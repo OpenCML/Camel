@@ -1,0 +1,10 @@
+/**
+ * A program for the test passes that check structures of the graph store by themselves
+ * (test::writings): the program is run, unchanged, after them.
+ */
+module empty
+
+func main(): int sync {
+    println(1)
+    return 0
+}

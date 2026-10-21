@@ -242,6 +242,17 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::PassNeedsExtraction,
+            {
+                "PassNeedsExtraction",
+                "Pass '{0}' cannot take the program: some values of it have several writings.",
+                "An earlier pass (a saturation) left values with several writings, which only the "
+                "passes that work on them and the passes that run or translate the program "
+                "accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every "
+                "value by a cost model (its parameter 'cost', 'weighted' by default).",
+            },
+        },
+        {
             RuntimeDiag::PassInternalError,
             {
                 "PassInternalError",

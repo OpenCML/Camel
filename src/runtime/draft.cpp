@@ -753,6 +753,11 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
             draft->regionPorts_.push_back(translateNodeRef(ports[i], sourceToDraft));
         }
     }
+    for (WritingUnion entry : graph->writings()) {
+        entry.a = translateNodeRef(entry.a, sourceToDraft);
+        entry.b = translateNodeRef(entry.b, sourceToDraft);
+        draft->writings_.push_back(entry);
+    }
     translateVector(graph->normPorts(), draft->normPorts_);
     translateVector(graph->withPorts(), draft->withPorts_);
     translateVector(graph->closureNodes(), draft->closureNodes_);
@@ -916,12 +921,27 @@ uint64_t GraphDraft::firstNodeOrigin() const {
     return 0;
 }
 
+void GraphDraft::setWritings(std::vector<WritingUnion> log) {
+    if (log != writings_) {
+        ++mutations_;
+        writings_ = std::move(log);
+    }
+}
+
+void GraphDraft::refuseWithWritings(const char *what) const {
+    throw std::logic_error(
+        std::string("GraphDraft::") + what +
+        ": the draft has values with several writings; only nodes can be added until they are "
+        "extracted.");
+}
+
 uint8_t GraphDraft::nodePermissions(gc_node_ref_t id) const {
     const DraftNodeHeader *h = header(id);
     return h ? h->permissions : 0;
 }
 
 void GraphDraft::setNodePermissions(gc_node_ref_t id, uint8_t permissions) {
+    requireOneWriting("setNodePermissions");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set the permissions of a missing draft node.");
@@ -1022,6 +1042,7 @@ void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_n
 }
 
 void GraphDraft::eraseNode(gc_node_ref_t id) {
+    requireOneWriting("eraseNode");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
@@ -1081,6 +1102,7 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
 }
 
 void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
+    requireOneWriting("setNormInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set norm inputs for a missing draft node.");
@@ -1098,6 +1120,7 @@ void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
 }
 
 void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
+    requireOneWriting("setWithInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set with inputs for a missing draft node.");
@@ -1115,6 +1138,7 @@ void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
 }
 
 void GraphDraft::setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
+    requireOneWriting("setCtrlInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set ctrl inputs for a missing draft node.");
@@ -1209,6 +1233,7 @@ void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t ne
 }
 
 void GraphDraft::replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    requireOneWriting("replaceAllNormUses");
     ++mutations_;
     std::vector<gc_node_ref_t> users(normUsersOf(oldId).begin(), normUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, true, false, false);
@@ -1216,6 +1241,7 @@ void GraphDraft::replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
 }
 
 void GraphDraft::replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    requireOneWriting("replaceAllWithUses");
     ++mutations_;
     std::vector<gc_node_ref_t> users(withUsersOf(oldId).begin(), withUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, false, true, false);
@@ -1223,6 +1249,7 @@ void GraphDraft::replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
 }
 
 void GraphDraft::replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    requireOneWriting("replaceAllCtrlUses");
     ++mutations_;
     std::vector<gc_node_ref_t> users(ctrlUsersOf(oldId).begin(), ctrlUsersOf(oldId).end());
     replaceUsesInList(oldId, users, oldId, newId, false, false, true);
@@ -1230,6 +1257,7 @@ void GraphDraft::replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
 }
 
 void GraphDraft::replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
+    requireOneWriting("replaceAllValueUses");
     ++mutations_;
     replaceAllNormUses(oldId, newId);
     replaceAllWithUses(oldId, newId);
@@ -1361,6 +1389,7 @@ gc_node_ref_t GraphDraft::materializeStaticValue(
 }
 
 void GraphDraft::setStaticSlot(size_t index, slot_t value) {
+    requireOneWriting("setStaticSlot");
     ++mutations_;
     ASSERT(index < staticSlots_.size(), "Draft static slot index is out of range.");
     touchRefs();
@@ -1438,6 +1467,7 @@ GCGraph *GraphDraft::calleeGraphOf(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setCalleeGraph(gc_node_ref_t id, GraphId callee) {
+    requireOneWriting("setCalleeGraph");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func, "Not a FUNC node.");
@@ -1458,6 +1488,7 @@ GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body) {
+    requireOneWriting("setLoopGraphs");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop, "Not a LOOP node.");

@@ -271,6 +271,7 @@ uint64_t contentHash(const GCGraph &graph) {
     }
     bytes(native->regionTable, native->regionCount * sizeof(*native->regionTable));
     bytes(native->regionPorts, native->regionPortCount * sizeof(*native->regionPorts));
+    bytes(native->writings, native->writingCount * sizeof(*native->writings));
     bytes(native->normPorts, native->normPortCount * sizeof(*native->normPorts));
     bytes(native->withPorts, native->withPortCount * sizeof(*native->withPorts));
     bytes(native->closure, native->closureCount * sizeof(*native->closure));
