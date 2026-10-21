@@ -37,6 +37,7 @@
 #include "camel/core/tags.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/pass/base.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
@@ -968,15 +969,20 @@ const camel::runtime::Program *simplifyGraph(
             &memo,
             mayMerge,
             config.checkScreens);
-        program = rewriteReachableGraphs(
-            context,
-            program,
-            "std::opt::algebra",
-            [&](GraphDraft &draft) { return algebraDraft(draft, config.safeFloatingPoint); },
-            &simplified,
-            &memo,
-            mayAlgebra,
-            config.checkScreens);
+        // The algebraic stage is the pass itself: std::opt::algebra is the rules library's
+        // `rules::simplify` (`rules::simplify_strict` for safe_fp), so the laws are written once,
+        // in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
+        // measurements assume.
+        const std::string algebraPass =
+            config.safeFloatingPoint ? "std::opt::algebra(safe_fp=true)" : "std::opt::algebra";
+        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os);
+        if (algebra.program == nullptr) {
+            return nullptr;
+        }
+        program = algebra.program;
+        if (algebra.changed) {
+            ++simplified;
+        }
         program = rewriteReachableGraphs(
             context,
             program,

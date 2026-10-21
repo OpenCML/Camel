@@ -78,5 +78,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     again.edit(const_cast<GCGraph *>(after));
     const Program *last = again.commit();
     os << "REGIONS recommit same=" << (last->graph(largest->id()) == after ? 1 : 0) << "\n";
-    return next;
+    // The recommit installed `last`; a pass returns the program the pipeline is to use, and that
+    // is the current one, not the version before the second commit. `last` has the same graph.
+    return last;
 }

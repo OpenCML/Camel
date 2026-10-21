@@ -164,3 +164,21 @@ PassApplyResult applyPassesDetailed(
 const camel::runtime::Program *applyPasses(
     const camel::runtime::Program *program, const std::vector<std::string> &passes,
     const camel::core::context::context_ptr_t &ctx, std::ostream &os);
+
+/// The outcome of one registered pass run, for a pass that runs another pass on the program it
+/// is given (std::opt runs the rules library's algebra, `rules::simplify`, as its algebraic
+/// stage). `program` is what the pass produced (unchanged when a rewrite pass produced nothing);
+/// `changed` says whether the produced program holds graphs of different content.
+struct PassRunResult {
+    const camel::runtime::Program *program = nullptr;
+    bool changed                           = false;
+};
+
+/// Runs the pass `spec` (as the pipeline writes it: `name` or `name(k=v, ...)`) on `program`,
+/// importing the module that contributes a `<module>::<pass>` name. This is the same resolution
+/// and stage handling the pipeline uses, without the pipeline's own bookkeeping: a rewrite pass
+/// that itself names another pass uses it. Returns {nullptr, true} when the pass failed (the
+/// diagnostics say why).
+PassRunResult applyRegisteredPass(
+    const camel::runtime::Program *program, const std::string &spec,
+    const camel::core::context::context_ptr_t &ctx, std::ostream &os);

@@ -208,8 +208,11 @@ class CamelPass final : public GraphIRPass {
         }
         const auto *produced = camel::core::rtdata::fromSlot<const Program *>(
             camel::core::rtdata::falliblePayload(result));
+        // Only the installed program is replaced. A pass over a private program (onnx.export's
+        // working copy, a specialization's detached snapshot) leaves the context's program as it
+        // is; the commit already keeps the produced program alive as a detached one.
         if (produced != program) {
-            context_->installRuntimeProgram(produced);
+            context_->installRuntimeProgramIfCurrent(program, produced);
         }
         return produced;
     }
