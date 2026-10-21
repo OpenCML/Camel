@@ -1,0 +1,31 @@
+; The exports that cannot be derived from a dependent target's object files (H36).
+;
+; Everything else that libcamel exports is generated before each link by
+; cmake/generate_libcamel_exports.mjs: the intersection of the symbols the object files of the
+; modules and tools leave undefined with the symbols libcamel's own object files define, for the
+; configuration being linked. Nothing here is a snapshot of an import table.
+;
+; The entries below are the symbols whose only call site is not an ordinary object file import: a
+; program that does not exist at build time, or an inline debug-only path whose instantiation the
+; compiler may or may not keep. Listing them makes the export set independent of that accident.
+;
+;   camel::standalone::bridge::call
+;       A program std::cpp generates includes camel/standalone/bridge.h and links libcamel; the
+;       inline Operator::call in that header invokes bridge::call (src/execute/standalone_bridge.cpp)
+;       for the runtime operators that have no standalone translation. No generated program exists
+;       while the build runs, so no object file imports it. The check that notices a missing entry
+;       is test/plans/feat/trans/cpp.plan.toml, which links every program it translates.
+;
+;   camel::core::rtdata::printSlotCapped
+;       The frame log's capped printer (H31). Its only caller is the inline Frame::get /
+;       FrameView::get in include/camel/core/context/frame.h, inside EXEC_WHEN_DEBUG, so a Release
+;       object names it only if something else does, and a Debug object names it only while that
+;       template instantiation is emitted. The scan finds it in a Debug build (where the resulting
+;       list matches the old hand-written one), but it is listed here so the exported surface is
+;       the same in both configurations and does not hinge on an inline call site.
+;
+; One symbol per line. The generator checks every entry against the symbols libcamel defines in
+; the configuration being linked and fails with the entry named when it is not defined there.
+EXPORTS
+    ?call@bridge@standalone@camel@@YA?AUValue@123@V?$basic_string_view@DU?$char_traits@D@std@@@std@@AEBV?$vector@UValue@bridge@standalone@camel@@V?$allocator@UValue@bridge@standalone@camel@@@std@@@6@1W4Kind@4123@@Z
+    ?printSlotCapped@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@1@Z

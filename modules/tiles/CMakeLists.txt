@@ -7,24 +7,33 @@ add_camel_module(
 )
 
 # Native contract tests build with the standard build, without needing a CUDA device.
-add_executable(tiles-plan-check src/resident_storage.cpp ../../test/cases/modules/tiles/plan_check.cpp ../../test/cases/modules/tiles/kernel_ir_check.cpp ../../test/cases/modules/tiles/reduction_domain_check.cpp ../../test/cases/modules/tiles/core_views_check.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
-target_compile_features(tiles-plan-check PRIVATE cxx_std_23)
-target_include_directories(tiles-plan-check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/third_party)
+#
+# The sources are an OBJECT library and the executable links from it, so the check target's
+# undefined symbols are visible to the libcamel export-list generation before libcamel links
+# (H36): tiles-plan-check is the target that imported OperatorTable::key and caught the gap.
+add_library(tiles-plan-check_objects OBJECT src/resident_storage.cpp ../../test/cases/modules/tiles/plan_check.cpp ../../test/cases/modules/tiles/kernel_ir_check.cpp ../../test/cases/modules/tiles/reduction_domain_check.cpp ../../test/cases/modules/tiles/core_views_check.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
+add_executable(tiles-plan-check $<TARGET_OBJECTS:tiles-plan-check_objects>)
+camel_register_export_scan_target(tiles-plan-check_objects)
+target_compile_features(tiles-plan-check_objects PRIVATE cxx_std_23)
+target_include_directories(tiles-plan-check_objects PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/third_party)
 target_link_libraries(tiles-plan-check PRIVATE libcamel fmt::fmt)
 
 # The module and its source inspection API also build without the CUDA SDK.
 # Load the driver and NVRTC lazily: importing tiles never requires a GPU.
 find_package(CUDAToolkit QUIET)
 if(CUDAToolkit_FOUND)
-  add_executable(tiles-async-check ../../test/cases/modules/tiles/async_submission_check.cpp ../../test/cases/modules/tiles/async_submission_lifetime.cpp ../../test/cases/modules/tiles/memory_pool_check.cpp ../../test/cases/modules/tiles/memory_pool_failures.cpp src/resident_storage.cpp src/cuda.cpp src/mixed_gemm.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/cuda_resources.cpp src/cuda_submission.cpp src/capability.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
-  target_compile_features(tiles-async-check PRIVATE cxx_std_23)
-  target_include_directories(tiles-async-check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/third_party)
+  add_library(tiles-async-check_objects OBJECT ../../test/cases/modules/tiles/async_submission_check.cpp ../../test/cases/modules/tiles/async_submission_lifetime.cpp ../../test/cases/modules/tiles/memory_pool_check.cpp ../../test/cases/modules/tiles/memory_pool_failures.cpp src/resident_storage.cpp src/cuda.cpp src/mixed_gemm.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/cuda_resources.cpp src/cuda_submission.cpp src/capability.cpp src/row_kernel.cpp src/row_body.cpp src/codegen.cpp src/codegen_cache.cpp src/schedule.cpp src/scalar_expr.cpp src/index_expr.cpp src/access.cpp src/kernel_ir.cpp src/matmul_kernel.cpp src/serial_kernel.cpp src/pointwise_kernel.cpp src/reduction_kernel.cpp src/regions.cpp src/scalar_kernel.cpp src/loop_kernel.cpp src/parallel_kernel.cpp)
+  add_executable(tiles-async-check $<TARGET_OBJECTS:tiles-async-check_objects>)
+  camel_register_export_scan_target(tiles-async-check_objects)
+  target_compile_features(tiles-async-check_objects PRIVATE cxx_std_23)
+  target_include_directories(tiles-async-check_objects PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/third_party)
+  target_link_libraries(tiles-async-check_objects PRIVATE nlohmann_json::nlohmann_json)
   target_link_libraries(tiles-async-check PRIVATE libcamel fmt::fmt nlohmann_json::nlohmann_json ${CMAKE_DL_LIBS})
   add_executable(tiles-module-lease ../../test/cases/modules/tiles/module_lease.cpp ../../test/cases/modules/tiles/scalar_device.cpp src/scalar_expr.cpp src/cuda_backend.cpp src/cuda_pool.cpp src/capability.cpp src/cuda_resources.cpp)
   target_compile_features(tiles-module-lease PRIVATE cxx_std_23)
   target_include_directories(tiles-module-lease PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
   target_link_libraries(tiles-module-lease PRIVATE ${CMAKE_DL_LIBS})
-  foreach(target tiles_cmo tiles-module-lease tiles-async-check)
+  foreach(target tiles_cmo_objects tiles-module-lease tiles-async-check_objects)
   target_include_directories(${target} PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
   target_compile_definitions(${target} PRIVATE
     CAMEL_TILES_CUDA=1
