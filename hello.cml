@@ -1,6 +1,6 @@
 module main
 
-import { whoami } from os
+import { whoami } from process
 
 func main() sync {
     let i = whoami()

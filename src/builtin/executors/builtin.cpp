@@ -453,7 +453,7 @@ void registerBuiltinOperatorTraits() {
     }
     // The higher-order operators and function composition run a function the program passes
     // in: what they do is what that function does, and the passes that look at them look at
-    // that function. exit and sleep are the os module's and are built in as well.
+    // that function. exit and sleep are the process module's and are built in as well.
     for (const char *uri :
          {":mark/map_arr",
           ":mark/apply_arr",
@@ -469,7 +469,7 @@ void registerBuiltinOperatorTraits() {
     registry.set(
         std::string(camel::execute::kFaultIsolationUri),
         {.pure = false, .callsGraphs = true});
-    registry.declare("os", {{"exit", false}, {"sleep", false}});
+    registry.declare("process", {{"exit", false}, {"sleep", false}});
     // The block counters are ambient state: two calls with the same arguments can return
     // different structs, so the call must not be folded, merged or dropped as a pure one.
     registry.set(":op/mem_blocks", {.pure = false});

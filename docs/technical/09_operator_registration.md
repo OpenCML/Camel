@@ -19,7 +19,7 @@
 | 全局内置模块（`GlobalsBuiltinModule`） | `src/builtin/`，编入 libcamel | 空字符串 `""` | `Context::create` 时加载，其导出对每个用户模块默认可见 |
 | 标准库与第三方模块 | `modules/<name>/`，各自编译为 `<name>.cmo` 动态库 | 模块名，如 `algo`、`math`、`tensor`、`python` | 被 `import` 时，或其协议下的算子首次被查找时加载 |
 
-libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`algo`、`math`、`tensor`、`nn`、`os`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
+libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`algo`、`math`、`tensor`、`nn`、`process`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
 
 ## 2. OperatorGroup 与类型解析
 
@@ -118,7 +118,7 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 
 因此 **opsMap 的 key 必须是 suffix**（即 `:` 后的部分），而不是完整 URI。
 
-第 3 步使一个模块的算子组可以引用另一个模块的实现：全局内置模块导出的 `sleep` 与 `exit` 的 URI 是 `os:sleep`、`os:exit`，首次查找时自动加载 `os` 模块，程序不必显式导入它。
+第 3 步使一个模块的算子组可以引用另一个模块的实现：全局内置模块导出的 `sleep` 与 `exit` 的 URI 是 `process:sleep`、`process:exit`，首次查找时自动加载 `process` 模块，程序不必显式导入它。
 
 找不到实现时 `find` 返回 `nullopt`，各调度器据此报告运行时诊断 `UnrecognizedOperatorURI`。
 

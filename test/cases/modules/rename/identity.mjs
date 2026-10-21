@@ -27,7 +27,7 @@ const CASES = {
     },
     process: {
         old: 'os',
-        now: 'os',
+        now: 'process',
         expected: 'ef0d12bcfa08cb37d4586b9783068818724ed2857faf4a71386929571bb7049f',
     },
     hash: {

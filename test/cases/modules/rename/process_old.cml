@@ -1,0 +1,11 @@
+/**
+ * The old spelling is no longer a module: the diagnostic names `process` (handover H114).
+ */
+module process_old
+
+import { whoami } from os
+
+func main(): int sync {
+    println(whoami())
+    return 0
+}

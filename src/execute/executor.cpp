@@ -95,7 +95,7 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
     }
     if (!factoryRegistered(protocol)) {
         // An operator of a module the program has not imported: the globals `exit` and `sleep`
-        // are implemented in the os module. Importing the module registers its executor.
+        // are implemented in the process module. Importing the module registers its executor.
         static std::mutex importMutex;
         std::lock_guard importLock(importMutex);
         if (!factoryRegistered(protocol)) {

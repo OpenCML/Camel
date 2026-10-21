@@ -48,7 +48,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [random](#random) | `import { ... } from random` | C++ | 10 |
 | [time](#time) | `import { ... } from time` | C++ | 3 |
 | [fs](#fs) | `import { ... } from fs` | C++ | 15 |
-| [os](#os) | `import { ... } from os` | C++ | 8 |
+| [process](#process) | `import { ... } from process` | C++ | 8 |
 | [env](#env) | `import { ... } from env` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
@@ -2587,9 +2587,9 @@ delete; a file or a symbolic link is an error too.
 - Failure: error `NotFound` when nothing exists at the path; error `PermissionDenied` when the file system refuses the removal; error `IOError` when the path is a file, a symbolic link, or a directory that is not empty.
 - Example: `remove_dir('out/old')`
 
-<a id="os"></a>
+<a id="process"></a>
 
-## `os`: process and terminal
+## `process`: process and terminal
 
 Every function touches the process, the terminal or the machine and is declared with effects.
 `sleep` and `exit` are also built in: they need no import.

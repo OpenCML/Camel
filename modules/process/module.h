@@ -19,10 +19,10 @@
 
 #pragma once
 #include "camel/core/module/builtin.h"
-class OSModule : public camel::core::module::BuiltinModule {
+class ProcessModule : public camel::core::module::BuiltinModule {
   public:
-    OSModule(camel::core::context::context_ptr_t ctx);
-    ~OSModule() override = default;
+    ProcessModule(camel::core::context::context_ptr_t ctx);
+    ~ProcessModule() override = default;
     bool load() override;
     static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx);
 };

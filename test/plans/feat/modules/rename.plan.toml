@@ -30,3 +30,21 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ModuleRenamed"
 expect_diagnostic_code = "0x03000185"
 expect_output_contains = ["env_old.cml:6:", "The module 'sys' was renamed to 'env'.", "Import 'env' instead"]
+
+[[tests]]
+name = "rename.process_new_name"
+desc = "`process` imports and its process/machine/terminal operators run."
+case = "../../../cases/modules/rename/process_new.cml"
+args = ["${case}"]
+expect_stdout_exact = "true\ntrue\n"
+
+[[tests]]
+name = "rename.process_old_name_diagnosed"
+desc = "`import ... from os` is refused at the import, naming `process`; there is no deprecated alias."
+kind = "negative"
+case = "../../../cases/modules/rename/process_old.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ModuleRenamed"
+expect_diagnostic_code = "0x03000185"
+expect_output_contains = ["process_old.cml:6:", "The module 'os' was renamed to 'process'.", "Import 'process' instead"]

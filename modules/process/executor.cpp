@@ -17,15 +17,15 @@
 
 namespace {
 
-class OSExecutor : public Executor {
+class ProcessExecutor : public Executor {
   public:
-    OSExecutor(
+    ProcessExecutor(
         camel::core::context::context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(std::move(ctx), std::move(ops)) {}
 };
 
 } // namespace
 
-executor_ptr_t createOSExecutor(camel::core::context::context_ptr_t ctx) {
-    return std::make_shared<OSExecutor>(std::move(ctx), getOSOpsMap());
+executor_ptr_t createProcessExecutor(camel::core::context::context_ptr_t ctx) {
+    return std::make_shared<ProcessExecutor>(std::move(ctx), getProcessOpsMap());
 }

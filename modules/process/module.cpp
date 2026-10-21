@@ -35,51 +35,51 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "sleep",
-            {{"os:sleep",
+            {{"process:sleep",
               StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void())}}),
         OperatorGroup::create(
             "whoami",
-            {{"os:whoami", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
+            {{"process:whoami", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
         OperatorGroup::create(
             "cpu_count",
-            {{"os:cpu_count", StaticFuncTypeResolver::create({}, {}, Type::Int64())}}),
+            {{"process:cpu_count", StaticFuncTypeResolver::create({}, {}, Type::Int64())}}),
         OperatorGroup::create(
             "set_terminal_raw_mode",
-            {{"os:set_terminal_raw_mode",
+            {{"process:set_terminal_raw_mode",
               StaticFuncTypeResolver::create({}, {{Type::Bool(), false}}, Type::Void())}}),
         OperatorGroup::create(
             "has_input",
-            {{"os:has_input", StaticFuncTypeResolver::create({}, {}, Type::Bool())}}),
+            {{"process:has_input", StaticFuncTypeResolver::create({}, {}, Type::Bool())}}),
         OperatorGroup::create(
             "get_char",
-            {{"os:get_char", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
+            {{"process:get_char", StaticFuncTypeResolver::create({}, {}, Type::String())}}),
         OperatorGroup::create(
             "get_chars",
-            {{"os:get_chars",
+            {{"process:get_chars",
               StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String())}}),
         OperatorGroup::create(
             "clear_input_buffer",
-            {{"os:clear_input_buffer", StaticFuncTypeResolver::create({}, {}, Type::Void())}}),
+            {{"process:clear_input_buffer", StaticFuncTypeResolver::create({}, {}, Type::Void())}}),
     };
     return groups;
 }
 } // namespace
 
-OSModule::OSModule(context_ptr_t ctx) : BuiltinModule("os", ctx) {
+ProcessModule::ProcessModule(context_ptr_t ctx) : BuiltinModule("process", ctx) {
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
 }
 
-module_ptr_t OSModule::create(context_ptr_t ctx) { return std::make_shared<OSModule>(ctx); }
+module_ptr_t ProcessModule::create(context_ptr_t ctx) { return std::make_shared<ProcessModule>(ctx); }
 
-bool OSModule::load() {
+bool ProcessModule::load() {
     if (loaded_)
         return true;
     context_ptr_t ctx = context_;
-    context_->registerExecutorFactory("os", [ctx]() { return createOSExecutor(ctx); });
+    context_->registerExecutorFactory("process", [ctx]() { return createProcessExecutor(ctx); });
     // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
-        "os",
+        "process",
         {
             // The terminal, the process and the machine it runs on.
             {"exit", false},
@@ -97,7 +97,7 @@ bool OSModule::load() {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
         camel::core::OperatorTable::instance().declareResources(
-            "os",
+            "process",
             {
                 {"exit", externalAmbient("process", AccessMode::ReadModifyWrite)},
                 {"sleep", externalAmbient("time:clock", AccessMode::Read)},
@@ -115,5 +115,5 @@ bool OSModule::load() {
 }
 
 extern "C" {
-Module *camel_module_create(Context *ctx) { return new OSModule(ctx->shared_from_this()); }
+Module *camel_module_create(Context *ctx) { return new ProcessModule(ctx->shared_from_this()); }
 }

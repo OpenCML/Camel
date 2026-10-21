@@ -391,7 +391,7 @@ expect_stdout_starts_with = "done\n"
 
 [[tests]]
 name = "end.exit_code"
-desc = "exit(3) in a function, without importing os: the output before it is there, nothing after it runs, the exit code is 3, and there is no diagnostic."
+desc = "exit(3) in a function, without importing process: the output before it is there, nothing after it runs, the exit code is 3, and there is no diagnostic."
 kind = "behavior"
 case = "../../../cases/consistency/faults/exit_code.cml"
 expect_exit = 3
@@ -403,7 +403,7 @@ assert(input.diagnostics.length === 0, 'no diagnostic expected')
 
 [[tests]]
 name = "end.exit_imported"
-desc = "The same with exit imported from os."
+desc = "The same with exit imported from process."
 kind = "behavior"
 case = "../../../cases/consistency/faults/exit_imported.cml"
 expect_exit = 3

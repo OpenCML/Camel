@@ -1,0 +1,14 @@
+/**
+ * `process` is the module of the process, the machine and the terminal (handover H114, which
+ * renamed `os`); this proves the new name imports and its operators run.
+ */
+module process_new
+
+import { whoami, sleep, cpu_count } from process
+
+func main(): int sync {
+    sleep(0)
+    println(whoami()->len > 0)
+    println(cpu_count() >= 1)
+    return 0
+}

@@ -1,5 +1,5 @@
 /**
- * Signatures of the `os` module (C++ operators, modules/os).
+ * Signatures of the `process` module (C++ operators, modules/process).
  *
  * Every function touches the process, the terminal or the machine and is declared with effects.
  * `sleep` and `exit` are also built in: they need no import.

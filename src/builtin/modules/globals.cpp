@@ -1576,12 +1576,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // ======= OS (implemented in os.cmo) ======
+        // ======= process (implemented in process.cmo) ======
         OperatorGroup::create(
             "sleep",
             {
                 {
-                    "os:sleep",
+                    "process:sleep",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),
@@ -1589,7 +1589,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             "exit",
             {
                 {
-                    "os:exit",
+                    "process:exit",
                     StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Void()),
                 },
             }),

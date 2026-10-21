@@ -19,4 +19,4 @@
 
 #pragma once
 #include "camel/execute/executor.h"
-executor_ptr_t createOSExecutor(camel::core::context::context_ptr_t ctx);
+executor_ptr_t createProcessExecutor(camel::core::context::context_ptr_t ctx);

@@ -21,3 +21,9 @@ name = "rename.env_graph_identity"
 desc = "`sys` -> `env`: the graph of a program that reads the environment and the working directory is unchanged apart from `env:` in the two operator URIs."
 case = "../../../cases/modules/rename/env_identity.cml"
 args = ["${case}", "std::jgir"]
+
+[[tests]]
+name = "rename.process_graph_identity"
+desc = "`os` -> `process`: the graph of a program that asks who it is and how many CPUs there are is unchanged apart from `process:` in the operator URIs."
+case = "../../../cases/modules/rename/process_identity.cml"
+args = ["${case}", "std::jgir"]

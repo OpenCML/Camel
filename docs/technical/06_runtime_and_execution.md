@@ -262,7 +262,7 @@ that G reaches through direct calls (`FUNC`, G included) satisfies all of
    (4.3.1) would fork.
 4. Every operator of H is found without importing a module, and H has a frame layout (what the
    bytecode compiler needs). An operator of a module the program did not import, such as the
-   global `exit` without `import ... from os`, keeps its graph on the scheduler.
+   global `exit` without `import ... from process`, keeps its graph on the scheduler.
 
 The set is closed under direct calls by definition, so the bytecode never calls back into the
 scheduler: a serial graph reaches serial graphs only, through `FUNC` and `TAIL` bytecodes the
@@ -447,7 +447,7 @@ located diagnostic.
   output on standard output and returns 1 from `main`.
 - `exit(n)`: the operator throws `camel::core::ProcessExit` (`camel/core/process_exit.h`). It
   unwinds the scheduler like a fault; the pass driver turns it into a completed run with exit
-  code `n` and no diagnostic. `exit` and `sleep` are globals implemented in the `os` module;
+  code `n` and no diagnostic. `exit` and `sleep` are globals implemented in the `process` module;
   the executor manager imports a module the first time an operator of it is needed, so they
   work without `import`.
 
