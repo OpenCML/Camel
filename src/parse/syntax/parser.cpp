@@ -799,7 +799,10 @@ void ParserImpl::parseFrontMatter() {
 }
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'? implMark? modifiers?
-///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
+///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+///
+/// Without a body the declaration stands for a C++ operator of the module the name is bound in
+/// (design principles 6.4): it has no block, and what it declares is its signature.
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -960,7 +963,13 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::Colon)) {
         parseType();
     }
-    if (!panic_) {
+    // A function written without a body is the declaration of an operator of a C++ module: the
+    // signature is the whole of it (design principles 6.4, handover H19 step 1). A block is
+    // still what follows a signature in every other case, so the next token decides; `sync`
+    // belongs to the block and is read with it (parseStmtBlock).
+    const bool hasBlock =
+        cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace);
+    if (!panic_ && hasBlock) {
         parseStmtBlock();
     }
     close(m, NK::FuncDecl);

@@ -1629,15 +1629,21 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         *annoListNode << any2node(visitFuncAnno(funcAnno));
     }
 
+    // A function written without a body is a declaration of an operator of a C++ module (design
+    // principles 6.4): the signature is the whole of it. Its token range and origin end with the
+    // signature, not with a block that is not there.
+    const auto blockContext = context->get<cst::StmtBlock>();
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     TokenRange typeRange    = {
         context->firstToken()->index(),
-        context->get<cst::StmtBlock>()->firstToken()->index() + 1};
+        blockContext ? blockContext->firstToken()->index() + 1
+                     : context->lastToken()->index() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);
     setNodeOriginByOffsets(
         funcTypeNode,
         static_cast<size_t>(context->firstToken()->begin()),
-        static_cast<size_t>(context->get<cst::StmtBlock>()->firstToken()->begin()));
+        static_cast<size_t>(
+            blockContext ? blockContext->firstToken()->begin() : context->lastToken()->end()));
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
     auto implMark = context->get<cst::ImplMark>();
@@ -1686,7 +1692,8 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     setNodeOriginByOffsets(
         typeOptNode,
         static_cast<size_t>(context->firstToken()->begin()),
-        static_cast<size_t>(context->get<cst::StmtBlock>()->firstToken()->begin()));
+        static_cast<size_t>(
+            blockContext ? blockContext->firstToken()->begin() : context->lastToken()->end()));
     if (context->type()) {
         node_ptr_t typeNode = any2node(visitType(context->type()));
         *typeOptNode << typeNode;
@@ -1716,8 +1723,13 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         export_->addRef(ref);
     }
 
-    node_ptr_t blockNode = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
-    unwrapNodeAs<StmtBlockLoad>(blockNode)->grantNumeric(numericPermissions);
+    // The body, when the declaration has one. A `FuncDataLoad` without a `StmtBlock` child is a
+    // body-less declaration: the GCT builder makes a FUNC of it that no graph is built from.
+    node_ptr_t blockNode = nullptr;
+    if (blockContext) {
+        blockNode = any2node(visitStmtBlock(blockContext));
+        unwrapNodeAs<StmtBlockLoad>(blockNode)->grantNumeric(numericPermissions);
+    }
 
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
@@ -1765,7 +1777,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
                 "returnType"),
             semanticPart(
                 camel::source::SemanticRole::ValueProducer,
-                nodeOrigin(blockNode),
+                blockNode ? nodeOrigin(blockNode) : camel::source::kInvalidOriginId,
                 -1,
                 "body"),
         });

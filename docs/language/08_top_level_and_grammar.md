@@ -117,7 +117,7 @@ namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDec
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? implMark? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
+                     'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?

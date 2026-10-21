@@ -1246,6 +1246,36 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NativeDeclarationIncomplete,
+            {
+                "NativeDeclarationIncomplete",
+                "The body-less declaration '{0}' is incomplete: it has no result type.",
+                "A body-less declaration is the whole signature of a C++ operator, result "
+                "included; write the result type (`: T`).",
+            },
+        },
+        {
+            SemanticDiag::NativeDeclarationNotLoaded,
+            {
+                "NativeDeclarationNotLoaded",
+                "The declaration '{0}' names the operator '{1}', which no loaded module "
+                "implements.",
+                "A body-less declaration stands for an operator of a loaded C++ module. Import "
+                "the module that implements it, and check that the URI names its function; a "
+                "declaration whose implementation is not loaded is not a function.",
+            },
+        },
+        {
+            SemanticDiag::DeclarationModuleHasBody,
+            {
+                "DeclarationModuleHasBody",
+                "The declaration module '{0}' has a body in function '{1}'.",
+                "A Camel module found beside a C++ module of the same name declares that "
+                "module's operators and has no bodies. Put the implementation in a module that "
+                "has no `.cmo`, or remove the `.cmo`.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",

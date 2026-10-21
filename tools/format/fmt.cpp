@@ -483,7 +483,7 @@ funcDecl   :
         (WITH angledParams)?
         EXPORT? implMark? modifiers?
 
-FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
+FUNC identRef parentParams (':' typeExpr)? stmtBlock? ;
 */
 any Formatter::visitFuncDecl(cst::FuncDecl context) {
     string result;
@@ -534,6 +534,11 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += ": " + any_cast<string>(visitType(typeExpr));
     }
 
+    if (!stmtBlock) {
+        // A body-less declaration of a C++ operator: the signature is the whole of it (design
+        // principles 6.4; handover H19, step 1).
+        return result;
+    }
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
 }
 

@@ -185,6 +185,11 @@ enum class SemanticDiag : uint32_t {
     StaticTypeNotConcrete     = 0x000172,
     StaticMatchTooDeep        = 0x000173,
     GenericInstantiationCycle = 0x000174,
+    // Body-less declarations, the declarations of a C++ module's operators (design principles
+    // 6.4; handover H19, step 1). 0x175 and up.
+    NativeDeclarationIncomplete = 0x000175,
+    NativeDeclarationNotLoaded  = 0x000176,
+    DeclarationModuleHasBody    = 0x000177,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

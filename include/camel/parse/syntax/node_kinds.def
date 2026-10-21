@@ -36,7 +36,7 @@ CAMEL_NODE(TagPositions, Other)        // identDef (',' identDef)* ','?
 CAMEL_NODE(TagReaders, Other)          // identRef (',' identRef)* ','?
 CAMEL_NODE(TagUse, Other)              // '#' (tagRef | '[' tagRef (',' tagRef)* ','? ']')
 CAMEL_NODE(TagRef, Other)              // identRef angledValues?
-CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'export'? implMark? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
+CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'export'? implMark? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock? (no block: the declaration of a C++ operator, design principles 6.4)
 CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the name `operator`, read so only after 'func' (provisional notation)
 CAMEL_NODE(RuleDecl, Other)            // 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}' (IDENTIFIER dataExpr)?
 CAMEL_NODE(RuleContext, Other)         // '<' identDef (',' identDef)* ','? '>'
