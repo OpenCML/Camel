@@ -439,13 +439,46 @@ Block FunctionEmitter::lowerSequence(
     return out;
 }
 
+const camel::runtime::ControlRegions &FunctionEmitter::controlRegionsOf(const GCGraph *graph) {
+    auto &held = regions_[graph];
+    if (!held) {
+        held = std::make_unique<camel::runtime::ControlRegions>(*graph);
+    }
+    return *held;
+}
+
 Block FunctionEmitter::lowerSequenceBody(
     Frame &frame, const std::vector<gc_node_ref_t> &order, gc_node_ref_t result, Tail tail) {
     Block out;
     bool done = false;
+    // What a loop of this sequence owns is lowered with the loop: the nodes of its regions, the
+    // ports of the regions and the port that counts its rounds.
+    std::unordered_set<gc_node_ref_t> ownedByLoops;
+    for (gc_node_ref_t loop : order) {
+        if (frame.graph->node(loop)->kind != GCNodeKind::Loop) {
+            continue;
+        }
+        const auto &regions = controlRegionsOf(frame.graph);
+        const auto parts    = regions.loopPartsOf(loop);
+        for (gc_node_ref_t n : order) {
+            for (uint32_t part : parts) {
+                if (part != 0 && regions.within(regions.controlOf(n), part)) {
+                    ownedByLoops.insert(n);
+                }
+            }
+        }
+        for (uint32_t part : parts) {
+            if (part != 0) {
+                for (gc_node_ref_t port : frame.graph->regionPorts(part)) {
+                    ownedByLoops.insert(port);
+                }
+            }
+        }
+        ownedByLoops.insert(frame.graph->withInputsOf(loop).back());
+    }
     for (size_t i = 0; i < order.size(); ++i) {
         const gc_node_ref_t ref = order[i];
-        if (frame.consumed.contains(ref)) {
+        if (frame.consumed.contains(ref) || ownedByLoops.contains(ref)) {
             continue;
         }
         const auto *node = frame.graph->node(ref);
@@ -473,6 +506,10 @@ Block FunctionEmitter::lowerSequenceBody(
                 join == result && tail.kind != Tail::Kind::Discard && at != order.end() &&
                 nothingAfter(frame, order, static_cast<size_t>(at - order.begin()));
             done = lowerBranch(frame, ref, order, out, joinIsTail, tail);
+            continue;
+        }
+        if (node->kind == GCNodeKind::Loop) {
+            lowerLoop(frame, ref, order, out);
             continue;
         }
         const bool isTailResult =
@@ -938,6 +975,132 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
                 uri));
     }
     bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
+}
+
+void FunctionEmitter::lowerLoop(
+    Frame &frame, gc_node_ref_t loop, const std::vector<gc_node_ref_t> &order, Block &out) {
+    GCGraph *g = frame.graph;
+    if (g->loopCollectionCountOf(loop) != 0) {
+        refuse(g, loop, std::format("{} has a loop that collects values", describeFunction(g)));
+    }
+    const bool iterates = camel::core::loopHasIterable(g->loopKindOf(loop));
+    const auto norm     = g->normInputsOf(loop);
+    const size_t k      = norm.size() - (iterates ? 1 : 0);
+    const auto &regions = controlRegionsOf(g);
+    const auto parts    = regions.loopPartsOf(loop);
+    const auto results  = g->withInputsOf(loop);
+    const bool hasCond  = parts[0] != 0;
+    const gc_node_ref_t bodyResult = results[0];
+    const gc_node_ref_t condResult = hasCond ? results[1] : kInvalidNodeRef;
+
+    // The state is k variables the rounds assign; the ports of both regions are those variables.
+    std::vector<std::string> state;
+    for (size_t j = 0; j < k; ++j) {
+        const gc_node_ref_t port = g->regionPorts(parts[1])[(iterates ? 1 : 0) + j];
+        const std::string name   = locals_.unique(std::format("v{}_state", nextValue_++));
+        out.push_back(
+            Stmt::line(
+                std::format(
+                    "{} {} = {};",
+                    cppType(g, port, g->node(port)->dataType()),
+                    name,
+                    withoutParentheses(valueOf(frame, norm[(iterates ? 1 : 0) + j]).text))));
+        state.push_back(name);
+        frame.values[port] = CppValue{name, false};
+        if (hasCond) {
+            frame.values[g->regionPorts(parts[0])[j]] = CppValue{name, false};
+        }
+    }
+    std::string array, index;
+    if (iterates) {
+        const gc_node_ref_t iterable = norm.front();
+        array = locals_.unique(std::format("v{}_items", nextValue_++));
+        index = locals_.unique(std::format("v{}_round", nextValue_++));
+        out.push_back(
+            Stmt::line(
+                std::format(
+                    "const {} {} = {};",
+                    cppType(g, iterable, g->node(iterable)->dataType()),
+                    array,
+                    withoutParentheses(valueOf(frame, iterable).text))));
+        out.push_back(Stmt::line(std::format("std::size_t {} = 0;", index)));
+    }
+
+    const auto nodesIn = [&](uint32_t part) {
+        std::vector<gc_node_ref_t> nodes;
+        for (gc_node_ref_t n : order) {
+            if (part != 0 && !frame.consumed.contains(n) &&
+                regions.within(regions.controlOf(n), part)) {
+                nodes.push_back(n);
+            }
+        }
+        return nodes;
+    };
+    const std::vector<gc_node_ref_t> condNodes = nodesIn(parts[0]);
+    const std::vector<gc_node_ref_t> bodyNodes = nodesIn(parts[1]);
+
+    Block round;
+    if (hasCond) {
+        Block cond = lowerSequence(frame, condNodes, condResult, Tail{});
+        round.insert(round.end(), cond.begin(), cond.end());
+        round.push_back(
+            Stmt::line(std::format("if (!({})) {{ break; }}", valueOf(frame, condResult).text)));
+        for (gc_node_ref_t n : condNodes) {
+            frame.consumed.insert(n);
+        }
+    }
+    if (iterates) {
+        const gc_node_ref_t element = g->regionPorts(parts[1]).front();
+        round.push_back(Stmt::line(std::format("if ({} >= {}.size()) {{ break; }}", index, array)));
+        const std::string name = locals_.unique(std::format("v{}_item", nextValue_++));
+        round.push_back(
+            Stmt::line(
+                std::format(
+                    "const {} {} = {}[{}];",
+                    cppType(g, element, g->node(element)->dataType()),
+                    name,
+                    array,
+                    index)));
+        round.push_back(Stmt::line(std::format("++{};", index)));
+        frame.values[element] = CppValue{name, false};
+    }
+    Block body = lowerSequence(frame, bodyNodes, bodyResult, Tail{});
+    round.insert(round.end(), body.begin(), body.end());
+    for (gc_node_ref_t n : bodyNodes) {
+        frame.consumed.insert(n);
+    }
+    // The next state. The components are all computed before any variable is assigned.
+    const std::string next = valueOf(frame, bodyResult).text;
+    if (k == 1) {
+        round.push_back(Stmt::line(std::format("{} = {};", state[0], withoutParentheses(next))));
+    } else {
+        const Type *type  = g->node(bodyResult)->dataType();
+        cppType(g, bodyResult, type);
+        const std::string tuple = locals_.unique(std::format("v{}_next", nextValue_++));
+        round.push_back(Stmt::line(std::format("const auto {} = {};", tuple, withoutParentheses(next))));
+        for (size_t j = 0; j < k; ++j) {
+            round.push_back(
+                Stmt::line(
+                    std::format("{} = {}.{};", state[j], tuple, program_.values.fieldName(type, j))));
+        }
+    }
+    out.push_back(Stmt::loop(std::move(round)));
+
+    // The value of the loop is its state.
+    if (k == 1) {
+        frame.values[loop] = CppValue{state[0], false};
+    } else {
+        const Type *type = g->node(loop)->dataType();
+        std::string list;
+        for (size_t j = 0; j < k; ++j) {
+            list += (j ? ", " : "") + state[j];
+        }
+        const std::string name = locals_.unique(std::format("v{}_loop", nextValue_++));
+        out.push_back(
+            Stmt::line(std::format("const {} {} = {}{{{}}};", cppType(g, loop, type), name, cppType(g, loop, type), list)));
+        frame.values[loop] = CppValue{name, false};
+    }
+    frame.consumed.insert(loop);
 }
 
 bool FunctionEmitter::lowerBranch(

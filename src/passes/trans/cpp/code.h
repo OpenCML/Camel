@@ -40,17 +40,19 @@ struct Stmt {
         Line,   // one line of C++ (a declaration, an expression statement, return, continue)
         Branch, // if (c0) { b0 } else if (c1) { b1 } ... else { bn }
         Scope,  // { b } (keeps the temporaries of a tail call to themselves)
+        Loop,   // for (;;) { b } (a loop of the program; `break` leaves it)
     };
 
     Kind kind = Kind::Line;
     std::string text;
     /// Branch: (condition, block) pairs; an empty condition is the final `else`.
     std::vector<std::pair<std::string, Block>> arms;
-    /// Scope: the statements in it.
+    /// Scope, Loop: the statements in it.
     Block body;
 
     static Stmt line(std::string text) { return Stmt{Kind::Line, std::move(text), {}, {}}; }
     static Stmt scope(Block body) { return Stmt{Kind::Scope, {}, {}, std::move(body)}; }
+    static Stmt loop(Block body) { return Stmt{Kind::Loop, {}, {}, std::move(body)}; }
 };
 
 /// Writes `block` with `indent` levels of four spaces.

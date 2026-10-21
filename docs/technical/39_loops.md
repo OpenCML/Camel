@@ -198,7 +198,7 @@ contribution would be dropped without a sign of it.
 | `std::fvm`, `std::jit` | natively, as bytecode: the plan's events are three instructions, `LBEG` (the loop starts), `LTST` (the condition has run: stop, or bind the body's ports) and `LEND` (the body has run: the next state, and a backward jump to the start of a round), run by the same functions as NodeVM's (`loopBegin`, `loopTest`, `loopEnd`). A graph with a loop is not compiled by the JIT yet: it runs in the interpreter, and the functions it calls are compiled |
 | `std::macro` evaluator | natively, in the frame of the function (`stepLoops`), at most 1,000,000 rounds |
 | `std::prl` | a graph with a loop is evaluated node by node, with the same events as NodeVM's (`stepLoops`), or, when it is serial, run as bytecode |
-| `std::cpp` | the private lowering at its entry; the generated tail calls are loops |
+| `std::cpp` | a `for (;;)` of its own: the state in variables, the condition and the body in the loop, the next components computed before any variable is assigned (`FunctionEmitter::lowerLoop`) |
 | ONNX export | refused where the loop is written (the LOOP to ONNX Loop translation is the next step) |
 | autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
 | debugger | the condition and the body are regions of the graph of their function: part of its frame, with the names of their ports |

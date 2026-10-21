@@ -128,7 +128,7 @@ test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=3.4028235e38+1i
 test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=3.5e38+1i
 test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=1+3.5e38i
 
-# Loops (design principles 3.10), run through the private lowering to tail recursion.
+# Loops (design principles 3.10), written as `for (;;)` loops.
 test/cases/loops/shapes.cml
 test/cases/loops/effects.cml
 test/cases/loops/captures.cml
