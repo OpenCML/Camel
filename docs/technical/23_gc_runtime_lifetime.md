@@ -273,8 +273,8 @@ remembered when promotion leaves old-to-young edges behind.
 
 The verifier compares remembered entries against typed old/large objects whose layouts are known
 from barriers, roots, or relocation metadata. Missing remembered entries report the owner slot, slot
-type, region, and young target. `CAMEL_GC=generational` selects the moving collector;
-the production default remains address-stable.
+type, region, and young target. `--gc generational`, the default of a release build, selects the
+moving collector; `--gc mark-sweep` keeps objects where they are.
 
 Intentionally unbarriered paths are limited to storage that is not an old auto-space container:
 dynamic frame slots are traced roots, graph-space static tuples are graph roots rather than

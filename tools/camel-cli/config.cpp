@@ -215,40 +215,6 @@ bool readMegabyteLimit(const std::string &text, const char *option, size_t &out)
     return true;
 }
 
-/// A switch that used to be an environment variable of the core. The variable is not read any
-/// more: setting it is refused with the option or pass parameter that replaced it, so an old
-/// command line stops with a reason instead of silently running with the default.
-struct RetiredEnvironmentVariable {
-    const char *name;
-    const char *replacement;
-};
-
-constexpr RetiredEnvironmentVariable kRetiredEnvironmentVariables[] = {
-    {"CAMEL_GC", "give the collector with --gc <generational|mark-sweep>"},
-    {"CAMEL_BLOCK_LIMIT_MB", "give the limit with --block-limit <megabytes>"},
-    {"CAMEL_GRAPH_GC_MB", "give the floor with --graph-gc-mb <megabytes>"},
-    {"CAMEL_GC_STATS", "ask for them with 'std::profile(gc_stats=1)' in the pipeline"},
-    {"CAMEL_TYPE_STATS", "ask for them with 'std::profile(type_stats=true)' in the pipeline"},
-    {"CAMEL_EFFECT_TRACE",
-     "ask for the trace with 'std::profile(effect_trace=\"<file>\")' in the pipeline"},
-    {"CAMEL_NATIVE_STACK_GUARD", "give the switch with --native-stack-guard <on|off>"},
-    {"CAMEL_PROFILE_MODE", "give the mode with --profile-mode <normal|full>"},
-    {"CAMEL_ENABLE_TEST_PASSES",
-     "the test-only passes (test::*) need no switch; name the pass in the pipeline"},
-};
-
-bool rejectRetiredEnvironmentVariables() {
-    bool ok = true;
-    for (const auto &retired : kRetiredEnvironmentVariables) {
-        if (const char *value = std::getenv(retired.name); value != nullptr) {
-            std::cerr << "Error: the environment variable " << retired.name
-                      << " is retired; " << retired.replacement << "." << std::endl;
-            ok = false;
-        }
-    }
-    return ok;
-}
-
 /// Left-to-right over argv: last `--log-level` / `-v*` wins; then applies preset/include and stderr
 /// sink.
 void applyCamelCliLogging(int argc, char **argv) {
@@ -634,12 +600,6 @@ void printCliArgs(Command selected) {
 }
 
 bool parseArgs(int argc, char *argv[]) {
-    // A switch that moved out of the environment is refused when the old variable is still set:
-    // the run stops with the name of what replaced it instead of silently using the default.
-    if (!rejectRetiredEnvironmentVariables()) {
-        exitCode = 1;
-        return false;
-    }
     const bool startupProfile = std::getenv("CAMEL_STARTUP_PROFILE") != nullptr;
     auto startupLast          = std::chrono::steady_clock::now();
     auto startupMark          = [&](const char *stage) {

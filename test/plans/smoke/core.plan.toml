@@ -136,15 +136,5 @@ verify_script = """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
-[[tests]]
-name = "retired_environment_variable.diagnosed"
-desc = "A switch that moved to the command line is not silently accepted: setting CAMEL_GC ends the run with exit code 1 and a diagnostic that names --gc."
-kind = "negative"
-case = "../../cases/smoke/core/fib10_pipeline.cml"
-args = ["${case}"]
-envs = ["CAMEL_GC=generational"]
-expect_exit = 1
-expect_stderr_contains = ["is retired", "--gc <generational|mark-sweep>"]
-expect_stdout_not_contains = ["fib(10)"]
-timeout_ms = 4000
+
 
