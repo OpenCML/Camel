@@ -117,7 +117,6 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/json.cml',
     },
-    { name: 're', title: '`re`: regular expressions', kind: 'cpp' },
     { name: 'hash', title: '`hash`', kind: 'cpp' },
     {
         name: 're',
@@ -127,7 +126,6 @@ const MODULES = [
         source: 're.cml',
         declaration: true,
     },
-    { name: 'crypto', title: '`crypto`', kind: 'cpp' },
     { name: 'para', title: '`para`: unordered iteration', kind: 'cpp' },
     { name: 'this', title: '`this`', kind: 'cpp' },
     { name: 'graph', title: '`graph`: a program as a value', kind: 'cpp' },
