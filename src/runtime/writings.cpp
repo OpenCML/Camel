@@ -720,8 +720,11 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         }
     }
 
-    // What stays: every node that is the only writing of its value, what the graph names (its
-    // ports, entry, exit, result), and the writing chosen for every value that is read.
+    // What stays: what the graph names (its ports, entry, exit and result, and the regions'
+    // results) and the writing chosen for every value those read. A writing nothing reads is
+    // dead: keeping it would keep the values the saturation created only to compare them, and
+    // the extraction would not be one writing for every value that is used (a saturation with
+    // distribution and association makes many such values: rules.cml's `saturate_all`).
     std::vector<uint8_t> selected(slots, 0);
     std::vector<gc_node_ref_t> work;
     const auto select = [&](gc_node_ref_t node) {
@@ -730,11 +733,6 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
             work.push_back(node);
         }
     };
-    for (gc_node_ref_t node = 0; node < slots; ++node) {
-        if (draft_.alive(node) && !multi[node]) {
-            select(node);
-        }
-    }
     for (auto list : {draft_.normPorts(), draft_.withPorts(), draft_.closureNodes()}) {
         for (gc_node_ref_t node : list) {
             select(node);
