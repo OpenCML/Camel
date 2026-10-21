@@ -114,14 +114,13 @@ expect_stdout_exact = "3.141592653589793\n1.5707963267948966 4.0\n42\n"
 timeout_ms = 10000
 
 [[tests]]
-name = "camel_pass_module_importing_a_camel_module_is_refused"
-desc = "A pass module importing a module written in Camel is refused with a diagnostic (a library compiled on its own imports modules written in C++ only; task H36), not run with the imported value reading 0."
-kind = "negative"
+name = "camel_pass_module_importing_a_camel_module"
+desc = "A pass module may import a library written in Camel: the imported function is declared and built by the pass program's builder and runs (task H36, item 1)."
+kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "camel_import_values::show", "std::nvm"]
-expect_exit = 1
-expect_output_contains = ["imports modules written in C++ only", "camel_import_values"]
-expect_output_not_contains = ["42"]
+expect_exit = 0
+expect_stdout_exact = "[1, 2, 2, 3, 3, 4]\n42\n"
 timeout_ms = 10000
 
 # A transaction edits the program being processed and commits a new Program (design 5.1).
@@ -318,4 +317,100 @@ case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
 args = ["${case}", "neutral::integers", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "5\n7\n3\n"
+timeout_ms = 20000
+
+# A module that hosts a pass may import a Camel library: the library's functions are declared
+# with the pass module's, so `flat_map` of `array` is available to the pass.
+
+[[tests]]
+name = "pass_module_imports_a_camel_library"
+desc = "imports::count uses array::flat_map on a local array; the Camel library is built with the pass module."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "imports::count", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[1, 2, 2, 3, 3, 4]\n42\n"
+timeout_ms = 10000
+
+# A direct call to a monomorphic function of the imported Camel library returns its value: the
+# library is declared again by the pass module's builder, so its graph belongs to this program.
+
+[[tests]]
+name = "pass_module_calls_a_monomorphic_camel_function"
+desc = "monomorphic::show calls libvals::nine and libvals::addOne directly; both return their values."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "monomorphic::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "9\n42\n42\n"
+timeout_ms = 10000
+
+# The `with` parameters of a pass function are the pass parameters written on the pipeline.
+
+[[tests]]
+name = "camel_pass_parameters"
+desc = "params::report reads string, int, f64, f32 and bool parameters, at a call site and in a closure."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "params::report(label='ok', n=21, scale=2.5, small=1.5, flag=true)", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "ok\n21\n42\n[21, 42, 63]\n2.5\n1.5\ntrue\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_parameter_missing"
+desc = "A parameter without a source default is required; a missing one is a resolution error that names it."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "params::report(n=1)", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["parameter 'label' is not written and has no default", "label: string (required)"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
+# A transaction may create a value: constant folding makes the sum a static value of the graph.
+# The value must survive a safepoint while the transaction is open.
+
+[[tests]]
+name = "constant_folding_makes_a_value"
+desc = "fold_constants::fold folds int additions through add_constant and replace; the result runs as before."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/fold_target.cml"
+args = ["${case}", "fold_constants::fold", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "constant_folding_survives_a_safepoint"
+desc = "The same pass with a collection forced at every safepoint while the new string constant is live."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/fold_target.cml"
+args = ["${case}", "fold_constants::fold", "std::nvm"]
+envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "7\n"
+timeout_ms = 30000
+
+# Region reads: a graph with the body only has no region column (region_of is null); after
+# inlining, the Inline regions and their parents are there.
+
+[[tests]]
+name = "regions_of_a_program_without_regions"
+desc = "region_of is null for every node of a graph that has the body only; region_parent is never called for one."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "regionprobe::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2\n0\n0\n2\n4\n0\n0\n4\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "regions_after_inlining"
+desc = "After std::opt::inline, the inlined nodes are in Inline regions whose parent region exists."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/region_target.cml"
+args = ["${case}", "std::opt::inline", "regionprobe::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2\n0\n0\n2\n9\n9\n2\n9\n12\n12\n6\n12\n1\n0\n0\n1\n3\n0\n0\n3\n3\n"
 timeout_ms = 20000

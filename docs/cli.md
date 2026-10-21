@@ -160,6 +160,8 @@ The `std::` prefix belongs to the passes of the core. A pass of a module is name
 
 A module may register passes of its own (`registerModulePass`, plus short aliases with `registerPassAlias`). They run only where the pipeline writes them: the pipeline is composed explicitly, so importing a module never adds a pass. A library whose pass is needed (autodiff needs `std::macro` before it) diagnoses the missing pass and says which one to add, and a tag whose reading pass is absent draws a warning.
 
+A pass written in Camel (`<module>::<function>`, `src/execute/camel_pass.cpp`) declares its parameters as the `with` parameters of that function: `with <label: string, n: int> export func report(p: Program): Program!` is run as `mymod::report(label='x', n=21)`. The names, order and types of the `with` parameters are the pass's parameters (design principles 4.4 and 9.3); bool, int, float and string are the types a pass parameter may have. A `with` parameter has no default in source, so each one is required: leaving one out is `RuntimeDiag::InvalidPassParameter`, and the message lists every parameter with its type.
+
 ### Common Passes
 
 - `std::opt::inline`: inline-only rewrite pass; default target strategy is `std::opt::inline::hybrid`
@@ -464,4 +466,3 @@ camel inspect --gir main.cml
 # View Zen of Camel
 camel --zen
 ```
-

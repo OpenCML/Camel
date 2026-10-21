@@ -378,6 +378,11 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
     return exportedEntityNS_->insert(ref, ent);
 }
 
+void Module::clearExportedNamespaces() {
+    exportedTypeNS_   = std::make_shared<Namespace<std::string, Type *>>();
+    exportedEntityNS_ = std::make_shared<Namespace<std::string, entity>>();
+}
+
 std::optional<Type *> Module::getImportedType(const Reference &ref, ImportLayer layer) const {
     auto bindings = importedBindingsForRef(ref, layer);
     if (bindings.empty()) {

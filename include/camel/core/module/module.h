@@ -241,6 +241,11 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportDefaultImportRef(const Reference &ref);
     bool exportType(const Reference &ref, Type *type);
     bool exportEntity(const Reference &ref, const entity &ent);
+    /// Forgets every name this module exports (types and entities). A module written in Camel
+    /// may be declared again by the builder of a program of its own (a pass: userdef.cpp,
+    /// compileAsProgram); that builder must export its own declarations, which would otherwise
+    /// be refused as duplicates and the importers would keep the graphs of the first build.
+    void clearExportedNamespaces();
     /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles
     /// 10.1). A use of the name is that constant in the graph where it is used: no node of the
     /// root graph, no capture, nothing evaluated when the module is imported. Only data that
