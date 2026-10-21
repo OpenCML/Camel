@@ -46,13 +46,15 @@ timeout_ms = 8000
 
 [[tests]]
 name = "fs.remove_permissions"
-desc = "A removal the file system refuses is an error value of kind PermissionDenied (not NotFound), carries the operator as its location, and leaves the entry in place."
+desc = "A removal the file system refuses is an error value of kind PermissionDenied (not NotFound), carries the operator as its location, and leaves the entry in place. The verifier arranges the refusal with a deny ACE (Windows) or the containing directory's permission bits, and prints why it stopped when the machine will not grant one -- a runner whose ACLs do not bind the process used to fail the run instead of reporting the reason."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/modules/std/fs/remove_permissions.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["fs.remove permission checks passed"]
+# Both outcomes of arranging the refusal begin with the same words: "passed" when the deny bound
+# the process, "skipped (…)" with the reason when it did not.
+expect_stdout_contains = ["fs.remove permission checks"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
