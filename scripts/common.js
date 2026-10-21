@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { execSync, spawnSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -64,6 +64,62 @@ export function getCmakeClangFlags() {
         return '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_RC_COMPILER=llvm-rc'
     }
     return '-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++'
+}
+
+/**
+ * ccache 作为编译器启动器，只在 `CAMEL_USE_CCACHE=1` 时启用（CI 的缓存步骤会设置它，并保证
+ * `ccache` 在 PATH 上）。默认关闭：本机的构建产物不该悄悄依赖一个额外的缓存目录，而当 ccache
+ * 不可用时（版本不认识、缓存目录不可写）构建仍必须以正确的结果完成，故探测失败只告警。
+ * @returns {string} 传给 cmake 的 `-D` 参数，空串表示不用
+ */
+export function getCmakeCcacheFlags() {
+    if (process.env.CAMEL_USE_CCACHE !== '1') {
+        return ''
+    }
+    const ccache = process.platform === 'win32' ? 'ccache.exe' : 'ccache'
+    const probe = spawnSync(ccache, ['--version'], { encoding: 'utf8' })
+    if (probe.status !== 0) {
+        logWarn(`CAMEL_USE_CCACHE=1 but ${ccache} did not run; building without it`)
+        return ''
+    }
+    return `-DCMAKE_C_COMPILER_LAUNCHER=${ccache} -DCMAKE_CXX_COMPILER_LAUNCHER=${ccache}`
+}
+
+/**
+ * `conan install` 要覆盖哪些 build_type，来自 `CAMEL_CONAN_BUILD_TYPES`（逗号分隔，默认三种）。
+ * 一个只构建 Release 的 CI job 只要 Release：Debug 与 RelWithDebInfo 的头文件与库没人读，
+ * 在 Windows 上却要为每种配置各构建一遍依赖。
+ * @returns {string[]}
+ */
+export function conanBuildTypes() {
+    const known = ['Release', 'Debug', 'RelWithDebInfo']
+    const raw = process.env.CAMEL_CONAN_BUILD_TYPES
+    if (!raw) {
+        return known
+    }
+    const wanted = raw
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean)
+    const unknown = wanted.filter((type) => !known.includes(type))
+    if (unknown.length > 0) {
+        throw new Error(
+            `CAMEL_CONAN_BUILD_TYPES has ${unknown.join(', ')}; the known build types are ${known.join(', ')}`
+        )
+    }
+    return wanted
+}
+
+/**
+ * 为 `conanBuildTypes()` 里的每种配置执行 `conan install`。Ninja Multi-Config 的工程需要同一棵
+ * `build/` 里有各配置的依赖，因此这里的集合必须覆盖工程会构建的配置。
+ * @param {string[]} [buildTypes] - 覆盖 `CAMEL_CONAN_BUILD_TYPES`
+ */
+export function conanInstall(buildTypes = conanBuildTypes()) {
+    for (const buildType of buildTypes) {
+        const settings = buildType === 'Release' ? '' : ` --settings=build_type=${buildType}`
+        runCommand(`conan install . --output-folder=build --build=missing${settings}`, { cwd: BASEDIR })
+    }
 }
 
 export function removeDir(dir) {
@@ -234,13 +290,7 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
     const conanToolchain = path.join(buildDir, 'conan_toolchain.cmake')
     if (!fs.existsSync(conanToolchain)) {
         logStep('build/ or conan_toolchain.cmake missing, running conan install...')
-        runCommand('conan install . --output-folder=build --build=missing', { cwd: BASEDIR })
-        runCommand('conan install . --output-folder=build --build=missing --settings=build_type=Debug', {
-            cwd: BASEDIR
-        })
-        runCommand('conan install . --output-folder=build --build=missing --settings=build_type=RelWithDebInfo', {
-            cwd: BASEDIR
-        })
+        conanInstall()
     }
     process.chdir(buildDir)
 
@@ -252,8 +302,9 @@ export function runCmakeBuild(config, cmakeOptionFlags) {
     logStep(`Building ${config}... (${BUILD_FOOTPRINT})`)
     const cmakeEnv = getCmakeEnv()
     const clangFlags = getCmakeClangFlags()
+    const ccacheFlags = getCmakeCcacheFlags()
     runCommand(
-        `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake ${clangFlags} ${cmakeOptionFlags}`,
+        `cmake .. -G "Ninja Multi-Config" -DBUILD_FOOTPRINT="${BUILD_FOOTPRINT}" -DCMAKE_TOOLCHAIN_FILE=./build/conan_toolchain.cmake ${clangFlags} ${ccacheFlags} ${cmakeOptionFlags}`,
         cmakeEnv ? { env: cmakeEnv } : {}
     )
     // CAMEL_BUILD_KEEP_GOING=1: do not stop at the first file that fails to compile, so that one

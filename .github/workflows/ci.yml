@@ -25,6 +25,10 @@ on:
         description: "Also run the ASan/UBSan Debug build (Linux, smoke plan)"
         type: boolean
         default: false
+      macos:
+        description: "Also run the macOS arm64 leg (Apple/macOS compiler signal; the wheel workflow already builds there)"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -65,16 +69,26 @@ jobs:
             slug: win-x64
             arch: x86-64-v2
             experimental: false
+          # Opt-in: `experimental` means it never decides the run, and its compiler is Apple Clang
+          # through Homebrew LLVM -- a signal worth having when a macOS build breaks, but not a
+          # 10x-priced runner on every tag. build-pypi.yml already builds and smokes wheels on macOS.
           - runner: macos-latest
             slug: macos-arm64
             arch: baseline # the x86-64 levels do not apply to arm64
             experimental: true
+            dispatch_only: true
     runs-on: ${{ matrix.cfg.runner }}
+    if: ${{ !matrix.cfg.dispatch_only || (github.event_name == 'workflow_dispatch' && inputs.macos) }}
     continue-on-error: ${{ matrix.cfg.experimental }}
     timeout-minutes: 120
     env:
       # Same value as build-pypi.yml on x86-64 (pending the owner's decision there).
       CAMEL_TARGET_ARCH: ${{ matrix.cfg.arch }}
+      # Only Release is built here; the Debug and RelWithDebInfo dependencies that
+      # scripts/install.js installs by default cost about a minute on Windows and nothing reads them.
+      CAMEL_CONAN_BUILD_TYPES: Release
+      # scripts/common.js adds ccache as the compiler launcher; the step above provides it.
+      CAMEL_USE_CCACHE: "1"
 
     defaults:
       run:
@@ -143,6 +157,16 @@ jobs:
           fi
           echo "CLANG_MAJOR=$major" >> "$GITHUB_ENV"
 
+      # Compiling is ~13 of the ~15 minutes of this job, and a run usually changes a handful of
+      # files: ccache keys an object by the preprocessed source and the compiler, so only those
+      # compile again. scripts/common.js passes it to CMake as the compiler launcher when
+      # CAMEL_USE_CCACHE=1 (the build still succeeds without it, with a warning).
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.cfg.slug }}-clang${{ env.CLANG_MAJOR }}
+          max-size: 500M
+
       - name: Install Conan and test-side Python packages
         run: |
           python -m pip install --upgrade pip "conan>=2.10,<3" $TEST_PIP_PACKAGES
@@ -183,7 +207,7 @@ jobs:
       - name: Install npm dependencies (skip husky / prepare)
         run: npm ci --ignore-scripts
 
-      - name: Conan install (Release, Debug, RelWithDebInfo)
+      - name: Conan install (Release; see CAMEL_CONAN_BUILD_TYPES)
         run: node scripts/install.js
 
       # scripts/cmake-opts.js reads the build options from .camel-opts.json.
@@ -292,6 +316,9 @@ jobs:
 
       - name: Conan install (Release, Debug, RelWithDebInfo)
         run: node scripts/install.js
+        env:
+          # This job builds Debug; the default set keeps every configuration available.
+          CAMEL_CONAN_BUILD_TYPES: Release,Debug,RelWithDebInfo
 
       - name: Build (Debug, ASan + UBSan)
         env:
