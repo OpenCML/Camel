@@ -226,3 +226,16 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "target\n1\n0\n15\n15\nSignatureMismatch\n"
 timeout_ms = 20000
+
+# Facts the core keeps (design 10): effects of a graph, the shape of a tensor node, the
+# permissions a node was granted, read without a pass computing them again.
+
+[[tests]]
+name = "facts_of_graphs_and_nodes"
+desc = "A graph that only computes has no external effect, one that prints has; the shape of a tensor value; no permissions are granted."
+kind = "behavior"
+case = "../../../cases/modules/graph_facts.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "false\ntrue\ntrue\ntrue\n[-, -, f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
+timeout_ms = 10000
