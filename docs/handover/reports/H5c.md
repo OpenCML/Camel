@@ -1,0 +1,121 @@
+# H5c — named struct types in the C++ emitter
+
+Worktree `D:\Projects\Camel-wt\h5c-cpp`, branch `handover/H5c-cpp-named` (from `develop`).
+Everything is left in the working tree: no commit, no new branch, no push. Builds used only
+`camel-build.ps1 -Path <worktree>`; test plans used only
+`camel-test.ps1 -Path <worktree> -Plan <plan> -Jobs 8`. Logs and scratch programs are under
+`D:\Temp\h5c`; nothing was written into the tree.
+
+## 1. The three reproductions
+
+`python test/tools/cppexec/run.py <three cases>` with `CAMEL_HOME` set and
+`D:\Projects\Camel\.venv\Scripts` first on `PATH`, before the change:
+
+| program | outcome | detail |
+|---|---|---|
+| `test/cases/consistency/new_values/rebinding_loop.cml` | does not build | `no matching function for call to 'append'` |
+| `test/cases/consistency/values/structs_tuples.cml` | refused | `function 'swap' converts a value of type '{ x: int, y: int }' to 'Point', which std::cpp does not translate yet` |
+| `test/cases/trans/cpp/exec/composites.cml` | does not build | `no matching function for call to 'norm1'` |
+
+The generated C++ showed the cause directly: `rebinding_loop` had two structs of the same
+fields, `struct Record` for `Box` and `struct Record_2` for the anonymous literal;
+`composites` had `struct Record` for `Point` and `Record_2` for `{ x: 1, y: 2 }`; and
+`structs_tuples` had an anonymous-to-`Point` CAST the emitter refused.
+
+After the change the same command reports `3 100.0% same` for the three programs.
+
+## 2. Root cause
+
+One root, not two. H5 made named struct types nominal: a named type's mangled name is its
+declaration (`S<declId>`), while an anonymous struct type keeps its structural name. The
+emitter keyed generated C++ structs by that mangled name, so `Point` and `{ x: int, y: int }`
+(which the language lets enter each other without moving) became two unrelated C++ class
+types. That produced all three symptoms:
+
+- an argument or return of anonymous type could not be passed where the named C++ struct was
+  expected (`norm1` in `composites`), because the GIR call carries no CAST: the two types have
+  the same layout, so the language moves nothing;
+- `rt::append` of an anonymous `{ label, values }` could not append to `rt::Array<Box>`, for
+  the same reason (`rebinding_loop`);
+- where the GIR does carry the identity CAST, `lowerCast` saw two different C++ spellings and
+  refused it (`swap` in `structs_tuples`).
+
+`append` is therefore the same root, not a second defect in the array path: the array element
+type and the literal were the two C++ structs.
+
+## 3. What the emitter now does
+
+`src/passes/trans/cpp/cpp_types.{h,cpp}`:
+
+- **One C++ struct per layout, and a name per declaration.** The layout is the field names and
+  the C++ types of their values, in order, with the kind (tuple or struct) kept apart. A named
+  type is named from its declaration (`record->decl()->name()`, sanitized: `models::Point`
+  becomes `models_Point`; a generic instance appends its type arguments, `Pair<int>` becomes
+  `Pair_int`). A named type whose layout already has a C++ struct becomes another name for it:
+  `using Spot = Point;`. Its fields are in the declaration's order, which is also the order of
+  the `appendText` and `operator==` generated for that struct.
+- **The identity CAST is no operation.** `ProgramValues::sameRepresentation` resolves both
+  sides to the canonical struct of their layout; `lowerCast` writes nothing when they agree.
+  This covers an anonymous value entering a named type and an `as` between two named types
+  whose fields are in the same order (design principles 5.1 and 5.2).
+- **The reorder conversion is a per-field copy.** The GIR already lowers it to a `FILL`; the
+  emitter constructs the target struct with the source's fields in the target declaration's
+  order (for example `Point{lit::record_2.x, lit::record_2.y}` for a `Swapped` source).
+- **The refusal stays** for a struct-to-struct CAST whose representations do not agree. A field
+  set that does not correspond never reaches the emitter: the front end diagnoses it
+  (`DeclaredTypeMismatch`, `NoMatchingFunction`, `ElementTypeMismatch`, `DynamicCastForbidden`
+  for a named `as`), and the emitter's fallback refusal is unchanged.
+- Arrays, constants and `append` now see the element's one C++ type, so no special case was
+  needed there.
+
+## 4. Tests added
+
+- `test/cases/trans/cpp/named_structs.cml`: `Point` and `Spot` with one layout, `Swapped` with
+  the fields in another order, an anonymous literal into a `Point` parameter, a named
+  same-order `as`, a reordered `as`, an array of `Point` built from an anonymous literal, and
+  `append` of an anonymous literal to `Point[]`. It agrees with `std::fvm`.
+- `test/tools/cppexec/expect.txt`: added that program (no existing entry was changed or
+  weakened).
+- `test/plans/feat/trans/cpp.plan.toml`: `named_struct_types` checks the generated text has
+  `struct Point {`, `struct Swapped {`, `using Spot = Point;` and the field-by-field copy
+  `Point{lit::record_2.x, lit::record_2.y}`.
+
+## 5. Verification counts
+
+| target | result |
+|---|---|
+| `test/plans/feat/trans/cpp.plan.toml` | 9/9 pass; `agree_with_fvm` passes, 110/110 programs |
+| `test/plans/feat/compile` | 850/853 pass (three pre-existing failures, below) |
+| `test/plans/feat/consistency` | 988/988 pass |
+| `test/plans/smoke` | 10/10 pass |
+
+The three compile failures are `context.struct_field_variable`, `context.struct_field_text` and
+`context.nested_field_text`, each `expected exit 1, got 0`. They are pre-existing on this
+worktree's base, not caused by this change: they run the compiler front end (`camel -E short`,
+no `std::cpp`), and this change set touches only `src/passes/trans/cpp`. The branch base
+contains commits 095d6169 and 32545167 ("One number grammar for source and entry arguments, and
+a text value reports where it sits"), which changed literal context and the number grammar;
+the failing cases accept a value the plan says must be rejected. The h5c binary reproduces this
+without any C++ translation involved, so the fix belongs to the front end, not here.
+
+## 6. Left
+
+- The three front-end literal-context failures above: a variable struct field and a text struct
+  field are currently accepted where the plan requires `DeclaredTypeMismatch`. Out of scope for
+  the C++ emitter and not papered over here.
+- A struct that mentions itself through an array (`type Node = { children: Node[] }`) is still
+  refused earlier by the front end as `SemanticDiag::FeatureNotSupported`; the emitter does not
+  see it.
+- A named type first met after an anonymous type of the same layout is emitted as a `using`
+  alias for that C++ struct rather than as its own `struct` tag. It is the same C++ type, so
+  the CAST is still a no-op; the declaration name is still present in the file.
+
+## 7. Files changed
+
+Emitter: `src/passes/trans/cpp/cpp_types.h`, `src/passes/trans/cpp/cpp_types.cpp`,
+`src/passes/trans/cpp/function_emitter.cpp`.
+
+Tests: `test/cases/trans/cpp/named_structs.cml`,
+`test/plans/feat/trans/cpp.plan.toml`, `test/tools/cppexec/expect.txt`.
+
+Documentation: this report.

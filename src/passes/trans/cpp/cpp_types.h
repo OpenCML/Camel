@@ -89,6 +89,15 @@ class ProgramValues {
     /// `void` is "void": the value of a node of that type is not kept.
     std::optional<std::string> type(const Type *type);
 
+    /// The C++ representation of values of `type`: for a struct type, the one struct that all
+    /// types of its layout share, whichever declaration or literal wrote it (design principles
+    /// 5.2: a named type is its declaration, but a value of the same layout enters it without
+    /// moving, so a CAST between them is a no-op); otherwise the C++ type itself.
+    std::optional<std::string> representation(const Type *type);
+
+    /// Whether a CAST from one type to the other moves nothing: the same C++ representation.
+    bool sameRepresentation(const Type *a, const Type *b);
+
     /// The C++ name of element `i` of a tuple (`_0`, `_1`, ...) or field `i` of a struct type.
     std::string fieldName(const Type *type, size_t i) const;
 
@@ -109,8 +118,10 @@ class ProgramValues {
   private:
     std::string hoist(const std::string &type, const std::string &expr, const std::string &hint);
 
-    std::map<std::string, std::string> types_;    // the type's mangled name -> C++ type
-    std::map<std::string, std::string> constants; // C++ expression -> name of the constant
+    std::map<std::string, std::string> types_;           // the type's mangled name -> C++ type
+    std::map<std::string, std::string> layouts_;         // a struct layout -> its one C++ struct
+    std::map<std::string, std::string> representations_; // a type -> the struct it denotes
+    std::map<std::string, std::string> constants;        // C++ expression -> name of the constant
     std::string declarations_;
     std::string constants_;
     NameScope names_;         // the declared types
