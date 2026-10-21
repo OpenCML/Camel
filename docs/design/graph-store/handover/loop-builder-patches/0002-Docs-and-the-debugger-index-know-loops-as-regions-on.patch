@@ -1,0 +1,188 @@
+From beb86776f426920771273c28cb9f40de1a858efd Mon Sep 17 00:00:00 2001
+From: Stuart0808 <20211402@bjtu.edu.cn>
+Date: Wed, 21 Oct 2026 09:53:14 +0100
+Subject: [PATCH 2/3] Docs and the debugger index know loops as regions only
+
+The loop notes (loops, debugger, facts, GIR interchange) describe the regions and the plan's
+events instead of the loop graphs, the capture table and the lowering; the debugger index no
+longer looks for loop graphs.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HPQpHqPqSJbP9yRrJbDvye
+---
+ docs/technical/35_debugger.md             | 20 ++++++--------
+ docs/technical/40_graph_facts.md          | 14 +++++-----
+ docs/technical/gir-interchange.md         |  4 ++-
+ tools/debugger/src/core/program_index.cpp | 32 ++---------------------
+ tools/debugger/src/core/program_index.h   |  4 +--
+ 5 files changed, 21 insertions(+), 53 deletions(-)
+
+diff --git a/docs/technical/35_debugger.md b/docs/technical/35_debugger.md
+index b9bd8361..f00ee741 100644
+--- a/docs/technical/35_debugger.md
++++ b/docs/technical/35_debugger.md
+@@ -294,24 +294,20 @@ not listed.
+ 
+ The core keeps one shadow frame per activation of a graph, as the schedulers run them, and
+ groups them into *activations of functions*; a tail call that replaces the only frame of an
+-activation replaces the activation (and is counted, 5.2). The parts of a loop, which are still
+-graphs, are grouped with the function that holds the `LOOP` node:
++activation replaces the activation (and is counted, 5.2). A frame starts an activation: a call of
++a function or of a lambda, the tail call of one.
+ 
+-- the frame of a loop part, called by a frame of its owner, is part of the caller's activation;
+-- every other frame starts an activation: a call of a function or of a lambda, the tail call of
+-  one.
+-
+-`frames` `subgraphs` shows every shadow frame, so the parts of a loop are frames of their own;
+-lambdas are frames of their own in both settings: a function value is a function. The setting is
++`frames` `subgraphs` shows every shadow frame; lambdas are frames of their own in both settings: a function value is a function. The setting is
+ the core command `configure {frames}`, the DAP launch attribute `frames` and custom request
+ `camel/setFrames` (VS Code: *Camel: Toggle Subgraph Frames*), and the REPL command `frames`.
+ It changes what the next question about the stack sees, also while the program is stopped; a
+ step uses the setting it started with.
+ 
+-A loop (design principles 3.10) will be a `LOOP` node with a condition subgraph and a body
+-subgraph; they are code of the function the loop is written in and fold the same way. In the
+-index they will be a role of graph that folds (`GraphRole`), with the graph that holds the
+-`LOOP` node as their owner, so the activations, the names and the steps need no other change.
++A loop (design principles 3.10) is a `LOOP` node whose condition and body are regions of the
++graph that holds it, as the arms of a branch are: they have no frame of their own in either
++setting, the nodes in them are nodes of the function's frame, and the names of their ports (the
++state, the element) are visible while the code is in the region (`NodeInfo::controlRegion`,
++`GraphInfo::visibleAt`).
+ 
+ ### 5.5 Full names
+ 
+diff --git a/docs/technical/40_graph_facts.md b/docs/technical/40_graph_facts.md
+index ce43c405..ea208d62 100644
+--- a/docs/technical/40_graph_facts.md
++++ b/docs/technical/40_graph_facts.md
+@@ -39,7 +39,7 @@ The core's kinds (`core_facts.h`):
+ | `core.instance` | Node | ii | the index instance of an OPER node whose operator declares one (`instanceOf`), or "none" |
+ | `core.reorder` | Node | ii | what its reduction may do (`reorderFreedomOf`) |
+ | `core.effects` | Graph | ii | the effect summary through calls and loops (`effectSummaryOf`) |
+-| `core.loopDomain` | CrossGraph | ii | a LOOP node and its body graph: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
++| `core.loopDomain` | CrossGraph | ii | a LOOP node and the graph that holds its body region: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
+ | `core.permissions` | Node | i | the permissions granted to the node |
+ | `core.resources` | Node | ii | what the node does to resources (`resourcesOf`, `docs/technical/41_resources_and_definitions.md`), at the nodes that touch any |
+ 
+@@ -77,15 +77,15 @@ is keyed the same way.
+ 
+ Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::opt::inline`,
+ `std::opt` and its parts, `std::macro`, specialization, entry arguments, `tensor::fuse`, the ONNX
+-export's session, the loop lowering), so the revisions are maintained in one place. A fact computed
++export's session), so the revisions are maintained in one place. A fact computed
+ before a pass reads as stale afterwards when the pass changed what it read, and is computed again
+ on the next `obtain`; it is never reused silently. A `Cone` kind (`core.shape`) rehashes what it
+ read when a revision changed: when that is unchanged (the node's type) the fact stays valid with a
+ new stamp (`revalidated`).
+ 
+-The loop lowering of std::fvm/std::jit/std::prl/std::cpp commits a detached copy: graphs keep
+-their GraphId, the graph that held a loop gets a new revision, so facts computed on the program
+-are valid on the copy where nothing changed.
++A detached copy (the working copy of autodiff, `outlineLoopRegions`) keeps the GraphId of its
++graphs; the graph that held a loop gets a new revision, so facts computed on the program are valid
++on the copy where nothing changed.
+ 
+ Facts do not follow a pass on their own (design 10.5: "derived facts are not stale notes that
+ happened to survive a clone"); `tx.keep` (a pass re-establishing a fact it maintains) and the
+@@ -115,13 +115,13 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
+   ```
+   FACT {"kind":"core.shape","version":1,"class":"derived","anchors":[{"graph":"layer","node":2}],"value":"f32 [2, 4]","stamp":{"revisions":[{"graph":"layer","revision":2}],"epoch":0,"target":0,"cone":"5ea9e00000000050"}}
+   FACT {"kind":"core.reorder","version":1,"class":"derived","anchors":[{"graph":"total","node":1}],"value":"regroup, permute","stamp":{"revisions":[{"graph":"total","revision":3}],"epoch":68,"target":0}}
+-  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":2},{"graph":"twice.loop1.body","node":0}],"value":"for: t sequential, t < len(node 1) = 2; element port 0 reads xs(t)","stamp":{"revisions":[{"graph":"twice","revision":4},{"graph":"twice.loop1.body","revision":5}],"epoch":0,"target":0}}
++  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":5},{"graph":"twice","node":2}],"value":"for: t sequential, t < len(node 1) = 2; element port 2 reads xs(t)","stamp":{"revisions":[{"graph":"twice","revision":4}],"epoch":0,"target":0}}
+   FACT {"kind":"core.permissions","version":1,"class":"content","anchors":[{"graph":"total","node":1}],"value":"reassociate","stamp":null}
+   ```
+ 
+   (`test/cases/facts/tensors_and_loops.cml`.)
+ - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
+-  (`test::facts`), facts across `std::opt::inline` and `std::opt` and a private loop lowering
++  (`test::facts`), facts across `std::opt::inline` and `std::opt` and the outlined program
+   (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
+   and `inspect --facts`. The test passes need `CAMEL_ENABLE_TEST_PASSES`.
+ 
+diff --git a/docs/technical/gir-interchange.md b/docs/technical/gir-interchange.md
+index 53644cdc..b57cc99e 100644
+--- a/docs/technical/gir-interchange.md
++++ b/docs/technical/gir-interchange.md
+@@ -38,7 +38,9 @@ Nodes may additionally contain:
+ - `parameter: { name, kind, index }`, where kind is `normal`, `with` or `capture`.
+ - `callee`: the graph ID of a direct FUNC call or a static function value, never a graph
+   name extracted from a label.
+-- `loop: { kind, condition, body }`: explicit graph IDs; `condition` is null for a plain
++- `loop: { kind, condition, body, conditionRegion, bodyRegion }`: `conditionRegion` and
++  `bodyRegion` are the ids of the regions of the graph that hold the condition and the body;
++  `condition` and `body` are null (the node names no graph); `conditionRegion` is 0 for a plain
+   `for` loop. Kind is `while`, `for`, or `for-while`.
+ - `origin`: a decimal string preserving the complete uint64 source identity.
+ - `source: { file, start: { line, character }, end: { line, character } }`: zero-based
+diff --git a/tools/debugger/src/core/program_index.cpp b/tools/debugger/src/core/program_index.cpp
+index 774ca34e..f7a85f6d 100644
+--- a/tools/debugger/src/core/program_index.cpp
++++ b/tools/debugger/src/core/program_index.cpp
+@@ -340,20 +340,7 @@ void ProgramIndex::collect(
+         graphs.push_back(g);
+         if (g->hasNodePayload()) {
+             for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+-                const GCNode *n = *it;
+-                if (n != nullptr && n->kind == GCNodeKind::Loop && arms != nullptr) {
+-                    // The condition and the body of a loop are code of the function the loop
+-                    // is written in (design principles 12.1: they fold like arms).
+-                    for (GCGraph *part :
+-                         {program->loopCondOf(*g, it.ref()), program->loopBodyOf(*g, it.ref())}) {
+-                        if (part != nullptr) {
+-                            auto &owners = (*arms)[part];
+-                            if (std::find(owners.begin(), owners.end(), g) == owners.end()) {
+-                                owners.push_back(g);
+-                            }
+-                        }
+-                    }
+-                }
++                const GCNode *n  = *it;
+                 const origin_t o = g->nodeOrigin(it.ref());
+                 if (n == nullptr || o == 0) {
+                     continue;
+@@ -1022,22 +1009,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
+     // frame of an arm is shown at all is the stack's business (DebugCore, 5.4): it folds into
+     // the frame of the function unless the user asks for the subgraphs.
+     info->display = info->name;
+-    // `f.loop1.cond`, `f.loop1.body`: the condition and the body of a loop written in `f`.
+-    const bool loopPart = info->name.find(".loop") != std::string::npos &&
+-                          (info->name.ends_with(".cond") || info->name.ends_with(".body"));
+-    if (loopPart && armOwners_.contains(g)) {
+-        info->role   = GraphRole::Arm;
+-        info->owners = armOwners_.at(g);
+-        int line     = 0;
+-        for (const NodeInfo &n : info->nodes) {
+-            if (n.loc.valid() && (line == 0 || n.loc.line < line)) {
+-                line = n.loc.line;
+-            }
+-        }
+-        const std::string owner = info->name.substr(0, info->name.rfind(".loop"));
+-        info->display = owner + " [loop " + (info->name.ends_with(".cond") ? "condition" : "body") +
+-                        (line > 0 ? " at line " + std::to_string(line) : std::string()) + "]";
+-    } else if (info->name.rfind("__g_", 0) == 0) {
++    if (info->name.rfind("__g_", 0) == 0) {
+         std::string owner;
+         for (GCGraph *outer = programOfGraph->outerOf(*g); outer != nullptr;
+              outer          = programOfGraph->outerOf(*outer)) {
+diff --git a/tools/debugger/src/core/program_index.h b/tools/debugger/src/core/program_index.h
+index 82ce50e8..fba68437 100644
+--- a/tools/debugger/src/core/program_index.h
++++ b/tools/debugger/src/core/program_index.h
+@@ -118,9 +118,7 @@ enum class GraphRole {
+     Lambda,   // a function value written in another function: a frame of its own
+     /// The arm of a branch (`if`, `match`, `&&`, `||`, `??`, `!!`, `?->`, narrowing): code of
+     /// the function that branches, which a call makes a frame of its own. Folded into the
+-    /// function's frame unless the user asks for the subgraphs. The condition and the body of
+-    /// a `LOOP` will be subgraphs of this kind too (design principles 3.10): they belong
+-    /// to the function the loop is written in, and fold the same way.
++    /// function's frame unless the user asks for the subgraphs.
+     Arm,
+ };
+ 
+-- 
+2.55.0.windows.3
+

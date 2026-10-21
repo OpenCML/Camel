@@ -1,0 +1,2279 @@
+From 43286534f0454c7e85e9240c9f6517173c616872 Mon Sep 17 00:00:00 2001
+From: Stuart0808 <20211402@bjtu.edu.cn>
+Date: Wed, 21 Oct 2026 09:49:11 +0100
+Subject: [PATCH 1/3] The front end builds the condition and the body of a loop
+ as regions
+
+A loop is written the way a branch is: its condition and its body are regions of the current
+graph, built where they are written (Builder::buildArm with the kind LoopCond or LoopBody), their
+ports are Port nodes of the region declared in its scope, and what the code names is read where
+it is. The LOOP node gets the results of the parts and a round counter as With inputs. There is
+no capture table of a loop any more (captureTwins_, buildLoopGraph, the loop graphs and their
+names are gone), the program is not regionized after the front end, and the encoder, the
+reachability walk, the effect analysis and the debug dump know the regions.
+
+With the loop lowering gone from every back end, what only it used goes too:
+loop_lowering, the hidden operators :loop/collector and :loop/collect, :graph/original and
+Program::original. The facts test pass tallies the outlined program instead of the lowered one.
+Two details found on the way: a loop's ports are nodes of its regions, and the layout of a loop
+leaves the ctrl inputs that come from inside the loop to the regions.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01HPQpHqPqSJbP9yRrJbDvye
+---
+ docs/technical/39_loops.md                    | 120 ++--
+ .../camel/compile/gir/draft_graph_builder.h   |  19 +-
+ include/camel/core/operator_table.h           |   7 +-
+ include/camel/execute/loop_frame.h            |   9 +-
+ include/camel/runtime/draft_session.h         |   4 +-
+ include/camel/runtime/graph.h                 |   9 +-
+ include/camel/runtime/loop.h                  |   7 +-
+ include/camel/runtime/loop_lowering.h         |  70 --
+ include/camel/runtime/program.h               |  13 +-
+ src/builtin/executors/builtin.cpp             |  11 +-
+ src/builtin/operators/graph.cpp               |  62 --
+ src/builtin/operators/graph.h                 |  40 --
+ src/builtin/operators/loop.cpp                |  54 --
+ src/builtin/operators/loop.h                  |  41 --
+ src/compile/gir/builder.h                     |  40 +-
+ src/compile/gir/builder_control.cpp           | 266 +++-----
+ src/compile/gir/builder_diagnostics.cpp       |  19 +-
+ src/compile/gir/captures.cpp                  |   5 -
+ src/compile/gir/debug_json.cpp                |   8 +-
+ src/compile/gir/draft_graph_builder.cpp       |  29 +-
+ src/compile/gir/graph_encode.cpp              |  24 +-
+ src/compile/gir/reachable.cpp                 |   8 -
+ src/core/context/context.cpp                  |   7 -
+ src/execute/graph_runtime_support.cpp         |   5 +-
+ src/passes/test/facts.cpp                     |  13 +-
+ src/passes/trans/cpp/cpp_export.cpp           |   1 -
+ src/passes/trans/cpp/operator_rules.cpp       |   8 -
+ src/runtime/draft_session.cpp                 |   3 -
+ src/runtime/loop_lowering.cpp                 | 621 ------------------
+ src/runtime/loop_outline.cpp                  |   3 +-
+ src/runtime/program.cpp                       |  12 -
+ test/plans/feat/modules/graph_facts.plan.toml |   6 +-
+ test/plans/feat/modules/tiles.plan.toml       |   6 +-
+ 33 files changed, 258 insertions(+), 1292 deletions(-)
+ delete mode 100644 include/camel/runtime/loop_lowering.h
+ delete mode 100644 src/builtin/operators/graph.cpp
+ delete mode 100644 src/builtin/operators/graph.h
+ delete mode 100644 src/builtin/operators/loop.cpp
+ delete mode 100644 src/builtin/operators/loop.h
+ delete mode 100644 src/runtime/loop_lowering.cpp
+
+diff --git a/docs/technical/39_loops.md b/docs/technical/39_loops.md
+index 5293f7b5..4d8b7e2a 100644
+--- a/docs/technical/39_loops.md
++++ b/docs/technical/39_loops.md
+@@ -2,8 +2,8 @@
+ 
+ This note describes how a loop goes from source to execution. The normative text is
+ `docs/design-principles.cn.md`, sections 3.10 (a loop is an expression with a state; no `break`
+-or `continue`; a `LOOP` node lowered to tail recursion at each subsystem's entry, then made native
+-one subsystem at a time; one capture table for the condition and the body; `for … while`
++or `continue`; a `LOOP` node whose condition and body are regions of the graph it is in, run in
++that graph's frame by every back end; `for … while`
+ is a third form of the same node; several values of state are a tuple; the `do`
+ syntax) and 7.5 (`@numeric` covers loop bodies). The design work behind it is `docs/design/loops`, the
+ node card is in `docs/design/graph-model` 3.5, and the consumer API is
+@@ -49,51 +49,43 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
+    (`LoopStateWithoutType`). A sequence that is not an array (a string, a map, a tensor) is
+    turned into its array of elements by the `__iter__` operator the sequence's type resolves,
+    and any other type is `LoopSequenceNotIterable`; see section 2a.
+-2. The condition graph and the body graph (`f.loopN.cond`, `f.loopN.body`) are created with
+-   their ports (the state; the body the element first) before either is built, and are
+-   registered as **capture twins** (`captureTwins_`): `captureInto` makes every capture made
+-   into one also into the other, at the same position. So the two capture tables are equal at
+-   every moment, including captures the link step adds later.
+-3. Each graph is built as a body of its own (a block, `sync` if written so, `return` ends the
+-   block with the next state). The condition must be a `bool` (`LoopConditionNotBool`); the
+-   body must give the state (`LoopBodyTypeMismatch`), a value that enters it (an `int` for an
+-   `int?`) gets the CAST at the body's exit.
+-4. The capture ports become with-ports; the LOOP node is added with Norm inputs (the array,
+-   the first values); its With inputs are linked by the link step, in the twins' order, as the
+-   captures of a FUNC node are.
+-5. Like a branch, the loop uses every variable its graphs capture and writes those they write
+-   (ordering, `wait`, `IgnoredSideEffect`); in a sync block it joins the chain. A loop whose
+-   value nothing uses outside a sync block does not run; when its graphs have effects that is
+-   reported as `EffectNotExecuted` ("The loop").
++2. The condition and the body are regions of the current graph (`LoopCond`, `LoopBody`), built
++   where they are written like the arms of a branch (`Builder::buildArm`). Their ports (the
++   state; the body the element first) are Port nodes of the graph that belong to the region and
++   are declared as names in its scope; everything else the code names is read where it is, so a
++   loop has no capture table.
++3. Each part is a block (`sync` if written so, `return` ends the block with the next state).
++   The condition must be a `bool` (`LoopConditionNotBool`); the body must give the state
++   (`LoopBodyTypeMismatch`), a value that enters it (an `int` for an `int?`) gets the CAST at the
++   body's exit.
++4. The LOOP node is added with Norm inputs (the array, the first values) and With inputs the
++   results of the parts (the body's, then the condition's) and a Port node of type `int64`, the
++   slot the back ends count the rounds in.
++5. Like a branch, the loop uses every variable its parts used and writes those they wrote
++   (`mergeArmVariables`: ordering, `wait`, `IgnoredSideEffect`); in a sync block it joins the
++   chain. A loop whose value nothing uses outside a sync block does not run; when its parts have
++   effects that is reported as `EffectNotExecuted` ("The loop").
+ 
+ Storage (`include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form
+-and the reference-table indexes of the two graphs (both marked callee); a draft holds
+-`GCLoopBody` with the graphs themselves. Both payloads also hold `collectionCount`, the number of
+-collection slots (section 3.1, zero for a loop written in source today). Decode, clone, both
+-encoders, the session's graph enumeration and reachability know it. Every commit checks the
+-payload (I12/I13) and `validateRuntimeLoopInterface` (op-semantics I18, I19).
+-
+-**Region form.** The graphs above are what the front end builds. Right after it
+-(`Context::materializeRuntimeProgram`, `passes::opt::regionizeLoops`, `src/passes/opt/inline/loops.cpp`)
+-the condition and the body are copied into the graph that has the LOOP node as its `LoopCond` and
+-`LoopBody` regions (`GCRegion`): the state ports (the element first, for the body) are the ports
+-of the region, named by `GCRegion::params`; the values the graphs captured are read where they
+-are, so the node has no capture table; and the With inputs of the node are the results of the
+-regions (the body's, then the condition's), which is how what the regions compute is reached
+-from the node. The payload names no graph (`condRef` and `bodyRef` are none), the loop graphs
+-leave the program, and a graph that has loops holds their nodes: the passes, the facts and the
+-validator see them as nodes of one graph with regions. `LoopView` reads both forms
+-(`inRegions()`); a loop in graph form only exists for the code that reads a loop as two graphs.
+-`runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`) makes that form from the region
+-form, in a private program: the lowering to tail recursion (std::prl, std::cpp) and autodiff use
+-it; autodiff regionizes its gradient again.
+-`test::outline_loops` shows the result in a dump.
++(`condRef` and `bodyRef` are none: the node names no graph) and `collectionCount`, the number of
++collection slots (section 3.1, zero for a loop written in source today). The regions are
++`GCRegion`s of kind `LoopCond` and `LoopBody` owned by the node: their ports are the Port nodes
++the code reads the state and the element through, named by `GCRegion::params`; the With inputs of
++the node are the results of the regions (which is how what they compute is reached from the node)
++and the round counter. A graph that has loops holds their nodes: the passes, the facts and the
++validator see them as nodes of one graph with regions. Every commit checks the payload (I12/I13)
++and `validateRuntimeLoopInterface` (op-semantics I18, I19). `LoopView` reads the node; a consumer
++that needs the condition and the body as graphs of their own (autodiff) takes them out in a
++private program, `runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`), and puts them
++back, `passes::opt::regionizeLoops` (`src/passes/opt/inline/loops.cpp`). `test::outline_loops`
++shows the graph form in a dump.
+ 
+ `std::rgir` shows the node (`LOOP while`); in graph form it names the graphs:
+ 
+ ```
+ N2A [label="LOOP while cond=main.loop2.cond body=main.loop2.body", type="LOOP", ...];
+ ```
++(`graph form` is what `test::outline_loops` and autodiff's working copy have.)
+ 
+ ## 2a. The elements of a string, a map and a tensor
+ 
+@@ -119,8 +111,7 @@ today; the question is in the H4b report).
+ The result is that the LOOP node's iterable port is always an array, and every consumer sees
+ one form: `LoopView::iterable()` is the array of elements (an OPER node when a conversion was
+ made), the element port has its element type (I18), `driveLoopRounds`
+-(`include/camel/execute/loop_driver.h`) takes one element per round from it, and the lowering
+-(`src/runtime/loop_lowering.cpp`) uses `:struct/len_arr` and `:op/idx_arr` on it. No back end
++(`include/camel/execute/loop_driver.h`) takes one element per round from it. No back end
+ has iteration code of its own, and `std::cpp` handles the string conversion (`rt::chars`)
+ while maps and tensors stay untranslated types there.
+ 
+@@ -203,33 +194,20 @@ contribution would be dropped without a sign of it.
+ | autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
+ | debugger | the condition and the body are regions of the graph of their function: part of its frame, with the names of their ports |
+ 
+-**The lowering** (`camel/runtime/loop_lowering.h`): per loop, three graphs,
+-`rec(i, S; c, xs) = if go then next(S; c, i, xs) else done(S)`, `next = rec(i + 1, body(xs[i],
+-S; c); c, xs)`, `done(S) = S`, with `go` the condition, `i < len(xs)`, or both (the condition
+-first). The arms are graphs under a BRCH, as the front end builds an `if`, so the call of `rec`
+-is in tail position on every back end, and the lowered loop is not counted against the recursion
+-limit. The program is committed **detached** (`RuntimeGraphDraftSession::commit(true)`): the
+-context's program keeps its LOOP nodes.
+-
+-The parallel scheduler also accepts function graphs obtained during execution, for example
+-the CPU fallback of a native operator that reads a function's original graph. Its per-run
+-execution-graph cache lowers such a graph once, under a mutex, before allocating the callee
+-frame. Arguments and captures are bound through the resulting frame's own ports. Detached
+-copies and their original graphs remain rooted by the context's graph manager; the cache
+-holds no function values or invocation data. Concurrent publication of those graph roots is
+-serialized, with collections inhibited only while publishing or rewriting, never while
+-running the callee. The bytecode hand-off excludes original LOOP graphs, so bytecode compiled
+-for a source graph cannot be paired with a lowered graph's frame layout.
++**The range of a loop.** The plan (`ExecPlan`, `src/execute/exec_plan.cpp`) lays a loop out as one
++piece: what its regions read from outside, the first values of the state, the nodes of the
++condition, those of the body, then the LOOP node (`computeExecutionOrder`). `ExecLoop` records the
++positions, the data slots a round reads and writes and the slot of the round counter; the events
++at a position (`ExecLoopEvent`: `Begin`, `Test`, `End`) are run by the functions of
++`camel/execute/loop_frame.h` (`loopBegin`, `loopTest`, `loopEnd`, and `stepLoops` for an
++interpreter that walks the nodes). A nested loop starts again in every round of the loop around
++it; going back to the start of a round does not start or test the loops around it.
+ 
+ **Operators that read graphs see the program's own.** An operator that reads the graph of a
+ function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
+ `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
+-`OperatorTraits::inspectsGraphs`. The lowering passes every operand of function type of such an
+-operator through `:graph/original` (`src/builtin/operators/graph.h`), which turns a function
+-value of the private copy into the same function over the program's graph it was copied from
+-(`Program::original()`, recorded by the detached commit; the closure is kept, a copy has its
+-original's ports). So Tiles sees a function's LOOP, and the ONNX export refuses it where it is
+-written, on every back end (`modules.tiles` `loop_structure_*`, `linear.loops`
++`OperatorTraits::inspectsGraphs`. It sees a function's LOOP and its regions (`modules.tiles`
++`loop_structure_*`), and the ONNX export refuses it where it is written (`linear.loops`
+ `loops.onnx_refused_lowered`). autodiff differentiates a function's own LOOP node instead of
+ refusing it: the forward loop collects each round's residuals in its collection slots and the
+ reverse pass is a loop over those arrays (section 3.2, `linear.loops`
+@@ -258,10 +236,7 @@ components are updated in place, and each round's `v_c` is appended to tape `c`
+ append is unobservable). The work tuple lives in the node's slot (NodeVM, FastVM) or in a rooted
+ tuple, so the arrays are traced; the tapes grow on the run-time heap, so a
+ limit hit is `RuntimeDiag::MemoryExhausted` reported while "collecting the values a loop produces
+-each round" at the loop's source location. There is no round limit. The lowering does the same
+-with two hidden operators, `:loop/collector` (a fresh array, once before the loop) and
+-`:loop/collect` (append in place, returns the tape), effectful by default so no pass removes or
+-reorders them; `next` carries the `(state…, tape…)` tuple.
++each round" at the loop's source location. There is no round limit.
+ 
+ ## 5. Timings
+ 
+@@ -272,13 +247,12 @@ process, one container, the median of three runs:
+ |---|---|---|
+ | 2.06 s | 1.08 s | 1.07 s |
+ 
+-Before the loops were bytecode, FastVM and the JIT ran the private lowering (1.67 s, 1.88 s) and
+-the first native instruction was slower than that (it entered the interpreter again for each of
+-its two calls a round). A loop with several values of state builds the tuple of the next state
+-every round (the body's FILL), which a hand-written recursion over separate parameters does not.
++Before the loops were bytecode, FastVM and the JIT ran a lowering to tail recursion (1.67 s, 1.88 s).
++A loop with several values of state builds the tuple of the next state every round (the body's
++FILL), which a hand-written recursion over separate parameters does not.
+ 
+ Next steps: compiling a loop with the JIT; passing the k values of the state separately when the
+-body ends in a tuple FILL; and in their turn std::prl, std::cpp, ONNX and autodiff.
++body ends in a tuple FILL; the translation of a loop to an ONNX Loop; autodiff on the regions.
+ 
+ ## 6. Tests
+ 
+diff --git a/include/camel/compile/gir/draft_graph_builder.h b/include/camel/compile/gir/draft_graph_builder.h
+index d24128d5..a508224e 100644
+--- a/include/camel/compile/gir/draft_graph_builder.h
++++ b/include/camel/compile/gir/draft_graph_builder.h
+@@ -53,11 +53,6 @@ namespace camel::compile::gir {
+ class DraftGraphBuilder {
+   public:
+     using FuncTarget = graph_ptr_t;
+-    /// The graphs of a LOOP node: the condition (null for a For loop) and the body.
+-    struct LoopTarget {
+-        graph_ptr_t cond;
+-        graph_ptr_t body;
+-    };
+     using DrefTarget = std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>;
+ 
+     explicit DraftGraphBuilder(camel::core::type::FunctionType *funcType = nullptr);
+@@ -127,10 +122,11 @@ class DraftGraphBuilder {
+     addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body = {});
+     runtime::DraftNodeRef addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex);
+     runtime::DraftNodeRef addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex);
+-    /// A LOOP node of form `kind` running `target` (camel/runtime/loop.h); its value has type
+-    /// `type`. The two graphs are made dependencies of this one.
+-    runtime::DraftNodeRef 
+-    addLoopNode(camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type);
++    /// A LOOP node of form `kind` (camel/runtime/loop.h) whose condition and body are regions of
++    /// this graph; its value has type `type`.
++    runtime::DraftNodeRef addRegionLoopNode(camel::core::LoopKind kind, camel::core::type::Type *type);
++    /// A Port node that is a port of a region (the state of a loop), not a parameter of the graph.
++    runtime::DraftNodeRef addRegionPortNode(camel::core::type::Type *type, std::string name);
+     /// Makes the OPER node `node` call `op` instead, an overload with the same parameters and
+     /// result type (the node's inputs, outputs and slot are kept).
+     void retargetOperNode(runtime::DraftNodeRef node, const oper_idx_ptr_t &op);
+@@ -157,10 +153,6 @@ class DraftGraphBuilder {
+     const FuncTarget &funcTarget(runtime::gc_node_ref_t nodeId) const {
+         return funcTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
+     }
+-    const LoopTarget &loopTarget(runtime::DraftNodeRef node) const;
+-    const LoopTarget &loopTarget(runtime::gc_node_ref_t nodeId) const {
+-        return loopTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
+-    }
+     const DrefTarget &drefTarget(runtime::DraftNodeRef node) const;
+     const DrefTarget &drefTarget(runtime::gc_node_ref_t nodeId) const {
+         return drefTarget(runtime::DraftNodeRef(draft_.get(), nodeId));
+@@ -208,7 +200,6 @@ class DraftGraphBuilder {
+ 
+     std::unordered_map<runtime::gc_node_ref_t, std::string> nodePortNames_;
+     std::unordered_map<runtime::gc_node_ref_t, FuncTarget> funcTargets_;
+-    std::unordered_map<runtime::gc_node_ref_t, LoopTarget> loopTargets_;
+     std::unordered_map<runtime::gc_node_ref_t, DrefTarget> drefTargets_;
+     std::unordered_map<runtime::gc_node_ref_t, oper_idx_ptr_t> operTargets_;
+     std::vector<graph_ptr_t> dependencyGraphs_;
+diff --git a/include/camel/core/operator_table.h b/include/camel/core/operator_table.h
+index 78b27017..d0155cf2 100644
+--- a/include/camel/core/operator_table.h
++++ b/include/camel/core/operator_table.h
+@@ -147,11 +147,8 @@ struct OperatorTraits {
+     bool callsGraphs = false;
+     /// The operator reads the graphs of the function values it receives as arguments (it
+     /// compiles, exports or differentiates them) instead of only calling them. Such an operator
+-    /// is given the program's own graphs, with their structure (a LOOP node: docs/design/
+-    /// op-semantics 11.4), also on a back end that runs a private, lowered copy of the program:
+-    /// lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) passes each of its operands of
+-    /// function type through `:graph/original`, which takes a function value of the copy back
+-    /// to the program's graph it was copied from (Program::original).
++    /// sees the program's own graphs, with their structure (a LOOP node and its regions:
++    /// docs/design/op-semantics 11.4).
+     bool inspectsGraphs = false;
+ };
+ 
+diff --git a/include/camel/execute/loop_frame.h b/include/camel/execute/loop_frame.h
+index 948c0739..b832462b 100644
+--- a/include/camel/execute/loop_frame.h
++++ b/include/camel/execute/loop_frame.h
+@@ -188,7 +188,14 @@ inline size_t stepLoops(
+     for (const uint32_t code : plan.loopEventsAt(at)) {
+         const uint32_t index                 = code / 3;
+         const camel::runtime::ExecLoop &loop = plan.loops[index];
+-        switch (static_cast<ExecLoopEvent>(code % 3)) {
++        const auto event                     = static_cast<ExecLoopEvent>(code % 3);
++        // Going back to the start of a round of a loop is not starting or testing the loops
++        // around it, which are in the middle of a round; those inside it start again.
++        if (resumedHere != kNoLoop && event != ExecLoopEvent::End &&
++            loop.position > plan.loops[resumedHere].position) {
++            continue;
++        }
++        switch (event) {
+         case ExecLoopEvent::Begin:
+             if (index != resumedHere) {
+                 loopBegin(frame, loop);
+diff --git a/include/camel/runtime/draft_session.h b/include/camel/runtime/draft_session.h
+index 8956a99a..7d7bbdf7 100644
+--- a/include/camel/runtime/draft_session.h
++++ b/include/camel/runtime/draft_session.h
+@@ -166,8 +166,8 @@ class RuntimeGraphDraftSession {
+ 
+     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
+     /// Encodes the edited closure into a new program and returns it. A session over the
+-    /// program's root installs it as the program of the context; with `detached` (a back end's
+-    /// private rewrite, such as lowering loops before it runs) the program is left as it is and
++    /// program's root installs it as the program of the context; with `detached` (a private
++    /// rewrite, such as the working copy of autodiff) the program is left as it is and
+     /// the new program is kept alive as a detached one (Context::trackDetachedRuntimeProgram).
+     const Program *commit(bool detached = false);
+     /// The graphs the session read or wrote (decoded or edited) whose version in the context's
+diff --git a/include/camel/runtime/graph.h b/include/camel/runtime/graph.h
+index b0b4d7a2..b27214f0 100644
+--- a/include/camel/runtime/graph.h
++++ b/include/camel/runtime/graph.h
+@@ -130,8 +130,7 @@ enum class GCNodeKind : uint8_t {
+     // collection slots (payload collectionCount): the body then returns (state…, v…) each round
+     // and the value is (state…, array…), the arrays holding the v of every round (see
+     // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView); those
+-    // that do not run it natively lower it to a tail recursion first
+-    // (lowerLoopsToTailRecursion), never in the shared program.
++    // that need two graphs (autodiff) take them out of the regions first (outlineLoopRegions).
+     Loop = 15,
+     // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
+     // from, so a removed node leaves a record with this kind and no inputs, which every
+@@ -180,12 +179,6 @@ enum GCNodeFlag : uint8_t {
+     kGCNodeFlagConstant = 1 << 1,
+ };
+ 
+-/// The operator a back end's private copy of the program applies to a function value before an
+-/// operator that reads graphs gets it (Program::original, OperatorTraits::inspectsGraphs):
+-/// the same function over the program's own graph. Implemented by the built-in executor
+-/// (src/builtin/operators/graph.h); a program cannot name it.
+-inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
+-
+ /// Properties a graph has besides its nodes (GCGraph::flags).
+ enum GCGraphFlag : uint8_t {
+     /// The graph is a function that carries a vjp rule as its last closure value
+diff --git a/include/camel/runtime/loop.h b/include/camel/runtime/loop.h
+index 9ea25cf0..4179f310 100644
+--- a/include/camel/runtime/loop.h
++++ b/include/camel/runtime/loop.h
+@@ -55,10 +55,9 @@
+  * graphs of the loop are the ones the Program holds; nodes are named by their NodeIds
+  * (gc_node_ref_t), types by Type pointers.
+  *
+- * Lowering. lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) rewrites every LOOP of a
+- * program into the tail recursion it means. It is applied only by a back end, on a private copy
+- * of the program it runs (op-semantics 11.4): a pass never commits a lowered loop to the shared
+- * program, so a consumer such as Tiles sees structured loops wherever it is in the pipeline.
++ * Graph form. A consumer that needs the condition and the body as graphs of their own
++ * (autodiff) takes them out of the regions in a private copy of the program
++ * (outlineLoopRegions, camel/runtime/loop_outline.h), and puts them back (regionizeLoops).
+  */
+ 
+ #pragma once
+diff --git a/include/camel/runtime/loop_lowering.h b/include/camel/runtime/loop_lowering.h
+deleted file mode 100644
+index a82ae5a7..00000000
+--- a/include/camel/runtime/loop_lowering.h
++++ /dev/null
+@@ -1,70 +0,0 @@
+-/**
+- * Copyright (c) 2024 the OpenCML Organization
+- * Camel is licensed under the MIT license.
+- * You can use this software according to the terms and conditions of the
+- * MIT license. You may obtain a copy of the MIT license at:
+- * [https://opensource.org/license/mit]
+- *
+- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+- *
+- * See the the MIT license for more details.
+- *
+- * Author: Camel Contributors
+- * Created: Oct. 15, 2026
+- * Updated: Oct. 15, 2026
+- * Supported by: National Key Research and Development Program of China
+- */
+-
+-/*
+- * Lowering a LOOP node to the tail recursion it means (design principles 3.10: "first lower
+- * LOOP to a tail-recursive subgraph at each subsystem's entry"; docs/design/graph-model 3.5, the
+- * end of the LOOP card; docs/design/op-semantics 11.4).
+- *
+- * For a loop with state S (one value, or the k-tuple of k values), captures c and, for `for`,
+- * the array xs, the LOOP node becomes a direct call of a new graph
+- *
+- *     rec(i, S; c, xs) = if go then next(S; c, i, xs) else done(S)
+- *         go           = cond(S; c)                    While
+- *                      = i < len(xs)                   For
+- *                      = cond(S; c) & (i < len(xs))    ForWhile (the condition first, as the
+- *                                                      native loop: camel/core/loop_kind.h)
+- *     next(S; c, i, xs) = rec(i + 1, body(xs[i], S; c); c, xs)
+- *     done(S)           = S
+- *
+- * (the index exists only with `for`; with k > 1 the condition and the body take the k values
+- * of S, ACCS of the tuple, and the call passes the tuple of the first values). `next` and `done`
+- * are the arms of the branch, each a graph called under the BRCH as the front end builds the
+- * arms of an `if`; the call of `rec` in `next` is in tail position, so every back end runs it in
+- * constant stack and it is not counted against the recursion limit: the shape is that of a
+- * hand-written tail-recursive loop. The condition and body graphs are called unchanged.
+- *
+- * Privacy (op-semantics 11.4). The lowering is for a back end that does not run LOOP natively:
+- * it returns a new, detached program (RuntimeGraphDraftSession::commit(true)) and leaves the
+- * context's program as it is, so the program that passes, Tiles and the debugger see keeps its
+- * structured loops. No pass of the standard pipeline calls it.
+- */
+-
+-#pragma once
+-
+-#include "camel/core/context/context.h"
+-#include "camel/runtime/graph.h"
+-#include "camel/runtime/program.h"
+-
+-namespace camel::runtime {
+-
+-/// True when a LOOP node is reachable from `root`.
+-bool programHasLoops(const Program &program, GCGraph *root);
+-
+-/// `program` with every LOOP node replaced by a call of a tail-recursive graph (see the file
+-/// comment): a detached copy, or `program` itself when it has no loop.
+-const Program *lowerLoopsToTailRecursion(
+-    const camel::core::context::context_ptr_t &context, const Program *program);
+-
+-/// The same for the graphs reachable from `root`, a graph of `program`: the copy is rooted at
+-/// the copy of `root`.
+-const Program *lowerLoopsToTailRecursion(
+-    const camel::core::context::context_ptr_t &context, const Program *program, GCGraph *root);
+-
+-} // namespace camel::runtime
+diff --git a/include/camel/runtime/program.h b/include/camel/runtime/program.h
+index 149ed292..79268e26 100644
+--- a/include/camel/runtime/program.h
++++ b/include/camel/runtime/program.h
+@@ -56,7 +56,7 @@ class Program final : public camel::core::rtdata::Object {
+     Program(const Program &other)
+         : camel::core::rtdata::Object(), byId_(other.byId_), own_(other.own_),
+           satellite_(other.satellite_), version_(other.version_), count_(other.count_),
+-          root_(other.root_), original_(other.original_) {}
++          root_(other.root_) {}
+     /// Assigning replaces the table and keeps whose program this is.
+     Program &operator=(const Program &other) {
+         byId_      = other.byId_;
+@@ -65,7 +65,6 @@ class Program final : public camel::core::rtdata::Object {
+         version_   = other.version_ + 1;
+         count_     = other.count_;
+         root_      = other.root_;
+-        original_  = other.original_;
+         if (manager_ != nullptr) {
+             noteAll();
+         }
+@@ -196,14 +195,6 @@ class Program final : public camel::core::rtdata::Object {
+             }
+         }
+     }
+-    /// The program this one is a private copy of, nullptr when it is not one. A back end that
+-    /// runs a rewritten copy of the program (lowerLoopsToTailRecursion, which commits its
+-    /// session detached) gets a program whose original is the program it rewrote, followed
+-    /// back to the first program that is not a copy. Operators that read the graphs of
+-    /// function values (OperatorTraits::inspectsGraphs) are handed the original, so that they
+-    /// see the program as it was written (op-semantics 11.4).
+-    const Program *original() const { return original_; }
+-
+     /// Construction; see the file comment.
+     void bind(GraphId id, GCGraph *graph) {
+         ++version_;
+@@ -222,7 +213,6 @@ class Program final : public camel::core::rtdata::Object {
+         byId_[index] = graph;
+     }
+     void setRoot(GCGraph *root) { root_ = root; }
+-    void setOriginal(const Program *original) { original_ = original; }
+ 
+   private:
+     friend class GCGraphManager;
+@@ -235,7 +225,6 @@ class Program final : public camel::core::rtdata::Object {
+     uint64_t version_        = 0;
+     size_t count_            = 0;
+     GCGraph *root_           = nullptr;
+-    const Program *original_ = nullptr;
+ };
+ 
+ /// Makes the function values among the static values of `graph` name `to` where `to` holds the
+diff --git a/src/builtin/executors/builtin.cpp b/src/builtin/executors/builtin.cpp
+index 2cadcb79..e57fa0f5 100644
+--- a/src/builtin/executors/builtin.cpp
++++ b/src/builtin/executors/builtin.cpp
+@@ -30,10 +30,8 @@ using namespace camel::core::rtdata;
+ #include "../operators/cast.h"
+ #include "../operators/collection.h"
+ #include "../operators/enum.h"
+-#include "../operators/graph.h"
+ #include "../operators/higher_order.h"
+ #include "../operators/io.h"
+-#include "../operators/loop.h"
+ #include "../operators/macro.h"
+ #include "../operators/mem.h"
+ #include "../operators/ops.h"
+@@ -354,12 +352,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
+         // macro
+         {"macro/cmp", __cmp__},
+ 
+-        // Inserted by the runtime, never written by a program (operators/graph.h).
+-        {"graph/original", __graph_original__},
+-
+-        // Inserted by the loop lowering, never written by a program (operators/loop.h).
+-        {"loop/collector", __loop_collector__},
+-        {"loop/collect", __loop_collect__},
+ 
+         // Tagged forms T? and T! (operators/tagged.h). All are under op/: pure.
+         {"op/tag_is_null", __is_null__},
+@@ -428,7 +420,6 @@ void registerBuiltinOperatorTraits() {
+         "tangent/scatter_add_arr",
+         "tangent/init_arr",
+         "tangent/last_arr",
+-        "graph/original",
+     };
+     // Declared never to fault, where the implementation has no fault path at all: integer
+     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
+@@ -438,7 +429,7 @@ void registerBuiltinOperatorTraits() {
+         "op/add_i", "op/add_l", "op/add_f", "op/add_d", "op/sub_i", "op/sub_l", "op/sub_f",
+         "op/sub_d", "op/lt_i",  "op/lt_l",  "op/lt_f",  "op/lt_d",  "op/le_i",  "op/le_l",
+         "op/le_f",  "op/le_d",  "op/gt_i",  "op/gt_l",  "op/gt_f",  "op/gt_d",  "op/ge_i",
+-        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",   "graph/original",
++        "op/ge_l",  "op/ge_f",  "op/ge_d",  "op/and",   "op/or",    "op/not",
+     };
+     auto &registry = camel::core::OperatorTable::instance();
+     for (const auto &[name, op] : getOpsImplMap()) {
+diff --git a/src/builtin/operators/graph.cpp b/src/builtin/operators/graph.cpp
+deleted file mode 100644
+index 580ea376..00000000
+--- a/src/builtin/operators/graph.cpp
++++ /dev/null
+@@ -1,62 +0,0 @@
+-/**
+- * Copyright (c) 2024 the OpenCML Organization
+- * Camel is licensed under the MIT license.
+- * You can use this software according to the terms and conditions of the
+- * MIT license. You may obtain a copy of the MIT license at:
+- * [https://opensource.org/license/mit]
+- *
+- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+- *
+- * See the the MIT license for more details.
+- *
+- * Author: Camel Contributors
+- * Created: Oct. 15, 2026
+- * Updated: Oct. 15, 2026
+- * Supported by: National Key Research and Development Program of China
+- */
+-
+-/*
+- * The operators of graph.h.
+- */
+-
+-#include "graph.h"
+-
+-#include "camel/core/context/context.h"
+-#include "camel/core/mm.h"
+-#include "camel/core/mm/gen.h"
+-#include "camel/core/rtdata/func.h"
+-#include "camel/core/rtdata/tuple.h"
+-#include "camel/runtime/graph.h"
+-#include "camel/runtime/program.h"
+-
+-using namespace camel::core::context;
+-
+-slot_t __graph_original__(ArgsView &with, ArgsView &norm, Context &ctx) {
+-    (void)with;
+-    (void)ctx;
+-    auto *function = norm.get<::Function *>(0);
+-    // The program the function's program is a private copy of (Program::original), and the
+-    // graph of it that this function's graph was copied from.
+-    const camel::runtime::Program *original = function != nullptr && function->program() != nullptr
+-                                                  ? function->program()->original()
+-                                                  : nullptr;
+-    if (original == nullptr || original->graph(function->graphId()) == nullptr) {
+-        return norm.slot(0);
+-    }
+-    // `function` is a raw pointer held across the allocation below: nothing may move meanwhile.
+-    camel::core::mm::NoCollectionScope noCollection;
+-    const auto *closureType = function->tupleType();
+-    auto *result            = ::Function::create(
+-        original,
+-        function->graphId(),
+-        closureType,
+-        camel::core::mm::autoSpace());
+-    if (const ::Tuple *closure = function->tuple()) {
+-        for (size_t i = 0; i < closure->size(); ++i) {
+-            result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), closureType);
+-        }
+-    }
+-    return camel::core::rtdata::toSlot<::Function *>(result);
+-}
+diff --git a/src/builtin/operators/graph.h b/src/builtin/operators/graph.h
+deleted file mode 100644
+index 68f8e1e1..00000000
+--- a/src/builtin/operators/graph.h
++++ /dev/null
+@@ -1,40 +0,0 @@
+-/**
+- * Copyright (c) 2024 the OpenCML Organization
+- * Camel is licensed under the MIT license.
+- * You can use this software according to the terms and conditions of the
+- * MIT license. You may obtain a copy of the MIT license at:
+- * [https://opensource.org/license/mit]
+- *
+- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+- *
+- * See the the MIT license for more details.
+- *
+- * Author: Camel Contributors
+- * Created: Oct. 15, 2026
+- * Updated: Oct. 15, 2026
+- * Supported by: National Key Research and Development Program of China
+- */
+-
+-/*
+- * Operators on the graphs of function values that the runtime itself inserts; a program cannot
+- * name them.
+- *
+- * `:graph/original` (one Norm operand, a function value; the result has its type): the same
+- * function over the program's own graph. A back end that runs a private, rewritten copy of the
+- * program (loops lowered to tail recursion, camel/runtime/loop_lowering.h) passes each operand
+- * of function type of an operator that reads graphs (OperatorTraits::inspectsGraphs) through
+- * it, so that such an operator sees the graph as the program wrote it, LOOP nodes included
+- * (docs/design/op-semantics 11.4). A function value whose graph is not a copy is returned as it
+- * is; otherwise the result is a new function value over the graph of Program::original() with the
+- * same captured values (the copy has the original's ports and closure: a copy only rewrites nodes
+- * inside graphs).
+- */
+-
+-#pragma once
+-
+-#include "camel/core/operator.h"
+-#include "camel/core/type.h"
+-
+-slot_t __graph_original__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+diff --git a/src/builtin/operators/loop.cpp b/src/builtin/operators/loop.cpp
+deleted file mode 100644
+index 7855dac1..00000000
+--- a/src/builtin/operators/loop.cpp
++++ /dev/null
+@@ -1,54 +0,0 @@
+-/**
+- * Copyright (c) 2024 the OpenCML Organization
+- * Camel is licensed under the MIT license.
+- * You can use this software according to the terms and conditions of the
+- * MIT license. You may obtain a copy of the MIT license at:
+- * [https://opensource.org/license/mit]
+- *
+- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+- *
+- * See the the MIT license for more details.
+- *
+- * Author: Camel Contributors
+- * Created: Oct. 20, 2026
+- * Updated: Oct. 20, 2026
+- * Supported by: National Key Research and Development Program of China
+- */
+-
+-/*
+- * The operators of loop.h.
+- */
+-
+-#include "loop.h"
+-
+-#include "camel/core/context/frame.h"
+-#include "camel/core/mm.h"
+-#include "camel/core/rtdata/array.h"
+-#include "camel/core/type/composite/array.h"
+-
+-using namespace camel::core::context;
+-
+-slot_t __loop_collector__(ArgsView &with, ArgsView &norm, Context &ctx) {
+-    (void)with;
+-    (void)norm;
+-    (void)ctx;
+-    return camel::core::rtdata::toSlot<::Array *>(::Array::create(camel::core::mm::autoSpace(), 0));
+-}
+-
+-slot_t __loop_collect__(ArgsView &with, ArgsView &norm, Context &ctx) {
+-    (void)with;
+-    (void)ctx;
+-    auto *tape           = norm.get<::Array *>(0);
+-    const auto *tapeType = static_cast<const camel::core::type::ArrayType *>(norm.type(0));
+-    ASSERT(tape != nullptr && tapeType != nullptr, "A collection slot holds an array.");
+-    try {
+-        tape->append(norm.slot(1), tapeType);
+-    } catch (const camel::core::mm::MemoryExhausted &e) {
+-        // Growing a tape is the loop's allocation, as in loop_driver.h's native rounds; the
+-        // executor's instruction supplies the source location.
+-        throw e.during("collecting the values a loop produces each round", 0);
+-    }
+-    return norm.slot(0);
+-}
+\ No newline at end of file
+diff --git a/src/builtin/operators/loop.h b/src/builtin/operators/loop.h
+deleted file mode 100644
+index dff2ff0a..00000000
+--- a/src/builtin/operators/loop.h
++++ /dev/null
+@@ -1,41 +0,0 @@
+-/**
+- * Copyright (c) 2024 the OpenCML Organization
+- * Camel is licensed under the MIT license.
+- * You can use this software according to the terms and conditions of the
+- * MIT license. You may obtain a copy of the MIT license at:
+- * [https://opensource.org/license/mit]
+- *
+- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+- *
+- * See the the MIT license for more details.
+- *
+- * Author: Camel Contributors
+- * Created: Oct. 20, 2026
+- * Updated: Oct. 20, 2026
+- * Supported by: National Key Research and Development Program of China
+- */
+-
+-/*
+- * The operators a lowered collecting loop uses (camel/runtime/loop.h, "Collection slots"):
+- * the machinery of the tape, inserted by the runtime; a program cannot name it.
+- *
+- * `:loop/collector` (no operands; the result type is the slot's ArrayType): a fresh empty
+- * array. It is the loop's first tape per slot.
+- *
+- * `:loop/collect` (Norm operands: the tape, the value; the result is the tape): appends the
+- * value to the tape with the slot's element type, in place and O(1) amortized (Array::append
+- * grows geometrically). The tape belongs to the loop: it was made by `:loop/collector` in this
+- * activation, is carried only in the loop's state, and is returned as part of the loop's value,
+- * so the in-place append cannot be observed by anything else. A memory exhausted while growing
+- * the tape is reported by the pass runner at the node the VM was running.
+- */
+-
+-#pragma once
+-
+-#include "camel/core/context/context.h"
+-#include "camel/core/operator.h"
+-
+-slot_t __loop_collector__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+-slot_t __loop_collect__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+\ No newline at end of file
+diff --git a/src/compile/gir/builder.h b/src/compile/gir/builder.h
+index d26877fb..4f1788fb 100644
+--- a/src/compile/gir/builder.h
++++ b/src/compile/gir/builder.h
+@@ -569,6 +569,9 @@ class Builder {
+         };
+         std::unordered_map<node_handle_t, Touched> touched;
+         std::vector<node_handle_t> touchedOrder; // in the order they were first changed
++        /// The ports of the region (a loop's condition or body), in order: the element, then the
++        /// values of the state.
++        std::vector<node_handle_t> ports;
+         /// The variables the arm stores into itself, and the functions it calls: what else it
+         /// writes is what those write (capturedWritesOf), known once every body is built.
+         std::set<node_handle_t> directWrites;
+@@ -1036,13 +1039,10 @@ class Builder {
+     FunctionType *signatureForArgumentContext(node_handle_t target) const;
+     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
+     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
+-    /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and
+-    /// the array where the loop is, a graph for the condition and one for the body, and one
+-    /// LOOP node calling them. The two graphs share one capture table (captureTwins_).
++    /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and the array
++    /// where the loop is, its condition and its body as regions of the current graph (built where
++    /// they are written, like the arms of a branch), and one LOOP node that has them.
+     node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
+-    /// Builds `graph`, a loop's condition or body graph made with its ports, from `exec`: the
+-    /// names of its Norm ports are declared in it, and its result is the value of the block.
+-    void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
+     /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
+     /// that state's first value is a fresh literal, to the form that may append to the state in
+     /// place (design principles 10.5): the state's old value cannot be seen once the next round
+@@ -1051,19 +1051,12 @@ class Builder {
+     /// state the body hands the append call back directly, with several it returns a tuple whose
+     /// j-th component is state j's next value.
+     void markLoopStateInPlace(
+-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+-        std::vector<node_handle_t> &initial);
++        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial);
+     /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
+     /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
+     void markLoopStateInPlaceOne(
+-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+-        std::vector<node_handle_t> &initial, size_t index, node_handle_t next);
+-    /// The condition and the body graph of a loop capture the same values in the same order
+-    /// (design principles 3.10: one capture table): a capture made into one is made into the
+-    /// other (captureInto).
+-    std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> captureTwins_;
+-    /// How many loops each graph has, for the names of their graphs (`f.loop2.body`).
+-    std::unordered_map<DraftGraphBuilder *, size_t> loopCounts_;
++        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
++        size_t index, node_handle_t next);
+     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
+     /// `gct`, or, when `arms` is given, are those arms in order (built by buildArm).
+     /// No arm is added to those the program wrote (design principles 3.7).
+@@ -1075,10 +1068,14 @@ class Builder {
+     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
+     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
+     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
+-    /// One branch arm: a region of the current graph. Its body is the block `exec`, or what
+-    /// `body` builds (called inside the arm's scope) when given; `exec` then only locates the
+-    /// arm.
+-    arm_ptr_t buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
++    /// One branch arm, or the condition or the body of a loop (`kind`): a region of the current
++    /// graph. Its body is the block `exec`, or what `body` builds (called inside the region's
++    /// scope) when given; `exec` then only locates the region. `declare` is called first, inside
++    /// the scope: a loop part declares its ports there.
++    arm_ptr_t buildArm(
++        const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {},
++        runtime::GCRegionKind kind                  = runtime::GCRegionKind::Arm,
++        const std::function<void(ArmBuild &)> &declare = {});
+     /// Gives the arm `arm` the value `result` (the last expression of its body) unless a
+     /// `return` has given one.
+     void setArmResult(ArmBuild &arm, node_handle_t result);
+@@ -1086,9 +1083,6 @@ class Builder {
+     void coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin);
+     /// The nodes of each arm that read nothing the arm computes wait for the BRCH.
+     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
+-    /// The same at the exit of a graph already built (the body of a loop).
+-    void coerceGraphExit(
+-        const compile_graph_ptr_t &graph, Type *target, const GCT::node_ptr_t &origin);
+     /// After the JOIN is there: the variables the arms changed are changed by the branch.
+     void mergeArmVariables(
+         const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,
+diff --git a/src/compile/gir/builder_control.cpp b/src/compile/gir/builder_control.cpp
+index 55ec18d7..bb363c31 100644
+--- a/src/compile/gir/builder_control.cpp
++++ b/src/compile/gir/builder_control.cpp
+@@ -513,31 +513,6 @@ data_ptr_t Builder::literalElementInType(
+     rejectLiteralData(data, type, where, nullptr, writtenAt);
+ }
+ 
+-void Builder::coerceGraphExit(
+-    const compile_graph_ptr_t &graph, Type *target, const GCT::node_ptr_t &origin) {
+-    Type *exitType = graph->funcType()->exitType();
+-    if (exitType != nullptr && target->assignableFrom(exitType)) {
+-        return;
+-    }
+-    // The nodes are added to the graph itself; no name is looked up, so the scopes of the
+-    // position the loop stands at do no harm.
+-    const compile_graph_ptr_t outer = std::exchange(currGraph_, graph);
+-    node_handle_t output            = graph->draft().ref(graph->draft().exitNode());
+-    node_handle_t coerced           = coerceTo(output, target, origin);
+-    ASSERT(coerced != nullptr, "A graph is coerced only to a type its value enters.");
+-    if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
+-        // A literal took the place of the output (`[]`): what the output waited for (the
+-        // statements of a sync body) is still waited for.
+-        node_handle_t gate = currGraph_->addGateNode(target);
+-        linkNodes(LinkType::Norm, coerced, gate);
+-        linkNodes(LinkType::Ctrl, output, gate);
+-        coerced = gate;
+-    }
+-    graph->setExitType(target);
+-    setGraphReturnFromResult(graph, nodeIdOf(coerced), nodeIdOf(coerced), target);
+-    currGraph_ = outer;
+-}
+-
+ void Builder::coerceArmExit(
+     const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
+     Type *exitType = arm->exitType();
+@@ -680,20 +655,21 @@ void Builder::noteVariable(node_handle_t variable) {
+     }
+ }
+ 
+-Builder::arm_ptr_t
+-Builder::buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body) {
++Builder::arm_ptr_t Builder::buildArm(
++    const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body,
++    runtime::GCRegionKind kind, const std::function<void(ArmBuild &)> &declare) {
+     auto arm                   = std::make_shared<ArmBuild>();
+     runtime::GraphDraft &draft = currGraph_->draft();
+     const uint32_t outerRegion = draft.insertRegion();
+     arm->graph                 = currGraph_.get();
+-    arm->region                = draft.addRegion(runtime::GCRegionKind::Arm, outerRegion);
++    arm->region                = draft.addRegion(kind, outerRegion);
+     arm->firstNode             = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+     if (context_ && context_->sourceContext()) {
+         const auto origin = deriveGirOrigin(
+             context_,
+             exec,
+             camel::source::OriginKind::Graph,
+-            "gir.brch.case.graph",
++            kind == runtime::GCRegionKind::Arm ? "gir.brch.case.graph" : "gir.loop.graph",
+             {});
+         if (origin != camel::source::kInvalidOriginId) {
+             draft.setRegionOrigin(arm->region, static_cast<uint32_t>(origin));
+@@ -735,6 +711,9 @@ Builder::buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t
+         leaveBlockScope();
+     };
+     try {
++        if (declare) {
++            declare(*arm);
++        }
+         if (body) {
+             synced_         = false;
+             lastSyncedNode_ = {};
+@@ -1719,36 +1698,6 @@ void Builder::mergeArmVariables(
+     }
+ }
+ 
+-void Builder::buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec) {
+-    // The graph is written inside the current one, like an arm: its scope is entered from
+-    // here, so the names of the enclosing code are visible in it (and captured).
+-    const bool atRoot = currGraph_ == rootGraph_;
+-    enterGraphScope(graph, "");
+-    if (atRoot) {
+-        rootSubGraphOwners_[graph.get()] = unit_;
+-    }
+-    registerGraphOrigin(context_, graph, exec, "gir.loop.graph");
+-    bodyStates_[graph.get()] = BodyState::Open;
+-    try {
+-        for (draft_node_ref_t portId : graph->draft().normPorts()) {
+-            node_handle_t port = graph->draft().ref(portId);
+-            insertNode(graph->nodePortName(port), port);
+-            if (recorder_) {
+-                recordDeclaration(graph->nodePortName(port), port, exec);
+-            }
+-        }
+-        setBodyResult(graph, visitBodyNode(exec));
+-    } catch (...) {
+-        bodyStates_[graph.get()] = BodyState::Built;
+-        failedBodies_.insert(graph.get());
+-        leaveScope();
+-        throw;
+-    }
+-    bodyStates_[graph.get()] = BodyState::Built;
+-    unit_->builtBodies.push_back(graph);
+-    leaveScope();
+-}
+-
+ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
+     ENTER("LOOP");
+     using camel::core::LoopKind;
+@@ -1855,50 +1804,65 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
+     Type *stateType =
+         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+ 
+-    // The two graphs, made before either is built so that every capture is made in both in
+-    // the same order (captureTwins_). They take the state (the body the element first) as
+-    // ordinary parameters; their captures become with-ports once they are built.
+-    const size_t ordinal        = ++loopCounts_[currGraph_.get()];
+-    const std::string graphBase = std::format("{}.loop{}", currGraph_->name(), ordinal);
+-    const auto makeLoopGraph    = [&](bool withElement, const char *role) {
+-        FunctionTypeFactory factory;
++    // The condition and the body are regions of the current graph, built where they are
++    // written. Their ports (the element, the values of the state) are Port nodes of the graph
++    // that are not its parameters; the captured values are read where they are.
++    const auto declarePorts = [&](ArmBuild &part, bool withElement,
++                                  const GCT::node_ptr_t &exec) {
++        FunctionTypeFactory params;
++        std::vector<runtime::gc_node_ref_t> ids;
++        const auto add = [&](const std::string &name, Type *type) {
++            node_handle_t port = currGraph_->addRegionPortNode(type, name);
++            // A port belongs to its region, as the nodes that read it do.
++            part.graph->draft().setNodeRegion(nodeIdOf(port), part.region);
++            insertNode(name, port);
++            if (recorder_) {
++                recordDeclaration(name, port, exec);
++            }
++            part.ports.push_back(port);
++            ids.push_back(nodeIdOf(port));
++            params.addNormArg(name, type, false);
++        };
+         if (withElement) {
+-            factory.addNormArg(gct->loopElementName(), elementType, false);
++            add(gct->loopElementName(), elementType);
+         }
+         for (size_t j = 0; j < k; ++j) {
+-            factory.addNormArg(gct->loopStateName(j), stateTypes[j], false);
++            add(gct->loopStateName(j), stateTypes[j]);
+         }
+-        return createCompileGraph(
+-            context_->graphIds().allocate(),
+-            factory.build(),
+-            currGraph_,
+-            std::format("{}.{}", graphBase, role));
++        params.setExitType(Type::Void());
++        part.graph->draft().setRegionPorts(part.region, ids);
++        part.graph->draft().setRegionParams(part.region, params.build());
+     };
+-    compile_graph_ptr_t condGraph =
+-        camel::core::loopHasCondition(kind) ? makeLoopGraph(false, "cond") : nullptr;
+-    compile_graph_ptr_t bodyGraph = makeLoopGraph(hasIterable, "body");
+-    if (condGraph) {
+-        captureTwins_[condGraph.get()] = bodyGraph;
+-        captureTwins_[bodyGraph.get()] = condGraph;
+-    }
+-
+-    if (condGraph) {
+-        buildLoopGraph(condGraph, gct->loopCondition());
+-        Type *condType = condGraph->funcType()->exitType();
+-        if (condType == nullptr || condType->code() != TypeCode::Bool) {
+-            diags_->of(SemanticDiag::LoopConditionNotBool)
+-                .atOrigin(gct->loopCondition()->origin())
+-                .commit(condType ? condType->toString() : std::string("void"));
+-            throw BuildAbortException();
++    arm_ptr_t condPart;
++    arm_ptr_t bodyPart;
++    {
++        ExpectedValueScope partScope(expectedValueType_, nullptr);
++        if (camel::core::loopHasCondition(kind)) {
++            condPart = buildArm(
++                gct->loopCondition(),
++                {},
++                runtime::GCRegionKind::LoopCond,
++                [&](ArmBuild &part) { declarePorts(part, false, gct->loopCondition()); });
++            Type *condType = condPart->exitType();
++            if (condType == nullptr || condType->code() != TypeCode::Bool) {
++                diags_->of(SemanticDiag::LoopConditionNotBool)
++                    .atOrigin(gct->loopCondition()->origin())
++                    .commit(condType ? condType->toString() : std::string("void"));
++                throw BuildAbortException();
++            }
+         }
++        bodyPart = buildArm(
++            gct->loopBody(),
++            {},
++            runtime::GCRegionKind::LoopBody,
++            [&](ArmBuild &part) { declarePorts(part, hasIterable, gct->loopBody()); });
+     }
+-    buildLoopGraph(bodyGraph, gct->loopBody());
+     // The body gives the next state: of the state's type, or a value that enters it (an
+     // `int` where the state is an `int?`, design principles 3.8).
+-    Type *bodyType = bodyGraph->funcType()->exitType();
++    Type *bodyType = bodyPart->exitType();
+     if (bodyType == nullptr || !stateType->assignableFrom(bodyType)) {
+         if (bodyType != nullptr && entersImplicitly(stateType, bodyType)) {
+-            coerceGraphExit(bodyGraph, stateType, gct->loopBody());
++            coerceArmExit(bodyPart, stateType, gct->loopBody());
+         } else {
+             diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+                 .atOrigin(gct->loopBody()->origin())
+@@ -1909,28 +1873,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
+         }
+     }
+ 
+-    markLoopStateInPlace(bodyGraph, gct, initial);
++    markLoopStateInPlace(bodyPart, gct, initial);
+ 
+-    // Called by the LOOP node: the captures are with-ports, in the order both graphs share.
+-    for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
+-        if (!graph) {
+-            continue;
+-        }
+-        const std::vector<draft_node_ref_t> closureNodes(
+-            graph->draft().closureNodes().begin(),
+-            graph->draft().closureNodes().end());
+-        for (draft_node_ref_t closureId : closureNodes) {
+-            graph->draft().removeNormPort(closureId);
+-            graph->draft().appendWithPort(closureId);
+-            graph->draft().removeClosureNode(closureId);
+-        }
+-        graph->setParameterized(true);
+-    }
+-
+-    node_handle_t loopNode = currGraph_->addLoopNode(
+-        kind,
+-        DraftGraphBuilder::LoopTarget{condGraph, bodyGraph},
+-        stateType);
++    node_handle_t loopNode = currGraph_->addRegionLoopNode(kind, stateType);
+     registerNodeOrigin(context_, loopNode, gct, "gir.loop");
+     stampPermissions(loopNode);
+     if (sequence != nullptr) {
+@@ -1939,47 +1884,53 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
+     for (node_handle_t node : initial) {
+         linkNodes(LinkType::Norm, node, loopNode);
+     }
+-    // The captured values are the With inputs, linked by the link step in the graphs' order
+-    // (the condition graph has the same captures as the body graph).
+-    addCaptureSite(loopNode, bodyGraph);
++    // The With inputs of the node are the results of its parts (the body's, then the
++    // condition's) and the slot the rounds are counted in; the parts are its regions.
++    std::vector<arm_ptr_t> parts{bodyPart};
++    linkNodes(LinkType::With, bodyPart->output, loopNode);
++    if (condPart) {
++        parts.push_back(condPart);
++        linkNodes(LinkType::With, condPart->output, loopNode);
++    }
++    linkNodes(LinkType::With, currGraph_->addRegionPortNode(Type::Int64(), ""), loopNode);
++    runtime::GraphDraft &draft = currGraph_->draft();
++    draft.setRegionOwner(bodyPart->region, nodeIdOf(loopNode), 1);
++    draft.setRegionResult(bodyPart->region, nodeIdOf(bodyPart->output));
++    if (condPart) {
++        draft.setRegionOwner(condPart->region, nodeIdOf(loopNode), 0);
++        draft.setRegionResult(condPart->region, nodeIdOf(condPart->output));
++    }
+ 
+-    // Running the loop is like calling its graphs (and entering an arm): it uses every
+-    // variable they captured and writes those they write.
+-    std::vector<CapturedUse> captured;
+-    for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
+-        if (!graph) {
+-            continue;
+-        }
+-        for (const CapturedUse &use : capturedUsesOf(graph)) {
+-            auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
+-            if (known == captured.end()) {
+-                captured.push_back(use);
+-            } else {
+-                known->written |= use.written;
+-            }
++    // Running the loop is like entering an arm: it uses every variable its parts used and
++    // writes those they wrote.
++    std::vector<node_handle_t> capturedWrites;
++    mergeArmVariables(parts, loopNode, loopNode, capturedWrites);
++    const auto originOf = [&](node_handle_t variable) {
++        const auto origin = captureOriginOf_.find(variable);
++        return origin != captureOriginOf_.end() ? origin->second : variable;
++    };
++    std::vector<DraftGraphBuilder *> callees;
++    std::set<node_handle_t> directWrites;
++    for (const arm_ptr_t &part : parts) {
++        callees.insert(callees.end(), part->callees.begin(), part->callees.end());
++        for (node_handle_t variable : part->directWrites) {
++            directWrites.insert(originOf(variable));
+         }
+     }
+-    std::vector<node_handle_t> capturedWrites;
+-    for (const CapturedUse &use : captured) {
+-        orderAfterLastWriter(use.variable, loopNode);
+-        if (use.written) {
+-            capturedWrites.push_back(use.origin);
++    if (ArmBuild *outer = activeArm()) {
++        // The parts of this loop are part of the arm it is in.
++        outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
++        for (const arm_ptr_t &part : parts) {
++            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
+         }
+     }
+     if (!capturedWrites.empty() && !waited_ && !synced_) {
+-        std::vector<DraftGraphBuilder *> graphs{bodyGraph.get()};
+-        if (condGraph) {
+-            graphs.push_back(condGraph.get());
++        std::vector<node_handle_t> origins;
++        for (node_handle_t variable : capturedWrites) {
++            origins.push_back(originOf(variable));
+         }
+         unit_->pendingIgnoredWrites.push_back(
+-            {graphs, capturedWrites, {}, gct->origin(), "The loop", "its body writes"});
+-    }
+-    for (const CapturedUse &use : captured) {
+-        if (use.written) {
+-            recordWrite(use.variable, loopNode, loopNode, true);
+-        } else {
+-            pendingUsesOf(use.variable).push_back({loopNode, false});
+-        }
++            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
+     }
+ 
+     if (synced_) {
+@@ -2111,18 +2062,12 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
+ }
+ 
+ void Builder::markLoopStateInPlace(
+-    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+-    std::vector<node_handle_t> &initial) {
++    const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial) {
+     const size_t stateCount = loop->loopStateCount();
+-    if (stateCount == 0 || initial.size() != stateCount) {
+-        return;
+-    }
+-    runtime::GraphDraft &draft = bodyGraph->draft();
+-    if (draft.returnKind() != runtime::GCReturnKind::Self ||
+-        draft.returnNode() == runtime::kInvalidNodeRef) {
++    if (stateCount == 0 || initial.size() != stateCount || body->returned) {
+         return;
+     }
+-    node_handle_t returned = loopStateValueOf(draft.ref(draft.returnNode()));
++    node_handle_t returned = loopStateValueOf(body->value);
+     if (returned == nullptr) {
+         return;
+     }
+@@ -2131,7 +2076,7 @@ void Builder::markLoopStateInPlace(
+     // components and whose payload says which component each one fills; a component written as
+     // a constant there (`(xs->append<7>, 0)`) has no value node and no rewrite of its own.
+     if (stateCount == 1) {
+-        markLoopStateInPlaceOne(bodyGraph, loop, initial, 0, returned);
++        markLoopStateInPlaceOne(body, loop, initial, 0, returned);
+         return;
+     }
+     if (!nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
+@@ -2162,13 +2107,13 @@ void Builder::markLoopStateInPlace(
+         next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
+     }
+     for (size_t j = 0; j < stateCount; ++j) {
+-        markLoopStateInPlaceOne(bodyGraph, loop, initial, j, next[j]);
++        markLoopStateInPlaceOne(body, loop, initial, j, next[j]);
+     }
+ }
+ 
+ void Builder::markLoopStateInPlaceOne(
+-    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+-    std::vector<node_handle_t> &initial, size_t index, node_handle_t next) {
++    const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
++    size_t index, node_handle_t next) {
+     if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
+         return;
+     }
+@@ -2194,7 +2139,8 @@ void Builder::markLoopStateInPlaceOne(
+         return;
+     }
+     node_handle_t port = nodeDraftOf(next)->ref(normIns.front());
+-    if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(index)) {
++    const size_t portAt = index + (camel::core::loopHasIterable(loop->loopKind()) ? 1 : 0);
++    if (port == nullptr || portAt >= body->ports.size() || body->ports[portAt] != port) {
+         return;
+     }
+     if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {
+diff --git a/src/compile/gir/builder_diagnostics.cpp b/src/compile/gir/builder_diagnostics.cpp
+index b01df1fa..297adb5e 100644
+--- a/src/compile/gir/builder_diagnostics.cpp
++++ b/src/compile/gir/builder_diagnostics.cpp
+@@ -254,10 +254,21 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
+         return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->ref(callee[0])));
+     }
+     case runtime::GCNodeKind::Loop: {
+-        // Each round calls the condition and the body graph.
+-        const auto &target = graph->loopTarget(node);
+-        return (target.cond && effectfulGraphs_.contains(target.cond.get())) ||
+-               effectfulGraphs_.contains(target.body.get());
++        // Each round runs the condition and the body, regions of the graph.
++        const runtime::GraphDraft &draft = graph->draft();
++        for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
++            const uint32_t region = draft.loopRegionOf(nodeIdOf(node), part);
++            if (region == 0) {
++                continue;
++            }
++            for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
++                if (draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), region) &&
++                    isEffectNode(graph, draft.ref(id))) {
++                    return true;
++                }
++            }
++        }
++        return false;
+     }
+     case runtime::GCNodeKind::Join: {
+         // The branch is an effect when what an arm gives depends on one inside the arm.
+diff --git a/src/compile/gir/captures.cpp b/src/compile/gir/captures.cpp
+index 0a845691..5f76eae8 100644
+--- a/src/compile/gir/captures.cpp
++++ b/src/compile/gir/captures.cpp
+@@ -115,11 +115,6 @@ node_handle_t Builder::captureInto(
+         variables_.insert(port);
+         captures_[graph.get()].variables.push_back(origin);
+     }
+-    // The other graph of a loop takes the same capture at the same position: both lists grow
+-    // together, so the LOOP node's With inputs serve both (design principles 3.10).
+-    if (auto twin = captureTwins_.find(graph.get()); twin != captureTwins_.end()) {
+-        (void)captureInto(twin->second, origin, name);
+-    }
+     return port;
+ }
+ 
+diff --git a/src/compile/gir/debug_json.cpp b/src/compile/gir/debug_json.cpp
+index b575cfff..04d27dcd 100644
+--- a/src/compile/gir/debug_json.cpp
++++ b/src/compile/gir/debug_json.cpp
+@@ -145,11 +145,11 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
+         j["operName"] = graph->operTarget(node)->name();
+     }
+     if (header && header->kind == GCNodeKind::Loop) {
+-        const auto &target = graph->loopTarget(node);
+-        if (target.cond) {
+-            j["loopCondGraphId"] = camel::runtime::toText(target.cond->graphId());
++        const auto &draft = graph->draft();
++        if (const uint32_t cond = draft.loopRegionOf(nodeId, camel::runtime::GCRegionKind::LoopCond); cond != 0) {
++            j["loopCondRegion"] = cond;
+         }
+-        j["loopBodyGraphId"] = camel::runtime::toText(target.body->graphId());
++        j["loopBodyRegion"] = draft.loopRegionOf(nodeId, camel::runtime::GCRegionKind::LoopBody);
+     }
+     if (auto *sourceContext = sourceContextForGraph(graph)) {
+         auto origin = sourceContext->resolveGirNodeOrigin(draftDebugKey(nodeId));
+diff --git a/src/compile/gir/draft_graph_builder.cpp b/src/compile/gir/draft_graph_builder.cpp
+index f5f99730..1ec91e8f 100644
+--- a/src/compile/gir/draft_graph_builder.cpp
++++ b/src/compile/gir/draft_graph_builder.cpp
+@@ -232,24 +232,20 @@ DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t
+     return node;
+ }
+ 
+-runtime::DraftNodeRef DraftGraphBuilder::addLoopNode(
+-    camel::core::LoopKind kind, const LoopTarget &target, camel::core::type::Type *type) {
+-    ASSERT(target.body != nullptr, "A LOOP node needs a body graph.");
+-    // The draft holds no graph yet: the encoder writes the runtime graphs of the targets
+-    // (graph_encode.cpp), as it does for the callee of a FUNC node.
+-    const runtime::gc_node_ref_t id = draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type);
+-    const auto node                 = ref(id);
+-    loopTargets_[node.id]              = target;
+-    addDependencyGraph(target.cond);
+-    addDependencyGraph(target.body);
+-    return node;
++runtime::DraftNodeRef
++DraftGraphBuilder::addRegionLoopNode(camel::core::LoopKind kind, camel::core::type::Type *type) {
++    return ref(draft_->addLoopNode(runtime::GCLoopBody{.kind = kind}, type));
+ }
+ 
+-const DraftGraphBuilder::LoopTarget &
+-DraftGraphBuilder::loopTarget(runtime::DraftNodeRef node) const {
+-    auto it = loopTargets_.find(node.id);
+-    ASSERT(it != loopTargets_.end(), "DraftGraphBuilder loop target not found.");
+-    return it->second;
++runtime::DraftNodeRef
++DraftGraphBuilder::addRegionPortNode(camel::core::type::Type *type, std::string name) {
++    const auto slotIndex            = addRuntimeSlot(type);
++    const runtime::gc_node_ref_t id = draft_->addPortNode(type, slotIndex);
++    const auto node                 = ref(id);
++    if (!name.empty()) {
++        registerNodePortName(node, std::move(name));
++    }
++    return node;
+ }
+ 
+ runtime::DraftNodeRef 
+@@ -388,7 +384,6 @@ void DraftGraphBuilder::registerOperTarget(runtime::DraftNodeRef node, oper_idx_
+ void DraftGraphBuilder::eraseNodeColdData(runtime::DraftNodeRef node) {
+     nodePortNames_.erase(node.id);
+     funcTargets_.erase(node.id);
+-    loopTargets_.erase(node.id);
+     drefTargets_.erase(node.id);
+     operTargets_.erase(node.id);
+ }
+diff --git a/src/compile/gir/graph_encode.cpp b/src/compile/gir/graph_encode.cpp
+index 8b5f6023..de3d1561 100644
+--- a/src/compile/gir/graph_encode.cpp
++++ b/src/compile/gir/graph_encode.cpp
+@@ -271,6 +271,16 @@ std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
+         if (header == nullptr) {
+             continue;
+         }
++        if (header->kind == GCNodeKind::Loop) {
++            // The ports of its regions are part of it, whether the code reads them or not.
++            for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
++                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
++                    for (draft_node_ref_t port : draft.regionPortsOf(region)) {
++                        pushRoot(port);
++                    }
++                }
++            }
++        }
+         if (header->kind == GCNodeKind::Brch) {
+             const auto *payload =
+                 reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(current).data());
+@@ -618,6 +628,12 @@ class EncodeSession {
+             prepared.draft->setRegionResult(id, mapped(region.result));
+             prepared.draft->setRegionOrigin(id, region.origin);
+             prepared.draft->setRegionAttrs(id, region.attrs);
++            prepared.draft->setRegionParams(id, region.params);
++            std::vector<runtime::gc_node_ref_t> ports;
++            for (runtime::gc_node_ref_t port : built.regionPortsOf(r)) {
++                ports.push_back(mapped(port));
++            }
++            prepared.draft->setRegionPorts(id, ports);
+         }
+         prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
+         CAMEL_LOG_INFO_S(
+@@ -683,14 +699,6 @@ class EncodeSession {
+                     preparedId,
+                     resolvePreparedGraph(prepared.source->funcTarget(sourceId))->draft->id());
+             }
+-            if (header->kind == GCNodeKind::Loop) {
+-                const auto &target = prepared.source->loopTarget(sourceId);
+-                prepared.draft->setLoopGraphs(
+-                    preparedId,
+-                    target.cond ? resolvePreparedGraph(target.cond)->draft->id()
+-                                : camel::runtime::kInvalidGraphId,
+-                    resolvePreparedGraph(target.body)->draft->id());
+-            }
+             ++preparedId;
+         }
+     }
+diff --git a/src/compile/gir/reachable.cpp b/src/compile/gir/reachable.cpp
+index d687f677..ce2a69a7 100644
+--- a/src/compile/gir/reachable.cpp
++++ b/src/compile/gir/reachable.cpp
+@@ -67,14 +67,6 @@ void forEachReachableGraph(
+         const auto &draft = curr->draft();
+         for (draft_node_ref_t nodeId = 0; nodeId < draft.nodeSlotCount(); ++nodeId) {
+             const auto *header = draft.header(nodeId);
+-            if (header && header->kind == runtime::GCNodeKind::Loop) {
+-                const auto &target = curr->loopTarget(nodeId);
+-                if (target.cond) {
+-                    visit(target.cond);
+-                }
+-                visit(target.body);
+-                continue;
+-            }
+             if (!header || header->kind != runtime::GCNodeKind::Func) {
+                 continue;
+             }
+diff --git a/src/core/context/context.cpp b/src/core/context/context.cpp
+index a70168d3..a111b63a 100644
+--- a/src/core/context/context.cpp
++++ b/src/core/context/context.cpp
+@@ -34,7 +34,6 @@
+ #include "camel/core/module/userdef.h"
+ #include "camel/core/rtdata/tagged.h"
+ #include "camel/execute/executor.h"
+-#include "camel/passes/opt/inline.h"
+ #include "camel/runtime/core_facts.h"
+ #include "camel/runtime/definitions.h"
+ #include "camel/runtime/facts.h"
+@@ -725,12 +724,6 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
+         *program);
+     runtimeGraphMgr_->adoptRoot(program);
+     registerRuntimeGraphDebugInfo(program);
+-    // The condition and the body of each loop the front end built as graphs become regions of the
+-    // graph that has the LOOP node.
+-    if (const auto *regionized = camel::passes::opt::regionizeLoops(shared_from_this(), program);
+-        regionized != program) {
+-        return installRuntimeProgram(regionized);
+-    }
+     return program;
+ }
+ 
+diff --git a/src/execute/graph_runtime_support.cpp b/src/execute/graph_runtime_support.cpp
+index 74a7e0f1..854242a9 100644
+--- a/src/execute/graph_runtime_support.cpp
++++ b/src/execute/graph_runtime_support.cpp
+@@ -352,8 +352,11 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
+                     }
+                 }
+             }
++            // What a part ends with (the last write it makes) is ordered by the region.
+             for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
+-                visit(input);
++                if (!inLoop(input)) {
++                    visit(input);
++                }
+             }
+             for (gc_node_ref_t input : graph->normInputsOf(index)) {
+                 visit(input);
+diff --git a/src/passes/test/facts.cpp b/src/passes/test/facts.cpp
+index de73ea65..b1f90bf0 100644
+--- a/src/passes/test/facts.cpp
++++ b/src/passes/test/facts.cpp
+@@ -30,7 +30,7 @@
+ #include "camel/runtime/draft_session.h"
+ #include "camel/runtime/fact_persist.h"
+ #include "camel/runtime/facts.h"
+-#include "camel/runtime/loop_lowering.h"
++#include "camel/runtime/loop_outline.h"
+ #include "camel/runtime/reachable.h"
+ 
+ #include <algorithm>
+@@ -462,11 +462,12 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
+     }
+     os << std::format("FACTS verify equal={} differ={}\n", equal, differ);
+ 
+-    // A back end's private lowering: a copy of every graph, new only where a loop was.
+-    if (programHasLoops(*program, graph)) {
+-        const Program *loweredProgram = lowerLoopsToTailRecursion(context_, program);
+-        GCGraph *lowered              = loweredProgram->root();
+-        (void)tally(os, store, *loweredProgram, lowered, "lowered");
++    // The program with its loops as graphs (what autodiff works on): a copy of every graph, new
++    // only where a loop was.
++    if (const Program *outlinedProgram = outlineLoopRegions(context_, program, graph);
++        outlinedProgram != program) {
++        GCGraph *outlined = outlinedProgram->root();
++        (void)tally(os, store, *outlinedProgram, outlined, "outlined");
+     }
+     return program;
+ }
+diff --git a/src/passes/trans/cpp/cpp_export.cpp b/src/passes/trans/cpp/cpp_export.cpp
+index af1f2379..6a80848f 100644
+--- a/src/passes/trans/cpp/cpp_export.cpp
++++ b/src/passes/trans/cpp/cpp_export.cpp
+@@ -18,7 +18,6 @@
+  */
+ 
+ #include "cpp_export.h"
+-#include "camel/runtime/loop_lowering.h"
+ 
+ #include "camel/core/error/diagnostics.h"
+ #include "camel/core/source/manager.h"
+diff --git a/src/passes/trans/cpp/operator_rules.cpp b/src/passes/trans/cpp/operator_rules.cpp
+index 1c35072d..c80adeb7 100644
+--- a/src/passes/trans/cpp/operator_rules.cpp
++++ b/src/passes/trans/cpp/operator_rules.cpp
+@@ -414,14 +414,6 @@ Rules buildRules() {
+         false,
+     };
+ 
+-    // ---- Graphs (operators/graph.h) ----
+-    // A function value of the generated program is its own C++ function: there is no copy of
+-    // a graph to take back to its original.
+-    r[":graph/original"] = {
+-        [](OperatorCall &c) -> std::optional<std::string> { return c.norm(0).text; },
+-        true,
+-    };
+-
+     // ---- Arrays (struct.cpp, ops.cpp __builtin__idx__) ----
+     r[":op/idx_arr"]          = faultingFunction("at", RuntimeDiag::IndexOutOfRange, 3);
+     r[":struct/len_arr"]      = runtimeFunction("length");
+diff --git a/src/runtime/draft_session.cpp b/src/runtime/draft_session.cpp
+index 67a65ed5..26643c28 100644
+--- a/src/runtime/draft_session.cpp
++++ b/src/runtime/draft_session.cpp
+@@ -1219,9 +1219,6 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
+         context_->currentRuntimeProgram() == program_ && program_->root() == oldRuntimeRoot) {
+         program_ = context_->installRuntimeProgram(committed);
+     } else {
+-        // A private copy of a program: it remembers the program it was made from, for the
+-        // operators that read graphs (Program::original).
+-        committed->setOriginal(program_->original() ? program_->original() : program_);
+         program_ = committed;
+         context_->trackDetachedRuntimeProgram(committed);
+     }
+diff --git a/src/runtime/loop_lowering.cpp b/src/runtime/loop_lowering.cpp
+deleted file mode 100644
+index 7d9d032c..00000000
+--- a/src/runtime/loop_lowering.cpp
++++ /dev/null
+@@ -1,621 +0,0 @@
+-/**
+- * Copyright (c) 2024 the OpenCML Organization
+- * Camel is licensed under the MIT license.
+- * You can use this software according to the terms and conditions of the
+- * MIT license. You may obtain a copy of the MIT license at:
+- * [https://opensource.org/license/mit]
+- *
+- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+- *
+- * See the the MIT license for more details.
+- *
+- * Author: Camel Contributors
+- * Created: Oct. 15, 2026
+- * Updated: Oct. 15, 2026
+- * Supported by: National Key Research and Development Program of China
+- */
+-
+-/*
+- * The private lowering of LOOP nodes to tail recursion (camel/runtime/loop_lowering.h).
+- *
+- * Every loop gets three new graphs, made in one GraphDraftGroup (rec and next call each other):
+- *   rec    the loop itself: computes whether to go on and branches;
+- *   next   the arm that goes on: one round of the body, then the tail call of rec;
+- *   done   the arm that stops: the state.
+- * The graph that held the LOOP node is then edited in a draft session over the program's root:
+- * the node becomes a FUNC node calling rec, with the same users, control inputs and origin, so
+- * a fault in a lowered loop is reported where the loop is written. The session is committed
+- * detached: the program the context holds keeps its LOOP nodes.
+- */
+-
+-#include "camel/runtime/loop_lowering.h"
+-
+-#include "camel/core/mm.h"
+-#include "camel/core/operator_table.h"
+-#include "camel/core/rtdata/tuple.h"
+-#include "camel/core/type/composite/array.h"
+-#include "camel/core/type/composite/func.h"
+-#include "camel/core/type/composite/tuple.h"
+-#include "camel/runtime/draft_session.h"
+-#include "camel/runtime/loop.h"
+-#include "camel/runtime/loop_outline.h"
+-#include "camel/runtime/reachable.h"
+-#include "camel/utils/assert.h"
+-
+-#include <array>
+-#include <cstring>
+-#include <format>
+-#include <memory>
+-#include <string>
+-#include <vector>
+-
+-namespace camel::runtime {
+-
+-using namespace camel::core::type;
+-using camel::core::loopHasCondition;
+-using camel::core::loopHasIterable;
+-using camel::core::rtdata::toSlot;
+-
+-namespace {
+-
+-/// What the three graphs of one lowered loop need to know about it.
+-struct LoopShape {
+-    GCGraph *owner         = nullptr; // the graph the LOOP node is in
+-    const Program *program = nullptr; // the program that holds the graphs
+-    gc_node_ref_t node     = kInvalidNodeRef;
+-    LoopKind kind          = LoopKind::While;
+-    GCGraph *cond          = nullptr;
+-    GCGraph *body          = nullptr;
+-    size_t stateCount      = 0;
+-    size_t collectionCount = 0;              // s: values collected into arrays each round
+-    Type *stateType        = nullptr;        // the LOOP node's value: the state (or state+tape)
+-    Type *bodyType         = nullptr;        // the body's exit (LoopView::bodyResultType)
+-    std::vector<Type *> stateTypes;          // the k values of the state
+-    std::vector<Type *> collectionTypes;     // Array<T>, one per collection slot
+-    std::vector<Type *> collectionElemTypes; // T, one per collection slot
+-    std::vector<Type *> captureTypes;        // the types of the body's capture ports
+-    std::vector<std::string> captureNames;   // what they capture, for dumps and std::cpp
+-    Type *arrayType = nullptr;               // For, ForWhile
+-    uint64_t origin = 0;                     // where the loop is written
+-
+-    bool iterates() const { return loopHasIterable(kind); }
+-    /// True when the state travels in a tuple: k > 1, or the loop collects (then the tuple is
+-    /// (state…, tape…), the LOOP node's value).
+-    bool wrapsState() const { return stateCount > 1 || collectionCount != 0; }
+-};
+-
+-/// The names the three graphs give their own parameters: of the compiler's reserved form
+-/// (`__x__`), so that no captured name of the program equals one of them.
+-constexpr const char *kStateName = "__state__";
+-constexpr const char *kRoundName = "__round__";
+-constexpr const char *kItemsName = "__items__";
+-
+-/// A parameter of a lowered graph: its name and type.
+-using NamedParam = std::pair<std::string, Type *>;
+-
+-/// The interned signature of a lowered graph, with the names of its parameters (std::cpp and
+-/// the dumps name ports by them).
+-FunctionType *
+-signatureOf(const std::vector<NamedParam> &with, const std::vector<NamedParam> &norm, Type *exit) {
+-    FunctionTypeFactory factory;
+-    for (const auto &[name, type] : with) {
+-        factory.addWithArg(name, type, false);
+-    }
+-    for (const auto &[name, type] : norm) {
+-        factory.addNormArg(name, type, false);
+-    }
+-    factory.setExitType(exit);
+-    return factory.build();
+-}
+-
+-/// The captures of a loop as parameters of a lowered graph.
+-std::vector<NamedParam> captureParams(const LoopShape &loop) {
+-    std::vector<NamedParam> params;
+-    for (size_t c = 0; c < loop.captureTypes.size(); ++c) {
+-        params.emplace_back(loop.captureNames[c], loop.captureTypes[c]);
+-    }
+-    return params;
+-}
+-
+-/// A port of type `type` appended to the Norm (`with` false) or With ports of `draft`.
+-gc_node_ref_t addPort(GraphDraft &draft, Type *type, bool with) {
+-    const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
+-    if (with) {
+-        draft.appendWithPort(port);
+-    } else {
+-        draft.appendNormPort(port);
+-    }
+-    return port;
+-}
+-
+-gc_node_ref_t addOper(
+-    GraphDraft &draft, Type *type, std::string_view uri, std::span<const gc_node_ref_t> inputs) {
+-    const gc_node_ref_t node = draft.addOperNode(type, nullptr, uri);
+-    draft.setNormInputs(node, inputs);
+-    return node;
+-}
+-
+-gc_node_ref_t addCall(
+-    GraphDraft &draft, GraphId callee, Type *type, std::span<const gc_node_ref_t> norm,
+-    std::span<const gc_node_ref_t> with) {
+-    const gc_node_ref_t node = draft.addFuncNode(callee, type);
+-    draft.setNormInputs(node, norm);
+-    draft.setWithInputs(node, with);
+-    draft.addDependency(callee);
+-    return node;
+-}
+-
+-gc_node_ref_t addInt(GraphDraft &draft, int64_t value) {
+-    return draft.materializeStaticValue(toSlot<int64_t>(value), Type::Int64());
+-}
+-
+-/// The values of the state a graph's condition or body call takes: S itself when it is not
+-/// wrapped, its first k elements (ACCS) when it is (k > 1, or the loop collects).
+-std::vector<gc_node_ref_t> unpackState(GraphDraft &draft, const LoopShape &loop, gc_node_ref_t s) {
+-    if (!loop.wrapsState()) {
+-        return {s};
+-    }
+-    std::vector<gc_node_ref_t> values;
+-    for (size_t j = 0; j < loop.stateCount; ++j) {
+-        const gc_node_ref_t element =
+-            draft.addAccsNode(loop.stateTypes[j], static_cast<uint32_t>(j));
+-        draft.setNormInputs(element, std::span<const gc_node_ref_t>(&s, 1));
+-        values.push_back(element);
+-    }
+-    return values;
+-}
+-
+-/// Gives every node of `draft` the origin of the loop (the condition and body graphs keep their
+-/// own): what goes wrong in the machinery of a lowered loop is reported at the loop.
+-void stampOrigin(GraphDraft &draft, uint64_t origin) {
+-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+-        if (draft.alive(id) && draft.nodeOrigin(id) == 0) {
+-            draft.setNodeOrigin(id, origin);
+-        }
+-    }
+-}
+-
+-void setResult(GraphDraft &draft, gc_node_ref_t result) {
+-    draft.setOutputNode(result);
+-    draft.setExitNode(result);
+-    draft.setReturnNode(result, GCReturnKind::Self);
+-}
+-
+-/// `done(S) = S`.
+-std::unique_ptr<GraphDraft> buildDone(const LoopShape &loop) {
+-    auto draft = std::make_unique<GraphDraft>();
+-    draft->setFuncType(signatureOf({{kStateName, loop.stateType}}, {}, loop.stateType));
+-    const gc_node_ref_t s = addPort(*draft, loop.stateType, true);
+-    setResult(*draft, s);
+-    return draft;
+-}
+-
+-/// An ACCS node reading component `index` of `tuple`.
+-gc_node_ref_t addAccs(GraphDraft &draft, gc_node_ref_t tuple, Type *type, uint32_t index) {
+-    const gc_node_ref_t node = draft.addAccsNode(type, index);
+-    draft.setNormInputs(node, std::span<const gc_node_ref_t>(&tuple, 1));
+-    return node;
+-}
+-
+-/// `next(S; c, i, xs) = rec(i + 1, body(xs[i], S; c); c, xs)`; a collecting loop's body also
+-/// produces the values of the slots, which are appended to the tapes the state carries (one
+-/// `:loop/collect` per slot), and the next state is the (state…, tape…) tuple.
+-std::unique_ptr<GraphDraft> buildNext(const LoopShape &loop, GraphId rec) {
+-    auto draft = std::make_unique<GraphDraft>();
+-    std::vector<NamedParam> withParams{{kStateName, loop.stateType}};
+-    for (auto &param : captureParams(loop)) {
+-        withParams.push_back(std::move(param));
+-    }
+-    if (loop.iterates()) {
+-        withParams.emplace_back(kRoundName, Type::Int64());
+-        withParams.emplace_back(kItemsName, loop.arrayType);
+-    }
+-    draft->setFuncType(signatureOf(withParams, {}, loop.stateType));
+-
+-    const gc_node_ref_t s = addPort(*draft, loop.stateType, true);
+-    std::vector<gc_node_ref_t> captures;
+-    for (Type *type : loop.captureTypes) {
+-        captures.push_back(addPort(*draft, type, true));
+-    }
+-    gc_node_ref_t index = kInvalidNodeRef, array = kInvalidNodeRef;
+-    if (loop.iterates()) {
+-        index = addPort(*draft, Type::Int64(), true);
+-        array = addPort(*draft, loop.arrayType, true);
+-    }
+-
+-    std::vector<gc_node_ref_t> bodyArgs;
+-    if (loop.iterates()) {
+-        const std::array<gc_node_ref_t, 2> at{array, index};
+-        bodyArgs.push_back(addOper(
+-            *draft,
+-            static_cast<ArrayType *>(loop.arrayType)->elemType(),
+-            ":op/idx_arr",
+-            at));
+-    }
+-    for (gc_node_ref_t value : unpackState(*draft, loop, s)) {
+-        bodyArgs.push_back(value);
+-    }
+-    Type *producedType           = loop.collectionCount != 0 ? loop.bodyType : loop.stateType;
+-    const gc_node_ref_t produced =
+-        addCall(*draft, loop.body->id(), producedType, bodyArgs, captures);
+-
+-    gc_node_ref_t nextState = produced;
+-    if (loop.collectionCount != 0) {
+-        std::vector<size_t> slots;
+-        std::vector<gc_node_ref_t> values;
+-        for (size_t j = 0; j < loop.stateCount; ++j) {
+-            values.push_back(
+-                addAccs(*draft, produced, loop.stateTypes[j], static_cast<uint32_t>(j)));
+-            slots.push_back(j);
+-        }
+-        for (size_t c = 0; c < loop.collectionCount; ++c) {
+-            const uint32_t at         = static_cast<uint32_t>(loop.stateCount + c);
+-            const gc_node_ref_t value = addAccs(*draft, produced, loop.collectionElemTypes[c], at);
+-            const gc_node_ref_t tape  = addAccs(*draft, s, loop.collectionTypes[c], at);
+-            const std::array<gc_node_ref_t, 2> operands{tape, value};
+-            const gc_node_ref_t collect =
+-                addOper(*draft, loop.collectionTypes[c], ":loop/collect", operands);
+-            // Growing the tape can exhaust memory: the failure is the loop's allocation.
+-            draft->setNodeOrigin(collect, loop.origin);
+-            values.push_back(collect);
+-            slots.push_back(loop.stateCount + c);
+-        }
+-        auto *empty =
+-            ::Tuple::create(loop.stateCount + loop.collectionCount, camel::core::mm::autoSpace());
+-        const gc_node_ref_t source = draft->materializeStaticValue(
+-            toSlot<camel::core::rtdata::Object *>(empty),
+-            loop.stateType);
+-        nextState = draft->addFillNode(loop.stateType, makeFillPayload(GCFillKind::Tuple, slots));
+-        draft->setNormInputs(nextState, std::span<const gc_node_ref_t>(&source, 1));
+-        draft->setWithInputs(nextState, values);
+-        draft->setNodeOrigin(nextState, loop.origin);
+-    }
+-
+-    std::vector<gc_node_ref_t> recNorm, recWith = captures;
+-    if (loop.iterates()) {
+-        const std::array<gc_node_ref_t, 2> step{index, addInt(*draft, 1)};
+-        recNorm.push_back(addOper(*draft, Type::Int64(), ":op/add_l", step));
+-        recWith.push_back(array);
+-    }
+-    recNorm.push_back(nextState);
+-    setResult(*draft, addCall(*draft, rec, loop.stateType, recNorm, recWith));
+-    stampOrigin(*draft, loop.origin);
+-    return draft;
+-}
+-
+-/// `rec(i, S; c, xs) = if go then next(...) else done(S)`, the arms as graphs under a BRCH.
+-std::unique_ptr<GraphDraft> buildRec(const LoopShape &loop, GraphId next, GraphId done) {
+-    auto draft                         = std::make_unique<GraphDraft>();
+-    std::vector<NamedParam> withParams = captureParams(loop), normParams;
+-    if (loop.iterates()) {
+-        withParams.emplace_back(kItemsName, loop.arrayType);
+-        normParams.emplace_back(kRoundName, Type::Int64());
+-    }
+-    normParams.emplace_back(kStateName, loop.stateType);
+-    draft->setFuncType(signatureOf(withParams, normParams, loop.stateType));
+-
+-    gc_node_ref_t index = kInvalidNodeRef, array = kInvalidNodeRef;
+-    if (loop.iterates()) {
+-        index = addPort(*draft, Type::Int64(), false);
+-    }
+-    const gc_node_ref_t s = addPort(*draft, loop.stateType, false);
+-    std::vector<gc_node_ref_t> captures;
+-    for (Type *type : loop.captureTypes) {
+-        captures.push_back(addPort(*draft, type, true));
+-    }
+-    if (loop.iterates()) {
+-        array = addPort(*draft, loop.arrayType, true);
+-    }
+-
+-    // Whether to go on: the condition first (it sees the state), then an element left.
+-    gc_node_ref_t go = kInvalidNodeRef;
+-    if (loopHasCondition(loop.kind)) {
+-        go = addCall(*draft, loop.cond->id(), Type::Bool(), unpackState(*draft, loop, s), captures);
+-    }
+-    if (loop.iterates()) {
+-        const gc_node_ref_t length = addOper(
+-            *draft,
+-            Type::Int64(),
+-            ":struct/len_arr",
+-            std::span<const gc_node_ref_t>(&array, 1));
+-        const std::array<gc_node_ref_t, 2> bound{index, length};
+-        const gc_node_ref_t left = addOper(*draft, Type::Bool(), ":op/lt_l", bound);
+-        if (go == kInvalidNodeRef) {
+-            go = left;
+-        } else {
+-            const std::array<gc_node_ref_t, 2> both{go, left};
+-            go = addOper(*draft, Type::Bool(), ":op/and", both);
+-        }
+-    }
+-
+-    // The branch, as the front end builds an `if`: each arm a FUNC under the BRCH, every value
+-    // an arm takes ready before the BRCH, the JOIN the graph's exit.
+-    std::vector<gc_node_ref_t> nextWith{s};
+-    nextWith.insert(nextWith.end(), captures.begin(), captures.end());
+-    if (loop.iterates()) {
+-        nextWith.push_back(index);
+-        nextWith.push_back(array);
+-    }
+-    const gc_node_ref_t join = draft->addJoinNode(loop.stateType, kInvalidNodeRef, 2);
+-    const gc_node_ref_t goOn = draft->addFuncNode(next, loop.stateType);
+-    const gc_node_ref_t stop = draft->addFuncNode(done, loop.stateType);
+-    draft->addDependency(next);
+-    draft->addDependency(done);
+-    draft->addSubGraph(next);
+-    draft->addSubGraph(done);
+-    const gc_node_ref_t brch = draft->addBrchNode(Type::Int64(), join, 2);
+-    draft->setNormInputs(brch, std::span<const gc_node_ref_t>(&go, 1));
+-    draft->setCtrlInputs(brch, nextWith);
+-    reinterpret_cast<GCJoinBody *>(draft->mutablePayloadOf(join).data())->brch = brch;
+-    draft->setCtrlInputs(goOn, std::span<const gc_node_ref_t>(&brch, 1));
+-    draft->setWithInputs(goOn, nextWith);
+-    draft->setCtrlInputs(stop, std::span<const gc_node_ref_t>(&brch, 1));
+-    draft->setWithInputs(stop, std::span<const gc_node_ref_t>(&s, 1));
+-    draft->setNormInputs(join, std::span<const gc_node_ref_t>(&brch, 1));
+-    const std::array<gc_node_ref_t, 2> armValues{goOn, stop};
+-    draft->setWithInputs(join, armValues);
+-    for (uint32_t arm = 0; arm < armValues.size(); ++arm) {
+-        const uint32_t region = draft->addRegion(GCRegionKind::Arm, 0, brch, arm);
+-        draft->setNodeRegion(armValues[arm], region);
+-        draft->setRegionResult(region, armValues[arm]);
+-    }
+-    setResult(*draft, join);
+-    stampOrigin(*draft, loop.origin);
+-    return draft;
+-}
+-
+-LoopShape shapeOf(const Program &program, GCGraph *owner, gc_node_ref_t node) {
+-    const LoopView view(program, *owner, node);
+-    LoopShape loop;
+-    loop.owner           = owner;
+-    loop.program         = &program;
+-    loop.node            = node;
+-    loop.kind            = view.kind();
+-    loop.cond            = view.condGraph();
+-    loop.body            = view.bodyGraph();
+-    loop.stateCount      = view.stateCount();
+-    loop.collectionCount = view.collectionCount();
+-    loop.stateType       = view.valueType();
+-    loop.bodyType        = view.bodyResultType();
+-    loop.origin          = owner->nodeOrigin(node);
+-    for (size_t j = 0; j < loop.stateCount; ++j) {
+-        loop.stateTypes.push_back(view.stateType(j));
+-    }
+-    for (size_t c = 0; c < loop.collectionCount; ++c) {
+-        loop.collectionTypes.push_back(view.collectionArrayType(c));
+-        loop.collectionElemTypes.push_back(view.collectionElemType(c));
+-    }
+-    const auto names = loop.body->captureNames();
+-    for (size_t c = 0; c < view.captures().size(); ++c) {
+-        loop.captureTypes.push_back(loop.body->node(view.bodyCapturePort(c))->dataType());
+-        loop.captureNames.push_back(
+-            c < names.size() ? std::string(camel::core::symbolText(names[c]))
+-                             : std::format("__capture{}__", c));
+-    }
+-    if (const auto iterable = view.iterable()) {
+-        loop.arrayType = owner->node(*iterable)->dataType();
+-    }
+-    return loop;
+-}
+-
+-/// Replaces the LOOP node of `loop` in `draft` (the draft of loop.owner) by a call of `rec`.
+-void replaceLoop(GraphDraft &draft, const LoopShape &loop, GraphId rec) {
+-    const gc_node_ref_t id = draft.draftIdOfSourceRef(loop.node);
+-    ASSERT(id != kInvalidNodeRef, "A lowered loop's node is not in its graph's draft.");
+-    const auto norm = draft.normInputsOf(id);
+-    const size_t at = loop.iterates() ? 1 : 0;
+-    std::vector<gc_node_ref_t> initial(norm.begin() + static_cast<std::ptrdiff_t>(at), norm.end());
+-    const gc_node_ref_t array = loop.iterates() ? norm.front() : kInvalidNodeRef;
+-
+-    // The first state: the one first value, or the tuple of them; a collecting loop also starts
+-    // with one empty tape per slot.
+-    gc_node_ref_t first = initial.front();
+-    if (loop.wrapsState()) {
+-        std::vector<gc_node_ref_t> values = initial;
+-        std::vector<size_t> slots(initial.size());
+-        for (size_t j = 0; j < slots.size(); ++j) {
+-            slots[j] = j;
+-        }
+-        for (size_t c = 0; c < loop.collectionCount; ++c) {
+-            const gc_node_ref_t tape = addOper(
+-                draft,
+-                loop.collectionTypes[c],
+-                ":loop/collector",
+-                std::span<const gc_node_ref_t>());
+-            draft.setNodeOrigin(tape, loop.origin);
+-            values.push_back(tape);
+-            slots.push_back(loop.stateCount + c);
+-        }
+-        auto *empty                = ::Tuple::create(values.size(), camel::core::mm::autoSpace());
+-        const gc_node_ref_t source = draft.materializeStaticValue(
+-            toSlot<camel::core::rtdata::Object *>(empty),
+-            loop.stateType);
+-        first = draft.addFillNode(loop.stateType, makeFillPayload(GCFillKind::Tuple, slots));
+-        draft.setNormInputs(first, std::span<const gc_node_ref_t>(&source, 1));
+-        draft.setWithInputs(first, values);
+-        draft.setNodeOrigin(first, loop.origin);
+-    }
+-    std::vector<gc_node_ref_t> recNorm;
+-    if (loop.iterates()) {
+-        const gc_node_ref_t zero = addInt(draft, 0);
+-        draft.setNodeOrigin(zero, loop.origin);
+-        recNorm.push_back(zero);
+-    }
+-    recNorm.push_back(first);
+-    std::vector<gc_node_ref_t> recWith(
+-        draft.withInputsOf(id).begin(),
+-        draft.withInputsOf(id).end());
+-    if (loop.iterates()) {
+-        recWith.push_back(array);
+-    }
+-
+-    const DraftNodeHeader *header = draft.header(id);
+-    const GCFuncRef body{.ref = draft.payloadGraphIndexOf(rec)};
+-    std::vector<std::byte> payload(sizeof(body));
+-    std::memcpy(payload.data(), &body, sizeof(body));
+-    const std::vector<gc_node_ref_t> ctrl(
+-        draft.ctrlInputsOf(id).begin(),
+-        draft.ctrlInputsOf(id).end());
+-    draft.rewriteNode(
+-        id,
+-        DraftNodeInit{
+-            .dataIndex    = header->dataIndex,
+-            .dataType     = header->dataType,
+-            .kind         = GCNodeKind::Func,
+-            .runtimeFlags = header->runtimeFlags,
+-            .payload      = payload,
+-            .normInputs   = recNorm,
+-            .withInputs   = recWith,
+-            .ctrlInputs   = ctrl,
+-        });
+-    draft.addDependency(rec);
+-    draft.addSubGraph(rec);
+-}
+-
+-/// In `draft`, the inputs `inputs` with every one of function type passed through
+-/// `:graph/original` (one new node per input, at `origin`).
+-std::vector<gc_node_ref_t> throughOriginals(
+-    GraphDraft &draft, std::span<const gc_node_ref_t> inputs, uint64_t origin, bool &changed) {
+-    std::vector<gc_node_ref_t> result(inputs.begin(), inputs.end());
+-    for (gc_node_ref_t &input : result) {
+-        Type *type = draft.header(input)->dataType;
+-        if (type != nullptr && type->code() == TypeCode::Function) {
+-            const gc_node_ref_t value = input;
+-            input =
+-                addOper(draft, type, kGraphOriginalUri, std::span<const gc_node_ref_t>(&value, 1));
+-            draft.setNodeOrigin(input, origin);
+-            changed = true;
+-        }
+-    }
+-    return result;
+-}
+-
+-/**
+- * The operators of the copy that read the graphs of the function values they receive
+- * (OperatorTraits::inspectsGraphs: Tiles compiling a function, an export) must see the program
+- * as it was written, not this private lowering (op-semantics 11.4). Every operand of function
+- * type of such an operator is passed through `:graph/original`, which takes a function value
+- * of the copy back to the program's graph it was copied from (Program::original; the
+- * commit records it). The new node takes the operator's origin.
+- */
+-void handOriginalsToGraphReaders(RuntimeGraphDraftSession &session) {
+-    const auto &table = camel::core::OperatorTable::instance();
+-    for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+-        std::vector<gc_node_ref_t> readers;
+-        if (const GraphDraft *draft = session.tryDraft(graph)) {
+-            for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+-                const DraftNodeHeader *header = draft->alive(id) ? draft->header(id) : nullptr;
+-                if (header && header->kind == GCNodeKind::Oper &&
+-                    table.inspectsGraphs(
+-                        reinterpret_cast<const GCOperBody *>(draft->payloadOf(id).data())->oper)) {
+-                    readers.push_back(id);
+-                }
+-            }
+-        } else {
+-            for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+-                if (graph->node(ref)->kind == GCNodeKind::Oper &&
+-                    table.inspectsGraphs(graph->nodeBodyAs<GCOperBody>(ref)->oper)) {
+-                    readers.push_back(ref); // a draft decoded from it numbers its nodes alike
+-                }
+-            }
+-        }
+-        if (readers.empty()) {
+-            continue;
+-        }
+-        GraphDraft &draft = session.edit(graph);
+-        for (gc_node_ref_t id : readers) {
+-            const std::vector<gc_node_ref_t> norm(
+-                draft.normInputsOf(id).begin(),
+-                draft.normInputsOf(id).end());
+-            const std::vector<gc_node_ref_t> with(
+-                draft.withInputsOf(id).begin(),
+-                draft.withInputsOf(id).end());
+-            const uint64_t origin = draft.nodeOrigin(id);
+-            bool changed          = false;
+-            const std::vector<gc_node_ref_t> newNorm =
+-                throughOriginals(draft, norm, origin, changed);
+-            const std::vector<gc_node_ref_t> newWith =
+-                throughOriginals(draft, with, origin, changed);
+-            if (changed) {
+-                draft.setNormInputs(id, newNorm);
+-                draft.setWithInputs(id, newWith);
+-            }
+-        }
+-    }
+-}
+-
+-} // namespace
+-
+-bool programHasLoops(const Program &program, GCGraph *root) {
+-    bool found = false;
+-    forEachReachableGraph(program, root, [&](GCGraph *graph) {
+-        for (gc_node_ref_t ref = 0; !found && ref < graph->nodeCount(); ++ref) {
+-            found = graph->node(ref)->kind == GCNodeKind::Loop;
+-        }
+-    });
+-    return found;
+-}
+-
+-const Program *lowerLoopsToTailRecursion(
+-    const camel::core::context::context_ptr_t &context, const Program *program) {
+-    return lowerLoopsToTailRecursion(context, program, program ? program->root() : nullptr);
+-}
+-
+-const Program *lowerLoopsToTailRecursion(
+-    const camel::core::context::context_ptr_t &context, const Program *program, GCGraph *root) {
+-    if (program == nullptr || root == nullptr || !programHasLoops(*program, root)) {
+-        return program;
+-    }
+-    // The loops of a program are regions; the lowering reads a loop as its two graphs.
+-    if (const Program *outlined = outlineLoopRegions(context, program, root); outlined != program) {
+-        return lowerLoopsToTailRecursion(context, outlined, outlined->graph(root->id()));
+-    }
+-    RuntimeGraphDraftSession session(context, program, root);
+-    std::vector<LoopShape> loops;
+-    for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+-        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+-            if (graph->node(ref)->kind == GCNodeKind::Loop) {
+-                loops.push_back(shapeOf(session.work(), graph, ref));
+-            }
+-        }
+-    }
+-
+-    // The new graphs of every loop, in one group: rec and next refer to each other.
+-    GraphDraftGroup group(context, program);
+-    struct Members {
+-        GraphId rec, next, done;
+-    };
+-    std::vector<Members> members;
+-    for (const LoopShape &loop : loops) {
+-        // `f.loop1.body` gives `f.loop1.rec`, the name the lowered loop runs under.
+-        std::string base = loop.body->name();
+-        if (base.ends_with(".body")) {
+-            base.resize(base.size() - 5);
+-        }
+-        Members m{
+-            .rec  = group.reserve(base + ".rec", base + ".rec"),
+-            .next = group.reserve(base + ".next", base + ".next"),
+-            .done = group.reserve(base + ".done", base + ".done"),
+-        };
+-        group.define(m.rec, buildRec(loop, m.next, m.done));
+-        group.define(m.next, buildNext(loop, m.rec));
+-        group.define(m.done, buildDone(loop));
+-        members.push_back(m);
+-    }
+-    group.encode();
+-    for (const Members &m : members) {
+-        session.adoptGraph(group.encoded(m.rec));
+-        session.adoptGraph(group.encoded(m.next));
+-        session.adoptGraph(group.encoded(m.done));
+-    }
+-
+-    for (size_t i = 0; i < loops.size(); ++i) {
+-        replaceLoop(session.edit(loops[i].owner), loops[i], members[i].rec);
+-    }
+-    handOriginalsToGraphReaders(session);
+-    return session.commit(/*detached=*/true);
+-}
+-
+-} // namespace camel::runtime
+diff --git a/src/runtime/loop_outline.cpp b/src/runtime/loop_outline.cpp
+index be55f40f..de23ef86 100644
+--- a/src/runtime/loop_outline.cpp
++++ b/src/runtime/loop_outline.cpp
+@@ -19,8 +19,7 @@
+ 
+ /*
+  * The loops of a program as graphs of their own, for the code that reads a loop as two graphs
+- * (the lowering of a loop to tail recursion, Tiles, the interpreters that call a graph each
+- * round).
++ * (autodiff).
+  *
+  * The condition and the body of a loop are regions of the graph that has the LOOP node. This
+  * outlines each into a graph: the state ports of the region are the norm ports of the graph, the
+diff --git a/src/runtime/program.cpp b/src/runtime/program.cpp
+index 3be1e75d..ed694a8e 100644
+--- a/src/runtime/program.cpp
++++ b/src/runtime/program.cpp
+@@ -82,18 +82,6 @@ void Program::updateRefs(
+                 });
+         }
+     }
+-    if (original_ != nullptr) {
+-        relocate(
+-            const_cast<Program *>(original_),
+-            nullptr,
+-            RefTraceInfo{
+-                .owner     = this,
+-                .ownerType = type,
+-                .slotType  = nullptr,
+-                .ownerKind = "Program",
+-                .slotName  = "program",
+-            });
+-    }
+ }
+ 
+ void Program::note(GCGraph *graph) { manager_->noteGraph(graph); }
+diff --git a/test/plans/feat/modules/graph_facts.plan.toml b/test/plans/feat/modules/graph_facts.plan.toml
+index 8dcbc6fd..3016589e 100644
+--- a/test/plans/feat/modules/graph_facts.plan.toml
++++ b/test/plans/feat/modules/graph_facts.plan.toml
+@@ -84,7 +84,7 @@ assert(value('core.reorder', 'layer', 2) === 'contract', 'matmul freedom')
+ assert(value('core.reorder', 'total', 1) === 'regroup, permute', 'sum freedom under reassociate')
+ assert(value('core.effects', 'count') === 'may fault, may not terminate', 'loop effects')
+ const loopFor = find('core.loopDomain', 'twice')
+-assert(loopFor && loopFor.anchors[1].graph === 'twice' && loopFor.value.includes('= 2; element port 3 reads xs(t)'), 'for domain')
++assert(loopFor && loopFor.anchors[1].graph === 'twice' && loopFor.value.includes('= 2; element port 2 reads xs(t)'), 'for domain')
+ assert(value('core.loopDomain', 'count') === 'while: rounds unbounded (no sequence)', 'while domain')
+ const p = find('core.permissions', 'total', 1)
+ assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === null, 'permissions')
+@@ -115,8 +115,8 @@ for (const l of [
+   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=7 revalidated=0 stale=0',
+   'FACTS graph main valid=0 revalidated=3 stale=8', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+   'FACTS gone 0',
+-  'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered twice valid=0 revalidated=2 stale=5',
+-  'FACTS lowered layer valid=6 revalidated=0 stale=0',
++  'FACTS outlined count valid=0 revalidated=0 stale=2', 'FACTS outlined twice valid=0 revalidated=2 stale=5',
++  'FACTS outlined layer valid=6 revalidated=0 stale=0',
+   '60.0',
+ ]) line(l)
+ assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
+diff --git a/test/plans/feat/modules/tiles.plan.toml b/test/plans/feat/modules/tiles.plan.toml
+index 7029b88b..5d7903e7 100644
+--- a/test/plans/feat/modules/tiles.plan.toml
++++ b/test/plans/feat/modules/tiles.plan.toml
+@@ -182,7 +182,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
+ args = ["${case}", "std::nvm"]
+ envs = ["CAMEL_TILES_DEVICE=invalid"]
+ expect_exit = 1
+-expect_output_contains = ["node 3: tiles requires a pure static For loop"]
++expect_output_contains = ["tiles requires a pure static For loop"]
+ timeout_ms = 10000
+ 
+ [[tests]]
+@@ -192,7 +192,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
+ args = ["${case}", "std::fvm"]
+ envs = ["CAMEL_TILES_DEVICE=invalid"]
+ expect_exit = 1
+-expect_output_contains = ["node 3: tiles requires a pure static For loop"]
++expect_output_contains = ["tiles requires a pure static For loop"]
+ timeout_ms = 10000
+ 
+ [[tests]]
+@@ -202,7 +202,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
+ args = ["${case}", "std::prl"]
+ envs = ["CAMEL_TILES_DEVICE=invalid"]
+ expect_exit = 1
+-expect_output_contains = ["node 3: tiles requires a pure static For loop"]
++expect_output_contains = ["tiles requires a pure static For loop"]
+ timeout_ms = 10000
+ 
+ [[tests]]
+-- 
+2.55.0.windows.3
+
