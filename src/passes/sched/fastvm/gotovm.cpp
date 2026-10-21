@@ -25,6 +25,7 @@
 #include "camel/core/global_config.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/loop_frame.h"
 #include "runtime_support.h"
 #include <array>
 #include <iostream>
@@ -241,6 +242,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             &&label_TAIL, // 10
             &&label_OPER, // 11
             &&label_SCHD, // 12
+            &&label_LBEG, // 13
+            &&label_LTST, // 14
+            &&label_LEND, // 15
 
             // Inline operators
             &&label_IADD,
@@ -395,6 +399,45 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         pc = getJumpTargetPc(bc);
 
         JUMP();
+    }
+
+    label_LBEG: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        camel::execute::loopBegin(*currFrame, *bc->extra()->loop);
+
+        NEXT();
+    }
+
+    label_LTST: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        if (camel::execute::loopTest(*currFrame, *bc->extra()->loop)) {
+            pc = getJumpTargetPc(bc);
+            JUMP();
+        }
+
+        NEXT();
+    }
+
+    label_LEND: {
+        EXEC_WHEN_DEBUG(
+            CAMEL_LOG_DEBUG_S("FastVM", "Executing bytecode: {}", opCodeToString(*bc, context_)));
+        opperf::ScopeTimer _timer(bc->opcode);
+
+        if (camel::execute::loopEnd(
+                *currFrame,
+                *bc->extra()->loop,
+                camel::execute::loopRoundSafepoint([&] { fastVmCallBoundarySafepoint(); }))) {
+            pc = getJumpTargetPc(bc);
+            JUMP();
+        }
+
+        NEXT();
     }
 
     label_BRCH: {
@@ -790,11 +833,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t wargs = bc->wargs();
         auto mark              = bc->extra()->mark;
         try {
-            if (isLoopMark(mark)) {
-                evalLoop(*bc, *currFrame);
-            } else {
-                evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
-            }
+            evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
         } catch (const camel::core::mm::MemoryExhausted &e) {
             throw e.during(
                 std::string(),

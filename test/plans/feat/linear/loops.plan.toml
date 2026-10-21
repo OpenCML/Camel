@@ -3,7 +3,7 @@ order = 348
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "loops"]
-desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
+desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm, fvm and jit in the frame of the function, prl through the private lowering to tail recursion), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
 [[tests]]
 name = "loops.native_callback"
@@ -166,45 +166,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.iterate_string.native_loop"
-desc = "The native loop instruction of std::fvm and std::jit takes the elements of a string the same way the lowering does."
-kind = "behavior"
-case = "../../../cases/loops/iterate_string.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["3 3 中文 2 7 2 3"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "loops.iterate_map.native_loop"
-desc = "The native loop instruction of std::fvm and std::jit over a map's key-ordered pairs."
-kind = "behavior"
-case = "../../../cases/loops/iterate_map.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["abc 3 1 6 ab 9 3 ab"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "loops.iterate_tensor.native_loop"
-desc = "The native loop instruction of std::fvm and std::jit over a tensor's first-dimension elements."
-kind = "behavior"
-case = "../../../cases/loops/iterate_tensor.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["21 3 3 6 7 21 3"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
 name = "loops.not_recursion"
 desc = "A loop is not a recursion: with --max-recursion-depth 3 the million-round loops still run on every back end."
 kind = "behavior"
@@ -282,12 +243,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.rgir"
-desc = "On the graph a loop is one LOOP node naming its form and its two graphs (`LOOP while cond=main.loop2.cond body=main.loop2.body`); `for` has no condition graph."
+desc = "On the graph a loop is one LOOP node naming its form (`LOOP while`); its condition and its body are regions of the graph that has the node."
 kind = "behavior"
 case = "../../../cases/parse/rulings/loop_forms.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = ["LOOP for body=main.loop1.body", "LOOP while cond=main.loop2.cond body=main.loop2.body", "LOOP for body=main.loop3.body", "LOOP for-while cond=main.loop4.cond body=main.loop4.body", "label=\"main.loop2.cond\""]
+expect_stdout_contains = ["tooltip=\"LOOP for", "tooltip=\"LOOP while", "tooltip=\"LOOP for-while"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -520,32 +481,6 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.native_fvm"
-desc = "The native loop instruction of std::fvm and std::jit (std::fvm(native_loop=true); it is also what a debugger runs): the four shapes, captures and nesting, the edges, give what the lowering gives."
-kind = "behavior"
-case = "../../../cases/loops/captures.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["24 306 42 25 4"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "loops.native_fvm_shapes"
-desc = "The four shapes and the edges (a million rounds, a recursion limit of 3) on the native loop instruction of std::fvm and std::jit."
-kind = "behavior"
-case = "../../../cases/loops/edges.cml"
-args = ["--max-recursion-depth", "3", "${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["7 5 832040 [1, 4, 9, 16, 25] 2999997"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 60000
-
-[[tests]]
 name = "loops.state_in_place"
 desc = "The old value of a loop state is not visible once the next round begins (design principles 10.5): a body whose only use of its single state is `xs->append<v>` starts from a private copy of the literal and appends in place, so 199 rounds take one block (`std::mem::blocks()` read between the operations), while the copying append of an array the loop does not own takes 199; the `for` shape of the same rewrite takes one block for five rounds; the literal is not edited, a second call of the same loop sees its first value again. The decision is per state: with an array and a counter, whichever order they are written in, only the array takes a copy (1 block each), two appended arrays take two, an array starting from a parameter takes 199, a body that also reads the state (`len(xs)`) takes 199, and a state whose next value is the constant `0` leaves the appended state's one copy alone."
 kind = "behavior"
@@ -581,3 +516,66 @@ expect_exit = 0
 expect_stdout_exact = "(1, 30)\n(0, 5)\n(6, 56)\n(3, 20)\n(1, 30)\n{ x: 1, y: 30 }\n{ ok: true, y: 30 }\n((0, 0), 5)\n(1, 30)\n(1, 30)\n(1, 60)\n(200, 0)\n(200, 0)\n{ ok: true, y: 200 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+[[tests]]
+name = "loops.grad_loop_collect"
+desc = "A loop state that starts as `[]` and is only appended to is a collection output (design principles 3.10): the element type comes from the appended value (5.1, 5.2), the driver builds the array in one pass, and the state stays the program's value and gradient channel. The gradient reads the appended values back through the state, and 1000 rounds cost 3 blocks, not one copy per round (`std::mem::blocks()`, 10.5)."
+kind = "behavior"
+case = "../../../cases/loops/grad_loop_collect.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n3.0\n1998.0\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.refuse_struct_data"
+desc = "A differentiable value read through a struct and converted to data (`float(p.n)`, where `n` is an `int` field computed from the parameter) is refused at the read: the conversion has no gradient channel, so the contribution would vanish without a sign (design principles 9.9)."
+kind = "negative"
+case = "../../../cases/loops/refuse_struct_data.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 12
+expect_output_contains = ["has no gradient channel", "refuse_struct_data.cml:12:18"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.refuse_effectful_data"
+desc = "A value produced by an effectful call (`side` returns an `int` from the parameter) and converted to data is refused at the conversion: the call boundary hides the dependency, so the gradient would be dropped silently (design principles 9.9)."
+kind = "negative"
+case = "../../../cases/loops/refuse_effectful_data.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 15
+expect_output_contains = ["has no gradient channel", "refuse_effectful_data.cml:15:16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.refuse_loop_array_state"
+desc = "A loop state with no gradient channel (`int[]`) whose next value depends on the parameter is refused at the loop, even when only another state's value is read: before H22 the int state's contribution vanished and the gradient was 2 instead of 6 (design principles 9.9, 3.10)."
+kind = "negative"
+case = "../../../cases/loops/refuse_loop_array_state.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 9
+expect_output_contains = ["has no gradient channel", "refuse_loop_array_state.cml:9:16"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "loops.refuse_loop_iter_array"
+desc = "A loop iterating over an array computed from the parameter is refused at the loop: each round's element carries part of the contribution, but the reverse pass has no scatter for an iterated array, so before H22 the gradient was silently 0 (design principles 9.9)."
+kind = "negative"
+case = "../../../cases/loops/refuse_loop_iter_array.cml"
+args = ["-E", "short", "${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 8
+expect_output_contains = ["has no gradient channel", "refuse_loop_iter_array.cml:8:12"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

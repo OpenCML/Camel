@@ -875,8 +875,24 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
         return uint32_t{0};
     };
     info->regionOuter.assign(g->regionCount(), 0);
+    // The ports of the condition and of the body of a loop are named as the loop declares them;
+    // a name of a port is there while the code runs in its region.
+    std::unordered_map<gc_node_ref_t, uint32_t> portRegion;
     for (uint32_t r = 1; r < g->regionCount(); ++r) {
         info->regionOuter[r] = controlRegionOf(g->region(r)->parent);
+        const GCRegion *region = g->region(r);
+        if (region->kind != GCRegionKind::LoopCond && region->kind != GCRegionKind::LoopBody) {
+            continue;
+        }
+        const auto ports = g->regionPorts(r);
+        const auto names =
+            region->params != nullptr ? region->params->argNames() : std::vector<std::string_view>{};
+        for (size_t i = 0; i < ports.size(); ++i) {
+            portRegion.emplace(ports[i], r);
+            if (names.size() == ports.size()) {
+                portNames[ports[i]] = std::string(names[i]);
+            }
+        }
     }
 
     std::unordered_map<int, size_t> functionVotes;
@@ -895,6 +911,9 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
             node.function = functionOf(node.loc);
             node.executes = executesKind(n->kind);
             node.controlRegion = controlRegionOf(g->nodeRegion(node.ref));
+            if (auto port = portRegion.find(node.ref); port != portRegion.end()) {
+                node.controlRegion = port->second;
+            }
             switch (n->kind) {
             case GCNodeKind::Oper: {
                 const auto *body = g->nodeBodyAs<GCOperBody>(node.ref);

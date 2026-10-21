@@ -249,6 +249,9 @@ void registerBuiltinDerivatives() {
     // The form the loop-state rewrite uses (Builder::markLoopStateInPlace): the same call, so
     // the same rule - it reads the output's gradient and never the array's own value.
     registry.setRule(":struct/append_arr_owned", appendArrayVjp);
+    // The private copy a rewritten loop starts from is the identity on values: its gradient is
+    // the gradient of the array it copied, unchanged.
+    registry.setRule(":struct/copy_arr", identityVjp);
 
     registry.setTangentSpace(TypeCode::Float64, floatTangentSpace<F64>());
     registry.setTangentSpace(TypeCode::Float32, floatTangentSpace<F32>());

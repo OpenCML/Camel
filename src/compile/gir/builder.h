@@ -403,7 +403,7 @@ class Builder {
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
 
     // ---- Captures (the graph model, 3.7: a capture port is bound to what it captures) ----
-    // A graph (function, lambda, branch arm, ...) that uses a value of an enclosing graph
+    // A graph (function, lambda, loop part, ...) that uses a value of an enclosing graph
     // holds it in a capture port. The port is bound to the node it stands for, its origin:
     // a node of the enclosing graph the value is computed in, or, for a value of the top
     // level of a module, its node on the root graph. Wherever the graph is called or made a
@@ -441,8 +441,6 @@ class Builder {
         node_handle_t call;
         compile_graph_ptr_t callee;
         std::vector<node_handle_t> values;
-        // When the call is a branch arm: the BRCH, which every captured value must precede.
-        node_handle_t branch = nullptr;
         // How many of the callee's captures are linked already.
         size_t linked = 0;
     };
@@ -458,8 +456,7 @@ class Builder {
     std::string captureNameOf(node_handle_t origin, const std::string &fallback) const;
     /// Registers the direct call `call` of `callee` in the current graph: its captures, as
     /// the current graph sees them now, to be linked by linkCaptureSites.
-    void addCaptureSite(
-        node_handle_t call, const compile_graph_ptr_t &callee, node_handle_t branch = nullptr);
+    void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
     /// The link step for captures: passes to every direct call the captures of its callee,
     /// including the ones the callee made after the call was built, until nothing changes.
     void linkCaptureSites();
@@ -476,6 +473,9 @@ class Builder {
     // The callee expression of such a binding, for the binding used as a value
     // (partialApplicationOf builds the call from it).
     std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
+    // The `f<w>` expression that made the binding. Everything the partial application makes is
+    // located there: the expression itself, not the statement it is written in (H9 1.6).
+    std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithOrigin_;
     // The candidates of such a binding when the pass being used has several and the position
     // has not chosen one (H27e). The ambiguity is reported when the binding is refused for
     // good (rejectUnappliedBinding): visiting a value first must not preempt the position
@@ -544,12 +544,63 @@ class Builder {
     };
     std::unordered_map<node_handle_t, std::vector<VariableUse>> pendingUses_;
 
-    // Captured variables. A graph (function, lambda, branch arm) that names a variable of an
+    /// A branch arm: a region of the graph that has the branch (docs/design/graph-store 3.3),
+    /// built where it is written. What the arm changes of the order of the variables (the last
+    /// writer of each, the operations that used it since) is kept apart while the arm is built,
+    /// and the branch takes it over once its JOIN is there (mergeArmVariables).
+    struct ArmBuild {
+        DraftGraphBuilder *graph = nullptr;
+        uint32_t region          = 0;
+        /// The first node the draft had room for when the arm began.
+        draft_node_ref_t firstNode = 0;
+        /// What the JOIN takes from the arm: its value, behind a GATE that waits for the
+        /// arm's statements when it has any.
+        node_handle_t output{};
+        /// The value of the arm without that GATE.
+        node_handle_t value{};
+        /// The type of the value; void for an arm without one.
+        camel::core::type::Type *type = nullptr;
+        /// A `return` in the arm has given the value.
+        bool returned = false;
+        /// The variables the arm changed: the last writer and the uses they had when the arm
+        /// began (the writer is empty for one without), and at the end of the arm what the
+        /// arm made of them.
+        struct Touched {
+            std::optional<draft_node_ref_t> writerBefore;
+            std::vector<VariableUse> usesBefore;
+            std::optional<node_handle_t> writerAfter;
+            std::vector<VariableUse> usesAfter;
+        };
+        std::unordered_map<node_handle_t, Touched> touched;
+        std::vector<node_handle_t> touchedOrder; // in the order they were first changed
+        /// The variables the arm stores into itself, and the functions it calls: what else it
+        /// writes is what those write (capturedWritesOf), known once every body is built.
+        std::set<node_handle_t> directWrites;
+        std::vector<DraftGraphBuilder *> callees;
+        camel::core::type::Type *exitType() const { return type; }
+    };
+    using arm_ptr_t = std::shared_ptr<ArmBuild>;
+    /// The arms being built, outermost first.
+    std::vector<ArmBuild *> armStack_;
+    /// The arm whose code the builder is writing now, if it is in one: not a function or a
+    /// lambda written inside it.
+    ArmBuild *activeArm() const {
+        return !armStack_.empty() && armStack_.back()->graph == currGraph_.get() ? armStack_.back()
+                                                                              : nullptr;
+    }
+    /// Records the state of `variable` for the arm being built before it is changed.
+    void noteVariable(node_handle_t variable);
+    std::vector<VariableUse> &pendingUsesOf(node_handle_t variable) {
+        noteVariable(variable);
+        return pendingUses_[variable];
+    }
+
+    // Captured variables. A graph (function, lambda, loop part) that names a variable of an
     // enclosing graph, a module-level one included, holds the variable's cell in a capture
     // port. What the graph does with it is not in its type, so the builder keeps a summary per
-    // graph and consults it wherever the graph is called directly or entered as a branch arm:
-    // the call or branch is then a use of each captured variable, and a write of those the
-    // graph writes (design principles 3.5: tracking of modifications is complete).
+    // graph and consults it wherever the graph is called directly: the call is then a use of
+    // each captured variable, and a write of those the graph writes (design principles 3.5:
+    // tracking of modifications is complete).
     struct CaptureSummary {
         // The captured variables (the origins of the capture ports that hold a cell), in
         // capture order.
@@ -576,6 +627,8 @@ class Builder {
     struct PendingIgnoredWrite {
         std::vector<DraftGraphBuilder *> graphs;
         std::vector<node_handle_t> variables;
+        /// Variables known to be written (by the arms of a branch), besides what `graphs` write.
+        std::set<node_handle_t> written;
         camel::source::origin_id_t origin;
         std::string subject;
         std::string verb;
@@ -593,7 +646,6 @@ class Builder {
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
     // graphs that are branch arms (reported through their branch, not as calls).
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
-    std::unordered_set<DraftGraphBuilder *> armGraphs_;
     // The function bodies and arms of a module, in the order they were built, are in
     // ModuleUnit::builtBodies.
     node_handle_t lastSyncedNode_{};
@@ -849,11 +901,9 @@ class Builder {
     void reportImportNameConflicts();
     // A use of the function `graph` in the current graph: its function value
     // (`callableAsResult`), or a direct call of it (`allowParameterization`; a FUNC node, or a
-    // CALL of its value when its value was made before). `branch` is the BRCH node when the
-    // call is a branch arm.
+    // CALL of its value when its value was made before).
     node_handle_t createFuncDataNode(
-        const compile_graph_ptr_t &graph, bool callableAsResult, bool allowParameterization,
-        node_handle_t branch = nullptr);
+        const compile_graph_ptr_t &graph, bool callableAsResult, bool allowParameterization);
     // The value node of a visited expression: a node as is, or a function literal (a graph) as
     // its callable function value.
     node_handle_t valueNodeOf(const std::any &res);
@@ -923,6 +973,11 @@ class Builder {
     void rejectAmbiguousCall(
         const std::string &name, const std::string &argumentTypes,
         const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin);
+    /// The same, located at an origin that is already the whole expression (a partial
+    /// application's `f<w>` rather than the `<w>` its node spans).
+    void rejectAmbiguousCallAt(
+        const std::string &name, const std::string &argumentTypes,
+        const std::vector<std::string> &candidates, camel::source::origin_id_t origin);
     /// The same for candidates that are function types: their signatures are listed in the
     /// order they were written, which is all an ordinary call and a partial application
     /// have to show.
@@ -942,8 +997,8 @@ class Builder {
     // An operation writes `variable`: later reads and writers are ordered after it, and a
     // waited one is ordered after the operations before it that used the variable's value. The
     // operation starts at `entry` and is complete at `exit` (one node for a call; BRCH and
-    // JOIN for a branch). `throughCallee`: the write is one a called function or an arm makes
-    // to a variable it captured, which the summaries already account for.
+    // JOIN for a branch). `throughCallee`: the write is one a called function or a branch makes
+    // to a variable, which the summaries already account for.
     void recordWrite(
         node_handle_t variable, node_handle_t entry, node_handle_t exit,
         bool throughCallee = false);
@@ -1046,6 +1101,22 @@ class Builder {
     void markLoopStateInPlaceOne(
         const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
         std::vector<node_handle_t> &initial, size_t index, node_handle_t next);
+    /// Recognises a state that starts as an empty array and whose only use is appending one
+    /// value per round, and gives the loop a collection slot for the appended values
+    /// (design principles 3.10). The state itself stays: it is the value the program sees and
+    /// the channel its gradient uses. The slot is an extra, internal output; a FILL (or an
+    /// access, for one state) projects the loop's value back to the states alone. Must run
+    /// before autodiff and before `std::opt`: both read the loop's shape.
+    std::vector<Type *> collectLoopAppends(
+        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        const std::vector<Type *> &stateTypes, const std::vector<bool> &emptyInitial);
+    /// Rewrites an empty-array state's `void[]` type once the body's append has told us the
+    /// element type it appends (design principles 5.1: `loop losses = [] for ...` infers from
+    /// the value appended). Returns false when the next value is not such an append.
+    bool inferLoopStateFromAppend(
+        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
+        node_handle_t next);
     /// The condition and the body graph of a loop capture the same values in the same order
     /// (design principles 3.10: one capture table): a capture made into one is made into the
     /// other (captureInto).
@@ -1053,20 +1124,37 @@ class Builder {
     /// How many loops each graph has, for the names of their graphs (`f.loop2.body`).
     std::unordered_map<DraftGraphBuilder *, size_t> loopCounts_;
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
-    /// `gct`, or, when `arms` is given, are those graphs in order (built by buildArmGraph).
+    /// `gct`, or, when `arms` is given, are those arms in order (built by buildArm).
     /// No arm is added to those the program wrote (design principles 3.7).
     /// `valueless` (with `arms`): the branch is an `if` without `else`, whose join takes no
     /// value from its arms.
     node_handle_t buildBranch(
         const GCT::node_ptr_t &gct, node_handle_t condNode,
-        const std::vector<compile_graph_ptr_t> *arms = nullptr, bool valueless = false);
+        const std::vector<arm_ptr_t> *arms = nullptr, bool valueless = false);
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
-    /// The subgraph of one branch arm. Its body is the block `exec`, or what `body` builds
-    /// (called inside the arm's scope) when given; `exec` then only locates the arm.
-    compile_graph_ptr_t
-    buildArmGraph(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
+    /// One branch arm: a region of the current graph. Its body is the block `exec`, or what
+    /// `body` builds (called inside the arm's scope) when given; `exec` then only locates the
+    /// arm.
+    arm_ptr_t buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
+    /// Gives the arm `arm` the value `result` (the last expression of its body) unless a
+    /// `return` has given one.
+    void setArmResult(ArmBuild &arm, node_handle_t result);
+    /// The arm enters the form `target` at its end (the `CAST` is part of the arm).
+    void coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin);
+    /// The nodes of each arm that read nothing the arm computes wait for the BRCH.
+    void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
+    /// The same at the exit of a graph already built (the body of a loop).
+    void coerceGraphExit(
+        const compile_graph_ptr_t &graph, Type *target, const GCT::node_ptr_t &origin);
+    /// After the JOIN is there: the variables the arms changed are changed by the branch.
+    void mergeArmVariables(
+        const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,
+        std::vector<node_handle_t> &written);
+    /// The names of a block that is not a graph (an arm).
+    void enterBlockScope();
+    void leaveBlockScope();
 
     // ---- The tagged forms `T?` and `T!` (design principles 3.8;
     // docs/technical/29_nullable_and_fallible_values.md). Each construct below is a branch on
@@ -1260,13 +1348,13 @@ class Builder {
     /// body. Where that value is dropped (a body declared `: void`, the element function of
     /// `foreach`, the arm of an `if` without `else`), rejectDiscardedValue checks it as a
     /// statement whose value nothing takes.
-    std::unordered_map<const DraftGraphBuilder *, std::pair<GCT::node_ptr_t, node_handle_t>>
+    std::unordered_map<const void *, std::pair<GCT::node_ptr_t, node_handle_t>>
         bodyValueStatement_;
     /// The last statement of the block visitExecNode finished most recently, and its node.
     std::pair<GCT::node_ptr_t, node_handle_t> lastBlockStatement_{};
     /// UnusedPureResult at the last statement of the body of `graph` when it is a call of a
     /// pure operator: the body's value is dropped where `graph` is used (see above).
-    void rejectDiscardedValue(const DraftGraphBuilder *graph);
+    void rejectDiscardedValue(const void *body);
     /// The graph of each function written in place (a lambda), by its construction node.
     std::unordered_map<const GCT::Node *, const DraftGraphBuilder *> lambdaGraphs_;
     std::vector<node_handle_t> syncedReads_;
@@ -1376,10 +1464,6 @@ class Builder {
     void adaptLiteralOperands(
         const std::string &group, std::vector<Argument> &inputs,
         camel::core::type::type_vec_t &types, const GCT::node_ptr_t &call);
-    /// The same at the exit of a branch arm already built: what `arm` gives enters `target`.
-    void coerceArmExit(
-        const compile_graph_ptr_t &arm, camel::core::type::Type *target,
-        const GCT::node_ptr_t &origin);
     /// The return type the function around the current position declares (looking out of
     /// branch arms), or nullptr when it declares none.
     camel::core::type::Type *declaredExitTypeHere() const;
@@ -1396,8 +1480,6 @@ class Builder {
     node_handle_t adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t value);
     /// `file:line:column` of an origin, for the `location` of an error; empty when unknown.
     std::string sourceLocationOf(uint64_t origin) const;
-    /// Branch arms whose body is being built.
-    std::unordered_set<DraftGraphBuilder *> openArmGraphs_;
     size_t tagTemporaries_ = 0;
     node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExitNode(const GCT::node_ptr_t &gct);

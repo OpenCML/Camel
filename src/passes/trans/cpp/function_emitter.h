@@ -38,6 +38,7 @@
 #pragma once
 
 #include "camel/core/operator_table.h"
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
@@ -98,10 +99,6 @@ struct ProgramParts {
 /// "function 'f'" or "an anonymous function", as refusals name a graph.
 std::string describeFunction(const GCGraph *graph);
 
-/// Whether the FUNC node `ref` of `graph` is the head of a branch arm in the front end's form:
-/// a call of an anonymous graph that the BRCH starts. Such a call is lowered in place.
-bool isArmCall(const camel::runtime::Program &program, const GCGraph *graph, gc_node_ref_t ref);
-
 /// The URI of the operator of the OPER node `ref`: what the rule table (operator_rules.h) and
 /// the messages name it by.
 std::string operatorUri(const GCGraph *graph, gc_node_ref_t ref);
@@ -150,7 +147,7 @@ class FunctionEmitter {
     Block lowerMember(const Member &member);
 
     /// The values of one activation of a graph lowered into this function: the function's
-    /// own graph, or an arm graph lowered in place of its call.
+    /// own graph.
     struct Frame {
         GCGraph *graph = nullptr;
         std::unordered_map<gc_node_ref_t, CppValue> values;
@@ -178,6 +175,12 @@ class FunctionEmitter {
     bool lowerBranch(
         Frame &frame, gc_node_ref_t brch, const std::vector<gc_node_ref_t> &order, Block &out,
         bool joinIsTail, const Tail &tail);
+    /// A loop whose condition and body are regions of the graph: its state in variables, and its
+    /// rounds in a `for (;;)`. The nodes of its regions are in `order`, before the LOOP node.
+    void lowerLoop(
+        Frame &frame, gc_node_ref_t loop, const std::vector<gc_node_ref_t> &order, Block &out);
+    /// The control regions of `graph`, made once.
+    const camel::runtime::ControlRegions &controlRegionsOf(const GCGraph *graph);
     void lowerCall(
         Frame &frame, gc_node_ref_t ref, Block &out, bool isTailResult, const Tail &tail,
         bool &handled);
@@ -201,8 +204,6 @@ class FunctionEmitter {
     /// The count of open calls a call at `ref` passes: `rt::call(depth, site)`, which checks
     /// the limit, or `depth` for a call of the entry.
     std::string callDepth(const GCGraph *graph, gc_node_ref_t ref);
-    /// The statements of an arm graph called by the FUNC node `call` of `frame`.
-    Block lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail);
 
     /// Names the value of `ref`: a statement `const T name = expr;` (or `expr;` when nothing
     /// uses it), or the expression itself when it may be moved to its one use.
@@ -227,11 +228,8 @@ class FunctionEmitter {
     NameScope locals_;
     size_t nextValue_ = 1;
     bool loops_       = false; // a tail call jumps back: the body is a loop
-    /// The arm graphs being lowered in place, outermost first: an arm that reaches one of
-    /// them again is called as a function instead.
-    std::unordered_set<const GCGraph *> inlining_;
-    std::unordered_set<const GCGraph *> escapeWalk_; // the same for cellEscapes
     std::unordered_map<const GCGraph *, std::vector<gc_node_ref_t>> orders_;
+    std::unordered_map<const GCGraph *, std::unique_ptr<camel::runtime::ControlRegions>> regions_;
     std::unordered_map<const GCGraph *, std::unordered_map<gc_node_ref_t, size_t>> uses_;
 };
 

@@ -24,7 +24,6 @@
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
-#include "camel/runtime/loop_lowering.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/view.h"
 #include "camel/utils/log.h"
@@ -498,6 +497,8 @@ void FastVMSchedPass::inspectInstruction(size_t pc, Frame *frame) {
         site.effect = camel::execute::InstructionEffect::TailCall;
         break;
     case OpCode::JUMP:
+    case OpCode::LTST:
+    case OpCode::LEND:
         site.effect = camel::execute::InstructionEffect::Jump; // its result field is no slot
         break;
     default:
@@ -518,27 +519,6 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     (void)os;
     ASSERT(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
 
-    // Loops. By default they run as the tail recursion they mean, on a private copy of the
-    // program (camel/runtime/loop_lowering.h): today that is faster here than the native
-    // instruction (evalLoop), which enters the interpreter again for each of its two calls a
-    // round (docs/technical/39_loops.md, section 5). Natively, so that the frames shown are the
-    // loop's condition and body (folded into their function): when an observer asks for them
-    // (ExecutionObserver::wantsLoopFrames: the debugger) and with std::fvm(native_loop=true).
-    // The two ways give the same results, faults and output; the choice is logged. Making the
-    // native loop a bytecode loop, at least as fast as the lowering, is the next step.
-    const auto *observer = camel::execute::executionObserver();
-    const bool observed  = observer != nullptr && observer->wantsLoopFrames();
-    const bool native    = observed || nativeLoop_;
-    CAMEL_LOG_INFO_S(
-        "FastVM",
-        "Loops run {} ({}).",
-        native ? "natively" : "lowered to tail recursion",
-        observed ? "an observer shows loop frames"
-        : native ? "native_loop=true"
-                 : "the default");
-    if (!native) {
-        program = camel::runtime::lowerLoopsToTailRecursion(context_, program);
-    }
     camel::runtime::GCGraph *runtimeRoot = program->root();
     camel::execute::RunScope runScope(programs_, *context_, program);
     precompile(*program, runtimeRoot);
@@ -719,87 +699,6 @@ void FastVMSchedPass::evalMarkedOperator_filter_arr(
     });
 
     currFrame.get<Array *>(self)->shrinkToFit(resultType);
-}
-
-void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
-    const auto &loopExtra    = bc.extra()->loop;
-    const MarkOpCode mark    = loopExtra.mark;
-    const auto *words        = reinterpret_cast<const uint64_t *>(&bc + bc.opsize) - 3;
-    auto *cond               = reinterpret_cast<camel::runtime::GCGraph *>(words[0]);
-    auto *body               = reinterpret_cast<camel::runtime::GCGraph *>(words[1]);
-    const bool iterates      = mark != MarkOpCode::LoopWhile;
-    const size_t collections = loopExtra.collectionCount;
-    const data_arr_t nargs   = bc.nargs();
-    const data_arr_t wargs   = bc.wargs();
-    const data_idx_t self    = bc.result;
-    const size_t first       = iterates ? 1 : 0;
-    const size_t k           = nargs.size() - first;
-    const bool wraps         = k > 1 || collections != 0;
-    const auto *valueType =
-        wraps ? static_cast<const TupleType *>(currFrame.typeAt<Type>(self)) : nullptr;
-
-    // The state and the rounds are the loop's (camel/execute/loop_driver.h); this interpreter
-    // supplies a frame and a call for each, through the call path of the higher-order operators.
-    struct Host {
-        FastVMSchedPass &vm;
-        Frame &currFrame;
-        data_idx_t self;
-        size_t k;
-        data_arr_t nargs;
-        data_arr_t wargs;
-        size_t first;
-        HigherOrderCallSite condSite, bodySite;
-
-        void beforeRound(size_t) {}
-        slot_t initialState(size_t j) { return currFrame.get<slot_t>(nargs[first + j]); }
-        slot_t stateValue() { return currFrame.get<slot_t>(self); }
-        void setStateValue(slot_t value) {
-            // The next round reads this value: it is a value, not a view of this round's element
-            // (H29). The loop state is a store that outlives the element, so materialise here.
-            const type::Type *stateType = currFrame.typeAt<Type>(self);
-            value = camel::core::rtdata::materializeCallResult(value, stateType);
-            CAMEL_ASSERT_NOT_VIEW(value, stateType, "a loop state");
-            currFrame.set(self, value);
-        }
-        slot_t callRound(
-            const camel::execute::LoopShape &shape, camel::runtime::GCGraph *target,
-            const slot_t *element) {
-            vm.requireNestedCallRoom(&currFrame);
-            Frame *frame = vm.framePool_.acquire(target);
-            camel::execute::bindLoopRound(
-                frame,
-                target,
-                k,
-                element,
-                wargs.size(),
-                [&](size_t j) {
-                    return camel::execute::loopStateComponent(shape, stateValue(), j);
-                },
-                [&](size_t c) { return currFrame.get<slot_t>(wargs[c]); });
-            return vm.callElement(target == condSite.runtimeGraph ? condSite : bodySite, frame);
-        }
-        Array *iterable() { return currFrame.get<Array *>(nargs[0]); }
-    } host{
-        *this,
-        currFrame,
-        self,
-        k,
-        nargs,
-        wargs,
-        first,
-        HigherOrderCallSite{.runtimeGraph = cond, .entryPc = cond ? graphEntryPc(cond) : 0},
-        HigherOrderCallSite{.runtimeGraph = body, .entryPc = graphEntryPc(body)}};
-    camel::execute::driveLoopRounds(
-        camel::execute::LoopShape{
-            .cond            = cond,
-            .body            = body,
-            .iterates        = iterates,
-            .stateCount      = k,
-            .collectionCount = collections,
-            .valueType       = valueType,
-            .origin          = camel::source::kInvalidOriginId,
-        },
-        host);
 }
 
 void FastVMSchedPass::evalMarkedOperator_reduce_arr(
@@ -1152,9 +1051,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                 case x64::JitExitKind::Interp: {
                     const data_arr_t nargs = bc->nargs();
                     const data_arr_t wargs = bc->wargs();
-                    if (bc->opcode == OpCode::SCHD && isLoopMark(bc->extra()->mark)) {
-                        evalLoop(*bc, *cur);
-                    } else if (bc->opcode == OpCode::SCHD) {
+                    if (bc->opcode == OpCode::SCHD) {
                         evalMarkedOperator(bc->extra()->mark, bc->result, nargs, wargs, *cur);
                     } else {
                         ASSERT(bc->opcode == OpCode::CALL, "Unexpected bytecode at a JIT exit.");

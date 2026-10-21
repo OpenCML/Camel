@@ -1060,6 +1060,17 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
         for (gc_node_ref_t ref : f.graph->normPorts()) {
             addPort(ref);
         }
+        // The state and the element of a loop whose condition or body the code is in.
+        const uint32_t at = f.node != nullptr ? f.node->controlRegion : 0;
+        for (uint32_t r = 1; r < f.graph->regionCount(); ++r) {
+            const GCRegion *region = f.graph->region(r);
+            if ((region->kind == GCRegionKind::LoopCond || region->kind == GCRegionKind::LoopBody) &&
+                f.info->visibleAt(r, at)) {
+                for (gc_node_ref_t ref : f.graph->regionPorts(r)) {
+                    addPort(ref);
+                }
+            }
+        }
     }
 
     // The names declared in the function the frames were built from. A binding is shown from

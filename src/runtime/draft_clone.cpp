@@ -219,6 +219,7 @@ void adoptRegions(
         owner.setRegionResult(made, mapNode(from.result));
         owner.setRegionOrigin(made, from.origin);
         owner.setRegionAttrs(made, from.attrs);
+        owner.setRegionParams(made, from.params);
         owner.setRegionInline(made, from.inlineOf, mapNode(from.callSite));
         std::vector<gc_node_ref_t> ports;
         for (gc_node_ref_t port : portsOf(source, r)) {

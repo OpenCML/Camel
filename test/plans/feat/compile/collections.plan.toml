@@ -1165,3 +1165,63 @@ expect_exit = 1
 expect_output_contains = ["err_unrelated.cml:5:16: [Error]: No matching function found", "(Map<string, int>, int, string). Check"]
 expect_output_not_contains = ["in angle brackets"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+# --- An enum as a map key and as a set element (design principles 11.3) ---------------------
+
+[[tests]]
+name = "enum_keys"
+desc = "An enum without a payload and one with a comparable payload as a map key and as a set element: construction, the key order (variants in declaration order, then field by field), lookup, equality, printing, and duplicates dropped by equality. Alike on the four back ends."
+kind = "snapshot"
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+case = "../../../cases/compile/collections/enum_keys.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+golden = "golden/collections/enum_keys.txt"
+expect_exit = 0
+expect_output_not_contains = ["[Error]", "Segmentation fault", "dumped core"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "err_key_enum_field"
+desc = "An enum whose payload cannot be a key is refused: the message names the field of the variant, and the position of the field's type in the declaration is a second location."
+kind = "negative"
+case = "../../../cases/compile/collections/err_key_enum_field.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 36
+expect_output_contains = ["The type 'Boxed' cannot be a key of 'Map': its field 0 of variant 'Weight' of type 'float' cannot be a key", "[field 0 of variant 'Weight' is declared here at 7:35]", "tuples of those, and an enum every field of which is one of those"]
+expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "err_key_enum_element"
+desc = "The element of a set is checked like the key of a map: an enum with a struct field is refused, and the diagnostic names the field of the variant (here `field 0`: a tuple variant's fields have no names) and points at the field's type in the declaration."
+kind = "negative"
+case = "../../../cases/compile/collections/err_key_enum_element.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 27
+expect_output_contains = ["The type 'Rec' cannot be a key of 'Set': its field 0 of variant 'Point' of type 'Pair' cannot be a key: a struct is not a key type", "[field 0 of variant 'Point' is declared here at 8:30]"]
+expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "err_key_enum_by_substitution"
+desc = "The key is checked again when a type variable is replaced: `to_set(Boxed::Empty)` reports CollectionKeyNotAllowed at the call, naming the enum's field and its declaration."
+kind = "negative"
+case = "../../../cases/compile/collections/err_key_enum_by_substitution.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CollectionKeyNotAllowed"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 19
+expect_output_contains = ["The type 'Boxed' cannot be a key of 'Set<Boxed>'", "[field 0 of variant 'Weight' is declared here at 7:35]"]
+expect_output_not_contains = ["never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

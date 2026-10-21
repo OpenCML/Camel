@@ -2199,7 +2199,7 @@ The type '{0}' cannot be a key of '{1}': {2}.
 **Help**
 
 ```text
-A key of a Map and an element of a Set must have an order and an equality that cannot change: 'int', 'i32', 'bool', 'string', and tuples of those. The value type of a Map is not restricted.
+A key of a Map and an element of a Set must have an order and an equality that cannot change: 'int', 'i32', 'bool', 'string', tuples of those, and an enum every field of which is one of those. The value type of a Map is not restricted.
 ```
 
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)

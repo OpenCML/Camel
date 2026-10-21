@@ -1,0 +1,14 @@
+module main
+
+// The element of a set is checked like the key of a map: an enum with a struct field is not
+// one, and the diagnostic names the field of the variant it is in.
+
+type Pair = { a: int, b: int }
+
+type Rec = enum { Tag, Point(Pair) }
+
+func main(): int sync {
+    let s = [Rec::Tag] as Set<Rec>
+    println("never printed")
+    return 0
+}

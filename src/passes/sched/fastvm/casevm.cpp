@@ -24,6 +24,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/global_config.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/loop_frame.h"
 #include "runtime_support.h"
 
 using namespace camel::core::error;
@@ -171,6 +172,27 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             case OpCode::JUMP: {
                 pc = getJumpTargetPc(&bc);
                 continue; // skip i increment
+            } break;
+
+            case OpCode::LBEG: {
+                camel::execute::loopBegin(*currFrame, *bc.extra()->loop);
+            } break;
+
+            case OpCode::LTST: {
+                if (camel::execute::loopTest(*currFrame, *bc.extra()->loop)) {
+                    pc = getJumpTargetPc(&bc);
+                    continue; // skip i increment
+                }
+            } break;
+
+            case OpCode::LEND: {
+                if (camel::execute::loopEnd(
+                        *currFrame,
+                        *bc.extra()->loop,
+                        camel::execute::loopRoundSafepoint([&] { fastVmCallBoundarySafepoint(); }))) {
+                    pc = getJumpTargetPc(&bc);
+                    continue; // skip i increment
+                }
             } break;
 
             case OpCode::BRCH: {
@@ -421,11 +443,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const data_arr_t wargs = bc.wargs();
                 auto mark              = bc.extra()->mark;
                 try {
-                    if (isLoopMark(mark)) {
-                        evalLoop(bc, *currFrame);
-                    } else {
-                        evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
-                    }
+                    evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
                 } catch (const camel::core::mm::MemoryExhausted &e) {
                     throw e.during(
                         std::string(),

@@ -120,6 +120,7 @@ A key (and a set element) must have a total order and an equality that cannot ch
 |---|---|---|
 | `int`, `i32`, `bool`, `string` | yes | total order; a string is compared by bytes, as its length and index are |
 | a tuple of key types | yes | compared element by element |
+| an `enum` every field of every variant of which is a key type | yes | the variants in declaration order, then the fields field by field (design principles 11.3) |
 | `float`, `f32` | no | `NaN != NaN` (a key that cannot be found again), `0.0 == -0.0` with different bits |
 | `T[]` | no | not among the key types of design principles 11.3 (the reason given first, that `append` changed an array in place, no longer holds since 11.3) |
 | struct | no | admissible in principle (field by field in declaration order); left out until asked for |
@@ -128,14 +129,17 @@ A key (and a set element) must have a total order and an equality that cannot ch
 | `Map`, `Set` | no | admissible in principle (they are immutable and ordered); left out until asked for |
 
 A type that is not allowed is `SemanticDiag::CollectionKeyNotAllowed` (0xA0) at the type
-expression (or at the call that produces it by substitution), with the reason. The value
-type of a map is unrestricted.
+expression (or at the call that produces it by substitution), with the reason. When an enum
+is refused for a field, the message names the field of the variant (`field 'w' of variant
+'Rect' of type 'float'`) and the field's type is a second location, where it is written. The
+value type of a map is unrestricted.
 
 ## 4. Order (ruled: design principles 11.3)
 
 **A map is ordered by its keys, a set by its elements.** `keys`, `values`, `items`, printing
 and equality all follow that order: integers numerically, `false` before `true`, strings by
-bytes, tuples lexicographically.
+bytes, tuples lexicographically, enums by the variants' declaration order and then their
+fields.
 
 The order must not depend on the platform or on a hash function: tests, differential checks
 of the four backends and the correctness of passes all compare output. That leaves insertion

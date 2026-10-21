@@ -26,6 +26,7 @@
 #include "camel/execute/function_call.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/loop_driver.h"
+#include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop.h"
@@ -278,11 +279,15 @@ slot_t NodeVMSchedPass::call(
         // e.g. after inlining) must not lose that arm's end: the enclosing (tail, join) pairs
         // wait here and are restored when the nested JOIN is reached.
         std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
+        // The loops of the graph that are running, the innermost last.
+        uint32_t resumedLoop = camel::execute::kNoLoop;
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
         gcSafepoint("nodevm graph boundary");
         const size_t nodesSize = currNodes.size();
+        const bool hasLoops    = !currPlan->loops.empty();
+        resumedLoop = camel::execute::kNoLoop;
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {
@@ -309,6 +314,21 @@ slot_t NodeVMSchedPass::call(
                         currNodes.size(),
                         currRuntimeGraph->name(),
                         nodeRef));
+                    continue;
+                }
+            }
+            // A loop of the graph starts, tests its round, or ends one here. These come before the
+            // end of an arm is looked for: going back to the start of a round does not pass it.
+            if (hasLoops) [[unlikely]] {
+                const size_t resume = camel::execute::stepLoops(
+                    *currPlan,
+                    i,
+                    *currFrame,
+                    resumedLoop,
+                    camel::execute::loopRoundSafepoint(
+                        [&] { gcSafepoint("nodevm loop round"); }));
+                if (resume != camel::execute::kNoLoopJump) {
+                    i = resume - 1;
                     continue;
                 }
             }
@@ -578,7 +598,8 @@ slot_t NodeVMSchedPass::call(
             } break;
 
             case GCNodeKind::Loop:
-                evalLoop(currRuntimeGraph, nodeRef, *currFrame);
+                // The rounds ran at the events of the plan; the state is the value.
+                ASSERT(hasLoops, "NodeVM runs only loops that are regions of their graph.");
                 break;
 
             case GCNodeKind::Port:
@@ -822,70 +843,6 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         call(programs_.graphOf(func), frame);
     }
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
-}
-
-void NodeVMSchedPass::evalLoop(
-    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
-    const camel::runtime::LoopView loop(programs_.of(graph), *graph, nodeRef);
-    const size_t k           = loop.stateCount();
-    const size_t collections = loop.collectionCount();
-    const auto stateSlot     = dataIndexOf(graph, nodeRef);
-    const auto captures      = loop.captures();
-    const auto iterable      = loop.iterable();
-    GCGraph *const cond      = loop.condGraph();
-    GCGraph *const body      = loop.bodyGraph();
-    // The value is a tuple when k > 1 or the loop collects; its components are the k state
-    // values and, when it collects, the arrays (LoopView::valueType).
-    const bool wraps = k > 1 || collections != 0;
-    const auto *const valueType =
-        wraps ? static_cast<const TupleType *>(loop.valueType()) : nullptr;
-    // The rounds and the state are the loop's (camel/execute/loop_driver.h); this interpreter
-    // supplies a frame and a call for each.
-    struct Host {
-        NodeVMSchedPass &vm;
-        GCGraph *graph;
-        Frame &currFrame;
-        camel::runtime::LoopView loop;
-        camel::runtime::gc_data_idx_t stateSlot;
-        size_t k;
-        std::span<const gc_node_ref_t> captures;
-        std::optional<gc_node_ref_t> iterableNode;
-
-        void beforeRound(size_t) {}
-        slot_t initialState(size_t j) {
-            return currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(j)));
-        }
-        slot_t stateValue() { return currFrame.get<slot_t>(stateSlot); }
-        void setStateValue(slot_t value) { currFrame.set(stateSlot, value); }
-        slot_t
-        callRound(const camel::execute::LoopShape &shape, GCGraph *target, const slot_t *element) {
-            vm.requireRecursionRoom(graph);
-            Frame *frame = vm.framePool_.acquire(target);
-            camel::execute::bindLoopRound(
-                frame,
-                target,
-                k,
-                element,
-                captures.size(),
-                [&](size_t j) {
-                    return camel::execute::loopStateComponent(shape, stateValue(), j);
-                },
-                [&](size_t c) { return currFrame.get<slot_t>(dataIndexOf(graph, captures[c])); });
-            return vm.call(target, frame);
-        }
-        Array *iterable() { return currFrame.get<Array *>(dataIndexOf(graph, *iterableNode)); }
-    } host{*this, graph, currFrame, loop, stateSlot, k, captures, iterable};
-    camel::execute::driveLoopRounds(
-        camel::execute::LoopShape{
-            .cond            = cond,
-            .body            = body,
-            .iterates        = iterable.has_value(),
-            .stateCount      = k,
-            .collectionCount = collections,
-            .valueType       = valueType,
-            .origin          = graph->nodeOrigin(nodeRef),
-        },
-        host);
 }
 
 // The fault-isolation node (docs/technical/33_fault_isolation.md): a call of the function value

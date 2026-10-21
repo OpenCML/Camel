@@ -106,11 +106,4 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     __attribute__((noinline)) void evalMarkedOperator_isolate(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
-    /// Runs the LOOP node `nodeRef` (camel/runtime/loop.h) natively: one call of the condition
-    /// graph and one of the body graph per round, the state kept in the node's own slot of
-    /// `currFrame` (so the collector traces it). A round is not a recursion: each call is one
-    /// level deep and returns before the next, so no number of rounds reaches the limit.
-    __attribute__((noinline)) void evalLoop(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame &currFrame);
 };

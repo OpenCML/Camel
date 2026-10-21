@@ -27,7 +27,6 @@
 #include "camel/core/context/context.h"
 
 #include "camel/core/global_config.h"
-#include "camel/passes/opt/inline.h"
 #include "camel/core/mm.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/module/dynamic.h"
@@ -35,6 +34,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/execute/executor.h"
+#include "camel/passes/opt/inline.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/definitions.h"
 #include "camel/runtime/facts.h"
@@ -725,11 +725,11 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
         *program);
     runtimeGraphMgr_->adoptRoot(program);
     registerRuntimeGraphDebugInfo(program);
-    // The arms the front end built as graphs of their own become regions of the graphs that have
-    // the branches.
-    if (const auto *lowered = camel::passes::opt::lowerBranchArms(shared_from_this(), program);
-        lowered != program) {
-        return installRuntimeProgram(lowered);
+    // The condition and the body of each loop the front end built as graphs become regions of the
+    // graph that has the LOOP node.
+    if (const auto *regionized = camel::passes::opt::regionizeLoops(shared_from_this(), program);
+        regionized != program) {
+        return installRuntimeProgram(regionized);
     }
     return program;
 }

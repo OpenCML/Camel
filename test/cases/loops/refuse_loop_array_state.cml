@@ -1,0 +1,16 @@
+// A `loop` state whose type has no gradient channel (`int[]`) and whose next value depends on
+// the differentiated parameter. Only the float state is read in the result, so before H22 the
+// int state's contribution disappeared without a sign (the gradient was 2 instead of 6). The
+// loop is refused at its own line (design principles 9.9, 3.10).
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let pair = loop a = w, ns = [int(w)] while len(ns) < 2 do (a * 2.0, ns->append<int(w * 10.0)>)
+    return pair.0
+}
+
+func main(): int sync {
+    println(grad(f)<2.0>())
+    return 0
+}

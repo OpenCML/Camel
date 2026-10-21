@@ -123,24 +123,17 @@ node_handle_t Builder::captureInto(
     return port;
 }
 
-void Builder::addCaptureSite(
-    node_handle_t call, const compile_graph_ptr_t &callee, node_handle_t branch) {
+void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee) {
     CaptureSite site;
     site.caller = currGraph_;
     site.call   = call;
     site.callee = callee;
-    site.branch = branch;
     // A copy: capturing into the caller may add to the table.
     const std::vector<CapturedValue> captured = capturedValues_[callee.get()];
     site.values.reserve(captured.size());
     for (const CapturedValue &value : captured) {
         node_handle_t here = captureInto(currGraph_, value.origin, value.name);
         site.values.push_back(here);
-        // Every value an arm captures is ready before the branch runs: the nodes between BRCH
-        // and JOIN then belong to the arms alone, which the schedulers rely on.
-        if (branch != nullptr && linkCheek(here, branch)) {
-            linkNodes(LinkType::Ctrl, here, branch);
-        }
     }
     captureSites_.push_back(std::move(site));
 }
@@ -163,9 +156,6 @@ void Builder::linkCaptureSites() {
                     value = captureInto(site.caller, captured[k].origin, captured[k].name);
                     if (capturedValues_[site.caller.get()].size() != before) {
                         changed = true;
-                    }
-                    if (site.branch != nullptr && linkCheek(value, site.branch)) {
-                        linkNodes(LinkType::Ctrl, value, site.branch);
                     }
                 }
                 // The With inputs of a FUNC node are its callee's with-ports in order: the

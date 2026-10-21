@@ -33,6 +33,11 @@ void printBlock(std::string &out, const Block &block, int indent) {
             printBlock(out, stmt.body, indent + 1);
             out += pad + "}\n";
             break;
+        case Stmt::Kind::Loop:
+            out += pad + "for (;;) {\n";
+            printBlock(out, stmt.body, indent + 1);
+            out += pad + "}\n";
+            break;
         case Stmt::Kind::Branch:
             for (size_t i = 0; i < stmt.arms.size(); ++i) {
                 const auto &[condition, body] = stmt.arms[i];

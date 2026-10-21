@@ -30,7 +30,7 @@ expect_stdout_starts_with = "camel-ran-marker\n"
 [[tests]]
 name = "valid.passes_option"
 desc = "--passes splits at the commas outside the parameters."
-args = ["${case}", "--passes", "std::opt(safe_fp=false),std::fvm(native_loop=true, stats=\"\")"]
+args = ["${case}", "--passes", "std::opt(safe_fp=false),std::fvm(stats=\"\")"]
 expect_exit = 0
 expect_stdout_starts_with = "camel-ran-marker\n"
 

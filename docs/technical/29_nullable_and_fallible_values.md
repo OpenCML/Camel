@@ -25,9 +25,9 @@ language author. Each is implemented the way section 10 recommends and marked in
 Section numbers below: 2 the tag, 3 the nodes, 4 types, 5 `try`, 6 faults, 7 passes, 8
 library, 9 a defect met in a pass, 10 questions.
 
-A branch is the node pair `BRCH`/`JOIN` with one subgraph per arm, the structure `if` has.
+A branch is the node pair `BRCH`/`JOIN` with one arm region per arm, the structure `if` has.
 Nothing in this table depends on what `a`, `b`, `f` or the arms contain, which is the
-criterion of section 1. The right-hand side of `??` and `!!` is a subgraph of its own and
+criterion of section 1. The right-hand side of `??` and `!!` is an arm region of its own and
 is entered only when the branch selects it: that is the whole of "evaluated only when needed".
 
 ## 2. Where the one-bit tag lives

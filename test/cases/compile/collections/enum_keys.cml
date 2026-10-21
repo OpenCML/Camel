@@ -1,0 +1,45 @@
+module main
+
+// An enum as a map key and as a set element (design principles 11.3): allowed when every
+// field of every variant is a key type. The order is the variants' declaration order, then
+// field by field.
+
+type Color = enum { Red, Green, Blue }
+
+type Value = enum { Unit, Pair(int, int), Named { x: int, y: int } }
+
+func main(): int sync {
+    // No payload: a map key.
+    let colors = [(Color::Blue, 3), (Color::Red, 1), (Color::Green, 2)] as Map<Color, int>
+    println(colors)
+    println(len(colors))
+    println(keys(colors))
+    println(values(colors))
+    println(items(colors))
+    println(colors[Color::Green] ?? -1, colors[Color::Red] ?? -1)
+    println(colors->has<Color::Blue>, colors->has<Color::Red>)
+    println(colors->put<Color::Red, 10>->remove<Color::Green>)
+    println(colors == ([(Color::Red, 1), (Color::Green, 2), (Color::Blue, 3)] as Map<Color, int>))
+    // No payload: a set element. The duplicates are dropped by equality, the order is the
+    // variants' declaration order.
+    let bag = [Color::Green, Color::Red, Color::Blue, Color::Green] as Set<Color>
+    println(bag, len(bag))
+    println(bag->contains<Color::Blue>, bag->contains<Color::Red>)
+    println(bag->add<Color::Red> == bag, bag->remove<Color::Red>)
+    println(bag->union([Color::Blue, Color::Red] as Set<Color>))
+    // A payload: the variants in declaration order, then the fields, field by field.
+    let payloads = [
+        (Value::Named { x: 1, y: 2 }, 'n'),
+        (Value::Pair(2, 3), 'b'),
+        (Value::Unit, 'u'),
+        (Value::Pair(1, 9), 'a'),
+        (Value::Pair(2, 2), 'c'),
+    ] as Map<Value, string>
+    println(payloads)
+    println(keys(payloads))
+    println(payloads[Value::Pair(2, 3)] ?? '?', payloads[Value::Pair(3, 2)] ?? '?')
+    println(payloads[Value::Named { x: 1, y: 2 }] ?? '?')
+    let deduped = [Value::Pair(1, 2), Value::Pair(1, 2), Value::Unit, Value::Unit] as Set<Value>
+    println(deduped, len(deduped))
+    return 0
+}

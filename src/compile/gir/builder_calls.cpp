@@ -102,14 +102,18 @@ Builder::namedValueOf(node_handle_t node, const std::string &name, const GCT::no
 node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t &origin) {
     if (boundWithArgs_.contains(node)) {
         // `f<w>` as a value is a partial application (design principles 4.4). The binding
-        // used to be dropped here, without a word.
-        if (node_handle_t applied = partialApplicationOf(node, origin)) {
+        // used to be dropped here, without a word. It is located at `f<w>` itself, not at the
+        // statement the binding is written in (H9 1.6).
+        const auto withIt = boundWithOrigin_.find(node);
+        const GCT::node_ptr_t at =
+            withIt != boundWithOrigin_.end() ? withIt->second : origin;
+        if (node_handle_t applied = partialApplicationOf(node, at)) {
             return applied;
         }
         // Not one function for these arguments. A name may still be settled by the position
         // it stands in (a parameter of function type); a value cannot.
         if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
-            rejectUnappliedBinding(node, origin);
+            rejectUnappliedBinding(node, at);
         }
         return node;
     }
@@ -147,8 +151,7 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
 }
 
 node_handle_t Builder::createFuncDataNode(
-    const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization,
-    node_handle_t branch) {
+    const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
         !(callableAsResult && allowParameterization),
         "Cannot enable both callableAsResult and allowParameterization options.");
@@ -192,7 +195,7 @@ node_handle_t Builder::createFuncDataNode(
         }
         node_handle_t funcNode = currGraph_->addFuncNode(graph, 0);
         markMacroNode(funcNode);
-        addCaptureSite(funcNode, graph, branch);
+        addCaptureSite(funcNode, graph);
         bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, funcNode);
         return funcNode;
     }
@@ -259,6 +262,22 @@ node_handle_t Builder::partialApplicationOf(
     if (boundIt == boundWithArgs_.end() || genericDrefs_.contains(target)) {
         return nullptr;
     }
+    // Where the whole binding is: the `f<w>` expression (boundWithOrigin_), otherwise the position
+    // the caller gives (a value passed where a function of a type is expected). The expression is
+    // the union of the node's own span (`<w>`) and its operands, as for a call (design
+    // principles 5.1): the callee and the angled arguments together.
+    const auto originIt = boundWithOrigin_.find(target);
+    const GCT::node_ptr_t where = originIt != boundWithOrigin_.end() ? originIt->second : origin;
+    const auto exprSpan         = callExpressionSpan(context_, where);
+    const auto exprOrigin       = deriveGirOrigin(
+        context_,
+        where,
+        camel::source::OriginKind::GirNode,
+        "gir.with.expr",
+        {},
+        exprSpan);
+    const camel::source::origin_id_t at =
+        exprOrigin != camel::source::kInvalidOriginId ? exprOrigin : where->origin();
     std::vector<Argument> bound = boundIt->second;
     type_vec_t boundTypes;
     for (Argument &arg : bound) {
@@ -395,7 +414,7 @@ node_handle_t Builder::partialApplicationOf(
             // the function value a writer of a captured variable; whether that is meant has
             // not been decided, so it is refused rather than guessed.
             diags_->of(SemanticDiag::ConstructNotSupported)
-                .atOrigin(origin->origin())
+                .atOrigin(at)
                 .commit(
                     "f<w> as a value",
                     "a partial application is implemented for functions without 'var' "
@@ -428,7 +447,7 @@ node_handle_t Builder::partialApplicationOf(
         boundNames.push_back(bindTemporary(valueOf(arg.node)));
     }
     const auto make = [&](GCT::node_ptr_t node) {
-        node->setOrigin(origin->origin());
+        node->setOrigin(at);
         return node;
     };
     const auto nameNode    = [&](const std::string &name) { return make(tree_->makeDRef(name)); };
@@ -442,6 +461,7 @@ node_handle_t Builder::partialApplicationOf(
     }
     boundWithArgs_.erase(target);
     boundWithCallee_.erase(target);
+    boundWithOrigin_.erase(target);
 
     // The function: the `with` parameters that are left, then the ordinary parameters.
     FunctionTypeFactory factory;
@@ -465,6 +485,18 @@ node_handle_t Builder::partialApplicationOf(
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph     = enterScope(type);
+    // The graph is the value `f<w>`: it is located at that expression, so the function value
+    // made from it covers `f<w>` and not the statement it is written in (H9 1.6).
+    registerGraphOrigin(
+        context_,
+        graph,
+        where,
+        "gir.partial.graph",
+        {},
+        {},
+        false,
+        "",
+        exprSpan);
     const bool outerSynced        = synced_;
     const node_handle_t outerLast = lastSyncedNode_;
     const auto restore            = [&] {

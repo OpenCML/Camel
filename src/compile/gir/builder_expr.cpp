@@ -331,6 +331,9 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         registerNodeOrigin(context_, bound, gct, "gir.var");
     }
     bool success = insertNode(ident, bound);
+    if (success && isVar) {
+        originNames_.try_emplace(bound, ident);
+    }
     if (!success) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(ident);
         throw BuildAbortException();
@@ -369,6 +372,7 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
     ASSERT(
         inputGraph == nodeGraphOf(modifier),
         "Modifier tracking must stay within a single compile graph.");
+    noteVariable(input);
     nodeModifierMaps_[inputGraph][nodeIdOf(input)] = nodeIdOf(modifier);
 }
 
@@ -382,7 +386,7 @@ void Builder::recordWrite(
     // by position: in `A(i + 1); wait modify(i)` the direct user is `+`, not A. In a sync block
     // the block's chain already orders them. A writer that is neither waited nor in a sync
     // block is not ordered after earlier users; they stay pending for the next waited writer.
-    auto &uses = pendingUses_[variable];
+    auto &uses = pendingUsesOf(variable);
     if (waited_ && !synced_) {
         std::unordered_set<node_handle_t> before;
         for (const VariableUse &use : uses) {
@@ -409,6 +413,11 @@ void Builder::recordWrite(
         uses.clear();
     }
     setModifier(variable, exit);
+    if (!throughCallee) {
+        if (ArmBuild *arm = activeArm()) {
+            arm->directWrites.insert(variable);
+        }
+    }
     // A write of a captured variable is what callers of this graph have to see.
     if (!throughCallee) {
         if (auto captured = captureOriginOf_.find(variable); captured != captureOriginOf_.end()) {
@@ -919,7 +928,7 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
 node_handle_t Builder::readVariableThrough(
     node_handle_t variable, const std::string &group) {
     node_handle_t value = variableOperator(group, variable);
-    pendingUses_[variable].push_back({value, true});
+    pendingUsesOf(variable).push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
             linkNodes(LinkType::Ctrl, *modifier, value);
@@ -986,6 +995,11 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());
     boundWithCallee_.try_emplace(targetNode, gct->at(0));
+    // The `f<w>` expression the binding was made by: a partial application is located there,
+    // at the callee and the angled arguments together (design principles 5.1), not at the
+    // statement it is written in (H9 1.6). Its span is derived where the binding is used as a
+    // value (partialApplicationOf), so an ordinary `f<w>(x)` allocates nothing extra.
+    boundWithOrigin_.try_emplace(targetNode, gct);
     LEAVE("WITH");
     return targetNode;
 }

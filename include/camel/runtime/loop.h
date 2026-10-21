@@ -112,14 +112,37 @@ class LoopView {
     std::optional<gc_node_ref_t> iterable() const;
     /// The first value of the j-th value of the state (the Norm input after the iterable).
     gc_node_ref_t initialState(size_t j) const;
-    /// The captured values (With inputs), shared by the condition and the body graph.
-    std::span<const gc_node_ref_t> captures() const { return graph_->withInputsOf(node_); }
+    /// The captured values (With inputs), shared by the condition and the body graph; none for a
+    /// loop in region form, whose With inputs are the results of its regions.
+    std::span<const gc_node_ref_t> captures() const {
+        return inRegions() ? std::span<const gc_node_ref_t>() : graph_->withInputsOf(node_);
+    }
 
-    // ---- The two graphs ----
+    // ---- The two graphs, or the two regions ----
 
-    /// While, ForWhile: the condition graph; nullptr for For.
+    /// A loop in region form (the form a program has after the front end): its condition and its
+    /// body are regions of the graph that has the node, and it names no graph. A loop in graph
+    /// form (outlineLoopRegions) names its two graphs.
+    bool inRegions() const { return body_ == nullptr; }
+    /// While, ForWhile: the condition region; 0 for For and for a loop in graph form.
+    uint32_t condRegion() const { return condRegion_; }
+    uint32_t bodyRegion() const { return bodyRegion_; }
+    /// While, ForWhile: the condition graph; nullptr for For and for a loop in region form.
     GCGraph *condGraph() const { return cond_; }
     GCGraph *bodyGraph() const { return body_; }
+
+    // ---- A loop in region form: what its regions hold and read ----
+
+    /// The Port node, of type int64, whose slot a back end counts the rounds of the loop in (the
+    /// last With input of the node); a loop in region form only.
+    gc_node_ref_t roundPort() const { return graph_->withInputsOf(node_).back(); }
+    /// The nodes of the condition and of the body region, the regions inside them included, and
+    /// the round port, in node order. Empty for a loop in graph form.
+    std::vector<gc_node_ref_t> regionNodes() const;
+    /// The nodes outside the two regions that nodes inside them read, in the order they are first
+    /// read: what graph form passes as captures. The constants (DATA nodes) are left out unless
+    /// `constants`. Empty for a loop in graph form.
+    std::vector<gc_node_ref_t> externalInputs(bool constants = false) const;
 
     // ---- Correspondence between the node and the ports of its graphs ----
 
@@ -135,10 +158,14 @@ class LoopView {
 
     // ---- The next state and the collected values ----
 
-    /// The body graph's result node: the next state, followed by the s collected values when
-    /// the loop collects (so a tuple whenever valueIsTuple(); otherwise the state itself when
-    /// k = 1).
+    /// The body's result node: the next state, followed by the s collected values when the loop
+    /// collects (so a tuple whenever valueIsTuple(); otherwise the state itself when k = 1). In
+    /// region form, the value the result of the body region forwards.
     gc_node_ref_t nextState() const;
+    /// The node the body (condition) ends in: nextState(), or a GATE in front of it that orders
+    /// the value after the statements of the body (the exit of the graph, in graph form).
+    gc_node_ref_t bodyResult() const;
+    gc_node_ref_t condResult() const;
     /// True when the body builds its result with a tuple FILL: k > 1 or the loop collects.
     bool nextStateIsTuple() const { return valueIsTuple(); }
     /// The body node that fills position j of the result tuple (the j-th state value); nullopt
@@ -150,15 +177,15 @@ class LoopView {
     std::optional<gc_node_ref_t> nextCollectionComponent(size_t c) const;
     /// The type of the body graph's result: the state type when it does not collect, the
     /// (state_0, ..., state_{k-1}, elem_0, ..., elem_{s-1}) tuple when it does.
-    camel::core::type::Type *bodyResultType() const { return body_->funcType()->exitType(); }
+    camel::core::type::Type *bodyResultType() const;
     /// The index of the j-th state value (the c-th collected value) in the body result tuple.
     size_t bodyStateResultIndex(size_t j) const { return j; }
     size_t bodyCollectionResultIndex(size_t c) const { return stateCount_ + c; }
 
     // ---- Effects ----
 
-    EffectSummary condEffects() const { return effectSummaryOf(*program_, cond_); }
-    EffectSummary bodyEffects() const { return effectSummaryOf(*program_, body_); }
+    EffectSummary condEffects() const;
+    EffectSummary bodyEffects() const;
     /// The LOOP node's own: the union of the two graphs', and "may fault" and "may not
     /// terminate" (a loop may not end; design of loops 4.8).
     EffectSummary effects() const;
@@ -172,6 +199,8 @@ class LoopView {
     size_t collectionCount_;
     GCGraph *cond_;
     GCGraph *body_;
+    uint32_t condRegion_ = 0;
+    uint32_t bodyRegion_ = 0;
 };
 
 /// The LOOP node `node` of `graph`, a graph of `program` (asserts that it is one).
@@ -253,13 +282,13 @@ slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c);
 void validateRuntimeLoopInterface(const Program &program, const GCGraph *graph, gc_node_ref_t node);
 
 /// Gives up the in-place write of a loop body's array state: every `:struct/append_arr_owned`
-/// in `body` (the form Builder::markLoopStateInPlace leaves, design principles 10.5) becomes the
+/// in `body` (the nodes of its region `region`, when the body is one) (the form Builder::markLoopStateInPlace leaves, design principles 10.5) becomes the
 /// copying `:struct/append_arr`, and the count is returned.
 ///
 /// A party that needs the loop's tape (its collection slots) calls this first: an in-place loop
 /// appends into one array, so every tape entry would be the same final array. This is a
 /// fallback, never a refusal — the program is legal in both forms — and it changes neither the
 /// loop's value nor its derivatives, only the allocations per round.
-size_t fallBackToCopyingAppend(GraphDraft &body);
+size_t fallBackToCopyingAppend(GraphDraft &body, uint32_t region = 0);
 
 } // namespace camel::runtime

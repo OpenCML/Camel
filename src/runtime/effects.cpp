@@ -51,10 +51,30 @@ struct EffectWalk {
             recursion.mayNotTerminate = true;
             return recursion;
         }
+        const EffectSummary summary = ofNodes(graph, 0);
+        active.erase(graph);
+        done.emplace(graph, summary);
+        return summary;
+    }
+
+    /// The nodes of `graph` that lie in `region` (0: all of them).
+    EffectSummary ofNodes(const GCGraph *graph, uint32_t region) {
         const auto &table = camel::core::OperatorTable::instance();
         EffectSummary summary;
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            if (region != 0) {
+                uint32_t at = graph->nodeRegion(ref);
+                while (at != 0 && at != region && graph->region(at) != nullptr) {
+                    at = graph->region(at)->parent;
+                }
+                if (at != region) {
+                    continue;
+                }
+            }
             const GCNode *node = graph->node(ref);
+            if (node == nullptr) {
+                continue;
+            }
             switch (node->kind) {
             case GCNodeKind::Oper: {
                 const auto oper   = graph->nodeBodyAs<GCOperBody>(ref)->oper;
@@ -88,8 +108,6 @@ struct EffectWalk {
                 break;
             }
         }
-        active.erase(graph);
-        done.emplace(graph, summary);
         return summary;
     }
 };
@@ -98,6 +116,16 @@ struct EffectWalk {
 
 EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph) {
     return EffectWalk{program}.of(graph);
+}
+
+EffectSummary
+effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region) {
+    if (graph == nullptr || region == 0) {
+        return {};
+    }
+    EffectWalk walk{program};
+    walk.active.insert(graph);
+    return walk.ofNodes(graph, region);
 }
 
 } // namespace camel::runtime

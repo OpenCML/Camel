@@ -42,6 +42,8 @@
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/exhaust_perm_space.h"
+#include "camel/passes/test/exec_plan.h"
+#include "camel/passes/test/outline_loops.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/trans/json/gir.h"
 #include "macro/macro.h"
@@ -548,15 +550,6 @@ PassDescriptor algebraDescriptor() {
     return d;
 }
 
-PassParam nativeLoopParameter() {
-    return PassParam{
-        "native_loop",
-        PassParamType::Bool,
-        false,
-        "run the program's LOOP nodes natively instead of lowering them to tail recursion "
-        "(debugging; slower today)"};
-}
-
 PassParam statsParameter() {
     return PassParam{
         "stats",
@@ -569,7 +562,7 @@ PassDescriptor fastVmDescriptor(bool jit) {
     PassDescriptor d;
     d.doc =
         jit ? "the bytecode interpreter with on-demand native code" : "the bytecode interpreter";
-    d.params = {nativeLoopParameter(), statsParameter()};
+    d.params = {statsParameter()};
     if (jit) {
         d.params.push_back(
             PassParam{
@@ -581,7 +574,6 @@ PassDescriptor fastVmDescriptor(bool jit) {
     }
     d.make = [jit](const context_ptr_t &ctx, const PassArgs &args) {
         FastVMConfig config = jit ? makeDefaultFastVmJitConfig() : FastVMConfig{};
-        config.nativeLoop   = args.getBool("native_loop");
         config.statsPath    = args.getString("stats");
         if (jit) {
             const int64_t threshold = args.getInt("hot_threshold");
@@ -1030,6 +1022,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
+        TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
+        TEST_PASS(kOutlineLoopsTestPass, OutlineLoopsTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),

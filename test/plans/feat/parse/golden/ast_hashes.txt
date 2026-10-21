@@ -378,10 +378,14 @@ e39cd2161b4fdf8d ok test/cases/compile/callform/err_slice_ordinary.cml
 f7151991d2d5abe7 ok test/cases/compile/closure/bound_closures.cml
 79a3ae5e4be0cfbd ok test/cases/compile/closure/function_values.cml
 c57778ba7984b849 ok test/cases/compile/collections/edges.cml
+c5ce8fbadc0fad10 ok test/cases/compile/collections/enum_keys.cml
 56ce590c9459828c ok test/cases/compile/collections/err_bare_name.cml
 5a83f1f35dec192b ok test/cases/compile/collections/err_duplicate_key.cml
 18b55d5e1e2abc1f ok test/cases/compile/collections/err_key_array.cml
 15611ca341325e7a ok test/cases/compile/collections/err_key_by_substitution.cml
+6950f3190d8539fe ok test/cases/compile/collections/err_key_enum_by_substitution.cml
+8a0b4d9a8749d44c ok test/cases/compile/collections/err_key_enum_element.cml
+75e36bff2b9beab8 ok test/cases/compile/collections/err_key_enum_field.cml
 80bc81945e611317 ok test/cases/compile/collections/err_key_float.cml
 fd02019ceb9a753f ok test/cases/compile/collections/err_key_tuple_part.cml
 b3de72bf203f3033 ok test/cases/compile/collections/err_mixed_sets.cml
@@ -495,6 +499,7 @@ cd9ed41517076329 ok test/cases/compile/function_values/let_named_function.cml
 bae0f84fb22a22d2 ok test/cases/compile/function_values/literal_operator_name.cml
 d2569ce8131b6d1e ok test/cases/compile/function_values/literal_unknown_name.cml
 9067bea0040736e5 ok test/cases/compile/function_values/nested_function_value.cml
+0d91e3cb647f8173 ok test/cases/compile/function_values/partial_application_span.cml
 99a09a3699bd3316 ok test/cases/compile/function_values/return_named_function.cml
 827cd7ebaa789251 ok test/cases/compile/function_values/return_operator_name.cml
 79265f9bf79aa39e ok test/cases/compile/function_values/value_positions.cml
@@ -571,7 +576,7 @@ cccd95ec8b3cccd3 ok test/cases/compile/literals/convert_float_to_int.cml
 3cf27dd300ecdf3a ok test/cases/compile/literals/convert_int_to_i32.cml
 d2e5ff1f70fd2565 ok test/cases/compile/literals/convert_text_to_float.cml
 dd122058fbbdf90e ok test/cases/compile/literals/convert_text_to_int.cml
-a386b2c1c8a9b0e3 ok test/cases/compile/literals/empty_array_context.cml
+bea3560d0664475c ok test/cases/compile/literals/empty_array_context.cml
 f2090dca344cbe23 ok test/cases/compile/literals/f32_too_large.cml
 e6044490abc2a5d4 ok test/cases/compile/literals/float_too_large.cml
 42bab9b1f2857216 ok test/cases/compile/literals/i32_nullable_too_large.cml
@@ -794,6 +799,7 @@ ab0aad16b6a4e305 ok test/cases/compile/tagged/err_member.cml
 12b7d28b4af4111d ok test/cases/compile/tagged/err_throw_plain.cml
 77f3718962ac2b0d ok test/cases/compile/tagged/err_throw_value.cml
 ae19e84205f1f860 ok test/cases/compile/tagged/err_wrong_form.cml
+876b9ade741926f9 ok test/cases/compile/tagged/error_position_pipeline.cml
 cde0f327b68d1b0f ok test/cases/compile/tagged/fallible.cml
 1adaa3f29b9f213e ok test/cases/compile/tagged/generic.cml
 0ff9acc1800cbbb3 ok test/cases/compile/tagged/graph_null_then.cml
@@ -1432,7 +1438,7 @@ e99fcea43d4b5e69 ok test/cases/modules/std/pyplot/main.cml
 606e5c8d28967099 ok test/cases/modules/std/python/basic.cml
 7c35eaa8ac9c05f3 ok test/cases/modules/std/python/main.cml
 8dad7d36224bae1c ok test/cases/modules/std/python/phot.cml
-9b8ff2c2867422fa ok test/cases/modules/std/python/pyphot.cml
+3f2c3475169000fb ok test/cases/modules/std/python/pyphot.cml
 5c4e1424173cf687 ok test/cases/modules/std/random/basic.cml
 0d587d4670523b43 ok test/cases/modules/std/re/basic.cml
 a9c1c348ea212a48 ok test/cases/modules/std/sim/basic.cml

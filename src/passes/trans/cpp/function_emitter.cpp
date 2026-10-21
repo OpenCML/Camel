@@ -145,23 +145,6 @@ std::string describeFunction(const GCGraph *graph) {
     return std::format("function '{}'", graph->name().substr(0, graph->name().find('$')));
 }
 
-bool isArmCall(const camel::runtime::Program &program, const GCGraph *graph, gc_node_ref_t ref) {
-    const auto *node = graph->node(ref);
-    if (node == nullptr || node->kind != GCNodeKind::Func) {
-        return false;
-    }
-    const GCGraph *callee = program.calleeOf(*graph, ref);
-    if (callee == nullptr || !isAnonymousGraphName(callee->name())) {
-        return false;
-    }
-    for (gc_node_ref_t input : graph->ctrlInputsOf(ref)) {
-        if (const auto *in = graph->node(input); in != nullptr && in->kind == GCNodeKind::Brch) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::string operatorUri(const GCGraph *graph, gc_node_ref_t ref) {
     return std::string(graph->nodeBodyAs<GCOperBody>(ref)->uri());
 }
@@ -341,7 +324,6 @@ FunctionEmitter::refuse(const GCGraph *graph, gc_node_ref_t ref, std::string rea
 
 Block FunctionEmitter::lowerMember(const Member &member) {
     current_ = &member;
-    inlining_.insert(member.graph);
     Frame top{member.graph, {}, {}, {}};
     for (const Parameter &p : member.params) {
         // A `var` parameter or a captured variable is the variable's cell.
@@ -355,7 +337,6 @@ Block FunctionEmitter::lowerMember(const Member &member) {
         resultOf(member.graph),
         Tail{Tail::Kind::Return, {}});
     current_ = nullptr;
-    inlining_.erase(member.graph);
     return body;
 }
 
@@ -458,13 +439,46 @@ Block FunctionEmitter::lowerSequence(
     return out;
 }
 
+const camel::runtime::ControlRegions &FunctionEmitter::controlRegionsOf(const GCGraph *graph) {
+    auto &held = regions_[graph];
+    if (!held) {
+        held = std::make_unique<camel::runtime::ControlRegions>(*graph);
+    }
+    return *held;
+}
+
 Block FunctionEmitter::lowerSequenceBody(
     Frame &frame, const std::vector<gc_node_ref_t> &order, gc_node_ref_t result, Tail tail) {
     Block out;
     bool done = false;
+    // What a loop of this sequence owns is lowered with the loop: the nodes of its regions, the
+    // ports of the regions and the port that counts its rounds.
+    std::unordered_set<gc_node_ref_t> ownedByLoops;
+    for (gc_node_ref_t loop : order) {
+        if (frame.graph->node(loop)->kind != GCNodeKind::Loop) {
+            continue;
+        }
+        const auto &regions = controlRegionsOf(frame.graph);
+        const auto parts    = regions.loopPartsOf(loop);
+        for (gc_node_ref_t n : order) {
+            for (uint32_t part : parts) {
+                if (part != 0 && regions.within(regions.controlOf(n), part)) {
+                    ownedByLoops.insert(n);
+                }
+            }
+        }
+        for (uint32_t part : parts) {
+            if (part != 0) {
+                for (gc_node_ref_t port : frame.graph->regionPorts(part)) {
+                    ownedByLoops.insert(port);
+                }
+            }
+        }
+        ownedByLoops.insert(frame.graph->withInputsOf(loop).back());
+    }
     for (size_t i = 0; i < order.size(); ++i) {
         const gc_node_ref_t ref = order[i];
-        if (frame.consumed.contains(ref)) {
+        if (frame.consumed.contains(ref) || ownedByLoops.contains(ref)) {
             continue;
         }
         const auto *node = frame.graph->node(ref);
@@ -492,6 +506,10 @@ Block FunctionEmitter::lowerSequenceBody(
                 join == result && tail.kind != Tail::Kind::Discard && at != order.end() &&
                 nothingAfter(frame, order, static_cast<size_t>(at - order.begin()));
             done = lowerBranch(frame, ref, order, out, joinIsTail, tail);
+            continue;
+        }
+        if (node->kind == GCNodeKind::Loop) {
+            lowerLoop(frame, ref, order, out);
             continue;
         }
         const bool isTailResult =
@@ -959,6 +977,132 @@ void FunctionEmitter::lowerOperator(Frame &frame, gc_node_ref_t ref, Block &out)
     bind(frame, ref, std::move(*expr), rule->inlinable, out, operatorHint(uri));
 }
 
+void FunctionEmitter::lowerLoop(
+    Frame &frame, gc_node_ref_t loop, const std::vector<gc_node_ref_t> &order, Block &out) {
+    GCGraph *g = frame.graph;
+    if (g->loopCollectionCountOf(loop) != 0) {
+        refuse(g, loop, std::format("{} has a loop that collects values", describeFunction(g)));
+    }
+    const bool iterates = camel::core::loopHasIterable(g->loopKindOf(loop));
+    const auto norm     = g->normInputsOf(loop);
+    const size_t k      = norm.size() - (iterates ? 1 : 0);
+    const auto &regions = controlRegionsOf(g);
+    const auto parts    = regions.loopPartsOf(loop);
+    const auto results  = g->withInputsOf(loop);
+    const bool hasCond  = parts[0] != 0;
+    const gc_node_ref_t bodyResult = results[0];
+    const gc_node_ref_t condResult = hasCond ? results[1] : kInvalidNodeRef;
+
+    // The state is k variables the rounds assign; the ports of both regions are those variables.
+    std::vector<std::string> state;
+    for (size_t j = 0; j < k; ++j) {
+        const gc_node_ref_t port = g->regionPorts(parts[1])[(iterates ? 1 : 0) + j];
+        const std::string name   = locals_.unique(std::format("v{}_state", nextValue_++));
+        out.push_back(
+            Stmt::line(
+                std::format(
+                    "{} {} = {};",
+                    cppType(g, port, g->node(port)->dataType()),
+                    name,
+                    withoutParentheses(valueOf(frame, norm[(iterates ? 1 : 0) + j]).text))));
+        state.push_back(name);
+        frame.values[port] = CppValue{name, false};
+        if (hasCond) {
+            frame.values[g->regionPorts(parts[0])[j]] = CppValue{name, false};
+        }
+    }
+    std::string array, index;
+    if (iterates) {
+        const gc_node_ref_t iterable = norm.front();
+        array = locals_.unique(std::format("v{}_items", nextValue_++));
+        index = locals_.unique(std::format("v{}_round", nextValue_++));
+        out.push_back(
+            Stmt::line(
+                std::format(
+                    "const {} {} = {};",
+                    cppType(g, iterable, g->node(iterable)->dataType()),
+                    array,
+                    withoutParentheses(valueOf(frame, iterable).text))));
+        out.push_back(Stmt::line(std::format("std::size_t {} = 0;", index)));
+    }
+
+    const auto nodesIn = [&](uint32_t part) {
+        std::vector<gc_node_ref_t> nodes;
+        for (gc_node_ref_t n : order) {
+            if (part != 0 && !frame.consumed.contains(n) &&
+                regions.within(regions.controlOf(n), part)) {
+                nodes.push_back(n);
+            }
+        }
+        return nodes;
+    };
+    const std::vector<gc_node_ref_t> condNodes = nodesIn(parts[0]);
+    const std::vector<gc_node_ref_t> bodyNodes = nodesIn(parts[1]);
+
+    Block round;
+    if (hasCond) {
+        Block cond = lowerSequence(frame, condNodes, condResult, Tail{});
+        round.insert(round.end(), cond.begin(), cond.end());
+        round.push_back(
+            Stmt::line(std::format("if (!({})) {{ break; }}", valueOf(frame, condResult).text)));
+        for (gc_node_ref_t n : condNodes) {
+            frame.consumed.insert(n);
+        }
+    }
+    if (iterates) {
+        const gc_node_ref_t element = g->regionPorts(parts[1]).front();
+        round.push_back(Stmt::line(std::format("if ({} >= {}.size()) {{ break; }}", index, array)));
+        const std::string name = locals_.unique(std::format("v{}_item", nextValue_++));
+        round.push_back(
+            Stmt::line(
+                std::format(
+                    "const {} {} = {}[{}];",
+                    cppType(g, element, g->node(element)->dataType()),
+                    name,
+                    array,
+                    index)));
+        round.push_back(Stmt::line(std::format("++{};", index)));
+        frame.values[element] = CppValue{name, false};
+    }
+    Block body = lowerSequence(frame, bodyNodes, bodyResult, Tail{});
+    round.insert(round.end(), body.begin(), body.end());
+    for (gc_node_ref_t n : bodyNodes) {
+        frame.consumed.insert(n);
+    }
+    // The next state. The components are all computed before any variable is assigned.
+    const std::string next = valueOf(frame, bodyResult).text;
+    if (k == 1) {
+        round.push_back(Stmt::line(std::format("{} = {};", state[0], withoutParentheses(next))));
+    } else {
+        const Type *type  = g->node(bodyResult)->dataType();
+        cppType(g, bodyResult, type);
+        const std::string tuple = locals_.unique(std::format("v{}_next", nextValue_++));
+        round.push_back(Stmt::line(std::format("const auto {} = {};", tuple, withoutParentheses(next))));
+        for (size_t j = 0; j < k; ++j) {
+            round.push_back(
+                Stmt::line(
+                    std::format("{} = {}.{};", state[j], tuple, program_.values.fieldName(type, j))));
+        }
+    }
+    out.push_back(Stmt::loop(std::move(round)));
+
+    // The value of the loop is its state.
+    if (k == 1) {
+        frame.values[loop] = CppValue{state[0], false};
+    } else {
+        const Type *type = g->node(loop)->dataType();
+        std::string list;
+        for (size_t j = 0; j < k; ++j) {
+            list += (j ? ", " : "") + state[j];
+        }
+        const std::string name = locals_.unique(std::format("v{}_loop", nextValue_++));
+        out.push_back(
+            Stmt::line(std::format("const {} {} = {}{{{}}};", cppType(g, loop, type), name, cppType(g, loop, type), list)));
+        frame.values[loop] = CppValue{name, false};
+    }
+    frame.consumed.insert(loop);
+}
+
 bool FunctionEmitter::lowerBranch(
     Frame &frame, gc_node_ref_t brch, const std::vector<gc_node_ref_t> &order, Block &out,
     bool joinIsTail, const Tail &tail) {
@@ -1034,17 +1178,10 @@ bool FunctionEmitter::lowerBranch(
     for (size_t k = 0; k < armCount; ++k) {
         Block body;
         const gc_node_ref_t result = g->withInputsOf(join)[k];
-        if (isArmCall(*program_.program, g, result) &&
-            !inlining_.contains(program_.program->calleeOf(*g, result))) {
-            // The front end's form: the arm is a graph of its own, lowered here.
-            body = lowerArmGraph(frame, result, armTail);
-            frame.consumed.insert(result);
-        } else {
-            const std::vector<gc_node_ref_t> region = regionOf(k);
-            body = lowerSequence(frame, region, resultThrough(g, result), armTail);
-            for (gc_node_ref_t n : region) {
-                frame.consumed.insert(n);
-            }
+        const std::vector<gc_node_ref_t> region = regionOf(k);
+        body = lowerSequence(frame, region, resultThrough(g, result), armTail);
+        for (gc_node_ref_t n : region) {
+            frame.consumed.insert(n);
         }
         std::string condition;
         if (k + 1 < armCount) {
@@ -1062,57 +1199,6 @@ bool FunctionEmitter::lowerBranch(
     frame.consumed.insert(join);
     out.push_back(std::move(branch));
     return joinIsTail;
-}
-
-Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail) {
-    const GCGraph *g = frame.graph;
-    GCGraph *arm     = program_.program->calleeOf(*g, call);
-    if (!arm->closureNodes().empty()) {
-        refuse(
-            g,
-            call,
-            std::format("an arm of a branch in {} captures a closure", describeFunction(g)));
-    }
-    Frame inner{arm, {}, {}};
-    Block prefix;
-    // The ports take the values the call passes. A value written as an expression that the
-    // arm uses more than once is computed once, at the start of the arm.
-    auto bindPorts =
-        [&](std::span<const gc_node_ref_t> ports, std::span<const gc_node_ref_t> args) {
-            for (size_t i = 0; i < ports.size() && i < args.size(); ++i) {
-                CppValue value    = valueOf(frame, args[i]);
-                const bool simple = value.literal || value.text.find_first_of("()+-*/<>=!&|~ ,") ==
-                                                         std::string::npos;
-                if (!simple && liveUses(arm, ports[i]) > 1) {
-                    const std::string name = locals_.unique(
-                        std::format("v{}_{}", nextValue_++, parameterName(arm, ports[i])));
-                    prefix.push_back(
-                        Stmt::line(
-                            std::format(
-                                "const {} {} = {};",
-                                cppType(arm, ports[i], arm->node(ports[i])->dataType()),
-                                name,
-                                value.text)));
-                    value = CppValue{name, false};
-                }
-                inner.values[ports[i]] = value;
-            }
-        };
-    bindPorts(arm->normPorts(), g->normInputsOf(call));
-    bindPorts(arm->withPorts(), g->withInputsOf(call));
-
-    inlining_.insert(arm);
-    Block body = lowerSequence(
-        inner,
-        arm->execPlan().topo,
-        resultOf(arm),
-        tail);
-    inlining_.erase(arm);
-    prefix.insert(
-        prefix.end(),
-        std::make_move_iterator(body.begin()),
-        std::make_move_iterator(body.end()));
-    return prefix;
 }
 
 std::string FunctionEmitter::callDepth(const GCGraph *graph, gc_node_ref_t ref) {
@@ -1470,32 +1556,6 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
             if (node->kind == GCNodeKind::Gate) {
                 if (cellEscapes(graph, user)) {
                     return true;
-                }
-                continue;
-            }
-            if (node->kind == GCNodeKind::Func && isArmCall(*program_.program, graph, user) &&
-                !escapeWalk_.contains(program_.program->calleeOf(*graph, user))) {
-                // The arm's port that receives the cell must stay inside the arm too.
-                const GCGraph *arm = program_.program->calleeOf(*graph, user);
-                escapeWalk_.insert(arm);
-                struct Leave {
-                    std::unordered_set<const GCGraph *> &walk;
-                    const GCGraph *arm;
-                    ~Leave() { walk.erase(arm); }
-                } leave{escapeWalk_, arm};
-                const auto args  = graph->withInputsOf(user);
-                const auto ports = arm->withPorts();
-                for (size_t i = 0; i < args.size() && i < ports.size(); ++i) {
-                    if (args[i] == cell && cellEscapes(arm, ports[i])) {
-                        return true;
-                    }
-                }
-                const auto normArgs  = graph->normInputsOf(user);
-                const auto normPorts = arm->normPorts();
-                for (size_t i = 0; i < normArgs.size() && i < normPorts.size(); ++i) {
-                    if (normArgs[i] == cell && cellEscapes(arm, normPorts[i])) {
-                        return true;
-                    }
                 }
                 continue;
             }

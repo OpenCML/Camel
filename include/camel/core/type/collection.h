@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include "camel/core/source/ids.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/other.h"
@@ -42,10 +43,17 @@ namespace camel::core::type {
 
 /**
  * Why `type` cannot be the key of a map or the element of a set; empty when it can.
- * Design principles 11.3 (key types): allowed are int, i32, bool, string and tuples of allowed
- * types. A type variable is allowed: the check is made again when it has been replaced.
+ * Design principles 11.3 (key types): allowed are int, i32, bool, string, tuples of allowed
+ * types, and an enum every field of which is allowed. A type variable is allowed: the check is
+ * made again when it has been replaced.
+ *
+ * When the reason is a field of an enum, `fieldOrigin` (if given) receives the origin of the
+ * declaration of that field, and `fieldLabel` a phrase naming it (`field 'x' of variant 'B'`).
+ * Both are left untouched when the reason is something else, so a caller can test the origin.
  */
-std::string collectionKeyProblem(Type *type);
+std::string collectionKeyProblem(
+    Type *type, camel::source::origin_id_t *fieldOrigin = nullptr,
+    std::string *fieldLabel = nullptr);
 
 /// A `Map<K, V>` or `Set<T>` anywhere in `type` whose key type is not allowed, or nullptr.
 /// Substituting a type variable can produce one (`Set<T>` with `T = float`).

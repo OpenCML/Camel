@@ -1,0 +1,12 @@
+module main
+
+// A partial application is a function value located at the expression itself: `inc<1>`, not
+// the `let` statement it is written in (H9 1.6, H16 item 4).
+
+with <step: int>
+func inc(x: int): int { return x + step }
+
+func main(): int sync {
+    let g = inc<1>
+    return g(2)
+}

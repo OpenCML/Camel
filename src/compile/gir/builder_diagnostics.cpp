@@ -137,6 +137,9 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
     if (std::ranges::find(callees, callee.get()) == callees.end()) {
         callees.push_back(callee.get());
     }
+    if (ArmBuild *arm = activeArm()) {
+        arm->callees.push_back(callee.get());
+    }
     auto summary = captures_.find(callee.get());
     if (summary == captures_.end() || summary->second.variables.empty()) {
         return {};
@@ -155,7 +158,7 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
 
 void Builder::reportIgnoredCapturedWrites() {
     for (const PendingIgnoredWrite &pending : unit_->pendingIgnoredWrites) {
-        std::set<node_handle_t> written;
+        std::set<node_handle_t> written = pending.written;
         for (DraftGraphBuilder *graph : pending.graphs) {
             written.merge(capturedWritesOf(graph));
         }
@@ -241,8 +244,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Func: {
         const auto callee = calleeOf(node);
-        // An arm is entered by its branch, which is what gets reported.
-        if (callee == nullptr || armGraphs_.contains(callee.get())) {
+        if (callee == nullptr) {
             return false;
         }
         return declaresEffects(callee->funcType()) || effectfulGraphs_.contains(callee.get());
@@ -258,13 +260,35 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                effectfulGraphs_.contains(target.body.get());
     }
     case runtime::GCNodeKind::Join: {
-        for (draft_node_ref_t arm : withInputsOf(node)) {
-            node_handle_t armNode = nodeDraftOf(node)->ref(arm);
-            if (nodeIsKind(armNode, runtime::GCNodeKind::Func)) {
-                const auto callee = calleeOf(armNode);
-                if (callee != nullptr && effectfulGraphs_.contains(callee.get())) {
-                    return true;
-                }
+        // The branch is an effect when what an arm gives depends on one inside the arm.
+        const runtime::GraphDraft &draft = graph->draft();
+        const draft_node_ref_t join      = nodeIdOf(node);
+        const auto *body = reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(join).data());
+        std::vector<uint32_t> arms;
+        for (size_t k = 0; k < draft.withInputsOf(join).size(); ++k) {
+            if (const uint32_t region = draft.armRegionOf(body->brch, k); region != 0) {
+                arms.push_back(region);
+            }
+        }
+        const auto inArms = [&](draft_node_ref_t id) {
+            const uint32_t region = draft.nodeRegion(id);
+            return region != 0 && std::ranges::any_of(arms, [&](uint32_t arm) {
+                       return draft.regionWithin(region, arm);
+                   });
+        };
+        std::unordered_set<draft_node_ref_t> seen;
+        std::vector<draft_node_ref_t> work(draft.withInputsOf(join).begin(), draft.withInputsOf(join).end());
+        while (!work.empty()) {
+            const draft_node_ref_t id = work.back();
+            work.pop_back();
+            if (!inArms(id) || !seen.insert(id).second) {
+                continue;
+            }
+            if (isEffectNode(graph, draft.ref(id))) {
+                return true;
+            }
+            for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+                work.insert(work.end(), inputs.begin(), inputs.end());
             }
         }
         return false;
@@ -476,18 +500,14 @@ void Builder::reportUnusedFallibleValues() {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {
-                    node_handle_t arm   = draft.ref(armId);
-                    const auto armGraph = nodeIsKind(arm, runtime::GCNodeKind::Func)
-                                              ? graph->funcTarget(arm)
-                                              : nullptr;
-                    if (armGraph == nullptr ||
-                        armGraph->draft().returnNode() == runtime::kInvalidNodeRef) {
-                        continue;
+                    node_handle_t value = draft.ref(armId);
+                    if (nodeIsKind(value, runtime::GCNodeKind::Gate) &&
+                        !normInputsOf(value).empty()) {
+                        value = draft.ref(normInputsOf(value).front());
                     }
-                    node_handle_t value = armGraph->draft().ref(armGraph->draft().returnNode());
-                    if (TupleType *type = fallibleTypeOf(armGraph, value);
+                    if (TupleType *type = fallibleTypeOf(graph, value);
                         type != nullptr && !discardedValues_.contains(value)) {
-                        warn(armGraph, value, type, "");
+                        warn(graph, value, type, "");
                     }
                 }
                 continue;
@@ -652,8 +672,8 @@ void Builder::markNonRetainingReads() {
     syncedReads_.clear();
 }
 
-void Builder::rejectDiscardedValue(const DraftGraphBuilder *graph) {
-    if (auto it = bodyValueStatement_.find(graph); it != bodyValueStatement_.end()) {
+void Builder::rejectDiscardedValue(const void *body) {
+    if (auto it = bodyValueStatement_.find(body); it != bodyValueStatement_.end()) {
         rejectUnusedPureResult(it->second.first, it->second.second);
     }
 }
@@ -823,6 +843,12 @@ void Builder::rejectLiteralConversion(
 void Builder::rejectAmbiguousCall(
     const std::string &name, const std::string &argumentTypes,
     const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin) {
+    rejectAmbiguousCallAt(name, argumentTypes, candidates, origin->origin());
+}
+
+void Builder::rejectAmbiguousCallAt(
+    const std::string &name, const std::string &argumentTypes,
+    const std::vector<std::string> &candidates, camel::source::origin_id_t origin) {
     // The one report for several candidates in the pass a call is making (design principles
     // 5.1, H27e): an ordinary call, an operator call and a partial application used as a
     // value all come here. Listing the candidates in declaration order lets a reader see
@@ -830,7 +856,7 @@ void Builder::rejectAmbiguousCall(
     // how to choose (annotate the literal, add a cast).
     ASSERT(!candidates.empty(), "An ambiguity has candidates.");
     diags_->of(SemanticDiag::AmbiguousCall)
-        .atOrigin(origin->origin())
+        .atOrigin(origin)
         .commit(
             name,
             argumentTypes,
@@ -863,6 +889,21 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
         callee != boundWithCallee_.end() && callee->second->type() == GCT::NodeKind::DREF) {
         name = callee->second->name();
     }
+    // Where the whole binding is: the `f<w>` expression (boundWithOrigin_), otherwise the position
+    // the caller gives. The expression is the union of the node's own span with its operands
+    // (design principles 5.1), as for a call; the destructive pass below runs after it is made.
+    const auto originIt = boundWithOrigin_.find(node);
+    const GCT::node_ptr_t where = originIt != boundWithOrigin_.end() ? originIt->second : origin;
+    const auto exprSpan         = callExpressionSpan(context_, where);
+    const auto exprOrigin       = deriveGirOrigin(
+        context_,
+        where,
+        camel::source::OriginKind::GirNode,
+        "gir.with.expr",
+        {},
+        exprSpan);
+    const camel::source::origin_id_t at =
+        exprOrigin != camel::source::kInvalidOriginId ? exprOrigin : where->origin();
     // Several candidates in the pass the binding could use: the same ambiguity an ordinary
     // call reports, with the same candidate list (H27e). No position chose one (`expected`),
     // which is why the binding is being refused now.
@@ -872,7 +913,12 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
         ambiguousBindings_.erase(ambiguous);
         boundWithArgs_.erase(node);
         boundWithCallee_.erase(node);
-        rejectAmbiguousCall(name, given, candidates, origin);
+        std::vector<std::string> signatures;
+        signatures.reserve(candidates.size());
+        for (FunctionType *candidate : candidates) {
+            signatures.push_back(candidate->toString());
+        }
+        rejectAmbiguousCallAt(name, given, signatures, at);
     }
     std::string why;
     if (genericDrefs_.contains(node)) {
@@ -911,8 +957,9 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     }
     boundWithArgs_.erase(node);
     boundWithCallee_.erase(node);
+    boundWithOrigin_.erase(node);
     diags_->of(SemanticDiag::PartialApplicationRefused)
-        .atOrigin(origin->origin())
+        .atOrigin(at)
         .commit(given, name, why);
     throw BuildAbortException();
 }

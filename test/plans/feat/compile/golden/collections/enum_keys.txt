@@ -1,0 +1,18 @@
+{Color::Red: 1, Color::Green: 2, Color::Blue: 3}
+3
+[Color::Red, Color::Green, Color::Blue]
+[1, 2, 3]
+[(Color::Red, 1), (Color::Green, 2), (Color::Blue, 3)]
+2 1
+true true
+{Color::Red: 10, Color::Blue: 3}
+true
+{Color::Red, Color::Green, Color::Blue} 3
+true true
+true {Color::Green, Color::Blue}
+{Color::Red, Color::Green, Color::Blue}
+{Value::Unit: u, Value::Pair(1, 9): a, Value::Pair(2, 2): c, Value::Pair(2, 3): b, Value::Named { x: 1, y: 2 }: n}
+[Value::Unit, Value::Pair(1, 9), Value::Pair(2, 2), Value::Pair(2, 3), Value::Named { x: 1, y: 2 }]
+b ?
+n
+{Value::Unit, Value::Pair(1, 2)} 2
