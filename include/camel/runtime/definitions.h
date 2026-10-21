@@ -115,6 +115,21 @@ class DefinitionStore {
     /// asking again gives the same answer without compiling again.
     const DefinitionGraph *definitionOf(camel::core::OperId oper, std::string *problem = nullptr);
 
+    /// A function of a library, encoded into a program of its own (kept for as long as the
+    /// context): for a native caller that runs a function written in Camel.
+    struct LibraryFunction {
+        const Program *program = nullptr;
+        GCGraph *graph         = nullptr;
+    };
+    /// The function `function` exported by the library module `module`, compiled and encoded
+    /// the first time it is asked for. It must be one non-generic function. Returns nothing
+    /// when it cannot be had, and then `problem` says why; the answer is remembered. `absent`
+    /// tells a library that is not there (no such module written in Camel, or it exports no
+    /// such function) from one that is there and refused.
+    std::optional<LibraryFunction> libraryFunction(
+        const std::string &module, const std::string &function, std::string &problem,
+        bool &absent);
+
   private:
     struct Entry {
         /// The key of the declaration it was built for (nullopt: the operator had none).
@@ -145,6 +160,12 @@ class DefinitionStore {
     std::recursive_mutex mutex_;
     std::unordered_map<camel::core::OperId, Entry> entries_;
     std::map<std::string, std::shared_ptr<camel::core::module::UserDefinedModule>> libraries_;
+    struct FunctionEntry {
+        std::optional<LibraryFunction> found;
+        std::string problem;
+        bool absent = false;
+    };
+    std::map<std::string, FunctionEntry> functions_;
 };
 
 struct ExpandOptions {

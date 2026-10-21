@@ -182,6 +182,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::GraphPassFailed,
+            {
+                "GraphPassFailed",
+                "Pass '{0}' failed: {1}.",
+                "A pass written in Camel returned an error value instead of a program, and the "
+                "message is the error's kind and text. The program is left as the previous pass "
+                "produced it, and the pipeline stops.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",
