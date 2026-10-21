@@ -1,0 +1,11 @@
+/**
+ * The old spelling is no longer a module: the diagnostic names `hash` (handover H114).
+ */
+module hash_old
+
+import { sha256 } from crypto
+
+func main(): int sync {
+    println(sha256('abc'))
+    return 0
+}

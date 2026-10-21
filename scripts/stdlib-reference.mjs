@@ -77,7 +77,7 @@ const MODULES = [
     { name: 'env', title: '`env`: environment', kind: 'cpp' },
     { name: 'json', title: '`json`', kind: 'cpp' },
     { name: 're', title: '`re`: regular expressions', kind: 'cpp' },
-    { name: 'crypto', title: '`crypto`', kind: 'cpp' },
+    { name: 'hash', title: '`hash`', kind: 'cpp' },
     { name: 'para', title: '`para`: unordered iteration', kind: 'cpp' },
     { name: 'this', title: '`this`', kind: 'cpp' },
     { name: 'graph', title: '`graph`: a program as a value', kind: 'cpp' },

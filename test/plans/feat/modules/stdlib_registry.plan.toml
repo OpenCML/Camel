@@ -20,7 +20,7 @@ verify_script = """
 const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
 assert(ops.length > 300, `only ${ops.length} operators listed`)
 const modules = new Set(ops.map((o) => o.module))
-for (const m of ['<builtin>', 'algo', 'crypto', 'env', 'fs', 'json', 'math', 'process', 'para', 'random', 're', 'sim', 'statistics', 'str', 'this', 'time']) {
+for (const m of ['<builtin>', 'algo', 'hash', 'env', 'fs', 'json', 'math', 'process', 'para', 'random', 're', 'sim', 'statistics', 'str', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
 const undeclared = ops.filter((o) => o.purity === 'undeclared').map((o) => o.uri)
@@ -34,7 +34,7 @@ for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
 const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median', 'algo:sort', 'algo:argsort',
-  're:test', 'json:encode', 'json:decode', 'crypto:sha256_str', 'crypto:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
+  're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3).
   ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'algo:quick_sort', 'algo:insert_sort', 'algo:merge_sort']
 for (const uri of pure) {

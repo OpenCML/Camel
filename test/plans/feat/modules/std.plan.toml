@@ -14,10 +14,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
 [[tests]]
-name = "crypto.basic"
-desc = "Exercises deterministic hashing and multi-round hashing from the crypto module."
+name = "hash.basic"
+desc = "Exercises deterministic hashing and multi-round hashing from the hash module."
 kind = "behavior"
-case = "../../../cases/modules/std/crypto/basic.cml"
+case = "../../../cases/modules/std/hash/basic.cml"
 args = ["${case}"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

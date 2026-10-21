@@ -1,5 +1,5 @@
 /**
- * Signatures of the `crypto` module (C++ operators, modules/crypto).
+ * Signatures of the `hash` module (C++ operators, modules/hash).
  *
  * For reference only: these declarations are not compiled. They are checked against the
  * operators the module registers, and docs/stdlib-reference.md is generated from them
@@ -9,14 +9,14 @@
 /// The SHA-256 digest of the bytes of s, as 64 lower-case hexadecimal digits.
 /// @pure
 /// @example sha256('abc')    // 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
-#op<'crypto:sha256_str'>
+#op<'hash:sha256_str'>
 export func sha256(s: string): string
 /// The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
-/// two operators (`crypto:sha256_str`, `crypto:sha256_bytes`); the one is chosen when the program is
+/// two operators (`hash:sha256_str`, `hash:sha256_bytes`); the one is chosen when the program is
 /// compiled.
 /// @pure
 /// @example sha256(encode('abc')) == sha256('abc')    // true
-#op<'crypto:sha256_bytes'>
+#op<'hash:sha256_bytes'>
 export func sha256(s: Bytes): string
 
 /// SHA-256 applied rounds times, each round to the hexadecimal text of the one before;

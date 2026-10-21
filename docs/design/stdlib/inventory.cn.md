@@ -46,7 +46,7 @@
 | env | 环境 | 2 | get_env/get_cwd | 105 / 33（几乎都是入口参数用 get_env） | |
 | json | `Json` 类型与编解码 | 12 | encode/decode/decode_as；kind/is_null/get/as_bool/as_int/as_float/as_string/as_array/as_object | 17 / 2 | |
 | re | 正则 | 1 | test | 4 / 1 | |
-| crypto | 哈希 | 2 | sha256（str/Bytes 两重载）/sha256_rounds | 6 / 0 | |
+| hash | 哈希 | 2 | sha256（str/Bytes 两重载）/sha256_rounds | 6 / 0 | |
 | para | 无序并行与同步 | 3 | unordered_foreach/unordered_reduce/rendezvous | 11 / 0 | rendezvous 看起来是测试设施 |
 | this | `zen()` 彩蛋 | 1 | zen | 4 / 0 | |
 | io | 空壳：module.cpp 注释写 print/println/input 已移入内建，`getOperatorGroups()` 返回空 | 0 | 无 | 1 测试（registry_all） | 仍编译、仍可导入 |
@@ -89,7 +89,7 @@
 违反或有分歧的：
 - `format<args...>`：被格式化的数据放在尖括号里，格式串是主输入（`'{} is {}'->format<a, b>`），与 4.4 相反；`print<fmt>(...)` 方向正确。
 - `re::test(pattern, text)`：被处理的文本在第二位，不能写成 `text->test(...)`；其余库都是"数据第一"。
-- `fs` 全部用普通参数且路径在前：`read_chunk(path, offset, size)`、`write_text(path, content)`；`time::strftime(ts, format)`、`strptime(text, format)`；`random::sample(xs, n)`；`crypto::sha256_rounds(s, rounds)`；`json::encode(value, indent)`；`math::clamp(x, lo, hi)`；这些"配置"用的是普通参数。同一库里 `str::repeat<count>`、`array::take<n>` 却用 with。
+- `fs` 全部用普通参数且路径在前：`read_chunk(path, offset, size)`、`write_text(path, content)`；`time::strftime(ts, format)`、`strptime(text, format)`；`random::sample(xs, n)`；`hash::sha256_rounds(s, rounds)`；`json::encode(value, indent)`；`math::clamp(x, lo, hi)`；这些"配置"用的是普通参数。同一库里 `str::repeat<count>`、`array::take<n>` 却用 with。
 - tensor 的配置全是普通参数：`sum(x, axis, keepdim)`、`reshape(x, shape)`、`max(x, axis, true)`（见 tensor_definitions.cml）。`tiles::run<f>(args)`、`attempt(f, args)` 把函数放在不同位置。
 - 原则 4.4 末句"标准库各函数的归属在示例写出来后逐个确定"：这项审查尚未做。
 
@@ -170,7 +170,7 @@
 - **math**：`clamp`、`sign`、`min`/`max`（两数）、`gcd`/`lcm`、`hypot`、`hex/bin/oct`、`expm1`/`log1p`（后两个需要精度，留 C++）。
 - **fs**：`read_text`（=`decode(read_bytes)`，但有流式与错误形式问题）、`write_text`（=`write_bytes(encode)`）、`mkdirs`（=循环 `mkdir`）、`is_file/is_dir/exists` 可共用一个 stat 原语；`try_read_text` 与 `read_text` 的错误形式差异可在 Camel 层一次解决。
 - **json**：`as_*`/`get`/`kind`/`is_null` 是对 `Json` 值的访问，类型本身在 C++；访问器的 `Json?`/`Json!` 链式重载可由一个 C++ 原语加 Camel 包装产生。
-- **crypto::sha256_rounds**：`sha256` 的循环，Camel 即可。
+- **hash::sha256_rounds**：`sha256` 的循环，Camel 即可。
 - **this::zen**：常量字符串。
 
 ### 4.2 Camel 实现但应是（或可能是）C++

@@ -320,11 +320,11 @@ dc425a313698f684 ok stdlib/rules.cml
 a9d764727c60f619 ok stdlib/str.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 68408c82f05916d6 ok stdlib/signatures/algo.cml
-804b138ab44d3612 ok stdlib/signatures/crypto.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
 e46e8d8f1dd87a8f ok stdlib/signatures/fs.cml
 3364937d4942b0ed no stdlib/signatures/globals.cml
 7b8935da68ae2c54 ok stdlib/signatures/graph.cml
+b465908c31d8462a ok stdlib/signatures/hash.cml
 6a3e6cc94c265b2e ok stdlib/signatures/json.cml
 16c0cffa4e13a3af ok stdlib/signatures/math.cml
 288f3bfd8801992a ok stdlib/signatures/para.cml
@@ -1408,7 +1408,7 @@ f350a6371bce7def ok test/cases/loops/state_in_place_multi.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 1d1931ddf83c2747 ok test/cases/macro/hof_calls.cml
 1b7bf9c3efc0466e ok test/cases/modules/bytes_text_reject.cml
-2c68d3aee1ec548c ok test/cases/modules/bytes_values.cml
+cfff76ef02ee1337 ok test/cases/modules/bytes_values.cml
 b883a882b7336cfd ok test/cases/modules/fs_binary_roundtrip.cml
 2dddeba382c1e7c6 ok test/cases/modules/graph_facts.cml
 e3c3e7a58fd7dfbd ok test/cases/modules/graph_function.cml
@@ -1519,7 +1519,7 @@ a621dfdd89784f98 no test/cases/modules/graph_pass/unparsable_pass.cml
 f32ff1e512b4f4cf ok test/cases/modules/nn/autograd_linear_demo.cml
 560c44bb32cdc19b ok test/cases/modules/nn/bn_train_grad_sanity.cml
 5ac7f213be993c87 ok test/cases/modules/nn/checkpoint_interrupted.cml
-93d7ea90d1a10266 ok test/cases/modules/nn/checkpoint_roundtrip.cml
+45ab5a47bbbb22a7 ok test/cases/modules/nn/checkpoint_roundtrip.cml
 769b9fa3f8ebe6e5 ok test/cases/modules/nn/checkpoint_tensor.cml
 4c5c4ac526fe1f10 ok test/cases/modules/nn/checkpoint_unsupported_leaf.cml
 b913117fdb307669 ok test/cases/modules/nn/checkpoint_unsupported_load.cml
@@ -1645,7 +1645,9 @@ a4167c31852a3565 ok test/cases/modules/random/random_independence.cml
 d618d2cf0cd7ebee ok test/cases/modules/rename/env_identity.cml
 1bd9d79b9cb0d637 ok test/cases/modules/rename/env_new.cml
 4a124ec64520c399 ok test/cases/modules/rename/env_old.cml
-5cc2b1f25daca1c1 ok test/cases/modules/rename/hash_identity.cml
+c530847968ceec01 ok test/cases/modules/rename/hash_identity.cml
+f753057c58ecfeeb ok test/cases/modules/rename/hash_new.cml
+91f2490357845c7b ok test/cases/modules/rename/hash_old.cml
 b3b920b15f951ca0 ok test/cases/modules/rename/process_identity.cml
 44b3a640e87ce755 ok test/cases/modules/rename/process_new.cml
 326a85f05f9a8357 ok test/cases/modules/rename/process_old.cml
@@ -1694,7 +1696,6 @@ d707ad0acc9fc5ca ok test/cases/modules/rules/typed_target.cml
 18ae059de31cf9ae ok test/cases/modules/rules/when_rules.cml
 ff1edbf6f8cd8d8e ok test/cases/modules/rules/when_target.cml
 d1107a262096b1bc ok test/cases/modules/std/algo/basic.cml
-3666dc6396a32e7d ok test/cases/modules/std/crypto/basic.cml
 6ec0713029bb0f09 ok test/cases/modules/std/env/basic.cml
 f488f2a5c5afd4ec ok test/cases/modules/std/env/string_equality.cml
 bbbd75c06c0a5a29 ok test/cases/modules/std/env/unicode/env_paths.cml
@@ -1703,6 +1704,7 @@ d9b0720c01d29203 ok test/cases/modules/std/env/unicode/missing_file.cml
 0b704a143904dfe9 ok test/cases/modules/std/env/unicode/package_user.cml
 91a098d4bc08f840 ok test/cases/modules/std/fs/basic.cml
 433124220d868148 ok test/cases/modules/std/fs/remove.cml
+dbccf2afb90dc693 ok test/cases/modules/std/hash/basic.cml
 801f5bc8610ae608 ok test/cases/modules/std/io/basic.cml
 e2139f77a26c1fad ok test/cases/modules/std/json/decode.cml
 9ac4eb6d169fb9ab ok test/cases/modules/std/json/decode_as.cml
@@ -1754,12 +1756,12 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-a219a9b9da330539 ok test/cases/modules/stdlib/registry_all.cml
+fcc99f7ffe57ef6f ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 bc5627b4036b601d ok test/cases/modules/stdlib/str_bytes.cml
 cfdb5f3595780ad0 ok test/cases/modules/stdlib/str_chars.cml
-6d6753ca828a2b4d ok test/cases/modules/stdlib/utf8_string.cml
+849aa704d71bcd76 ok test/cases/modules/stdlib/utf8_string.cml
 47e9377b7e730e0b ok test/cases/modules/tensor/argmax_ieee.cml
 0371d805dc801c23 ok test/cases/modules/tensor/binary_bool_error.cml
 2e93d94409351b15 ok test/cases/modules/tensor/binary_bytes.cml
@@ -2052,7 +2054,7 @@ c03fc5f818bb04d6 ok test/cases/opt/progen/judgement/short_circuit_fault.cml
 b91962760102bb56 ok test/cases/para/core/concurrent_alloc.cml
 21f01aa0576fa482 ok test/cases/para/core/concurrent_calls.cml
 124aad4df4fbd4d8 ok test/cases/para/core/concurrent_recursion.cml
-fe596d31d450fe01 ok test/cases/para/core/file_chunk_hash.cml
+03512a04e8b52021 ok test/cases/para/core/file_chunk_hash.cml
 1305f89a125c1353 ok test/cases/para/core/filter_keeps_all.cml
 b5681dd0c4839381 ok test/cases/para/core/map_chunks.cml
 fbe8b81927ee5879 ok test/cases/para/core/map_ordered_effects.cml

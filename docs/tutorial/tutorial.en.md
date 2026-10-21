@@ -777,7 +777,7 @@ func main(): int sync {
 
 ### The standard library
 
-The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `algo`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `crypto`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fifteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
+The modules that come with Camel are `str` (strings), `array` (arrays), `math`, `statistics`, `algo`, `random`, `time`, `fs`, `json`, `process`, `env`, `re`, `hash`, `para`, `this`, the tensor family `tensor`, `nn`, `autodiff`, `onnx`, and `python`, which embeds Python ([language reference 5.2.1](../language/en/05_modules.md#521-modules-provided-with-camel)). The [standard library reference](../stdlib-reference.md) lists the functions of the first fifteen modules one by one: signature, whether it is pure, behaviour on failure, examples. [`examples/12_stdlib.cml`](examples/12_stdlib.cml):
 
 ```cml
 module stdlib_demo

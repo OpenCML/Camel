@@ -385,6 +385,7 @@ const std::unordered_map<std::string, std::string> &renamedModules() {
     static const std::unordered_map<std::string, std::string> renamed = {
         {"sys", "env"},
         {"os", "process"},
+        {"crypto", "hash"},
     };
     return renamed;
 }

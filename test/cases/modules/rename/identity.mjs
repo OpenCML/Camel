@@ -32,7 +32,7 @@ const CASES = {
     },
     hash: {
         old: 'crypto',
-        now: 'crypto',
+        now: 'hash',
         expected: 'e24d1896575924d33fec0d21de336dda49114dc1cadc8f05575e8a94bef57bd8',
     },
 }

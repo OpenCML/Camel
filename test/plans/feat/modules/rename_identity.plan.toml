@@ -27,3 +27,9 @@ name = "rename.process_graph_identity"
 desc = "`os` -> `process`: the graph of a program that asks who it is and how many CPUs there are is unchanged apart from `process:` in the operator URIs."
 case = "../../../cases/modules/rename/process_identity.cml"
 args = ["${case}", "std::jgir"]
+
+[[tests]]
+name = "rename.hash_graph_identity"
+desc = "`crypto` -> `hash`: the graph of a program that hashes a literal is unchanged apart from `hash:` in the operator URIs."
+case = "../../../cases/modules/rename/hash_identity.cml"
+args = ["${case}", "std::jgir"]

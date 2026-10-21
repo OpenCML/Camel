@@ -17,15 +17,15 @@
 
 namespace {
 
-class CryptoExecutor : public Executor {
+class HashExecutor : public Executor {
   public:
-    CryptoExecutor(
+    HashExecutor(
         camel::core::context::context_ptr_t ctx, std::unordered_map<std::string, operator_t> ops)
         : Executor(std::move(ctx), std::move(ops)) {}
 };
 
 } // namespace
 
-executor_ptr_t createCryptoExecutor(camel::core::context::context_ptr_t ctx) {
-    return std::make_shared<CryptoExecutor>(std::move(ctx), getCryptoOpsMap());
+executor_ptr_t createHashExecutor(camel::core::context::context_ptr_t ctx) {
+    return std::make_shared<HashExecutor>(std::move(ctx), getHashOpsMap());
 }

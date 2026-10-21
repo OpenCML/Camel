@@ -1,12 +1,12 @@
 /**
- * Exercises crypto hashing APIs, focusing on determinism and the difference between single-round and repeated hashing.
+ * Exercises the hashing APIs of the hash module, focusing on determinism and the difference between single-round and repeated hashing.
  */
 module main
 
-import { sha256, sha256_rounds } from crypto
+import { sha256, sha256_rounds } from hash
 
 func main(): int sync {
-    println("=== Crypto Module Basic Tests ===")
+    println("=== Hash Module Basic Tests ===")
 
     println("\n[1] sha256('abc')")
     let digest = sha256("abc")
@@ -18,7 +18,7 @@ func main(): int sync {
     println("  deterministic =", rounds_digest == sha256_rounds("abc", 1000))
     println("  differs from sha256 =", rounds_digest != digest)
 
-    println("\n=== Crypto tests completed ===")
+    println("\n=== Hash tests completed ===")
     return 0
 }
 

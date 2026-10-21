@@ -31,13 +31,13 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
             "sha256",
-            {{"crypto:sha256_str",
+            {{"hash:sha256_str",
               StaticFuncTypeResolver::create({}, {{Type::String(), false}}, Type::String())},
-             {"crypto:sha256_bytes",
+             {"hash:sha256_bytes",
               StaticFuncTypeResolver::create({}, {{BytesType::get(), false}}, Type::String())}}),
         OperatorGroup::create(
             "sha256_rounds",
-            {{"crypto:sha256_rounds",
+            {{"hash:sha256_rounds",
               StaticFuncTypeResolver::create(
                   {},
                   {{Type::String(), false}, {Type::Int64(), false}},
@@ -47,22 +47,22 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
 }
 } // namespace
 
-CryptoModule::CryptoModule(context_ptr_t ctx) : BuiltinModule("crypto", ctx) {
+HashModule::HashModule(context_ptr_t ctx) : BuiltinModule("hash", ctx) {
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
 }
 
-module_ptr_t CryptoModule::create(context_ptr_t ctx) { return std::make_shared<CryptoModule>(ctx); }
+module_ptr_t HashModule::create(context_ptr_t ctx) { return std::make_shared<HashModule>(ctx); }
 
-bool CryptoModule::load() {
+bool HashModule::load() {
     if (loaded_)
         return true;
-    context_->registerExecutorFactory("crypto", [ctx = context_]() {
-        return createCryptoExecutor(ctx);
+    context_->registerExecutorFactory("hash", [ctx = context_]() {
+        return createHashExecutor(ctx);
     });
     // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
-        "crypto",
+        "hash",
         {
             {"sha256_str", true},
             {"sha256_bytes", true},
@@ -73,5 +73,5 @@ bool CryptoModule::load() {
 }
 
 extern "C" {
-Module *camel_module_create(Context *ctx) { return new CryptoModule(ctx->shared_from_this()); }
+Module *camel_module_create(Context *ctx) { return new HashModule(ctx->shared_from_this()); }
 }

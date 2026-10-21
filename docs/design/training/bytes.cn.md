@@ -14,7 +14,7 @@
 - `read_bytes` / `write_bytes` 处理 `Bytes`；`read_chunk` 现在返回 `Bytes`。
 - `read_text` / `write_text` 检查 UTF-8，错误提示改用二进制接口；`try_read_text` 在解码失败时返回 `EncodingError`。合法的 UTF-8 仍可含 NUL，按长度读写。
 - `replace(path, bytes)` 使用同目录独占创建的临时文件。Linux 写完后 `fsync` 文件、关闭、改名并 `fsync` 目录；失败清理本次临时文件。Windows 使用 `FlushFileBuffers` 与带替换和写穿标志的 `MoveFileExW`，该平台分支本轮未执行。
-- `crypto::sha256` 新增 `Bytes` 重载。块哈希调用先计算一次二进制 SHA-256，再对十六进制文本执行剩余轮次，保持原来的总轮数。
+- `hash::sha256` 新增 `Bytes` 重载。块哈希调用先计算一次二进制 SHA-256，再对十六进制文本执行剩余轮次，保持原来的总轮数。
 
 已迁移仓库中的分块文件哈希、文件示例、二进制回归用例，以及 DDPM 的 IDX/RGB 输入和 PGM/PPM 输出。文本签名和生成的标准库参考文档同时更新。
 

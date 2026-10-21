@@ -6,7 +6,7 @@ module utf8_string
 
 import { split, trim, replace, find, substr, starts_with, repeat, bytes, from_bytes, codepoints, to_upper } from str
 import { encode, decode, size } from bytes
-import { sha256 } from crypto
+import { sha256 } from hash
 import { test } from re
 
 func main(): int sync {

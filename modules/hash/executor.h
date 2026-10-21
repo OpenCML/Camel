@@ -13,17 +13,6 @@
  */
 
 #pragma once
+#include "camel/execute/executor.h"
 
-#include "camel/core/operator.h"
-#include "camel/core/type.h"
-
-#include <string>
-#include <unordered_map>
-
-namespace ctx = camel::core::context;
-
-slot_t __crypto_sha256_str__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __crypto_sha256_bytes__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-slot_t __crypto_sha256_rounds__(ArgsView &with, ArgsView &norm, ctx::Context &ctx);
-
-std::unordered_map<std::string, operator_t> getCryptoOpsMap();
+executor_ptr_t createHashExecutor(camel::core::context::context_ptr_t ctx);

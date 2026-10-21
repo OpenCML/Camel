@@ -6,7 +6,7 @@ module registry_all
 
 import algo
 import bytes
-import crypto
+import hash
 import env
 import fs
 import graph

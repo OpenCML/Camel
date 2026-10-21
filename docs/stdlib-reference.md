@@ -52,7 +52,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [env](#env) | `import { ... } from env` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
 | [re](#re) | `import { ... } from re` | C++ | 1 |
-| [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
+| [hash](#hash) | `import { ... } from hash` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
@@ -2935,9 +2935,9 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 - Failure: fault `RegexInvalid` when pattern is not a regular expression.
 - Example: `test('[0-9]+', 'room 42')` gives `true`
 
-<a id="crypto"></a>
+<a id="hash"></a>
 
-## `crypto`
+## `hash`
 
 #### `sha256`
 
@@ -2957,7 +2957,7 @@ sha256: (s: Bytes) => string
 ```
 
 The SHA-256 digest of a `Bytes` value, as 64 lower-case hexadecimal digits. The two overloads are
-two operators (`crypto:sha256_str`, `crypto:sha256_bytes`); the one is chosen when the program is
+two operators (`hash:sha256_str`, `hash:sha256_bytes`); the one is chosen when the program is
 compiled.
 
 - Pure.

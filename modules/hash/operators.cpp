@@ -33,31 +33,31 @@ using namespace camel::core::rtdata;
 
 using camel::utils::sha256Hex;
 
-std::unordered_map<std::string, operator_t> getCryptoOpsMap() {
+std::unordered_map<std::string, operator_t> getHashOpsMap() {
     return {
-        {"sha256_str", __crypto_sha256_str__},
-        {"sha256_bytes", __crypto_sha256_bytes__},
-        {"sha256_rounds", __crypto_sha256_rounds__},
+        {"sha256_str", __hash_sha256_str__},
+        {"sha256_bytes", __hash_sha256_bytes__},
+        {"sha256_rounds", __hash_sha256_rounds__},
     };
 }
 
 // One URI per signature (the overload is chosen when the program is compiled): the digest of the
 // UTF-8 bytes of a string, and of a Bytes value.
-slot_t __crypto_sha256_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __hash_sha256_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(String::from(sha256Hex(norm.get<String *>(0)->view()), mm::autoSpace()));
 }
 
-slot_t __crypto_sha256_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __hash_sha256_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return toSlot(String::from(sha256Hex(norm.get<BytesObject *>(0)->view()), mm::autoSpace()));
 }
 
-slot_t __crypto_sha256_rounds__(ArgsView &with, ArgsView &norm, Context &ctx) {
+slot_t __hash_sha256_rounds__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *input  = norm.get<String *>(0);
     int64_t rounds = norm.get<int64_t>(1);
     if (rounds < 0) {
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,
-            "crypto.sha256_rounds",
+            "hash.sha256_rounds",
             std::format("the number of rounds is {}; it must not be negative", rounds));
     }
 
