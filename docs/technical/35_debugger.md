@@ -268,11 +268,11 @@ whose only work is the call of `main`) is shown last, without a location.
 After a tail call the caller's frame is gone; both back ends reuse it. The stack is shown as
 it is, and the frame that was entered by a tail call carries the count of frames it replaced:
 `loop (tail call, 3 frames replaced)`. No frames are invented. `DESIGN-QUESTION(tail-call-stack)`.
-With frames of functions (5.4) the count is of activations of functions: the arm that replaced
-its own function's frame is part of that function and is not counted, so the third iteration of
+With frames of functions (5.4) the count is of activations of functions: an arm is a region of
+its function's frame and is not an activation of its own, so the third iteration of
 `spin` in `return if n == 0 then acc else spin(n - 1, acc + n)` is
-`spin (tail call, 2 frames replaced)`; with frames of subgraphs every shadow frame counts
-(`spin (tail call, 4 frames replaced)`).
+`spin (tail call, 2 frames replaced)`. An arm is a region of the frame it runs in, not a shadow
+frame (5.4), so frames of subgraphs counts the same two frames.
 
 ### 5.3 Inlined code
 
@@ -595,10 +595,10 @@ has ruled since, which say so.
 6. `parallel-debugging`: run on the sequential `std::fvm` with a notice (implemented), refuse
    to debug, or stop-the-world with one current node per worker.
 7. `arm-frames`: show the arm of a branch as the frame it is, or fold arms into the frame of
-   their function. **Ruled** (design principles 12.1): folded by default, the real subgraphs on
-   request (5.4). `func fact(n: int): int { return if n <= 1 then 1 else n * fact(n - 1) }`
-   stopped in the third call shows `fact` three times, `main`; with frames of subgraphs `fact`,
-   `fact [arm at line 1] (tail call, 1 frame replaced)` twice, `main`.
+   their function. **Ruled** (design principles 12.1): folded by default, and an arm is a region
+   of the frame it runs in, so no setting invents an arm frame (5.4). `func fact(n: int) { ... }`
+   stopped in the third call shows `fact` three times, `main`; `frames subgraphs` shows the same
+   frames.
 
 ## 9. Status
 

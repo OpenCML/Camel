@@ -165,9 +165,10 @@
 
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
-| H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **部分完成**（运行器已严格、`expect_stdout_exact` 真正比较：`handover/H52-runner-fields`；暴露 9 条真实失败，全部已修（8 条循环梯度回归与第 9 条 `extract` 死写法见 H59）；报告 reports/H52.md） |
+| H58 | **过期测试**：DAP 尾递归步进的 6 个断言仍按 `fda0d21f` 之前的“臂是独立影子帧”写；按 12.1 的区域模型更正断言，并补尾调用点的 `next`/`stepOut` | 无 | **已完成**（报告 reports/H58.md；无源码改动，不是缺陷修复） |
+| H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **已完成**（运行器已严格、`expect_stdout_exact`/`expect_stdout_not_contains` 真正比较；暴露的 9 条真实失败全部已修，见 H59；报告 reports/H52.md） |
 | H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **进行中**（`handover/H54-cpu-op-cost`） |
-| H51 | 泛型第一期：按结构展开（`match type`、`static for`、`static loop`、`t.[n]`、可变元数），`tree_map` 等改用 Camel 写（先交计划） | 无 | **计划已批**（reviews/H51-plan.md），按 15 步实施 |
+| H51 | 泛型第一期：按结构展开（`match type`、`static for`、`static loop`、`t.[n]`、可变元数），`tree_map` 等改用 Camel 写（先交计划） | 无 | **计划已批**（reviews/H51-plan.md），按 15 步实施；第 1–2 步进行中 |
 | H50 | GPU G4–G5：支持面（bf16/Tensor Core 等）、使用已授予的许可、融合、优化器多张量融合（先交计划） | H49 计划获批 | **未开始** |
 | H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **部分完成**（H49a：区域/树传输合批，小往返 97.6→56.3 µs、同步点 5→2；报告 reports/H49a.md；动态形状、回传图类型、无设备时不重试 `cuInit` 按 author 裁定仍未做） |
 | H47 | Tiles 现状与差距报告（只读，可并入 H48 的第一份报告） | 无 | **已完成**（报告 reports/H47.md；H49a 更正了它对 `run` 归因：4.9 ms 中约 3.2 ms 是 `tensor:sum` 串行归约） |

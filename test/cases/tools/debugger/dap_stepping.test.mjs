@@ -3,8 +3,8 @@
 // the next node (granularity "instruction"); the line reached is the next one in execution
 // order, and a line the step went past because nothing uses its result is said in the debug
 // console (design principles 12.1). Also: recursion as a stack of frames, a tail recursion as
-// the one frame it is, with the arms of the branches folded into the frames of their function
-// (the default) or shown as the subgraphs they are (frames: "subgraphs"), and the arm of a
+// the one frame it is, with the arms of the branches as regions of the frame they run in (the
+// frames setting changes the presentation, it does not invent arm frames), and the arm of a
 // branch that is not taken.
 
 import { runTest, check, checkEq, fixture, lineOf } from '../../../tools/debugger/client.mjs'
@@ -149,12 +149,13 @@ await runTest(async (t) => {
             const invalidated = await dap.waitEvent('invalidated')
             checkEq(invalidated?.body?.areas, ['stacks', 'variables'], on('the client is told to fetch the stack and the variables again'))
             let names = (await dap.request('stackTrace', { threadId: 1 })).body?.stackFrames?.map((f) => f.name) || []
-            check(
-                names.length === 6 && names[0] === 'fact' &&
-                    names.slice(1, 4).every((n) => /^fact \[arm at line \d+\] \(tail call, 1 frame replaced\)$/.test(n)),
-                on('switched to subgraphs: the callers are the arms of fact that replaced its frame'),
+            checkEq(
                 names,
+                ['fact', 'fact', 'fact', 'fact', 'main', '__root__'],
+                on('switched to subgraphs: the arms are regions of fact, so the frame set does not change'),
             )
+            const subgraphLocals = await dap.variables(stop.frames[1].id)
+            checkEq(subgraphLocals?.n?.value, '2', on('switching the presentation leaves the caller and its variables in place'))
             await dap.request('camel/setFrames', { frames: 'functions' })
             names = (await dap.request('stackTrace', { threadId: 1 })).body?.stackFrames?.map((f) => f.name) || []
             checkEq(names, ['fact', 'fact', 'fact', 'fact', 'main', '__root__'], on('switched back: frames of functions'))
@@ -203,16 +204,15 @@ await runTest(async (t) => {
             }
             checkEq(ns, ['4', '3', '2', '1'], on('each frame has its own n'))
             checkEq(depths.map((d) => d - depths[0]), [0, 1, 2, 3], on('each recursive call is one frame deeper'))
-            // The callers are the else arms: an arm is a subgraph of its own, entered by a tail
-            // call that replaced the frame of fact.
-            const callers = stop.names.slice(1, 4)
-            check(
-                callers.every((n) => /^fact \[arm at line \d+\] \(tail call, 1 frame replaced\)$/.test(n)),
-                on('the callers are shown as what they are: arms of fact that replaced its frame'),
+            // The callers are frames of fact: an arm is a region of the frame of its function,
+            // not a frame of its own.
+            checkEq(
                 stop.names,
+                ['fact', 'fact', 'fact', 'fact', 'main', '__root__'],
+                on('the callers are frames of fact: the arms are regions of the same frame'),
             )
-            const armLocals = await dap.variables(stop.frames[1].id)
-            checkEq(armLocals?.n?.value, '2', on('an arm sees the n of its function'))
+            const callerLocals = await dap.variables(stop.frames[1].id)
+            checkEq(callerLocals?.n?.value, '2', on('a caller frame sees its n'))
 
             // spin(5, 0): the recursion is a tail call; the frame is replaced, the stack stays flat.
             await dap.request('continue', { threadId: 1 })
@@ -220,15 +220,52 @@ await runTest(async (t) => {
             const accs = []
             for (let i = 0; i < 3; i++) {
                 stop = await dap.waitStop()
-                check(/^spin( \(tail call, \d+ frames? replaced\))?$/.test(stop?.name || ''), on(`iteration ${i + 1} of loop stops in loop`), at(stop))
+                checkEq(stop?.line, loopLine, on(`iteration ${i + 1} of loop stops in loop`))
                 loopDepths.push(stop?.frames.length)
                 accs.push((await dap.variables(stop.top.id)).acc?.value)
                 await dap.request('continue', { threadId: 1 })
             }
             checkEq(accs, ['0', '5', '9'], on('the accumulator advances'))
             checkEq(loopDepths, [3, 3, 3], on('a tail recursion keeps one frame: the stack does not grow'))
-            check(/tail call, 4 frames replaced/.test(stop.name), on('and the frame says how many it replaced'), stop.name)
+            checkEq(stop?.frames.length, 3, on('the replaced frame is spin itself'))
+            checkEq(stop?.frames[1]?.name, 'main', on('the caller below it is main, not an arm of spin'))
+            checkEq(stop?.frames[2]?.name, '__root__', on('under main is the entry graph'))
+            check(!stop?.names?.some((n) => n.includes('[arm at line')), on('the arm of the tail call is a region, not a frame'), stop?.names)
             await dap.stop()
+        }
+
+        // ---- a step at the tail-call site: over it, and out of the replaced frame -----------
+        {
+            const L = (mark) => lineOf(RECURSION, `mark:${mark}`)
+            const clear = (dap) => dap.request('setBreakpoints', { source: { path: RECURSION }, breakpoints: [] })
+            {
+                const dap = await t.dap()
+                await dap.launch(RECURSION, { passes: [backend] }, { [RECURSION]: [L('loop')] })
+                let stop = await dap.waitStop()
+                checkEq(stop?.line, L('loop'), on('next at the tail-call site starts at the call'))
+                await clear(dap)
+                stop = await step(dap, 'next')
+                checkEq(at(stop), `main:${L('print')}`, on('next at the tail-call site runs the chain back to the caller'))
+                checkEq(stop?.frames.length, 2, on('the replaced frames do not become a stack'))
+                checkEq((await dap.variables(stop.top.id)).s?.value, '15', on('the tail recursion ran to its result'))
+                await dap.stop()
+            }
+            {
+                const dap = await t.dap()
+                await dap.launch(RECURSION, { passes: [backend] }, { [RECURSION]: [L('loop')] })
+                let stop = await dap.waitStop()
+                await clear(dap)
+                stop = await step(dap, 'stepIn')
+                checkEq(stop?.line, L('loop'), on('stepIn enters the replaced frame at the same line'))
+                const args = await dap.variables(stop.top.id)
+                checkEq([args.n?.value, args.acc?.value], ['4', '5'], on('the entered frame has the next round values'))
+                checkEq(stop?.frames.length, 3, on('the entered frame is the one frame of spin'))
+                stop = await step(dap, 'stepOut')
+                checkEq(at(stop), `main:${L('print')}`, on('stepOut from the replaced frame returns to the caller of its caller'))
+                checkEq(stop?.frames.length, 2, on('and leaves no frame of the tail chain'))
+                checkEq((await dap.variables(stop.top.id)).s?.value, '15', on('the tail recursion ran to its result'))
+                await dap.stop()
+            }
         }
 
         // ---- a branch: the arm that is not taken never stops -------------------------------
