@@ -465,6 +465,7 @@ c8c8348a8e154358 no test/cases/compile/diag_render/syntax_unexpected_token.cml
 16e3db9d1dec1061 ok test/cases/compile/entry_args/struct_param.cml
 5b27eb08f596830e ok test/cases/compile/entry_args/struct_scalars.cml
 dd7246c7579bc44a ok test/cases/compile/entry_args/tensors.cml
+904d91ce672086f2 ok test/cases/compile/entry_args/timeit_failure.cml
 13647c408df0eb49 ok test/cases/compile/entry_args/widths.cml
 ea8b33fa610fddd2 ok test/cases/compile/entry_args/with_params.cml
 b26149a96b7a1b65 ok test/cases/compile/enum/err_bare_unit_variant.cml

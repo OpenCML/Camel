@@ -288,8 +288,10 @@ class Context : public std::enable_shared_from_this<Context> {
     std::vector<module_ptr_t> importedModules() const;
 
     /// Dump diagnostics from main and all imported modules that have errors; json=true for JSON
-    /// format
-    void dumpAllModuleDiagnostics(std::ostream &os, bool json) const;
+    /// format. `wrapInArray` is `Diagnostics::dump`'s: with false (JSON only) the objects are
+    /// written without the surrounding `[` and `]`, so a caller that is itself writing a JSON
+    /// object can nest them.
+    void dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInArray = true) const;
 
     /// Dump the Warn-level diagnostics of the user modules that compiled without an error (the
     /// modules with errors show theirs through dumpAllModuleDiagnostics). Text: one line per

@@ -265,7 +265,7 @@ size_t Context::dumpModuleWarnings(
     return lines.size();
 }
 
-void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
+void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInArray) const {
     auto allMods = allUserModules();
     std::vector<module_ptr_t> modsErr;
     for (const auto &mod : allMods) {
@@ -282,9 +282,13 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
     });
     if (json) {
         if (modsErr.empty()) {
-            os << "[]\n" << std::flush;
+            if (wrapInArray) {
+                os << "[]\n" << std::flush;
+            }
         } else {
-            os << "[\n";
+            if (wrapInArray) {
+                os << "[\n";
+            }
             bool first = true;
             for (const auto &mod : modsErr) {
                 auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
@@ -295,7 +299,9 @@ void Context::dumpAllModuleDiagnostics(std::ostream &os, bool json) const {
                 ud->diagnostics()->dump(os, true, false);
                 first = false;
             }
-            os << "\n]\n" << std::flush;
+            if (wrapInArray) {
+                os << "\n]\n" << std::flush;
+            }
         }
     } else {
         for (const auto &mod : modsErr) {
