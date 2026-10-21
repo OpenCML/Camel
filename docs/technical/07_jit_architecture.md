@@ -679,7 +679,7 @@ JIT 代码没有展开信息，C++ 异常穿不过它的栈帧。但编译出的
 - `invokeOwnedJitFrame` 进入前把 `maxRecursionDepth_ - stackDepth_` 写入 `JitContext::depthBudget`，包装器装入 r15。
 - 每次原生自调用 `sub r15, 1`，借位即故障；返回后 `inc r15`。尾调用不计数。
 
-**机器栈的余量。** 上限可以设到一百万，而原生自调用每层都占机器栈（`depth` 每层 112 字节，8 MiB 的栈大约放七万层），所以只计数不够。`invokeOwnedJitFrame` 在写入 `depthBudget` 的同时把 `execute::nativeStackFloor()` 写入 `JitContext::stackLimit`：当前线程栈的下界加保留量（栈的十六分之一，至少 128 KiB，与解释器 `nativeStackNearlyExhausted` 用的是同一个保留量；栈界读不到或 `CAMEL_NATIVE_STACK_GUARD=0` 时为 0，任何栈指针都不低于它）。栈界按线程读取（`thread_local`），所以由哪个线程进入原生代码就用哪个线程的栈。每次原生自调用在计数之后执行 `cmp rsp, [ctx + stackLimit]; jb .fault_stack`。故障桩除了记录种类与 pc，还把 r15 存回 `depthBudget`，`raiseJitFault` 据此算出"已有多少次调用未返回"。故障出口本身不使用栈；保留量留给之后 C++ 一侧构造诊断。对不递归或浅递归的路径，代价是每次原生调用多一条比较和一条不跳转的条件跳转（fib(35)：改动前后在测量噪声之内）。
+**机器栈的余量。** 上限可以设到一百万，而原生自调用每层都占机器栈（`depth` 每层 112 字节，8 MiB 的栈大约放七万层），所以只计数不够。`invokeOwnedJitFrame` 在写入 `depthBudget` 的同时把 `execute::nativeStackFloor()` 写入 `JitContext::stackLimit`：当前线程栈的下界加保留量（栈的十六分之一，至少 128 KiB，与解释器 `nativeStackNearlyExhausted` 用的是同一个保留量；栈界读不到或 `--native-stack-guard off` 时为 0，任何栈指针都不低于它）。栈界按线程读取（`thread_local`），所以由哪个线程进入原生代码就用哪个线程的栈。每次原生自调用在计数之后执行 `cmp rsp, [ctx + stackLimit]; jb .fault_stack`。故障桩除了记录种类与 pc，还把 r15 存回 `depthBudget`，`raiseJitFault` 据此算出"已有多少次调用未返回"。故障出口本身不使用栈；保留量留给之后 C++ 一侧构造诊断。对不递归或浅递归的路径，代价是每次原生调用多一条比较和一条不跳转的条件跳转（fib(35)：改动前后在测量噪声之内）。
 
 ### 16.5 有帧代码里的故障出口
 

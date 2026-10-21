@@ -172,7 +172,8 @@ class Result:
         self.seconds = seconds
         self.peak_kb = peak_kb
         self.detail = detail
-        # The line `[camel] spaces: ...` the run printed at exit (with CAMEL_GC_STATS set).
+        # The line `[camel] spaces: ...` the run printed at exit (with `std::profile(gc_stats=1)`
+        # in the pipeline).
         self.spaces = spaces
 
 

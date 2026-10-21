@@ -157,7 +157,7 @@
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
 | `onnx::export` | `out: string = ""`（模型文件；见下） |
 
-仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限（`CAMEL_*_SPACE_*`，以及 `--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds` 的环境变量写法），回收器的诊断与节奏变量（`CAMEL_GC_HEAP_LIMIT_MB`、`CAMEL_GC_GROWTH_PERCENT`、`CAMEL_GC_PROMOTION_AGE`、`CAMEL_GC_POISON`、`CAMEL_GC_VERIFY`、`CAMEL_GC_STRESS_*`），以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。曾经是环境变量的开关现在是选项和遍参数，旧名字会被拒绝，并给出指出替代物的诊断：`CAMEL_GC`（--gc）、`CAMEL_BLOCK_LIMIT_MB`（--block-limit）、`CAMEL_GRAPH_GC_MB`（--graph-gc-mb）、`CAMEL_GC_STATS`（std::profile(gc_stats=...)）、`CAMEL_TYPE_STATS`（std::profile(type_stats=true)）、`CAMEL_EFFECT_TRACE`（std::profile(effect_trace="...")）、`CAMEL_NATIVE_STACK_GUARD`（--native-stack-guard）、`CAMEL_PROFILE_MODE`（--profile-mode）和 `CAMEL_ENABLE_TEST_PASSES`（测试遍在流水线里写出名字即可）。
+仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限（`CAMEL_*_SPACE_*`，以及 `--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds` 的环境变量写法），回收器的诊断与节奏变量（`CAMEL_GC_HEAP_LIMIT_MB`、`CAMEL_GC_GROWTH_PERCENT`、`CAMEL_GC_PROMOTION_AGE`、`CAMEL_GC_POISON`、`CAMEL_GC_VERIFY`、`CAMEL_GC_STRESS_*`），以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。曾经是环境变量的开关现在是选项和遍参数：`--gc`、`--block-limit`、`--graph-gc-mb`、`--native-stack-guard`、`--profile-mode`，以及 `std::profile` 的 `gc_stats`、`type_stats`、`effect_trace` 参数；测试专用的遍在流水线里写出名字即可。
 
 ### 模块的遍
 
