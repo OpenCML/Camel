@@ -19,7 +19,7 @@
 
 /*
  * The string library (design principles 11.1: a string is valid UTF-8, its length and
- * indices count code points; `bytes`/`from_bytes` cross to the UTF-8 bytes).
+ * indices count code points; `bytes::encode`/`bytes::decode` cross to the UTF-8 bytes).
  *
  * Every operator is a primitive written in C++ and is pure. The string an operator works on is
  * its one ordinary argument and everything else is a `with` argument, as for the built-in
@@ -63,8 +63,6 @@ bool StrModule::load() {
          {"starts_with", true},
          {"ends_with", true},
          {"repeat", true},
-         {"bytes", true},
-         {"from_bytes", true},
          {"codepoints", true},
          {"from_codepoints", true}});
     loaded_ = true;

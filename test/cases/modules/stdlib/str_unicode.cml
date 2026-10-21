@@ -1,12 +1,13 @@
 /**
- * The str module: length and indices count code points (design principles 11.1); `bytes` and
- * `from_bytes` convert to and from the UTF-8 bytes.
+ * The str module: length and indices count code points (design principles 11.1); the UTF-8
+ * bytes of a string and back are `bytes::encode`/`bytes::decode`, the one conversion.
  * The subject is the ordinary argument, the rest are with-arguments
  * (DESIGN-QUESTION(param-style)).
  */
-module str_bytes
+module str_unicode
 
-import { split, trim, trim_start, trim_end, to_upper, to_lower, replace, find, substr, starts_with, ends_with, repeat, bytes, from_bytes } from str
+import { split, trim, trim_start, trim_end, to_upper, to_lower, replace, find, substr, starts_with, ends_with, repeat } from str
+import { encode, decode, from_array, size, to_array } from bytes
 
 func show(label: string, s: string): void sync {
     println(label + ' [' + s + '] ' + string(len(s)))
@@ -59,7 +60,7 @@ func main(): int sync {
     show('substr all', 'hello'->substr<0, 5>)
     show('substr empty at end', 'hello'->substr<5, 0>)
     show('substr empty', ''->substr<0, 0>)
-    show('substr one char of é', 'é'->substr<0, 1>->bytes->from_bytes->bytes->len->string)
+    show('substr one char of é', 'é'->substr<0, 1>->encode->size->string)
     show('substr non-ascii', 'h€llo'->substr<1, 2>)
     show('substr 4-byte', '😀a😀'->substr<1, 2>)
 
@@ -72,20 +73,20 @@ func main(): int sync {
     show('repeat zero', 'ab'->repeat<0>)
     show('repeat empty', ''->repeat<5>)
 
-    // bytes / from_bytes
-    println(bytes('hé'), bytes(''), len(bytes('€')))
-    show('from_bytes', from_bytes([104, 105]))
-    show('from_bytes empty', from_bytes(bytes('')))
-    show('round trip', from_bytes(bytes('héllo €')))
+    // the UTF-8 bytes of a string, and back (bytes::encode / bytes::decode)
+    println(to_array(encode('hé')), to_array(encode('')), size(encode('€')))
+    show('decode', decode(from_array([104, 105])) !! 'bad')
+    show('decode empty', decode(encode('')) !! 'bad')
+    show('round trip', decode(encode('héllo €')) !! 'bad')
     // a zero byte is a character like any other
-    println(len(from_bytes([104, 0, 105])), bytes(from_bytes([104, 0, 105])))
+    println(len(decode(from_array([104, 0, 105])) !! 'bad'), to_array(encode(decode(from_array([104, 0, 105])) !! 'bad')))
     // the bytes of a character
-    println(from_bytes([228, 184, 173]), len(from_bytes([228, 184, 173])))
+    println(decode(from_array([228, 184, 173])) !! 'bad', len(decode(from_array([228, 184, 173])) !! 'bad'))
 
     // indexing: the character at the index, as a string (design principles 11.1)
     let s = 'hello'
     println(s[0], s[4], len(s[1]))
-    println('中'[0] == '中', '中文'[1], len('中文'), len('😀'), bytes('é'[0]))
+    println('中'[0] == '中', '中文'[1], len('中文'), len('😀'), to_array(encode('é'[0])))
     println('h€😀é'[2], len('h€😀é'))
     return 0
 }

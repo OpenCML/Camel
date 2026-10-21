@@ -182,29 +182,6 @@ expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
 expect_diagnostic_line = 7
 
 [[tests]]
-name = "stdlib.fault.from_bytes"
-desc = "from_bytes with a number that is not a byte."
-case = "../../../cases/modules/stdlib/fault_from_bytes.cml"
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.from_bytes.opt"
-desc = "The same through std::opt."
-case = "../../../cases/modules/stdlib/fault_from_bytes.cml"
-backends = false
-args = ["${case}", "std::opt", "std::fvm"]
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
-name = "stdlib.fault.from_bytes_utf8"
-desc = "from_bytes with bytes that are not valid UTF-8: a string is always valid UTF-8 (11.1), so this is a fault here."
-case = "../../../cases/modules/stdlib/fault_from_bytes_utf8.cml"
-expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
-expect_diagnostic_line = 7
-
-[[tests]]
 name = "stdlib.fault.index_char"
 desc = "A string index past the last character (counted in code points, not bytes)."
 case = "../../../cases/modules/stdlib/fault_string_index.cml"

@@ -24,24 +24,24 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 30000
 
 [[tests]]
-name = "stdlib.str_bytes"
-desc = "The str module (code points): split, trim, case, replace, find, substr, starts_with/ends_with, repeat, bytes/from_bytes and indexing, with empty strings and non-ASCII text."
-case = "../../../cases/modules/stdlib/str_bytes.cml"
-golden = "golden/stdlib/str_bytes.txt"
+name = "stdlib.str_unicode"
+desc = "The str module (code points): split, trim, case, replace, find, substr, starts_with/ends_with, repeat, the UTF-8 bytes of a string through bytes::encode/decode, and indexing, with empty strings and non-ASCII text."
+case = "../../../cases/modules/stdlib/str_unicode.cml"
+golden = "golden/stdlib/str_unicode.txt"
 
 [[tests]]
-name = "stdlib.str_bytes.inline_opt"
+name = "stdlib.str_unicode.inline_opt"
 desc = "The same through std::opt::inline std::opt."
-case = "../../../cases/modules/stdlib/str_bytes.cml"
-golden = "golden/stdlib/str_bytes.txt"
+case = "../../../cases/modules/stdlib/str_unicode.cml"
+golden = "golden/stdlib/str_unicode.txt"
 backends = false
 args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 
 [[tests]]
-name = "stdlib.str_bytes.macro_opt"
+name = "stdlib.str_unicode.macro_opt"
 desc = "The same through std::macro std::opt."
-case = "../../../cases/modules/stdlib/str_bytes.cml"
-golden = "golden/stdlib/str_bytes.txt"
+case = "../../../cases/modules/stdlib/str_unicode.cml"
+golden = "golden/stdlib/str_unicode.txt"
 backends = false
 args = ["${case}", "std::macro", "std::opt", "std::nvm"]
 

@@ -1,0 +1,12 @@
+module bytes_invalid_utf8
+
+import { decode, from_array } from bytes
+
+func main(): int sync {
+    // A string is always valid UTF-8 (design principles 11.1): decoding malformed bytes is an
+    // error value the program handles, not a fault. The retired `str::from_bytes` faulted here.
+    println('before')
+    println(decode(from_array([255])) !! 'invalid UTF-8')
+    println('after')
+    return 0
+}

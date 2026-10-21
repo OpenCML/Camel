@@ -317,6 +317,7 @@ cd2479e5aabb7c48 ok stdlib/array.cml
 f8a426c8e96936da ok stdlib/bytes.cml
 173076cd43673a6b ok stdlib/perf.cml
 dc425a313698f684 ok stdlib/rules.cml
+1c94db09ee5e88dd ok stdlib/str.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 0539c1402fbe163c ok stdlib/signatures/algo.cml
 ba50ff52809dea87 ok stdlib/signatures/crypto.cml
@@ -781,6 +782,8 @@ a08398ab5e4ba3b7 ok test/cases/compile/native/bytes_type.cml
 56df9aa3996cbbf9 ok test/cases/compile/native/generic_module.cml
 c7fe2aa20c0b534e ok test/cases/compile/native/missing.cml
 627cb2d4cbd33d70 ok test/cases/compile/native/missing_module.cml
+cbd832547e7cdf8d ok test/cases/compile/native/retired_str_bytes.cml
+bcac67bf72834a87 ok test/cases/compile/native/retired_str_from_bytes.cml
 6ff823b21e5dd2c8 no test/cases/compile/not_supported/is_operator.cml
 3292f35f88354816 ok test/cases/compile/not_supported/list_comprehension.cml
 2ca92d4290a1bd4b no test/cases/compile/not_supported/non_null_assert.cml
@@ -1388,6 +1391,8 @@ f350a6371bce7def ok test/cases/loops/state_in_place_multi.cml
 09531a936b6bca82 ok test/cases/loops/struct_state.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 de8066e46383fc72 ok test/cases/macro/hof_calls.cml
+37bacc6296bd0894 ok test/cases/modules/bytes_fault_from_array.cml
+f093be1165f5db33 ok test/cases/modules/bytes_invalid_utf8.cml
 c96746199ab07fa4 ok test/cases/modules/bytes_text_reject.cml
 14de4ac15fcb6436 ok test/cases/modules/bytes_values.cml
 f5599ee347287b8f ok test/cases/modules/fs_binary_roundtrip.cml
@@ -1704,8 +1709,6 @@ d8f60aa811873668 ok test/cases/modules/std/time/basic.cml
 8eee2c6eeefc9418 ok test/cases/modules/stdlib/array_large.cml
 53818e9878cd3cef ok test/cases/modules/stdlib/fault_clamp_bounds.cml
 8aa310af01dbb69c ok test/cases/modules/stdlib/fault_clamp_nan.cml
-f60be76fa3b57bbc ok test/cases/modules/stdlib/fault_from_bytes.cml
-e66d4822c4489882 ok test/cases/modules/stdlib/fault_from_bytes_utf8.cml
 9a32b29e918ac3dd ok test/cases/modules/stdlib/fault_gcd_overflow.cml
 54f5a83e59294c68 ok test/cases/modules/stdlib/fault_index.cml
 f7f77e4c03838b5e ok test/cases/modules/stdlib/fault_index_empty.cml
@@ -1730,9 +1733,9 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 3f28469678d9fa41 ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
-bc5627b4036b601d ok test/cases/modules/stdlib/str_bytes.cml
-cfdb5f3595780ad0 ok test/cases/modules/stdlib/str_chars.cml
-6d6753ca828a2b4d ok test/cases/modules/stdlib/utf8_string.cml
+f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml
+3aac282218ea4cf9 ok test/cases/modules/stdlib/str_unicode.cml
+8717cbfb689244c6 ok test/cases/modules/stdlib/utf8_string.cml
 47e9377b7e730e0b ok test/cases/modules/tensor/argmax_ieee.cml
 0371d805dc801c23 ok test/cases/modules/tensor/binary_bool_error.cml
 2e93d94409351b15 ok test/cases/modules/tensor/binary_bytes.cml

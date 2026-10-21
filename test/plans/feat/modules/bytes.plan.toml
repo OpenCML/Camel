@@ -20,3 +20,41 @@ args = ["${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["invalid UTF-8 at byte 0", "use read_bytes for binary data"]
 timeout_ms = 10000
+
+# The fault the retired `str::from_bytes` raised for a number outside 0..255 is `bytes::from_array`'s
+# (handover H122). What changed is the other half of the pair: malformed UTF-8 used to be a fault
+# in `str::from_bytes`; `bytes::decode` returns it as an error value (design principles 3.9).
+
+[[tests]]
+name = "from_array_rejects_non_byte"
+desc = "from_array with a number that is not a byte: the same InvalidArgument fault the retired `str::from_bytes` raised, at the same place."
+kind = "negative"
+case = "../../../cases/modules/bytes_fault_from_array.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+expect_output_not_contains = ["not reached"]
+timeout_ms = 10000
+
+[[tests]]
+name = "from_array_rejects_non_byte.opt"
+desc = "The same through std::opt."
+kind = "negative"
+case = "../../../cases/modules/bytes_fault_from_array.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::InvalidArgument"
+expect_diagnostic_line = 7
+expect_output_not_contains = ["not reached"]
+timeout_ms = 10000
+
+[[tests]]
+name = "decode_malformed_utf8_is_an_error_value"
+desc = "Malformed UTF-8 is a value-level decoding error, not a fault: the program runs on past it. The retired `str::from_bytes` faulted on the same bytes."
+kind = "behavior"
+case = "../../../cases/modules/bytes_invalid_utf8.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "before\ninvalid UTF-8\nafter\n"
+timeout_ms = 10000

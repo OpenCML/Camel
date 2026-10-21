@@ -41,8 +41,8 @@ repeat [ababab] 6
 repeat zero [] 0
 repeat empty [] 0
 [104, 195, 169] [] 3
-from_bytes [hi] 2
-from_bytes empty [] 0
+decode [hi] 2
+decode empty [] 0
 round trip [héllo €] 7
 3 [104, 0, 105]
 中 1

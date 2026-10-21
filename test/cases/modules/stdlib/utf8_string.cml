@@ -4,8 +4,8 @@
  */
 module utf8_string
 
-import { split, trim, replace, find, substr, starts_with, repeat, bytes, from_bytes, codepoints, to_upper } from str
-import { encode, decode, size } from bytes
+import { split, trim, replace, find, substr, starts_with, repeat, codepoints, to_upper } from str
+import { encode, decode, from_array, size } from bytes
 import { sha256 } from crypto
 import { test } from re
 
@@ -22,10 +22,10 @@ func main(): int sync {
     println('[{:>4}][{:<4}][{:^5}][{:*^6}][{:.2}]'->format<'中', '文', 'ab', '😀', '中文😀'>)
     println('[{:>6}][{}]'->format<'é', '中'>)
 
-    // the bytes of a string, and back
+    // the bytes of a string, and back: `bytes::encode` and `bytes::decode` are the one conversion
     let b = encode(s)
-    println(size(b), bytes(s)->len, decode(b) !! 'bad')
-    println(from_bytes(bytes('héllo')), len(from_bytes([228, 184, 173])))
+    println(size(b), size(encode(s)), decode(b) !! 'bad')
+    println(decode(encode('héllo')) !! 'bad', len(decode(from_array([228, 184, 173])) !! 'bad'))
     println(codepoints(s))
     println(sha256('abc') == sha256(encode('abc')), sha256('中') == sha256(encode('中')))
 

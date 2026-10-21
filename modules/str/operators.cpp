@@ -253,37 +253,6 @@ slot_t __str_repeat__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return makeString(out);
 }
 
-slot_t __str_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    const std::string s = textOf(norm, 0);
-    std::vector<Int64> values(s.size());
-    for (size_t i = 0; i < s.size(); ++i)
-        values[i] = static_cast<uint8_t>(s[i]);
-    return makeIntArray(values);
-}
-
-slot_t __str_from_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Array *arr = norm.get<Array *>(0);
-    std::string out(arr->size(), '\0');
-    for (size_t i = 0; i < arr->size(); ++i) {
-        const Int64 value = arr->get<Int64>(i);
-        if (value < 0 || value > 255) {
-            throwRuntimeFault(
-                RuntimeDiag::InvalidArgument,
-                "str.from_bytes",
-                std::format("element {} is {}, not a byte (0 to 255)", i, value));
-        }
-        out[i] = static_cast<char>(static_cast<uint8_t>(value));
-    }
-    // A string is always valid UTF-8 (design principles 11.1): the bytes must be.
-    if (const size_t bad = camel::utf8::invalidOffset(out); bad != camel::utf8::npos) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "str.from_bytes",
-            std::format("the bytes are not valid UTF-8 (byte {} starts an invalid sequence)", bad));
-    }
-    return makeString(out);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Code points as numbers.
 // ---------------------------------------------------------------------------------------------
@@ -336,8 +305,6 @@ std::unordered_map<std::string, operator_t> getStrOpsMap() {
         {"starts_with", __str_starts_with__},
         {"ends_with", __str_ends_with__},
         {"repeat", __str_repeat__},
-        {"bytes", __str_bytes__},
-        {"from_bytes", __str_from_bytes__},
         {"codepoints", __str_codepoints__},
         {"from_codepoints", __str_from_codepoints__},
     };
