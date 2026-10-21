@@ -46,6 +46,8 @@
 
 #include <atomic>
 #include <cctype>
+#include <functional>
+#include <map>
 #include <numeric>
 #define DEBUG_LEVEL -1
 
@@ -135,6 +137,143 @@ bool isEmptyArrayLiteral(node_handle_t node) {
         return false;
     }
     return withInputsOf(node).empty();
+}
+
+/// Whether a value of this type is a struct or tuple whose parts can be the components of a
+/// loop state (H71). A cell and the tagged forms are representations, not collections of values:
+/// their parts are not independent values of the programme.
+bool isSplittableAggregate(const Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == TypeCode::Struct) {
+        const auto *strct = tt::as_ptr<const StructType>(type);
+        return strct->resolved() && strct->size() > 0;
+    }
+    if (type->code() == TypeCode::Tuple) {
+        const auto *tuple = tt::as_ptr<const TupleType>(type);
+        return tuple->resolved() && tuple->size() > 0 && !tuple->isCell() && !tuple->isTagged();
+    }
+    return false;
+}
+
+size_t aggregatePartCount(const Type *type) {
+    if (type->code() == TypeCode::Struct) {
+        return tt::as_ptr<const StructType>(type)->size();
+    }
+    return tt::as_ptr<const TupleType>(type)->size();
+}
+
+Type *aggregatePartType(const Type *type, size_t index) {
+    if (type->code() == TypeCode::Struct) {
+        return tt::as_ptr<const StructType>(type)->typeAt(index);
+    }
+    return tt::as_ptr<const TupleType>(type)->typeAt(index);
+}
+
+std::string aggregatePartName(const Type *type, size_t index) {
+    if (type->code() == TypeCode::Struct) {
+        return std::string(tt::as_ptr<const StructType>(type)->fieldName(index));
+    }
+    return std::to_string(index);
+}
+
+/// The part of `type` an ACCS node reads, when it reads one: `s.x` of a struct, `t.0` of a
+/// tuple, of exactly the part's type.
+std::optional<size_t> accessedPartOf(node_handle_t node, const Type *type) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Accs) || type == nullptr) {
+        return std::nullopt;
+    }
+    const auto norm = normInputsOf(node);
+    if (norm.size() != 1) {
+        return std::nullopt;
+    }
+    const auto payload = nodeDraftOf(node)->payloadOf(nodeIdOf(node));
+    if (payload.size() < sizeof(runtime::GCAccsBody)) {
+        return std::nullopt;
+    }
+    const auto *body = reinterpret_cast<const runtime::GCAccsBody *>(payload.data());
+    size_t index     = 0;
+    if (type->code() == TypeCode::Struct) {
+        if (body->accsKind != runtime::GCAccsKind::StructKey) {
+            return std::nullopt;
+        }
+        const auto field = tt::as_ptr<const StructType>(type)->findField(body->key());
+        if (!field.has_value()) {
+            return std::nullopt;
+        }
+        index = *field;
+    } else if (type->code() == TypeCode::Tuple) {
+        if (body->accsKind != runtime::GCAccsKind::TupleIndex ||
+            body->value >= tt::as_ptr<const TupleType>(type)->size()) {
+            return std::nullopt;
+        }
+        index = body->value;
+    } else {
+        return std::nullopt;
+    }
+    Type *part = aggregatePartType(type, index);
+    Type *read = valueTypeOf(nodeTypeOf(node));
+    if (part == nullptr || read == nullptr || (read != part && !read->equals(part))) {
+        return std::nullopt;
+    }
+    return index;
+}
+
+/// The next value of the part `step` of `value` (`value` is a struct or tuple FILL, or any value
+/// of that type). A FILL's parts are its With inputs, which is what lets an `append` among them
+/// keep growing the state's array in place; a part the FILL does not write is read from it.
+node_handle_t projectPart(node_handle_t value, const Type *type, size_t step) {
+    if (value == nullptr || type == nullptr) {
+        return nullptr;
+    }
+    node_handle_t source = value;
+    // A gate forwards its value unchanged; an identity CAST between two spellings of the same
+    // struct layout does not move a field (design principles 5.2). Both are looked through, so
+    // that a struct written in a `sync` body or under a named type still gives its parts.
+    for (size_t depth = 0; depth < 16; ++depth) {
+        if (nodeIsKind(source, runtime::GCNodeKind::Gate)) {
+            const auto inputs = normInputsOf(source);
+            if (inputs.size() != 1) {
+                break;
+            }
+            source = nodeDraftOf(source)->ref(inputs.front());
+            continue;
+        }
+        if (nodeIsKind(source, runtime::GCNodeKind::Cast)) {
+            const auto inputs = normInputsOf(source);
+            Type *from        = inputs.empty() ? nullptr
+                                               : valueTypeOf(nodeTypeOf(nodeDraftOf(source)->ref(inputs.front())));
+            Type *to          = valueTypeOf(nodeTypeOf(source));
+            if (inputs.size() == 1 && from != nullptr && to != nullptr &&
+                from->code() == TypeCode::Struct && to->code() == TypeCode::Struct &&
+                to->castSafetyFrom(from) == CastSafety::Safe) {
+                source = nodeDraftOf(source)->ref(inputs.front());
+                continue;
+            }
+        }
+        break;
+    }
+    if (nodeIsKind(source, runtime::GCNodeKind::Fill)) {
+        const auto payload = nodeDraftOf(source)->payloadOf(nodeIdOf(source));
+        if (payload.size() >= sizeof(runtime::GCFillBody)) {
+            const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
+            const bool structFill = fill->fillKind == runtime::GCFillKind::Struct &&
+                                    type->code() == TypeCode::Struct;
+            const bool tupleFill = fill->fillKind == runtime::GCFillKind::Tuple &&
+                                   type->code() == TypeCode::Tuple;
+            if (structFill || tupleFill) {
+                const auto slots = fill->slots();
+                const auto with  = withInputsOf(source);
+                for (size_t i = 0; i < slots.size() && i < with.size(); ++i) {
+                    if (slots[i] == step) {
+                        return nodeDraftOf(source)->ref(with[i]);
+                    }
+                }
+            }
+        }
+    }
+    return nullptr;
 }
 
 /// The exact value of a literal primitive datum: an integer or a real. A literal element
@@ -1933,6 +2072,14 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     Type *stateType =
         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
 
+    // The names of the state's components. They are the state's one name until H71 splits a
+    // struct state into its parts; then they are the paths of those parts (`s.inner.x`), which
+    // is what the graph shows and the diagnostics name.
+    std::vector<std::string> stateNames(k);
+    for (size_t j = 0; j < k; ++j) {
+        stateNames[j] = gct->loopStateName(j);
+    }
+
     // The condition and the body are regions of the current graph, built where they are
     // written. Their ports (the element, the values of the state) are Port nodes of the graph
     // that are not its parameters; the captured values are read where they are.
@@ -1943,7 +2090,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         for (size_t i = 0; i < part.ports.size(); ++i) {
             const size_t state = i - (withElement ? 1 : 0);
             const std::string &name =
-                withElement && i == 0 ? gct->loopElementName() : gct->loopStateName(state);
+                withElement && i == 0 ? gct->loopElementName() : stateNames[state];
             ids.push_back(nodeIdOf(part.ports[i]));
             params.addNormArg(name, nodeTypeOf(part.ports[i]), false);
         }
@@ -1967,7 +2114,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             add(gct->loopElementName(), elementType);
         }
         for (size_t j = 0; j < k; ++j) {
-            add(gct->loopStateName(j), stateTypes[j]);
+            add(stateNames[j], stateTypes[j]);
         }
         refreshPorts(part, withElement);
     };
@@ -2028,14 +2175,326 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    markLoopStateInPlace(bodyPart, gct, initial);
+    // H71: a struct's fields are the loop state's components. When the state is one struct (or
+    // one tuple) and the whole value never escapes the loop's parts -- every use of the state,
+    // in the body and in the condition, is a part access -- the parts of that value become the
+    // state's components, as if the loop had declared one state per part. The body hands back a
+    // tuple of their next values, and the struct is rebuilt once, after the loop.
+    //
+    // What this buys is the in-place guarantee of design principles 10.5 for an array field: the
+    // field is a state of its own, so `s.xs->append<v>` grows the loop's own array each round
+    // instead of copying the struct's array. A part that never changes is still handed on, and
+    // nothing observable changes: an array part is copied once when the loop is entered, and the
+    // struct a user sees is the one built at the end. A body that uses the struct as a whole (a
+    // call, a branch, `return s`) is left alone.
+    struct SplitPart {
+        Type *type = nullptr;
+        std::vector<size_t> steps;
+        std::string name;
+        bool split = false;
+        std::vector<node_handle_t> bodyNodes;
+        std::vector<node_handle_t> condNodes;
+        std::vector<SplitPart> children;
+        size_t component = 0;
+    };
+    SplitPart splitRoot;
+    std::vector<SplitPart *> splitComponents;
+    bool splitApplied = false;
+    Type *splitValueType = nullptr;
+    std::vector<bool> privateInitial;
+
+    // A part access (`s.x`, `t.0`) of the value a node holds; added to the insert region.
+    const auto addPartAccess = [&](Type *type,
+                                   node_handle_t value,
+                                   size_t step) -> node_handle_t {
+        Type *partType = aggregatePartType(type, step);
+        node_handle_t access =
+            type->code() == TypeCode::Struct
+                ? currGraph_->addAccsNode(partType, aggregatePartName(type, step))
+                : currGraph_->addAccsNode(partType, static_cast<uint32_t>(step));
+        linkNodes(LinkType::Norm, value, access);
+        registerNodeOrigin(context_, access, gct, "gir.loop.split");
+        return access;
+    };
+
+    const auto splitStructState = [&]() -> bool {
+        if (k != 1 || stateTypes.size() != 1 || bodyPart->returned || bodyPart->value == nullptr ||
+            bodyPart->output == nullptr || !isSplittableAggregate(stateType)) {
+            return false;
+        }
+        runtime::GraphDraft &draft  = currGraph_->draft();
+        const size_t statePortAt    = camel::core::loopHasIterable(kind) ? 1 : 0;
+        if (bodyPart->ports.size() != statePortAt + 1) {
+            return false;
+        }
+        if (condPart != nullptr && condPart->ports.size() != 1) {
+            return false;
+        }
+        const node_handle_t bodyStatePort = bodyPart->ports[statePortAt];
+        const node_handle_t condStatePort =
+            condPart != nullptr ? condPart->ports.front() : nullptr;
+
+        std::function<bool(
+            SplitPart &, const std::vector<node_handle_t> &, const std::vector<node_handle_t> &)>
+            buildPart;
+        buildPart = [&](SplitPart &part,
+                        const std::vector<node_handle_t> &bodyNodes,
+                        const std::vector<node_handle_t> &condNodes) -> bool {
+            part.bodyNodes = bodyNodes;
+            part.condNodes = condNodes;
+            if (!isSplittableAggregate(part.type) || (bodyNodes.empty() && condNodes.empty())) {
+                return true; // a component, or a part nothing reads: kept whole
+            }
+            // Every use has to be a part access. One use of the whole value (as a call's
+            // argument, a branch's arm, another struct) makes the parts inseparable, so this
+            // part stays whole and the split stops here.
+            std::map<size_t, std::vector<node_handle_t>> bodyUses;
+            std::map<size_t, std::vector<node_handle_t>> condUses;
+            std::vector<node_handle_t> all = bodyNodes;
+            all.insert(all.end(), condNodes.begin(), condNodes.end());
+            for (node_handle_t source : all) {
+                for (const auto users : {normUsersOf(source), withUsersOf(source)}) {
+                    for (draft_node_ref_t userRef : users) {
+                        node_handle_t user = nodeDraftOf(source)->ref(userRef);
+                        if (user == nullptr) {
+                            return true;
+                        }
+                        const auto index  = accessedPartOf(user, part.type);
+                        const auto norms  = normInputsOf(user);
+                        if (!index.has_value() || norms.size() != 1 ||
+                            nodeDraftOf(user)->ref(norms.front()) != source) {
+                            return true;
+                        }
+                        const uint32_t region = draft.nodeRegion(nodeIdOf(user));
+                        std::map<size_t, std::vector<node_handle_t>> *uses = nullptr;
+                        if (draft.regionWithin(region, bodyPart->region)) {
+                            uses = &bodyUses;
+                        } else if (condPart != nullptr &&
+                                   draft.regionWithin(region, condPart->region)) {
+                            uses = &condUses;
+                        } else {
+                            return true;
+                        }
+                        auto &list = (*uses)[*index];
+                        if (std::find(list.begin(), list.end(), user) == list.end()) {
+                            list.push_back(user);
+                        }
+                    }
+                }
+            }
+            part.split         = true;
+            const size_t count = aggregatePartCount(part.type);
+            for (size_t i = 0; i < count; ++i) {
+                SplitPart child;
+                child.type  = aggregatePartType(part.type, i);
+                child.steps = part.steps;
+                child.steps.push_back(i);
+                const std::string stepName = aggregatePartName(part.type, i);
+                child.name = part.name.empty() ? stepName : part.name + "." + stepName;
+                const auto bodyIt = bodyUses.find(i);
+                const auto condIt = condUses.find(i);
+                const std::vector<node_handle_t> none;
+                if (!buildPart(
+                        child,
+                        bodyIt == bodyUses.end() ? none : bodyIt->second,
+                        condIt == condUses.end() ? none : condIt->second)) {
+                    return false;
+                }
+                part.children.push_back(std::move(child));
+            }
+            return true;
+        };
+
+        const Type *rootStateType = stateType;
+        splitRoot.type            = stateType;
+        splitRoot.name            = stateNames.front();
+        splitRoot.steps.clear();
+        splitRoot.children.clear();
+        splitRoot.split = false;
+        const std::vector<node_handle_t> noCond;
+        const std::vector<node_handle_t> condRoot =
+            condStatePort != nullptr ? std::vector<node_handle_t>{condStatePort} : noCond;
+        if (!buildPart(splitRoot, {bodyStatePort}, condRoot) || !splitRoot.split) {
+            return false;
+        }
+        splitComponents.clear();
+        std::function<void(SplitPart &)> collectParts = [&](SplitPart &part) {
+            if (!part.split) {
+                part.component = splitComponents.size();
+                splitComponents.push_back(&part);
+                return;
+            }
+            for (SplitPart &child : part.children) {
+                collectParts(child);
+            }
+        };
+        collectParts(splitRoot);
+        if (splitComponents.empty()) {
+            return false;
+        }
+        std::vector<Type *> leafTypes;
+        for (SplitPart *component : splitComponents) {
+            leafTypes.push_back(component->type);
+        }
+        Type *valueType =
+            leafTypes.size() == 1 ? leafTypes.front() : TupleType::create(leafTypes);
+
+        const uint32_t outerRegion = draft.insertRegion();
+
+        // The body's ports: the element, then one port per component, in the same order as the
+        // states. The old state port goes; nothing but the accesses of its parts read it.
+        draft.setInsertRegion(bodyPart->region);
+        std::vector<node_handle_t> bodyPorts(bodyPart->ports.begin(), bodyPart->ports.end());
+        bodyPorts.erase(bodyPorts.begin() + static_cast<std::ptrdiff_t>(statePortAt));
+        std::vector<node_handle_t> bodyComponentPorts;
+        for (SplitPart *component : splitComponents) {
+            node_handle_t port = currGraph_->addRegionPortNode(component->type, component->name);
+            draft.setNodeRegion(nodeIdOf(port), bodyPart->region);
+            bodyComponentPorts.push_back(port);
+            bodyPorts.push_back(port);
+        }
+        bodyPart->ports = bodyPorts;
+        std::vector<node_handle_t> condComponentPorts;
+        if (condPart != nullptr) {
+            std::vector<node_handle_t> condPorts(condPart->ports.begin(), condPart->ports.end());
+            condPorts.erase(condPorts.begin());
+            for (SplitPart *component : splitComponents) {
+                node_handle_t port = currGraph_->addRegionPortNode(component->type, component->name);
+                draft.setNodeRegion(nodeIdOf(port), condPart->region);
+                condComponentPorts.push_back(port);
+                condPorts.push_back(port);
+            }
+            condPart->ports = condPorts;
+        }
+
+        // The next value of each component, worked out from the body's next struct: a part of a
+        // struct FILL is the value written there (so an `append` stays the next state itself,
+        // and can grow in place); a part the FILL does not write, or a struct given by another
+        // value (a call, a branch), is read from it.
+        std::vector<node_handle_t> nextValues(splitComponents.size(), nullptr);
+        std::function<void(const SplitPart &, node_handle_t, bool)> assignNext;
+        assignNext = [&](const SplitPart &part, node_handle_t value, bool unchanged) {
+            if (!part.split) {
+                nextValues[part.component] = unchanged ? nullptr : value;
+                return;
+            }
+            bool same = unchanged || value == nullptr;
+            for (node_handle_t node : part.bodyNodes) {
+                if (node == value) {
+                    same = true;
+                    break;
+                }
+            }
+            for (const SplitPart &child : part.children) {
+                const size_t step = child.steps.back();
+                node_handle_t childValue = nullptr;
+                if (!same) {
+                    childValue = projectPart(value, part.type, step);
+                    if (childValue == nullptr) {
+                        childValue = addPartAccess(part.type, value, step);
+                    }
+                }
+                assignNext(child, childValue, same);
+            }
+        };
+        assignNext(splitRoot, bodyPart->value, false);
+
+        std::vector<node_handle_t> resolved;
+        for (size_t i = 0; i < splitComponents.size(); ++i) {
+            resolved.push_back(
+                nextValues[i] != nullptr ? nextValues[i] : bodyComponentPorts[i]);
+        }
+        node_handle_t result = nullptr;
+        if (splitComponents.size() == 1) {
+            result = resolved.front();
+        } else {
+            const size_t count = resolved.size();
+            std::vector<size_t> slots(count);
+            std::iota(slots.begin(), slots.end(), size_t{0});
+            result = currGraph_->addFillNode(
+                valueType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+            const slot_t empty = camel::core::rtdata::toSlot(
+                ::Tuple::create(count, camel::core::mm::autoSpace()));
+            node_handle_t source =
+                draft.ref(draft.materializeStaticValue(empty, valueType));
+            linkNodes(LinkType::Norm, source, result);
+            for (node_handle_t value : resolved) {
+                linkNodes(LinkType::With, value, result);
+            }
+            registerNodeOrigin(context_, result, gct->loopBody(), "gir.loop.split");
+        }
+        if (bodyPart->output != bodyPart->value) {
+            // A `sync` body's effects are ordered by the gate around the old value; the new
+            // state comes after them.
+            linkNodes(LinkType::Ctrl, bodyPart->output, result);
+        }
+        bodyPart->output = result;
+        bodyPart->value  = result;
+        bodyPart->type   = valueType;
+        draft.setRegionResult(bodyPart->region, nodeIdOf(result));
+
+        // The loop starts from the parts of its first value. The accesses are made outside the
+        // loop (the insert region is the one around it).
+        draft.setInsertRegion(outerRegion);
+        std::vector<node_handle_t> projections;
+        projections.reserve(splitComponents.size());
+        for (SplitPart *component : splitComponents) {
+            node_handle_t value = initial.front();
+            Type *current      = const_cast<Type *>(rootStateType);
+            for (size_t step : component->steps) {
+                value   = addPartAccess(current, value, step);
+                current = aggregatePartType(current, step);
+            }
+            projections.push_back(value);
+        }
+
+        // The reads of the old state are now reads of its parts. This is done after the next
+        // values are written: a next value that is a read of the state (`n: s.n`) becomes the
+        // part itself, which is the value it had.
+        for (size_t i = 0; i < splitComponents.size(); ++i) {
+            for (node_handle_t node : splitComponents[i]->bodyNodes) {
+                draft.replaceAllValueUses(nodeIdOf(node), nodeIdOf(bodyComponentPorts[i]));
+            }
+            for (node_handle_t node : splitComponents[i]->condNodes) {
+                draft.replaceAllValueUses(nodeIdOf(node), nodeIdOf(condComponentPorts[i]));
+            }
+        }
+
+        stateTypes = std::move(leafTypes);
+        stateNames.clear();
+        for (SplitPart *component : splitComponents) {
+            stateNames.push_back(component->name);
+        }
+        initial       = std::move(projections);
+        privateInitial.assign(splitComponents.size(), false);
+        for (size_t i = 0; i < splitComponents.size(); ++i) {
+            privateInitial[i] = splitComponents[i]->type != nullptr &&
+                                splitComponents[i]->type->code() == TypeCode::Array;
+        }
+        stateType        = valueType;
+        splitValueType   = valueType;
+        splitApplied     = true;
+        refreshPorts(*bodyPart, hasIterable);
+        if (condPart != nullptr) {
+            refreshPorts(*condPart, false);
+        }
+        return true;
+    };
+    splitStructState();
+    if (splitApplied) {
+        // The empty-array collection is a slot beside one state; a struct state's parts are not
+        // empty literals, so there is nothing to collect once it is split.
+        emptyInitial.assign(stateTypes.size(), false);
+    }
+
+    markLoopStateInPlace(bodyPart, gct, initial, privateInitial);
     // An empty-array state whose only use is `append` also becomes a collection slot: the loop
     // then hands out the appended values as one array, built by the driver in one pass, beside
     // the state the program sees (design principles 3.10; the tape autodiff and the exporter
     // read). The state stays the program's value and its gradient channel; the slot is
     // internal, and the FILL below hides it from the loop's users.
     const std::vector<Type *> collected = collectLoopAppends(bodyPart, gct, stateTypes, emptyInitial);
-    Type *loopValueType                  = stateType;
+    Type *loopValueType = splitApplied ? splitValueType : stateType;
     if (!collected.empty()) {
         std::vector<Type *> components = stateTypes;
         for (Type *element : collected) {
@@ -2118,26 +2577,76 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     // collections to autodiff and the exporter.
     node_handle_t loopValue = loopNode;
     if (!collected.empty()) {
-        if (k == 1) {
+        if (stateTypes.size() == 1) {
             loopValue = currGraph_->addAccsNode(stateType, 0);
             linkNodes(LinkType::Norm, loopNode, loopValue);
             registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
         } else {
-            std::vector<size_t> slots(k);
+            std::vector<size_t> slots(stateTypes.size());
             std::iota(slots.begin(), slots.end(), size_t{0});
             loopValue = currGraph_->addFillNode(
                 stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-            const slot_t empty = camel::core::rtdata::toSlot(::Tuple::create(k, camel::core::mm::autoSpace()));
+            const slot_t empty = camel::core::rtdata::toSlot(::Tuple::create(stateTypes.size(), camel::core::mm::autoSpace()));
             node_handle_t source = currGraph_->draft().ref(
                 currGraph_->draft().materializeStaticValue(empty, stateType));
             linkNodes(LinkType::Norm, source, loopValue);
-            for (size_t j = 0; j < k; ++j) {
+            for (size_t j = 0; j < stateTypes.size(); ++j) {
                 node_handle_t component = currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
                 linkNodes(LinkType::Norm, loopNode, component);
                 linkNodes(LinkType::With, component, loopValue);
             }
             registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
         }
+    }
+    if (splitApplied) {
+        // The programme sees the struct, not its parts: it is rebuilt from the loop's value,
+        // once, in the layout of the type the state had (nested structs included). Nothing of
+        // the loop's own arrays is copied here; the parts are read out of the loop's value.
+        std::vector<node_handle_t> componentValues(splitComponents.size(), nullptr);
+        for (size_t j = 0; j < splitComponents.size(); ++j) {
+            if (splitComponents.size() == 1) {
+                componentValues[j] = loopValue;
+                continue;
+            }
+            node_handle_t access =
+                currGraph_->addAccsNode(splitComponents[j]->type, static_cast<uint32_t>(j));
+            linkNodes(LinkType::Norm, loopValue, access);
+            registerNodeOrigin(context_, access, gct, "gir.loop.value");
+            componentValues[j] = access;
+        }
+        std::function<node_handle_t(const SplitPart &)> rebuildPart =
+            [&](const SplitPart &part) -> node_handle_t {
+            if (!part.split) {
+                return componentValues[part.component];
+            }
+            std::vector<node_handle_t> values;
+            for (const SplitPart &child : part.children) {
+                values.push_back(rebuildPart(child));
+            }
+            const size_t count = values.size();
+            std::vector<size_t> slots(count);
+            std::iota(slots.begin(), slots.end(), size_t{0});
+            const bool isStruct = part.type->code() == TypeCode::Struct;
+            node_handle_t fill   = currGraph_->addFillNode(
+                part.type,
+                runtime::makeFillPayload(
+                    isStruct ? runtime::GCFillKind::Struct : runtime::GCFillKind::Tuple, slots));
+            const slot_t empty =
+                isStruct
+                    ? camel::core::rtdata::toSlot(
+                          ::Struct::create(count, camel::core::mm::autoSpace()))
+                    : camel::core::rtdata::toSlot(
+                          ::Tuple::create(count, camel::core::mm::autoSpace()));
+            node_handle_t source = currGraph_->draft().ref(
+                currGraph_->draft().materializeStaticValue(empty, part.type));
+            linkNodes(LinkType::Norm, source, fill);
+            for (node_handle_t value : values) {
+                linkNodes(LinkType::With, value, fill);
+            }
+            registerNodeOrigin(context_, fill, gct, "gir.loop.split");
+            return fill;
+        };
+        loopValue = rebuildPart(splitRoot);
     }
     LEAVE("LOOP");
     return loopValue;
@@ -2323,8 +2832,8 @@ bool Builder::inferLoopStateFromAppend(
 std::vector<Type *> Builder::collectLoopAppends(
     const arm_ptr_t &body, const GCT::node_ptr_t &loop, const std::vector<Type *> &stateTypes,
     const std::vector<bool> &emptyInitial) {
-    const size_t stateCount = loop->loopStateCount();
-    if (stateCount == 0 || stateTypes.size() != stateCount || body->returned) {
+    const size_t stateCount = stateTypes.size();
+    if (stateCount == 0 || emptyInitial.size() != stateCount || body->returned) {
         return {};
     }
     runtime::GraphDraft &draft = currGraph_->draft();
@@ -2446,7 +2955,8 @@ std::vector<Type *> Builder::collectLoopAppends(
 }
 
 void Builder::markLoopStateInPlace(
-    const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial) {
+    const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
+    const std::vector<bool> &privateInitial) {
     // The decision is per state, and only a state of these four properties is rewritten: the
     // state is an array, its first value is a literal (a Data or FILL node), its next value is
     // `state->append<v>`, and the body uses that state's port nowhere else. Anything else -- a
@@ -2454,8 +2964,11 @@ void Builder::markLoopStateInPlace(
     // also reads the state or ends in `return` -- keeps the copying `append`; the values are the
     // same either way, and only the allocation differs (10.5's in-place guarantee is about the
     // state's data block, not about a promise on the source).
-    const size_t stateCount = loop->loopStateCount();
-    if (stateCount == 0 || initial.size() != stateCount || body->returned) {
+    // A state that H71 split out of a struct is a component of the states the loop's parts
+    // declare, so the count is the initial values', not the LOOP node's names; its first value
+    // is a projection of the struct (a value the loop does not own) and is copied once.
+    const size_t stateCount = initial.size();
+    if (stateCount == 0 || body->returned) {
         return;
     }
     node_handle_t returned = loopStateValueOf(body->value);
@@ -2467,7 +2980,13 @@ void Builder::markLoopStateInPlace(
     // components and whose payload says which component each one fills; a component written as
     // a constant there (`(xs->append<7>, 0)`) has no value node and no rewrite of its own.
     if (stateCount == 1) {
-        markLoopStateInPlaceOne(body, loop, initial, 0, returned);
+        markLoopStateInPlaceOne(
+            body,
+            loop,
+            initial,
+            0,
+            returned,
+            !privateInitial.empty() && privateInitial[0]);
         return;
     }
     if (!nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
@@ -2498,19 +3017,27 @@ void Builder::markLoopStateInPlace(
         next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
     }
     for (size_t j = 0; j < stateCount; ++j) {
-        markLoopStateInPlaceOne(body, loop, initial, j, next[j]);
+        markLoopStateInPlaceOne(
+            body,
+            loop,
+            initial,
+            j,
+            next[j],
+            !privateInitial.empty() && j < privateInitial.size() && privateInitial[j]);
     }
 }
 
 void Builder::markLoopStateInPlaceOne(
     const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-    size_t index, node_handle_t next) {
+    size_t index, node_handle_t next, bool initialIsPrivate) {
     if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
         return;
     }
     // The first value has to be a literal: a name, a call or a projection can name an array
     // that something else also reads, and the loop is about to make its first value private.
-    if (!nodeIsKind(initial[index], runtime::GCNodeKind::Data) &&
+    // A component split out of a struct state (H71) is such a projection, and it is copied
+    // below because the struct it comes from is the program's, not the loop's.
+    if (!initialIsPrivate && !nodeIsKind(initial[index], runtime::GCNodeKind::Data) &&
         !nodeIsKind(initial[index], runtime::GCNodeKind::Fill)) {
         return;
     }
@@ -2572,7 +3099,8 @@ void Builder::markLoopStateInPlaceOne(
     }
     node_handle_t copy = currGraph_->addOperNode(*copyOp, 0);
     stampPermissions(copy);
-    registerNodeOrigin(context_, copy, loop->loopInitial(index), "gir.loop.copy");
+    const size_t initialAt = index < loop->loopStateCount() ? index : 0;
+    registerNodeOrigin(context_, copy, loop->loopInitial(initialAt), "gir.loop.copy");
     linkNodes(LinkType::Norm, initial[index], copy);
     initial[index] = copy;
     nodeGraphOf(next)->retargetOperNode(next, *owned);

@@ -11,8 +11,9 @@
 //   threeTyped   appends another state's old value: xs = [0, 0, 1, .., 198], count = 199,
 //                flip toggled 199 times (false), total 199 * 0.25 = 49.75
 //   growMixed    int[] and float[] (different element types): the last elements are 1 and 0.25
-//   growStruct   a struct state: its array field is appended, but the state is not an array, so
-//                every round copies (199 blocks); values are the same
+//   growStruct   a struct state: its fields are the loop's state components (H71), so the array
+//                field is a state of its own, appended in place (1 block at entry, none per
+//                round); values are the same
 //   growPairs    an array of structs: compact aggregate elements, appended in place (1 block)
 //   growFromElem a state that starts from an array element: the loop does not own it (199 blocks)
 //   peekOld(4)   the body reads the previous state (`len(xs)`) while writing the next: copy form,
