@@ -1051,7 +1051,7 @@ e1e169ed073c55e5 ok test/cases/consistency/values/tail_deep.cml
 47f632254922b577 ok test/cases/consistency/values/tail_mutual.cml
 578df1b0ce5442d6 ok test/cases/consistency/values/wait_order.cml
 502d2d473cc4a4e9 ok test/cases/consistency/values/with_params.cml
-7a250294764c09f9 ok test/cases/definitions/bad_definitions.cml
+06c3b5c40ca60348 ok test/cases/definitions/bad_definitions.cml
 af3630ffac4ff23b ok test/cases/definitions/broken_definitions.cml
 e74173f109a285b1 ok test/cases/definitions/check.cml
 b6fd085d2a312641 ok test/cases/definitions/grad.cml
