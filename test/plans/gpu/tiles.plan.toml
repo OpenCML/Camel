@@ -929,7 +929,9 @@ case = "../../cases/modules/tiles/extrema_bits.py"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: canonical extrema", "std::fvm: canonical extrema", "std::jit: canonical extrema"]
-timeout_ms = 60000
+# 15 subprocess runs; 10 s alone on an idle host, but the previous 60 s budget timed out in two
+# separate full sweeps on the shared host, so the budget covers a loaded one.
+timeout_ms = 180000
 
 [[tests]]
 name = "numeric_permission_boundaries"
@@ -1169,8 +1171,11 @@ tool = "python"
 case = "../../cases/modules/tiles/loop_multi_boundaries.py"
 args = ["${case}"]
 expect_exit = 0
+# The case now runs every backend to the end (it used to stop at the second one, where the
+# region-shape expectation failed), 16 subprocess runs in all; 114 s alone, and more under a
+# parallel sweep, so the budget covers the whole matrix.
 expect_stdout_contains = ["std::nvm: multi-state LOOP", "std::fvm: multi-state LOOP", "std::jit: multi-state LOOP", "std::prl: multi-state LOOP", "Multi-state LOOP graph: one region, selected downloads and CPU neighbor regions PASS"]
-timeout_ms = 180000
+timeout_ms = 360000
 
 [[tests]]
 name = "core_view_maps"
@@ -1179,6 +1184,9 @@ kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/core_views.py"
 args = ["${case}"]
+# The case binds grad(loss) outside the wrapper it hands to run<f>: a loss that captures a
+# value is not macro-static, so the transform stays a runtime operator, and tiles::run has no
+# CPU fallback for an operator it cannot lower.
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: core views exact bits", "std::fvm: core views exact bits", "std::jit: core views exact bits", "std::prl: core views exact bits"]
 timeout_ms = 180000
