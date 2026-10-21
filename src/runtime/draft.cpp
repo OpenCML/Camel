@@ -369,19 +369,12 @@ std::span<const std::byte> GraphDraft::payloadOf(const DraftNode *nodePtr) const
     return containsNode(nodePtr) ? DraftNodeView::payload(nodePtr) : std::span<const std::byte>{};
 }
 
-std::span<const GCBranchArm> GraphDraft::branchArmsOf(gc_node_ref_t id) const {
+gc_cnt_t GraphDraft::armCountOf(gc_node_ref_t id) const {
     const DraftNode *draftNode = node(id);
     if (draftNode == nullptr || draftNode->header.kind != GCNodeKind::Brch) {
-        return {};
+        return 0;
     }
-    const auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
-    const auto *arms    = reinterpret_cast<const GCBranchArm *>(
-        DraftNodeView::payload(draftNode).data() + sizeof(DraftBrchPayload));
-    return {arms, static_cast<size_t>(payload->armCount)};
-}
-
-std::span<const GCBranchArm> GraphDraft::branchArmsOf(const DraftNode *nodePtr) const {
-    return branchArmsOf(nodeId(nodePtr));
+    return DraftNodeView::payloadAs<DraftBrchPayload>(draftNode)->armCount;
 }
 
 const DraftNode *GraphDraft::node(gc_node_ref_t id) const {
@@ -499,25 +492,6 @@ bool GraphDraft::isControlAnchor(const DraftNode *nodePtr) const {
     return isControlAnchor(nodeId(nodePtr));
 }
 
-bool GraphDraft::isBranchArmAnchor(gc_node_ref_t id) const {
-    for (gc_node_ref_t draftId : brchIds_) {
-        const DraftNodeHeader *draftHeader = header(draftId);
-        if (!draftHeader || draftHeader->kind != GCNodeKind::Brch) {
-            continue;
-        }
-        for (const GCBranchArm &arm : branchArmsOf(draftId)) {
-            if (arm.head == id || arm.tail == id) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
-bool GraphDraft::isBranchArmAnchor(const DraftNode *nodePtr) const {
-    return isBranchArmAnchor(nodeId(nodePtr));
-}
-
 gc_node_ref_t GraphDraft::resolveForwardedValueRef(gc_node_ref_t id) const {
     gc_node_ref_t current = id;
     while (current != kInvalidNodeRef) {
@@ -574,7 +548,7 @@ size_t GraphDraft::payloadBytesForSourceNode(const GCGraph *graph, gc_node_ref_t
     const GCNode *sourceNode = graph->node(sourceRef);
     ASSERT(sourceNode != nullptr, "Draft decode encountered a null runtime node.");
     if (sourceNode->kind == GCNodeKind::Brch) {
-        return sizeof(DraftBrchPayload) + graph->branchArmsOf(sourceRef).size_bytes();
+        return sizeof(DraftBrchPayload);
     }
     return graph->nodePayloadBytes(sourceRef).size();
 }
@@ -619,18 +593,10 @@ DraftNode *GraphDraft::createDecodedNode(
     draftNode->header.storageCls       = storageClass;
 
     if (sourceNode->kind == GCNodeKind::Brch) {
-        const auto sourceArms         = graph->branchArmsOf(sourceRef);
         auto *payload                 = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
         const auto *sourceBrchPayload = graph->nodeBodyAs<GCBrchBody>(sourceRef);
         payload->join                 = translateNodeRef(sourceBrchPayload->join, sourceToDraft);
         payload->armCount             = sourceBrchPayload->armCount;
-        payload->defaultArm = translateNodeRef(sourceBrchPayload->defaultArm, sourceToDraft);
-        auto *armBytes      = reinterpret_cast<GCBranchArm *>(
-            DraftNodeView::payload(draftNode).data() + sizeof(DraftBrchPayload));
-        for (size_t i = 0; i < sourceArms.size(); ++i) {
-            armBytes[i].head = translateNodeRef(sourceArms[i].head, sourceToDraft);
-            armBytes[i].tail = translateNodeRef(sourceArms[i].tail, sourceToDraft);
-        }
     } else if (const auto body = graph->nodePayloadBytes(sourceRef); !body.empty()) {
         std::memcpy(DraftNodeView::payload(draftNode).data(), body.data(), body.size());
         if (sourceNode->kind == GCNodeKind::Join) {
@@ -1224,7 +1190,6 @@ void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t ne
         }
         auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
         replaceOne(payload->join);
-        replaceOne(payload->defaultArm);
     }
     for (gc_node_ref_t id : joinIds_) {
         DraftNode *draftNode = node(id);
@@ -1289,40 +1254,6 @@ void GraphDraft::dropUncalledGraphs(std::span<const GraphId> graphs) {
     touchRefs();
 }
 
-void GraphDraft::setBranchArm(gc_node_ref_t brch, size_t index, GCBranchArm arm) {
-    ++mutations_;
-    DraftNode *draftNode = node(brch);
-    ASSERT(
-        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Brch,
-        "Not a BRCH node.");
-    auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
-    ASSERT(index < payload->armCount, "No such arm.");
-    reinterpret_cast<GCBranchArm *>(
-        DraftNodeView::payload(draftNode).data() + sizeof(DraftBrchPayload))[index] = arm;
-}
-
-void GraphDraft::retargetBranchArmAnchors(
-    gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId) {
-    ++mutations_;
-    for (gc_node_ref_t id : brchIds_) {
-        DraftNode *draftNode = node(id);
-        if (!draftNode || draftNode->header.kind != GCNodeKind::Brch) {
-            continue;
-        }
-        auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
-        auto *arms    = reinterpret_cast<GCBranchArm *>(
-            DraftNodeView::payload(draftNode).data() + sizeof(DraftBrchPayload));
-        for (size_t i = 0; i < payload->armCount; ++i) {
-            if (arms[i].head == oldId) {
-                arms[i].head = newHeadId;
-            }
-            if (arms[i].tail == oldId) {
-                arms[i].tail = newTailId;
-            }
-        }
-    }
-}
-
 size_t GraphDraft::dissolveUnorderedGates() {
     size_t removed = 0;
     for (bool changed = true; changed;) {
@@ -1338,7 +1269,7 @@ size_t GraphDraft::dissolveUnorderedGates() {
         for (gc_node_ref_t id : gates) {
             const DraftNodeHeader *h = header(id);
             if (!h || h->kind != GCNodeKind::Gate || !ctrlInputsOf(id).empty() ||
-                normInputsOf(id).empty() || isBranchArmAnchor(id)) {
+                normInputsOf(id).empty()) {
                 continue;
             }
             const gc_node_ref_t value = normInputsOf(id).back();
@@ -1355,29 +1286,6 @@ size_t GraphDraft::dissolveUnorderedGates() {
             eraseNode(id); // its control users lose nothing: it waited on nothing
             ++removed;
             changed = true;
-        }
-    }
-    // A GATE that is the head or tail of a branch arm is not dissolved: it marks where the arm
-    // starts or ends. It can still lose every control input, when all it waited on were gates
-    // dissolved above or parameters of an inlined callee (an inlined function whose exit GATE
-    // only waited on its ports and on gated constants, placed as the tail of an arm). Such a
-    // gate then waits on its BRCH, the shape of the bridge GATE inlining gives an arm whose
-    // body has no control entry; a GATE without control input is not a valid graph.
-    std::ranges::sort(brchIds_);
-    brchIds_.erase(std::ranges::unique(brchIds_).begin(), brchIds_.end());
-    for (gc_node_ref_t brch : brchIds_) {
-        const DraftNodeHeader *h = header(brch);
-        if (!h || h->kind != GCNodeKind::Brch) {
-            continue;
-        }
-        const std::vector<GCBranchArm> arms(branchArmsOf(brch).begin(), branchArmsOf(brch).end());
-        for (const GCBranchArm &arm : arms) {
-            for (gc_node_ref_t anchor : {arm.head, arm.tail}) {
-                const DraftNodeHeader *a = anchor != kInvalidNodeRef ? header(anchor) : nullptr;
-                if (a && a->kind == GCNodeKind::Gate && ctrlInputsOf(anchor).empty()) {
-                    appendInput(DraftEdgeKind::Ctrl, anchor, brch);
-                }
-            }
         }
     }
     return removed;

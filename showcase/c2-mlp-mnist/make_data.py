@@ -15,11 +15,13 @@ checkpoint and checks when reading it back.
 Files written to ``--out``:
 
   train_images.npy   (n_train, 784)  float32, pixel values in [0, 1]
-  train_targets.npy  (n_train, 10)   float32, one-hot targets (`nn.softmax_cross_entropy`)
-  train_labels.npy   (n_train,)      int64   class indices (PyTorch's cross_entropy)
+  train_labels.npy   (n_train,)      int64   class indices (`F.cross_entropy` and
+                                             `nn.softmax_cross_entropy` both take these)
   val_images.npy     (n_val, 784)    float32
-  val_targets.npy    (n_val, 10)     float32
   val_labels.npy     (n_val,)        int64
+  train_order.npy    (epochs * n_train,) int64, one epoch permutation after another: the
+                                             batch sampler both implementations walk, so a
+                                             training step sees the same rows on both sides
   init/w1.npy        (784, hidden)   float32, He normal
   init/b1.npy        (hidden,)       float32, zeros
   init/w2.npy        (hidden, 10)    float32, He normal
@@ -108,12 +110,6 @@ def synthetic(n_train: int, n_val: int, rng: np.random.Generator):
     )
 
 
-def one_hot(labels: np.ndarray) -> np.ndarray:
-    out = np.zeros((len(labels), CLASSES), dtype=np.float32)
-    out[np.arange(len(labels)), labels] = 1.0
-    return out
-
-
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -136,15 +132,26 @@ def main() -> int:
         help="where the images come from (auto: MNIST if the repository cache holds it, else synthetic)",
     )
     parser.add_argument("--mnist", default=None, help="path to mnist.npz")
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=10,
+        help="number of epoch permutations to write to train_order.npy",
+    )
     args = parser.parse_args()
+
+    if args.epochs < 1:
+        parser.error("--epochs must be positive")
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / "init").mkdir(exist_ok=True)
 
-    # Two independent streams: the data does not move when the initialisation changes.
+    # Three independent streams: the data does not move when the initialisation or the
+    # batch sampler changes.
     data_rng = np.random.default_rng(args.seed)
     init_rng = np.random.default_rng(args.seed + 1)
+    order_rng = np.random.default_rng(args.seed + 2)
 
     mnist = find_mnist(args.mnist) if args.source in ("auto", "mnist") else None
     if args.source == "mnist" and mnist is None:
@@ -164,11 +171,13 @@ def main() -> int:
 
     files = {
         "train_images.npy": train_x,
-        "train_targets.npy": one_hot(train_y),
         "train_labels.npy": train_y,
         "val_images.npy": val_x,
-        "val_targets.npy": one_hot(val_y),
         "val_labels.npy": val_y,
+        # One epoch permutation per row-major block, written flat so a step can slice it.
+        "train_order.npy": np.concatenate(
+            [order_rng.permutation(args.train) for _ in range(args.epochs)]
+        ).astype(np.int64),
     }
     for name, array in files.items():
         np.save(out / name, array)
@@ -176,9 +185,10 @@ def main() -> int:
         np.save(out / "init" / f"{name}.npy", array)
 
     # A content identity: regenerating the same data gives the same id, so a checkpoint
-    # written for different data fails to load (tree.save_tree checks it).
+    # written for different data fails to load (tree.save_tree checks it). The batch order
+    # is not part of it: it changes with the number of epochs, and a checkpoint stays valid.
     fingerprint = hashlib.sha256()
-    for name in ("train_images.npy", "train_targets.npy", "val_images.npy", "val_targets.npy"):
+    for name in ("train_images.npy", "train_labels.npy", "val_images.npy", "val_labels.npy"):
         fingerprint.update((out / name).read_bytes())
     digest = fingerprint.hexdigest()[:16]
     dataset_id = f"c2-{source}-train{args.train}-val{args.val}-hidden{hidden}-{digest}"
@@ -198,6 +208,7 @@ def main() -> int:
         "train": args.train,
         "val": args.val,
         "hidden": hidden,
+        "epochs": args.epochs,
         "features": FEATURES,
         "classes": CLASSES,
         "files": {

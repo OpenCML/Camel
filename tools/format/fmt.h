@@ -458,6 +458,12 @@ class Formatter {
 
     std::any visitFuncAnno(cst::FuncAnno context);
 
+    std::any visitTagDecl(cst::TagDecl context);
+    std::any visitTagPositions(cst::TagPositions context);
+    std::any visitTagReaders(cst::TagReaders context);
+    std::any visitTagUse(cst::TagUse context);
+    std::any visitTagRef(cst::TagRef context);
+
     std::any visitFuncDecl(cst::FuncDecl context);
     std::any visitRuleDecl(cst::RuleDecl context);
     std::any visitRuleContext(cst::RuleContext context);

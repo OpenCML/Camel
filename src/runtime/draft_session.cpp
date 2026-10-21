@@ -645,7 +645,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     if (a->nodeCount != b->nodeCount || a->edgeCount != b->edgeCount ||
         a->payloadWordCount != b->payloadWordCount || a->normPortCount != b->normPortCount ||
         a->withPortCount != b->withPortCount || a->closureCount != b->closureCount ||
-        a->branchArmCount != b->branchArmCount || a->entryNode != b->entryNode ||
+        a->entryNode != b->entryNode ||
         a->exitNode != b->exitNode || a->outputNode != b->outputNode ||
         a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
         before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
@@ -681,8 +681,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     }
     if (!sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
-        !sameArray(a->closure, b->closure, a->closureCount) ||
-        !sameArray(a->branchArms, b->branchArms, a->branchArmCount)) {
+        !sameArray(a->closure, b->closure, a->closureCount)) {
         return false;
     }
     // Payloads, node by node: an OPER's cached implementation pointer is not content.
@@ -829,6 +828,40 @@ GraphDraft &RuntimeGraphDraftSession::edit(GCGraph *graph) {
 }
 
 GraphDraft &RuntimeGraphDraftSession::rootDraft() { return edit(runtimeRoot_); }
+
+void RuntimeGraphDraftSession::traceStaticSlots(
+    const camel::core::rtdata::Object::RefRelocator &relocate, const Type *ownerType) {
+    for (auto &[graph, entry] : drafts_) {
+        GraphDraft &draft        = *entry->draft;
+        const auto slots         = draft.staticSlots();
+        const auto types         = draft.staticSlotTypes();
+        const size_t slotCount   = std::min(slots.size(), types.size());
+        // Slot 0 is the static tuple itself (appendStaticSlot reserves it as Void); the values
+        // start at 1.
+        for (size_t i = 1; i < slotCount; ++i) {
+            Type *type = types[i];
+            if (!shouldTraverseStaticSlotType(type) || slots[i] == NullSlot) {
+                continue;
+            }
+            Object *value = fromSlot<Object *>(slots[i]);
+            if (value == nullptr) {
+                continue;
+            }
+            Object *moved = relocate(
+                value,
+                type,
+                camel::core::rtdata::RefTraceInfo{
+                    .owner     = nullptr,
+                    .ownerType = ownerType,
+                    .slotType  = type,
+                    .ownerKind = "Txn",
+                    .slotName  = "draft",
+                    .slotIndex = i,
+                });
+            draft.relocateStaticSlot(i, toSlot<Object *>(moved));
+        }
+    }
+}
 
 GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
     if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {

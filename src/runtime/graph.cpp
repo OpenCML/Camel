@@ -148,7 +148,6 @@ struct GraphArenaLayout {
     size_t normPortBytes    = 0;
     size_t withPortBytes    = 0;
     size_t closureBytes     = 0;
-    size_t branchArmBytes   = 0;
     size_t frameLayoutBytes = 0;
     size_t totalBytes       = 0;
 };
@@ -191,14 +190,10 @@ GraphArenaLayout planGraphArenaLayout(
         .closureBytes = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.closureCount),
             alignof(gc_node_ref_t)),
-        .branchArmBytes = camel::core::mm::alignUp(
-            bytesForArray<GCBranchArm>(payload.branchArmCount),
-            alignof(GCBranchArm)),
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
-        layout.branchArmBytes;
+        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes;
     // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
     if (frameSlots) {
@@ -515,21 +510,6 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                         selectorInputs.size()));
             }
             validateRef(body->join, "branch-join");
-            const auto arms = graph->branchArmsOf(ref);
-            if (arms.size() != body->armCount) {
-                throw std::runtime_error(
-                    std::format(
-                        "Runtime graph '{}' has BRCH node {} with mismatched arm count: body={}, "
-                        "slice={}.",
-                        graph->name(),
-                        ref,
-                        body->armCount,
-                        arms.size()));
-            }
-            for (size_t armIndex = 0; armIndex < arms.size(); ++armIndex) {
-                validateRef(arms[armIndex].head, "branch-arm-head");
-                validateRef(arms[armIndex].tail, "branch-arm-tail");
-            }
         }
         if (node->kind == GCNodeKind::Join) {
             const auto *body = graph->nodeBodyAs<GCJoinBody>(ref);
@@ -574,17 +554,6 @@ void writeBody(gc_payload_word_t *payload, const GCNode &node, const Body &body)
     std::memcpy(payload + node.payload, &body, sizeof(Body));
 }
 
-std::span<const GCBranchArm>
-branchSliceView(const GCBranchArm *storage, gc_off_t offset, gc_cnt_t count, gc_cnt_t totalCount) {
-    if (!storage || count == 0) {
-        return {};
-    }
-    if (static_cast<size_t>(offset) + static_cast<size_t>(count) > totalCount) {
-        throw std::runtime_error("GCGraph branch-arm slice is out of bounds.");
-    }
-    return {storage + offset, count};
-}
-
 struct PlannedDraftNode {
     bool dead               = false; // the place of an erased node (ids are kept)
     gc_node_ref_t draftId   = kInvalidNodeRef;
@@ -598,7 +567,6 @@ struct DraftPayloadPlan {
     std::vector<gc_node_ref_t> runtimeRefsByDraftId;
     gc_cnt_t edgeCount        = 0;
     gc_cnt_t payloadWordCount = 0;
-    gc_cnt_t branchArmCount   = 0;
 };
 
 /// Words of the payload area a node of this kind takes: its body (for ACCS, OPER and FILL the
@@ -660,7 +628,6 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
     size_t nodeCount      = 0;
     size_t edgeCount      = 0;
     size_t payloadWords   = 0;
-    size_t branchArmCount = 0;
     const bool keepIds = draft.keepsNodeIds();
     for (gc_node_ref_t draftId = 0; draftId < draft.nodeSlotCount(); ++draftId) {
         if (!draft.alive(draftId)) {
@@ -686,13 +653,6 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
         }
         for (gc_node_ref_t ref : draft.ctrlInputsOf(draftId)) {
             requireAlive(draftId, ref, "ctrl-input");
-        }
-        if (header->kind == GCNodeKind::Brch) {
-            for (const GCBranchArm &arm : draft.branchArmsOf(draftId)) {
-                requireAlive(draftId, arm.head, "branch-head");
-                requireAlive(draftId, arm.tail, "branch-tail");
-            }
-            branchArmCount += draft.branchArmsOf(draftId).size();
         }
         const size_t words = draftPayloadWords(*header);
         // The NodeId kInvalidNodeRef and the payload offset kNoPayload are reserved.
@@ -729,7 +689,6 @@ DraftPayloadPlan planDraftPayload(const GraphDraft &draft) {
 
     plan.edgeCount        = static_cast<gc_cnt_t>(edgeCount);
     plan.payloadWordCount = static_cast<gc_cnt_t>(payloadWords);
-    plan.branchArmCount   = static_cast<gc_cnt_t>(branchArmCount);
     return plan;
 }
 
@@ -741,7 +700,6 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
         .normPortCount    = static_cast<gc_cnt_t>(draft.normPorts().size()),
         .withPortCount    = static_cast<gc_cnt_t>(draft.withPorts().size()),
         .closureCount   = static_cast<gc_cnt_t>(draft.closureNodes().size()),
-        .branchArmCount = plan.branchArmCount,
         .permissions    = std::any_of(
             plan.nodes.begin(),
             plan.nodes.end(),
@@ -768,7 +726,6 @@ void emitDraftPayload(
         "Draft payload arena shape does not match the planned node count.");
 
     size_t inputCursor       = 0;
-    gc_off_t branchArmCursor = 0;
     // Appends the runtime refs of `refs` to the input table; returns where they begin.
     auto appendInputs = [&](std::span<const gc_node_ref_t> refs) -> gc_off_t {
         const auto begin = static_cast<gc_off_t>(inputCursor);
@@ -916,24 +873,12 @@ void emitDraftPayload(
         case GCNodeKind::Brch: {
             const auto *draftBody = reinterpret_cast<const DraftBrchPayload *>(payloadBytes.data());
             ASSERT(draftBody != nullptr, "Draft BRCH payload is missing.");
-            const gc_off_t armOffset = branchArmCursor;
-            const auto arms          = draft.branchArmsOf(planned.draftId);
-            for (const GCBranchArm &arm : arms) {
-                payload.branchArms[branchArmCursor++] = GCBranchArm{
-                    .head = plan.runtimeRefsByDraftId[arm.head],
-                    .tail = plan.runtimeRefsByDraftId[arm.tail],
-                };
-            }
             writeBody(
                 payload.payload,
                 header,
                 GCBrchBody{
-                    .join       = plan.runtimeRefsByDraftId[draftBody->join],
-                    .armOffset  = armOffset,
-                    .armCount   = draftBody->armCount,
-                    .defaultArm = draftBody->defaultArm == kInvalidNodeRef
-                                      ? kInvalidNodeRef
-                                      : plan.runtimeRefsByDraftId[draftBody->defaultArm],
+                    .join     = plan.runtimeRefsByDraftId[draftBody->join],
+                    .armCount = draftBody->armCount,
                 });
         } break;
         case GCNodeKind::Join: {
@@ -1040,9 +985,6 @@ void emitDraftPayload(
     ASSERT(
         inputCursor == payload.edgeCount,
         "Draft direct payload emission did not match edge count.");
-    ASSERT(
-        branchArmCursor == payload.branchArmCount,
-        "Draft direct payload emission did not match branch-arm count.");
 }
 
 } // namespace
@@ -1087,14 +1029,12 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure          = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
-    payload.branchArms       = arenaAllocArray<GCBranchArm>(arena, shape.branchArmCount);
     payload.nodeCount        = shape.nodeCount;
     payload.edgeCount        = shape.edgeCount;
     payload.payloadWordCount = shape.payloadWordCount;
     payload.normPortCount    = shape.normPortCount;
     payload.withPortCount    = shape.withPortCount;
     payload.closureCount     = shape.closureCount;
-    payload.branchArmCount   = shape.branchArmCount;
     return payload;
 }
 
@@ -1128,14 +1068,12 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload, PayloadS
         .normPorts        = payload.normPorts,
         .withPorts        = payload.withPorts,
         .closure          = payload.closure,
-        .branchArms       = payload.branchArms,
         .nodeCount        = payload.nodeCount,
         .edgeCount        = payload.edgeCount,
         .payloadWordCount = payload.payloadWordCount,
         .normPortCount    = payload.normPortCount,
         .withPortCount    = payload.withPortCount,
         .closureCount     = payload.closureCount,
-        .branchArmCount   = payload.branchArmCount,
         .entryNode        = payload.entryNode,
         .exitNode         = payload.exitNode,
         .outputNode       = payload.outputNode,
@@ -1472,11 +1410,10 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     }
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
-        "constructInPlace allocated arenas: name='{}' staticArea={} chunks={} branchArms={}.",
+        "constructInPlace allocated arenas: name='{}' staticArea={} chunks={}.",
         debugRecord ? debugRecord->name : std::string{"<null>"},
         static_cast<const void *>(staticArea),
-        ownedPayload.chunkCount,
-        static_cast<const void *>(ownedPayload.branchArms));
+        ownedPayload.chunkCount);
     emitPayload(payloadArena);
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
@@ -1705,7 +1642,6 @@ const GCGraphNativePayload *GCGraph::nodePayload() const {
     return nativePayload_.empty() ? nullptr : &nativePayload_;
 }
 
-gc_cnt_t GCGraph::branchArmCount() const { return nativePayload_.branchArmCount; }
 
 const GCNode *GCGraph::entryNode() const { return node(entryNodeRef()); }
 
@@ -1966,18 +1902,9 @@ std::span<const gc_node_ref_t> GCGraph::closureNodes() const {
     return {payload.closure, payload.closureCount};
 }
 
-std::span<const GCBranchArm> GCGraph::branchArmsOf(gc_node_ref_t brchRef) const {
-    const auto &payload = nativePayload_;
-    const GCNode *n     = node(brchRef);
-    if (!n || n->kind != GCNodeKind::Brch) {
-        return {};
-    }
-    const auto *body = nodeBodyAs<GCBrchBody>(brchRef);
-    return branchSliceView(
-        payload.branchArms,
-        body->armOffset,
-        body->armCount,
-        payload.branchArmCount);
+gc_cnt_t GCGraph::armCountOf(gc_node_ref_t brchRef) const {
+    const GCNode *n = node(brchRef);
+    return n && n->kind == GCNodeKind::Brch ? nodeBodyAs<GCBrchBody>(brchRef)->armCount : 0;
 }
 
 bool GCGraph::equals(

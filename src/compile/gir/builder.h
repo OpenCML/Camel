@@ -38,6 +38,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/typevar.h"
@@ -744,9 +745,43 @@ class Builder {
     // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
     void enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name);
     // Builds the body of the function `gct` into `graph`, whose scope has been entered.
+    // ---- Tags (design principles 6.2) -------------------------------------------------------
+    // A `#` use written on a function, a type declaration, a field or a block adds facts
+    // (camel/core/node_attrs.h): to the declaration it is written on (`on func`, `on type`,
+    // `on field`) or to the nodes written below it (`on nodes`: the body of the function, the
+    // statements of the block). The uses are on the GCT node (GCT::Tree::tagUsesOf), put there
+    // by the GCT builder; they are resolved here, where imports and the module are known.
+    struct TagFacts {
+        camel::core::attr::AttrSetId declaration = camel::core::attr::kNoAttrs;
+        camel::core::attr::AttrSetId nodes       = camel::core::attr::kNoAttrs;
+    };
+    /// The facts of the tag uses written on `gct`, which is written at `at` (Func, Type or
+    /// Nodes). Resolved once per node and remembered. Reports a use that is wrong and throws
+    /// BuildAbortException.
+    TagFacts tagFactsOf(const GCT::node_ptr_t &gct, camel::core::tag::Position at);
+    /// The facts of a list of uses (the tags of a block, of a field), each written at `at`.
+    TagFacts tagFactsOfList(
+        const std::vector<GCT::TagUse> &uses, camel::core::tag::Position at);
+    /// Adds the facts of one use, expanding an alias group to its members.
+    void addTagFacts(
+        const GCT::TagUse &use, camel::core::tag::Position at, TagFacts &facts,
+        std::unordered_set<camel::core::tag::TagId> &seen);
+    /// The tag the written name names here: declared by this module, then imported by name or
+    /// through a module prefix. nullopt when there is none.
+    std::optional<camel::core::tag::TagId> tagNamed(const std::string &written);
+    /// The attribute value of the arguments of one use of `decl`; reports an argument that is
+    /// not a compile-time value or that the tag cannot carry.
+    camel::core::attr::AttrValueId tagValueOf(
+        const camel::core::tag::Decl &decl, const GCT::TagUse &use);
+    /// The tags written on the fields of the type declaration `decl` (its GCT node), recorded
+    /// in the module with the declaration.
+    void recordFieldTags(const GCT::node_ptr_t &decl);
+    std::unordered_map<const GCT::Node *, TagFacts> tagFacts_;
+
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-        const std::string &name);
+        const std::string &name,
+        camel::core::attr::AttrSetId bodyTags = camel::core::attr::kNoAttrs);
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({

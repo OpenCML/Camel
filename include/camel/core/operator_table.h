@@ -320,6 +320,8 @@ class OperatorTable {
 
     /// Declares that the operator `uri`, used as a decorator, grants an attribute (AttrGrant).
     /// Module load time; std::invalid_argument when the key is not a valid key name.
+    /// One tag declares its decorator and its node-attribute form together with
+    /// tag::declareNodeTag (camel/core/tags.h); this is the part that makes the decorator work.
     void declareGrant(std::string_view uri, AttrGrant grant);
 
     /// What the operator `uri` grants, or nullptr when it is not declared to grant anything.

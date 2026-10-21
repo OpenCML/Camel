@@ -90,6 +90,15 @@ struct EntryConfig {
     std::string toString() const;
 };
 
+/// A tag use the graph builder resolved: its qualified name, the passes its declaration says
+/// read it, and where it is written. The command line uses it to warn about a tag that no pass
+/// in the pipeline reads: the tag then has no effect.
+struct TagUse {
+    std::string name;
+    std::vector<std::string> readBy;
+    camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+};
+
 class Context : public std::enable_shared_from_this<Context> {
     EntryConfig entryConfig_;
     error::DiagsConfig diagConfig_;
@@ -101,6 +110,8 @@ class Context : public std::enable_shared_from_this<Context> {
     std::vector<std::pair<const module::Module *, std::string>> typeDeclarations_;
     /// The type declarations found on a cycle (see markTypeCycle).
     std::set<std::pair<const module::Module *, std::string>> typeCycleMembers_;
+    /// The tag uses the program was compiled with (see noteTagUse).
+    std::vector<TagUse> tagUses_;
     std::unordered_map<std::string, module_ptr_t> builtinModules_;
 
     std::unique_ptr<ExecutorManager> exeMgr_;
@@ -252,6 +263,11 @@ class Context : public std::enable_shared_from_this<Context> {
     bool onReportedTypeCycle(const module::Module *mod, const std::string &name) const {
         return typeCycleMembers_.contains({mod, name});
     }
+
+    // ---- Tags written in the program (design principles 6.2, 9.4) ----------------------------
+    void noteTagUse(TagUse use) { tagUses_.push_back(std::move(use)); }
+    const std::vector<TagUse> &tagUses() const { return tagUses_; }
+    void clearTagUses() { tagUses_.clear(); }
 
     /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
     std::vector<module_ptr_t> allUserModules() const;

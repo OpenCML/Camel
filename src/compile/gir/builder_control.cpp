@@ -215,6 +215,12 @@ bool elementEntersIn(
     if (isComposite(data->type()->code())) {
         return compositeEntersIn(data, type, origin);
     }
+    if (data->type()->code() == TypeCode::String) {
+        // A text never becomes the type of its position (design principles 5.1), but it is the
+        // element's own type mismatch: the conversion reports it at the element
+        // (literalElementInType), instead of the whole literal being a value of another type.
+        return true;
+    }
     const std::optional<literal::Value> fallback =
         written == nullptr ? exactValueOfData(data) : std::nullopt;
     const literal::Value *value = written != nullptr ? written : fallback ? &*fallback : nullptr;
@@ -492,11 +498,6 @@ data_ptr_t Builder::literalElementInType(
     const std::optional<literal::Value> fallback =
         exact == nullptr ? exactValueOfData(data) : std::nullopt;
     const literal::Value *value = exact != nullptr ? exact : fallback ? &*fallback : nullptr;
-    if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
-        // Not a numeric literal (a string, a bool): the type is not one it can be given by
-        // taking the position's type, so the value is left as it is.
-        return nullptr;
-    }
     // The element's own position and its source text, as in a declared position (design
     // principles 5.1); the whole literal's position only when the GCT kept no element.
     const bool ownPosition =
@@ -504,6 +505,16 @@ data_ptr_t Builder::literalElementInType(
     const camel::source::origin_id_t where = ownPosition ? written->origin : origin->origin();
     const camel::source::origin_id_t writtenAt =
         ownPosition ? written->origin : camel::source::kInvalidOriginId;
+    if (data->type()->code() == TypeCode::String) {
+        // A text where another type is expected is the element's own type mismatch, reported at
+        // the element (design principles 5.1; H15h). There is no text-to-number conversion.
+        rejectLiteralData(data, type, where, nullptr, writtenAt);
+    }
+    if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
+        // Not a numeric literal (a bool, for one): the type is not one it can be given by
+        // taking the position's type, so the value is left as it is.
+        return nullptr;
+    }
     if (!literal::kindEnters(*value, type)) {
         rejectLiteralData(data, type, where, nullptr, writtenAt);
     }
@@ -1268,7 +1279,7 @@ node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode,
     const std::vector<compile_graph_ptr_t> *arms, bool valueless) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
-    node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, {}, nullptr);
+    node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, 0);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
     registerNodeOrigin(
         context_,
@@ -1300,7 +1311,6 @@ node_handle_t Builder::buildBranch(
     }
 
     linkNodes(LinkType::Norm, condNode, brchNode);
-    std::vector<runtime::GCBranchArm> branchArms;
     std::vector<node_handle_t> branchFuncs;
     // The variables the arms captured, and whether some arm writes them.
     std::vector<CapturedUse> captured;
@@ -1334,11 +1344,6 @@ node_handle_t Builder::buildBranch(
         // directly without frequent checks.
         auto funcNode = createFuncDataNode(subGraph, false, true, brchNode);
         branchFuncs.push_back(funcNode);
-        branchArms.push_back(
-            runtime::GCBranchArm{
-                .head = nodeIdOf(funcNode),
-                .tail = nodeIdOf(funcNode),
-            });
 
         if (absentElse) {
             // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
@@ -1470,18 +1475,10 @@ node_handle_t Builder::buildBranch(
     }
 
     runtime::DraftBrchPayload payload{
-        .join       = nodeIdOf(joinNode),
-        .armCount   = static_cast<runtime::gc_cnt_t>(branchArms.size()),
-        .defaultArm = runtime::kInvalidNodeRef};
-    std::vector<std::byte> brchBytes(
-        sizeof(runtime::DraftBrchPayload) + sizeof(runtime::GCBranchArm) * branchArms.size());
+        .join     = nodeIdOf(joinNode),
+        .armCount = static_cast<runtime::gc_cnt_t>(branchFuncs.size())};
+    std::vector<std::byte> brchBytes(sizeof(runtime::DraftBrchPayload));
     std::memcpy(brchBytes.data(), &payload, sizeof(payload));
-    if (!branchArms.empty()) {
-        std::memcpy(
-            brchBytes.data() + sizeof(payload),
-            branchArms.data(),
-            sizeof(runtime::GCBranchArm) * branchArms.size());
-    }
     std::vector<draft_node_ref_t> brchNormInputs(
         normInputsOf(brchNode).begin(),
         normInputsOf(brchNode).end());
@@ -1508,7 +1505,7 @@ node_handle_t Builder::buildBranch(
             .ctrlInputs   = brchCtrlInputs});
     runtime::GCJoinBody joinBody{
         .brch     = nodeIdOf(brchNode),
-        .armCount = static_cast<runtime::gc_cnt_t>(branchArms.size())};
+        .armCount = static_cast<runtime::gc_cnt_t>(branchFuncs.size())};
     std::vector<draft_node_ref_t> joinNormInputs(
         normInputsOf(joinNode).begin(),
         normInputsOf(joinNode).end());

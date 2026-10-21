@@ -18,6 +18,7 @@
  */
 
 /* Draft-only topology tests: no synthetic operator payload is executed or encoded. */
+#include <algorithm>
 #include "camel/passes/test/control.h"
 #include "../opt/generic/rewrite.h"
 #include "camel/runtime/control.h"
@@ -130,7 +131,7 @@ void branchBoundaries() {
     GraphDraft draft;
     const auto a = node(draft);
     DraftBrchPayload body{.armCount = 1};
-    std::vector<std::byte> bytes(sizeof(body) + sizeof(GCBranchArm));
+    std::vector<std::byte> bytes(sizeof(body));
     std::memcpy(bytes.data(), &body, sizeof(body));
     const auto branch = draft.addNode(
         DraftNodeInit{
@@ -141,14 +142,15 @@ void branchBoundaries() {
     const auto other = node(draft, {a});
     const auto head  = node(draft, {branch, a, other});
     draft.setNormInputs(head, std::span<const gc_node_ref_t>(&other, 1));
-    GCBranchArm arm{.head = head, .tail = head};
-    std::memcpy(draft.mutablePayloadOf(branch).data() + sizeof(body), &arm, sizeof(arm));
     const auto tail = node(draft, {a, head});
     draft.setNormInputs(tail, std::span<const gc_node_ref_t>(&head, 1));
-    check(reduceControlDependencies(draft) == 0, "branch anchor or boundary was reduced");
+    (void)tail;
+    (void)reduceControlDependencies(draft);
+    // The BRCH keeps what it waits on, and what waits on it keeps waiting.
+    check(draft.ctrlInputsOf(branch).size() == 1, "the controls of a boundary were reduced");
     check(
-        draft.ctrlInputsOf(head).size() == 3 && draft.ctrlInputsOf(tail).size() == 2,
-        "branch controls changed");
+        std::ranges::find(draft.ctrlInputsOf(head), branch) != draft.ctrlInputsOf(head).end(),
+        "the wait on a BRCH was reduced");
 }
 void denseChain() {
     GraphDraft draft;

@@ -1083,14 +1083,15 @@ void Builder::rejectLiteralData(
         // is out of the range.
         reason = isWholeNumber(data) ? "out of range (" + literal::rangeText(type) + ")"
                                      : "the value would be truncated";
-    } else if (data->type()->code() == TypeCode::String) {
-        // A text where another type is expected is a type mismatch, not a text that is not a
-        // number: there is no implicit text-to-number conversion (design principles 5.1), and
-        // `int(s)`/`parse_int(s)` are the explicit ones. The same position reports a variable
-        // of type `string` with this diagnostic.
+    } else if (data->type()->code() == TypeCode::String || type->code() == TypeCode::String) {
+        // A text where another type is expected, or another type where a text is expected, is
+        // a type mismatch, not a text that is not a number: there is no implicit conversion
+        // between a value and a text either way (design principles 5.1), and `int(s)` /
+        // `parse_int(s)` / `string(n)` are the explicit ones. The same position reports a
+        // variable of type `string` with this diagnostic.
         diags_->of(SemanticDiag::DeclaredTypeMismatch)
             .atOrigin(where)
-            .commit("string", type->toString());
+            .commit(data->type()->toString(), type->toString());
         throw BuildAbortException();
     } else {
         reason = "the value cannot become that type";

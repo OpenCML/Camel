@@ -28,23 +28,28 @@ CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?
 CAMEL_NODE(ExportDecl, Other)          // 'export' (dataDecl | typeDecl | bracedIdents)
 CAMEL_NODE(UsingNamespaceDecl, Other)  // 'using' 'namespace' identRef
 CAMEL_NODE(NamespaceDecl, Other)       // 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
-CAMEL_NODE(BlockStmt, Other)           // 'wait' stmtBlock | funcAnno+ stmtBlock
+CAMEL_NODE(BlockStmt, Other)           // 'wait' stmtBlock | frontMatter? ('#' tagUse)* ('sync'? stmtBlock | funcDecl | typeDecl)
 CAMEL_NODE(StmtBlock, Other)           // 'sync'? '{' stmtList? '}'
 CAMEL_NODE(FuncAnno, Other)            // '@' identRef (angledValues | parentIdents)?
-CAMEL_NODE(FuncDecl, Other)            // funcAnno* ('with' angledParams)? 'export'? implMark? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
+CAMEL_NODE(TagDecl, Other)             // 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)? | 'export'? 'tag' identDef '=' bracketIdents
+CAMEL_NODE(TagPositions, Other)        // identDef (',' identDef)* ','?
+CAMEL_NODE(TagReaders, Other)          // identRef (',' identRef)* ','?
+CAMEL_NODE(TagUse, Other)              // '#' (tagRef | '[' tagRef (',' tagRef)* ','? ']')
+CAMEL_NODE(TagRef, Other)              // identRef angledValues?
+CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'export'? implMark? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
 CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the name `operator`, read so only after 'func' (provisional notation)
 CAMEL_NODE(RuleDecl, Other)            // 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}' (IDENTIFIER dataExpr)?
 CAMEL_NODE(RuleContext, Other)         // '<' identDef (',' identDef)* ','? '>'
 CAMEL_NODE(RuleBody, Other)            // dataExpr ('=>' | '<=>') dataExpr
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
-CAMEL_NODE(TypeDecl, Other)            // implMark? 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING)
+CAMEL_NODE(TypeDecl, Other)            // implMark? 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING), with the tag uses before it
 CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw') dataList
 CAMEL_NODE(ImplMark, Other)            // 'inner' | 'outer'
 CAMEL_NODE(Modifiers, Other)           // ('atomic' | 'shared' | 'sync' | 'macro')+
 CAMEL_NODE(ParentIdents, Other)        // '(' identList? ','? ')'
 CAMEL_NODE(BracedIdents, Other)        // '{' identList? ','? '}'
 CAMEL_NODE(BracketIdents, Other)       // '[' identList? ','? ']'
-CAMEL_NODE(KeyTypePair, Other)         // identDef ':' typeExpr
+CAMEL_NODE(KeyTypePair, Other)         // tagUse* identDef ':' typeExpr
 CAMEL_NODE(KeyValuePair, Other)        // identDef ':' dataExpr | '...' dataExpr
 CAMEL_NODE(KeyParamPair, Other)        // 'var'? identDef ':' typeExpr ('=' dataExpr)?
 CAMEL_NODE(DataList, Other)            // dataExpr (',' dataExpr)*

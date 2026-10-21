@@ -44,6 +44,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 600000
 
 [[tests]]
+name = "named_struct_types"
+desc = "A named struct type is one C++ struct named by its declaration, and a second declaration of the same layout is another name for it (`using Spot = Point;`); a type that writes its fields in another order is a struct of its own, and converting to it copies field by field in the declaration's order (`Point{lit::record_2.x, lit::record_2.y}`). The program itself is built and run by agree_with_fvm."
+kind = "behavior"
+case = "../../../cases/trans/cpp/named_structs.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["struct Point {", "struct Swapped {", "using Spot = Point;", "Point{lit::record_2.x, lit::record_2.y}"]
+expect_output_not_contains = ["TranslationRefused", "camel/core/", "libcamel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
 name = "main_io"
 desc = "Checks the C++ translation path preserves imports, formatting, timing calls, and stdout side effects."
 kind = "behavior"

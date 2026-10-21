@@ -27,7 +27,18 @@ namespace camel::parse::ast {
 
 // `Name` was the retired `use` declaration (design principles 10.2); the value is kept so that
 // the numbering of the others does not change.
-enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace };
+enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace, Tag };
+
+/// Where a tag may be written (design principles 6.2). The bits are those of
+/// camel::core::tag::Position: the AST builder converts them with a cast.
+enum class TagPosition : uint8_t {
+    None  = 0,
+    Func  = 1u << 0,
+    Type  = 1u << 1,
+    Field = 1u << 2,
+    Nodes = 1u << 3,
+    Param = 1u << 4,
+};
 
 enum class UnpackType { Array, Tuple, Struct };
 
@@ -180,9 +191,12 @@ class StmtBlockLoad : public StmtLoad {
     void grantNumeric(uint8_t permissions) { numeric_ |= permissions; }
     uint8_t numeric() const { return numeric_; }
 
-    // A block written with decorators (`@d { ... }`, language reference 7.6) has a second
-    // child, a RepeatedLoad("FuncAnno") of the decorators in the order written; the first is
-    // always the statements.
+    // The children of a block, in this order (each only when it is there):
+    //   [0] RepeatedLoad("Stmt")          the statements (always)
+    //   [1] RepeatedLoad("FuncAnno")      the decorators after the statements' child, in the
+    //                                    order written (`@d { ... }`, language reference 7.6)
+    //   [2] RepeatedLoad("TagUse")        the tag uses written `#tag` before the block
+    // The GCT builder finds them by their nodeName, not by their index.
 
     const std::string toString() const override;
     const std::string geneCode() const override;
@@ -191,6 +205,74 @@ class StmtBlockLoad : public StmtLoad {
     bool synced_     = false;
     bool waited_     = false;
     uint8_t numeric_ = 0;
+};
+
+/// One `#` form (design principles 6.2): `#name`, `#name<args>`, and each member of
+/// `#[a, b<v>]`. Its arguments, when it has any, are one RepeatedLoad("Data") child of data
+/// expressions (compile-time values). The tag is resolved where it is written, when the tree is
+/// built: a tag written at a position it does not list, or with the wrong number of arguments,
+/// is reported at the tag.
+class TagUseLoad : public Load {
+  public:
+    TagUseLoad(Reference name) : Load(LoadType::TagUse), name_(std::move(name)) {}
+
+    const Reference &name() const { return name_; }
+    const std::string toString() const override { return "TagUse: " + name_.toString(); }
+    const std::string geneCode() const override { return ""; }
+
+  private:
+    Reference name_;
+};
+
+/// A tag declaration (design principles 6.2):
+///
+///   tag vjp<rule: func> on func read_by autodiff::vjp
+///   tag finite_math = [no_nans, no_infs]
+///
+/// The parameters are names with a type, as written; a tag does not use them yet (the pass
+/// that reads the tag checks its arguments), but the number of a use's arguments is checked
+/// against them.
+class TagDeclLoad : public StmtLoad {
+  public:
+    TagDeclLoad(Reference ref) : StmtLoad(StmtType::Tag), ref_(ref) {}
+
+    const Reference &ref() const { return ref_; }
+
+    struct Param {
+        std::string name;
+        /// The type as written, for the report; empty when the parser recovered.
+        std::string type;
+    };
+    void addParam(Param param) { params_.push_back(std::move(param)); }
+    const std::vector<Param> &params() const { return params_; }
+
+    void addPosition(TagPosition position) {
+        on_ = static_cast<uint8_t>(on_) | static_cast<uint8_t>(position);
+    }
+    uint8_t on() const { return on_; }
+    bool allows(TagPosition position) const {
+        return (on_ & static_cast<uint8_t>(position)) != 0;
+    }
+
+    /// The tags of an alias group (`tag finite_math = [no_nans, no_infs]`); empty for an
+    /// ordinary tag.
+    void addAlias(Reference alias) { aliases_.push_back(std::move(alias)); }
+    const std::vector<Reference> &aliases() const { return aliases_; }
+    bool isGroup() const { return !aliases_.empty(); }
+
+    /// The passes the declaration says read it, as written (`std::opt`, `tensor::fuse`).
+    void addReader(Reference reader) { readBy_.push_back(std::move(reader)); }
+    const std::vector<Reference> &readBy() const { return readBy_; }
+
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+    std::vector<Param> params_;
+    uint8_t on_ = 0;
+    std::vector<Reference> aliases_;
+    std::vector<Reference> readBy_;
 };
 
 } // namespace camel::parse::ast

@@ -59,19 +59,11 @@ std::vector<std::byte> bytesForOperPayload(operator_t op, std::string_view uri) 
     return bytesForStruct(body);
 }
 
-std::vector<std::byte> bytesForBranchPayload(
-    gc_node_ref_t joinRef, std::span<const GCBranchArm> arms, gc_node_ref_t defaultArm) {
+std::vector<std::byte> bytesForBranchPayload(gc_node_ref_t joinRef, gc_cnt_t armCount) {
     DraftBrchPayload body;
-    body.join       = joinRef;
-    body.armCount   = static_cast<gc_cnt_t>(arms.size());
-    body.defaultArm = defaultArm;
-
-    std::vector<std::byte> bytes(sizeof(DraftBrchPayload) + arms.size_bytes());
-    std::memcpy(bytes.data(), &body, sizeof(body));
-    if (!arms.empty()) {
-        std::memcpy(bytes.data() + sizeof(DraftBrchPayload), arms.data(), arms.size_bytes());
-    }
-    return bytes;
+    body.join     = joinRef;
+    body.armCount = armCount;
+    return bytesForStruct(body);
 }
 
 std::vector<gc_node_ref_t> mutatedInputs(
@@ -243,11 +235,11 @@ gc_node_ref_t GraphDraft::addAccsNode(
 }
 
 gc_node_ref_t GraphDraft::addBrchNode(
-    camel::core::type::Type *type, gc_node_ref_t joinRef, std::span<const GCBranchArm> arms,
-    gc_node_ref_t defaultArm, gc_slot_idx_t dataIndex) {
+    camel::core::type::Type *type, gc_node_ref_t joinRef, gc_cnt_t armCount,
+    gc_slot_idx_t dataIndex) {
     ++mutations_;
     dataIndex          = ensureValueSlot(*this, type, dataIndex);
-    const auto payload = bytesForBranchPayload(joinRef, arms, defaultArm);
+    const auto payload = bytesForBranchPayload(joinRef, armCount);
     return addNode(
         DraftNodeInit{
             .dataIndex = dataIndex,

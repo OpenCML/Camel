@@ -84,8 +84,7 @@ bool isPrivateIntermediate(const GraphDraft &draft, gc_node_ref_t id, gc_node_re
     const auto ctrlUsers = draft.ctrlUsersOf(id);
     return normUsers.size() == 1 && normUsers[0] == next && draft.withUsersOf(id).empty() &&
            std::ranges::all_of(ctrlUsers, [&](gc_node_ref_t user) { return user == next; }) &&
-           id != draft.outputNode() && id != draft.returnNode() && id != draft.exitNode() &&
-           !draft.isBranchArmAnchor(id);
+           id != draft.outputNode() && id != draft.returnNode() && id != draft.exitNode();
 }
 
 struct Match {
@@ -177,7 +176,7 @@ void fuse(GraphDraft &draft, const Match &m) {
 
     draft.replaceAllValueUses(root, fused);
     draft.replaceAllCtrlUses(root, fused);
-    draft.retargetBranchArmAnchors(root, fused, fused);
+    draft.setNodeRegion(fused, draft.nodeRegion(root));
     if (draft.outputNode() == root) {
         draft.setOutputNode(fused);
     }
@@ -221,7 +220,7 @@ size_t useLibraryGemm(GraphDraft &draft) {
         draft.setNodeAttrs(blas, draft.nodeAttrs(id));
         draft.replaceAllValueUses(id, blas);
         draft.replaceAllCtrlUses(id, blas);
-        draft.retargetBranchArmAnchors(id, blas, blas);
+        draft.setNodeRegion(blas, draft.nodeRegion(id));
         if (draft.outputNode() == id) {
             draft.setOutputNode(blas);
         }

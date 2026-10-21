@@ -208,7 +208,7 @@ bool mayRemoveDead(const GCGraph &graph) {
     }
     const size_t count = graph.nodeCount();
     // Per node: the value users (norm and with), whether one of them is a JOIN or a BRCH, and
-    // whether the node anchors the graph or a branch arm.
+    // whether the node anchors the graph.
     std::vector<uint32_t> valueUsers(count, 0);
     std::vector<bool> joinOrBrchUser(count, false), anchor(count, false);
     for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
@@ -218,15 +218,6 @@ bool mayRemoveDead(const GCGraph &graph) {
             for (gc_node_ref_t in : inputs) {
                 ++valueUsers[in];
                 joinOrBrchUser[in] = joinOrBrchUser[in] || joinOrBrch;
-            }
-        }
-        if ((*it)->kind == GCNodeKind::Brch) {
-            for (const auto &arm : graph.branchArmsOf(ref)) {
-                for (gc_node_ref_t end : {arm.head, arm.tail}) {
-                    if (end < count) {
-                        anchor[end] = true;
-                    }
-                }
             }
         }
     }

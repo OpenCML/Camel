@@ -93,6 +93,34 @@ const std::vector<Reference> *Tree::usingsOf(const Node *node) const {
     return it == usings_.end() ? nullptr : &it->second;
 }
 
+void Tree::addTagUses(const Node *node, std::vector<TagUse> uses) {
+    if (uses.empty()) {
+        return;
+    }
+    auto &known = tagUses_[node];
+    known.insert(
+        known.end(), std::make_move_iterator(uses.begin()), std::make_move_iterator(uses.end()));
+}
+
+const std::vector<TagUse> *Tree::tagUsesOf(const Node *node) const {
+    const auto it = tagUses_.find(node);
+    return it == tagUses_.end() ? nullptr : &it->second;
+}
+
+void Tree::addFieldTagUses(const Node *decl, size_t field, std::vector<TagUse> uses) {
+    if (uses.empty()) {
+        return;
+    }
+    auto &known = fieldTagUses_[decl][field];
+    known.insert(
+        known.end(), std::make_move_iterator(uses.begin()), std::make_move_iterator(uses.end()));
+}
+
+const std::map<size_t, std::vector<TagUse>> *Tree::fieldTagUsesOf(const Node *decl) const {
+    const auto it = fieldTagUses_.find(decl);
+    return it == fieldTagUses_.end() ? nullptr : &it->second;
+}
+
 void Tree::setLiteralValue(const Node *node, literal::Value value) {
     literalValues_[node] = std::move(value);
 }

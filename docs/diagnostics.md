@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-168 diagnostics: 151 errors, 17 warnings.
+178 diagnostics: 160 errors, 18 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -136,6 +136,15 @@ prints one entry.
 | `0x03000143` | [SemanticDiag::DimensionMismatch](#dimensionmismatch) | Error |
 | `0x03000144` | [SemanticDiag::InvalidExtentExpression](#invalidextentexpression) | Error |
 | `0x03000150` | [SemanticDiag::NotDifferentiable](#notdifferentiable) | Error |
+| `0x03000160` | [SemanticDiag::TagUnknownPosition](#tagunknownposition) | Error |
+| `0x03000161` | [SemanticDiag::TagNotAtPosition](#tagnotatposition) | Error |
+| `0x03000162` | [SemanticDiag::TagUndeclared](#tagundeclared) | Error |
+| `0x03000163` | [SemanticDiag::TagArgumentCount](#tagargumentcount) | Error |
+| `0x03000164` | [SemanticDiag::TagArgumentNotConstant](#tagargumentnotconstant) | Error |
+| `0x03000166` | [SemanticDiag::TagParameterMissing](#tagparametermissing) | Error |
+| `0x03000167` | [SemanticDiag::TagOnUnnamedField](#tagonunnamedfield) | Error |
+| `0x03000168` | [SemanticDiag::TagArgumentNamed](#tagargumentnamed) | Error |
+| `0x03000169` | [SemanticDiag::TagArgumentUnsupported](#tagargumentunsupported) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -148,6 +157,7 @@ prints one entry.
 | `0x03100130` | [SemanticDiag::EnumVariantCaseRepeated](#enumvariantcaserepeated) | Warn |
 | `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
 | `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
+| `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -2759,7 +2769,7 @@ This value has type '{0}', which is not the declared type '{1}'.
 **Help**
 
 ```text
-A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself, and a text does not become a number). Convert the value explicitly: 'float(n)' for a number of another type, 'int(s)' or 'parse_int(s)' for a text (the same for 'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or change the declared type.
+A declaration written with a type takes a value of that type; nothing is converted on the way (a number does not become a float by itself, and a text does not become a number). Convert the value explicitly: 'float(n)' for a number of another type, 'int(s)' or 'parse_int(s)' for a text, 'string(n)' for a number written as text (the same for 'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or change the declared type.
 ```
 
 **Example** (`test/cases/compile/literals/context_text_declared_int.cml`, run as `camel -E short test/cases/compile/literals/context_text_declared_int.cml`)
@@ -2815,26 +2825,18 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 7.5).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 7.5). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).
 ```
 
-**Example** (`test/cases/compile/numeric/invalid.cml`, run as `camel test/cases/compile/numeric/invalid.cml`)
+**Example** (`test/cases/compile/tags/err_old_annotation.cml`, run as `camel test/cases/compile/tags/err_old_annotation.cml`)
 
 ```camel
-module invalid
+/// The old `@name(...)` form of a tag: a located diagnostic points at `#[...]`.
+module err_old_annotation
 
-@numeric(reassociate, fast)
-func a(x: float): float { return x * 2.0 }
+@kernel(base)
 
-@kernelish(reassociate)
-func b(x: float): float { return x * 2.0 }
-
-@numeric()
-func c(x: float): float { return x * 2.0 }
-
-func main(): int sync {
-    return 0
-}
+func main(): int { return 0 }
 ```
 
 ### LoopSequenceNotIterable
@@ -3420,6 +3422,225 @@ func main(): int sync {
 }
 ```
 
+### TagUnknownPosition
+
+`0x03000160` · Error · `SemanticDiag::TagUnknownPosition`
+
+**Message**
+
+```text
+A tag cannot be written at '{0}': the positions are func, type, field, nodes and param.
+```
+
+**Help**
+
+```text
+Write the places the tag may be written, after 'on': '... on func, nodes'.
+```
+
+*No example: no test small enough to show raises it.*
+
+### TagNotAtPosition
+
+`0x03000161` · Error · `SemanticDiag::TagNotAtPosition`
+
+**Message**
+
+```text
+The tag '{0}' may not be written at a {1}: it is declared for {2}.
+```
+
+**Help**
+
+```text
+Write the tag where its declaration says it belongs, or add the position to the declaration after 'on'.
+```
+
+**Example** (`test/cases/compile/tags/err_position.cml`, run as `camel test/cases/compile/tags/err_position.cml`)
+
+```camel
+/// A tag written where its declaration does not list it (design principles 6.2).
+module err_position
+
+export tag shape on type
+
+#shape
+func main(): int { return 0 }
+```
+
+### TagUndeclared
+
+`0x03000162` · Error · `SemanticDiag::TagUndeclared`
+
+**Message**
+
+```text
+No tag '{0}' is declared.
+```
+
+**Help**
+
+```text
+Tags share the namespace of functions and types: import the module that declares it, or declare it with 'tag {0} on ...'.
+```
+
+**Example** (`test/cases/compile/tags/err_undeclared.cml`, run as `camel test/cases/compile/tags/err_undeclared.cml`)
+
+```camel
+/// A tag that is not declared.
+module err_undeclared
+
+#nope
+func main(): int { return 0 }
+```
+
+### TagArgumentCount
+
+`0x03000163` · Error · `SemanticDiag::TagArgumentCount`
+
+**Message**
+
+```text
+The tag '{0}' takes {1} parameter(s), but {2} argument(s) are written.
+```
+
+**Help**
+
+```text
+Write one argument for each parameter of the tag, in the order of the declaration.
+```
+
+**Example** (`test/cases/compile/tags/err_arity.cml`, run as `camel test/cases/compile/tags/err_arity.cml`)
+
+```camel
+/// A tag written with the wrong number of arguments.
+module err_arity
+
+export tag width<w: int> on type
+
+#width
+type T = { a: int }
+
+func main(): int { return 0 }
+```
+
+### TagArgumentNotConstant
+
+`0x03000164` · Error · `SemanticDiag::TagArgumentNotConstant`
+
+**Message**
+
+```text
+The argument '{0}' of the tag '{1}' is not a compile-time value.
+```
+
+**Help**
+
+```text
+A tag is read before the program runs: write a literal, a top-level constant or a function name.
+```
+
+**Example** (`test/cases/compile/tags/err_const.cml`, run as `camel test/cases/compile/tags/err_const.cml`)
+
+```camel
+/// A tag argument that is not a compile-time value.
+module err_const
+
+export tag width<w: int> on type
+
+func f(n: int): int {
+    #width<n>
+    type T = { a: int }
+    return 0
+}
+
+func main(): int { return f(1) }
+```
+
+### TagParameterMissing
+
+`0x03000166` · Error · `SemanticDiag::TagParameterMissing`
+
+**Message**
+
+```text
+The parameter '{0}' of the tag '{1}' has no type.
+```
+
+**Help**
+
+```text
+A tag parameter is read as a compile-time value: write its type, 'tag {1}<{0}: int> on ...'.
+```
+
+*No example: no test small enough to show raises it.*
+
+### TagOnUnnamedField
+
+`0x03000167` · Error · `SemanticDiag::TagOnUnnamedField`
+
+**Message**
+
+```text
+A tag on the field '{0}' of an unnamed struct type belongs to no declaration.
+```
+
+**Help**
+
+```text
+Declare the struct as a type ('type S = { ... }') and tag the field in that declaration.
+```
+
+*No example: no test small enough to show raises it.*
+
+### TagArgumentNamed
+
+`0x03000168` · Error · `SemanticDiag::TagArgumentNamed`
+
+**Message**
+
+```text
+A tag argument is positional: '{0}' is named.
+```
+
+**Help**
+
+```text
+A tag's parameters are given in the order the tag declares them: write '#tag<a, b>', not '#tag<x: a>'.
+```
+
+*No example: no test small enough to show raises it.*
+
+### TagArgumentUnsupported
+
+`0x03000169` · Error · `SemanticDiag::TagArgumentUnsupported`
+
+**Message**
+
+```text
+The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.
+```
+
+**Help**
+
+```text
+A tag carries an integer, a string, a boolean (as 0 or 1), a symbol or a graph reference; a floating-point argument comes with the real-valued tag attributes.
+```
+
+**Example** (`test/cases/compile/tags/err_float.cml`, run as `camel test/cases/compile/tags/err_float.cml`)
+
+```camel
+/// A tag argument of a type a tag cannot hold yet (H2b adds them).
+module err_float
+
+export tag width<w: int> on type
+
+#width<1.5>
+type T = { a: int }
+
+func main(): int { return 0 }
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -3822,6 +4043,24 @@ func main(): void sync {
     println(f(Shape::Circle(1.0)))
 }
 ```
+
+### TagHasNoReader
+
+`0x03100160` · Warn · `SemanticDiag::TagHasNoReader`
+
+**Message**
+
+```text
+The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline.
+```
+
+**Help**
+
+```text
+A tag only allows a pass to do something; with no such pass in the pipeline the tag has no effect. Add the pass it names ('read_by'), or remove the tag.
+```
+
+*No example: no test small enough to show raises it.*
 
 ## Run time and passes (`RuntimeDiag`)
 

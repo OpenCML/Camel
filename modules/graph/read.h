@@ -28,6 +28,11 @@
 
 namespace camel::graphmod {
 
+/// Whether a constant of this type is one the graph module reads and writes: a number, a bool
+/// or a string. These are the types whose slot is the value itself (for a string, a reference
+/// to an object), so a transaction can make one without a type of its own.
+bool constantType(const camel::core::type::Type *type);
+
 /// The operators that read a Program: their groups (exported by the module) and kernels. Every
 /// one is pure.
 const std::vector<oper_group_ptr_t> &readGroups();

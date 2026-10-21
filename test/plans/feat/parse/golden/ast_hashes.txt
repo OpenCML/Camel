@@ -310,7 +310,7 @@ f193836847b14eeb ok exemplars/06_loop_carried_state/program.cml
 b320d56b95f91c24 ok exemplars/07_export_integrity/program.cml
 18da615b13dfd8aa ok exemplars/08_structured_control_flow/program.cml
 08be7c0b09652bc6 ok showcase/c1-linear-logistic/train.cml
-561aaa4446375214 ok showcase/c2-mlp-mnist/train.cml
+e161ae730c757b4e ok showcase/c2-mlp-mnist/train.cml
 99a1aa3bfd6baad7 ok showcase/c6-vae/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
@@ -369,7 +369,7 @@ e39cd2161b4fdf8d ok test/cases/compile/callform/err_slice_ordinary.cml
 9e969d0b581033d1 ok test/cases/compile/callform/err_unrelated.cml
 3461b6ce186bc4cd ok test/cases/compile/callform/kept_forms.cml
 77251ce7afbfd3be ok test/cases/compile/callform/pipeline_arguments.cml
-3d5d2ae56a1ca409 ok test/cases/compile/casts/same_type.cml
+5ac7db42889d93eb ok test/cases/compile/casts/same_type.cml
 3c92822e6687b76a ok test/cases/compile/check/clean.cml
 015fbe435e54a521 no test/cases/compile/check/lexical_error.cml
 5d41d7674b5310e8 no test/cases/compile/check/lexical_many_errors.cml
@@ -722,7 +722,7 @@ e4862de16dae3163 ok test/cases/compile/not_supported/struct_unpacking.cml
 9a04df74fb2e4efe ok test/cases/compile/not_supported/wait_ignored.cml
 13fbd71b37526793 ok test/cases/compile/numeric/cse.cml
 3a57b8f70254b82e ok test/cases/compile/numeric/fuse.cml
-2480a4ed6aa8744e no test/cases/compile/numeric/invalid.cml
+e39f69ff88d8951c no test/cases/compile/numeric/invalid.cml
 ff520b71c454e671 ok test/cases/compile/numeric/library_gemm.cml
 999a15f801ebef52 ok test/cases/compile/numeric/permissions.cml
 193074d94ca4e26b ok test/cases/compile/operators/array_add_assign.cml
@@ -1432,7 +1432,7 @@ e99fcea43d4b5e69 ok test/cases/modules/std/pyplot/main.cml
 606e5c8d28967099 ok test/cases/modules/std/python/basic.cml
 7c35eaa8ac9c05f3 ok test/cases/modules/std/python/main.cml
 8dad7d36224bae1c ok test/cases/modules/std/python/phot.cml
-3f2c3475169000fb ok test/cases/modules/std/python/pyphot.cml
+9b8ff2c2867422fa ok test/cases/modules/std/python/pyphot.cml
 5c4e1424173cf687 ok test/cases/modules/std/random/basic.cml
 0d587d4670523b43 ok test/cases/modules/std/re/basic.cml
 a9c1c348ea212a48 ok test/cases/modules/std/sim/basic.cml

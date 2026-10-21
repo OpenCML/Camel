@@ -1,0 +1,6 @@
+/// The old `@name(...)` form of a tag: a located diagnostic points at `#[...]`.
+module err_old_annotation
+
+@kernel(base)
+
+func main(): int { return 0 }

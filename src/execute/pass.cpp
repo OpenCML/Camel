@@ -22,6 +22,7 @@
 #include "camel/core/array/block_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/mm.h"
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/foreign_handle.h"
@@ -1283,6 +1284,50 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
         DiagnosticBuilder::of(RuntimeDiag::PassesNeverRun).commit(passes[*consumer], rest);
     warning.stage = "pass:" + specName(passes[*consumer]);
     return warning;
+}
+
+std::vector<Diagnostic> tagsNeverReadWarnings(
+    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    std::vector<Diagnostic> warnings;
+    if (!ctx) {
+        return warnings;
+    }
+    // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
+    // own name): a tag's `read_by` may name either.
+    std::vector<std::string> inPipeline;
+    inPipeline.reserve(passes.size() * 2);
+    for (const auto &spec : passes) {
+        const std::string name = specName(spec);
+        inPipeline.push_back(name);
+        inPipeline.push_back(resolveAlias(name));
+    }
+    for (const auto &use : ctx->tagUses()) {
+        bool read = false;
+        for (const std::string &reader : use.readBy) {
+            for (const std::string &name : inPipeline) {
+                if (name == reader || name.starts_with(reader + "::")) {
+                    read = true;
+                    break;
+                }
+            }
+            if (read) {
+                break;
+            }
+        }
+        if (read) {
+            continue;
+        }
+        std::string readers;
+        for (const std::string &reader : use.readBy) {
+            readers += (readers.empty() ? "" : ", ") + reader;
+        }
+        auto warning = DiagnosticBuilder::of(SemanticDiag::TagHasNoReader)
+                           .atOrigin(use.origin)
+                           .commit(use.name, readers);
+        warning.stage = "tag:" + use.name;
+        warnings.push_back(std::move(warning));
+    }
+    return warnings;
 }
 
 PassApplyResult applyPassesDetailed(

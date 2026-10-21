@@ -39,6 +39,9 @@ class EntityAccess {
     static Entity makeNode(node_handle_t node) { return Entity(node); }
     static Entity makeGraphSet(graph_set_ptr_t graphs) { return Entity(std::move(graphs)); }
     static Entity makeDecoratedGraph(graph_handle_t graph) { return Entity(std::move(graph)); }
+    /// A tag declared by the module (design principles 6.2): its id, later resolved through
+    /// camel/core/tags.h.
+    static Entity makeTag(uint32_t tag) { return Entity(tag); }
 
     static Entity makeGenericTemplate(std::shared_ptr<void> tmpl) {
         return Entity(Entity::generic_payload_t{std::move(tmpl)});

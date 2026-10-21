@@ -104,6 +104,10 @@ class Builder {
     // The names the module exports (visitModule), and the modules its imports bound, with the
     // import that bound each (compileImportedModules).
     std::unordered_set<std::string> exportedRefs_;
+    // The DECL node of the type declaration whose right-hand side is being lowered: the tags
+    // written on the fields of the struct it writes belong to that declaration (visitTypeDecl,
+    // visitStructType). Null outside a type declaration.
+    node_ptr_t fieldTagOwner_ = nullptr;
     std::vector<std::pair<AST::node_ptr_t, camel::core::module::module_ptr_t>> importedModules_;
     // Compiles the imported modules written in Camel as far as their declarations; one in
     // error is reported at its import (ImportedModuleHasErrors).
@@ -202,6 +206,14 @@ class Builder {
     node_ptr_t visitStmt(const AST::node_ptr_t &ast);
     node_ptr_t visitDataDecl(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncDecl(const AST::node_ptr_t &ast);
+    /// A `tag` declaration (design principles 6.2): the tag is registered here, before the types
+    /// are declared, and lowers to no node.
+    void visitTagDecl(const AST::node_ptr_t &ast);
+    /// The tag uses written before `ast`, lowered: the `RepeatedLoad("TagUse")` child of a
+    /// function, type or block declaration, and the one of each of its fields.
+    std::vector<GCT::TagUse> tagUsesOf(const AST::node_ptr_t &ast);
+    /// Attaches the tag uses of `ast` (if it has any) to the node they are written on.
+    void attachTagUses(const GCT::node_ptr_t &gct, const AST::node_ptr_t &ast);
     /// `func operator <symbol>(...)` (design principles 4.3): reports, and aborts, an operator
     /// that cannot be overloaded (OperatorNotOverloadable) and a declaration that does not fit
     /// its operator: the number of parameters, a with-parameter or a var parameter
@@ -278,6 +290,14 @@ class Builder {
     /// would be truncated is reported at `at`); the same node when it is not a literal, or
     /// when the type is not one a literal can be given this way. Null-safe.
     node_ptr_t literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_ptr_t &at);
+    /// A text element of the composite literal `data` where the type of its position expects
+    /// something else, reported as the type mismatch it is (design principles 5.1) at the
+    /// element itself, as H27c reports an element whose value does not fit. Recurses through
+    /// nested composites; false when there is no such element, and the caller reports the
+    /// literal the way it did before. `where` is the position to use for an element whose own
+    /// position was not kept.
+    bool rejectTextInLiteral(
+        const data_ptr_t &data, Type *type, camel::source::origin_id_t where);
     /// The initializer `value` of a declaration written with the type `type` (`let x: T = e`,
     /// lowered from `ast`). A literal is converted to the type here; any other expression is
     /// put under an annotation CAST, which the GIR builder resolves once the type of the value

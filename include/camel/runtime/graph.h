@@ -176,11 +176,6 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagConstant = 1 << 1,
 };
 
-struct GCBranchArm {
-    gc_node_ref_t head = kInvalidNodeRef;
-    gc_node_ref_t tail = kInvalidNodeRef;
-};
-
 /// The operator a back end's private copy of the program applies to a function value before an
 /// operator that reads graphs gets it (Program::original, OperatorTraits::inspectsGraphs):
 /// the same function over the program's own graph. Implemented by the built-in executor
@@ -363,10 +358,8 @@ inline std::vector<std::byte> makeFillPayload(GCFillKind kind, std::span<const s
 }
 
 struct GCBrchBody {
-    gc_node_ref_t join       = kInvalidNodeRef;
-    gc_off_t armOffset       = 0;
-    gc_cnt_t armCount        = 0;
-    gc_node_ref_t defaultArm = kInvalidNodeRef;
+    gc_node_ref_t join = kInvalidNodeRef;
+    gc_cnt_t armCount  = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCBrchBody>);
 
@@ -427,7 +420,8 @@ struct GCRegion {
     uint32_t origin      = 0;                // source origin (0: none)
     uint32_t attrs       = 0;                // the tag set of the region (camel/core/node_attrs.h)
     GraphId inlineOf     = kInvalidGraphId;  // Inline: the function whose body this is
-    gc_node_ref_t callSite = kInvalidNodeRef; // Inline: the call it replaced
+    gc_node_ref_t callSite = kInvalidNodeRef; // Inline: the call it replaced; Arm: the call of the
+                                              // graph that is the arm, until it is inlined
 };
 static_assert(std::is_trivially_copyable_v<GCRegion>);
 
@@ -466,14 +460,12 @@ struct GCGraphNativePayload {
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
-    GCBranchArm *branchArms    = nullptr;
     gc_cnt_t nodeCount         = 0;
     gc_cnt_t edgeCount         = 0;
     gc_cnt_t payloadWordCount  = 0;
     gc_cnt_t normPortCount     = 0;
     gc_cnt_t withPortCount     = 0;
     gc_cnt_t closureCount      = 0;
-    gc_cnt_t branchArmCount    = 0;
     gc_node_ref_t entryNode    = kInvalidNodeRef;
     gc_node_ref_t exitNode     = kInvalidNodeRef;
     gc_node_ref_t outputNode   = kInvalidNodeRef;
@@ -616,7 +608,6 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_cnt_t liveNodeCount() const;
     /// Number of edges (input table entries).
     gc_cnt_t edgeCount() const { return nativePayload_.edgeCount; }
-    gc_cnt_t branchArmCount() const;
 
     const GCNode *entryNode() const;
     gc_node_ref_t entryNodeRef() const;
@@ -699,7 +690,8 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const gc_node_ref_t> normPorts() const;
     std::span<const gc_node_ref_t> withPorts() const;
     std::span<const gc_node_ref_t> closureNodes() const;
-    std::span<const GCBranchArm> branchArmsOf(gc_node_ref_t brchRef) const;
+    /// The number of arms of the BRCH `brchRef` (0 for another node).
+    gc_cnt_t armCountOf(gc_node_ref_t brchRef) const;
 
     class NodeIterator {
       public:

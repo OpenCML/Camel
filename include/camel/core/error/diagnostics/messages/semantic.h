@@ -164,6 +164,16 @@ enum class SemanticDiag : uint32_t {
     InvalidExtentExpression   = 0x000144,
     // Automatic differentiation (design principles 9.9): 0x150 and up.
     NotDifferentiable = 0x000150,
+    // Tags (design principles 6.2): 0x160 and up.
+    TagUnknownPosition     = 0x000160,
+    TagNotAtPosition       = 0x000161,
+    TagUndeclared          = 0x000162,
+    TagArgumentCount       = 0x000163,
+    TagArgumentNotConstant = 0x000164,
+    TagParameterMissing    = 0x000166,
+    TagOnUnnamedField      = 0x000167,
+    TagArgumentNamed       = 0x000168,
+    TagArgumentUnsupported = 0x000169,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
@@ -183,6 +193,9 @@ enum class SemanticDiag : uint32_t {
     MatchCaseAfterWildcard  = 0x100131,
     // `case _` after every variant is matched: the wildcard can never be taken.
     MatchWildcardRedundant = 0x100132,
+    // Tags (design principles 6.2): the tag is declared for no pass in the pipeline, so nothing
+    // reads what was written.
+    TagHasNoReader = 0x100160,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

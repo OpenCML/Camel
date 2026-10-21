@@ -1,11 +1,15 @@
-// A pass whose module imports a module written in Camel cannot be compiled on its own yet (a
-// library compiled on its own imports modules written in C++ only; task H36 joins the two). The
-// diagnostic says so: it is refused, not run with the imported value reading 0 (task H37).
+// A pass whose module imports a library written in Camel: the imported function's graph is
+// declared and built by the pass program's builder, and its generic `flat_map` works there
+// (task H36, item 1).
 module camel_import_values
 import { Program } from graph
-import { two } from values
+import { flat_map } from array
+
+func expanded(x: int): int[] {
+    return [x, x + 1]
+}
 
 export func show(p: Program): Program! sync {
-    println(two)
+    println([1, 2, 3]->flat_map<expanded>)
     return p
 }

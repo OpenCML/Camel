@@ -1,8 +1,7 @@
 // The REPL of camel-db (docs/debugging.en.md, section 2), on both debuggable back ends: a user
 // types commands on its standard input. The same presentation as over DAP (design principles
-// 12.1): the arm of a branch is part of the frame of its function unless `frames
-// subgraphs` is asked for; a line step that goes past a line nothing uses the result of says
-// so; functions are named and found by their full names.
+// 12.1): the arm of a branch is a region of the frame of its function; a line step that goes
+// past a line nothing uses the result of says so; functions are named and found by their full names.
 
 import { runTest, check, checkEq, fixture, lineOf } from '../../../tools/debugger/client.mjs'
 
@@ -48,14 +47,9 @@ await runTest(async (t) => {
         has(await repl.command('print big'), /^big: int = 12$/m, 'print a name of the arm')
 
         has(await repl.command('frames subgraphs'), /^Frames: subgraphs/m, 'frames subgraphs')
-        has(
-            await repl.command('bt'),
-            new RegExp(`^#0  pick \\[arm at line ${L('big')}\\]  folded\\.cml:${L('bigret')}:\\d+\\n#1  pick  folded\\.cml:${L('big')}:`, 'm'),
-            'bt: the arm as the subgraph frame it is, above the frame of pick',
-        )
         has(await repl.command('frames'), /^Frames: subgraphs$/m, 'frames tells the setting')
         has(await repl.command('frames functions'), /^Frames: functions/m, 'frames functions')
-        has(await repl.command('bt'), /^#0  pick  folded/m, 'bt: folded again')
+        has(await repl.command('bt'), /^#0  pick  folded/m, 'bt: the arm is part of the frame of pick')
 
         const end = await repl.command('continue')
         has(end, /^14$/m, 'the program prints its result')

@@ -97,7 +97,7 @@ Every production of the language, one for one with the parser: each production i
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | dataDecl | funcDecl | typeDecl | ruleDecl
+                     | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt
 blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
@@ -115,13 +115,21 @@ namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
                      | typeDecl | dataDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
-funcDecl           : funcAnno* ('with' angledParams)? 'export'? implMark? modifiers?
+frontMatter        : (funcAnno | tagUse)*
+funcDecl           : frontMatter ('with' angledParams)? 'export'? implMark? modifiers?
                      'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
+tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
+                     | 'export'? 'tag' identDef '=' bracketIdents
+tagPositions       : tagPositionName (',' tagPositionName)* ','?
+tagPositionName    : IDENTIFIER
+tagReaders         : identRef (',' identRef)* ','?
+tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
+tagRef             : identRef angledValues?
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents | bracedIdents | bracketIdents
-typeDecl           : implMark? 'type' identRef
+typeDecl           : frontMatter? implMark? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
 retStmt            : ('return' | 'throw') dataList
@@ -206,7 +214,7 @@ primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tuple
                      | 'typeof' dataExpr | 'typeas' identDef
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
-keyTypePair        : identDef ':' typeExpr
+keyTypePair        : tagUse* identDef ':' typeExpr
 funcType           : modifiers? angledParams? parentParams '=>' typeExpr
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'

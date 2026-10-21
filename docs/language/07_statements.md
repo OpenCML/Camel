@@ -378,6 +378,50 @@ func norm(x: float, y: float): float {
 - 许可记在图的每个节点上，`std::rgir`、`std::gir` 在有许可的节点上显示 `numeric="..."`；`camel inspect -a`、`-c` 在块上显示。公共子表达式合并与张量的融合不把许可不同的节点合在一起。
 - 不认识的许可名、别的名字后面跟圆括号（`@foo(x)`）、空的 `@numeric()`，都是编译期错误 `SemanticDiag::InvalidAnnotation`。
 
+### 7.6.2 标签：`#`
+
+`#` 不再开始注释（文件第一行的 `#!` 除外），而是**标签**（设计原则 6.2）。标签是与函数、类型同一个命名空间里的名字：在本模块声明、按名字导入、或用 `模块::标签` 限定。
+
+标签在模块顶层声明，`on` 之后是它可以写的位置：
+
+```cml
+export tag kernel on nodes                  // 写在块、函数或类型之前，属于其中的节点
+export tag fast on func, nodes              // 也属于函数的声明
+export tag width<w: int> on type, field     // 带参数，参数是编译期值
+tag finite = [kernel, fast]                 // 标签组：成员一起生效
+```
+
+位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告。
+
+`#` 有三种写法，可以写在函数、类型声明、结构体字段或块之前：
+
+```cml
+#kernel
+func matmul(a: T, b: T): T { ... }
+```
+
+```cml
+#width<32>
+type Packed = {
+    #width<8> a: int,
+    b: int,
+}
+
+func main(): int {
+    #fast
+    {
+        // 块里的节点带着 fast
+    }
+    return 0
+}
+```
+
+`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的类型标签还载不了（目前是浮点，见 H2b），也都在标签上报告。
+
+`on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::ofDeclaration` / `tag::ofField` 读取；在 Camel 代码里读它们要等泛型的第一阶段。
+
+`@名字(实参)` 不是标签的写法：它按标注报告，并指出应写 `#名字`。
+
 ## 7.7 类型声明
 
 ```
