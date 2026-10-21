@@ -182,6 +182,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::GraphPassFailed,
+            {
+                "GraphPassFailed",
+                "Pass '{0}' failed: {1}.",
+                "A pass written in Camel returned an error value instead of a program, and the "
+                "message is the error's kind and text. The program is left as the previous pass "
+                "produced it, and the pipeline stops.",
+            },
+        },
+        {
             RuntimeDiag::PassesNeverRun,
             {
                 "PassesNeverRun",
@@ -229,6 +239,17 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "without it. The auto space holds run-time values: it is bounded by the memory of "
                 "the host, or by CAMEL_GC_HEAP_LIMIT_MB when that is set, in which case the "
                 "values the program keeps alive do not fit the limit.",
+            },
+        },
+        {
+            RuntimeDiag::PassNeedsExtraction,
+            {
+                "PassNeedsExtraction",
+                "Pass '{0}' cannot take the program: some values of it have several writings.",
+                "An earlier pass (a saturation) left values with several writings, which only the "
+                "passes that work on them and the passes that run or translate the program "
+                "accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every "
+                "value by a cost model (its parameter 'cost', 'weighted' by default).",
             },
         },
         {

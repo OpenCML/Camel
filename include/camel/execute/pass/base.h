@@ -43,6 +43,11 @@ class GraphIRPass {
     // given when it did not rewrite, nullptr when it consumed the program.
     virtual const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) = 0;
+
+    // A pass that reads or rewrites graphs with several writings (writings.h). The pass driver
+    // extracts one writing per value before a pass that consumes the program (a back end, an
+    // exporter), and refuses the others.
+    virtual bool acceptsWritings() const { return false; }
 };
 
 class NullGraphIRPass : public GraphIRPass {

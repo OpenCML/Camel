@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-166 diagnostics: 149 errors, 17 warnings.
+168 diagnostics: 151 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -181,6 +181,8 @@ prints one entry.
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
+| `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
+| `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -4682,6 +4684,66 @@ A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the va
 ```
 
 *No example: no test small enough to show raises it.*
+
+### GraphPassFailed
+
+`0x04000061` · Error · `RuntimeDiag::GraphPassFailed`
+
+**Message**
+
+```text
+Pass '{0}' failed: {1}.
+```
+
+**Help**
+
+```text
+A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.
+```
+
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::refuse std::nvm`)
+
+```camel
+module tiny
+func main(): int sync {
+    println(21 * 2)
+    return 0
+}
+```
+
+### PassNeedsExtraction
+
+`0x04000062` · Error · `RuntimeDiag::PassNeedsExtraction`
+
+**Message**
+
+```text
+Pass '{0}' cannot take the program: some values of it have several writings.
+```
+
+**Help**
+
+```text
+An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
+```
+
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
+
+```camel
+module congruence
+
+func f(a: int, b: int): int {
+    let p = a + 1
+    let q = b + 1
+    let r = a + 1
+    return p * q + r
+}
+
+func main(): int sync {
+    println(f(2, 3))
+    return 0
+}
+```
 
 ### PassesNeverRun
 

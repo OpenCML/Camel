@@ -178,6 +178,7 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
         module = std::dynamic_pointer_cast<UserDefinedModule>(context_.importModule(name));
         if (!module) {
             problem = std::format("its library '{}' is not a module written in Camel", name);
+            absentLibraries_.insert(name);
         } else if (!module->compileAsLibrary()) {
             problem =
                 std::format("its library '{}' does not compile: {}", name, firstError(*module));
@@ -188,6 +189,10 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
             "its library '{}' cannot be loaded: {}",
             name,
             d.message.substr(0, d.message.find('\n')));
+        if (d.type == core::error::DiagType::SemanticDiag &&
+            d.specific == static_cast<uint32_t>(core::error::SemanticDiag::ModuleNotFound)) {
+            absentLibraries_.insert(name);
+        }
         module.reset();
     } catch (const std::exception &e) {
         problem = std::format("its library '{}' cannot be loaded: {}", name, e.what());
@@ -195,6 +200,48 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
     }
     libraries_.emplace(name, module);
     return module;
+}
+
+std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
+    const std::string &moduleName, const std::string &functionName, std::string &problem,
+    bool &absent) {
+    std::lock_guard lock(mutex_);
+    const std::string key = moduleName + "::" + functionName;
+    if (auto it = functions_.find(key); it != functions_.end()) {
+        problem = it->second.problem;
+        absent  = it->second.absent;
+        return it->second.found;
+    }
+    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent) {
+        absent          = isAbsent;
+        functions_[key] = {found, problem, isAbsent};
+        return found;
+    };
+    const auto module = library(moduleName, problem);
+    if (!module) {
+        return remember(std::nullopt, absentLibraries_.contains(moduleName));
+    }
+    const auto entity = module->getExportedEntity(Reference(functionName));
+    using Access      = core::module::detail::EntityAccess;
+    if (!entity) {
+        problem = std::format("'{}' exports no '{}'", moduleName, functionName);
+        return remember(std::nullopt, true);
+    }
+    if (Access::isGenericTemplate(*entity) || !Access::isGraphSet(*entity) ||
+        !Access::graphSet(*entity) || Access::graphSet(*entity)->size() != 1) {
+        problem = std::format("'{}::{}' is not one non-generic function", moduleName, functionName);
+        return remember(std::nullopt, false);
+    }
+    camel::compile::gir::graph_ptr_t function = *Access::graphSet(*entity)->begin();
+    Program *program                          = context_.reserveProgram();
+    camel::compile::gir::encodeToRuntimeProgram(function, *program, &context_.graphIds());
+    context_.pinRuntimeProgram(program);
+    if (program->root() == nullptr) {
+        problem = std::format("'{}::{}' could not be encoded", moduleName, functionName);
+        return remember(std::nullopt, false);
+    }
+    problem.clear();
+    return remember(LibraryFunction{program, program->root()}, false);
 }
 
 DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {

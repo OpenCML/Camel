@@ -1,0 +1,25 @@
+module identity
+import { Program, graphs, nodes, name } from graph
+
+export func keep(p: Program): Program! {
+    return p
+}
+
+export func report(p: Program): Program! sync {
+    let all = graphs(p)
+    println(len(all))
+    println(all->map<name>)
+    return p
+}
+
+export func refuse(p: Program): Program! {
+    throw error('NotSupported', 'this program has too few graphs')
+}
+
+export func helper(x: int): int {
+    return x
+}
+
+export func broken(p: Program): int {
+    return 1
+}

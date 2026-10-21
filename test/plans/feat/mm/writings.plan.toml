@@ -1,0 +1,199 @@
+id = "mm.writings"
+order = 374
+tier = "fast"
+tags = ["feat", "mm", "writings"]
+desc = """
+Values with several writings (docs/design/graph-store 3.1, 3.4): a node already is a value, and
+several writings are nodes declared equivalent. The classes are kept per numeric permission
+context; the root of a class is its smallest node, whatever the order of the merges.
+"""
+
+[[tests]]
+name = "writings.union_find"
+desc = "The equivalence classes of a graph: merges, smallest node as root, ascending members, the same classes in any order of merges, a log that gives the classes back, the permission contexts (a context sees the equivalences within its permissions), at most four contexts, and a chain of 100000 merges."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/empty.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS merge_new ok", "WRITINGS root_is_smallest ok", "WRITINGS members_ascending ok", "WRITINGS alone ok", "WRITINGS order_free ok", "WRITINGS from_log ok", "WRITINGS strict_context ok", "WRITINGS granted_context ok", "WRITINGS two_grants ok", "WRITINGS exact_reaches_layers ok", "WRITINGS new_flag ok", "WRITINGS layer_limit ok", "WRITINGS long_chain ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.congruence"
+desc = "Nodes that compute the same thing from the same values are one value: the two writings of `a + 1` are merged when the draft is indexed, merging the parameters `a` and `b` merges what is built from them, and asking for a node that exists gives it."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS params_are_two ok", "WRITINGS build_merged_repeats ok", "WRITINGS parameters_joined ok", "WRITINGS congruence_follows ok", "WRITINGS classes_grew ok", "WRITINGS lookup_adds_once ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.congruence_chain"
+desc = "Two chains of 300 additions from two parameters: merging the parameters merges every step of the chains (the repair of users runs to a fixed point without scanning the graph again)."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/chains.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS chain_closes ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.congruence_apart"
+desc = "What is not one value stays two: `0.0` and `-0.0` (compared bit for bit) and two calls of an operator with an effect are not merged by congruence."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/apart.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS two_zeros_found ok", "WRITINGS zero_signs_apart ok", "WRITINGS two_events_found ok", "WRITINGS effects_apart ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.commit_roundtrip"
+desc = "The equivalences are content of the graph version: a commit that adds some gives a new version that is not in the executable state (no execution plan, the flag set), shares every node chunk but the last, decodes back into the same equivalences, and a commit that adds none leaves the version as it is; a draft with equivalences refuses to change or remove a node."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS draft_refuses_changes ok", "WRITINGS commit_makes_new_version ok", "WRITINGS flag_set ok", "WRITINGS other_graphs_executable ok", "WRITINGS no_plan ok", "WRITINGS chunks_shared ok", "WRITINGS decode_gives_them_back ok", "WRITINGS unchanged_is_same_version ok", "WRITINGS another_equivalence_exists ok", "WRITINGS table_is_content ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.commit_chunks"
+desc = "The same commit on a graph of about 1200 nodes (five node chunks): the equivalences, 300 of them found by congruence, and the node added make a new version that shares the first four chunks with the old one."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/chains.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS chunks_shared ok", "WRITINGS info chunks_shared=4 of 5", "WRITINGS table_is_content ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.extract"
+desc = "Extraction picks one writing for every value by cost and leaves the executable state: `a + 1` is also written `1 + a`, the cost model likes the second, and the users of the value read it; the program, run after the pass, prints what it printed. A value that is one of its own writings (`a == a * 1`) takes the one that does not read itself, whatever the model likes."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS commuted_is_new_writing ok", "WRITINGS extract_took_the_liked_writing ok", "WRITINGS extract_rewired_users ok", "WRITINGS extract_is_executable ok", "WRITINGS extracted_graph_runs ok", "WRITINGS one_found ok", "WRITINGS self_reading_writing_excluded ok", "\n15"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.driver_extracts"
+desc = "A program in the state with several writings (a pass left `a + 1` also written `1 + a`) reaches the back end with one writing per value: the pipeline driver extracts before a pass that consumes the program, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::tabled", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.driver_refuses_rewrite"
+desc = "A rewrite pass that does not know the state with several writings does not get the program: the driver stops with PassNeedsExtraction, naming the pass and the extraction to put before it."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::tabled", "std::opt::fold", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+expect_output_contains = ["PassNeedsExtraction", "std::opt::fold", "std::opt::extract"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.extract_pass"
+desc = "std::opt::extract chooses one writing for every value, so the rewrite pass after it gets a program it knows; its cost parameter names the model, and an unknown model is an error."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::tabled", "std::opt::extract(cost=\"nodes\")", "std::opt::fold", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "saturate.default"
+desc = "The local algebra of std::opt::algebra as rules (exact commutation, neutral elements of wrapping integers, x*c+x*c, x*c1+x*c2, (x*c1)*c2, the last two needing reassociate for floats), saturated under the default numeric policy and extracted by node count, leaves the same operators as std::opt::algebra on every function of the algebra corpus: the products and sums of `strict`, `underflow_sensitive`, the coefficient functions and the integer ones fold into one product, `mixed_permissions` (a product outside the block that grants reassociate) is left alone. `shared_product` is `sync`: the sum waits for the println, and the product that replaces it takes over that wait (waits=1), so it folds as in std::opt::algebra. The program prints what it printed on every back end."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "${backend}"]
+backends = ["nvm", "fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "saturate.safe"
+desc = "The same rules under the strict policy (safe_fp): only the exact ones apply, as in std::opt::algebra(safe_fp=true): `underflow_sensitive` (0.1 is not a whole number), the float coefficient functions and `mixed_permissions` keep their sums; `strict`, the integer functions and the f32 one fold; `shared_product` also folds (x*c + x*c with a whole c is exact; std::opt::algebra(safe_fp=true) leaves it because its product is shared)."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_safe", "${backend}"]
+backends = ["nvm", "fvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=1 mul=1", "SATURATE strict_coefficients add=1 mul=2", "SATURATE relaxed_coefficients add=1 mul=2", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "saturate.deterministic"
+desc = "The same rules, graph and budget give the same saturation: the number of rounds, matches, writings and unions of each function are fixed numbers (the matches are found in node order and applied in the order found; no hash table is walked)."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["SATURATE-INFO strict rounds=3 matches=17 writings=4 unions=3 saturated=1", "SATURATE-INFO strict_coefficients rounds=3 matches=23 writings=6 unions=5 saturated=1", "SATURATE-INFO integer_chain rounds=3 matches=26 writings=6 unions=6 saturated=1", "SATURATE-INFO mixed_permissions rounds=2 matches=9 writings=3 unions=3 saturated=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "saturate.budget"
+desc = "A budget of one round stops the saturation where it is, without an error: `saturated=0`, and what is extracted from the writings found so far still runs and prints what it printed."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_SATURATE_ROUNDS=1"]
+expect_exit = 0
+expect_stdout_contains = ["SATURATE-INFO strict rounds=1", "saturated=0", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.facts"
+desc = "The fact of a value with several writings is the join of the facts of its writings (the analysis of the rewrite design 4.2); a value with one writing has the fact of that writing."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS class_fact_is_the_join ok", "WRITINGS single_writing_fact_is_its_own ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

@@ -917,13 +917,15 @@ bool gateInputsSurvive(const GraphDraft &draft, gc_node_ref_t gate) {
     return true;
 }
 
-size_t dceDraft(GraphDraft &draft) {
+/// With valuesOnly, only the nodes that are no more than their value: constants and pure
+/// operations (also casts, copies, accesses and fills) that no node reads; gates and syncs stay.
+size_t dceDraft(GraphDraft &draft, bool valuesOnly = false) {
     size_t removed        = 0;
     size_t gateEdgeBudget = std::min<size_t>(8192, draft.nodeSlotCount() * 8);
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-            if (bypassValueGate(draft, id, gateEdgeBudget)) {
+            if (!valuesOnly && bypassValueGate(draft, id, gateEdgeBudget)) {
                 ++removed;
                 changed = true;
                 continue;
@@ -939,9 +941,9 @@ size_t dceDraft(GraphDraft &draft) {
             // that call across the branch. A GATE that nothing uses at all stays when it is the
             // only way something it waits on reaches the exit.
             const auto *h     = draft.header(id);
-            const bool isJoin = h && h->kind == GCNodeKind::Sync;
+            const bool isJoin = !valuesOnly && h && h->kind == GCNodeKind::Sync;
             const bool isDeadGate =
-                h && h->kind == GCNodeKind::Gate &&
+                !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.ctrlUsersOf(id).empty() || gateInputsSurvive(draft, id));
             if ((isValueOnly(draft, id) || isJoin || isDeadGate) && draft.normUsersOf(id).empty() &&
                 draft.withUsersOf(id).empty() && isReplaceable(draft, id)) {
@@ -987,7 +989,7 @@ DeadCodePass::apply(const camel::runtime::Program *program, std::ostream &) {
         context_,
         program,
         "std::opt::dce",
-        dceDraft,
+        [&](GraphDraft &draft) { return dceDraft(draft, valuesOnly_); },
         nullptr,
         nullptr,
         mayRemoveDead);
@@ -1067,7 +1069,7 @@ const camel::runtime::Program *simplifyGraph(
             context,
             program,
             "std::opt::dce",
-            dceDraft,
+            [](GraphDraft &draft) { return dceDraft(draft); },
             &removed,
             &memo,
             mayRemoveDead,

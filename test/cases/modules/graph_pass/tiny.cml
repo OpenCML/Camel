@@ -1,0 +1,5 @@
+module tiny
+func main(): int sync {
+    println(21 * 2)
+    return 0
+}

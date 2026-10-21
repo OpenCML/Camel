@@ -1,0 +1,34 @@
+module unused
+import { flatten } from algo
+import { Program, Node, Graph, NodeKind, graphs, nodes, kind, is_pure, is_constant, is_anchor, value_users, open, erase, commit } from graph
+
+/// Whether the node is no more than its value: a constant, a conversion, a copy, an access, a
+/// fill or a pure operation.
+func valueOnly(n: Node): bool {
+    let k = kind(n)
+    return (k == NodeKind::Data && is_constant(n)) || k == NodeKind::Cast || k == NodeKind::Copy || k == NodeKind::Accs || k == NodeKind::Fill || is_pure(n)
+}
+
+func isUnused(n: Node): bool {
+    return valueOnly(n) && len(value_users(n)) == 0 && !is_anchor(n)
+}
+
+func allNodes(p: Program): Node[] {
+    return flatten(graphs(p)->map<(g: Graph): Node[] => nodes(g)>)
+}
+
+func eraseAll(p: Program, hits: Node[]): Program! sync {
+    let t = open(p)
+    hits->foreach<(n: Node) => erase(t, n)>
+    return commit(t)
+}
+
+func settle(p: Program): Program! sync {
+    let hits = allNodes(p)->filter<isUnused>
+    return if len(hits) == 0 then p else eraseAll(p, hits) ?-> settle
+}
+
+/// The constants and pure operations that no node reads, removed until none is left.
+export func values(p: Program): Program! {
+    return settle(p)
+}
