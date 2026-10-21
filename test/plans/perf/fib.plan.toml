@@ -1,3 +1,19 @@
+# Recursive Fibonacci, timed with `--timeit` on each back end and after `std::opt::inline`.
+#
+# No `perf_budget_mean_ms` here: the means are recorded, not gated. The budgets this plan used to
+# carry (200/200/65/50/80/3 ms, 2026-05-04) were recorded on a developer machine and cannot be met
+# on another one. docs/performance/graph-store-baseline.md measured the same case with the same
+# `--timeit` on the 28-core i7-14700K (2026-10-20): nvm 219.0 ms -- 1 ms under its 220 ms ceiling
+# -- fvm 55.8 ms, jit 84.7 ms. The Linux host runs this workload about twice as slowly per core,
+# so nvm and fvm fail there on a quiet machine, and on the shared host the same command spreads
+# from 432 ms to 960 ms between runs (load average 26 to 54), which no percentage tolerance makes
+# a signal. `std::nvm` has no budget by the author's ruling: it is the node-at-a-time reference,
+# the performance is `std::fvm`'s and `std::jit`'s to carry (H54, quoting H43 item 7). The jit
+# numbers also moved after H55 (84.7 ms on the i7, 5.3 ms on the host), so the old inline_jit
+# budget of 3 ms -- below the plain jit budget of 80 ms -- was never a comparison.
+#
+# The runner still prints mean, n and the 95 % interval; compare a change against a run of the
+# same build on the same machine, as the baseline page says.
 id = "perf.fib"
 order = 400
 tier = "slow"
@@ -13,9 +29,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 200
-perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "inline_nvm_timeit"
@@ -27,9 +40,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 200
-perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "fvm_timeit"
@@ -41,9 +51,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 65
-perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "inline_fvm_timeit"
@@ -55,9 +62,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 50
-perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "jit_timeit"
@@ -69,9 +73,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 15000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 80
-perf_budget_tolerance_pct = 10
 
 [[tests]]
 name = "inline_jit_timeit"
@@ -83,7 +84,3 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 1500
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 3
-perf_budget_tolerance_pct = 10
-
