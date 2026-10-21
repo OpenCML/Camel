@@ -67,6 +67,8 @@ enum class RuntimeDiag : uint32_t {
     SliceOutOfRange      = 0x000052,
     // The pipeline's pass specifications `name(key=value, ...)` (design principles 9.3).
     InvalidPassParameter = 0x000060,
+    // A pass written in Camel gave an error value instead of a program.
+    GraphPassFailed = 0x000061,
     // Warnings (severity bits = Warn).
     PassesNeverRun           = 0x10000F,
     ConstantExpressionFaults = 0x100015,

@@ -33,3 +33,47 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[false, true, true, true, true]\n[none, compute]\n"
 timeout_ms = 10000
+
+# A pass written in Camel is a function (p: Program) => Program! exported by a module; it runs
+# on the tool program the context keeps, with the program being processed as its argument.
+
+[[tests]]
+name = "camel_pass_runs_on_the_program"
+desc = "A Camel pass reads the program being processed and returns it; the pipeline goes on."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2\n[__root__, main]\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_error_stops_the_pipeline"
+desc = "A pass that returns an error value fails with its kind and message, and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::refuse", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GraphPassFailed", "error NotSupported: this program has too few graphs"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_function_that_is_not_a_pass_is_refused"
+desc = "An exported function of another signature is not a pass; the diagnostic says what a pass is."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::helper", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["is not a pass", "(p: Program) => Program!"]
+timeout_ms = 10000
+
+[[tests]]
+name = "unknown_camel_pass"
+desc = "A module that exports no such function leaves the pass unknown."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "identity::nosuch", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["UnrecognizedGraphPass"]
+timeout_ms = 10000

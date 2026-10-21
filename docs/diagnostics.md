@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-166 diagnostics: 149 errors, 17 warnings.
+167 diagnostics: 150 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -181,6 +181,7 @@ prints one entry.
 | `0x04000051` | [RuntimeDiag::UnhandledError](#unhandlederror) | Error |
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
+| `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -4682,6 +4683,32 @@ A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the va
 ```
 
 *No example: no test small enough to show raises it.*
+
+### GraphPassFailed
+
+`0x04000061` · Error · `RuntimeDiag::GraphPassFailed`
+
+**Message**
+
+```text
+Pass '{0}' failed: {1}.
+```
+
+**Help**
+
+```text
+A pass written in Camel returned an error value instead of a program, and the message is the error's kind and text. The program is left as the previous pass produced it, and the pipeline stops.
+```
+
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::refuse std::nvm`)
+
+```camel
+module tiny
+func main(): int sync {
+    println(21 * 2)
+    return 0
+}
+```
 
 ### PassesNeverRun
 

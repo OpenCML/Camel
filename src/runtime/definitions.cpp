@@ -197,6 +197,50 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
     return module;
 }
 
+std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
+    const std::string &moduleName, const std::string &functionName, std::string &problem,
+    bool &absent) {
+    std::lock_guard lock(mutex_);
+    const std::string key = moduleName + "::" + functionName;
+    if (auto it = functions_.find(key); it != functions_.end()) {
+        problem = it->second.problem;
+        absent  = it->second.absent;
+        return it->second.found;
+    }
+    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent) {
+        absent          = isAbsent;
+        functions_[key] = {found, problem, isAbsent};
+        return found;
+    };
+    const auto module = library(moduleName, problem);
+    if (!module) {
+        // A module that is not there, or not written in Camel, is absent; one that does not
+        // compile is refused.
+        return remember(std::nullopt, problem.find("does not compile") == std::string::npos);
+    }
+    const auto entity = module->getExportedEntity(Reference(functionName));
+    using Access      = core::module::detail::EntityAccess;
+    if (!entity) {
+        problem = std::format("'{}' exports no '{}'", moduleName, functionName);
+        return remember(std::nullopt, true);
+    }
+    if (Access::isGenericTemplate(*entity) || !Access::isGraphSet(*entity) ||
+        !Access::graphSet(*entity) || Access::graphSet(*entity)->size() != 1) {
+        problem = std::format("'{}::{}' is not one non-generic function", moduleName, functionName);
+        return remember(std::nullopt, false);
+    }
+    camel::compile::gir::graph_ptr_t function = *Access::graphSet(*entity)->begin();
+    Program *program                          = context_.reserveProgram();
+    camel::compile::gir::encodeToRuntimeProgram(function, *program, &context_.graphIds());
+    context_.pinRuntimeProgram(program);
+    if (program->root() == nullptr) {
+        problem = std::format("'{}::{}' could not be encoded", moduleName, functionName);
+        return remember(std::nullopt, false);
+    }
+    problem.clear();
+    return remember(LibraryFunction{program, program->root()}, false);
+}
+
 DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     const auto &table                         = core::OperatorTable::instance();
     const sem::OperatorSemantics *s           = table.semantics(oper);
