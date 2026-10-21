@@ -207,20 +207,6 @@ jobs:
           EOF
           cat "$profile"
 
-      # TEMPORARY H57 diagnostic: record what the Windows image actually has, so the profile pin
-      # above is a fact from a run and not a guess. Remove before the branch is handed over.
-      - name: Diagnose Visual Studio and Conan (temporary)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        continue-on-error: true
-        run: |
-          conan --version
-          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -all -products * -format json
-          Get-ChildItem "C:\Program Files\Microsoft Visual Studio" -ErrorAction SilentlyContinue | Select-Object Name
-          Get-ChildItem "C:\Program Files\Microsoft Visual Studio\18" -ErrorAction SilentlyContinue | Select-Object Name
-          Get-ChildItem "C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Tools\MSVC" -ErrorAction SilentlyContinue | Select-Object Name
-          conan profile show
-
       - name: Install npm dependencies (skip husky / postinstall conan wipe)
         run: npm ci --ignore-scripts
         env:
