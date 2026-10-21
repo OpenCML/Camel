@@ -37,9 +37,14 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
+#include "camel/runtime/draft.h"
+#include "camel/runtime/draft_writes.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
+#include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 
@@ -314,6 +319,34 @@ slot_t isAnchorKernel(ArgsView &, ArgsView &norm, Context &) {
     return toSlot<Bool>(anchor);
 }
 
+/// Whether the value of the node may be written in place: it is passed to a `var` parameter or
+/// to an operator that changes its operand, directly or through gates. A rewrite must not treat
+/// such a node as one value. The answer for a graph is computed once and kept while the graph
+/// version is the same.
+slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
+    static std::mutex mutex;
+    static std::map<std::pair<const GCGraph *, uint64_t>, std::shared_ptr<camel::runtime::WrittenSlots>>
+        cache;
+    const auto *handle = norm.get<Handle *>(0);
+    nodeOf(handle, "graph.is_written_slot");
+    const GCGraph &graph = graphOf(handle, "graph.is_written_slot");
+    std::shared_ptr<camel::runtime::WrittenSlots> written;
+    {
+        std::lock_guard lock(mutex);
+        const auto key = std::make_pair(&graph, graph.revision());
+        auto found     = cache.find(key);
+        if (found == cache.end()) {
+            if (cache.size() > 64) {
+                cache.clear();
+            }
+            const auto draft = camel::runtime::GraphDraft::decode(*handle->program(), &graph);
+            found = cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(*draft)).first;
+        }
+        written = found->second;
+    }
+    return toSlot<Bool>((*written)(handle->index()));
+}
+
 slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     nodeOf(handle, "graph.origin");
@@ -412,6 +445,7 @@ const std::vector<ReadOp> &readOps() {
             {"callee", calleeKernel, node, maybe(HandleKind::Graph)},
             {"tags", tagsKernel, node, Type::String()},
             {"is_anchor", isAnchorKernel, node, Type::Bool()},
+            {"is_written_slot", isWrittenSlotKernel, node, Type::Bool()},
             {"origin", originKernel, node, Type::Int64()},
             {"show", showKernel, node, Type::String()},
         };

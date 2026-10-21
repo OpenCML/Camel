@@ -1,0 +1,12 @@
+module neutral_var_target
+
+func main(): int sync {
+    var a = 5
+    let b = a + 0
+    wait a = 7
+    println(b)
+    println(a + 0)
+    let c = 3
+    println(c * 1)
+    return 0
+}
