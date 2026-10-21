@@ -122,7 +122,15 @@ class LoopView {
     /// the round port, in node order.
     std::vector<gc_node_ref_t> regionNodes() const;
     /// The nodes outside the two regions that nodes inside them read, in the order they are first
-    /// read. The constants (DATA nodes) are left out unless `constants`.
+    /// read: besides the round's ports (the element and the state), what a round uses and what a
+    /// consumer that lifts the loop into another representation has to pass in.
+    ///
+    /// A constant is not a capture. A node whose value is known at build time -- a `DATA` of the
+    /// static area (a literal, a folded literal, a static value the builder materialized) or any
+    /// node the graph marks `constant` -- is evaluated where it is read, in place, so it is left
+    /// out unless `constants` asks for it. A value that is merely loop-invariant (a parameter, a
+    /// module value read through a capture port, a variable's cell) is not constant and stays an
+    /// input (design principles 3.10; the author's ruling of 2026-10-21).
     std::vector<gc_node_ref_t> externalInputs(bool constants = false) const;
 
     // ---- Correspondence between the node and the ports of its regions ----
@@ -217,8 +225,9 @@ class LoopDraftView {
     uint32_t bodyRegion() const { return bodyRegion_; }
     /// The nodes of the two regions (the regions inside them included) and the round port.
     std::vector<gc_node_ref_t> regionNodes() const;
-    /// The nodes outside the two regions that nodes inside them read, constants left out unless
-    /// `constants`.
+    /// The nodes outside the two regions that nodes inside them read, in the order they are first
+    /// read. A constant (a `DATA`, or a node marked `constant`) is evaluated in place and is left
+    /// out unless `constants`; a merely loop-invariant value stays an input.
     std::vector<gc_node_ref_t> externalInputs(bool constants = false) const;
 
     gc_node_ref_t condStateParam(size_t j) const;

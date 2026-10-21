@@ -102,7 +102,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.captures"
-desc = "One capture table for the condition and the body (3.10): the condition captures `limit`, the body `step` and `scale`; a `var` read in the body; nested loops whose inner graphs capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
+desc = "The condition and the body read what they use where they are (3.10): `limit` is a constant the condition reads in place, `step` and `scale` are constants the body reads in place (a constant is not a capture, H91); the `var` `bias` is a cell and the outer state is a value, and those are the captures. Nested loops capture the outer state, in a `for` and in a two-state `while` (24 306 42 25 4)."
 kind = "behavior"
 case = "../../../cases/loops/captures.cml"
 args = ["${case}", "${backend}"]
@@ -110,6 +110,17 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["24 306 42 25 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.constant_is_not_a_capture"
+desc = "A constant is not a capture (H91, design principles 3.10): test::loop_inputs shows with_runtime with one capture (the parameter `n`, which its condition reads) and one constant left out (the body's `k`), and constants_only with no capture and the same one constant. The LOOP node's With inputs stay the results of its regions and the round port, so no constant is bound to the node. The same pipeline runs on std::nvm and prints 21 70: the shape and the values are checked together."
+kind = "behavior"
+case = "../../../cases/loops/captures_constants.cml"
+args = ["${case}", "test::loop_inputs", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["graph=with_runtime loop=", "kind=for-while state=1 with=3 captures=1 constants=1", "graph=constants_only loop=", "kind=for state=1 with=2 captures=0 constants=1", "input PORT constant=0 type=int", "constant DATA constant=1 type=int", "21 70"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

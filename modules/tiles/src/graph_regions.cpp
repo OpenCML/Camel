@@ -192,6 +192,9 @@ analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
         for (auto inner : view.regionNodes()) {
             insideLoop[inner] = true;
         }
+        // Every value the regions read, constants included: this is dependency analysis (was the
+        // read computed outside the loop?), not the loop's capture list. A constant is not a
+        // capture and is evaluated in place (LoopView::externalInputs, default without it).
         loopReads[id] = view.externalInputs(true);
     }
     for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {

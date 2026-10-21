@@ -45,6 +45,20 @@ using camel::core::rtdata::fromSlot;
 
 namespace {
 
+/// A constant: a value known at build time. A DATA node (a literal, a folded literal, a static
+/// value the builder materialized) is one, and so is any node the graph marks `constant`. A
+/// constant is evaluated where it is read, in place, and is not a capture of a LOOP: a consumer
+/// that lifts the loop into another representation needs no input for it (design principles 3.10;
+/// the author's ruling of 2026-10-21, "a constant is not a capture").
+bool constantValue(const GCNode &node) {
+    return node.kind == GCNodeKind::Data || node.isConstant();
+}
+
+/// The same for a node of a draft, whose flags are read from its header.
+bool constantValue(const DraftNodeHeader &header) {
+    return header.kind == GCNodeKind::Data || (header.runtimeFlags & kGCNodeFlagConstant) != 0;
+}
+
 /// The capture ports of a loop graph: its with-ports once it is called (the builder makes the
 /// loop graphs so), its closure ports otherwise.
 std::span<const gc_node_ref_t> capturePortsOf(const GCGraph *graph) {
@@ -165,7 +179,7 @@ std::vector<gc_node_ref_t> LoopDraftView::externalInputs(bool constants) const {
     for (gc_node_ref_t ref : nodes) {
         for (auto inputs : {draft_->normInputsOf(ref), draft_->withInputsOf(ref)}) {
             for (gc_node_ref_t input : inputs) {
-                if ((constants || draft_->header(input)->kind != GCNodeKind::Data) &&
+                if ((constants || !constantValue(*draft_->header(input))) &&
                     !inside.contains(input) && seen.insert(input).second) {
                     externals.push_back(input);
                 }
@@ -306,7 +320,7 @@ std::vector<gc_node_ref_t> LoopView::externalInputs(bool constants) const {
         for (auto inputs : {graph_->normInputsOf(ref), graph_->withInputsOf(ref)}) {
             for (gc_node_ref_t input : inputs) {
                 const GCNode *node = graph_->node(input);
-                if (node != nullptr && (constants || node->kind != GCNodeKind::Data) &&
+                if (node != nullptr && (constants || !constantValue(*node)) &&
                     !inside.contains(input) &&
                     seen.insert(input).second) {
                     externals.push_back(input);
