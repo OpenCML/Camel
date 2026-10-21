@@ -239,3 +239,37 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "false\ntrue\ntrue\ntrue\n[-, -, f32 [2, 3]]\n[0, 0, 0, 0, 0]\n"
 timeout_ms = 10000
+
+# Written (`var`) slots: both passes leave the nodes whose value may be written in place alone.
+
+[[tests]]
+name = "neutral_elements_with_var_by_std_opt_algebra"
+desc = "The reference on a program with var slots."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
+args = ["${case}", "std::opt::algebra(neutral_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_with_var_by_a_camel_pass"
+desc = "neutral::integers skips the written slots as the C++ pass does, so the graphs are equal."
+kind = "differential"
+case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
+args = ["${case}", "neutral::integers", "std::jgir"]
+expect_exit = 0
+compare_to = "neutral_elements_with_var_by_std_opt_algebra"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "neutral_elements_with_var_still_runs"
+desc = "The program after the Camel pass prints what it did."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/neutral_var_target.cml"
+args = ["${case}", "neutral::integers", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "5\n7\n3\n"
+timeout_ms = 20000

@@ -50,7 +50,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
-| [graph](#graph) | `import { ... } from graph` | C++ | 36 |
+| [graph](#graph) | `import { ... } from graph` | C++ | 37 |
 
 <a id="built-in-functions"></a>
 
@@ -3188,6 +3188,17 @@ Whether the node anchors its graph (its exit, output or return, or the end of a 
 
 - Pure.
 - Example: `is_anchor(n)`
+
+#### `is_written_slot`
+
+```camel
+is_written_slot: (n: Node) => bool
+```
+
+Whether the value of the node may be written in place: it is passed to a `var` parameter or to an operator that changes its operand, directly or through gates. A rewrite must not treat such a node as one value.
+
+- Pure.
+- Example: `is_written_slot(n)`
 
 #### `is_constant`
 
