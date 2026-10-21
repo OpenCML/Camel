@@ -164,7 +164,7 @@ Nothing converts between two named types implicitly, even when their fields are 
 
 ### 3.3.4 Strings
 
-A string is immutable text and is **always valid UTF-8**; length and subscripts count code points: `len('中文')` is 2 and `'中'[0]` is `'中'`. Binary data is the built-in type `Bytes` (a type name like `string`, not imported), converted explicitly: `bytes::encode`, `bytes::decode` (malformed UTF-8 gives an error value); making a string from invalid bytes, as in `str::from_bytes([255])`, is a fault right there. The built-in operations:
+A string is immutable text and is **always valid UTF-8**; length and subscripts count code points: `len('中文')` is 2 and `'中'[0]` is `'中'`. Binary data is the built-in type `Bytes` (a type name like `string`, not imported), converted explicitly: `bytes::encode`, `bytes::decode` (malformed UTF-8 gives an error value). That is the only conversion between a string and bytes: no other name makes a string from bytes. The built-in operations:
 
 | Form | Result |
 |---|---|
@@ -178,7 +178,7 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `bytes`, `from_bytes`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `find`, `substr` (index and length in code points), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
 
 ```cml
 import { split, trim, to_upper } from str

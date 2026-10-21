@@ -37,7 +37,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | Module | Import | Written in | Functions |
 |---|---|---|---|
 | [built-in](#built-in-functions) | none | C++ | 51 |
-| [str](#str) | `import { ... } from str` | C++ | 16 |
+| [str](#str) | `import { ... } from str` | C++ | 14 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
@@ -781,8 +781,8 @@ Whether every element of s is an element of other.
 ## `str`: strings
 
 A string is always valid UTF-8, and its length and indices count Unicode code points:
-`len('中文')` is 2 and `'中文'[0]` is `'中'`. Binary data is `Bytes`; `bytes` and `from_bytes`
-below convert to and from the UTF-8 bytes of a string.
+`len('中文')` is 2 and `'中文'[0]` is `'中'`. Binary data is `Bytes`; `bytes::encode` and
+`bytes::decode` are the one place where a string becomes UTF-8 bytes and back.
 The string a function works on is its ordinary argument; everything else is a with-argument,
 so calls chain: `s->trim->split<','>`.
 
@@ -925,30 +925,6 @@ s written count times in a row.
 - Pure.
 - Failure: fault `InvalidArgument` when count is negative or the result would be longer than a string can be (4 GiB of UTF-8).
 - Example: `'ab'->repeat<3>` gives `'ababab'`
-
-#### `bytes`
-
-```camel
-bytes: (s: string) => int[]
-```
-
-The bytes of s as numbers 0 to 255.
-
-- Pure.
-- Example: `bytes('hé')` gives `[104, 195, 169]`
-
-#### `from_bytes`
-
-```camel
-from_bytes: (xs: int[]) => string
-```
-
-The string made of the given UTF-8 bytes.
-
-- Pure.
-- Failure: fault `InvalidArgument` when an element is not in 0 to 255 or the bytes are not valid UTF-8 (a string is always valid UTF-8; binary data is `Bytes`).
-- Example: `from_bytes([104, 105])` gives `'hi'`
-- Example: `from_bytes([255])` gives `fault: not valid UTF-8`
 
 ### Code points as numbers
 

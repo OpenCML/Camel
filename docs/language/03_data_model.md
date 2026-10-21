@@ -168,7 +168,7 @@ println(p, q.x)
 
 ### 3.3.4 字符串
 
-字符串是不可变的文本，**总是合法的 UTF-8**，长度与下标按码点计：`len('中文')` 是 2，`'中'[0]` 是 `'中'`。二进制数据用内建类型 `Bytes`（和 `string` 一样不必导入），两者之间显式转换：`bytes::encode`、`bytes::decode`（解码非法 UTF-8 得到错误值）；`str::from_bytes([255])` 这样用非法字节造字符串，在调用处就是故障。内建的操作：
+字符串是不可变的文本，**总是合法的 UTF-8**，长度与下标按码点计：`len('中文')` 是 2，`'中'[0]` 是 `'中'`。二进制数据用内建类型 `Bytes`（和 `string` 一样不必导入），两者之间显式转换：`bytes::encode`、`bytes::decode`（解码非法 UTF-8 得到错误值）。这是字符串与字节之间唯一的转换：没有别的名字能用非法字节造出字符串。内建的操作：
 
 | 写法 | 结果 |
 |---|---|
@@ -182,7 +182,7 @@ println(p, q.x)
 | `strs->join<sep>` | 连接字符串数组 |
 | `s[i]` | 第 `i` 个码点，结果是只含这一个字符的字符串；越界是故障 |
 
-其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`（下标与长度按码点）、`starts_with`、`ends_with`、`repeat`、`bytes`、`from_bytes`、`codepoints`、`from_codepoints`。
+其余的字符串函数在 `str` 模块里（[标准库参考](../stdlib-reference.md)）：`split`、`trim`、`to_upper`、`to_lower`、`replace`、`find`、`substr`（下标与长度按码点）、`starts_with`、`ends_with`、`repeat`、`codepoints`、`from_codepoints`。
 
 ```cml
 import { split, trim, to_upper } from str
