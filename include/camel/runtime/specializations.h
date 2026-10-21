@@ -34,10 +34,14 @@
  * by address: a graph that was edited since gets a new revision and its entries no longer match,
  * which is what should happen. It names the specialization by GraphId too: a program that no
  * longer holds that graph resolves the id to nothing, and the session makes the specialization
- * again. The commit does what it can to keep that from happening: it binds every graph the table
- * names (and what those graphs call) into the program it produces, so the specializations of a
- * program are part of it even where nothing reachable calls them. That is the program keeping
- * what it made, not a cache holding a graph the program dropped.
+ * again.
+ *
+ * The table is a cache, not an owner. A commit binds the graphs the root reaches; a specialization
+ * nothing reachable calls any more is let go with the snapshot it was in, and the entry that
+ * names it goes too (the commit drops the entries its program cannot resolve, see
+ * eraseIf). A later session that needs that binding makes the specialization again; while it is
+ * reachable it stays, so one need costs one copy, not one per round. That is the bound on the
+ * table: no count limit of its own, just the program's reachability.
  *
  * Only bindings that are values in the language's sense are remembered: numbers, booleans and
  * refined types. A specialization that binds a GC-managed object (a captured tensor, say) is
@@ -143,9 +147,16 @@ class RuntimeSpecializationTable {
         }
     }
 
+    /// Drops the entries `keep` rejects: `keep(key, graph)` says whether the program still
+    /// resolves the entry. A commit keeps only what its program holds, so that the table names
+    /// no graph the snapshot collected and no callee whose revision changed.
+    template <typename Keep> void eraseIf(Keep &&keep) {
+        std::erase_if(entries_, [&](const auto &entry) { return !keep(entry.first, entry.second); });
+    }
+
     bool empty() const { return entries_.empty(); }
     size_t size() const { return entries_.size(); }
-    /// The entries, for a commit that binds the graphs they name into the program (program.h).
+    /// The entries, for a commit that checks the graphs they name against the program it made.
     const std::unordered_map<ProgramSpecializationKey, GraphId, ProgramSpecializationKeyHasher> &
     entries() const {
         return entries_;
