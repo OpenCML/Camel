@@ -1,0 +1,15 @@
+/**
+ * The declaration of `re:test` is what an importer sees: two string arguments and a bool result
+ * are read from `stdlib/re.cml`, and the calls reach the operator the C++ module runs (handover
+ * H19, step 10).
+ */
+module re_declaration_import
+
+import { test } from re
+
+func main(): int sync {
+    println(test('[0-9]+', 'room 42'))
+    println(test('^hello', 'hello world'))
+    println(test('xyz', 'hello'))
+    return 0
+}
