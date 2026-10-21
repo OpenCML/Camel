@@ -166,7 +166,7 @@
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
 | H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **部分完成**（运行器已严格、`expect_stdout_exact` 真正比较：`handover/H52-runner-fields`；暴露 9 条真实失败，其中 8 条循环梯度回归在 H54、第 9 条交给 H38；报告 reports/H52.md） |
-| H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | — |
+| H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **进行中**（`handover/H54-cpu-op-cost`） |
 | H51 | 泛型第一期：按结构展开（`match type`、`static for`、`static loop`、`t.[n]`、可变元数），`tree_map` 等改用 Camel 写（先交计划） | 无 | **计划已批**（reviews/H51-plan.md），按 15 步实施 |
 | H50 | GPU G4–G5：支持面（bf16/Tensor Core 等）、使用已授予的许可、融合、优化器多张量融合（先交计划） | H49 计划获批 | **未开始** |
 | H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **未开始**（第 0 步按 H47 的证据先做：逐叶传输合批 `handover/H49a-tiles-transfer`） |
@@ -200,7 +200,7 @@
 | H42 | 模块导出表改为每个程序一份，不再修改进程级的共享表（`clearExportedNamespaces`） | 无 | **已完成**（`a7d621ee`；报告 reports/H42.md） |
 | H41 | **缺陷**：`ort_loop_values`、`ort_grad_loop_values`、`lsp.editing`、`examples.ml.export_onnx_translate` 在 fsh-dev 上失败（H5 名义结构体之后） | 无 | **已完成**（`1f53d368`；报告 reports/H41.md） |
 | H40 | C2 峰值内存因每步 `take` 升高 150 MB：查清数据块回收是否及时触发并修复 | 无 | **已完成**（`90163c82`；报告 reports/H40-memory.md；后续 H40b、H40c） |
-| H38 | 规则引擎的其余部分（`when`、`#requires`、分析、替换 `algebra.cpp`；先交计划） | H2（`#requires` 部分） | **部分完成**（第 1 项 `50954d05`、第 6 项已入；第 2–5 项只有计划；报告 reports/H38.md） |
+| H38 | 规则引擎的其余部分（`when`、`#requires`、分析、替换 `algebra.cpp`；先交计划） | H2（`#requires` 部分） | **部分完成**（第 1、2、3、6 项已完成：`when` `50954d05`、误差界与许可门控、`analysis` v1、`extract` 不再保留死写法的修复；第 4 项 `algebra.cpp` 因规则库未达等价而未删（int32/float32/tensor 法则与 `safe_fp` 缺）；第 5 项等 `where`；报告 reports/H38.md、reports/H38b.md） |
 | H39 | 图存储的技术债（过期提交合并进最新快照、未绑定的编码图、`jitFnToGraph_`、节点级事实标记、草稿改为块存储） | 无 | **已完成**（复核报告 reports/H39.md；第 5 项按剖析结论不做） |
 | H37 | **缺陷（最优先）**：库程序（Camel 写的遍所在的模块）中模块级 `let` 的值读成 0 | 无 | **已完成**（修复 `5c40c184`；检查意见 reviews/H17-H22.md；报告 reports/H37.md） |
 | H36 | Camel 图 API 的收尾（导入 Camel 库、遍参数、新值的根规则、区域读取等） | 无 | **部分完成**（第 1–4、6 项已合入 `134c522f`、`d33376fe`；第 5 项等 H19；报告 reports/H36.md、reports/H36b.md） |
