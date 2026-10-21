@@ -463,7 +463,7 @@ slot_t NodeVMSchedPass::call(
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",
                     nodeRef,
                     jumpIdx,
-                    arms.size(),
+                    en.armCount,
                     tillNode,
                     skipNode,
                     joinNode));
@@ -598,8 +598,13 @@ slot_t NodeVMSchedPass::call(
             } break;
 
             case GCNodeKind::Loop:
-                // The rounds ran at the events of the plan; the state is the value.
-                ASSERT(hasLoops, "NodeVM runs only loops that are regions of their graph.");
+                // The rounds of a loop that is a region of its graph ran at the events of the
+                // plan, and the state is the value. A loop the builder left as two graphs -- one
+                // built while the program runs, which the lowering never saw -- runs its rounds
+                // here, a call of each graph per round.
+                if (!hasLoops) [[unlikely]] {
+                    evalLoop(currRuntimeGraph, nodeRef, *currFrame);
+                }
                 break;
 
             case GCNodeKind::Port:
@@ -942,3 +947,68 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
     return (*opFunc)(withView, normView, *context_);
 }
+
+void NodeVMSchedPass::evalLoop(
+    camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
+    const camel::runtime::LoopView loop(programs_.of(graph), *graph, nodeRef);
+    const size_t k           = loop.stateCount();
+    const size_t collections = loop.collectionCount();
+    const auto stateSlot     = dataIndexOf(graph, nodeRef);
+    const auto captures      = loop.captures();
+    const auto iterable      = loop.iterable();
+    GCGraph *const cond      = loop.condGraph();
+    GCGraph *const body      = loop.bodyGraph();
+    // The value is a tuple when k > 1 or the loop collects; its components are the k state
+    // values and, when it collects, the arrays (LoopView::valueType).
+    const bool wraps = k > 1 || collections != 0;
+    const auto *const valueType =
+        wraps ? static_cast<const TupleType *>(loop.valueType()) : nullptr;
+    // The rounds and the state are the loop's (camel/execute/loop_driver.h); this interpreter
+    // supplies a frame and a call for each.
+    struct Host {
+        NodeVMSchedPass &vm;
+        GCGraph *graph;
+        Frame &currFrame;
+        camel::runtime::LoopView loop;
+        camel::runtime::gc_data_idx_t stateSlot;
+        size_t k;
+        std::span<const gc_node_ref_t> captures;
+        std::optional<gc_node_ref_t> iterableNode;
+
+        void beforeRound(size_t) {}
+        slot_t initialState(size_t j) {
+            return currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(j)));
+        }
+        slot_t stateValue() { return currFrame.get<slot_t>(stateSlot); }
+        void setStateValue(slot_t value) { currFrame.set(stateSlot, value); }
+        slot_t
+        callRound(const camel::execute::LoopShape &shape, GCGraph *target, const slot_t *element) {
+            vm.requireRecursionRoom(graph);
+            Frame *frame = vm.framePool_.acquire(target);
+            camel::execute::bindLoopRound(
+                frame,
+                target,
+                k,
+                element,
+                captures.size(),
+                [&](size_t j) {
+                    return camel::execute::loopStateComponent(shape, stateValue(), j);
+                },
+                [&](size_t c) { return currFrame.get<slot_t>(dataIndexOf(graph, captures[c])); });
+            return vm.call(target, frame);
+        }
+        Array *iterable() { return currFrame.get<Array *>(dataIndexOf(graph, *iterableNode)); }
+    } host{*this, graph, currFrame, loop, stateSlot, k, captures, iterable};
+    camel::execute::driveLoopRounds(
+        camel::execute::LoopShape{
+            .cond            = cond,
+            .body            = body,
+            .iterates        = iterable.has_value(),
+            .stateCount      = k,
+            .collectionCount = collections,
+            .valueType       = valueType,
+            .origin          = graph->nodeOrigin(nodeRef),
+        },
+        host);
+}
+

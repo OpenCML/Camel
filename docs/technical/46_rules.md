@@ -25,15 +25,27 @@ func mul_one__rhs(x: int) => x              // what it becomes
 func mul_one() => __rule('mul_one', false, 0, 0, mul_one__lhs, mul_one__rhs)
 ```
 
-`__rule` is an operator of the module `rewrite` (`modules/rewrite`), which the declaration imports
-itself. It makes a `RuleObject` (type `Rule`): the name, the direction, the permissions the rule
-needs, a bit per `const` parameter and the two function values. A rule is the function that makes
-it, not a `let`: a library function (what a Camel pass is) has no module-level values, and a rule
-function is exported, imported and listed like any function. A list of rules is an array of such
-functions (`[mul_one, combine]`, type `(() => Rule)[]`).
+A condition adds a fourth function and a different maker:
 
-The condition (`when`) and the context of a rule (`rule fuse<f, g>(...)`) are read by the grammar
-and refused by the compiler (`ConstructNotSupported`) until they are implemented.
+```camel
+rule add_zero(x: int, y: int) { x + y => x } when isZero(y)
+
+func add_zero__lhs(x: int, y: int) => x + y
+func add_zero__rhs(x: int, y: int) => x
+func add_zero__when(x: Node, y: Node) => isZero(y)   // the parameters as nodes of the draft
+func add_zero() => __rule_when('add_zero', false, 0, 0, add_zero__lhs, add_zero__rhs, add_zero__when)
+```
+
+`__rule` and `__rule_when` are operators of the module `rewrite` (`modules/rewrite`), which the
+declaration imports itself (with `graph.Node` for the condition). They make a `RuleObject` (type
+`Rule`): the name, the direction, the permissions the rule needs, a bit per `const` parameter and
+the function values. A rule is the function that makes it, not a `let`: a library function (what a
+Camel pass is) has no module-level values, and a rule function is exported, imported and listed
+like any function. A list of rules is an array of such functions (`[mul_one, combine]`, type
+`(() => Rule)[]`).
+
+The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refused by the compiler
+(`ConstructNotSupported`) until generics land (H38 item 5).
 
 ## 2. From a rule to the engine
 
@@ -54,8 +66,9 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 | `extract(p, cost)` | one writing per value by the named cost model |
 | `check(rules, samples, seed)` | the check of section 4 |
 
-`rewrite` and `saturate` leave the functions that are the sides of rules alone. The result is
-`Program!`; the errors are `RuleInvalid`, `RuleTwoWay`, `NoCostModel`, `RewriteInvalid`. A pass is
+`rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
+`__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
+`NoCostModel`, `RewriteInvalid`. A pass is
 a function `(p: Program) => Program!` (`camel prog.cml mod::pass std::nvm`):
 
 ```camel
@@ -77,7 +90,10 @@ when the rule needs no permission, within `64 (steps + 1) eps (|a| + |b| + scale
 the engine applies the rule to its own left side with random constants (up to eight times): it
 must fire, and the rewritten function must agree too. The report has a line per rule: `ok name:
 n samples agree, fired k of m`, or `FAIL name: ...` with the arguments where it fails
-(`x + 0.0 => x` fails at `-0.0`).
+(`x + 0.0 => x` fails at `-0.0`). A rule with a condition cannot use the sampled values (the tool
+cannot ask a condition about them), so its line is `ok name: the condition selects the instances,
+fired k of m` and only the engine path runs; a condition that rejects every generated instance
+reports `never fired`.
 
 ## 5. The standard rules
 
@@ -92,11 +108,69 @@ check over every rule of it (the plan `modules.rules`). The float laws that depe
 permission (`x*c1 + x*c2`, `(x*c1)*c2`) and the ones that need a condition (`x*c + x*c` for a
 whole `c`) wait for `#requires` and `when`; `std::opt::algebra` keeps doing them.
 
-## 6. Open
+## 6. The rest of the engine (H38)
 
-- `when` and the context of a rule; the permissions of a rule are not written yet (`#requires`
-  needs the tag mechanism); analyses.
+The rule declaration, the engines and the check are the first step; `when` is implemented (H38
+item 1), the rest is planned in the H38 report (`docs/handover/reports/H38.md`, section 1). In
+short:
+
+**`when` (implemented).** `rule … { lhs => rhs } when expr` compiles to a fourth function
+`name__when(params as Node) => expr`, and to a maker `__rule_when(name, twoWay, needs, consts,
+lhs, rhs, when)`; the 6-argument `__rule` stays for rules without a condition. A parameter of the
+condition is a `graph::Node` naming the node the engine bound to that parameter in the draft
+being rewritten (scheme (a)), so a condition sees the live graph: its operator, type, tags,
+inputs, users, constants, anchor flags. The graph module's `Handle` carries a draft, and the node
+readers answer from it; `callee` is the one read that still needs a frozen program. The engine
+already calls `Rule.when` after a match and before a replacement; it now builds that closure from
+the Camel function, roots the rule object and the Node arguments across the call, and registers a
+tracer that relocates the draft's static values and the constant slots copied into the compiled
+patterns (a condition call is a safepoint). `check` compares the two sides only through the
+engine for a conditional rule. Tests: `test/cases/modules/rules/when_rules.cml` with
+`when_target.cml` (fact, shape and type conditions, each firing and refusing, all four backends,
+saturation) and `check_when.cml`. A rule, its target and the pass that applies it may also live
+in one module (`same_module_pass.cml`): the pass module is a program of its own, and the program
+it is also part of is built afterwards (H38 report §2.5).
+
+**`analysis`.** `analysis range: Interval { initial => …; join(a,b) => …; widen(a,b) => …; on (x +
+y) => range(x) + range(y) }` declares a lattice and its transfer clauses; it compiles to
+`range__initial`, `range__join`, `range__widen`, one pattern/clause pair per `on`, and the query
+`range(n: Node) => __analysis(…)`. The clause expression sees its pattern variables as `Node`s
+(like `when`); the fact type is restricted to trivial data, and the analysis becomes one
+`user.<module>.<analysis>` fact kind (Derived, scope Node, Anchors dependency). The facts are
+propagated in post-order, joined at JOIN nodes and across the writings of a value, cached per
+graph revision and per draft revision. Which of a clause's variables are values and which are
+facts is the open question the design's example leaves ambiguous; the plan recommends Nodes.
+
+**`#requires`.** `#requires<reassociate, finite_math>` before a rule maps the tag arguments to
+`sem::PermissionMask` and fills the `needs` slot that `Rule` already carries; the engine and the
+check use it. It waits for H2's tag registry.
+
+**Generic rules.** `rule comm<T>(…) where T: numeric` is one rule per instantiation, with the
+operator family selected by the instantiated type (the table `AlgebraPass::Families` reads in the
+native pass); it waits for `where` and the first stage of generics.
+
+**Deleting `algebra.cpp`.** After `when` and `#requires`, the rule library expresses the laws the
+native walk applies today (float coefficient folding needs the permissions). The bar: identical
+output and `std::jgir` structure on the algebra corpus and on generated 10k/40k/80k programs, on
+all four backends, and every test of `opt.algebra` passing with the rules pass substituted; then
+the pass is deleted and its name becomes the Camel pass.
+
+**The export list.** It is generated from the modules' undefined symbols (H36/H40), so a new
+libcamel function the module calls is exported without a hand edit; `rewrite` links the sibling
+`graph.cmo` for the handle constructors. A link failure is a defect of the generator.
+
+## 7. Open
+
+- The condition's side effects are not enforced statically (there is no purity annotation for
+  arbitrary functions); `when` must be pure by contract, and `check` is the guard.
+- `const` parameters match a *constant writing*, while `graph::is_constant` asks whether the
+  matched *node* is a constant; a condition that needs the value of a `const` parameter should use
+  the literal or `graph::constant` on the node that is the literal.
+- `check` cannot exercise a condition that depends on a non-constant parameter's value (it
+  materialises only the `const` ones); such a rule reports `never fired`.
 - The tolerance of the check for rules that need a permission is a bound on the rounding, not the
   declared numeric contract of each operator.
-- The module `rewrite` uses libcamel functions (`NodeVMSchedPass::callGraph`, the rule compiler,
-  `DraftWritings`, the cost models); the Windows export list has to get them.
+- The condition is a function of the rule's parameters, not of the whole matched pattern: in
+  `x + (a * b)` the parameter `a` is the multiplication's operand, not the multiplication node.
+- `analysis`: are a clause's variables values or nodes? The plan recommends nodes; the document
+  needs the author's decision before the clause typing is final.

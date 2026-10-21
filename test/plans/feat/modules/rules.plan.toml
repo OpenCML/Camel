@@ -131,3 +131,65 @@ args = ["${case}", "counts::report", "rules::saturate_all", "counts::report", "s
 expect_exit = 0
 expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.pass_in_the_program_module"
+desc = "A module that holds the rule, the target and the pass itself (`export func apply`) is a pass like any other: the rewritten program is installed and run. The rule turns x + 0 into x + 1 on purpose, so the output (8) shows that the pass produced and ran the program; the same file without the pass prints 7."
+kind = "behavior"
+case = "../../../cases/modules/rules/same_module_pass.cml"
+args = ["${case}", "same_module_pass::apply"]
+expect_exit = 0
+expect_stdout_exact = "8\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.pass_in_the_program_module_without_the_pass"
+desc = "The same file, run as a program: 7, the value before the rewrite. Together with rules.pass_in_the_program_module it says which program the pass produced."
+kind = "behavior"
+case = "../../../cases/modules/rules/same_module_pass.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.when_condition_selects_matches"
+desc = "A rule with `when` fires only where its condition holds: the shapes and types of the draft tell the four pairs of functions apart. The report before and after the rewrite shows which products and additions were replaced, and the program still prints the values it should."
+kind = "behavior"
+case = "../../../cases/modules/rules/when_target.cml"
+args = ["${case}", "when_rules::report", "when_rules::apply", "when_rules::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "byConst 1\nnotConst 1\nmulSum 1 1\nmulPlain 1\nintDouble 1 0\nfloatDouble 1 0\nbyConst 0\nnotConst 1\nmulSum 0 1\nmulPlain 1\nintDouble 0 1\nfloatDouble 0 1\n7 10 5 12\n10 2.5\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.when_on_every_backend"
+desc = "The program a rule with a condition rewrote runs the same on the node VM, the byte-code interpreter, the JIT and the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/modules/rules/when_target.cml"
+args = ["${case}", "when_rules::apply", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "7 10 5 12\n10 2.5\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.when_in_saturation"
+desc = "saturate applies a rule with a condition to the writings whose match passes it, and the extraction brings the program back to one writing: the same values as the greedy rewrite."
+kind = "behavior"
+case = "../../../cases/modules/rules/when_target.cml"
+args = ["${case}", "when_rules::saturated", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7 10 5 12\n10 2.5\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.when_passes_the_check"
+desc = "The check of a conditional rule cannot compare sampled values (the tool cannot ask a condition about them): it fires the rule on its own left side, where the condition holds, and compares the rewritten left side. A conditional rule whose sides disagree is still reported."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_when.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok double_int: the condition selects the instances, fired 8 of 8", "ok double_float: the condition selects the instances, fired 8 of 8", "FAIL wrong_guard: the rewritten left side differs"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

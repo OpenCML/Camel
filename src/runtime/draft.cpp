@@ -1344,6 +1344,33 @@ void GraphDraft::setStaticSlot(size_t index, slot_t value) {
     staticSlots_[index] = value;
 }
 
+void GraphDraft::relocateStaticValues(
+    const camel::core::rtdata::Object::RefRelocator &relocate) {
+    for (size_t i = 0; i < staticSlots_.size(); ++i) {
+        const camel::core::type::Type *type =
+            i < staticSlotTypes_.size() ? staticSlotTypes_[i] : nullptr;
+        if (!type || !type->isGCTraced() || staticSlots_[i] == NullSlot) {
+            continue;
+        }
+        auto *ref = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(staticSlots_[i]);
+        if (!ref) {
+            continue;
+        }
+        ref = relocate(
+            ref,
+            type,
+            camel::core::rtdata::RefTraceInfo{
+                .owner     = nullptr,
+                .ownerType = nullptr,
+                .slotType  = type,
+                .ownerKind = "GraphDraft",
+                .slotName  = {},
+                .slotIndex = i,
+            });
+        relocateStaticSlot(i, camel::core::rtdata::toSlot(ref));
+    }
+}
+
 void GraphDraft::addDependency(GraphId graph) {
     ++mutations_;
     touchRefs();
