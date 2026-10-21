@@ -238,10 +238,9 @@ node_ptr_t Tree::makeData(const data_ptr_t &data) {
     return node;
 }
 
-node_ptr_t Tree::makeType(Type *type, ImplMark impl) {
+node_ptr_t Tree::makeType(Type *type) {
     Node *node          = makeNode(NodeKind::TYPE);
     node->payload_.type = type;
-    node->tag_          = static_cast<uint16_t>(impl);
     return node;
 }
 

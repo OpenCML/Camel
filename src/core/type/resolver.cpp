@@ -28,12 +28,11 @@ using namespace camel::core::type;
 
 namespace {
 
-/// The declared signature as an operator's type: closed, with its parameter names, var marks,
-/// modifiers and implementation mark kept.
+/// The declared signature as an operator's type: closed, with its parameter names, var marks
+/// and modifiers kept.
 FunctionType *closedSignature(FunctionType *declared) {
     ASSERT(declared->hasExitType(), "A declared operator has a result type");
     FunctionTypeFactory factory;
-    factory.setImplMark(declared->implMark());
     factory.setModifiers(declared->modifiers());
     for (size_t i = 0; i < declared->withTypesCount(); ++i) {
         factory.addWithArg(

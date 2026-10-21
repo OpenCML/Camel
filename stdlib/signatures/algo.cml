@@ -16,79 +16,53 @@
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example sort([3, 1, 2])    // [1, 2, 3]
-inner func sort(xs: T[]): T[] {
-    return 'algo:sort'
-}
+export func sort(xs: T[]): T[]
 
 /// A sorted copy of xs, by insertion sort.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example insert_sort([3, 1, 2])    // [1, 2, 3]
-inner func insert_sort(xs: T[]): T[] {
-    return 'algo:insert_sort'
-}
+export func insert_sort(xs: T[]): T[]
 
 /// A sorted copy of xs, by quicksort.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example quick_sort([3, 1, 2])    // [1, 2, 3]
-inner func quick_sort(xs: T[]): T[] {
-    return 'algo:quick_sort'
-}
+export func quick_sort(xs: T[]): T[]
 
 /// A sorted copy of xs, by merge sort.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example merge_sort([3, 1, 2])    // [1, 2, 3]
-inner func merge_sort(xs: T[]): T[] {
-    return 'algo:merge_sort'
-}
+export func merge_sort(xs: T[]): T[]
 
 /// The sorted array made of the elements of two sorted arrays of numbers.
 /// @pure
 /// @fails fault `OperandTypeUnsupported` when the elements are not numbers
 /// @example merge_sorted_arrays([1, 4], [2, 3])    // [1, 2, 3, 4]
-inner func merge_sorted_arrays(left: T[], right: T[]): T[] {
-    return 'algo:merge_sorted_arrays'
-}
+export func merge_sorted_arrays(left: T[], right: T[]): T[]
 
 /// The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
 /// of the `array` module.
 /// @pure
 /// @example flatten([[1, 2], [3]])    // [1, 2, 3]
-inner func flatten(xss: T[][]): T[] {
-    return 'algo:flatten'
-}
+export func flatten(xss: T[][]): T[]
 
 /// The first occurrence of every value, in order; values are compared as `==` compares them
 /// (a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
 /// module.
 /// @pure
 /// @example unique([3, 1, 3, 2, 1])    // [3, 1, 2]
-inner func unique(xs: T[]): T[] {
-    return 'algo:unique'
-}
+export func unique(xs: T[]): T[]
 
 /// The positions of the keys in ascending order of key; equal keys keep their order (a stable
 /// sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
 /// primitive behind `sort_by` of the `array` module.
 /// @pure
 /// @example argsort([30, 10, 20])    // [1, 2, 0]
-inner func argsort(keys: i32[]): int[] {
-    return 'algo:argsort'
-}
-inner func argsort(keys: int[]): int[] {
-    return 'algo:argsort'
-}
-inner func argsort(keys: f32[]): int[] {
-    return 'algo:argsort'
-}
-inner func argsort(keys: float[]): int[] {
-    return 'algo:argsort'
-}
-inner func argsort(keys: bool[]): int[] {
-    return 'algo:argsort'
-}
-inner func argsort(keys: string[]): int[] {
-    return 'algo:argsort'
-}
+export func argsort(keys: i32[]): int[]
+export func argsort(keys: int[]): int[]
+export func argsort(keys: f32[]): int[]
+export func argsort(keys: float[]): int[]
+export func argsort(keys: bool[]): int[]
+export func argsort(keys: string[]): int[]

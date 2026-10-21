@@ -14,39 +14,29 @@
 /// @effect whatever the callback does
 /// @example tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
 with <f: (leaf: A) => B>
-inner func tree_map(tree: T): U {
-    return 'tree:tree_map'
-}
+export func tree_map(tree: T): U
 
 /// Folds the leaves from the first to the last with f, starting from init.
 /// @effect whatever the callback does
 /// @example tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)    // 6
 with <f: (acc: R, leaf: A) => R>
-inner func tree_reduce(tree: T, init: R): R {
-    return 'tree:tree_reduce'
-}
+export func tree_reduce(tree: T, init: R): R
 
 /// Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
 /// leaf of `tree` at a leaf of the reference is a tuple of the same length.
 /// @pure
 /// @example tree_unzip({ a: (1, 2.0) }, { a: 0 })    // ({ a: 1 }, { a: 2.0 })
-inner func tree_unzip(tree: T, reference: S): U {
-    return 'tree:tree_unzip'
-}
+export func tree_unzip(tree: T, reference: S): U
 
 /// The leaves of a tree, as a tuple.
 /// @pure
 /// @example tree_leaves({ a: 1, b: (2, 3) })    // (1, 2, 3)
-inner func tree_leaves(tree: T): L {
-    return 'tree:tree_leaves'
-}
+export func tree_leaves(tree: T): L
 
 /// The paths of the leaves, as a tree of the same shape.
 /// @pure
 /// @example tree_paths({ a: 1, b: (2, 3) })    // { a: 'a', b: ('b.0', 'b.1') }
-inner func tree_paths(tree: T): P {
-    return 'tree:tree_paths'
-}
+export func tree_paths(tree: T): P
 
 /// Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
 /// tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
@@ -67,9 +57,7 @@ inner func tree_paths(tree: T): P {
 /// @effect writes and replaces the directory
 /// @fails fault `FileSystemError` when the directory cannot be written or published
 /// @example save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })
-inner func save_tree(dir: string, tree: T, dataset_manifest_sha256: string): void {
-    return 'tree:save_tree'
-}
+export func save_tree(dir: string, tree: T, dataset_manifest_sha256: string): void
 
 /// Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
 /// the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
@@ -79,6 +67,4 @@ inner func save_tree(dir: string, tree: T, dataset_manifest_sha256: string): voi
 /// standard error; the next save restores it before replacing it.
 /// @effect reads the directory
 /// @example load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()
-inner func load_tree(dir: string, dataset_manifest_sha256: string): T! {
-    return 'tree:load_tree'
-}
+export func load_tree(dir: string, dataset_manifest_sha256: string): T!

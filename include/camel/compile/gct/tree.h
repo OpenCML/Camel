@@ -112,7 +112,7 @@ class Tree {
     // reference and is refused with std::runtime_error (makeFunc takes the empty name of an
     // anonymous function).
     node_ptr_t makeData(const data_ptr_t &data);
-    node_ptr_t makeType(Type *type, ImplMark impl);
+    node_ptr_t makeType(Type *type);
     node_ptr_t makeDecl(const std::string &name, bool isFunc);
     node_ptr_t makeFunc(const std::string &name);
     node_ptr_t makeNRef(const std::string &name);

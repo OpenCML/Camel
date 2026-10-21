@@ -641,7 +641,6 @@ FunctionType *Builder::completeLambdaSignature(
         return funcType->hasArgNames() ? std::string(funcType->argNameAt(index)) : std::string{};
     };
     FunctionTypeFactory factory;
-    factory.setImplMark(funcType->implMark());
     factory.setModifiers(funcType->modifiers());
     factory.setHasCompileInfo(funcType->hasArgNames());
     // The result type: the one written, or the one the expected function type gives. An

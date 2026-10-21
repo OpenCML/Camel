@@ -228,8 +228,6 @@ void ParserImpl::parsePrimaryType() {
         return parseEnumType();
     case TK::Lt:
     case TK::KwSync:
-    case TK::KwAtomic:
-    case TK::KwShared:
         return parseFuncType();
     case TK::KwTypeof: {
         // The operand stops before an assignment: `let v: typeof a = b` declares `v`.

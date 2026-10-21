@@ -1200,7 +1200,7 @@ node_ptr_t Builder::visitFuncDecl(const AST::node_ptr_t &ast) {
 }
 
 /*
-TypeDecl(Ref ref, ImplMark impl, string uri) : Type? type ;
+TypeDecl(Ref ref, string uri) : Type? type ;
 */
 namespace {
 
@@ -1389,7 +1389,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // is through (see visitModule).
         module_->exportType(typeLoad->ref(), type);
     }
-    *declNode << tree_->makeType(type, typeLoad->implMark());
+    *declNode << tree_->makeType(type);
     // The tags written before the declaration itself (`#tag type P = ...`).
     attachTagUses(declNode, ast);
     LEAVE("TypeDecl");
@@ -1708,7 +1708,7 @@ node_ptr_t Builder::visitDecoratedBlock(const AST::node_ptr_t &ast) {
     node_ptr_t execNode = visitStmtBlock(ast, false);
     FunctionTypeFactory factory; // no parameters; the result is the block's value
     FunctionType *type  = factory.buildOpen();
-    node_ptr_t typeNode = tree_->makeType(type, type->implMark());
+    node_ptr_t typeNode = tree_->makeType(type);
     node_ptr_t funcNode = tree_->makeFunc("");
     funcNode->setDecoratedBlock();
     *funcNode << typeNode << execNode;
@@ -2422,11 +2422,11 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
                 // `A = int`: the name as a constant, then the type (design principles 5.9).
                 const auto &named = argument->loadAs<AST::NamedTypeLoad>();
                 *res << tree_->makeData(std::make_shared<StringData>(named->getRef().toString()));
-                *res << tree_->makeType(visitType(argument->at(0)), ImplMark::Graph);
+                *res << tree_->makeType(visitType(argument->at(0)));
                 continue;
             }
             Type *type = visitType(argument);
-            *res << tree_->makeType(type, ImplMark::Graph);
+            *res << tree_->makeType(type);
         }
         setOriginFromAst(
             context_,
@@ -2922,7 +2922,7 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
 
     const auto &typeAst    = ast->atAs<AST::TypeLoad>(0);
     Type *subject          = visitType(typeAst);
-    node_ptr_t typeNode    = tree_->makeType(subject, ImplMark::Graph);
+    node_ptr_t typeNode    = tree_->makeType(subject);
     setOriginFromAst(
         context_, typeNode, typeAst, camel::source::OriginKind::GctNode, "gct.match.type.subject");
     *matchNode << typeNode;
@@ -2970,7 +2970,7 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
     } else {
         const auto &typeAst = ast->atAs<AST::TypeLoad>(0);
         Type *subject       = visitType(typeAst);
-        node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
+        node_ptr_t typeNode = tree_->makeType(subject);
         setOriginFromAst(
             context_, typeNode, typeAst, camel::source::OriginKind::GctNode,
             "gct.static.for.type");
@@ -3022,7 +3022,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     } else {
         const auto &typeAst = ast->atAs<AST::TypeLoad>(1);
         Type *subject       = visitType(typeAst);
-        node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
+        node_ptr_t typeNode = tree_->makeType(subject);
         setOriginFromAst(
             context_, typeNode, typeAst, camel::source::OriginKind::GctNode,
             "gct.static.loop.type");
@@ -3419,7 +3419,7 @@ node_ptr_t Builder::visitComprehension(const AST::node_ptr_t &ast) {
             TypeVarType::create("$element" + std::to_string(idIndex_++), true),
             false);
         FunctionType *type  = factory.buildOpen(); // a function being defined: see openSignature_
-        node_ptr_t typeNode = place(tree_->makeType(type, type->implMark()), body, "gct.func.type");
+        node_ptr_t typeNode = place(tree_->makeType(type), body, "gct.func.type");
         const ValueUseScope valueUseScope(*this);
         valueUse_           = {};
         node_ptr_t bodyNode = place(makeExec(false), body, "gct.block");
@@ -4075,7 +4075,7 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
             }
         }
     }
-    node_ptr_t typeNode = tree_->makeType(funcType, funcType->implMark());
+    node_ptr_t typeNode = tree_->makeType(funcType);
     // A declaration without a body declares an operator of a C++ module (design principles 6.4):
     // it has a signature and nothing to build, so the FUNC carries its type alone and is marked
     // as a declaration. The graph builder turns it into an operator group instead of a graph
@@ -4471,7 +4471,7 @@ Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
 }
 
 /*
-FuncType(Modifier[] modifiers, ImplMark impl, string uri)
+FuncType(Modifier[] modifiers, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 */
 namespace {
@@ -4553,7 +4553,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
 
     FunctionTypeFactory factory;
-    factory.setImplMark(typeLoad->implMark());
+
     factory.setModifiers(typeLoad->modifiers());
 
     std::unordered_set<string> paramNames;

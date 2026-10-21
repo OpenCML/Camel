@@ -247,7 +247,7 @@ class ParserImpl {
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
     void parseTypeDeclRest(size_t m);
     void parseRetStmt();
-    void parseImplMark();
+
     void parseModifiers();
     void parseIdentDef();
     void parseIdentRef(NK kind);
@@ -392,8 +392,6 @@ class ParserImpl {
     void parseTypeList(TK closer);
 };
 
-constexpr bool isModifier(TK kind) {
-    return kind == TK::KwAtomic || kind == TK::KwShared || kind == TK::KwSync;
-}
+constexpr bool isModifier(TK kind) { return kind == TK::KwSync; }
 
 } // namespace camel::parse::syntax

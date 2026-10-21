@@ -481,7 +481,7 @@ any Formatter::visitTagRef(cst::TagRef context) {
 funcDecl   :
         funcAnno*
         (WITH angledParams)?
-        EXPORT? implMark? modifiers?
+        EXPORT? modifiers?
 
 FUNC identRef parentParams (':' typeExpr)? stmtBlock? ;
 */
@@ -489,7 +489,6 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     string result;
     const auto funcAnnos     = context->all<cst::FuncAnno>();
     const auto &angledParams = context->get<cst::AngledParams>();
-    const auto &implMark     = context->get<cst::ImplMark>();
     const auto &modifiers    = context->get<cst::Modifiers>();
     const auto &identRef     = context->get<cst::IdentRef>();
     const auto &parentParams = context->get<cst::ParentParams>();
@@ -510,10 +509,6 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
 
     if (context->tok(TK::KwExport)) {
         result += "export ";
-    }
-
-    if (implMark) {
-        result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
 
     if (modifiers) {
@@ -706,18 +701,14 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
 
 /*
 typeDecl
-    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
       (typeExpr | STRING)
     ;
 */
 any Formatter::visitTypeDecl(cst::TypeDecl context) {
-    const auto &implMark = context->get<cst::ImplMark>();
     string result;
     for (const auto &tagUse : context->all<cst::TagUse>()) {
         result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
-    }
-    if (implMark) {
-        result += any_cast<string>(visitImplMark(implMark)) + " ";
     }
     result += "type " + any_cast<string>(visitIdentRef(context->get<cst::IdentRef>()));
     if (const auto params = context->all<cst::IdentDef>(); !params.empty()) {
@@ -745,17 +736,10 @@ any Formatter::visitRetStmt(cst::RetStmt context) {
 }
 
 /*
-implMark    : INNER | OUTER ;
-*/
-any Formatter::visitImplMark(cst::ImplMark context) { return context->text(); }
-
-/*
-modifiers   : (ATOMIC | SHARED | SYNC)+ ;
+modifiers   : SYNC+ ;
 */
 any Formatter::visitModifiers(cst::Modifiers context) {
     string result;
-    context->tokCount(TK::KwAtomic) ? result += "atomic " : result;
-    context->tokCount(TK::KwShared) ? result += "shared " : result;
     context->tokCount(TK::KwSync) ? result += "sync " : result;
     // remove trailing space
     if (!result.empty()) {
@@ -1778,7 +1762,6 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(DataDecl)
         CAMEL_FORMAT(TypeDecl)
         CAMEL_FORMAT(RetStmt)
-        CAMEL_FORMAT(ImplMark)
         CAMEL_FORMAT(Modifiers)
         CAMEL_FORMAT(ParentIdents)
         CAMEL_FORMAT(BracedIdents)

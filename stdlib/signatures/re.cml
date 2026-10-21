@@ -10,6 +10,4 @@
 /// @pure
 /// @fails fault `RegexInvalid` when pattern is not a regular expression
 /// @example test('[0-9]+', 'room 42')    // true
-inner func test(pattern: string, text: string): bool {
-    return 're:test'
-}
+export func test(pattern: string, text: string): bool

@@ -6,16 +6,15 @@
 //                                                   modules register (needs a built compiler)
 //
 // stdlib/signatures/<module>.cml declares the operators a C++ module exports (globals.cml: the
-// built-in ones), one `inner func` each, with a doc comment:
+// built-in ones), one body-less `export func` each, with a doc comment:
 //
 //   /// What it does, in one or more lines.
 //   /// @pure                      or  @effect <what the effect is>
 //   /// @fails <fault or error and when>          (optional; several conditions separated by `;`)
 //   /// @example <code>    // <result>
-//   with <a: A>                                    (optional: the with-parameters)
-//   inner func name(x: X): R {
-//       return 'protocol:operator'                 (the URI; `*` stands for any text, for a
-//   }                                               group of overloads that differ by type)
+//   #op<'protocol:operator'>                       (only when the URI is not `<module>:<name>`;
+//   with <a: A>                                     `*` stands for any text, for a group of
+//   export func name(x: X): R                       overloads that differ by type)
 //
 // A value a module exports (`math::pi`; design principles 10.1) is declared with its type and
 // a doc comment, and needs neither @pure nor a URI (it is not an operator):
@@ -145,11 +144,7 @@ function bracketed(text, open) {
 function parseDeclarations(module) {
     const file = sourceOf(module)
     const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
-    const keyword = module.declaration
-        ? 'export func'
-        : module.kind === 'camel'
-          ? 'export func'
-          : 'inner func'
+    const keyword = 'export func'
     const entries = []
     const sectionNotes = new Map()
     entries.sectionNotes = sectionNotes
@@ -207,10 +202,10 @@ function parseDeclarations(module) {
             withText = ''
             continue
         }
-        // A declaration module names the operator of a declaration with `#op<'module:function'>`
-    // when it does not follow the convention; the line belongs to the declaration, so it does
-    // not end the pending comment (design principles 6.4; handover H19, step 1).
-    if (module.declaration && trimmed.startsWith('#')) {
+        // A C++ module names the operator of a declaration with `#op<'module:function'>` when it
+    // does not follow the convention; the line belongs to the declaration, so it does not end
+    // the pending comment (design principles 6.4; handover H19, step 1).
+    if (module.kind === 'cpp' && trimmed.startsWith('#')) {
         const tagged = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
         if (!tagged) throw new Error(`${path.basename(file)}:${i + 1}: unknown tag on a declaration`)
         pendingUri = tagged[1]
@@ -247,15 +242,8 @@ function parseDeclarations(module) {
                 else entry.doc.push(text)
             }
             if (module.kind === 'cpp') {
-                if (module.declaration) {
-                    // `module:function`, or what the `#op` tag above says.
-                    entry.uri = pendingUri || `${module.name}:${name}`
-                } else {
-                    const body = (lines[i + 1] || '').trim().match(/^return '([^']+)'$/)
-                    if (!body)
-                        throw new Error(`${path.basename(file)}:${i + 2}: expected return '<uri>'`)
-                    entry.uri = body[1]
-                }
+                // `module:function`, or what the `#op` tag above says.
+                entry.uri = pendingUri || `${module.name}:${name}`
             }
             entries.push(entry)
             doc = []

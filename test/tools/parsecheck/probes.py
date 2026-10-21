@@ -75,7 +75,7 @@ STATEMENTS = [
     "let v = [x for x in xs if c]", "let v = [x for x in xs]", "let v = [...xs, 1,]",
     "let v = [1,]", "let v = []", "let v = { a: 1, ...b, }",
     "return a, b", "throw e", "use a = b::c", "use b::c", "using namespace a::b",
-    "type P = (int, int)", "inner type Q = 'uri'", "type P<T> = (T, T)", "type P<T>= T",
+    "type P = (int, int)", "type Q = 'uri'", "type P<T> = (T, T)", "type P<T>= T",
     "type P<A, B,> = A", "let v = raise", "let a = 1 let b = 2", "a b", "a; b",
     # `fields` and `match type` are followed by a type position: a `(` there is a type, so `()`
     # is the empty tuple type and a function type takes one more pair of parentheses (H79 ruling 1).
@@ -90,13 +90,13 @@ STATEMENTS = [
 DECLARATIONS = [
     "module m", "import a", "import a.b.c", "import .a", "import ..a.b", "import ...a",
     "import x from a.b", "import { x, y } from a", "import { x, } from a",
-    "export { a, b }", "export let a = 1", "export type T = int", "export inner type T = 'u'",
-    "export func f() {}", "export inner func f() {}", "inner func f() {}",
+    "export { a, b }", "export let a = 1", "export type T = int", "export type V = 'u'",
+    "export func f() {}", "export func v(): int", "func w(): int",
     "with <T: type> func f(a: T): T { return a }", "with <k: int = 1> export sync func f() {}",
     "@a func f() {}", "@a @b<1> func f() {}", "@a::b<k: 1> with <T: type> macro func f() {}",
     "func f(): int? {}", "func f(): int? { return 1 }", "func f(): int sync { return 1 }",
     "func f(): int! sync {}", "func f(): (x: int) => int { return g }",
-    "func f(a: int, var b: T[] = [],): () { }", "atomic shared func f() {}",
+    "func f(a: int, var b: T[] = [],): () { }", "sync func f() {}",
     "namespace a::b { func f() {} type T = int; namespace c { use x } }",
     "namespace a { import b; export { c } using namespace d }",
     "let a = 1; let b = 2", ";let a = 1", "type T = int type U = T",

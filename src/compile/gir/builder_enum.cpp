@@ -153,7 +153,7 @@ node_handle_t Builder::applyInternalOperatorCall(
         // The instance the call makes, as `f::<T>` gives one: the operator's result type is
         // that instance, and its slot is of it (a value of an enum type holds references).
         GCT::node_ptr_t application = tree_->makeTypeApplication();
-        *application << callee << tree_->makeType(typeArgument, ImplMark::Graph);
+        *application << callee << tree_->makeType(typeArgument);
         callee = application;
     }
     GCT::node_ptr_t call = tree_->makeLink(static_cast<uint32_t>(operands.size()));

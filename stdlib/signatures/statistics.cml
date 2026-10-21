@@ -12,67 +12,35 @@
 /// The arithmetic mean; 0 for an empty array.
 /// @pure
 /// @example mean([1, 2, 3, 4])    // 2.5
-inner func mean(xs: i32[]): float {
-    return 'statistics:mean'
-}
-inner func mean(xs: int[]): float {
-    return 'statistics:mean'
-}
-inner func mean(xs: f32[]): float {
-    return 'statistics:mean'
-}
-inner func mean(xs: float[]): float {
-    return 'statistics:mean'
-}
+export func mean(xs: i32[]): float
+export func mean(xs: int[]): float
+export func mean(xs: f32[]): float
+export func mean(xs: float[]): float
 
 /// The sample standard deviation (divisor n - 1); 0 for fewer than two elements.
 /// @pure
 /// @example stdev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0])    // 2.13809
-inner func stdev(xs: i32[]): float {
-    return 'statistics:stdev'
-}
-inner func stdev(xs: int[]): float {
-    return 'statistics:stdev'
-}
-inner func stdev(xs: f32[]): float {
-    return 'statistics:stdev'
-}
-inner func stdev(xs: float[]): float {
-    return 'statistics:stdev'
-}
+export func stdev(xs: i32[]): float
+export func stdev(xs: int[]): float
+export func stdev(xs: f32[]): float
+export func stdev(xs: float[]): float
 
 /// The sample variance (divisor n - 1), the square of stdev; 0 for fewer than two elements.
 /// @pure
 /// @example variance([1, 2, 3, 4])    // 1.66667
-inner func variance(xs: i32[]): float {
-    return 'statistics:variance'
-}
-inner func variance(xs: int[]): float {
-    return 'statistics:variance'
-}
-inner func variance(xs: f32[]): float {
-    return 'statistics:variance'
-}
-inner func variance(xs: float[]): float {
-    return 'statistics:variance'
-}
+export func variance(xs: i32[]): float
+export func variance(xs: int[]): float
+export func variance(xs: f32[]): float
+export func variance(xs: float[]): float
 
 /// The middle value of the sorted elements, the mean of the two middle ones for an even
 /// count; null for an empty array, NaN when an element is NaN.
 /// @pure
 /// @example median([3, 1, 2]) ?? 0.0    // 2
-inner func median(xs: i32[]): float? {
-    return 'statistics:median'
-}
-inner func median(xs: int[]): float? {
-    return 'statistics:median'
-}
-inner func median(xs: f32[]): float? {
-    return 'statistics:median'
-}
-inner func median(xs: float[]): float? {
-    return 'statistics:median'
-}
+export func median(xs: i32[]): float?
+export func median(xs: int[]): float?
+export func median(xs: f32[]): float?
+export func median(xs: float[]): float?
 
 /// The q-quantile, q from 0 to 1, by linear interpolation between the two nearest ranks
 /// (position q * (n - 1) of the sorted elements); null for an empty array, NaN when an
@@ -81,15 +49,7 @@ inner func median(xs: float[]): float? {
 /// @fails fault `InvalidArgument` when q is not between 0 and 1
 /// @example [1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0    // 2
 with <q: float>
-inner func quantile(xs: i32[]): float? {
-    return 'statistics:quantile'
-}
-inner func quantile(xs: int[]): float? {
-    return 'statistics:quantile'
-}
-inner func quantile(xs: f32[]): float? {
-    return 'statistics:quantile'
-}
-inner func quantile(xs: float[]): float? {
-    return 'statistics:quantile'
-}
+export func quantile(xs: i32[]): float?
+export func quantile(xs: int[]): float?
+export func quantile(xs: f32[]): float?
+export func quantile(xs: float[]): float?
