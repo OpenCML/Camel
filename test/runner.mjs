@@ -41,7 +41,7 @@ const DEFAULT_TARGETS = [
 ]
 
 // Options that take a value: the value belongs to the option, not to the target list.
-const VALUE_FLAGS = new Set(['--tier', '--jobs'])
+const VALUE_FLAGS = new Set(['--tier', '--jobs', '--build'])
 
 function resolvePlanPathFromSegments(segments) {
     if (segments.length === 0) return null
@@ -130,9 +130,27 @@ function parseArgs(argv) {
 
     return {
         runnerArgs,
-        targets: targets.length > 0 ? targets : (changed ? [] : DEFAULT_TARGETS),
+        // The debug layer is opt-in and its abort case lives in test/plans/debug, outside the
+        // ordinary smoke + feat default, so a debug run without a target scans the whole plan
+        // tree. A named target still narrows it.
+        targets: targets.length > 0
+            ? targets
+            : changed
+                ? []
+                : debugTierRequested(runnerArgs)
+                    ? [PLANS_ROOT]
+                    : DEFAULT_TARGETS,
         changed,
     }
+}
+
+/** Whether the forwarded arguments ask for `--tier debug` (as `--tier debug` or `--tier=debug`). */
+function debugTierRequested(runnerArgs) {
+    for (let i = 0; i < runnerArgs.length; i++) {
+        if (runnerArgs[i] === '--tier' && runnerArgs[i + 1] === 'debug') return true
+        if (runnerArgs[i] === '--tier=debug') return true
+    }
+    return false
 }
 
 /** Files changed against the base branch, committed or not; null when git cannot answer. */

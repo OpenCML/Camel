@@ -589,7 +589,9 @@ slot_t Array::getSlotSlow(uint64_t flatIndex) const {
 }
 
 void Array::setSlotSlow(uint64_t flatIndex, slot_t value, const type::ArrayType *arrayType) {
-    ASSERT(flatIndex < numel_, "Array flat index out of range");
+    // Inclusive: an append stores at `numel_` before the count grows (see Array::setSlot). The old
+    // exclusive bound aborted every compact append in a Debug build (H30).
+    ASSERT(flatIndex <= numel_, "Array flat index out of range");
     if (isSlots()) {
         CAMEL_ASSERT_NOT_VIEW(value, elemType_, "an array element");
         rtdata::Object *owner =

@@ -1,6 +1,7 @@
 id = "mm.capacity"
 order = 368
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "mm", "capacity", "scale"]
 desc = """
 Programs of ordinary size must not run into the capacity of the spaces the compiler keeps the
