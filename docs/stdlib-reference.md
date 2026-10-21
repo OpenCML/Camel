@@ -36,7 +36,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 50 |
+| [built-in](#built-in-functions) | none | C++ | 51 |
 | [str](#str) | `import { ... } from str` | C++ | 16 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [tree](#tree) | `import { ... } from tree` | C++ | 7 |
@@ -389,6 +389,20 @@ The first element. An empty array has none: check len first.
 - Pure.
 - Failure: fault `IndexOutOfRange` when the array is empty.
 - Example: `head([1, 2, 3])` gives `1`
+
+#### `last`
+
+```camel
+last: (xs: T[]) => T
+```
+
+The last element. An empty array has none: check len first. Negative indices are not
+counted from the end (a negative index is a fault), so this is how the last element is
+written.
+
+- Pure.
+- Failure: fault `IndexOutOfRange` when the array is empty.
+- Example: `last([1, 2, 3])` gives `3`
 
 #### `tail`
 

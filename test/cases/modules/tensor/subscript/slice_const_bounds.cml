@@ -1,0 +1,13 @@
+/**
+ * A slice bound outside a statically known first extent is a compile-time error (design
+ * principles 3.9), as for the function form of slice.
+ */
+module subscript_slice_const
+import { Tensor, reshape, sum } from tensor
+
+func main(): int sync {
+    println('ran')
+    let b = reshape([1.0, 2.0, 3.0, 4.0], [4])
+    println(sum(b[0:9]))
+    return 0
+}

@@ -68,3 +68,14 @@ expect_exit = 0
 expect_stdout_contains = ["annotated 1 2", "with-call 7 13", "call 1.5", "index y 1", "compare true"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "syntax.subscript_forms"
+desc = "The forms of a subscript (design principles 5.4): a slice with both bounds, with one, with neither, with a step, an int-array index and last(xs), parsed, type-checked and lowered for the first dimension of an array."
+kind = "behavior"
+case = "../../../cases/parse/syntax/subscript_forms.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["part [2, 3]", "after [3, 4]", "till [1, 2]", "whole [1, 2, 3, 4]", "stepped [1, 2, 3, 4]", "rows [3, 1]", "end 4"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

@@ -48,6 +48,7 @@ enum class DataType {
     Func,
     Ref,
     ConstAs,
+    Slice,
     EnumPattern
 };
 
@@ -428,6 +429,19 @@ class ConstAsLoad : public DataLoad {
 
   private:
     Reference ref_;
+};
+
+/// One dimension of a subscript that is a slice, `t[a:b]`, `t[:b]`, `t[a:]`, `t[a:b:s]`: its
+/// start, end and step, in that order. A part that was not written is a null load in its slot,
+/// an empty part, never an omitted value (design principles 5.4).
+class SliceLoad : public DataLoad {
+  public:
+    SliceLoad() : DataLoad(DataType::Slice) {}
+
+    const std::string toString() const override {
+        return "DataLoad: " + to_string(dataType()) + this->status();
+    }
+    const std::string geneCode() const override;
 };
 
 /// One field the pattern of an enum variant names. A tuple variant writes the bindings in

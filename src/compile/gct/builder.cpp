@@ -291,6 +291,10 @@ void Builder::initInnerTypes() {
 /*
 Module(Ref ref) : ImportDecl* import, ExportDecl? export, Stmt* ;
 */
+// Defined with the literal builder below; the subscript builder makes the constants a slice
+// did not write (start 0, step 1) out of it.
+template <typename T> inline data_ptr_t makeDataFromLiteral(const T &value);
+
 // A primitive type whose values are integers (`i32`, `int`): a float literal is not converted
 // to one by itself (design principles 5.1, "数值类型不做隐式转换").
 static bool isIntegerPrimitive(Type *type) {
@@ -2034,6 +2038,22 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     node_ptr_t opNode = nullptr;
 
+    // A dimension of a subscript that slices is not an element index (design principles 5.4):
+    // `t[a:b]` calls the slice operator, `t[i]` the index operator. The dimensions are counted
+    // because a slice of a dimension other than the first is a view with strides, which needs
+    // the multidimensional array representation of H17.
+    AST::node_ptr_t sliceDimension = nullptr;
+    size_t subscriptDimensions     = 0;
+    if (binaryExpr->op() == AST::BinaryDataOp::Index) {
+        for (const auto &item : *ast->atAs<AST::RepeatedLoad>(1)) {
+            ++subscriptDimensions;
+            if (item->type() == AST::LoadType::Data &&
+                item->loadAs<AST::DataLoad>()->dataType() == AST::DataType::Slice) {
+                sliceDimension = item;
+            }
+        }
+    }
+
     // Determine the binary operator and create the corresponding node
     switch (binaryExpr->op()) {
     case AST::BinaryDataOp::LogicalOr:
@@ -2058,6 +2078,11 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 "with '==' and '!='");
         throw BuildAbortException();
     }
+    case AST::BinaryDataOp::Index: {
+        // `t[a:b]` is the slice operator, `t[i]` the index operator; the table gives `[]` the
+        // index operator, so the slice is named here (design principles 5.4).
+        opNode = tree_->makeDRef(sliceDimension != nullptr ? "__slice__" : "__idx__");
+    } break;
     default: {
         // Every other operator is a call of the group the table of operator_names.cpp gives
         // its symbol: plain, compound assignment and `=` alike.
@@ -2090,17 +2115,67 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
 
     // Handle the right-hand side (RHS) or indices for specific operators
     if (binaryExpr->op() == AST::BinaryDataOp::Index) {
-        auto indices      = ast->atAs<AST::RepeatedLoad>(1);
-        int32_t indexSlot = 0;
-        for (const auto &index : *indices) {
-            node_ptr_t indexNode = visitData(index);
-            *res << indexNode;
-            mergedInputs.push_back(nodeOrigin(indexNode));
-            parts.push_back(semanticPart(
-                camel::source::SemanticRole::IndexExpr,
-                nodeOrigin(indexNode),
-                indexSlot++,
-                "index"));
+        auto indices = ast->atAs<AST::RepeatedLoad>(1);
+        if (sliceDimension != nullptr) {
+            if (subscriptDimensions > 1) {
+                // `t[:, 0]`, `t[a:b, c]`: the result takes every element of the dimension that
+                // is not sliced at the coordinate the index gives, so it is a view with
+                // strides (design principles 5.4). That needs the multidimensional array
+                // representation H17 brings; until then the form is a located error rather
+                // than a copy that would read like the view but not share its block.
+                diags_->of(SemanticDiag::ConstructNotSupported)
+                    .at(indices->load()->tokenRange())
+                    .commit(
+                        "a subscript that slices a dimension other than the first",
+                        "it is a view with strides, which needs the multidimensional array "
+                        "representation of H17; until then take the rows with the function "
+                        "'take', or index one dimension at a time");
+                throw BuildAbortException();
+            }
+            // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the three parts of the dimension
+            // (an unwritten one a null load) and whether the end was written at all (`t[a:]`
+            // runs to the end). A part that was not written is passed as the value it stands
+            // for, 0 for the start and 1 for the step; the end is read only when written.
+            node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
+            bool written[3]     = {false, false, false};
+            for (size_t i = 0; i < 3; ++i) {
+                const auto &part = sliceDimension->at(i);
+                written[i]       = part->type() != AST::LoadType::Null;
+                if (written[i]) {
+                    bound[i] = visitData(part);
+                }
+            }
+            const auto intConstant = [this](int64_t value) {
+                return tree_->makeData(makeDataFromLiteral<int64_t>(value));
+            };
+            bound[0]                  = written[0] ? bound[0] : intConstant(0);
+            bound[1]                  = written[1] ? bound[1] : intConstant(0);
+            bound[2]                  = written[2] ? bound[2] : intConstant(1);
+            node_ptr_t endWrittenNode = intConstant(written[1] ? 1 : 0);
+            for (size_t i = 0; i < 3; ++i) {
+                *res << bound[i];
+                if (written[i]) {
+                    mergedInputs.push_back(nodeOrigin(bound[i]));
+                    parts.push_back(semanticPart(
+                        camel::source::SemanticRole::IndexExpr,
+                        nodeOrigin(bound[i]),
+                        static_cast<int32_t>(i),
+                        i == 0 ? "start" : (i == 1 ? "end" : "step")));
+                }
+            }
+            *res << endWrittenNode;
+        } else {
+            int32_t indexSlot = 0;
+            for (const auto &index : *indices) {
+                node_ptr_t indexNode = visitData(index);
+                *res << indexNode;
+                mergedInputs.push_back(nodeOrigin(indexNode));
+                parts.push_back(semanticPart(
+                    camel::source::SemanticRole::IndexExpr,
+                    nodeOrigin(indexNode),
+                    indexSlot++,
+                    "index"));
+            }
         }
     } else {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);

@@ -511,6 +511,8 @@ class Formatter {
 
     std::any visitIndices(cst::Indices context);
 
+    std::any visitSliceIndices(cst::SliceIndices context);
+
     std::any visitParentParams(cst::ParentParams context);
 
     std::any visitParentArgues(cst::ParentArgues context);

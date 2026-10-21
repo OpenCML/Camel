@@ -678,24 +678,57 @@ void ParserImpl::parseArguments(TK closer) {
     eat(TK::Comma);
 }
 
-/// indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']'
+/// indices : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
 void ParserImpl::parseIndices() {
     const size_t m = mark();
     bump();
     {
         Scope scope(*this, false);
-        parseExpr();
-        if (eat(TK::Colon)) {
-            parseExpr();
-            if (eat(TK::Colon)) {
-                parseExpr();
+        parseSliceIndices();
+        while (eat(TK::Comma)) {
+            if (cur_ == TK::RBracket) {
+                break;
             }
+            parseSliceIndices();
         }
     }
     if (!panic_) {
         expect(TK::RBracket);
     }
     close(m, NK::Indices);
+}
+
+/// sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?
+///
+/// One dimension of a subscript: a slice when a colon follows, an element index otherwise (the
+/// expression is then the whole dimension, which `indices` writes as its other alternative).
+/// The node keeps the colons it consumed as children, so which of the three parts were written
+/// is read from the tree itself and not recovered from token positions: the part before the
+/// first colon is the start, the one between the colons the end, the one after the second colon
+/// the step.
+void ParserImpl::parseSliceIndices() {
+    const size_t m = mark();
+    if (cur_ != TK::Colon) {
+        parseExpr();
+        if (cur_ != TK::Colon) {
+            return; // an element index: the expression is the whole dimension
+        }
+    }
+    bump(); // ':'
+    parseSlicePart();
+    if (eat(TK::Colon)) {
+        parseSlicePart();
+    }
+    close(m, NK::SliceIndices);
+}
+
+/// One part of a slice: nothing at all when the next token is a colon or the end of the
+/// subscript, which leaves the part out of the tree.
+void ParserImpl::parseSlicePart() {
+    if (cur_ == TK::Colon || cur_ == TK::Comma || cur_ == TK::RBracket) {
+        return;
+    }
+    parseExpr();
 }
 
 /// parentArgues : '(' argumentList? ','? ')'

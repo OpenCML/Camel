@@ -885,17 +885,44 @@ any Formatter::visitArgumentList(cst::ArgumentList context) {
 }
 
 /*
-indices : '[' dataExpr (':' dataExpr (':' dataExpr)?)? ']' ;
+indices : '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']' ;
 */
 any Formatter::visitIndices(cst::Indices context) {
-    string result = "[" + any_cast<string>(visitExpr(context->expr(0)));
-    if (context->childCount() > 3) {
-        result += ": " + any_cast<string>(visitExpr(context->expr(1)));
-        if (context->childCount() > 6) {
-            result += ": " + any_cast<string>(visitExpr(context->expr(2)));
+    string result = "[";
+    bool first    = true;
+    for (const syn::Node entry : context->nodes()) {
+        if (!first) {
+            result += ", ";
+        }
+        first = false;
+        if (entry.is(NK::SliceIndices)) {
+            result += any_cast<string>(visitSliceIndices(cst::SliceIndices(entry)));
+        } else {
+            result += any_cast<string>(visitExpr(entry));
         }
     }
     return result + "]";
+}
+
+/*
+sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left out ;
+*/
+any Formatter::visitSliceIndices(cst::SliceIndices context) {
+    // The tree keeps the colons it consumed, so the text is the parts and the colons in the
+    // order they were written. A colon is followed by a space only when a part follows it.
+    string result;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            result += ":";
+            continue;
+        }
+        if (!result.empty() && result.back() == ':') {
+            result += " ";
+        }
+        result += any_cast<string>(visitExpr(child.node()));
+    }
+    return result;
 }
 
 /*
@@ -1817,6 +1844,8 @@ any Formatter::visit(syn::Node context) {
         return "typeas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::ConstasData:
         return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
+    case NK::SliceIndices:
+        return visitSliceIndices(cst::SliceIndices(context));
     default:
         throw std::runtime_error(
             "camel-format: no rule for " + std::string(syn::nodeKindName(context.kind())));
