@@ -390,8 +390,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = """
-tensor([    nan,       0.,       1.,       0.], dtype=float32)
+expect_stdout_exact = """tensor([    nan,       0.,       1.,       0.], dtype=float32)
 tensor([    nan,     nan,       0.,       0.], dtype=float32)
 tensor([    nan,     nan,       0.,       0.], dtype=float32)
 tensor([    nan,     nan,      -0.,      -0.], dtype=float32)
@@ -407,7 +406,7 @@ tensor(     -0., dtype=float32)
 matmul fma_step=0.0004883408546447754
 matmul chain=16777216.0
 softmax equal=0.0
-softmax nan_count=3
+softmax nan_count=3.0
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

@@ -1,0 +1,14 @@
+# Fixture of test/tools/selftest/run.mjs: a known assertion key with the wrong type fails the
+# plan where the file and the test are named, not later inside an assertion.
+id = "selftest.strict.wrong_type"
+order = 7
+tier = "fast"
+
+[[tests]]
+name = "wrong_type"
+desc = "expect_stdout_exact compares text, so a number is a schema error."
+kind = "behavior"
+tool = "node"
+case = "../backend_echo.mjs"
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_exact = 42
