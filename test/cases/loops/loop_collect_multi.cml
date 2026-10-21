@@ -1,0 +1,15 @@
+// A collection output in a loop with several states: the body returns the next values of the
+// states and then the appended element, and the loop's value is the states followed by the
+// collection arrays. The program still sees only the states (the FILL projection), and the
+// append is part of the body's result, so it runs (design principles 3.10).
+func collect(): (float[], int) {
+    return loop xs = [] as float[], total = 0
+        while len(xs) < 3
+        do (xs->append<1.0>, total + 1)
+}
+
+func main(): int sync {
+    let (xs, total) = collect()
+    println(xs, total)
+    return 0
+}

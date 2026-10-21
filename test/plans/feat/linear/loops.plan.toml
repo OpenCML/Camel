@@ -579,3 +579,16 @@ expect_diagnostic_line = 8
 expect_output_contains = ["has no gradient channel", "refuse_loop_iter_array.cml:8:12"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "loops.collect_multi_state"
+desc = "A collection output in a loop with several states: the body returns `(next states..., appended element...)`, so the append is part of the result and the loop value is `(states..., collection arrays...)`; the FILL projection gives the program only the states. Before the fix the body result read the states back through an ACCS of the loop value, so the append became dead and C2's training loop stopped at `EffectNotExecuted`."
+kind = "behavior"
+case = "../../../cases/loops/loop_collect_multi.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[1.0, 1.0, 1.0] 3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

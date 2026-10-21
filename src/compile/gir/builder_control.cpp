@@ -2370,14 +2370,18 @@ std::vector<Type *> Builder::collectLoopAppends(
     if (collected.empty()) {
         return {};
     }
-    std::vector<node_handle_t> components;
-    if (stateCount == 1) {
-        components.push_back(returned);
-    } else {
+    // The body's next state values, in state order, then one appended element per collection.
+    // They are the values the body computed this round; reading them back through an ACCS of
+    // the loop's own value would both lose the append (nothing would use it) and hand the
+    // driver the state it started with.
+    if (stateCount > 1) {
         for (size_t j = 0; j < stateCount; ++j) {
-            components.push_back(bodyGraph->addAccsNode(stateTypes[j], static_cast<uint32_t>(j)));
+            if (next[j] == nullptr) {
+                return {}; // a constant component the body does not give us as a value
+            }
         }
     }
+    std::vector<node_handle_t> components(next.begin(), next.end());
     components.insert(components.end(), values.begin(), values.end());
     std::vector<Type *> resultTypes = stateTypes;
     for (Type *element : collected) {

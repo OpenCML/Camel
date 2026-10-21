@@ -2299,3 +2299,14 @@ expect_output_contains = ["SemanticDiag::UnresolvedReference", "value_and_grad"]
 expect_output_not_contains = ["retired", "use `with_grad`"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "grad_data_input_is_data"
+desc = "An ordinary argument is data even when its type has a tangent: a float `scale` converted to int and a `Tensor` of integer labels cast to int64 and back to float are inputs of the differentiated computation with nothing differentiable upstream, so they are not refused; the gradient is taken through the first `with` parameter and is 3.0 and [0, 1, 0] (sum 1.0) respectively (design principles 9.9). This is the C2 `with_grad(loss)` shape."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_data_input.cml"
+args = ["${case}", "std::macro"]
+expect_exit = 0
+expect_stdout_exact = "6.0\n3.0\n2.0\n1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
