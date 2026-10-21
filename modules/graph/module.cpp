@@ -24,6 +24,8 @@
  */
 
 #include "handle.h"
+#include "nodekind.h"
+#include "read.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
@@ -42,33 +44,15 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
-using camel::runtime::GCNodeKind;
+using camel::graphmod::nodeKindType;
+using camel::graphmod::readGroups;
+using camel::graphmod::readKernels;
 
 namespace {
 
 namespace mm     = camel::core::mm;
 namespace rtdata = camel::core::rtdata;
 using camel::core::rtdata::Variant;
-
-/// The kinds of node a program can show, in the order of the Camel enum `NodeKind`. Bind and
-/// Dref exist only while a graph is built, and Dead marks the place of a removed node: none of
-/// them is a node of a graph a program reads.
-constexpr std::pair<GCNodeKind, const char *> kNodeKinds[] = {
-    {GCNodeKind::Data, "Data"},
-    {GCNodeKind::Port, "Port"},
-    {GCNodeKind::Cast, "Cast"},
-    {GCNodeKind::Copy, "Copy"},
-    {GCNodeKind::Fill, "Fill"},
-    {GCNodeKind::Accs, "Accs"},
-    {GCNodeKind::Brch, "Brch"},
-    {GCNodeKind::Join, "Join"},
-    {GCNodeKind::Call, "Call"},
-    {GCNodeKind::Func, "Func"},
-    {GCNodeKind::Oper, "Oper"},
-    {GCNodeKind::Sync, "Sync"},
-    {GCNodeKind::Gate, "Gate"},
-    {GCNodeKind::Loop, "Loop"},
-};
 
 bool isHandleType(const Type *type) {
     for (HandleKind kind :
@@ -84,20 +68,6 @@ bool isHandleType(const Type *type) {
             return true;
     }
     return false;
-}
-
-EnumType *nodeKindType() {
-    static EnumType *type = [] {
-        EnumDecl *decl = EnumDecl::create("NodeKind", {});
-        std::vector<EnumVariant> variants;
-        for (const auto &[kind, name] : kNodeKinds) {
-            (void)kind;
-            variants.push_back(EnumVariant{.name = name});
-        }
-        decl->define(std::move(variants));
-        return decl->prototype();
-    }();
-    return type;
 }
 
 slot_t currentKernel(ArgsView &, ArgsView &, Context &ctx) {
@@ -120,7 +90,15 @@ slot_t sameKernel(ArgsView &, ArgsView &norm, Context &) {
 class GraphExecutor final : public Executor {
   public:
     explicit GraphExecutor(context_ptr_t ctx)
-        : Executor(std::move(ctx), {{"current", currentKernel}, {"same", sameKernel}}) {}
+        : Executor(std::move(ctx), kernels()) {}
+
+  private:
+    static std::unordered_map<std::string, operator_t> kernels() {
+        auto out = readKernels();
+        out.emplace("current", currentKernel);
+        out.emplace("same", sameKernel);
+        return out;
+    }
 };
 
 class GraphModule final : public BuiltinModule {
@@ -138,6 +116,9 @@ class GraphModule final : public BuiltinModule {
             exportType(Reference(camel::graphmod::handleKindName(kind)), HandleType::get(kind));
         }
         exportType(Reference("NodeKind"), nodeKindType());
+        for (const auto &group : readGroups()) {
+            exportEntity(group->name(), group);
+        }
         exportEntity(
             "current",
             OperatorGroup::create(
@@ -167,7 +148,11 @@ class GraphModule final : public BuiltinModule {
             return std::make_shared<GraphExecutor>(ctx);
         });
         // The purity of every operator (design principles 3.3): a Program is immutable.
-        camel::core::OperatorTable::instance().declare("graph", {{"current", true}, {"same", true}});
+        auto &table = camel::core::OperatorTable::instance();
+        table.declare("graph", {{"current", true}, {"same", true}});
+        for (const auto &group : readGroups()) {
+            table.declare("graph", {{group->name(), true}});
+        }
         loaded_ = true;
         return true;
     }

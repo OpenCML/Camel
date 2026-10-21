@@ -1,0 +1,49 @@
+module graph_read
+import { current, graphs, name, nodes, op, op_name, inputs, users, type_of, type_name, is_pure, callee, tags, show } from graph
+import { Graph, Node } from graph
+
+func compute(x: int): int {
+    let y = x * 2
+    return y + 1
+}
+
+func wrap(x: int): int {
+    return compute(x)
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => 'none'
+        case o => op_name(o)
+    }
+}
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => 'none'
+        case t => type_name(t)
+    }
+}
+
+func calleeText(n: Node): string {
+    return match callee(n) {
+        case null => 'none'
+        case c => name(c)
+    }
+}
+
+func main(): int sync {
+    let p = current()
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == 'compute'>
+    let g = found[0]
+    println(nodes(g)->map<(n: Node): string => show(n)>)
+    println(nodes(g)->map<(n: Node): int => len(inputs(n))>)
+    println(nodes(g)->map<(n: Node): int => len(users(n))>)
+    println(nodes(g)->map<(n: Node): bool => is_pure(n)>)
+    println(nodes(g)->map<opText>)
+    println(nodes(g)->map<typeText>)
+    println(nodes(g)->map<(n: Node): string => tags(n)>)
+    let wrap_graph = graphs(p)->filter<(g: Graph): bool => name(g) == 'wrap'>
+    println(nodes(wrap_graph[0])->map<calleeText>)
+    return wrap(1) - 3
+}
