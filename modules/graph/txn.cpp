@@ -69,11 +69,11 @@ namespace err = camel::core::error;
 
 struct TxnState {
     TxnState(const context_ptr_t &context, const Program *base)
-        : base(base), session(context, base) {}
+        : base(base), session(context, base), roots(session) {}
     /// A transaction over one function and what it reaches, committed to a Program of its own
     /// that is not the context's (the running program is left as it is).
     TxnState(const context_ptr_t &context, const Program *base, GCGraph *root)
-        : base(base), session(context, base, root), detached(true) {}
+        : base(base), session(context, base, root), detached(true), roots(session) {}
 
     /// The Program the transaction was opened on. The transaction keeps it alive (the foreign
     /// resource traces it) until the transaction is released.
@@ -81,6 +81,11 @@ struct TxnState {
     RuntimeGraphDraftSession session;
     bool detached = false;
     bool done     = false;
+    /// The drafts stay open across Camel safepoints (the program can keep using the transaction),
+    /// so the session must root them from the first edit to the commit. The descriptor's trace
+    /// also calls traceStaticSlots; tracing a draft twice is harmless. TxnState is never moved
+    /// (it is reached through the foreign resource), which RootScope requires.
+    RuntimeGraphDraftSession::RootScope roots;
 };
 
 ForeignResourceDescriptor txnDescriptor() {
@@ -105,7 +110,10 @@ ForeignResourceDescriptor txnDescriptor() {
                 .slotName  = "program",
             });
         // The drafts keep the static values of the graphs they edit as raw slots, outside the
-        // object graph. A collection at a safepoint must move them with everything else.
+        // object graph. A collection at a safepoint must move them with everything else. The
+        // session's RootScope (TxnState) registers the same trace for the session's lifetime; a
+        // transaction value that is still reachable is traced here as well. Tracing the slots
+        // twice is harmless.
         state->session.traceStaticSlots(relocate, type);
     };
     descriptor.clone   = nullptr;

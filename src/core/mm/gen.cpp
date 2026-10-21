@@ -345,6 +345,9 @@ class SafepointScope {
 
 void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
 #ifndef NDEBUG
+    // Before the inhibit check and before any collection: the invariant the observer watches
+    // is about what is open while Camel code runs, not about whether this safepoint collects.
+    observeSafepoint(reason);
     AllocationDebugScope debugScope;
 #endif
     CollectionKind requested = CollectionKind::None;
@@ -392,6 +395,7 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
 
 void GenerationalAllocatorWithGC::minorGC() {
 #ifndef NDEBUG
+    observeSafepoint("manual minor GC");
     AllocationDebugScope debugScope;
 #endif
     {
@@ -414,6 +418,7 @@ void GenerationalAllocatorWithGC::minorGC() {
 
 void GenerationalAllocatorWithGC::majorGC() {
 #ifndef NDEBUG
+    observeSafepoint("manual major GC");
     AllocationDebugScope debugScope;
 #endif
     {

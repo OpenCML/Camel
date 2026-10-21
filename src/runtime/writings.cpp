@@ -54,8 +54,18 @@ class EngineRootScope {
                 draft_.relocateStaticValues(relocate);
                 traceRuleConstants(rules_, relocate);
             });
+#ifndef NDEBUG
+        // The Debug-only safepoint draft-root check counts this scope for this draft only: a
+        // session that rewrites several graphs still needs its RootScope for the others.
+        debugDraftRootOpened(draft_);
+#endif
     }
-    ~EngineRootScope() { camel::core::mm::autoSpace().unregisterExternalRootTracer(this); }
+    ~EngineRootScope() {
+#ifndef NDEBUG
+        debugDraftRootClosed(draft_);
+#endif
+        camel::core::mm::autoSpace().unregisterExternalRootTracer(this);
+    }
     EngineRootScope(const EngineRootScope &)            = delete;
     EngineRootScope &operator=(const EngineRootScope &) = delete;
 

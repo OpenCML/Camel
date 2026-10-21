@@ -374,7 +374,7 @@ void generate_advanced_report(const std::string &output_file) {
     AdvancedTracer::getInstance().generateStatisticsReport();
     AdvancedTracer::getInstance().generateCallGraph();
 
-if (config_.openPerfettoUI) {
+    if (AdvancedTracer::getInstance().getConfig().openPerfettoUI) {
         CAMEL_LOG_INFO_S("Profiler", "Full profiling mode detected, opening Perfetto UI...");
         AdvancedTracer::getInstance().openPerfettoUI();
     }

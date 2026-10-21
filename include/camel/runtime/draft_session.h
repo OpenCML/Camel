@@ -39,6 +39,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <source_location>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -107,15 +108,52 @@ class GraphCommitConflict : public std::runtime_error {
     std::vector<GraphId> graphs_;
 };
 
+#ifndef NDEBUG
+/// Debug-only companion of RuntimeGraphDraftSession, read by the safepoint check that enforces
+/// the draft-root invariant (draft_session.cpp): the drafts the session has open, the RootScopes
+/// covering all of them, and the EngineRootScopes covering one. It registers no root itself; it
+/// is a record of what the session owns, not a second way to register a root. It is a cell of its
+/// own so that it survives a move of the session, like the drafts do (the drafts_ map holds
+/// unique_ptrs, and the GraphDraft objects stay where they are).
+struct DraftRootsDebug {
+    struct Entry {
+        const GraphDraft *draft = nullptr;
+        /// EngineRootScopes (DraftWritings) covering this draft; a RootScope on the session
+        /// covers every draft and is counted in sessionRoots.
+        unsigned roots = 0;
+    };
+
+    explicit DraftRootsDebug(std::string label);
+    ~DraftRootsDebug();
+    DraftRootsDebug(const DraftRootsDebug &)            = delete;
+    DraftRootsDebug &operator=(const DraftRootsDebug &) = delete;
+
+    /// Where the session was opened and which program root it rewrites.
+    std::string label;
+    /// The RootScopes open on the session; they cover every entry of `drafts`.
+    unsigned sessionRoots = 0;
+    std::vector<Entry> drafts;
+};
+
+/// A DraftWritings's EngineRootScope covers its own draft, not a whole session: record it for
+/// the safepoint check. A draft of no session (one the front end built) is ignored.
+void debugDraftRootOpened(const GraphDraft &draft);
+void debugDraftRootClosed(const GraphDraft &draft);
+#endif
+
 class RuntimeGraphDraftSession {
   public:
+    /// `location` names the place the session was opened, for the Debug-only safepoint check
+    /// that reports a draft this session left unrooted (draft_session.cpp). A default argument
+    /// captures the call site; a Release build does not read it.
     /// A session over the graphs reachable from the root of `program`.
     RuntimeGraphDraftSession(
-        const camel::core::context::context_ptr_t &context, const Program *program);
+        const camel::core::context::context_ptr_t &context, const Program *program,
+        std::source_location location = std::source_location::current());
     /// A session over the graphs reachable from `runtimeRoot`, a graph of `program`.
     RuntimeGraphDraftSession(
         const camel::core::context::context_ptr_t &context, const Program *program,
-        GCGraph *runtimeRoot);
+        GCGraph *runtimeRoot, std::source_location location = std::source_location::current());
 
     /// The program the session rewrites; after a commit, the program it produced.
     const Program *program() const { return program_; }
@@ -166,10 +204,12 @@ class RuntimeGraphDraftSession {
 
     /// Keeps the static values of every open draft alive and relocatable while Camel code may run:
     /// a `when` condition of the rewrite engine is a safepoint, and the drafts are raw slots the
-    /// object graph does not reach. A transaction does not open one: its own trace callback calls
-    /// traceStaticSlots (modules/graph/txn.cpp). A rewrite engine does, from the first edit to the
-    /// commit, because it rewrites one draft after another while every condition can collect.
-    /// The session must not be moved while a scope is open.
+    /// object graph does not reach. A transaction opens one too, for its whole lifetime (its own
+    /// trace callback also calls traceStaticSlots; tracing a draft twice is harmless). The
+    /// rewrite engine opens one from the first edit to the commit, because it rewrites one draft
+    /// after another while every condition can collect. The session must not be moved while a
+    /// scope is open. A Debug build checks at every safepoint that every open draft is covered by
+    /// one of these (or by the EngineRootScope of its DraftWritings).
     class RootScope {
       public:
         explicit RootScope(RuntimeGraphDraftSession &session);
@@ -274,6 +314,11 @@ class RuntimeGraphDraftSession {
         specializationCache_;
     std::unordered_map<GraphId, size_t> typeSpecializationCounts_;
     bool typeSpecializationCountsReady_ = false;
+#ifndef NDEBUG
+    /// What the Debug-only safepoint draft-root check reads (DraftRootsDebug). Destroyed before
+    /// drafts_, so it unregisters while the drafts it names still exist.
+    std::unique_ptr<DraftRootsDebug> debugRoots_;
+#endif
 };
 
 /// Encodes new graphs that may refer to one another, such as the mutually recursive graphs a

@@ -217,7 +217,19 @@ root tracers), and nothing read before a call is used after it.
   takes the second way: one `RuntimeGraphDraftSession` rewrites graph after graph, a `when`
   condition is Camel code and so a safepoint, and `RuntimeGraphDraftSession::RootScope` keeps the
   static values of every draft the session has opened relocatable until the commit reads them
-  (`modules/rewrite/module.cpp`; the defect and its reproducer are in `reports/H74.md`).
+  (`modules/rewrite/module.cpp`; the defect and its reproducer are in `reports/H74.md`). A
+  transaction opens one too, for its whole lifetime: its value may stay reachable across
+  safepoints while the drafts are open (`modules/graph/txn.cpp`).
+- **The invariant is checked, not remembered.** A Debug build checks it at the start of every
+  safepoint (`mm::observeSafepoint`, installed by the first `RuntimeGraphDraftSession`): if a
+  session has a draft open that no `RootScope` (and no `DraftWritings::EngineRootScope` for that
+  draft) covers, the check aborts and names the safepoint, the session's construction site and
+  program root, and the first unrooted draft's graph, id and static slot. It runs before the
+  decision to collect, so the first safepoint the wrong path reaches reports, not the first
+  collection; an assertion rather than an exception, so a rewrite kernel that catches
+  `std::exception` cannot turn it into an ordinary rule error. A Release build has neither the
+  observer nor the call and pays nothing for it. The check reads the session's own open-draft set
+  and the scopes that already exist; it registers no second kind of root.
 
 ## 5. What the generational collector relies on
 
