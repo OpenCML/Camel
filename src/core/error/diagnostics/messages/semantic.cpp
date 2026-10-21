@@ -888,16 +888,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::IntegerLiteralTruncated,
-            {
-                "IntegerLiteralTruncated",
-                "The integer literal '{0}' is not a whole number: its value is {1}, the "
-                "fraction is dropped.",
-                "A number written without a decimal point is an 'int', with an exponent too. "
-                "For the floating-point number write the decimal point: '{2}'.",
-            },
-        },
-        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",
@@ -1181,8 +1171,49 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagArgumentUnsupported",
                 "The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.",
-                "A tag carries an integer, a string, a boolean (as 0 or 1), a symbol or a graph "
-                "reference; a floating-point argument comes with the real-valued tag attributes.",
+                "A tag carries an integer, a floating-point number, a string, a boolean (as 0 or 1), a "
+                "symbol or a graph reference; an argument of another type (a function, a "
+                "composite) is not a tag value yet.",
+            },
+        },
+        {
+            SemanticDiag::TagArgumentType,
+            {
+                "TagArgumentType",
+                "The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is "
+                "'{3}' ({4}).",
+                "A tag argument is a compile-time constant of the kind the parameter declares: "
+                "write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', "
+                "and a string for 'string'.",
+            },
+        },
+        {
+            SemanticDiag::TagNotAPermission,
+            {
+                "TagNotAPermission",
+                "The tag '{0}' grants no numeric permission.",
+                "A requirement names a permission of design principles 7.2: reassociate, "
+                "contract, approx_math, change_precision, finite_math, no_nans, no_infs, "
+                "no_signed_zeros or flush_subnormals.",
+            },
+        },
+        {
+            SemanticDiag::RuleTagNotRequires,
+            {
+                "RuleTagNotRequires",
+                "A rule may be preceded only by '#requires<...>', not by the tag '{0}'.",
+                "State the permissions the rule needs as tag arguments: "
+                "'#requires<reassociate>' (design principles 7.2).",
+            },
+        },
+        {
+            SemanticDiag::TagParameterType,
+            {
+                "TagParameterType",
+                "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an "
+                "int, a float, a bool or a string.",
+                "Declare the parameter with the kind of the constant the tag is written with: "
+                "'tag {1}<{0}: int> on ...'.",
             },
         },
         {

@@ -1,0 +1,10 @@
+/**
+ * A generic function instantiated with a builtin type reached through a named type: the
+ * value's type is `int`, which no module declares, so `x + x` is the builtin `+` and the
+ * declaration lookup has nothing to add (design principles 5.7).
+ */
+module alias_gen
+
+export func twice(x: typeas T): T {
+    return x + x
+}

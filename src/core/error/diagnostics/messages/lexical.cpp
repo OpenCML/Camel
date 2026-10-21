@@ -36,8 +36,11 @@ const std::unordered_map<LexicalDiag, DiagInfo> &getLexicalDiagInfoMap() {
             LexicalDiag::InvalidNumberFormat,
             {
                 "InvalidNumberFormat",
-                "Invalid number format: {0}.",
-                "Check the syntax of the numeric literal.",
+                "Invalid number format: '{0}'.",
+                "A number is decimal digits without a leading zero, or '0x', '0b' or '0o' "
+                "followed by digits of that base: octal 63 is '0o77', not '077'; '09' and "
+                "'077' are not number tokens. In an entry argument and a conversion text a "
+                "leading zero is decimal ('077' is 77).",
             },
         },
         {

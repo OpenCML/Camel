@@ -1,0 +1,8 @@
+/** One of two modules that offer `+` for a type declared elsewhere. */
+module two_left
+
+import { Box } from two_models
+
+export func operator +(a: Box, b: Box): Box {
+    return { v: 100 }
+}

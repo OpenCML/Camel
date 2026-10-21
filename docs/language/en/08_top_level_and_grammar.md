@@ -220,8 +220,8 @@ typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
-ruleDecl           : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
-                     (IDENTIFIER dataExpr)?
+ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
+                     '}' (IDENTIFIER dataExpr)?
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 ```

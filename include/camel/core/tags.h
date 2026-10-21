@@ -51,6 +51,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <optional>
@@ -63,6 +64,12 @@
 #include "camel/common/ref.h"
 #include "camel/core/data/base.h"
 #include "camel/core/node_attrs.h"
+
+namespace camel::runtime {
+class GCGraph;
+class GraphDraft;
+using gc_node_ref_t = uint32_t;
+} // namespace camel::runtime
 
 namespace camel::core {
 
@@ -112,6 +119,12 @@ struct Decl {
     /// nodes it is where the facts are stored; on a declaration it names the fact in the set the
     /// module keeps. Grouped facts combine by the key's rules.
     attr::AttrKey key = attr::kNoKey;
+    /// A standard numeric-permission tag (design principles 7.2): the permission it grants, as
+    /// a `sem::PermissionMask`; 0 when the tag grants no permission. Writing the tag on a
+    /// function or a block grants the permission to the code written there, exactly as
+    /// `@numeric(...)` does. `finite_math` is a group of the four assumptions and has 0 here;
+    /// its members carry their bits.
+    uint8_t permission = 0;
     /// `on nodes` and a C++ declaration: the value for the with-arguments written, nullopt
     /// when the arguments do not give one. Null: the arguments make the value (see above).
     std::function<std::optional<attr::AttrValueId>(std::span<const data::data_ptr_t> args)>
@@ -132,6 +145,34 @@ const Decl *get(TagId id);
 std::optional<TagId> find(std::string_view name);
 /// The tag `ident` of the module `module` (empty for the core's own), when one is declared.
 std::optional<TagId> find(std::string_view module, std::string_view ident);
+
+/// Declares the tags the language itself names, once per process: the numeric permissions of
+/// design principles 7.2 (`reassociate`, `contract`, `approx_math`, `change_precision`, the
+/// four finite-math assumptions and their group `finite_math`). They are names of the core, so
+/// a program writes them without importing anything. Idempotent.
+void declareStandardTags();
+
+/// The numeric permission a tag grants; 0 for a tag that is not a permission, and for the
+/// `finite_math` group (whose members carry the four assumptions).
+uint8_t permissionOf(TagId id);
+
+/// The numeric permission the tag `name` grants, resolving the core's standard tags and the
+/// group `finite_math`; 0 when `name` is not a permission tag (including an undeclared name).
+uint8_t permissionOfName(std::string_view name);
+
+/// The `read_by` passes of the tags in `tags`, sorted and without repeats. An empty list when no
+/// tag in the set names a reader.
+std::vector<std::string> readersOf(attr::AttrSetId tags);
+
+// ---- Readers ------------------------------------------------------------------------------
+
+/// Registers `pass` as a pass that reads tag facts (`std::opt`, `tensor::fuse`, ...). A tag's
+/// `read_by` names such a pass; `isReader` answers whether a written name is one. Registering
+/// the same name twice is harmless.
+void declareReader(std::string_view pass);
+/// Whether `written` names a registered reader: the registered pass itself or a path below it
+/// (the registered `std::opt` matches `std::opt::inline`).
+bool isReader(std::string_view written);
 
 /// `func`, `type`, `field`, `nodes`, `param`; empty for none or several.
 std::string_view positionName(Position position);
@@ -163,16 +204,57 @@ TagId declareNodeTag(std::string_view qualifiedName, Positions positions, NodeTa
 
 // ---- Declaration tags --------------------------------------------------------------------
 
+/// The facts of a declaration or a node, read through one query (design principles 6.2, 7.5):
+/// the tags written on it, the numeric permissions it grants, and the passes its tags name as
+/// readers. A pass or a C++ module reads all three here instead of reaching for the attribute
+/// set and the permission column separately.
+struct Facts {
+    /// The tags written on the declaration (or the node attributes), as an attribute set.
+    attr::AttrSetId tags = attr::kNoAttrs;
+    /// The numeric permissions granted (`sem::PermissionMask`): the permission tags written on
+    /// the declaration, and for a function the permissions of its body.
+    uint8_t permissions = 0;
+    /// The `read_by` passes of the tags present, sorted and without repeats.
+    std::vector<std::string> readers;
+};
+
+/// The facts of the declaration `name` of `module`, over every overload of that name.
+Facts factsOf(const module::Module &module, const Reference &name);
+/// The facts of one overload of `name`: `signature` is the declaration's function type as
+/// written (`(int) => int`); empty for a declaration that cannot be overloaded.
+Facts factsOf(const module::Module &module, const Reference &name, std::string_view signature);
+/// The facts of field `index` of the type declared as `typeName`.
+Facts factsOfField(const module::Module &module, const Reference &typeName, size_t index);
+/// The facts of node `node` of a graph being built (the draft) or of a runtime graph: its
+/// attributes and its numeric permissions.
+Facts factsOf(const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node);
+Facts factsOf(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node);
+
 /// The facts attached to the declaration `name` of `module` (`on func`, `on type`).
 attr::AttrSetId ofDeclaration(const module::Module &module, const Reference &name);
+/// The facts attached to the overload `signature` of the declaration `name`.
+attr::AttrSetId ofDeclaration(
+    const module::Module &module, const Reference &name, std::string_view signature);
 /// The facts attached to field `index` of the type declared as `typeName` in `module`.
 attr::AttrSetId ofField(const module::Module &module, const Reference &typeName, size_t index);
 /// Attaches `tags` to the declaration `name` of `module` (the graph builder does this while it
 /// compiles the declaration); `inner` wins over what is there, by each key's combine rule.
 void attachToDeclaration(module::Module &module, const Reference &name, attr::AttrSetId tags);
+/// Attaches the facts of one overload: `signature` distinguishes the overloads of an operator.
+void attachToDeclaration(
+    module::Module &module,
+    const Reference &name,
+    std::string_view signature,
+    attr::AttrSetId tags);
 /// Attaches `tags` to a field of a type declaration of `module`.
 void attachToField(
     module::Module &module, const Reference &typeName, size_t index, attr::AttrSetId tags);
+/// Records the numeric permissions the declaration `name` grants (its body's permissions).
+void attachPermissionsToDeclaration(
+    module::Module &module,
+    const Reference &name,
+    std::string_view signature,
+    uint8_t permissions);
 
 // ---- Inspection ----------------------------------------------------------------------------
 

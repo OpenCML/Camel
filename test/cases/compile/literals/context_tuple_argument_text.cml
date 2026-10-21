@@ -1,0 +1,12 @@
+/**
+ * A tuple literal written as an argument takes the parameter's type element by element (H15i):
+ * a text element is the mismatch of that element, not a call that matches no overload.
+ */
+module literal_context_tuple_argument_text
+
+func pairSum(t: (float, float)): float { return t.0 + t.1 }
+
+func main(): int sync {
+    println(pairSum(('1.5', 2.0)))
+    return 0
+}

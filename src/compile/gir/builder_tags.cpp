@@ -39,6 +39,7 @@
 
 #include "builder.h"
 
+#include <cctype>
 #include <format>
 #include <string>
 #include <vector>
@@ -47,12 +48,75 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/tags.h"
+#include "camel/utils/number_text.h"
 
 namespace camel::compile::gir {
 
 using namespace camel::core::error;
 
 namespace {
+
+/// The kind a tag parameter declares, as far as a tag can carry it. A tag argument is a
+/// compile-time constant: an integer, a real, a boolean or a string.
+enum class ArgKind { Int, Float, Bool, String, Other };
+
+ArgKind kindOfDeclaredType(std::string_view type) {
+    std::string t;
+    for (const char c : type) {
+        if (!std::isspace(static_cast<unsigned char>(c))) {
+            t += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+    }
+    if (t == "int" || t == "int8" || t == "int16" || t == "int32" || t == "int64" ||
+        t == "i8" || t == "i16" || t == "i32" || t == "i64" || t == "u8" || t == "u16" ||
+        t == "u32" || t == "u64" || t == "uint" || t == "integer") {
+        return ArgKind::Int;
+    }
+    if (t == "float" || t == "float32" || t == "float64" || t == "f32" || t == "f64" ||
+        t == "double" || t == "real") {
+        return ArgKind::Float;
+    }
+    if (t == "bool" || t == "boolean") {
+        return ArgKind::Bool;
+    }
+    if (t == "string" || t == "str" || t == "text") {
+        return ArgKind::String;
+    }
+    return ArgKind::Other;
+}
+
+ArgKind kindOfValue(camel::core::type::TypeCode code) {
+    using camel::core::type::TypeCode;
+    switch (code) {
+    case TypeCode::Int32:
+    case TypeCode::Int64:
+        return ArgKind::Int;
+    case TypeCode::Float32:
+    case TypeCode::Float64:
+        return ArgKind::Float;
+    case TypeCode::Bool:
+        return ArgKind::Bool;
+    case TypeCode::String:
+        return ArgKind::String;
+    default:
+        return ArgKind::Other;
+    }
+}
+
+const char *kindName(ArgKind kind) {
+    switch (kind) {
+    case ArgKind::Int:
+        return "int";
+    case ArgKind::Float:
+        return "float";
+    case ArgKind::Bool:
+        return "bool";
+    case ArgKind::String:
+        return "string";
+    default:
+        return "other";
+    }
+}
 
 /// The positions of a declaration as the source writes them (`func, nodes`).
 std::string positionsText(camel::core::tag::Positions positions) {
@@ -76,6 +140,14 @@ std::string positionsText(camel::core::tag::Positions positions) {
 std::optional<camel::core::tag::TagId> Builder::tagNamed(const std::string &written) {
     if (auto local = module_->declaredTag(written); local.has_value()) {
         return local;
+    }
+    // The language's own tags (`reassociate`, `finite_math`, ...) are names of the core: a
+    // program writes them without importing anything, as it writes `#macro`.
+    if (written.find("::") == std::string::npos) {
+        if (auto core = camel::core::tag::find(std::string_view{}, written);
+            core.has_value()) {
+            return core;
+        }
     }
     // A tag is a name of the entity namespace: an imported one resolves exactly as an imported
     // function does, by name or through the module that exports it.
@@ -115,6 +187,36 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
             .commit(use.name + " arguments", use.name);
         throw BuildAbortException();
     }
+    // Each argument must be a constant of the kind its parameter declares (design principles
+    // 6.2): an `int` parameter takes an integer, a `float` one a real, `bool` a boolean and
+    // `string` a string. A parameter of another declared kind is a located diagnostic here,
+    // not a value silently carried as something else.
+    for (size_t i = 0; i < args.size(); ++i) {
+        const camel::core::tag::TagParam &param = decl.params[i];
+        const ArgKind declared                  = kindOfDeclaredType(param.type);
+        if (declared == ArgKind::Other) {
+            diags_->of(SemanticDiag::TagParameterType)
+                .atOrigin(use.origin)
+                .commit(param.name, use.name, param.type);
+            throw BuildAbortException();
+        }
+        const ArgKind actual = kindOfValue(args[i]->type()->code());
+        if (actual != declared) {
+            // The written form of the argument, not the data's six-decimal rendering.
+            std::string written = args[i]->toString();
+            if (args[i]->type()->code() == camel::core::type::TypeCode::Float32) {
+                written = camel::utils::floatText(
+                    std::static_pointer_cast<camel::core::data::FloatData>(args[i])->data());
+            } else if (args[i]->type()->code() == camel::core::type::TypeCode::Float64) {
+                written = camel::utils::floatText(
+                    std::static_pointer_cast<camel::core::data::DoubleData>(args[i])->data());
+            }
+            diags_->of(SemanticDiag::TagArgumentType)
+                .atOrigin(use.origin)
+                .commit(param.name, use.name, param.type, written, kindName(actual));
+            throw BuildAbortException();
+        }
+    }
     auto valueOf = [&](const camel::core::data::data_ptr_t &data) {
         using camel::core::type::TypeCode;
         switch (data->type()->code()) {
@@ -124,6 +226,12 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
         case TypeCode::Int64:
             return camel::core::attr::integer(
                 std::static_pointer_cast<camel::core::data::LongData>(data)->data());
+        case TypeCode::Float32:
+            return camel::core::attr::real(
+                std::static_pointer_cast<camel::core::data::FloatData>(data)->data());
+        case TypeCode::Float64:
+            return camel::core::attr::real(
+                std::static_pointer_cast<camel::core::data::DoubleData>(data)->data());
         case TypeCode::Bool:
             return camel::core::attr::integer(
                 std::static_pointer_cast<camel::core::data::BoolData>(data)->data() ? 1 : 0);
@@ -195,6 +303,21 @@ void Builder::addTagFacts(
         throw BuildAbortException();
     }
     const auto value = tagValueOf(*decl, use);
+    if (decl->permission != 0) {
+        // A numeric permission is a tag (design principles 6.6, 7.2) but its fact is the
+        // permission column, not an attribute: the nodes get it through the permission scope
+        // of the body or block (see visitExecNode and buildFuncBody). On a declaration the tag
+        // is recorded too, so the facts query reports what the declaration grants.
+        facts.permissions = static_cast<uint8_t>(facts.permissions | decl->permission);
+        if (declaration) {
+            facts.declaration = camel::core::attr::unite(
+                facts.declaration, camel::core::attr::single(decl->key, value));
+        }
+        if (context_ != nullptr && !decl->readBy.empty()) {
+            context_->noteTagUse({decl->name, decl->readBy, use.origin});
+        }
+        return;
+    }
     if (declaration) {
         facts.declaration = camel::core::attr::unite(
             facts.declaration, camel::core::attr::single(decl->key, value));

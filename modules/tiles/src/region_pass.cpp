@@ -9,6 +9,7 @@
  */
 
 // Public region compilation pass. Device selection happens at execution time.
+#include "camel/core/tags.h"
 #include "camel/execute/pass/opt.h"
 #include "tiles/internal/regions.h"
 #include <memory>
@@ -39,5 +40,7 @@ void registerRegionPass(RegionDeviceOps preferred) {
     registerModulePass("tiles::compile", [preferred](const core::context::context_ptr_t &context) {
         return std::make_unique<RegionPass>(context, preferred);
     });
+    // The pass reads the kernel, tile and permission facts of the nodes it compiles.
+    core::tag::declareReader("tiles::compile");
 }
 } // namespace camel::tiles

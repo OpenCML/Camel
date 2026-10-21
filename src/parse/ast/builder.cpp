@@ -816,6 +816,88 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         }
     }
 
+    // `#requires<...>`: the numeric permissions the rule needs (design principles 7.2). The
+    // arguments are the names of the standard permission tags, not values: a permission tag is
+    // a compile-time fact, so the requirement is checked here, when the rule is compiled, and
+    // an argument that names no permission is a located diagnostic rather than a silent pass.
+    // The mask is handed to `__rule`, which the rewrite engines compare with the policy (a rule
+    // whose requirement is not met is not applied).
+    uint8_t needs = 0;
+    for (const auto use : context->all<cst::TagUse>()) {
+        for (const auto tagRef : use->all<cst::TagRef>()) {
+            const auto ident = tagRef->get<cst::IdentRef>();
+            const std::string written(ident->text());
+            if (written != "requires") {
+                diags_->of(SemanticDiag::RuleTagNotRequires)
+                    .at(rangeOf(ident->firstToken(), ident->lastToken()))
+                    .commit(written);
+                continue;
+            }
+            const syn::TokenBuffer &tokens = context.tree()->tokens();
+            const size_t begin             = tagRef->firstToken().index();
+            const size_t end               = tagRef->lastToken().index();
+            size_t argCount                = 0;
+            const auto resolve             = [&](size_t first, size_t last) {
+                while (first <= last && syn::isTrivia(tokens[first].kind)) {
+                    ++first;
+                }
+                while (last >= first && last != SIZE_MAX && syn::isTrivia(tokens[last].kind)) {
+                    --last;
+                }
+                if (first > last || last == SIZE_MAX) {
+                    return;
+                }
+                ++argCount;
+                std::string name;
+                for (size_t i = first; i <= last; ++i) {
+                    if (!syn::isTrivia(tokens[i].kind)) {
+                        name += tokens.text(i);
+                    }
+                }
+                const uint8_t permission = camel::core::tag::permissionOfName(name);
+                if (permission != 0) {
+                    needs = static_cast<uint8_t>(needs | permission);
+                    return;
+                }
+                const auto at =
+                    rangeOf(syn::TokenRef(context.tree(), first), syn::TokenRef(context.tree(), last));
+                // `#requires` names the core's permission tags; a name that is not one (a typo,
+                // or a tag of the program that grants no permission) is reported here, at the
+                // argument, with the list of the permissions that can be named.
+                diags_->of(SemanticDiag::TagNotAPermission).at(at).commit(name);
+            };
+            bool inAngles = false;
+            size_t argFrom = 0;
+            for (size_t i = begin; i <= end; ++i) {
+                if (syn::isTrivia(tokens[i].kind)) {
+                    continue;
+                }
+                const std::string_view text = tokens.text(i);
+                if (!inAngles) {
+                    if (text == "<") {
+                        inAngles = true;
+                        argFrom  = i + 1;
+                    }
+                    continue;
+                }
+                if (text == ">") {
+                    resolve(argFrom, i == 0 ? 0 : i - 1);
+                    inAngles = false;
+                } else if (text == ",") {
+                    resolve(argFrom, i == 0 ? 0 : i - 1);
+                    argFrom = i + 1;
+                }
+            }
+            if (!inAngles && argCount == 0) {
+                // `#requires` without any `<...>` argument requires nothing, which is never
+                // what was meant, so say how many arguments the form takes.
+                diags_->of(SemanticDiag::TagArgumentCount)
+                    .at(rangeOf(tagRef->firstToken(), tagRef->lastToken()))
+                    .commit("requires", "1", "0");
+            }
+        }
+    }
+
     if (!ruleImportAdded_) {
         ruleImportAdded_ = true;
         auto import_     = std::make_shared<ImportLoad>();
@@ -920,7 +1002,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(args, context);
     *args << literal(LiteralType::String, name);
     *args << literal(LiteralType::Boolean, twoWay ? "true" : "false");
-    *args << literal(LiteralType::Integer, "0"); // the numeric permissions: tags, not yet
+    *args << literal(LiteralType::Integer, std::to_string(needs));
     *args << literal(LiteralType::Integer, std::to_string(consts));
     *args << reference(name + "__lhs");
     *args << reference(name + "__rhs");

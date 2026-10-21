@@ -2214,6 +2214,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "ort_struct_casts"
+desc = "A named struct type is nominal, so an anonymous struct value reaches it by an identity CAST (a literal in the declaration's order) or by a copy into that order (a literal written another way). Five models export the conversion in a different position -- a returned literal, a reordered literal, a `let r: Run = ...`, a value passed to a parameter declared `Run`, and a reordered literal on the path where a recursion whose depth depends on the model input returns -- by the operator and by the pass. Each passes onnx.checker's full check, holds no Cast node (an identity conversion exports as nothing; only the loop's own condition comparison casts), names its outputs after the declaration's fields with the counter an int64, and matches NumPy on ONNX Runtime for walks of 0, 1 and the maximum 3 steps. The exporter used to refuse the identity cast with 'cast of a model-dependent value to Run', and the arms of the loop's returning branch with 'the arms of a branch on a model-dependent condition yield different types'."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_struct_casts.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["operator identity: worst", "operator walk: worst", "pass identity: worst", "pass walk: worst", "counters [0, 1, 3]", "struct casts: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
 name = "as_refusal.unproven.pass"
 desc = "A conversion of a model-dependent tensor that asserts an extent the exported inputs leave open (axis 0 is dynamic, the conversion says 2) cannot be checked at export, and an ONNX model checks nothing when it runs: refused at the conversion, naming it. The exporter used to drop the conversion silently. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"

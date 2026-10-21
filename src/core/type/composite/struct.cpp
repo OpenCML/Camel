@@ -47,14 +47,17 @@ std::atomic<uint32_t> structDeclCounter{1};
 
 } // namespace
 
-StructDecl::StructDecl(const std::string &name, std::vector<std::string> params)
-    : name_(name), params_(std::move(params)), id_(structDeclCounter.fetch_add(1)) {
+StructDecl::StructDecl(
+    const std::string &name, std::vector<std::string> params, std::string module)
+    : name_(name), module_(std::move(module)), params_(std::move(params)),
+      id_(structDeclCounter.fetch_add(1)) {
     const size_t at = name_.rfind("::");
     shortName_      = at == std::string::npos ? name_ : name_.substr(at + 2);
 }
 
-StructDecl *StructDecl::create(const std::string &name, std::vector<std::string> params) {
-    return new StructDecl(name, std::move(params));
+StructDecl *StructDecl::create(
+    const std::string &name, std::vector<std::string> params, std::string module) {
+    return new StructDecl(name, std::move(params), std::move(module));
 }
 
 void StructDecl::define(std::vector<std::pair<std::string, Type *>> fields) {

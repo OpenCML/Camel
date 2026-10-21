@@ -31,6 +31,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
@@ -439,10 +440,12 @@ slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
 slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle   = norm.get<Handle *>(0);
     const NodeView node  = viewOf(handle, "graph.tags");
-    const uint32_t attrs = node.isDraft()
-                               ? node.draft->nodeAttrs(node.ref)
-                               : graphOf(handle, "graph.tags").nodeAttrs(handle->index());
-    return stringSlot(camel::core::attr::text(attrs));
+    // The one query for the facts of a node (camel/core/tags.h): the attributes of a node are its
+    // tags.
+    const auto facts = node.isDraft()
+                           ? camel::core::tag::factsOf(*node.draft, node.ref)
+                           : camel::core::tag::factsOf(graphOf(handle, "graph.tags"), handle->index());
+    return stringSlot(camel::core::attr::text(facts.tags));
 }
 
 /// Whether the node anchors its graph: its exit, output or return node. A rewrite keeps such a
@@ -542,27 +545,33 @@ slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
 
 // ---- regions ----
 
-/// The region a node is in (the innermost); null for a graph that has the body only (its region
-/// table is empty). Region 0 is the body, so a node of a graph that has regions has one.
+/// The region a node is in (the innermost). Every node is in one: region 0 is the body, also in
+/// a graph whose region table is empty.
 slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     nodeOf(handle, "graph.region_of");
     const GCGraph &graph = graphOf(handle, "graph.region_of");
-    if (graph.regionCount() == 0) {
-        return NullSlot;
-    }
-    Handle *region = Handle::create(
+    Handle *region      = Handle::create(
         HandleKind::Region,
         handle->program(),
         handle->graph(),
         graph.nodeRegion(handle->index()),
         nullptr,
         mm::autoSpace());
-    return makeSome(toSlot(region), nullableOf(HandleType::get(HandleKind::Region)));
+    return toSlot(region);
+}
+
+/// The body of a graph whose region table is empty; region 0 is always the body.
+const GCRegion &bodyRegion() {
+    static const GCRegion body;
+    return body;
 }
 
 const GCRegion &regionOf(const Handle *handle, const char *site) {
-    const GCGraph &graph   = graphOf(handle, site);
+    const GCGraph &graph = graphOf(handle, site);
+    if (handle->index() == 0) {
+        return graph.region(0) != nullptr ? *graph.region(0) : bodyRegion();
+    }
     const GCRegion *region = graph.region(handle->index());
     if (region == nullptr) {
         err::throwRuntimeFault(
@@ -587,12 +596,12 @@ slot_t regionKindKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// The region this one is in; null for the body, whose region id is 0.
 slot_t regionParentKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle     = norm.get<Handle *>(0);
-    const GCRegion &region = regionOf(handle, "graph.region_parent");
+    const auto *handle = norm.get<Handle *>(0);
     if (handle->index() == 0) {
         return NullSlot;
     }
-    const GCGraph &graph = graphOf(handle, "graph.region_parent");
+    const GCRegion &region = regionOf(handle, "graph.region_parent");
+    const GCGraph &graph   = graphOf(handle, "graph.region_parent");
     if (graph.region(region.parent) == nullptr) {
         return NullSlot;
     }
@@ -676,7 +685,7 @@ const std::vector<ReadOp> &readOps() {
             {"is_written_slot", isWrittenSlotKernel, node, Type::Bool()},
             {"origin", originKernel, node, Type::Int64()},
             {"show", showKernel, node, Type::String()},
-            {"region_of", regionOfKernel, node, maybe(HandleKind::Region)},
+            {"region_of", regionOfKernel, node, handle(HandleKind::Region)},
             {"region_kind", regionKindKernel, handle(HandleKind::Region), regionKindType()},
             {"region_parent",
              regionParentKernel,

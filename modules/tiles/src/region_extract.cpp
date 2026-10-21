@@ -10,6 +10,7 @@
 
 // Reify a validated operator region as an ordinary Camel function draft.
 #include "camel/core/mm/gen.h"
+#include "camel/core/tags.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
@@ -86,7 +87,7 @@ std::vector<rt::gc_node_ref_t> copyLoopNodes(
                  .kind         = node->kind,
                  .runtimeFlags = node->flags,
                  .origin       = source.nodeOrigin(ref),
-                 .permissions  = source.nodePermissions(ref),
+                 .permissions  = camel::core::tag::factsOf(source, ref).permissions,
                  .payload      = source.nodePayloadBytes(ref)});
         }
         draft.setNodeOrigin(sourceToNode[ref], source.nodeOrigin(ref));
@@ -213,7 +214,7 @@ RegionDraft extractRegion(const rt::GCGraph &source, const Region &region) {
              .kind         = node->kind,
              .runtimeFlags = node->flags,
              .origin       = source.nodeOrigin(ref),
-             .permissions  = source.nodePermissions(ref),
+             .permissions  = camel::core::tag::factsOf(source, ref).permissions,
              .payload      = source.nodePayloadBytes(ref),
              .normInputs   = inputs,
              .withInputs   = captures});

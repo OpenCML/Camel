@@ -185,14 +185,16 @@ class EntryArguments {
 
     /// One number as `camel` reads one: one whole number token of the language (camel/utils/
     /// number_text.h), not strtod's wider grammar: an optional sign, an integer token (`0xFF`,
-    /// `0b1010`, `077`) or a real token (digits with an optional fraction and exponent), `inf`
-    /// or `nan`. A real token too small to tell from zero is zero, as a source literal is. A
-    /// number the width cannot hold is OutOfRange, not NotANumber; an integer token whose value
-    /// does not fit an int64 is OutOfRangeInteger.
+    /// `0b1010`, `0o77`; a leading zero is decimal data text, H15i) or a real token (digits with
+    /// an optional fraction and exponent), `inf` or `nan`. A nonzero real token too small to
+    /// tell from zero is refused as out of range, like a source literal (H15i). A number the
+    /// width cannot hold is OutOfRange, not NotANumber; an integer token whose value does not
+    /// fit an int64 is OutOfRangeInteger.
     template <std::floating_point T> static ReadStatus readNumber(std::string_view text, T &out) {
         switch (camel::utils::parseNumberToken<T>(text, out)) {
         case camel::utils::NumberTextStatus::Ok:
             return ReadStatus::Ok;
+        case camel::utils::NumberTextStatus::Underflow:
         case camel::utils::NumberTextStatus::OutOfRange:
             return ReadStatus::OutOfRange;
         case camel::utils::NumberTextStatus::OutOfRangeInteger:

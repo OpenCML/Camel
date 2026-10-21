@@ -441,6 +441,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void collectAtSafepointUnlocked(CollectionKind kind, std::string_view reason);
 
+    // Restarts the block-bytes pacing window from the live volume. Called after a collection's
+    // deferred releases have run: until then the blocks it found dead are still counted, and a
+    // base that includes them makes every following window larger than the last.
+    void noteBlockBytesAfterDeferredReleases();
+
     void publishSafepointSlowPathUnlocked();
 
     void minorGCUnlocked();

@@ -1,0 +1,14 @@
+/**
+ * The caller imports the module that declares the operator of `{ v: int }`, but the operator
+ * is found by the module that writes the expression, not by the caller's imports (5.7), and an
+ * anonymous type has no declaring module to add. The instance therefore has no candidate.
+ */
+import anon_models
+import { twice } from anon_gen
+
+func main(): int sync {
+    let a = { v: 1 }
+    let b = twice(a)
+    println(b.v)
+    return 0
+}

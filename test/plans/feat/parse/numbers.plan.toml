@@ -44,6 +44,34 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
+name = "numbers.leading_zero_decimal"
+desc = "A decimal run with a leading zero is one lexical error covering the whole run (H15i): `077` is no longer `0` and `77`, and the message names `0o77` as the octal spelling."
+kind = "negative"
+case = "../../../cases/parse/numbers/leading_zero.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::InvalidNumberFormat"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["Invalid number format: '077'", "0o77"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "numbers.bad_octal_digit"
+desc = "`0o9` is one refused number run: the prefix takes octal digits only, and the run is not cut before the `9` (H15i)."
+kind = "negative"
+case = "../../../cases/parse/numbers/bad_octal_digit.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "LexicalDiag::InvalidNumberFormat"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 13
+expect_output_contains = ["Invalid number format: '0o9'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
 name = "numbers.format_snapshot"
 desc = "camel-format writes `a-1` as `a - 1` and keeps `-1` and `t.0.1`."
 kind = "snapshot"

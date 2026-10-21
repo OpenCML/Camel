@@ -1,0 +1,11 @@
+/**
+ * `count` returns `Count`, an alias of `int`; the instance of `twice` sees `int` and uses the
+ * builtin `+` (design principles 5.7).
+ */
+import { count } from alias_models
+import { twice } from alias_gen
+
+func main(): int sync {
+    println(twice(count(21)))
+    return 0
+}

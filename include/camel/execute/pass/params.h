@@ -83,6 +83,10 @@ struct PassDescriptor {
     std::string doc;
     std::vector<PassParam> params;
     PassMaker make;
+    /// The pass reads tag facts (node attributes, numeric permissions, `read_by`); a tag's
+    /// `read_by` names it. `registerModulePass` registers such a pass in the tag reader
+    /// registry, which the `TagHasNoReader` warning consults (camel/core/tags.h).
+    bool readsTags = false;
 };
 
 /// Wraps a factory of a pass without parameters.

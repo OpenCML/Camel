@@ -52,10 +52,12 @@ it.
 What needed care, all of it kept as ANTLR read it (checked token for token, section 7):
 
 - **Numbers** carry no sign. `REAL` is `digits . digits exponent?` and is the longest match
-  whenever it applies (`007.5`); `1.` and `1..2` leave the dot. `INTEGER` is decimal, `0` and
-  octal digits, `0x…`, `0b…`, then an exponent; a digit run that is none of these is cut where
-  the longest of them ends (`089` is `0`, `89`). `0xFFe-3` is one token: the final `e` goes to a
-  signed exponent.
+  whenever it applies (`007.5`); `1.` and `1..2` leave the dot. `INTEGER` is decimal, `0x…`,
+  `0b…`, `0o…`, then an exponent on a decimal number; `0xFFe-3` is one token: the final `e` goes
+  to a signed exponent. A decimal digit run that starts with `0` and has another digit (`09`,
+  `077`) used to be cut into two tokens; it is now refused as one run, with a located
+  `LexicalDiag::InvalidNumberFormat`, and a prefixed form with no digit of its base (`0o8`,
+  `0x`) is refused the same way. Octal is written `0o77` (H15i).
 - **Strings** `'…'`, `"…"`, `` `…` `` end at the first unescaped quote; `\\` and an escaped
   quote do not close; a string may span lines. When no quote closes it, it ends at its last
   escaped quote if there is one (`'C:\dir\'`), else it is unclosed and takes the rest of the
@@ -66,9 +68,9 @@ What needed care, all of it kept as ANTLR read it (checked token for token, sect
   characters, then one). `>=` is always one token; there is no `>>`.
 
 Lexical errors are recorded in the buffer and their text kept as `Error` tokens, which the
-parser skips: a run of characters that start no token (one error per run), an unclosed string,
-an unterminated block comment (ANTLR read its `/*` as `/` and `*`; the only place the token
-streams differ).
+parser skips: a run of characters that start no token (one error per run), a number run that is
+not a number token (`09`, `0o8`), an unclosed string, an unterminated block comment (ANTLR read
+its `/*` as `/` and `*`; the only place the token streams differ).
 
 ## 2. Rule 1: angle brackets touch
 

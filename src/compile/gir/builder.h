@@ -809,6 +809,10 @@ class Builder {
     struct TagFacts {
         camel::core::attr::AttrSetId declaration = camel::core::attr::kNoAttrs;
         camel::core::attr::AttrSetId nodes       = camel::core::attr::kNoAttrs;
+        /// The numeric permissions the permission tags written here grant (design principles
+        /// 7.2: a permission is a tag). They go to the same column `@numeric(...)` uses, never
+        /// to the attribute set: one fact, one place.
+        uint8_t permissions = 0;
     };
     /// The facts of the tag uses written on `gct`, which is written at `at` (Func, Type or
     /// Nodes). Resolved once per node and remembered. Reports a use that is wrong and throws
@@ -835,8 +839,7 @@ class Builder {
 
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-        const std::string &name,
-        camel::core::attr::AttrSetId bodyTags = camel::core::attr::kNoAttrs);
+        const std::string &name, const TagFacts &bodyTags);
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -1276,6 +1279,51 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         const std::function<bool(FunctionType *, bool)> &accepts);
+
+    // ---- An operator of the module that declares the operand's type (design principles 5.7) --
+    //
+    // Names are looked up lexically where the expression is written; a value of a dependent
+    // type variable is also operated on as its type's declaration means, so an instance looks
+    // for the operator in the module that declares the operand's named type as well, not only
+    // in the module the generic function is written in. What the caller imported is not looked
+    // at. The types are concrete by the time an instance is built, so the modules are found
+    // from the operand types.
+
+    /// The modules whose overloads an operator call over these operand types may also use:
+    /// for each named struct or enum type among the operand value types, the module that
+    /// declares it (with the type's name as written), unless that is this module. Empty outside
+    /// a generic instance, and for anonymous, builtin and alias types, which have no declaring
+    /// module. Duplicates (two operands of the same type) appear once.
+    std::vector<std::pair<std::string, std::string>>
+    declaringModulesOf(const camel::core::type::type_vec_t &withTypes,
+                       const camel::core::type::type_vec_t &normTypes);
+    /// Adds what the declaring modules of the operands export as overloads of `group` to the
+    /// set of `dref`, once each: an overload the module also imports (or one found by both
+    /// routes) stays one candidate. `!=` takes the `==` overloads, as it does for the ones the
+    /// program declares (design principles 4.3). Returns whether anything was added.
+    bool addDeclaringModuleOverloads(
+        node_handle_t dref, const std::string &group,
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
+    /// Whether a module that declares one of the operand types exports an overload of `group`
+    /// (design principles 5.7). Asked before an operator DREF exists, for `+=`, which follows the
+    /// plain operator (`compoundAssignmentByRebinding`).
+    bool hasDeclaringModuleOperator(
+        const std::string &group, const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
+    /// The scope the diagnostic names when no overload fits: the module the expression is
+    /// written in, and the declaring modules of the operands. Empty when the declaring-module
+    /// lookup does not apply, so that the diagnostic of an ordinary operator failure is
+    /// unchanged.
+    std::string operatorSearchScopeText(
+        const camel::core::type::type_vec_t &withTypes,
+        const camel::core::type::type_vec_t &normTypes);
+    /// The loaded module of this name, or nullptr (the declaring module of a type is loaded:
+    /// the type came from it).
+    camel::core::module::module_ptr_t moduleNamed(const std::string &name);
+    /// What a diagnostic calls the module `name`: the name its source gives it, else the name
+    /// it is loaded under.
+    std::string moduleDisplayName(const std::string &name);
     /// Whether the generic overload `tmpl` accepts the arguments `normInputs` of the types
     /// `normTypes`: its type variables bind and every argument then fits its parameter
     /// (resolveGenericCall without the diagnostics). An argument that is a composite literal

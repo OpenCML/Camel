@@ -1,8 +1,10 @@
 module regionprobe
 import { Program, Graph, Node, Region, RegionKind, graphs, nodes, region_of, region_kind, region_parent } from graph
 
-func hasRegion(n: Node): bool {
-    return region_of(n) != null
+// Every node is in a region; the body of a graph is region 0 and its kind is Root, whether or
+// not the graph has a region table.
+func isBodyNode(n: Node): bool {
+    return region_kind(region_of(n)) == RegionKind::Root
 }
 
 func isInlineRegion(r: Region): bool {
@@ -10,23 +12,18 @@ func isInlineRegion(r: Region): bool {
 }
 
 func isInlineNode(n: Node): bool {
-    return match region_of(n) {
-        case null => false
-        case r => isInlineRegion(r)
-    }
+    return isInlineRegion(region_of(n))
 }
 
 func parentOk(n: Node): bool {
-    return match region_of(n) {
-        case null => true
-        case r => if isInlineRegion(r) then region_parent(r) != null else true
-    }
+    let r = region_of(n)
+    return if isInlineRegion(r) then region_parent(r) != null else true
 }
 
 func reportGraph(g: Graph) sync {
     let ns = nodes(g)
     println(len(ns))
-    println(len(ns->filter<hasRegion>))
+    println(len(ns->filter<isBodyNode>))
     println(len(ns->filter<isInlineNode>))
     println(len(ns->filter<parentOk>))
 }

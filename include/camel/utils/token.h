@@ -52,9 +52,6 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
     size_t i             = begin;
     bool anyDigit        = false;
     bool anyNonZero      = false;
-    // Position of the first non-zero digit against the decimal point: 3 for `123.4`, -2 for
-    // `0.004`. Only its sign is used, to tell a number too large from one too small.
-    long long magnitude  = 0;
     bool seenPoint       = false;
     for (; i < text.size(); ++i) {
         const char c = text[i];
@@ -62,15 +59,8 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
             seenPoint = true;
         } else if (std::isdigit(static_cast<unsigned char>(c))) {
             anyDigit = true;
-            if (!anyNonZero) {
-                if (c != '0') {
-                    anyNonZero = true;
-                    magnitude += seenPoint ? 0 : 1;
-                } else if (seenPoint) {
-                    --magnitude;
-                }
-            } else if (!seenPoint) {
-                ++magnitude;
+            if (!anyNonZero && c != '0') {
+                anyNonZero = true;
             }
         } else {
             break;
@@ -84,24 +74,17 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
             throw std::invalid_argument("Invalid number format: " + text);
         }
         ++i;
-        bool negativeExponent = false;
         if (i < text.size() && (text[i] == '+' || text[i] == '-')) {
-            negativeExponent = text[i] == '-';
             ++i;
         }
         if (i == text.size()) {
             throw std::invalid_argument("Invalid number format: " + text);
         }
-        long long exponent = 0;
         for (; i < text.size(); ++i) {
             if (!std::isdigit(static_cast<unsigned char>(text[i]))) {
                 throw std::invalid_argument("Invalid number format: " + text);
             }
-            if (exponent < 1000000) {
-                exponent = exponent * 10 + (text[i] - '0');
-            }
         }
-        magnitude += negativeExponent ? -exponent : exponent;
     }
 
     T value          = 0;
@@ -129,9 +112,10 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
         }
     }
     if (outOfRange) {
-        // As before: a literal too large for T is an error, one too small to tell from zero
-        // is zero.
-        if (anyNonZero && magnitude > 0) {
+        // A literal too large for T, or a nonzero one too small to tell from zero, is an error
+        // (H15i): a pass parameter is a literal too, and no reader turns a nonzero text into
+        // zero.
+        if (anyNonZero) {
             throw std::overflow_error("Number out of range");
         }
         value = 0;
@@ -142,9 +126,10 @@ template <typename T> T parseDecimalReal(const std::string &text, size_t begin) 
 } // namespace camel_number_detail
 
 // An integer literal as the lexer accepts it: an optional sign, then decimal digits with an
-// optional exponent (`12`, `1e6`, `15e-1`), or `0x` / `0b` / a leading `0` (octal) and digits.
-// The arithmetic is exact. A negative exponent divides and drops the fraction (`15e-1` is 1),
-// which `inexact` records. `-9223372036854775808` is in range although its digits alone are not.
+// optional exponent (`12`, `1e6`, `15e-1`), or `0x` / `0b` / `0o` (octal) and digits. The
+// arithmetic is exact. A negative exponent divides and drops the fraction (`15e-1` is 1), which
+// `inexact` records. `-9223372036854775808` is in range although its digits alone are not. A
+// leading-zero decimal is not a source token (H15i): the lexer refuses it and octal is `0o77`.
 enum class IntegerLiteralStatus { Ok, OutOfRange, Invalid };
 
 struct IntegerLiteral {
@@ -168,10 +153,9 @@ inline IntegerLiteral parseIntegerLiteral(const std::string &input) {
     } else if (input.compare(i, 2, "0b") == 0) {
         base = 2;
         i += 2;
-    } else if (i + 1 < input.size() && input[i] == '0' &&
-               std::isdigit(static_cast<unsigned char>(input[i + 1]))) {
+    } else if (input.compare(i, 2, "0o") == 0) {
         base = 8;
-        ++i;
+        i += 2;
     }
     // The magnitude is at most 2^63 (the smallest int64 negated).
     const uint64_t limit = isNegative ? (uint64_t{1} << 63) : (uint64_t{1} << 63) - 1;

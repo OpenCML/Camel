@@ -51,13 +51,19 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
     return tree_.tokens_.text(i) == "rule";
 }
 
-/// ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
-///            (IDENTIFIER dataExpr)?
+/// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
+///            '}' (IDENTIFIER dataExpr)?
 /// The first IDENTIFIER is the name `rule`, the second the name `when`: the condition, checked
 /// after the pattern matched. The parameters are the pattern variables; `const x: T` only
-/// matches a constant.
+/// matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
+/// design principles 7.2); the AST reads them from the tree.
 void ParserImpl::parseRuleDecl() {
     const size_t m = mark();
+    parseFrontMatter();
+    parseRuleDeclRest(m);
+}
+
+void ParserImpl::parseRuleDeclRest(size_t m) {
     eat(TK::KwExport);
     bump(); // `rule`
     parseIdentDef();

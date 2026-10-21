@@ -1,0 +1,10 @@
+/**
+ * `0o` must be followed by octal digits: `0o9` is one refused number run, not `0o` and a stray
+ * `9` (H15i).
+ */
+module parse_numbers_bad_octal_digit
+
+func main(): int sync {
+    let a = 0o9
+    return a
+}

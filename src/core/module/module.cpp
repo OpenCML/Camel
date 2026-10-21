@@ -455,12 +455,6 @@ Module::importedOperatorOverloads(const std::string &group) const {
     // import of the module brings them, whatever it names (design principles 10.2), so they
     // are looked up in the modules imported, not among the names imported. A generic overload
     // is exported under `group#k` (the GIR builder's exportOperatorOverloads).
-    const auto isOverloadOf = [&](const Reference &ref) {
-        const std::string &ident = ref.ident();
-        return ref.plain() &&
-               (ident == group || (ident.size() > group.size() && ident.starts_with(group) &&
-                                   ident[group.size()] == '#'));
-    };
     std::vector<std::shared_ptr<Module>> modules;
     for (const ImportSite &site : importSites_) {
         if (site.mod && std::ranges::find(modules, site.mod) == modules.end()) {
@@ -469,19 +463,37 @@ Module::importedOperatorOverloads(const std::string &group) const {
     }
     std::ranges::sort(modules, [](const auto &a, const auto &b) { return a->name() < b->name(); });
     for (const auto &mod : modules) {
-        mod->declareEntities();
-        std::vector<std::pair<Reference, entity>> found;
-        mod->exportedEntityNS()->forEach([&](const Reference &ref, const entity &ent) {
-            if (isOverloadOf(ref) && !ent.isOperGroup()) {
-                found.emplace_back(ref, ent);
-            }
-        });
-        std::ranges::sort(found, [](const auto &a, const auto &b) {
-            return a.first.toString() < b.first.toString();
-        });
-        for (auto &[ref, ent] : found) {
-            result.push_back({mod, ref, std::move(ent)});
+        for (auto &overload : mod->exportedOperatorOverloads(group)) {
+            result.push_back(std::move(overload));
         }
+    }
+    return result;
+}
+
+std::vector<Module::ImportedOperatorOverloads>
+Module::exportedOperatorOverloads(const std::string &group) {
+    // The declarations of the module are complete before any function body of the program is
+    // built (design principles 10.1), so this is a no-op by the time an operator is resolved.
+    declareEntities();
+    std::vector<ImportedOperatorOverloads> result;
+    const auto isOverloadOf = [&](const Reference &ref) {
+        const std::string &ident = ref.ident();
+        return ref.plain() &&
+               (ident == group || (ident.size() > group.size() && ident.starts_with(group) &&
+                                   ident[group.size()] == '#'));
+    };
+    std::vector<std::pair<Reference, entity>> found;
+    exportedEntityNS()->forEach([&](const Reference &ref, const entity &ent) {
+        if (isOverloadOf(ref) && !ent.isOperGroup()) {
+            found.emplace_back(ref, ent);
+        }
+    });
+    std::ranges::sort(found, [](const auto &a, const auto &b) {
+        return a.first.toString() < b.first.toString();
+    });
+    const auto self = shared_from_this();
+    for (auto &[ref, ent] : found) {
+        result.push_back({self, ref, std::move(ent)});
     }
     return result;
 }
@@ -543,16 +555,66 @@ void Module::addDeclaredTag(const std::string &ident, uint32_t tag) {
 
 camel::core::attr::AttrSetId Module::declarationTags(const Reference &name) const {
     const auto it = declarationTags_.find(name.toString());
-    return it == declarationTags_.end() ? camel::core::attr::kNoAttrs : it->second;
+    if (it == declarationTags_.end()) {
+        return camel::core::attr::kNoAttrs;
+    }
+    // The name-level query sees every overload of the name (an operator's, normally).
+    camel::core::attr::AttrSetId all = camel::core::attr::kNoAttrs;
+    for (const auto &[signature, tags] : it->second) {
+        all = camel::core::attr::unite(all, tags);
+    }
+    return all;
+}
+
+camel::core::attr::AttrSetId
+Module::declarationTags(const Reference &name, std::string_view signature) const {
+    const auto outer = declarationTags_.find(name.toString());
+    if (outer == declarationTags_.end()) {
+        return camel::core::attr::kNoAttrs;
+    }
+    const auto inner = outer->second.find(std::string(signature));
+    return inner == outer->second.end() ? camel::core::attr::kNoAttrs : inner->second;
+}
+
+void Module::setDeclarationTags(const Reference &name, camel::core::attr::AttrSetId tags) {
+    setDeclarationTags(name, std::string_view{}, tags);
 }
 
 void Module::setDeclarationTags(
-    const Reference &name, camel::core::attr::AttrSetId tags) {
-    const std::string key = name.toString();
-    const auto it         = declarationTags_.find(key);
-    declarationTags_[key] = it == declarationTags_.end()
-                                ? tags
-                                : camel::core::attr::unite(it->second, tags);
+    const Reference &name, std::string_view signature, camel::core::attr::AttrSetId tags) {
+    auto &bySignature = declarationTags_[name.toString()];
+    const auto it     = bySignature.find(std::string(signature));
+    bySignature[std::string(signature)] =
+        it == bySignature.end() ? tags : camel::core::attr::unite(it->second, tags);
+}
+
+uint8_t Module::declarationPermissions(const Reference &name) const {
+    const auto it = declarationPermissions_.find(name.toString());
+    if (it == declarationPermissions_.end()) {
+        return 0;
+    }
+    uint8_t all = 0;
+    for (const auto &[signature, permissions] : it->second) {
+        all = static_cast<uint8_t>(all | permissions);
+    }
+    return all;
+}
+
+uint8_t Module::declarationPermissions(const Reference &name, std::string_view signature) const {
+    const auto outer = declarationPermissions_.find(name.toString());
+    if (outer == declarationPermissions_.end()) {
+        return 0;
+    }
+    const auto inner = outer->second.find(std::string(signature));
+    return inner == outer->second.end() ? 0 : inner->second;
+}
+
+void Module::setDeclarationPermissions(
+    const Reference &name, std::string_view signature, uint8_t permissions) {
+    // The permissions of a declaration are the union of everything written on it; a second
+    // record (an instance built after the template) must not lose the first.
+    uint8_t &slot = declarationPermissions_[name.toString()][std::string(signature)];
+    slot          = static_cast<uint8_t>(slot | permissions);
 }
 
 camel::core::attr::AttrSetId Module::fieldTags(const Reference &typeName, size_t index) const {

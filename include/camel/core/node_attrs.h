@@ -86,13 +86,14 @@ inline constexpr AttrSetId kNoAttrs   = 0;
 
 // ---- Values ----------------------------------------------------------------------------
 
-enum class ValueKind : uint8_t { Unit, Flags, Int, Symbol, Graph, Tuple };
+enum class ValueKind : uint8_t { Unit, Flags, Int, Float, Symbol, Graph, Tuple };
 
 /// A value, decoded.
 struct Value {
     ValueKind kind = ValueKind::Unit;
     std::vector<uint64_t> words;    // Flags: bit i of the set is bit i % 64 of word i / 64
     int64_t integer = 0;            // Int
+    double real     = 0.0;          // Float, by its bits (NaN payload included: two NaNs differ)
     std::string text;               // Symbol; Graph: the graph's stable id
     std::vector<AttrValueId> items; // Tuple
 };
@@ -103,6 +104,9 @@ AttrValueId flags(std::span<const uint32_t> bits);
 /// The flags of these words (trailing zero words do not count); no value when all are zero.
 AttrValueId flagWords(std::vector<uint64_t> words);
 AttrValueId integer(int64_t value);
+/// A floating-point value, interned by its bits (two values are the same fact only when their
+/// bits agree: 0.0 and -0.0, or two NaNs, are different facts).
+AttrValueId real(double value);
 AttrValueId symbol(std::string_view text);
 /// A reference to the graph `graph` (see Graph above).
 AttrValueId graphRef(camel::runtime::GraphId graph);

@@ -2372,6 +2372,12 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         return uri == "tensor:shape" || uri == ":op/len_arr" || uri == ":op/len_str" ||
                uri == "tensor:rank" || uri == "tensor:numel";
     };
+    // A discrete value: an integer or a boolean. Its derivative is zero by definition (design
+    // principles 9.9), so it is never tainted and never refused, whatever it was computed from.
+    const auto discreteType = [](const Type *type) {
+        return type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
+               type->code() == TypeCode::Bool;
+    };
     for (gc_node_ref_t node : order) {
         Type *const type   = typeOf(forward_, node);
         const bool carrier = holdsFunction(type);
@@ -2414,7 +2420,11 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
             // A value that cannot carry a gradient but is computed from one is tainted: it may
             // still be stored, but using it as data is the silent loss design principles 9.9
             // forbids. An aggregate with a tangent is not tainted as a whole; its field read is.
-            if (!structural(node, type) && !metadataOper(node) && (inputActive || inputTainted)) {
+            // A discrete value is not: its derivative is zero by definition (9.9), so an integer
+            // or a boolean computed from a parameter -- a loop counter, a label cast back to
+            // float -- carries no gradient and drops nothing.
+            if (!discreteType(type) && !structural(node, type) && !metadataOper(node) &&
+                (inputActive || inputTainted)) {
                 tainted_.insert(node);
             }
             continue;

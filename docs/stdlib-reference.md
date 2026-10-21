@@ -3282,11 +3282,11 @@ The source origin id of the node, 0 when unknown.
 #### `region_of`
 
 ```camel
-region_of: (n: Node) => Region?
+region_of: (n: Node) => Region
 ```
 
-The innermost region the node is in. A graph with the body only has no region table, so the
-answer is null; in a graph that has regions, region 0 is the body and every node has one.
+The innermost region the node is in. Every node is in one: region 0 is the body, also in a
+graph whose region table is empty.
 
 - Pure.
 - Example: `region_of(n)`
@@ -3297,7 +3297,8 @@ answer is null; in a graph that has regions, region 0 is the body and every node
 region_kind: (r: Region) => RegionKind
 ```
 
-The kind of the region: `Root`, `Arm`, `LoopCond`, `LoopBody`, `Inline`, `Block` or `Dead`.
+The kind of the region: `Root` (the function body, region 0), `Arm`, `LoopCond`, `LoopBody`,
+`Inline`, `Block` or `Dead`.
 
 - Pure.
 - Example: `region_kind(r) == RegionKind::Inline`

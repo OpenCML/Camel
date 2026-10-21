@@ -10,6 +10,7 @@
 
 // Classify static core-indexed operations, then partition the complete dependency DAG.
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
@@ -114,7 +115,7 @@ std::string eligibility(
         .shape       = *output,
         .inputs      = {},
         .dtype       = node->dataType()->code() == ty::TypeCode::Float64 ? DType::F64 : DType::F32,
-        .permissions = graph.nodePermissions(id),
+        .permissions = camel::core::tag::factsOf(graph, id).permissions,
         .semantic    = 0,
         .indexing    = inst};
     const auto inputs = graph.normInputsOf(id);
@@ -273,7 +274,7 @@ inspectRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::Fa
         for (auto id : region.members) {
             const auto *copy = extracted.graph->header(extracted.sourceToNode[id]);
             if (copy->origin != graph.nodeOrigin(id) ||
-                copy->permissions != graph.nodePermissions(id) ||
+                copy->permissions != camel::core::tag::factsOf(graph, id).permissions ||
                 copy->dataType != graph.node(id)->dataType())
                 throw std::runtime_error("region extraction lost source metadata");
         }

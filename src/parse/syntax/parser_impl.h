@@ -214,6 +214,8 @@ class ParserImpl {
     /// At the name `rule` (offset `n`) that starts a rule declaration.
     bool atRuleDecl(uint32_t n) const;
     void parseRuleDecl();
+    /// ruleDecl after the tag uses that may precede it; `m` marks where they began.
+    void parseRuleDeclRest(size_t m);
     void parseRuleContext();
     void parseRuleBody();
     void parseDataDecl();

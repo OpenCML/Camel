@@ -756,14 +756,21 @@ void ParserImpl::parseFuncAnno() {
 }
 
 /// A statement that starts with annotations or tag uses: a function declaration, a type
-/// declaration, or an annotated/tagged block (blockStmt's second form; `@numeric(...)` on a
-/// block, design principles 7.5; `#tag { ... }` on a block, 6.2). They are read first; a block
-/// follows when the next token is '{' or `sync {`, a type declaration when it is 'type',
-/// anything else continues the function declaration. After a tag use '{' is always a block,
-/// never a struct literal.
+/// declaration, a rule declaration (`#requires<...> rule f(...)`), or an annotated/tagged block
+/// (blockStmt's second form; `@numeric(...)` on a block, design principles 7.5; `#tag { ... }` on
+/// a block, 6.2). They are read first; a block follows when the next token is '{' or `sync {`, a
+/// type declaration when it is 'type', a rule when the tags are followed by `rule`, anything else
+/// continues the function declaration. After a tag use '{' is always a block, never a struct
+/// literal.
 void ParserImpl::parseAnnotatedStmt() {
     const size_t m = mark();
     parseFrontMatter();
+    if (cur_ == TK::KwExport && atRuleDecl(1)) {
+        return parseRuleDeclRest(m);
+    }
+    if (atRuleDecl(0)) {
+        return parseRuleDeclRest(m);
+    }
     if (cur_ == TK::LBrace || (cur_ == TK::KwSync && peek(1) == TK::LBrace)) {
         parseStmtBlock();
         return close(m, NK::BlockStmt);

@@ -50,7 +50,7 @@ enum class SemanticDiag : uint32_t {
     CallingIncompleteFunction   = 0x000013,
     // 0x000014 was ClosureCaptureAfterSelfCall, replaced by CaptureAfterRecursiveCall: with
     // function bodies built when first needed it is only met in recursion.
-    ImportNameNotExported        = 0x000015,
+    ImportNameNotExported = 0x000015,
     // A literal the type it is given cannot hold: out of range, truncated (a decimal literal
     // in an integer type), or not a value of that type at all (a text that is not a number).
     // One diagnostic for all of them (handover H24): it says which literal, which type, and
@@ -174,6 +174,10 @@ enum class SemanticDiag : uint32_t {
     TagOnUnnamedField      = 0x000167,
     TagArgumentNamed       = 0x000168,
     TagArgumentUnsupported = 0x000169,
+    TagArgumentType        = 0x00016A,
+    TagNotAPermission      = 0x00016B,
+    RuleTagNotRequires     = 0x00016C,
+    TagParameterType       = 0x00016D,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
@@ -181,8 +185,7 @@ enum class SemanticDiag : uint32_t {
     CapturedWriteInAsyncFunction = 0x100003,
     EffectNotExecuted            = 0x100004,
     // 0x90 and up, clear of what other work adds after EffectNotExecuted.
-    ExitInUnusedBranch      = 0x100090,
-    IntegerLiteralTruncated = 0x1000A0,
+    ExitInUnusedBranch = 0x100090,
     // Rulings of 2026-10-13 (design principles log 2.11): 0xC0 and up.
     UnusedFallibleValue = 0x1000C0,
     // Rulings of 2026-10-15 (design principles log 2.13): 0x110 and up.

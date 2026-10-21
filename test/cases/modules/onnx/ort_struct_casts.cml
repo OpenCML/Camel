@@ -1,0 +1,68 @@
+/**
+ * Named struct values exported to ONNX. `type Run = { state: Tensor, steps: int }` is nominal:
+ * an anonymous struct value enters it by field name (design principles 5.2), the same order is
+ * an identity (no value moves) and another order is a copy into the declaration's order. Both
+ * conversions are exported, never refused:
+ *
+ *   identity   a literal written in the declaration's order, returned as `Run`;
+ *   reordered  a literal whose fields are written the other way round;
+ *   declared   an identity literal bound with `let r: Run = ...` (the CAST is at a declaration);
+ *   argument   an anonymous struct value given to a parameter declared `Run` (the CAST is at a
+ *              call argument), returned next to a number computed from it;
+ *   walk       a reordered literal on the path where a recursion whose depth depends on the
+ *              model input returns.
+ *
+ * Run by ort_struct_casts.py, which runs the program twice (the operator in a default run, the
+ * pass std::macro std::opt onnx::export) from a directory with the example input. Every model
+ * must pass onnx.checker's full check, hold no Cast node (an identity conversion exports as
+ * nothing and a reorder is ONNX identities between the initializer's fields), name its outputs
+ * after the declaration's fields with the counter an int64, and match NumPy on ONNX Runtime.
+ */
+module ort_struct_casts
+
+import { Tensor, reshape, sum, tanh } from tensor
+import { export_model } from onnx
+
+type Run = { state: Tensor, steps: int }
+
+func identity(h: Tensor, k: int): Run {
+    return { state: tanh(h) * 2.0, steps: k }
+}
+
+func reordered(h: Tensor, k: int): Run {
+    return { steps: k, state: tanh(h) * 2.0 }
+}
+
+func declared(h: Tensor, k: int): Run {
+    let r: Run = { state: tanh(h) * 3.0, steps: k + 1 }
+    return r
+}
+
+func doubled(r: Run): int {
+    return r.steps * 2
+}
+
+func argument(h: Tensor, k: int): (Run, int) {
+    let r = { state: tanh(h), steps: k + 2 }
+    return (r, doubled(r))
+}
+
+func done_reordered(h: Tensor, k: int): Run {
+    let r: Run = { steps: k, state: h }
+    return r
+}
+
+func walk(h: Tensor, k: int): Run {
+    return if k >= 3 || sum(h * h) < 1.0 then done_reordered(h, k) else walk(tanh(h) * 0.3 + h * 0.6, k + 1)
+}
+
+func main(): int sync {
+    let ex = reshape([1.0, -2.0, 0.5, 1.5], [2, 2])
+    export_model((x: Tensor): Run => identity(x, 1), ex, 'identity.onnx')
+    export_model((x: Tensor): Run => reordered(x, 1), ex, 'reordered.onnx')
+    export_model((x: Tensor): Run => declared(x, 1), ex, 'declared.onnx')
+    export_model((x: Tensor): (Run, int) => argument(x, 1), ex, 'argument.onnx')
+    export_model((x: Tensor): Run => walk(x, 0), ex, 'walk.onnx')
+    println('exported')
+    return 0
+}

@@ -28,6 +28,7 @@
 #include "../ops/registry.h"
 
 #include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/execute/pass/params.h"
 #include "camel/runtime/draft_session.h"
@@ -304,6 +305,8 @@ void registerTensorPasses() {
     registerModulePass("tensor::fuse", [](const core::context::context_ptr_t &ctx) {
         return std::make_unique<TensorFusePass>(ctx);
     });
+    // Fuse reads the permissions and attributes of the nodes it merges.
+    core::tag::declareReader("tensor::fuse");
     // The declaration evaluator is a test (index_eval.h): it exists only when test passes are
     // enabled, as the core's test passes do (CAMEL_ENABLE_TEST_PASSES).
     if (std::getenv("CAMEL_ENABLE_TEST_PASSES") != nullptr) {
