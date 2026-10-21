@@ -2,6 +2,8 @@
 ; CMakeLists.txt). One symbol per line, as the dependent targets import it; a Debug-only
 ; symbol belongs in libcamel_exports_debug.def. Regenerate from the dependent targets'
 EXPORTS
+    ; The standalone bridge: a program std::cpp generated calls it, so no import table names it.
+    ?call@bridge@standalone@camel@@YA?AUValue@123@V?$basic_string_view@DU?$char_traits@D@std@@@std@@AEBV?$vector@UValue@bridge@standalone@camel@@V?$allocator@UValue@bridge@standalone@camel@@@std@@@6@1W4Kind@4123@@Z
     ??0CamelParser@parse@camel@@QEAA@V?$shared_ptr@VDiagnostics@error@core@camel@@@std@@@Z
     ??0Data@data@core@camel@@QEAA@PEAVType@type@23@@Z
     ??0Data@data@core@camel@@QEAA@XZ
@@ -329,6 +331,7 @@ EXPORTS
     ?payloadOf@GraphDraft@runtime@camel@@QEBA?AV?$span@$$CBW4byte@std@@$0?0@std@@I@Z
     ?permSpace@mm@core@camel@@YAAEAVGrowableBumpAllocator@123@XZ
     ?print@Tree@gct@compile@camel@@QEBAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@@Z
+    ?printSlotCapped@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@1@Z
     ?printTaggedSlots@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@PEB_KPEBVTupleType@type@23@@Z
     ?printValue@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@@Z
     ?programOfRuntimeGraph@Context@context@core@camel@@QEBAPEBVProgram@runtime@4@PEBVGCGraph@64@@Z

@@ -1,0 +1,14 @@
+/**
+ * int('99999999999999999999'): an integer text that is a number too large for int is out of
+ * range, which the message says, rather than not a number (H15f).
+ */
+module int_text_out_of_range
+
+func conv(s: string): int { return int(s) }
+
+func main(): int sync {
+    println(conv('42'))
+    println(conv('99999999999999999999'))
+    println('not reached')
+    return 0
+}

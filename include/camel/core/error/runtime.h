@@ -41,6 +41,11 @@ class GCGraph;
 
 namespace camel::core::error {
 
+/// The message of `diag` with `args` put in place of `{0}`, `{1}`, ...: the sentence a
+/// diagnostic reports, without its position or help. For a report nested inside another — the
+/// reason an entry argument was refused says what made it unreadable (design principles 10.6).
+std::string runtimeDiagMessage(RuntimeDiag diag, const std::vector<std::string> &args);
+
 enum class RuntimeFaultPolicy : uint8_t {
     AbortCurrentExecution,
     AbortCurrentTask,

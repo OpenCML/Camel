@@ -1025,7 +1025,8 @@ const camel::runtime::Program *simplifyGraph(
             nullptr,
             &memo,
             mayReduceControl,
-            config.checkScreens);
+            config.checkScreens,
+            config.enableBranchedCallSplit);
     };
     for (size_t round = 0; round < maxRounds; ++round) {
         bool optChanged = false;
@@ -1040,7 +1041,8 @@ const camel::runtime::Program *simplifyGraph(
             &folded,
             &memo,
             mayFold,
-            config.checkScreens);
+            config.checkScreens,
+            config.enableBranchedCallSplit);
         program = rewriteReachableGraphs(
             context,
             program,
@@ -1049,7 +1051,8 @@ const camel::runtime::Program *simplifyGraph(
             &merged,
             &memo,
             mayMerge,
-            config.checkScreens);
+            config.checkScreens,
+            config.enableBranchedCallSplit);
         program = rewriteReachableGraphs(
             context,
             program,
@@ -1058,7 +1061,8 @@ const camel::runtime::Program *simplifyGraph(
             &simplified,
             &memo,
             mayAlgebra,
-            config.checkScreens);
+            config.checkScreens,
+            config.enableBranchedCallSplit);
         program = rewriteReachableGraphs(
             context,
             program,
@@ -1067,7 +1071,8 @@ const camel::runtime::Program *simplifyGraph(
             &removed,
             &memo,
             mayRemoveDead,
-            config.checkScreens);
+            config.checkScreens,
+            config.enableBranchedCallSplit);
         if (!optChanged && folded == 0 && merged == 0 && simplified == 0 && removed == 0) {
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return finish(program);

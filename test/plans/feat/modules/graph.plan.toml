@@ -1,0 +1,35 @@
+id = "modules.graph"
+order = 376
+tier = "fast"
+tags = ["feat", "modules", "graph"]
+
+# The graph module: a program as a value.
+
+[[tests]]
+name = "types_and_node_kind"
+kind = "behavior"
+case = "../../../cases/modules/graph_types.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\ntrue\nfalse\n0\n1\n1\nNodeKind::Oper\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "node_kinds_match_the_graph"
+desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order (compared once with the std::jgir dump of the same program)."
+kind = "behavior"
+case = "../../../cases/modules/graph_kinds.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "10\n[__root__, pick, total, kinds, main, __g_6__, __g_7__, __g_8__, __g_9__, __g_10__, __g_11__]\n[[NodeKind::Data, NodeKind::Call], [NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Func, NodeKind::Func], [NodeKind::Port, NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "reads_of_one_graph"
+desc = "The nodes, inputs, users, purity and printed form of a small graph."
+kind = "behavior"
+case = "../../../cases/modules/graph_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "[%0 Port : int, %1 Data : int, %2 Oper :op/mul_l : int, %3 Data : int, %4 Oper :op/add_l : int]\n[0, 0, 2, 0, 2]\n[1, 1, 1, 1, 0]\n[false, false, true, false, true]\n[none, none, :op/mul_l, none, :op/add_l]\n[int, int, int, int, int]\n[, , , , ]\n[null, 2, null, 1, null]\n[false, true, true, true, true]\n[none, compute]\n"
+timeout_ms = 10000

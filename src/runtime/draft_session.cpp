@@ -42,6 +42,7 @@
 #include "camel/utils/pointer_set.h"
 
 #include <algorithm>
+#include <format>
 #include <queue>
 #include <unordered_set>
 
@@ -965,6 +966,46 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
     return collectCommitClosure();
 }
 
+std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
+    std::vector<GraphId> differing;
+    const Program *current = context_->currentRuntimeProgram();
+    if (current == nullptr || current == program_) {
+        return differing;
+    }
+    // The graphs the session decoded or edited are the ones it read or wrote.
+    const auto compare = [&](GraphId id) {
+        if (current->graph(id) != program_->graph(id) &&
+            std::find(differing.begin(), differing.end(), id) == differing.end()) {
+            differing.push_back(id);
+        }
+    };
+    for (const auto &[graph, entry] : drafts_) {
+        compare(graph->id());
+    }
+    for (GCGraph *graph : edited_) {
+        compare(graph->id());
+    }
+    return differing;
+}
+
+const Program *RuntimeGraphDraftSession::commitChecked() {
+    std::vector<GraphId> differing = conflicts();
+    if (!differing.empty()) {
+        std::string names;
+        for (GraphId id : differing) {
+            const GCGraph *graph = program_->graph(id);
+            names += (names.empty() ? "'" : ", '") + (graph ? graph->name() : std::string("?")) + "'";
+        }
+        const std::string message = std::format(
+            "The commit conflicts with a newer program: {} graph(s) the session used have "
+            "another version there ({}).",
+            differing.size(),
+            names);
+        throw GraphCommitConflict(std::move(differing), message);
+    }
+    return commit();
+}
+
 const Program *RuntimeGraphDraftSession::commit(bool detached) {
     if (!runtimeRoot_) {
         return nullptr;
@@ -1149,7 +1190,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     }
     for (GCGraph *graph : order) {
         if (auto it = fresh.find(graph); it != fresh.end()) {
-            validateRuntimeGraphCalls(*committed, it->second);
+            validateRuntimeGraphCalls(*committed, it->second, graphState_);
         }
     }
     // The copy is the same graph to the fact store; a new revision only for a graph that was
@@ -1171,8 +1212,10 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
     // program is left as it is.
-    if (!detached && context_->currentRuntimeProgram() == program_ &&
-        program_->root() == oldRuntimeRoot) {
+    // A shape no back end runs (GraphState::NonExecutable: the export-only sessions) is never
+    // installed: it stays in a private program, whatever the caller asked for.
+    if (!detached && graphState_ == GraphState::Executable &&
+        context_->currentRuntimeProgram() == program_ && program_->root() == oldRuntimeRoot) {
         program_ = context_->installRuntimeProgram(committed);
     } else {
         // A private copy of a program: it remembers the program it was made from, for the

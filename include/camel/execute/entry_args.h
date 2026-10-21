@@ -33,14 +33,18 @@
  *     an input of the model).
  *
  * How the text of a value is read depends on the declared type of the parameter:
- *   int / float / bool / string   the literal itself (`3`, `0.5`, `true`, any text); a float is
- *                                 one whole number token by camel::utils::parseWholeFloat (no
- *                                 hexadecimal form, no `Infinity`, no blanks);
+ *   int / float / bool / string   the literal itself (`3`, `0.5`, `true`, any text); a number is
+ *                                 one whole number token by camel/utils/number_text.h (no
+ *                                 hexadecimal form, no `Infinity`, no blanks). Text that is not a
+ *                                 number is RuntimeDiag::InvalidNumberText; a number the type
+ *                                 cannot hold (an overflow or an underflow) is
+ *                                 RuntimeDiag::ConversionOutOfRange, with the range in the reason;
  *   c64 / c128                    a complex number as the language writes one: the real part,
  *                                 the sign of the imaginary part and the imaginary part
  *                                 (`1+2i`, `0.5-0.25i`), or only the imaginary part with its
  *                                 sign (`-2i`); each part is one whole number token by
- *                                 parseWholeFloat at the declared width. A number that is not
+ *                                 parseWholeFloat at the declared width, under the same two
+ *                                 causes (the reason names the part). A number that is not
  *                                 written as a complex one is taken as its real part, with an
  *                                 imaginary part of zero (`1.5` is `1.5+0i`: a literal takes its
  *                                 type from context, design principles 5.1);
