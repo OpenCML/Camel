@@ -1,0 +1,66 @@
+id = "parse.rules"
+order = 303
+tier = "fast"
+tags = ["feat", "parse", "rules"]
+desc = "Rule declarations (rewrite design 2): `rule name(params) { left => right } when condition`, `<=>`, `const` parameters. The grammar reads them and the formatter writes them; the compiler does not take them yet."
+
+[[tests]]
+name = "rules.ast"
+desc = "The AST has a RuleDecl for each rule, with its direction."
+kind = "behavior"
+case = "../../../cases/parse/rules/declared.cml"
+args = ["${inspect_ast}", "${case}"]
+expect_exit = 0
+expect_stdout_contains = ["RuleDecl: mul_one", "RuleDecl: add_swap (<=>)", "RuleDecl: combine", "RuleDecl: fuse"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.not_compiled_yet"
+desc = "The compiler refuses a rule declaration with a located ConstructNotSupported until rules are compiled."
+kind = "behavior"
+case = "../../../cases/parse/rules/declared.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
+expect_diagnostic_line = 4
+expect_diagnostic_column = 1
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.names_stay_names"
+desc = "A variable may be called `rule` or `when`."
+kind = "behavior"
+case = "../../../cases/parse/rules/names.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["7"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.needs_an_arrow"
+desc = "A rule body without `=>` or `<=>` is a located syntax error that names both."
+kind = "behavior"
+case = "../../../cases/parse/rules/no_arrow.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_line = 3
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "rules.format_snapshot"
+desc = "camel-format writes the rule declarations on one line each, the condition after the closing brace."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/parse/rules/declared.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "golden/rules_format.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

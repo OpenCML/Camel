@@ -362,6 +362,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitFuncDecl(cst::FuncDecl(context));
     case NK::TypeDecl:
         return visitTypeDecl(cst::TypeDecl(context));
+    case NK::RuleDecl:
+        return visitRuleDecl(cst::RuleDecl(context));
     default:
         return Value();
     }
@@ -762,6 +764,48 @@ funcDecl   :
         EXPORT? implMark? modifiers?
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
+/*
+ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}'
+           (IDENTIFIER dataExpr)? ;
+ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
+*/
+Value Builder::visitRuleDecl(cst::RuleDecl context) {
+    ENTER("RuleDecl");
+    Reference ref = qualifyRef(Reference(context->get<cst::IdentDef>()->text()));
+    const bool exported = context->has(TK::KwExport);
+    if (exported) {
+        export_->addRef(ref);
+    }
+    std::vector<std::string> contextNames;
+    if (const auto ruleContext = context->get<cst::RuleContext>()) {
+        for (const auto &name : ruleContext->all<cst::IdentDef>()) {
+            contextNames.emplace_back(name->text());
+        }
+    }
+    const auto body   = context->get<cst::RuleBody>();
+    const auto sides  = body->exprs();
+    const bool twoWay = body->has(TK::Equiv);
+
+    node_ptr_t ruleNode = createNodeAs<RuleDeclLoad>(ref, twoWay, exported, contextNames);
+    unwrapNodeAs<RuleDeclLoad>(ruleNode)->setDoc(docOf(context));
+    if (context->get<cst::ParentParams>()) {
+        *ruleNode << any2node(visitParentParams(context->get<cst::ParentParams>()));
+    } else {
+        *ruleNode << createNodeAs<RepeatedLoad>("NamedPair");
+    }
+    *ruleNode << any2node(visitExpr(sides[0]));
+    *ruleNode << any2node(visitExpr(sides[1]));
+    node_ptr_t whenNode = createNodeAs<OptionalLoad>("DataExpr");
+    if (context->expr()) {
+        setNodeTokenRangeByContext(whenNode, context->expr());
+        *whenNode << any2node(visitExpr(context->expr()));
+    }
+    *ruleNode << whenNode;
+    setNodeTokenRangeByContext(ruleNode, context);
+    LEAVE("RuleDecl");
+    return ruleNode;
+}
+
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
@@ -1174,8 +1218,9 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     if (context->tok(TK::KwVar)) {
         isVar = true;
     }
+    const bool isConst = context->has(TK::KwConst);
     Reference ref(context->get<cst::IdentDef>()->text());
-    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar);
+    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst);
     setNodeTokenRangeByContext(namedPairNode, context);
     *namedPairNode << any2node(visitType(context->type()));
     node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");

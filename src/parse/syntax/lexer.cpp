@@ -802,7 +802,9 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
             case '<':
                 // Rule 1: `<=` is always the comparison; a lone `<` opens an argument list
                 // exactly when it touches a token an operand can end with.
-                if (c1 == '=') {
+                if (c1 == '=' && c2 == '>') {
+                    three(TokenKind::Equiv);
+                } else if (c1 == '=') {
                     two(TokenKind::LtEq);
                 } else {
                     one((pending == 0 && endsAngleHost(previous)) ? TokenKind::LAngle

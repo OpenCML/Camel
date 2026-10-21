@@ -459,6 +459,9 @@ class Formatter {
     std::any visitFuncAnno(cst::FuncAnno context);
 
     std::any visitFuncDecl(cst::FuncDecl context);
+    std::any visitRuleDecl(cst::RuleDecl context);
+    std::any visitRuleContext(cst::RuleContext context);
+    std::any visitRuleBody(cst::RuleBody context);
 
     std::any visitNamespaceDecl(cst::NamespaceDecl context);
 

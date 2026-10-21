@@ -27,7 +27,7 @@ namespace camel::parse::ast {
 
 // `Name` was the retired `use` declaration (design principles 10.2); the value is kept so that
 // the numbering of the others does not change.
-enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace };
+enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace, Rule };
 
 enum class UnpackType { Array, Tuple, Struct };
 
@@ -109,6 +109,34 @@ class FuncDeclLoad : public StmtLoad {
     Reference ref_;
     std::string operatorSymbol_;
     std::vector<std::string> declaredIn_;
+};
+
+/// `rule name<context>(params) { left => right } when condition` (rewrite design 2). Its children:
+/// the parameters (a repeated NamedPair, `const` ones marked), the left side, the right side, and
+/// an optional node holding the condition.
+class RuleDeclLoad : public StmtLoad {
+  public:
+    RuleDeclLoad(Reference ref, bool twoWay, bool exported, std::vector<std::string> context)
+        : StmtLoad(StmtType::Rule), ref_(ref), twoWay_(twoWay), exported_(exported),
+          context_(std::move(context)) {}
+
+    const Reference &ref() const { return ref_; }
+    /// `<=>`: both sides are the same value.
+    bool twoWay() const { return twoWay_; }
+    bool exported() const { return exported_; }
+    /// The names in `<...>` after the rule's name (`rule fuse<f, g>(...)`).
+    const std::vector<std::string> &context() const { return context_; }
+
+    const std::string toString() const override {
+        return "RuleDecl: " + ref_.toString() + (twoWay_ ? " (<=>)" : "") + docSuffix();
+    }
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+    bool twoWay_;
+    bool exported_;
+    std::vector<std::string> context_;
 };
 
 class TypeDeclLoad : public StmtLoad {
