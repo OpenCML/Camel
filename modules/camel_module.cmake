@@ -26,16 +26,36 @@ function(add_camel_module)
   endif()
   list(APPEND _sources ${CMAKE_SOURCE_DIR}/modules/camel_module_abi.cpp)
 
-  add_library(${_target} SHARED ${_sources})
+  # The sources are compiled as an OBJECT library and the .cmo is linked from those objects.
+  # Compiling a module needs only the headers, so this target's objects exist before libcamel
+  # links; their undefined symbols are what decides libcamel's export list (H36). Linking the
+  # .cmo against libcamel would be the cycle otherwise.
+  set(_objects ${_target}_objects)
+  add_library(${_objects} OBJECT ${_sources})
+  add_library(${_target} SHARED $<TARGET_OBJECTS:${_objects}>)
+  camel_register_export_scan_target(${_objects})
+  set_target_properties(${_target} PROPERTIES LINKER_LANGUAGE CXX)
 
-  target_compile_features(${_target} PRIVATE cxx_std_23)
-  target_include_directories(${_target} PRIVATE
+  target_compile_features(${_objects} PRIVATE cxx_std_23)
+  set_target_properties(${_objects} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  target_include_directories(${_objects} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/third_party
     ${CMAKE_SOURCE_DIR}
     ${ARG_EXTRA_INCLUDES}
   )
+  # The objects need the include paths and definitions of the extra libraries, but not the
+  # libraries themselves (and linking another module here would recreate the cycle: that module
+  # links libcamel, which waits for these objects). Header-only packages and the system libraries
+  # are safe; a sibling .cmo module only contributes a link dependency to the shared target.
+  set(_object_libs camel_options fmt::fmt)
+  foreach(_extra IN LISTS ARG_EXTRA_LIBS)
+    if(NOT _extra MATCHES "_cmo$")
+      list(APPEND _object_libs ${_extra})
+    endif()
+  endforeach()
+  target_link_libraries(${_objects} PRIVATE ${_object_libs})
 
   set_target_properties(${_target} PROPERTIES
     OUTPUT_NAME ${_name}
@@ -248,11 +268,14 @@ function(add_camel_module)
       find_package(pybind11 REQUIRED)
     endif()
     list(APPEND _libs pybind11::embed Python3::Python)
-    target_compile_definitions(${_target} PRIVATE CAMEL_PYTHON_DLL_REPO="${_python_dll_repo}")
+    # The Python headers are needed while compiling the module, so the objects carry the
+    # dependency and the definition; the .cmo still links the libraries below.
+    target_link_libraries(${_objects} PRIVATE pybind11::embed Python3::Python)
+    target_compile_definitions(${_objects} PRIVATE CAMEL_PYTHON_DLL_REPO="${_python_dll_repo}")
   endif()
   target_link_libraries(${_target} PRIVATE ${_libs})
 
-  target_compile_options(${_target} PRIVATE
+  target_compile_options(${_objects} PRIVATE
     $<$<CONFIG:Release>:-O3>
     -Wall -Wextra
     -Wno-unused-parameter
@@ -260,6 +283,6 @@ function(add_camel_module)
   )
 
   if(WIN32)
-    target_compile_definitions(${_target} PRIVATE NOMINMAX ${ARG_EXTRA_DEFINITIONS})
+    target_compile_definitions(${_objects} PRIVATE NOMINMAX ${ARG_EXTRA_DEFINITIONS})
   endif()
 endfunction()
