@@ -323,7 +323,7 @@ def st(n: N, ind: int) -> list:
 
 def func_src(n: N, ind: int) -> list:
     pad = IND * ind
-    mods = ("macro " if n.a.get("macro") else "") + ("sync " if n.a.get("syncfn") else "")
+    mods = ("#macro " if n.a.get("macro") else "") + ("sync " if n.a.get("syncfn") else "")
     head = f"{pad}{mods}func {n.a['name']}({params_src(n.a['params'])}): {type_src(n.a['ret'])} "
     lines = [head + block(n.c[0], ind)]
     if n.a.get("with"):
