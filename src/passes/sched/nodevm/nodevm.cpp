@@ -262,6 +262,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
     try {
         const camel::runtime::ExecPlan *currPlan = &currRuntimeGraph->execPlan();
         std::span<const gc_node_ref_t> currNodes = currPlan->topo;
+        const camel::runtime::ExecNode *currRecords = currPlan->nodes().data();
         // The program the running graph belongs to: its direct callees are in it.
         const camel::runtime::Program *currProgram = &programs_.of(currRuntimeGraph);
 
@@ -282,7 +283,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {
-            const camel::runtime::ExecNode &en = currPlan->nodes[i];
+            const camel::runtime::ExecNode &en = currRecords[i];
             const gc_node_ref_t nodeRef = en.ref;
             faultNodeRef                = nodeRef;
             const GCNode *n             = en.node;
@@ -521,6 +522,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         // Switch to the callee graph and its topo sequence.
                         currRuntimeGraph = runtimeTarget;
                         currPlan         = &currRuntimeGraph->execPlan();
+                        currRecords      = currPlan->nodes().data();
                         currProgram      = &programs_.of(currRuntimeGraph);
                         currNodes        = currPlan->topo;
                     }

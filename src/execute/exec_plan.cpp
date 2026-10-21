@@ -38,35 +38,43 @@ gc_data_idx_t dataIndexOf(const GCGraph &graph, gc_node_ref_t ref) {
 
 } // namespace
 
+const std::vector<ExecNode> &ExecPlan::nodes() const {
+    std::call_once(nodesOnce_, [this] {
+        const size_t count = topo.size();
+        nodes_.resize(count);
+        for (size_t idx = 0; idx < count; ++idx) {
+            const gc_node_ref_t ref = topo[idx];
+            ExecNode &en            = nodes_[idx];
+            en.ref                  = ref;
+            en.node                 = graph->node(ref);
+            ASSERT(en.node != nullptr, "Execution plan node lookup resolved to null.");
+            const auto norm = graph->normInputsOf(ref);
+            const auto with = graph->withInputsOf(ref);
+            en.norm         = norm.data();
+            en.normCount    = static_cast<uint32_t>(norm.size());
+            en.with         = with.data();
+            en.withCount    = static_cast<uint32_t>(with.size());
+            if (en.node->hasPayload()) {
+                en.body = graph->nodePayloadBytes(ref).data();
+            }
+            if (en.node->kind == GCNodeKind::Brch) {
+                const auto arms = graph->branchArmsOf(ref);
+                en.arms         = arms.data();
+                en.armCount     = static_cast<uint32_t>(arms.size());
+            }
+        }
+    });
+    return nodes_;
+}
+
 std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     // The helpers of graph_runtime_support read the graph through its const interface only.
     auto *mutableGraph = const_cast<GCGraph *>(&graph);
     auto plan          = std::make_unique<ExecPlan>();
+    plan->graph        = &graph;
     plan->topo         = camel::execute::computeExecutionOrder(&graph);
 
     const size_t count        = plan->topo.size();
-    plan->nodes.resize(count);
-    for (size_t idx = 0; idx < count; ++idx) {
-        const gc_node_ref_t ref = plan->topo[idx];
-        ExecNode &en            = plan->nodes[idx];
-        en.ref                  = ref;
-        en.node                 = graph.node(ref);
-        ASSERT(en.node != nullptr, "Execution plan node lookup resolved to null.");
-        const auto norm = graph.normInputsOf(ref);
-        const auto with = graph.withInputsOf(ref);
-        en.norm         = norm.data();
-        en.normCount    = static_cast<uint32_t>(norm.size());
-        en.with         = with.data();
-        en.withCount    = static_cast<uint32_t>(with.size());
-        if (en.node->hasPayload()) {
-            en.body = graph.nodePayloadBytes(ref).data();
-        }
-        if (en.node->kind == GCNodeKind::Brch) {
-            const auto arms = graph.branchArmsOf(ref);
-            en.arms         = arms.data();
-            en.armCount     = static_cast<uint32_t>(arms.size());
-        }
-    }
     const bool hasValueReturn = graph.funcType() != nullptr && graph.funcType()->hasExitType() &&
                                 graph.funcType()->exitType() != camel::core::type::Type::Void();
 

@@ -40,6 +40,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <vector>
 
@@ -72,8 +73,9 @@ class ExecPlan {
     /// The live nodes in the order they run (every node after its inputs; an arm of a branch is
     /// one range between the BRCH and its JOIN).
     std::vector<gc_node_ref_t> topo;
-    /// The nodes of `topo`, in the same order.
-    std::vector<ExecNode> nodes;
+    /// The nodes of `topo`, in the same order. Built the first time they are asked for (only a
+    /// back end that walks the nodes while it runs needs them), then kept.
+    const std::vector<ExecNode> &nodes() const;
     /// The position in `topo` of each node, by node reference; kNotInPlan for a node that does
     /// not run (dead).
     static constexpr uint32_t kNotInPlan = UINT32_MAX;
@@ -135,6 +137,9 @@ class ExecPlan {
     };
     mutable FastVmState fastVm;
 
+    /// The graph version the plan was built from.
+    const GCGraph *graph = nullptr;
+
     std::span<const gc_data_idx_t> directCallArgSlotsOf(size_t topoIndex) const {
         return {
             directCallArgSlots.data() + directCallArgOffsets[topoIndex],
@@ -149,6 +154,10 @@ class ExecPlan {
             branchArmEntries.data() + branchArmEntryOffsets[topoIndex],
             branchArmEntryOffsets[topoIndex + 1] - branchArmEntryOffsets[topoIndex]};
     }
+
+  private:
+    mutable std::once_flag nodesOnce_;
+    mutable std::vector<ExecNode> nodes_;
 };
 
 /// Computes the plan of `graph` (a frozen graph with nodes). Use GCGraph::execPlan, which keeps
