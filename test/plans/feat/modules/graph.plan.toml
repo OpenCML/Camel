@@ -345,6 +345,47 @@ expect_exit = 0
 expect_stdout_exact = "9\n42\n42\n"
 timeout_ms = 10000
 
+# The module that hosts the pass can be a library of the program at the same time: the pass runs
+# in a program of its own, and the two programs must not read each other's entities, generic
+# instances included.
+
+[[tests]]
+name = "pass_module_imported_by_the_program"
+desc = "sharedvals::run is the pass, and shared_target.cml imports the same module; both compute with their own graphs."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/shared_target.cml"
+args = ["${case}", "sharedvals::run", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n10\n2\n4\n"
+timeout_ms = 10000
+
+# A Camel library the pass module imports may import another one: the whole closure is declared
+# and built, in import order.
+
+[[tests]]
+name = "pass_module_imports_a_camel_library_transitively"
+desc = "chain::show calls chainlib::six, which calls innerlib::triple; both modules are built with the pass."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "chain::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "6\n42\n"
+timeout_ms = 10000
+
+# A pass module the user is still editing does not parse: the pipeline reports a bad pass
+# specification with the parse diagnostic instead of ending abnormally.
+
+[[tests]]
+name = "pass_module_that_does_not_compile"
+desc = "unparsable_pass::run: the pass is InvalidPassParameter and names the parse error."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "unparsable_pass::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "'unparsable_pass' does not compile", "MissingClosingDelimiter"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
 # The `with` parameters of a pass function are the pass parameters written on the pipeline.
 
 [[tests]]
@@ -365,6 +406,28 @@ case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "params::report(n=1)", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["parameter 'label' is not written and has no default", "label: string (required)"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_parameter_unknown"
+desc = "A parameter the pass does not declare is a located diagnostic that lists the ones it takes."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "params::report(label='x', n=1, bogus=2)", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "column 32", "has no parameter 'bogus'", "label: string (required)"]
+expect_output_not_contains = ["42"]
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_parameter_wrong_type"
+desc = "A value of the wrong type names both types and the column in the specification."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "params::report(label='x', n=1.5)", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "column 27", "parameter 'n' is a float, not an int"]
 expect_output_not_contains = ["42"]
 timeout_ms = 10000
 
@@ -390,6 +453,31 @@ args = ["${case}", "fold_constants::fold", "std::nvm"]
 envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "7\n"
+timeout_ms = 30000
+
+# A transaction may create a value of any type `add_constant` accepts (int, f64, bool, string);
+# each one is in the committed program, and a collection while the transaction is open does not
+# take it away.
+
+[[tests]]
+name = "constants_of_every_type"
+desc = "typed_constants::make creates an int, an f64, a bool and a string constant and counts each after the commit."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/typed_target.cml"
+args = ["${case}", "typed_constants::make", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n1\n1\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "constants_of_every_type_survive_a_safepoint"
+desc = "The same pass with a collection forced at every safepoint while the four new values are live."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/typed_target.cml"
+args = ["${case}", "typed_constants::make", "std::nvm"]
+envs = ["CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n1\n1\n"
 timeout_ms = 30000
 
 # Region reads: a graph with the body only has no region column (region_of is null); after
