@@ -10,7 +10,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "declared_and_refused"
-desc = "test::definitions (CAMEL_ENABLE_TEST_PASSES): softmax, log_softmax (key 1.0: only the definition is declared), mean and relu (1.1 + the definition = 1.2) and sigmoid are built from tensor_definitions, each with its parameters and a portable content hash; a definition is built once; matmul has none; a definition without a function is rejected when declared. Refused when built, each with its reason: a cycle of two definitions (exp defined with softmax, which uses exp) and, since, softmax on that cycle too; a definition that reaches its own operator; a function of another arity; a function that reads a module-level value (a capture, so the graph takes more than the declared parameters: a definition library is encoded as the function graph alone, task H37); an effect in the definition of a pure operator; a generic function; a missing function; a library that does not compile; a library that does not exist."
+desc = "test::definitions (CAMEL_ENABLE_TEST_PASSES): softmax, log_softmax (key 1.0: only the definition is declared), mean and relu (1.1 + the definition = 1.2) and sigmoid are built from tensor_definitions, each with its parameters and a portable content hash; a definition is built once; matmul has none; a definition without a function is rejected when declared. Refused when built, each with its reason: a cycle of two definitions (exp defined with softmax, which uses exp) and, since, softmax on that cycle too; a definition that reaches its own operator; a function of another arity; a function that reads a module-level value (a capture, whether the value is a literal or the result of a call, and the refusal names the captured values: a definition library is encoded as the function graph alone, task H37); an effect in the definition of a pure operator; a generic function; a missing function; a library that does not compile; a library that does not exist."
 kind = "behavior"
 case = "../../../cases/definitions/check.cml"
 args = ["${case}", "test::definitions"]
@@ -40,7 +40,8 @@ for (const l of [
   "DEFINITION cycle_refuses_softmax refused: the definition of 'tensor:softmax' is refused: a cycle of definitions (tensor:softmax -> tensor:exp -> tensor:softmax)",
   "DEFINITION reaches_itself refused: the definition of 'tensor:abs' is refused: a cycle of definitions (tensor:abs -> tensor:abs)",
   "DEFINITION arity refused: the definition of 'tensor:neg' is refused: 'bad_definitions::two' has no overload of 1 ordinary parameters and no with parameter",
-  "DEFINITION capture refused: the definition of 'tensor:matmul' is refused: its graph does not take exactly the declared parameters",
+  "DEFINITION capture refused: the definition of 'tensor:matmul' is refused: its graph captures 'first_axis' of the module's top level; a definition is a function of the operator's operands, so a module-level value cannot be bound",
+  "DEFINITION call_capture refused: the definition of 'tensor:pow' is refused: its graph captures 'call_axis' of the module's top level; a definition is a function of the operator's operands, so a module-level value cannot be bound",
   "DEFINITION effect_of_pure refused: the definition of 'tensor:sqrt' is refused: the operator is pure and its definition has an effect",
   "DEFINITION generic refused: the definition of 'tensor:log' is refused: 'bad_definitions::generic' is generic; a definition has one graph",
   "DEFINITION missing_function refused: the definition of 'tensor:rsqrt' is refused: 'bad_definitions' exports no 'nope'",
