@@ -506,16 +506,42 @@ void ParserImpl::parseAccess() {
 }
 
 /// Whether the `(` at the current token opens the parameters of a lambda and not a tuple or a
-/// parenthesized expression. Parameters are `name: type` pairs, so the head tells: `(name:`,
-/// `(var`, or an empty list followed by `=>` or by the `:` of a return type. At most four
-/// tokens are read.
+/// parenthesized expression. Parameters are `name: type` pairs, or `name` alone in a lambda,
+/// where the type comes from the function type of the position the lambda stands in (design
+/// principles 5.9). The head tells: `(name:`, `(var`, `(name)` / `(name, ...)` when the list
+/// closes and `=>` (or the `:` of a return type) follows, or an empty list followed by `=>` or
+/// by that `:`. Only parentheses nest inside a parameter list (a type or a default value may
+/// hold a tuple, a function type or a call), so the matching `)` is found by counting them.
 bool ParserImpl::lambdaAhead() const {
     const TK t1 = peek(1);
     if (t1 == TK::KwVar) {
         return true;
     }
     if (t1 == TK::Identifier) {
-        return peek(2) == TK::Colon;
+        if (peek(2) == TK::Colon) {
+            return true;
+        }
+        if (peek(2) != TK::Comma && peek(2) != TK::RParen) {
+            return false;
+        }
+        uint32_t depth = 0;
+        for (uint32_t i = 0;; ++i) {
+            switch (peek(i)) {
+            case TK::Eof:
+                return false;
+            case TK::LParen:
+                ++depth;
+                break;
+            case TK::RParen:
+                if (--depth == 0) {
+                    const TK after = peek(i + 1);
+                    return after == TK::FatArrow || after == TK::Colon;
+                }
+                break;
+            default:
+                break;
+            }
+        }
     }
     if (t1 == TK::RParen) {
         const TK t2 = peek(2);
@@ -897,14 +923,21 @@ void ParserImpl::parseFuncData() {
     if (isModifier(cur_)) {
         parseModifiers();
     }
+    // A lambda's parameters may leave the type out: it comes from the function type of the
+    // position the lambda stands in (design principles 5.9). Its return type and the types
+    // written inside its parameters are parsed with the flag off, as everywhere else.
+    const bool outerLambdaParams = lambdaParams_;
+    lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         parseAngledParams();
     }
     if (cur_ != TK::LParen) {
+        lambdaParams_ = outerLambdaParams;
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncData);
     }
     parseParentParams();
+    lambdaParams_ = outerLambdaParams;
     if (eat(TK::Colon)) {
         parseType();
     }

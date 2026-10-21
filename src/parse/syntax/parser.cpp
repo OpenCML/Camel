@@ -1208,14 +1208,16 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
     close(m, kind);
 }
 
-/// keyParamPair : ('var' | 'const')? identDef ':' typeExpr ('=' dataExpr)?
+/// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 void ParserImpl::parseKeyParamPair() {
     const size_t m = mark();
     if (!eat(TK::KwVar)) {
         eat(TK::KwConst);
     }
     parseIdentDef();
-    if (!panic_ && expect(TK::Colon)) {
+    // Only a lambda may leave the type out (see lambdaParams_); a declaration and a function
+    // type require it, and report the `:` that is missing.
+    if (!panic_ && (lambdaParams_ ? eat(TK::Colon) : expect(TK::Colon))) {
         parseType();
         if (eat(TK::Assign)) {
             parseExpr();

@@ -1,0 +1,16 @@
+/**
+ * A lambda argument that writes no type, given to a name with two overloads: there is no single
+ * function type to take the parameter types from, and the call does not choose an overload to
+ * make one (design principles 5.9; H92 item 2). The diagnostic names the parameter; it is not a
+ * silent `any` and not a pick of one overload.
+ */
+module lambda_inference_overload_untyped
+
+func over(f: (x: int) => int, v: int): int { return f(v) + 1 }
+
+func over(f: (x: float) => float, v: float): float { return f(v) + 0.5 }
+
+func main(): int sync {
+    println(over((x) => x * 2, 20))
+    return 0
+}

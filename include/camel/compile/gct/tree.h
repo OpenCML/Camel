@@ -210,6 +210,21 @@ class Tree {
     void setLiteralElements(const data_ptr_t &data, std::vector<LiteralElement> elements);
     const std::vector<LiteralElement> *literalElementsOf(const data_ptr_t &data) const;
 
+    /// A parameter of a lambda whose type is left out (design principles 5.9): its index among
+    /// the parameters (`with` parameters first) and the origin of the pair, where the
+    /// diagnostic goes when the expected function type does not determine it. The signature
+    /// built from the lambda stands `void` in its place until GIR, the only stage that knows
+    /// the expected type, fills it.
+    struct UnwrittenParam {
+        size_t index                      = 0;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+
+    /// The parameters of the lambda `func` whose type was left out, in the order written. Null
+    /// when there are none.
+    void setUnwrittenParams(const Node *func, std::vector<UnwrittenParam> params);
+    const std::vector<UnwrittenParam> *unwrittenParamsOf(const Node *func) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -267,6 +282,7 @@ class Tree {
     std::unordered_map<const Node *, OperId> operRefs_;
     std::unordered_map<const Node *, std::map<size_t, std::vector<TagUse>>> fieldTagUses_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
+    std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>

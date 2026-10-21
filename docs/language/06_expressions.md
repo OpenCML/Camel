@@ -523,11 +523,42 @@ lambda 的写法是 `(形参): 返回类型 => 体`，返回类型可以省略�
 ```cml
 (x: int) => x + 1
 (x: int): int => { let y = x * 2; return y + 1 }
+(x) => x + 1                                    // 形参类型从所在位置推出（见下）
 (s: string) => sync { println(s) }              // 同步块作函数体
 sync (x: int) => sync { total = total + x }     // 写入被捕获的变量：加函数修饰符 sync
 ```
 
 函数类型写作 `(x: T) => R`，形参要写名字：`(x: int) => int`、`(acc: int, x: int) => int`。
+
+**形参类型从哪里来。** lambda 不写类型的形参，其类型从 lambda 所在位置的函数类型推出，省略的返回类型同样如此。这样的位置有三种：
+
+- 实参：调用一个形参是函数类型的函数，`with` 实参同理。
+
+  ```cml
+  func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
+  apply_twice((x) => x + 1, 3)         // x: int
+  ```
+
+- 带标注的绑定：`let` 或 `var` 的类型是函数类型；往这样的变量再赋一个新值同理。
+
+  ```cml
+  let g: (x: int) => int = (x) => x + 1    // x: int
+  var h: (x: int) => int = (x) => x - 1
+  h = (x) => x + 100                       // x: int
+  ```
+
+- 返回值：函数的结果类型是函数类型。
+
+  ```cml
+  func adder(n: int): (x: int) => int {
+      return (x) => x + n              // x: int，返回类型也是 int
+  }
+  ```
+
+期望的类型确定不了的形参是一个错误（`SemanticDiag::LambdaParameterWithoutType`，指到那个形参）：lambda 不在这样的位置上（`let g = (x) => x + 1`、`((x) => x)(1)`），期望的类型不是函数类型，形参个数对不上，或者期望的类型还带着这个位置绑定不了的类型变量。没有期望类型时它不会变成一个 `any`（5.10）：写出类型即可。
+
+- 推断不改变重载决议。lambda 在实参位置上推出类型这件事，与调用选中哪个重载无关：带类型的 lambda 仍按它自己的类型选重载（`pick((x: int) => x + 1, 1)` 与只有这一个重载时选中的相同）；不带类型的 lambda 面对一组重载时没有唯一的期望类型，于是报上面那个错误，而不是替调用挑一个重载。
+- 泛型高阶函数（`tree_reduce`、`map` 这类形参类型里带类型变量的）目前推不出来：实参位置的期望类型要等泛型实例化，而 lambda 总在实例化之前降低，所以那里的形参类型要写出来（`tree_reduce<(acc: int, x: int) => acc + x>(...)`）。这一项在 H92 的报告里记为待决。
 
 **函数是值。** 函数的名字可以用在任何能写值的位置：作实参、`with` 实参、`let g = f`、`return f`、数组或元组的元素、分支臂的值。
 
@@ -561,7 +592,7 @@ func main(): int sync {
 - 只有一个签名、且签名不随实参变化的库算子与用户函数一样是函数值：`xs->map<trim>`、`let t = trim`。
 - 代表一组重载（几个同名的用户函数，或有几个签名的算子，如 `abs`）的名字，在被调用者只有一个签名、且那个形参是函数类型的位置上，取签名与之完全相同的那一个：`func on_int(f: (x: int) => int, v: int)` 的调用 `on_int(abs, -3)`。其他位置上它没有单一的函数值，把它当值用是 `SemanticDiag::FunctionNameAsValue`，诊断列出各个签名；写一个写明形参类型的 lambda。签名随实参变化的算子（`println`、`len`、`map`、`append`）同样没有函数值。泛型函数的名字同理（`SemanticDiag::GenericFunctionAsValue`）。
 - 把这样的名字交给内建的高阶算子时（`xs->map<abs>`、`xs->reduce<max, 0>`、`xs->filter<is_even>`），算子说不出它期望哪个函数，编译器就逐个去问：恰好有一个被算子接受时取它；一个都不接受或有几个都接受时，名字没有值（`SemanticDiag::FunctionNameAsValue`，诊断列出候选）。
-- 带函数类型的声明 `let f: (x: int) => int = inc` 目前不可用（`SemanticDiag::FeatureNotSupported`）；省略类型即可。
+- 带函数类型的绑定 `let f: (x: int) => int = inc` 中，值按标注的函数类型检查；lambda 的形参类型也可以从它推出（见上）。
 
 ## 6.10 高阶算子
 

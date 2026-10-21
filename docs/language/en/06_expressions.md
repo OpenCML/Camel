@@ -523,11 +523,39 @@ A lambda is written `(parameters): return-type => body`; the return type can be 
 ```cml
 (x: int) => x + 1
 (x: int): int => { let y = x * 2; return y + 1 }
+(x) => x + 1                                    // the parameter type comes from where it stands (below)
 (s: string) => sync { println(s) }              // a sync block as the function body
 sync (x: int) => sync { total = total + x }     // writes a captured variable: add the function modifier sync
 ```
 
 A function type is written `(x: T) => R`, and the parameters must be named: `(x: int) => int`, `(acc: int, x: int) => int`.
+
+**Where a parameter type comes from.** A lambda parameter whose type is not written takes it, and an omitted return type too, from the function type of the position the lambda stands in. There are three such positions:
+
+- An argument: a call of a function whose parameter is of function type, and a `with` argument in the same way.
+
+  ```cml
+  func apply_twice(f: (x: int) => int, x: int): int { return f(f(x)) }
+  apply_twice((x) => x + 1, 3)         // x: int
+  ```
+
+- A declared binding: a `let` or `var` whose type is a function type, and an assignment of a new value to that variable.
+
+  ```cml
+  let g: (x: int) => int = (x) => x + 1    // x: int
+  var h: (x: int) => int = (x) => x - 1
+  h = (x) => x + 100                       // x: int
+  ```
+
+- A returned result: the result type of the function is a function type.
+
+  ```cml
+  func adder(n: int): (x: int) => int {
+      return (x) => x + n              // x: int, and the result is int
+  }
+  ```
+
+A parameter that the expected type does not determine is an error (`SemanticDiag::LambdaParameterWithoutType`, located at that parameter): the lambda does not stand in such a position (`let g = (x) => x + 1`, `((x) => x)(1)`), the expected type is not a function type, the number of parameters differs, or the expected type still holds a type variable that this position does not bind. With no expected type it does not become an `any` (5.10): write the type.
 
 **Functions are values.** The name of a function can be used wherever a value can be written: as an argument, as a `with` argument, in `let g = f`, in `return f`, as an element of an array or tuple, as the value of a branch arm.
 
@@ -561,7 +589,9 @@ func main(): int sync {
 - A library operator with one signature that does not vary with its arguments is a function value like a user function: `xs->map<trim>`, `let t = trim`.
 - A name that stands for a group of overloads (several user functions of one name, or an operator with several signatures such as `abs`) is, where the callee has one signature and its parameter there is a function type, the one whose signature is exactly that type: the call `on_int(abs, -3)` of `func on_int(f: (x: int) => int, v: int)`. Anywhere else it has no single function value, and using it as a value is `SemanticDiag::FunctionNameAsValue`, which lists the signatures; write a lambda that spells out the parameter types. An operator whose signature varies with its arguments (`println`, `len`, `map`, `append`) has no function value either. The same goes for the name of a generic function (`SemanticDiag::GenericFunctionAsValue`).
 - When such a name is handed to a built-in higher-order operator (`xs->map<abs>`, `xs->reduce<max, 0>`, `xs->filter<is_even>`), the operator cannot say which function it expects, so the compiler asks it about each: when exactly one is accepted, that one is meant; when none or several are, the name has no value (`SemanticDiag::FunctionNameAsValue`, which lists the candidates).
-- A declaration with a function type, `let f: (x: int) => int = inc`, is currently unavailable (`SemanticDiag::FeatureNotSupported`); just omit the type.
+- A binding with a function type, `let f: (x: int) => int = inc`, checks its value against the type written; a lambda's parameter types can come from that type too (above).
+- The inference does not change overload resolution: a typed lambda still picks the overload its own type picks, and an untyped one facing a group of overloads has no single expected type, so it is the error above rather than a choice of overload.
+- A generic higher-order function (`tree_reduce`, `map`: a parameter type that mentions a type variable) does not infer yet: the expected type of the argument waits for the generic instantiation, and the lambda is always lowered before it. Write the parameter types there (`tree_reduce<(acc: int, x: int) => acc + x>(...)`); the H92 report records this as undecided.
 
 ## 6.10 Higher-order operators
 

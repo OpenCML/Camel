@@ -1338,6 +1338,19 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::LambdaParameterWithoutType,
+            {
+                "LambdaParameterWithoutType",
+                "The type of the parameter '{0}' of this lambda is not written and cannot be "
+                "inferred: {1}.",
+                "A lambda takes the type of a parameter it does not write from the function "
+                "type of the position it stands in: an argument to a parameter of function "
+                "type, the value of a declared type, or the result of a function whose result "
+                "type is a function type (design principles 5.9). Write the type "
+                "('({0}: int) => ...'), or move the lambda to such a position.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",

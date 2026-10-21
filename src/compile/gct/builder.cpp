@@ -4015,6 +4015,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     openSignature_ = true;
     FunctionType *funcType =
         tt::as_ptr<FunctionType>(visitFuncType(ast->atAs<AST::FuncTypeLoad>(0)));
+    // The parameters of a lambda whose type was left out (design principles 5.9), filled by GIR
+    // from the function type the lambda stands in.
+    const std::vector<Tree::UnwrittenParam> unwrittenParams =
+        std::exchange(pendingUnwrittenParams_, {});
     // A parameter of a reserved name would stand in front of the operator of that name.
     for (size_t i = 0; i < funcType->argNamesCount(); ++i) {
         if (!validateIdent(std::string(funcType->argNameAt(i)))) {
@@ -4106,6 +4110,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
     node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
+    if (!unwrittenParams.empty()) {
+        tree_->setUnwrittenParams(funcNode, unwrittenParams);
+    }
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
     registerGctSemantic(
@@ -4529,6 +4536,34 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
 
     std::unordered_set<string> paramNames;
 
+    // The parameters of a lambda that leave their type out (design principles 5.9). The
+    // signature stands `void` in their place; the index (with parameters first) and the origin
+    // of the pair go to the FUNC node, and GIR, which alone knows the function type the lambda
+    // stands in, fills the type or reports the parameter.
+    std::vector<Tree::UnwrittenParam> unwrittenParams;
+    size_t paramIndex = 0;
+    const auto paramTypeOf = [&](const AST::node_ptr_t &paramPair,
+                                 const string &name) -> Type * {
+        const size_t index              = paramIndex++;
+        const AST::node_ptr_t &typeNode = paramPair->at(0);
+        const bool omitted =
+            typeNode->type() == AST::LoadType::Type &&
+            typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Infer;
+        if (!omitted) {
+            return visitType(typeNode);
+        }
+        if (!open) {
+            // A function type and a declaration write every parameter's type; the parser only
+            // leaves one out in a lambda's parameter list.
+            diags_->of(SemanticDiag::LambdaParameterWithoutType)
+                .atOrigin(typeNode->load()->origin())
+                .commit(name, "a function type and a declaration write every parameter's type");
+            throw BuildAbortException();
+        }
+        unwrittenParams.push_back({index, typeNode->load()->origin()});
+        return Type::Void();
+    };
+
     // Process "with" parameters (context parameters)
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
@@ -4549,7 +4584,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         Type *type         = nullptr;
         {
             dimBindAllowed_ = signature;
-            type            = visitType(paramPair->atAs<AST::TypeLoad>(0));
+            type            = paramTypeOf(paramPair, name);
             dimBindAllowed_ = false;
         }
         data_ptr_t data = nullptr;
@@ -4599,7 +4634,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         Type *type         = nullptr;
         {
             dimBindAllowed_ = signature;
-            type            = visitType(paramPair->atAs<AST::TypeLoad>(0));
+            type            = paramTypeOf(paramPair, name);
             dimBindAllowed_ = false;
         }
         data_ptr_t data = nullptr;
@@ -4641,6 +4676,9 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
 
     LEAVE("FuncType");
+    if (!unwrittenParams.empty()) {
+        pendingUnwrittenParams_ = std::move(unwrittenParams);
+    }
     return open ? static_cast<Type *>(factory.buildOpen()) : factory.build();
 }
 

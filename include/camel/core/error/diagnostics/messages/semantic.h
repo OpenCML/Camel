@@ -198,6 +198,10 @@ enum class SemanticDiag : uint32_t {
     NativeDeclarationNotLoaded  = 0x00017C,
     DeclarationModuleHasBody    = 0x00017D,
 
+    // A lambda's parameter that writes no type and that the function type of its position does
+    // not determine (design principles 5.9). 0x17E and up.
+    LambdaParameterWithoutType = 0x00017E,
+
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
     IgnoredSideEffect            = 0x100002,

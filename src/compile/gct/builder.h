@@ -146,6 +146,12 @@ class Builder {
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
 
+    // The lambda parameters whose type was left out, collected while the signature of the
+    // function being defined is visited and given to its FUNC node (Tree::setUnwrittenParams).
+    // Only the signature of a FuncData (openSignature_) may leave one out; the flag is taken
+    // by visitFuncData right after the signature.
+    std::vector<Tree::UnwrittenParam> pendingUnwrittenParams_;
+
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
     // type. Like `typeas T`, a name is bound only in the parameter types of the function
     // declaration being visited (`constas n`), and the rest of its signature writes `n`.
