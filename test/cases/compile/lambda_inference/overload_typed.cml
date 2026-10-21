@@ -1,0 +1,21 @@
+/**
+ * A lambda argument that writes its parameter types still picks the overload its own type
+ * picks, with two overloads of one name: the expected type here would be a group of two
+ * function types, and the argument supplies the type instead of taking one (design principles
+ * 5.9; H92 item 2: inference does not change overload resolution).
+ */
+module lambda_inference_overload_typed
+
+func over(f: (x: int) => int, v: int): int { return f(v) + 1 }
+
+func over(f: (x: float) => float, v: float): float { return f(v) + 0.5 }
+
+func pick(f: (x: int) => int, v: int): int { return f(v) }
+
+func pick(f: (x: int) => int, v: string): string { return 'string' }
+
+func main(): int sync {
+    println('over', over((x: int) => x * 2, 20), over((x: float) => x * 2.0, 1.0))
+    println('pick', pick((x: int) => x + 1, 41), pick((x: int) => x + 1, 'a'))
+    return 0
+}

@@ -1,0 +1,11 @@
+/**
+ * A lambda called where it stands: the callee of a call is not a position with a function type,
+ * so nothing fixes the parameter's type and it is reported there (design principles 5.9; H92
+ * item 2, the second example of the reference's list).
+ */
+module lambda_inference_call_in_place
+
+func main(): int sync {
+    println(((x) => x + 1)(41))
+    return 0
+}

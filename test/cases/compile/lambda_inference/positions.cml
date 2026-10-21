@@ -1,0 +1,42 @@
+/**
+ * A lambda's parameter types come from the function type of the position it stands in (design
+ * principles 5.9; handover H92, item 2). The positions are the three the reference lists: an
+ * argument to a parameter of function type (a normal one and a `with` one), a binding declared
+ * with a function type, and the result of a function whose result type is a function type. A
+ * parameter that writes its type keeps it, and a lambda that writes no return type takes that
+ * type from the expected function type too (the `1` of `apply_f` becomes an f64).
+ */
+module lambda_inference_positions
+
+func apply(f: (x: int) => int, x: int): int { return f(x) }
+
+with <f: (x: int) => int>
+func apply_with(x: int): int { return f(x) }
+
+func apply_f(f: (x: int) => f64, x: int): f64 { return f(x) }
+
+func add(f: (a: int, b: int) => int, x: int): int { return f(x, 10) }
+
+func adder(n: int): (x: int) => int { return (x) => x + n }
+
+func step(c: bool): (x: int) => int { return if c then (x) => x + 1 else (x) => x - 1 }
+
+func main(): int sync {
+    // An argument to a parameter of function type.
+    println('arg', apply((x) => x + 1, 3), apply((x: int) => x * 2, 3))
+    // A `with` argument.
+    println('with', apply_with<(x) => x * 2>(21))
+    // One parameter type written, one not.
+    println('mixed', add((a: int, b) => a + b, 5))
+    // A binding declared with a function type.
+    let g: (x: int) => int = (x) => x * 3
+    var h: (x: int) => int = (x) => x - 1
+    h = (x) => x + 100
+    println('let', g(14), h(1))
+    // A lambda that writes no return type takes it from the expected type.
+    println('exit', apply_f((x) => 1, 5))
+    // The result of a function whose result type is a function type.
+    let add5 = adder(5)
+    println('return', add5(37), step(true)(41), step(false)(43))
+    return 0
+}

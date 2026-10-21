@@ -1,0 +1,151 @@
+id = "compile.lambda_inference"
+order = 327
+tier = "fast"
+tags = ["feat", "compile", "lambda", "function_types", "inference"]
+
+# A lambda's parameter types come from the function type of the position it stands in (design
+# principles 5.9; handover H92, item 2). The positions are those of the reference: an argument to
+# a parameter of function type (normal and `with`), a binding declared with a function type (and
+# an assignment back into it), and the result of a function whose result type is a function type.
+# A parameter the expected type does not determine is an error at that parameter, naming it.
+#
+# Two things this plan pins down beyond the positions: a lambda that writes its types still picks
+# the overload it picked before (the overload_typed case prints the same on 950b690f5, the base of
+# this branch), and a lambda that writes none, given to a name with two overloads, is an error
+# rather than a pick. The generic higher-order case (`map`, `tree_reduce`) is the undecided one
+# of the H92 report: it is recorded as it behaves today (no expected type, so the error).
+
+[[tests]]
+name = "lambda_inference.positions"
+desc = "The three positions and the assignment: an argument, a `with` argument, a declared binding, an assignment to it, and a returned result; a lambda that writes no return type takes it from the expected type (1 as an f64 prints 1.0)."
+kind = "behavior"
+case = "../../../cases/compile/lambda_inference/positions.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "arg 4 6\nwith 42\nmixed 15\nlet 42 101\nexit 1.0\nreturn 42 42 42\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.no_expected"
+desc = "A lambda bound with no declared type: nothing expects a function type there, so the parameter is reported at the parameter (SyntaxDiag::UnexpectedToken at the `=>` before this change)."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/no_expected.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 14
+expect_output_contains = ["The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.not_function"
+desc = "A lambda where the declared type is not a function type: the diagnostic quotes the type expected there."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/not_function.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 19
+expect_output_contains = ["the type expected here, 'int', is not a function type"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.arity"
+desc = "A lambda whose parameter count differs from the expected function type: the first parameter the expected type does not determine is reported, with the two counts."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 20
+expect_output_contains = ["the expected type '(x: int, y: int) => int' takes 2 parameters and the lambda 1"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.overload_typed"
+desc = "A lambda that writes its parameter types still picks the overload its own type picks, with two overloads of one name and with overloads told apart by the other argument: the same output as on 950b690f5, before inference existed."
+kind = "behavior"
+case = "../../../cases/compile/lambda_inference/overload_typed.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "over 41 2.5\npick 42 string\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.overload_untyped"
+desc = "The ambiguity case: a lambda with no written types given to a name with two overloads. There is no single expected function type, so the parameter is reported; the call does not choose an overload to make one."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/overload_untyped.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 19
+expect_output_contains = ["The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.call_in_place"
+desc = "A lambda called where it stands: the callee of a call is not a position with a function type, so the parameter is reported there (the second example of the reference's list)."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/call_in_place.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 15
+expect_output_contains = ["The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.func_type"
+desc = "A function type that leaves a parameter's type out is still a syntax error at the `=>`: the omission exists only in a lambda's own parameter list, and this test keeps it from widening."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/func_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::MissingComma"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 19
+expect_output_contains = ["Expected ',' or ')' before '=>'"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.generic_undecided"
+desc = "The undecided case of the H92 report: a generic higher-order operator (`map`) gives the lambda no expected type, because the instance that would fix it does not exist yet when the lambda is lowered. Today that is the same error; the test records it so a ruling has something to change."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/generic.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 22
+expect_output_contains = ["The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type."]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
