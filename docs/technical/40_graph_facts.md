@@ -83,9 +83,7 @@ on the next `obtain`; it is never reused silently. A `Cone` kind (`core.shape`) 
 read when a revision changed: when that is unchanged (the node's type) the fact stays valid with a
 new stamp (`revalidated`).
 
-A detached copy (the working copy of autodiff, `outlineLoopRegions`) keeps the GraphId of its
-graphs; the graph that held a loop gets a new revision, so facts computed on the program are valid
-on the copy where nothing changed.
+A detached copy (the working copy of autodiff) keeps the GraphId of its graphs; the graph that held a loop gets a new revision, so facts computed on the program are valid on the copy where nothing changed.
 
 Facts do not follow a pass on their own (design 10.5: "derived facts are not stale notes that
 happened to survive a clone"); `tx.keep` (a pass re-establishing a fact it maintains) and the
@@ -121,16 +119,13 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
 
   (`test/cases/facts/tensors_and_loops.cml`.)
 - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
-  (`test::facts`), facts across `std::opt::inline` and `std::opt` and the outlined program
-  (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
+  (`test::facts`), facts across `std::opt::inline` and `std::opt` (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
   and `inspect --facts`. The test passes need `CAMEL_ENABLE_TEST_PASSES`.
 
 ## 7. Operators that read graphs
 
 Independent of the store, but part of the same work for Tiles: an operator that reads the graph
-of a function value it receives declares `OperatorTraits::inspectsGraphs` (Tiles' `run`,
+of a function value it receives declares `OperatorTraits::readsGraphs` (Tiles' `run`,
 `run_device`, `source`, `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`,
-`with_grad`). On a back end that runs a private lowered copy, every function-typed operand of
-such an operator goes through `:graph/original`, which returns the same function over the
-program's graph (`Program::original()`): Tiles sees the LOOP of a function on every back end
-(`docs/technical/39_loops.md` section 4).
+`with_grad`). Every back end runs the program's own graph, so such an operator sees the LOOP of a
+function and its regions wherever it runs (`docs/technical/39_loops.md` section 4).

@@ -1255,28 +1255,6 @@ bool devirtualizeStaticCallInDraft(
 
 namespace {
 
-/// True when `to` is reachable from `from` along value or control edges (to runs no earlier).
-/// Local mirror of the generic passes' reaches(); the runtime layer cannot pull in passes helpers.
-bool draftReaches(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t to) {
-    std::vector<bool> seen(draft.nodeSlotCount(), false);
-    std::vector<gc_node_ref_t> work{from};
-    while (!work.empty()) {
-        const gc_node_ref_t n = work.back();
-        work.pop_back();
-        if (n == to) {
-            return true;
-        }
-        if (n >= seen.size() || seen[n] || !draft.header(n)) {
-            continue;
-        }
-        seen[n] = true;
-        for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
-            work.insert(work.end(), users.begin(), users.end());
-        }
-    }
-    return false;
-}
-
 /// The graph a per-arm call of `elem` runs when the arm tuple's callee element is statically
 /// known: a closure FILL in this graph (every capture filled here), or a static Function
 /// carrier. nullptr otherwise.

@@ -3,7 +3,7 @@ order = 348
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "loops"]
-desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm, fvm and jit in the frame of the function, prl through the private lowering to tail recursion), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
+desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node with its condition and body regions, run by every back end (nvm, fvm, jit and prl in the frame of the function, each reading the same regions), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
 [[tests]]
 name = "loops.native_callback"
@@ -329,7 +329,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.fault_tensor_rank0"
-desc = "`for` over a tensor whose rank is only 0 at run time: the fault is reported at the loop's sequence on nvm and on the lowered fvm."
+desc = "`for` over a tensor whose rank is only 0 at run time: the fault is reported at the loop's sequence on nvm and on fvm."
 kind = "negative"
 case = "../../../cases/loops/fault_tensor_rank0.cml"
 args = ["-E", "short", "${case}", "${backend}"]
@@ -400,8 +400,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_through_loop_lowered"
-desc = "The same gradient run by std::fvm, which lowers loops in its private copy while grad reads the program's own graph: the tape is collected by the loop node and the reverse pass is a LOOP node of its own."
+name = "loops.grad_through_loop_fvm"
+desc = "The same gradient run by std::fvm: the tape is collected by the loop node and the reverse pass is a LOOP node of its own."
 kind = "behavior"
 case = "../../../cases/loops/grad_through_loop.cml"
 args = ["${case}", "std::fvm"]
@@ -433,8 +433,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.grad_array_loop_lowered"
-desc = "The array gradients of loops.grad_array_loop run by std::fvm, which lowers loops in a private copy while grad reads the program's own graph."
+name = "loops.grad_array_loop_fvm"
+desc = "The array gradients of loops.grad_array_loop run by std::fvm."
 kind = "behavior"
 case = "../../../cases/loops/grad_array_loop.cml"
 args = ["${case}", "std::fvm"]
@@ -470,8 +470,8 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 
 [[tests]]
-name = "loops.onnx_refused_lowered"
-desc = "export_model run by std::prl, which lowers loops in a private copy: the export reads the program's own graph and refuses the loop at line 8."
+name = "loops.onnx_refused_prl"
+desc = "export_model run by std::prl: the export reads the program's own graph and refuses the loop at line 8."
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
 args = ["-E", "short", "${case}", "std::prl"]

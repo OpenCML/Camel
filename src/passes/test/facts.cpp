@@ -420,7 +420,6 @@ size_t tally(
 
 const camel::runtime::Program *
 FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
     computeFacts(store, *program);
     std::map<std::string, size_t> perKind;
@@ -514,7 +513,6 @@ FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream 
     (void)main.materializeStaticValue(
         camel::core::rtdata::toSlot<int64_t>(7), camel::core::type::Type::Int64());
     const camel::runtime::Program *changedProgram = session.commit();
-    GCGraph *changed                              = changedProgram->root();
     store.clear();
     std::map<std::string, std::map<std::string, size_t>> perGraph;
     for (const PortableFact &fact : facts) {

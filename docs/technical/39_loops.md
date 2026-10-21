@@ -75,17 +75,14 @@ the node are the results of the regions (which is how what they compute is reach
 and the round counter. A graph that has loops holds their nodes: the passes, the facts and the
 validator see them as nodes of one graph with regions. Every commit checks the payload (I12/I13)
 and `validateRuntimeLoopInterface` (op-semantics I18, I19). `LoopView` reads the node; a consumer
-that needs the condition and the body as graphs of their own (autodiff) takes them out in a
-private program, `runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`), and puts them
-back, `passes::opt::regionizeLoops` (`src/passes/opt/inline/loops.cpp`). `test::outline_loops`
-shows the graph form in a dump.
+that needs the condition and the body reads their regions: the two are control regions of the
+graph, each with its own result and ports, and autodiff rewrites them in place.
 
-`std::rgir` shows the node (`LOOP while`); in graph form it names the graphs:
+`std::rgir` shows the node (`LOOP while`) and the two control regions it owns:
 
 ```
 N2A [label="LOOP while cond=main.loop2.cond body=main.loop2.body", type="LOOP", ...];
 ```
-(`graph form` is what `test::outline_loops` and autodiff's working copy have.)
 
 ## 2a. The elements of a string, a map and a tensor
 
@@ -118,13 +115,14 @@ while maps and tensors stay untranslated types there.
 ## 3. Consumers: `camel/runtime/loop.h`
 
 `LoopView` gives what op-semantics 11.1 lists: the form, k, the state types, the iterable, the
-first values, the captures, the two graphs, the ports of the state, the element and the
-captures in each graph, the next state and (for a tuple FILL) its components, and the effect
-summaries (`effectSummaryOf`, computed from the nodes). Graphs are `GCGraph *`, nodes NodeIds,
-types `Type *` (the design's GraphId and TypeId as this runtime spells them).
+first values, the values the two regions read from outside, the region ids and their nodes,
+the ports of the state, the element and the captures in each region, the next state and (for
+a tuple FILL) its components, and the effect summaries (`effectSummaryOf`, computed from the
+nodes). Graphs are `GCGraph *`, nodes NodeIds, types `Type *` (the design's GraphId and
+TypeId as this runtime spells them).
 
 Passes treat the node as opaque: it carries ordering, the inliner's call graph and effect
-analysis look into its two graphs, and nothing lowers it in the shared program.
+analysis look into its two regions, and nothing turns it into graphs in the shared program.
 
 ### 3.1 Collection slots
 
@@ -206,12 +204,12 @@ it; going back to the start of a round does not start or test the loops around i
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
 `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
-`OperatorTraits::inspectsGraphs`. It sees a function's LOOP and its regions (`modules.tiles`
+`OperatorTraits::readsGraphs`. It sees a function's LOOP and its regions (`modules.tiles`
 `loop_structure_*`), and the ONNX export refuses it where it is written (`linear.loops`
-`loops.onnx_refused_lowered`). autodiff differentiates a function's own LOOP node instead of
+`loops.onnx_refused_prl`). autodiff differentiates a function's own LOOP node instead of
 refusing it: the forward loop collects each round's residuals in its collection slots and the
 reverse pass is a loop over those arrays (section 3.2, `linear.loops`
-`loops.grad_through_loop_lowered`).
+`loops.grad_through_loop_fvm`).
 
 **Recursion limit.** A round calls the condition and the body one level deep and returns before
 the next round; no number of rounds takes depth (`--max-recursion-depth 3` runs a million rounds
@@ -284,6 +282,6 @@ state, a nested loop (the inner pullback closure collected as one value of the o
 empty loop (zero gradient), a captured array that does not depend on the parameter (the gradient
 stops at the read), and the two refusals — an iterated and a captured array that does depend on it
 — reported at the loop. `linear.loops` `loops.grad_through_loop` and
-`loops.grad_through_loop_lowered` are the source-level check under `std::macro` and `std::fvm` that
+`loops.grad_through_loop_fvm` are the source-level check under `std::macro` and `std::fvm` that
 a loop of the program's own graph is differentiated (they replace the two refusals that H4d 第一步
 left).

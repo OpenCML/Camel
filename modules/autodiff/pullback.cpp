@@ -1097,8 +1097,7 @@ void ForwardRewrite::followFunctionValues() {
                 continue;
             }
             const GCNodeKind kind = kindOf(draft_, id);
-            if ((kind != GCNodeKind::Func && kind != GCNodeKind::Call) ||
-                !carriesFunctionValue(id) || draft_.isArmCall(id)) {
+            if ((kind != GCNodeKind::Func && kind != GCNodeKind::Call) || !carriesFunctionValue(id)) {
                 continue;
             }
             // The function whose body would come in (for a closure, the function it closes).
@@ -1366,38 +1365,8 @@ struct ReverseLoop {
     std::vector<size_t> statePart;
 };
 
-gc_node_ref_t addLoopPort(GraphDraft &draft, Type *type, bool with) {
-    const gc_node_ref_t port = draft.addPortNode(type, draft.allocateRuntimeSlot(type));
-    if (with) {
-        draft.appendWithPort(port);
-    } else {
-        draft.appendNormPort(port);
-    }
-    return port;
-}
-
 gc_node_ref_t addLoopInt(GraphDraft &draft, int64_t value) {
     return draft.materializeStaticValue(toSlot<int64_t>(value), Type::Int64());
-}
-
-/// The signature of one of the reverse loop's graphs; the names are of the compiler's reserved
-/// form (`__x__`), so that no name of the program equals one of them.
-FunctionType *
-loopSignature(const std::vector<Type *> &with, const std::vector<Type *> &norm, Type *exit) {
-    FunctionTypeFactory factory;
-    for (size_t i = 0; i < with.size(); ++i) {
-        factory.addWithArg(std::format("__tape{}__", i), with[i], false);
-    }
-    static constexpr const char *kNormNames[] = {
-        "__round__", "__dstate0__", "__dstate1__", "__dstate2__", "__dstate3__"};
-    for (size_t i = 0; i < norm.size(); ++i) {
-        factory.addNormArg(
-            i < std::size(kNormNames) ? kNormNames[i] : std::format("__dstate{}__", i),
-            norm[i],
-            false);
-    }
-    factory.setExitType(exit);
-    return factory.build();
 }
 
 /// Where the loop is written is stamped on everything the reverse pass runs, so that a diagnostic
@@ -1429,14 +1398,6 @@ std::vector<Type *> reverseStateTypes(const ReverseLoop &loop) {
         }
     }
     return types;
-}
-
-/// The tape as the reverse loop's graphs read it: the arrays of the real residuals (the round
-/// counter is not a residual, it stays outside the loop).
-std::vector<Type *> tapeTypes(const ReverseLoop &loop) {
-    return std::vector<Type *>(
-        loop.collectionTypes.begin(),
-        loop.collectionTypes.begin() + static_cast<ptrdiff_t>(loop.residualTypes.size()));
 }
 
 /// A tuple of `values`, or the value itself when there is only one (the loop's value is not
@@ -1684,7 +1645,6 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         engine_.loopBodyPlanFor(draft_, loop, view.stateCount(), view.iterable().has_value());
     const size_t k               = bodyPlan.stateTypes.size();
     const size_t m               = bodyPlan.captureTypes.size();
-    const size_t r               = bodyPlan.residualTypes.size();
     // A state with no tangent whose next value depends on an active value loses that value's
     // gradient at the round boundary. The body knows which states those are; refuse the loop
     // here, where the source loop is, rather than let the tape skip it (9.9).
@@ -1723,6 +1683,8 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     ASSERT(
         bodyPlan.existingCollectionTypes.size() == existingCollections,
         "autodiff: a loop's existing collection slots do not match its body's.");
+    [[maybe_unused]] const size_t r = bodyPlan.residualTypes.size();
+
     ASSERT(
         bodyPlan.tapeCollectionTypes.size() == (r == 0 ? 1u : r),
         "autodiff: a loop body's tape slots do not match the values its round collects.");

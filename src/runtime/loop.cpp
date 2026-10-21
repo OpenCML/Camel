@@ -87,7 +87,7 @@ fillComponent(const GCGraph *graph, gc_node_ref_t result, size_t slot) {
 LoopDraftView::LoopDraftView(const Program &program, const GraphDraft &draft, gc_node_ref_t node)
     : draft_(&draft), node_(node) {
     (void)program;
-    const DraftNodeHeader *header = draft.header(node);
+    [[maybe_unused]] const DraftNodeHeader *header = draft.header(node);
     ASSERT(
         header != nullptr && header->kind == GCNodeKind::Loop,
         "LoopDraftView of a node that is not a LOOP node.");
@@ -212,7 +212,7 @@ Type *LoopDraftView::bodyResultType() const { return draft_->header(nextState())
 
 LoopView::LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t node)
     : program_(&program), graph_(&graph), node_(node) {
-    const GCNode *record = graph.node(node);
+    [[maybe_unused]] const GCNode *record = graph.node(node);
     ASSERT(
         record != nullptr && record->kind == GCNodeKind::Loop,
         "LoopView of a node that is not a LOOP node.");
