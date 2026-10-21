@@ -674,6 +674,19 @@ class GCGraph : public camel::core::rtdata::Object {
     }
     /// The payload bytes of node `ref` (rounded up to whole words); empty when it has none.
     std::span<const std::byte> nodePayloadBytes(gc_node_ref_t ref) const;
+    /**
+     * The version of node `ref`, as a hash of what it is: its record (kind, flags, slot, type),
+     * the nodes it consumes (Norm, then With, then Ctrl, in order) and its payload. Two versions
+     * of a graph that carry the same node at the same place hash the same, whatever else of the
+     * graph changed, and a node whose record moved to another chunk hashes the same as well (the
+     * offsets it holds are read as counts). 0 for a ref that is not a node.
+     *
+     * This is what a node-level fact is stamped with (facts.h, Dependency::Node): a fact about a
+     * node holds while the node does not change, though the graph's revision did. It is the
+     * version a stored mark would say, without the 8 bytes per node of the whole graph space
+     * (design graph-store 4.4).
+     */
+    uint64_t nodeContentHash(gc_node_ref_t ref) const;
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         const GCNode *n = node(ref);

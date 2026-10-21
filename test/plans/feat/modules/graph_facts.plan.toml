@@ -89,7 +89,7 @@ assert(value('core.loopDomain', 'count') === 'while: rounds unbounded (no sequen
 const p = find('core.permissions', 'total', 1)
 assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === null, 'permissions')
 const s = find('core.shape', 'layer', 2).stamp
-assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && /^[0-9a-f]{16}$/.test(s.cone), 'shape stamp')
+assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && s.nodes.length === 1 && s.nodes[0].graph === 'layer' && s.nodes[0].node === 2 && /^[0-9a-f]{16}$/.test(s.nodes[0].hash), 'shape stamp: the version of the node, not of a cone')
 assert(find('core.instance', 'layer', 2).stamp.epoch > 0, 'instance stamp has the epoch')
 assert(facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'main' && f.value === 'write ambient io:stdout; external'), 'println writes the console')
 assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'layer'), 'pure tensor code touches no resource')
@@ -98,7 +98,7 @@ assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'l
 
 [[tests]]
 name = "rewrite_inline"
-desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the facts about nodes that kept their id and whose inputs did not change (revalidated: a rewrite keeps the NodeIds of the nodes it leaves); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the others keep their facts."
+desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the shapes of the nodes it left where they were: a shape is about a node's own version (Dependency::Node), so it holds although the graph's revision changed (the shapes of the nodes the rewrite did touch read stale); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the others keep their facts."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::opt::inline", "test::facts_check"]
@@ -113,9 +113,9 @@ for (const l of [
   'FACTS seeded core.effects 6', 'FACTS seeded core.loopDomain 2', 'FACTS seeded core.resources 4',
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=7 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=3 stale=8', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
+  'FACTS graph main valid=2 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   'FACTS gone 0',
-  'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered twice valid=0 revalidated=2 stale=5',
+  'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered twice valid=1 revalidated=0 stale=6',
   'FACTS lowered layer valid=6 revalidated=0 stale=0',
   '60.0',
 ]) line(l)
@@ -139,7 +139,7 @@ const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
 for (const l of [
   'FACTS graph layer valid=6 revalidated=0 stale=0', 'FACTS graph total valid=4 revalidated=0 stale=0',
   'FACTS graph count valid=2 revalidated=0 stale=0',
-  'FACTS graph main valid=0 revalidated=2 stale=9', 'FACTS gone 0', '60.0',
+  'FACTS graph main valid=0 revalidated=0 stale=11', 'FACTS gone 0', '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 }
@@ -186,5 +186,27 @@ for (const l of [
   '60.0',
 ]) line(l)
 assert(!/FACTS reloaded (layer|total|twice|count)\S* graph changed/.test(out), 'unchanged graphs load')
+}
+"""
+
+[[tests]]
+name = "node_versions"
+desc = "test::facts_node: a fact of a kind about a node's own version (Dependency::Node, design 4.4) holds across a commit that changed its graph but not the node, where the fact of the conservative rule on the same node goes stale; the node's fact goes stale once the node itself changes. Every fact of that rule is about the record and the inputs of its nodes, so a rewrite that leaves a node where it was keeps its facts however many other nodes it changed."
+kind = "behavior"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::facts_node"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = (l) => assert(out.includes(l + '\n'), `missing: ${l}`)
+for (const l of [
+  'FACTS node_revision new',
+  'FACTS node_version kept',
+  'FACTS node_other node=valid graph=stale',
+  'FACTS node_self node=stale',
+  '41',
+]) line(l)
 }
 """
