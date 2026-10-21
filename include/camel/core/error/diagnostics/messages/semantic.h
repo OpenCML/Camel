@@ -199,9 +199,9 @@ enum class SemanticDiag : uint32_t {
     DeclarationModuleHasBody    = 0x00017D,
     // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
     /// Two generic declarations of one name can take the same call (ruling 2).
-    NativeDeclarationOverlap = 0x00017E,
+    NativeDeclarationOverlap = 0x000180,
     /// A declaration names an operator of another module (ruling 5).
-    NativeDeclarationForeignOperator = 0x00017F,
+    NativeDeclarationForeignOperator = 0x000181,
 
     // A lambda's parameter that writes no type and that the function type of its position does
     // not determine (design principles 5.9). 0x17E and up.

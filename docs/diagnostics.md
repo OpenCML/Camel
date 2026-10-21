@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-199 diagnostics: 182 errors, 17 warnings.
+200 diagnostics: 183 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -165,8 +165,9 @@ prints one entry.
 | `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
 | `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
 | `0x0300017D` | [SemanticDiag::DeclarationModuleHasBody](#declarationmodulehasbody) | Error |
-| `0x0300017E` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
-| `0x0300017F` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
+| `0x0300017E` | [SemanticDiag::LambdaParameterWithoutType](#lambdaparameterwithouttype) | Error |
+| `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
+| `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -518,7 +519,17 @@ Expected {1} before {0}.
 The items of a list (parameters, arguments, elements) are separated by ','.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/lambda_inference/func_type.cml`, run as `camel test/cases/compile/lambda_inference/func_type.cml`)
+
+```camel
+module lambda_inference_func_type
+
+func apply(f: (x) => int, x: int): int { return f(x) }
+
+func main(): int sync {
+    return apply((x: int) => x + 1, 1)
+}
+```
 
 ### MissingInitializer
 
@@ -4233,9 +4244,37 @@ A Camel module found beside a C++ module of the same name declares that module's
 
 *No example: no test small enough to show raises it.*
 
+### LambdaParameterWithoutType
+
+`0x0300017E` · Error · `SemanticDiag::LambdaParameterWithoutType`
+
+**Message**
+
+```text
+The type of the parameter '{0}' of this lambda is not written and cannot be inferred: {1}.
+```
+
+**Help**
+
+```text
+A lambda takes the type of a parameter it does not write from the function type of the position it stands in: an argument to a parameter of function type, the value of a declared type, or the result of a function whose result type is a function type (design principles 5.9). Write the type ('({0}: int) => ...'), or move the lambda to such a position.
+```
+
+**Example** (`test/cases/compile/lambda_inference/no_expected.cml`, run as `camel test/cases/compile/lambda_inference/no_expected.cml`)
+
+```camel
+module lambda_inference_no_expected
+
+func main(): int sync {
+    let g = (x) => x + 1
+    println(g(1))
+    return 0
+}
+```
+
 ### NativeDeclarationOverlap
 
-`0x0300017E` · Error · `SemanticDiag::NativeDeclarationOverlap`
+`0x03000180` · Error · `SemanticDiag::NativeDeclarationOverlap`
 
 **Message**
 
@@ -4270,7 +4309,7 @@ func main(): int sync {
 
 ### NativeDeclarationForeignOperator
 
-`0x0300017F` · Error · `SemanticDiag::NativeDeclarationForeignOperator`
+`0x03000181` · Error · `SemanticDiag::NativeDeclarationForeignOperator`
 
 **Message**
 
