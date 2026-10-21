@@ -3833,9 +3833,11 @@ GradientGraph buildGradientGraph(
     // there, and the transformation rewrites them where they are.
     Engine engine(context, program, function);
     GCGraph *graph = engine.gradient(function, withValue);
-    // The gradient may be called long after this transformation: its program (the base program
-    // plus the graphs made here) must outlive the group.
-    context->trackDetachedRuntimeProgram(engine.group().program());
+    // The gradient's function value is installed in the graph that calls it (a static DATA
+    // node), and the collector roots every program named by the function values of a rooted
+    // graph (GCGraphManager::rebuildGcRoots, functionsInStatics). Tracking the program here
+    // would root every gradient ever built: a loop that builds 4000 of them would hold them all
+    // (test/plans/feat/mm/graph_space.plan.toml).
     return {engine.group().program(), graph};
 }
 
