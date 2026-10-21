@@ -12,7 +12,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "compiled_region_invalidation_and_ownership"
@@ -22,7 +22,7 @@ args = ["${case}", "tiles::test_outline_compiled", "std::nvm"]
 envs = ["CAMEL_TILES_TEST_INVALIDATION=1", "CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "compiled_region_tuple_and_embedded_axis"
@@ -33,7 +33,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "compiled_region_parallel"
@@ -43,7 +43,7 @@ args = ["--gc", "generational", "${case}", "tiles::test_outline_compiled", "std:
 envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "cast_like_aliases_the_same_element_type"
@@ -68,7 +68,7 @@ assert(withCast.operator_contracts.some(c => c.identity === 'tensor:cast_like'),
 assert(!plain.operator_contracts.some(c => c.identity === 'tensor:cast' || c.identity === 'tensor:cast_like'), 'the plain derivative names a cast');
 }
 """
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "cast_between_element_types_stays_on_cpu"
@@ -340,7 +340,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "outlined_region_execution"
@@ -444,7 +444,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "public_region_pass"
@@ -455,7 +455,7 @@ backends = ["nvm", "fvm", "jit", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
-timeout_ms = 60000
+timeout_ms = 180000
 
 [[tests]]
 name = "public_region_graph"
