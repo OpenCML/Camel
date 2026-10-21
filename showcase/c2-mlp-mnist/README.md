@@ -166,10 +166,10 @@ stand-in) differs at the `2.4e-4` level.
   (four `load_npy` calls vs a layer-by-layer `copy_`). PyTorch is shorter in `model` and
   `loss`, because `nn.Linear` hides the bias and the shapes; the overall counts are in
   `RESULTS.md`.
-- **The cost**: in the recorded standard run Camel's throughput is 0.81× PyTorch's and its
-  peak memory about 0.82× (one thread; see `RESULTS.md`). Three same-day runs measured
-  0.83×, 1.30× and 0.81× — the middle one had PyTorch slowed by other load — so treat the
-  wall-clock ratio as load-dependent and the agreement numbers as the stable ones. Camel's
+- **The cost**: in the recorded standard run Camel's throughput is 0.83× PyTorch's and its
+  peak memory 0.24× (74.7 vs 315.8 MiB, one thread; see `RESULTS.md`). Three same-day runs
+  measured 0.83×, 1.30× and 0.81× — the middle one had PyTorch slowed by other load — so treat
+  the wall-clock ratio as load-dependent and the agreement numbers as the stable ones. Camel's
   compile time is about 0.03 s; PyTorch is eager and has no such step. Performance is not what
   this example sets out to prove, but the numbers are reported as measured.
 
@@ -211,10 +211,13 @@ The genuinely awkward parts of writing this example, with the question each rais
    lines and a `sync` closure for what a `for` loop with `print` does in Python. No blocking
    question; recorded because it is the kind of ceremony the showcase is meant to expose.
 5. **`take` copies rows.** The shuffled-order sampler needs a gather; a contiguous batch could
-   be a `slice` view. The copy is visible in the measured peak memory (the curve stays small,
-   but the runtime holds the gathered batches), and the standard run's memory is higher than
-   when the example used contiguous slices. This is the documented semantics of `take`
-   (5.4), not a defect; it is reported with the other numbers.
+   be a `slice` view. The copy is a per-step cost, not the source of the peak: **correction
+   (H40b)** this example used to say the standard run's memory was higher than with contiguous
+   slices; H40 found that the 262 MiB peak came from collection pacing (the order in which the
+   block-bytes base was taken after deferred releases) and not from `take`, and that `take` and
+   `slice` peak the same (H40 section 3). The standard run now peaks at 74.7 MiB
+   (`RESULTS.md`). This is the documented semantics of `take` (5.4), not a defect; it is
+   reported with the other numbers.
 
 ## Tests
 
