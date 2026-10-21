@@ -893,6 +893,12 @@ class GCGraphManager {
 
     /// Called by Program::bind for a program the manager owns.
     void noteGraph(GCGraph *graph);
+    /// Called for a graph a rewrite encoded but has not bound into a program: a graph version a
+    /// session makes on the way (a specialization) is used by the drafts of the session before a
+    /// commit binds it, or not at all. The collector knows it from here on, but does not free it
+    /// until the pass settles, so that the session's work table can still reach it; a graph no
+    /// program binds by then is freed like any other.
+    void noteUnbound(GCGraph *graph);
 
   private:
     friend class Program;
@@ -905,6 +911,9 @@ class GCGraphManager {
     mutable std::recursive_mutex mutex_;
     std::vector<Program *> programs_;
     std::unordered_set<GCGraph *> graphs_;
+    /// Graphs a rewrite encoded and did not bind yet (noteUnbound): the sweep leaves them alone
+    /// until the pass settles, then they are freed unless a program holds them.
+    std::unordered_set<GCGraph *> unbound_;
     const Program *current_ = nullptr;
     std::vector<const Program *> detached_;
     std::vector<const Program *> pinned_;

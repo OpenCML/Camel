@@ -63,3 +63,27 @@ expect_exit = 0
 expect_stdout_contains = ["KEEPFN alive=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "graph_space.encoded_graph_is_released"
+desc = "test::graph_release: a pass that encodes a graph version (what a specialization does) and no program binds it does not leave it in the graph space. The version is a root graph with 20000 nodes more (about 560 KB); a collection while the pass runs keeps it, because the session that made it is still open. When the pass is over and no program bound it, the settle that ends the pass lets the next collection free it: the space it took is given back, and what the collector frees is the version itself, not only its chunks."
+kind = "behavior"
+case = "../../../cases/facts/two_functions.cml"
+args = ["${case}", "test::graph_release", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["41"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const m = /GRAPH_RELEASE alive=(\d) freed=(\d) encoded=(\d+) before=(\d+) after=(\d+)/.exec(out)
+assert(m !== null, `no report in stdout: ${out}`)
+assert(m[1] === '1', 'the version was freed while the session that made it was open')
+assert(m[2] === '1', 'the version no program bound outlived the pass')
+assert(Number(m[3]) > 300000, `the version was small: ${m[3]} bytes`)
+const grown = Number(m[5]) - Number(m[4])
+assert(grown < Number(m[3]) / 2, `the space grew by ${grown} bytes of the ${m[3]} the version took`)
+}
+"""
+timeout_ms = 30000

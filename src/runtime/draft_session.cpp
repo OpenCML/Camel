@@ -769,7 +769,15 @@ void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
 }
 
 void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
-    if (graph != nullptr && work_->graph(graph->id()) == nullptr) {
+    if (graph == nullptr) {
+        return;
+    }
+    // A graph the session encoded itself (a specialization) is a version of the program that no
+    // program binds yet: the drafts reach it through the work table, which the collector does not
+    // trace. Telling the manager about it lets the collector free it once the pass is over when
+    // the commit did not bind it (a commit that replaced it with a copy of its own).
+    context_->noteUnboundRuntimeGraph(graph);
+    if (work_->graph(graph->id()) == nullptr) {
         work_->bind(graph->id(), graph);
     }
 }

@@ -805,6 +805,11 @@ void Context::releaseRuntimeGraph(camel::runtime::GCGraph *graph) {
     runtimeGraphMgr_->release(graph);
 }
 
+void Context::noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->noteUnbound(graph);
+}
+
 const camel::runtime::Program *
 Context::programOfRuntimeGraph(const camel::runtime::GCGraph *graph) const {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");

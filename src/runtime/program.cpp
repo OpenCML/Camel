@@ -137,11 +137,19 @@ const Program *makeProgram(
 void GCGraphManager::noteGraph(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.insert(graph);
+    unbound_.erase(graph);
+}
+
+void GCGraphManager::noteUnbound(GCGraph *graph) {
+    std::lock_guard lock(mutex_);
+    graphs_.insert(graph);
+    unbound_.insert(graph);
 }
 
 void GCGraphManager::release(GCGraph *graph) {
     std::lock_guard lock(mutex_);
     graphs_.erase(graph);
+    unbound_.erase(graph);
     freeGraph(graph);
 }
 
@@ -235,6 +243,7 @@ void GCGraphManager::clear() {
         mm::NoCollectionScope noCollection;
         std::lock_guard lock(mutex_);
         current_ = nullptr;
+        unbound_.clear();
         rebuildGcRoots();
     }
     collect();
@@ -272,7 +281,7 @@ void GCGraphManager::settle(const Program *keep) {
     {
         mm::NoCollectionScope noCollection;
         std::lock_guard lock(mutex_);
-        if (provisional_.empty() && keep == nullptr) {
+        if (provisional_.empty() && keep == nullptr && unbound_.empty()) {
             return;
         }
         // `keep`, the program the pass handed on, is the one thing that must stay.
@@ -280,6 +289,9 @@ void GCGraphManager::settle(const Program *keep) {
         if (keep != nullptr && keep != current_) {
             provisional_.push_back(keep);
         }
+        // The graphs a rewrite encoded and its commit did not bind belong to the pass that made
+        // them; from here they live only if a program holds them.
+        unbound_.clear();
         rebuildGcRoots();
     }
     collectIfGrown();
@@ -390,6 +402,11 @@ void GCGraphManager::sweepMarked() {
     }
     std::vector<GCGraph *> deadGraphs;
     for (GCGraph *graph : graphs_) {
+        // A graph a rewrite encoded and no program bound yet is only reachable from the session
+        // that encoded it: it is freed once that pass is over (settle).
+        if (unbound_.contains(graph)) {
+            continue;
+        }
         if (!marked(graph)) {
             deadGraphs.push_back(graph);
         }
