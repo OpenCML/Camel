@@ -164,7 +164,7 @@ std::vector<core::OperId> DefinitionStore::cycleThrough(core::OperId oper) {
 }
 
 std::shared_ptr<UserDefinedModule>
-DefinitionStore::library(const std::string &name, std::string &problem) {
+DefinitionStore::importLibrary(const std::string &name, std::string &problem) {
     if (auto it = libraries_.find(name); it != libraries_.end()) {
         if (!it->second) {
             problem = std::format("its library '{}' does not compile", name);
@@ -178,16 +178,17 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
         module = std::dynamic_pointer_cast<UserDefinedModule>(context_.importModule(name));
         if (!module) {
             problem = std::format("its library '{}' is not a module written in Camel", name);
-        } else if (!module->compileAsLibrary()) {
-            problem =
-                std::format("its library '{}' does not compile: {}", name, firstError(*module));
-            module.reset();
+            absentLibraries_.insert(name);
         }
     } catch (const core::error::Diagnostic &d) {
         problem = std::format(
             "its library '{}' cannot be loaded: {}",
             name,
             d.message.substr(0, d.message.find('\n')));
+        if (d.type == core::error::DiagType::SemanticDiag &&
+            d.specific == static_cast<uint32_t>(core::error::SemanticDiag::ModuleNotFound)) {
+            absentLibraries_.insert(name);
+        }
         module.reset();
     } catch (const std::exception &e) {
         problem = std::format("its library '{}' cannot be loaded: {}", name, e.what());
@@ -195,6 +196,69 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
     }
     libraries_.emplace(name, module);
     return module;
+}
+
+std::shared_ptr<UserDefinedModule>
+DefinitionStore::library(const std::string &name, std::string &problem) {
+    auto module = importLibrary(name, problem);
+    if (!module) {
+        return nullptr;
+    }
+    if (!module->compileAsLibrary()) {
+        problem = std::format("its library '{}' does not compile: {}", name, firstError(*module));
+        // Remembered as refused: the module is not compiled again (as before).
+        libraries_.erase(name);
+        libraries_.emplace(name, nullptr);
+        return nullptr;
+    }
+    return module;
+}
+
+std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
+    const std::string &moduleName, const std::string &functionName, std::string &problem,
+    bool &absent) {
+    std::lock_guard lock(mutex_);
+    const std::string key = moduleName + "::" + functionName;
+    if (auto it = functions_.find(key); it != functions_.end()) {
+        problem = it->second.problem;
+        absent  = it->second.absent;
+        return it->second.found;
+    }
+    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent) {
+        absent          = isAbsent;
+        functions_[key] = {found, problem, isAbsent};
+        return found;
+    };
+    const auto module = importLibrary(moduleName, problem);
+    if (!module) {
+        return remember(std::nullopt, absentLibraries_.contains(moduleName));
+    }
+    // The tool program is the library module as a program whose entry is the function: its root
+    // graph computes the module-level values and calls the function, so the function's capture
+    // ports are bound from values that were computed (design principles 10.1). The graph the
+    // caller runs is that program's root; its signature is the function's.
+    std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rootGraph;
+    const auto status = module->compileAsProgram(functionName, problem, rootGraph);
+    if (status == UserDefinedModule::ProgramStatus::NoSuchFunction) {
+        return remember(std::nullopt, true);
+    }
+    if (status == UserDefinedModule::ProgramStatus::NotAFunction) {
+        return remember(std::nullopt, false);
+    }
+    if (status != UserDefinedModule::ProgramStatus::Built) {
+        problem =
+            std::format("its library '{}' does not compile: {}", moduleName, firstError(*module));
+        return remember(std::nullopt, false);
+    }
+    Program *program = context_.reserveProgram();
+    camel::compile::gir::encodeToRuntimeProgram(rootGraph, *program, &context_.graphIds());
+    context_.pinRuntimeProgram(program);
+    if (program->root() == nullptr) {
+        problem = std::format("'{}::{}' could not be encoded", moduleName, functionName);
+        return remember(std::nullopt, false);
+    }
+    problem.clear();
+    return remember(LibraryFunction{program, program->root()}, false);
 }
 
 DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
@@ -296,7 +360,7 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
          .graph       = graph,
          .program     = program,
          .contentHash = fact::portableGraphHash(*program, graph),
-    });
+     });
     return entry;
 }
 

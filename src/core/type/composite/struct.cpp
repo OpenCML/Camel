@@ -24,17 +24,44 @@
 #include "camel/core/type/intern.h"
 #include "camel/core/type/storage.h"
 #include "camel/core/type/text.h"
+#include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
+#include <format>
+#include <mutex>
 #include <sstream>
+#include <unordered_map>
 
 namespace mm = camel::core::mm;
 using namespace std;
 using namespace camel::core::type;
+
+namespace {
+
+std::atomic<uint32_t> structDeclCounter{1};
+
+} // namespace
+
+StructDecl::StructDecl(const std::string &name, std::vector<std::string> params)
+    : name_(name), params_(std::move(params)), id_(structDeclCounter.fetch_add(1)) {
+    const size_t at = name_.rfind("::");
+    shortName_      = at == std::string::npos ? name_ : name_.substr(at + 2);
+}
+
+StructDecl *StructDecl::create(const std::string &name, std::vector<std::string> params) {
+    return new StructDecl(name, std::move(params));
+}
+
+void StructDecl::define(std::vector<std::pair<std::string, Type *>> fields) {
+    ASSERT(!defined_, "A struct declaration is defined once.");
+    fields_  = std::move(fields);
+    defined_ = true;
+}
 
 namespace {
 
@@ -65,10 +92,86 @@ StructTypeLayout computeLayout(size_t size, size_t refCount, size_t fieldNamesDa
 
 StructType *StructTypeFactory::build() { return StructType::fromFactory(*this); }
 
+namespace {
+
+/// The interned named instances, keyed by declaration and arguments, as enum instances are: a
+/// type holding a type variable is not interned, because the declaration's parameter objects
+/// and a use's argument objects are different types even when they print the same.
+std::mutex structMutex;
+std::unordered_map<std::string, StructType *> &structInstances() {
+    static std::unordered_map<std::string, StructType *> instances;
+    return instances;
+}
+
+bool internable(std::span<Type *const> args) {
+    return std::all_of(args.begin(), args.end(), [](Type *arg) {
+        return arg != nullptr && !containsTypeVar(arg);
+    });
+}
+
+std::string instanceKey(const StructDecl *decl, std::span<Type *const> args) {
+    std::string key = std::to_string(decl->id()) + "|";
+    for (Type *arg : args) {
+        key += arg->mangle();
+        key += '|';
+    }
+    return key;
+}
+
+std::vector<std::string> refsOf(const std::vector<std::pair<std::string, Type *>> &fields) {
+    std::vector<std::string> refs;
+    for (const auto &[name, type] : fields) {
+        if (type != nullptr && type->code() == TypeCode::Ref) {
+            refs.push_back(name);
+        }
+    }
+    return refs;
+}
+
+} // namespace
+
+StructType *StructType::get(StructDecl *decl, std::span<Type *const> args) {
+    ASSERT(decl != nullptr, "StructType::get needs a declaration.");
+    ASSERT(decl->defined(), "A struct type is instantiated after its fields are read.");
+    ASSERT(
+        args.size() == decl->params().size(),
+        "StructType::get: one type argument per parameter of the declaration.");
+    std::vector<std::pair<std::string, Type *>> fields;
+    fields.reserve(decl->fields().size());
+    if (decl->generic()) {
+        type_bindings_t bindings;
+        bindings.reserve(decl->params().size());
+        for (size_t i = 0; i < decl->params().size(); ++i) {
+            bindings.emplace_back(decl->params()[i], args[i]);
+        }
+        for (const auto &[name, fieldType] : decl->fields()) {
+            fields.emplace_back(name, substituteTypeVars(fieldType, bindings));
+        }
+    } else {
+        fields = decl->fields();
+    }
+    std::vector<std::string> refs = refsOf(fields);
+    std::vector<Type *> typeArgs(args.begin(), args.end());
+    if (!internable(args)) {
+        return allocate(fields, refs, decl, std::move(typeArgs));
+    }
+    std::lock_guard<std::mutex> lock(structMutex);
+    auto &instances       = structInstances();
+    const std::string key = instanceKey(decl, args);
+    if (auto it = instances.find(key); it != instances.end()) {
+        return it->second;
+    }
+    StructType *type = allocate(fields, refs, decl, std::move(typeArgs));
+    instances.emplace(key, type);
+    return type;
+}
+
 StructType::StructType(
     const StructTypeLayout &layout, const Type *const *types, const TypeCode *typeCodes,
-    const size_t *nameOffsets, const char *fieldNamesData, const size_t *refs)
-    : CompositeType(TypeCode::Struct), size_(layout.size), refCount_(layout.refCount) {
+    const size_t *nameOffsets, const char *fieldNamesData, const size_t *refs, StructDecl *decl,
+    std::vector<Type *> typeArgs)
+    : CompositeType(TypeCode::Struct), decl_(decl), typeArgs_(std::move(typeArgs)),
+      size_(layout.size), refCount_(layout.refCount) {
     auto p             = layout.ptrs(data_);
     typesPtr_          = p.types;
     typeCodesPtr_      = p.typeCodes;
@@ -113,7 +216,7 @@ StructType *StructType::fromFactoryData(
 
 StructType *StructType::allocate(
     const std::vector<std::pair<std::string, Type *>> &fields,
-    const std::vector<std::string> &refs) {
+    const std::vector<std::string> &refs, StructDecl *decl, std::vector<Type *> typeArgs) {
     size_t size     = fields.size();
     size_t refCount = refs.size();
 
@@ -160,7 +263,9 @@ StructType *StructType::allocate(
         typeCodes.data(),
         nameOffsets.data(),
         fieldNamesData.data(),
-        refIndices.data());
+        refIndices.data(),
+        decl,
+        std::move(typeArgs));
 }
 
 std::optional<size_t> StructType::findField(std::string_view name) const {
@@ -246,6 +351,10 @@ string StructType::toString() const { return typeToString(this); }
 string StructType::mangle() const { return typeMangle(this); }
 
 Type *StructType::clone(bool deep /* = false */) const {
+    if (named()) {
+        // A named type is its declaration: a copy of it is not another type.
+        return const_cast<StructType *>(this);
+    }
     StructTypeFactory factory;
     for (size_t i = 0; i < size_; ++i) {
         Type *fieldType = typeAt(i);
@@ -258,14 +367,84 @@ Type *StructType::clone(bool deep /* = false */) const {
 
 bool StructType::equals(Type *type) const { return typeEquals(this, type); }
 
-// Converting a value to its own type is legal and does nothing (design principles 5.1).
-CastSafety StructType::castSafetyFrom(Type *sourceType) const {
-    if (sourceType == nullptr)
-        return CastSafety::Forbidden;
-    return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
+namespace {
+
+/// Whether a value laid out as `source` can be read as `target` without moving anything: the
+/// same field names in the same order, each readable as the target field's type. A field of a
+/// refined module type (`Tensor<f32>` where `Tensor` is declared) keeps its one slot, so the
+/// conversion is a no-op (camel/core/type/base.h, CastSafety).
+bool layoutCompatibleFrom(const StructType &target, const StructType &source) {
+    if (target.size() != source.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < target.size(); ++i) {
+        if (target.fieldName(i) != source.fieldName(i)) {
+            return false;
+        }
+        Type *targetField = target.typeAt(i);
+        Type *sourceField = source.typeAt(i);
+        if (targetField == nullptr || sourceField == nullptr ||
+            !targetField->assignableFrom(sourceField)) {
+            return false;
+        }
+    }
+    return true;
 }
 
-// Every conversion castSafetyFrom admits (to the same type) keeps the value.
+} // namespace
+
+bool camel::core::type::structFieldsMatchByName(
+    const StructType *target, const StructType *source) {
+    if (target == nullptr || source == nullptr || !target->named() || source->named()) {
+        return false;
+    }
+    if (target->size() != source->size()) {
+        return false;
+    }
+    for (size_t i = 0; i < target->size(); ++i) {
+        const auto from = source->findField(target->fieldName(i));
+        if (!from.has_value()) {
+            return false;
+        }
+        Type *targetField = target->typeAt(i);
+        Type *sourceField = source->typeAt(*from);
+        if (targetField == nullptr || sourceField == nullptr) {
+            return false;
+        }
+        if (targetField->assignableFrom(sourceField)) {
+            continue;
+        }
+        // A field that is itself a struct is matched the same way, by name.
+        if (targetField->code() == TypeCode::Struct && sourceField->code() == TypeCode::Struct &&
+            structFieldsMatchByName(
+                static_cast<const StructType *>(targetField),
+                static_cast<const StructType *>(sourceField))) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
+
+// Converting a value to its own type is legal and does nothing (design principles 5.1). An
+// unnamed struct value whose fields are those of a named type in the declaration's order is
+// that type without moving anything, so the conversion is safe too; the CAST keeps the type
+// the value is used as. Between two named types the same holds when the fields are in the
+// same order (the `as` that design principles 5.2 requires is written by the programmer, and
+// changes the type without moving anything); when they are not, the conversion is a copy, and
+// is not safe (it is not castSlotFrom at all).
+CastSafety StructType::castSafetyFrom(Type *sourceType) const {
+    if (sourceType == nullptr || sourceType->code() != TypeCode::Struct) {
+        return CastSafety::Forbidden;
+    }
+    if (equals(sourceType)) {
+        return CastSafety::Safe;
+    }
+    const auto *source = static_cast<const StructType *>(sourceType);
+    return layoutCompatibleFrom(*this, *source) ? CastSafety::Safe : CastSafety::Forbidden;
+}
+
+// Every conversion castSafetyFrom admits keeps the value.
 slot_t StructType::castSlotFrom(slot_t value, Type *sourceType) const {
     ASSERT(
         castSafetyFrom(sourceType) == CastSafety::Safe,
@@ -273,31 +452,32 @@ slot_t StructType::castSlotFrom(slot_t value, Type *sourceType) const {
     return value;
 }
 
-// Fields are immutable, so a struct accepts any struct with the same field names whose field
-// types are assignable (e.g. { w: Tensor<float32> } where { w: Tensor } is expected).
+// A named type is its declaration: only the same declaration with the same type arguments is
+// the same type (design principles 5.2). An unnamed value may be used as a named type whose
+// fields are its fields, by name, in the declaration's order; a struct literal at a position
+// of a named type is built there in that order, so its written order is free (the builder
+// converts it before this check). An unnamed type accepts any struct whose fields are its
+// fields in its own (written) order, with covariant field types (e.g. { w: Tensor<float32> }
+// where { w: Tensor } is expected).
 bool StructType::assignableFrom(Type *sourceType) const {
-    if (!sourceType || sourceType->code() != TypeCode::Struct) {
+    if (sourceType == nullptr || sourceType->code() != TypeCode::Struct) {
         return false;
     }
-    auto other = static_cast<const StructType *>(sourceType);
-    if (size_ != other->size_) {
+    if (this == sourceType || equals(sourceType)) {
+        return true;
+    }
+    const auto *other = static_cast<const StructType *>(sourceType);
+    if (named() && other->named()) {
         return false;
     }
-    for (size_t i = 0; i < size_; ++i) {
-        auto optIdx = other->findField(std::string(fieldName(i)));
-        if (!optIdx.has_value()) {
-            return false;
-        }
-        Type *target = typeAt(i);
-        Type *source = other->typeAt(optIdx.value());
-        if (!target || !source || !target->assignableFrom(source)) {
-            return false;
-        }
-    }
-    return true;
+    return layoutCompatibleFrom(*this, *other);
 }
 
 Type *StructType::widened() const {
+    if (named()) {
+        // The fields of a named type are the declared ones; nothing refines them.
+        return const_cast<StructType *>(this);
+    }
     StructTypeFactory factory;
     bool changed = false;
     for (size_t i = 0; i < size_; ++i) {

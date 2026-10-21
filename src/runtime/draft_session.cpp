@@ -670,6 +670,10 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
             return false;
         }
     }
+    // The equivalences between nodes are content: a saturated graph is not the graph it was.
+    if (a->writingCount != b->writingCount || !sameArray(a->writings, b->writings, a->writingCount)) {
+        return false;
+    }
     if (a->regionCount != b->regionCount || a->regionPortCount != b->regionPortCount ||
         !sameArray(a->regionTable, b->regionTable, a->regionCount) ||
         !sameArray(a->regionPorts, b->regionPorts, a->regionPortCount)) {
@@ -1210,7 +1214,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     // program is left as it is.
     // A shape no back end runs (GraphState::NonExecutable: the export-only sessions) is never
     // installed: it stays in a private program, whatever the caller asked for.
-    if (!detached && graphState_ == GraphState::Executable &&
+    if (!detached && graphState_ != GraphState::NonExecutable &&
         context_->currentRuntimeProgram() == program_ && program_->root() == oldRuntimeRoot) {
         program_ = context_->installRuntimeProgram(committed);
     } else {

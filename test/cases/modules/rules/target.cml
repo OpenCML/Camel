@@ -1,0 +1,15 @@
+/** Functions with sums and products a rule pass folds. */
+module target
+
+func coefficients(x: int): int {
+    return x * 3 + x * 5
+}
+
+func chain(x: int): int {
+    return ((x + 0) * 3) * 2
+}
+
+func main(): int sync {
+    println(coefficients(7), chain(7))
+    return 0
+}

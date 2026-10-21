@@ -1,0 +1,133 @@
+id = "modules.rules"
+order = 392
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite"]
+desc = "Rules (rewrite design 2): a pass written with `rule` declarations and the rewrite of the module rewrite, run on a program as a Camel pass."
+
+[[tests]]
+name = "rules.rewrite_pass"
+desc = "simplify::apply rewrites the program with four rules: x*3 + x*5 becomes x*8 (the sum of the constants is computed by the operator), ((x+0)*3)*2 becomes x*6; the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "counts::report", "simplify::apply", "counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.rewrite_pass_on_every_backend"
+desc = "The rewritten program runs the same on the byte-code interpreter and the parallel scheduler."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::apply", "${backend}"]
+backends = ["fvm", "prl"]
+expect_exit = 0
+expect_stdout_exact = "56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.two_way_refused"
+desc = "A rule from <=> given to rewrite is an error value, RuleTwoWay, that names the rule: the pass fails and the program does not run."
+kind = "negative"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::swapped", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GraphPassFailed", "RuleTwoWay", "Rule 'swap' holds both ways"]
+expect_output_not_contains = ["56 42"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturate_and_extract"
+desc = "simplify::saturated saturates both ways (swap rules included) and extracts by node count inside one Camel pass: the same operators as the greedy rewrite, the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "counts::report", "simplify::saturated", "counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturation_alone_needs_an_extraction"
+desc = "simplify::tabled only saturates: the program has values with several writings, and a pass that does not know them (counts::report) gets PassNeedsExtraction instead of the program."
+kind = "negative"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::tabled", "counts::report", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNeedsExtraction", "counts::report", "std::opt::extract"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturation_then_the_extract_pass"
+desc = "With std::opt::extract after the saturation, the program is back to one writing per value and runs."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::tabled", "std::opt::extract", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_exact = "56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.saturation_then_the_pipeline_extracts"
+desc = "A saturated program given to a back end is extracted by the pipeline with the default cost."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "simplify::tabled", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.check_accepts_rules_that_hold"
+desc = "The check every rule passes before it enters a library (graph store decision 5): 100 random instances of the two sides agree bit for bit (the rules that need no permission), and the engine fires the rule on its own left side and gets a function that agrees too. Integer rules, a rule with const parameters, a rule from <=> and the float rules x + -0.0 and x * 1.0."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_rules.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok add_zero: 100 samples agree, fired 8 of 8", "ok mul_one: 100 samples agree, fired 8 of 8", "ok combine: 100 samples agree, fired 8 of 8", "ok swap: 100 samples agree, fired 8 of 8", "ok minus_zero: 100 samples agree, fired 8 of 8", "ok times_one: 100 samples agree, fired 8 of 8"]
+expect_output_not_contains = ["ok wrong", "ok sign", "ok plus_zero"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.check_finds_rules_that_do_not_hold"
+desc = "A rule that is not an equation (x * 2 => x + 2 differs at the integer limit), one that flips a sign, and x + 0.0 => x (it turns -0.0 into 0.0) are reported with the arguments where the two sides differ."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_rules.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["FAIL wrong: the two sides differ at (", "FAIL sign: the two sides differ at (", "FAIL plus_zero: the two sides differ at (-0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.library_passes_the_check"
+desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_library.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rules.library_simplify"
+desc = "rules::simplify, the library pass, folds x*3 + x*5 and ((x+0)*3)*2 as std::opt::algebra does, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "counts::report", "rules::simplify", "counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.library_saturate_all"
+desc = "rules::saturate_all saturates with every rule of the library, the rearranging ones included, and extracts the smallest writing: the same operators."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "counts::report", "rules::saturate_all", "counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+timeout_ms = 20000

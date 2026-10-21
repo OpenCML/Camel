@@ -1,0 +1,7 @@
+module no_arrow
+
+rule keep(x: int) { x }
+
+func main(): int sync {
+    return 0
+}

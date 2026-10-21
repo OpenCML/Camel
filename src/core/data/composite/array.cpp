@@ -21,6 +21,7 @@
 #include "camel/core/data/ref.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 
 using namespace std;
@@ -38,28 +39,57 @@ ArrayDataFactory::ArrayDataFactory() : impl_(std::make_unique<Impl>()) {}
 ArrayDataFactory::~ArrayDataFactory() = default;
 
 ArrayDataFactory &ArrayDataFactory::add(const data_ptr_t &e) {
+    data_ptr_t value = e;
     if (!impl_->elemType) {
-        impl_->elemType = e->type();
-    } else if (impl_->elemType->code() == TypeCode::Ref && e->type()->code() != TypeCode::Ref) {
+        impl_->elemType = value->type();
+    } else if (impl_->elemType->code() == TypeCode::Ref && value->type()->code() != TypeCode::Ref) {
         // When an array literal mixes dynamic expressions and static values, prefer the concrete
         // element type; holeIndices only records which positions need backfilling later.
-        impl_->elemType = e->type();
-    } else if (impl_->elemType->code() != TypeCode::Ref && e->type()->code() == TypeCode::Ref) {
+        impl_->elemType = value->type();
+    } else if (
+        impl_->elemType->code() != TypeCode::Ref && value->type()->code() == TypeCode::Ref) {
         // Keep the known concrete element type and only mark this position as a deferred reference.
-    } else if (!impl_->elemType->assignableFrom(e->type())) {
+    } else if (!impl_->elemType->assignableFrom(value->type())) {
         // Widen to the least common element type when one exists (e.g. tensors whose static
-        // shapes differ); otherwise the elements are incompatible.
-        Type *joined = impl_->elemType->unify(e->type());
+        // shapes differ, or an unnamed struct value next to a named struct type whose fields
+        // it has: the array is of the named type, design principles 5.2); otherwise the
+        // elements are incompatible.
+        Type *joined = joinTypes(impl_->elemType, value->type());
         if (!joined) {
             throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
-                .commit("Array", e->type()->toString(), impl_->elemType->toString());
+                .commit("Array", value->type()->toString(), impl_->elemType->toString());
+        }
+        if (!joined->equals(impl_->elemType)) {
+            // The elements already collected are values of the joined type too: a literal of
+            // an unnamed struct type becomes the named type it enters.
+            for (data_ptr_t &existing : impl_->data) {
+                if (existing == nullptr || existing->type()->code() == TypeCode::Ref ||
+                    joined->equals(existing->type())) {
+                    continue;
+                }
+                data_ptr_t converted = existing->convertTo(joined);
+                if (converted == nullptr) {
+                    throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+                        .commit("Array", existing->type()->toString(), joined->toString());
+                }
+                existing = converted;
+            }
+        }
+        // The element being added is a value of the joined type too.
+        if (!joined->equals(value->type())) {
+            data_ptr_t converted = value->convertTo(joined);
+            if (converted == nullptr) {
+                throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
+                    .commit("Array", value->type()->toString(), joined->toString());
+            }
+            value = converted;
         }
         impl_->elemType = joined;
     }
-    if (e->type()->code() == TypeCode::Ref) {
+    if (value->type()->code() == TypeCode::Ref) {
         impl_->holeIndices.push_back(impl_->data.size());
     }
-    impl_->data.push_back(e);
+    impl_->data.push_back(value);
     return *this;
 }
 
@@ -194,7 +224,14 @@ data_ptr_t ArrayData::convertTo(Type *type) {
     }
     if (type->code() == TypeCode::Array) {
         const auto &arrType = tt::as_ptr<ArrayType>(type);
-        return ArrayData::from(arrType->elemType(), data_);
+        // Every literal element takes the array's element type (an unnamed struct literal
+        // becomes the named type it enters, design principles 5.2).
+        ArrayDataFactory f;
+        f.setElemType(arrType->elemType());
+        for (const auto &e : data_) {
+            f.add(e);
+        }
+        return f.build();
     }
     return nullptr;
 }

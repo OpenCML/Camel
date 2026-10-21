@@ -23,6 +23,9 @@
 
 #include "pullback.h"
 
+#include "camel/passes/opt/inline.h"
+#include "camel/runtime/arm_raise.h"
+
 #include "rules.h"
 
 #include "camel/core/context/context.h"
@@ -3284,9 +3287,22 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     GCGraph *function, bool withValue) {
+    // The arms of the branches are graphs of their own for the differentiation.
+    const camel::runtime::Program *raised = camel::runtime::raiseBranchArms(context, program, function);
+    if (raised != program) {
+        function = raised->graph(function->id());
+        program  = raised;
+    }
     Engine engine(context, program, function);
     GCGraph *graph = engine.gradient(function, withValue);
-    return {engine.group().program(), graph};
+    // The gradient reads like any program: its arms are regions.
+    GCGraph *root = graph;
+    const camel::runtime::Program *lowered =
+        camel::passes::opt::lowerBranchArms(context, engine.group().program(), root, true);
+    if (lowered != engine.group().program()) {
+        graph = lowered->graph(graph->id());
+    }
+    return {lowered, graph};
 }
 
 } // namespace camel::autodiff

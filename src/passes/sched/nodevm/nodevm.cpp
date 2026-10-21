@@ -436,7 +436,9 @@ slot_t NodeVMSchedPass::call(
                 }
                 joinNode = body->join;
                 tillNode = currPlan->branchArmEntriesOf(i)[jumpIdx];
-                skipNode = tillNode == joinNode ? kInvalidNodeRef : arms[jumpIdx].tail;
+                skipNode = tillNode == joinNode
+                               ? kInvalidNodeRef
+                               : currPlan->branchArmTailsOf(i)[jumpIdx];
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                     "NodeVM",
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",
@@ -659,6 +661,19 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
     return nullptr;
+}
+
+slot_t NodeVMSchedPass::callGraph(
+    const camel::runtime::Program *program, camel::runtime::GCGraph *graph,
+    std::span<const slot_t> arguments) {
+    camel::execute::RunScope runScope(programs_, *context_, program);
+    Frame *frame      = framePool_.acquire(graph);
+    const auto ports  = graph->normPorts();
+    ASSERT(ports.size() == arguments.size(), "callGraph needs one argument per parameter.");
+    for (size_t i = 0; i < ports.size(); ++i) {
+        frame->set(graph->node(ports[i])->dataIndex, arguments[i]);
+    }
+    return call(graph, frame, program);
 }
 
 void NodeVMSchedPass::evalMarkedOperator(

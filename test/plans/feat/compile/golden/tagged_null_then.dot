@@ -4,67 +4,48 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => i64";
+        tooltip="() => int";
         subgraph cluster_F02 {
             label="pick";
-            tooltip="(a: i64?, b: i64) => i64";
-            subgraph cluster_F03 {
-                label="__g_4__";
-                tooltip="() => i64";
-                F03 [label="ARGS", type="ARGS", style=dashed, shape=circle];
-                O03 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-                N00 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_4__::node#1"];
-                F03 -> N00 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
-                N00 -> O03 [label="0", type="EXIT", style=solid];
-            }
-            subgraph cluster_F04 {
-                label="__g_6__";
-                tooltip="() => i64";
-                F04 [label="ARGS", type="ARGS", style=dashed, shape=circle];
-                O04 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-                N01 [label="PORT", type="PORT", shape=circle, style=solid, tooltip="PORT\n__g_6__::node#1"];
-                N02 [label=":op/tag\n_nul...", type="OPER", shape=diamond, style=solid, tooltip=":op/tag_null_value\n__g_6__::node#2"];
-                F04 -> N01 [label="0", type="WITH_PORT", style=dashed, arrowhead=empty];
-                N02 -> O04 [label="0", type="EXIT", style=solid];
-                N01 -> N02 [label="0|0", type="NORM"];
-            }
+            tooltip="(a: int?, b: int) => int";
             F02 [label="ARGS", type="ARGS", style=dashed, shape=circle];
             O02 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-            N03 [label="a", type="PORT", shape=circle, style=solid, tooltip="a\npick::node#1"];
-            N04 [label="b", type="PORT", shape=circle, style=solid, tooltip="b\npick::node#2"];
-            N05 [label=":op/tag\n_is_...", type="OPER", shape=diamond, style=solid, tooltip=":op/tag_is_null\npick::node#3"];
-            N06 [label="JOIN", type="JOIN", shape=diamond, style=solid, tooltip="JOIN\npick::node#7"];
-            N07 [label="BRCH", type="BRCH", shape=diamond, style=solid, tooltip="BRCH\npick::node#4"];
-            N08 [label="__g_4__", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__g_4__\npick::node#5"];
-            N09 [label="__g_6__", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="__g_6__\npick::node#6"];
-            F02 -> N03 [label="0", type="NORM_PORT", style=solid];
-            F02 -> N04 [label="1", type="NORM_PORT", style=solid];
-            N06 -> O02 [label="0", type="EXIT", style=solid];
-            N03 -> N05 [label="0|0", type="NORM"];
-            N08 -> N06 [label="0|0", type="WITH", style=dashed];
-            N09 -> N06 [label="0|1", type="WITH", style=dashed];
+            N00 [label="a", type="PORT", param_name="a", param_kind="normal", param_index="0", value_type="int?", shape=circle, style=solid, tooltip="a\npick::node#1"];
+            N01 [label="b", type="PORT", param_name="b", param_kind="normal", param_index="1", value_type="int", shape=circle, style=solid, tooltip="b\npick::node#2"];
+            N02 [label=":op/tag\n_is_...", type="OPER", shape=diamond, style=solid, value_type="bool", origin=71, span="6:13-6:15", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip=":op/tag_is_null\npick::node#3"];
+            N03 [label="JOIN", type="JOIN", shape=diamond, style=solid, value_type="int", origin=77, span="6:13-6:15", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="JOIN\npick::node#7"];
+            N04 [label="BRCH", type="BRCH", shape=diamond, style=solid, value_type="int", origin=76, span="6:13-6:15", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="BRCH\npick::node#4"];
+            N05 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int", tooltip="GATE\npick::node#2"];
+            N06 [label=":op/tag\n_nul...", type="OPER", shape=diamond, style=solid, value_type="int", origin=75, span="6:13-6:15", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip=":op/tag_null_value\npick::node#10"];
+            N07 [label="GATE", type="GATE", shape=diamond, style=dashed, value_type="int?", tooltip="GATE\npick::node#1"];
+            F02 -> N00 [label="0", type="NORM_PORT", style=solid];
+            F02 -> N01 [label="1", type="NORM_PORT", style=solid];
+            N03 -> O02 [label="0", type="EXIT", style=solid];
+            N00 -> N02 [label="0|0", type="NORM"];
+            N05 -> N03 [label="0|0", type="WITH", style=dashed];
+            N06 -> N03 [label="0|1", type="WITH", style=dashed];
+            N04 -> N03 [label="0|0", type="NORM"];
+            N02 -> N04 [label="0|0", type="NORM"];
+            N01 -> N05 [label="0|0", type="NORM"];
+            N04 -> N05 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
             N07 -> N06 [label="0|0", type="NORM"];
-            N05 -> N07 [label="0|0", type="NORM"];
-            N04 -> N07 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
-            N03 -> N07 [label="0|1", type="CTRL", style=dashed, arrowhead=empty];
-            N04 -> N08 [label="0|0", type="WITH", style=dashed];
-            N07 -> N08 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
-            N03 -> N09 [label="0|0", type="WITH", style=dashed];
-            N07 -> N09 [label="1|0", type="CTRL", style=dashed, arrowhead=empty];
+            N04 -> N06 [label="1|0", type="CTRL", style=dashed, arrowhead=empty];
+            N00 -> N07 [label="1|0", type="NORM"];
+            N04 -> N07 [label="2|0", type="CTRL", style=dashed, arrowhead=empty];
         }
         O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-        N0A [label="3", type="DATA", shape=circle, style=solid, tooltip="3\nmain::node#-1"];
-        N0B [label="CAST", type="CAST", shape=diamond, style=solid, tooltip="CAST\nmain::node#1"];
-        N0C [label="4", type="DATA", shape=circle, style=solid, tooltip="4\nmain::node#-2"];
-        N0D [label="pick", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, tooltip="pick\nmain::node#2"];
-        N0D -> O01 [label="0", type="EXIT", style=solid];
-        N0A -> N0B [label="0|0", type="NORM"];
-        N0B -> N0D [label="0|0", type="NORM"];
-        N0C -> N0D [label="0|1", type="NORM"];
+        N08 [label="3", type="DATA", shape=circle, style=solid, value_type="int", origin=80, span="10:16-10:17", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="3\nmain::node#-1"];
+        N09 [label="CAST", type="CAST", shape=diamond, style=solid, value_type="int?", origin=81, span="10:16-10:25", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="CAST\nmain::node#1"];
+        N0A [label="4", type="DATA", shape=circle, style=solid, value_type="int", origin=82, span="10:27-10:28", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="4\nmain::node#-2"];
+        N0B [label="pick", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="int", origin=83, span="10:11-10:29", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="pick\nmain::node#2"];
+        N0B -> O01 [label="0", type="EXIT", style=solid];
+        N08 -> N09 [label="0|0", type="NORM"];
+        N09 -> N0B [label="0|0", type="NORM"];
+        N0A -> N0B [label="0|1", type="NORM"];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N0E [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
-    N0F [label="CALL", type="CALL", shape=diamond, style=solid, tooltip="CALL\n__root__::node#1"];
-    N0F -> O00 [label="0", type="EXIT", style=solid];
-    N0E -> N0F [label="0|0", type="WITH", style=dashed];
+    N0C [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int", origin=78, span="9:0-11:1", srcfile="/work/lanes/gs-wide/test/cases/compile/tagged/graph_null_then.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
+    N0D [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#1"];
+    N0D -> O00 [label="0", type="EXIT", style=solid];
+    N0C -> N0D [label="0|0", type="WITH", style=dashed];
 }

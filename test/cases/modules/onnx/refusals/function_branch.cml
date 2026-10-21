@@ -1,9 +1,9 @@
 /**
  * A branch on a condition that depends on the model input whose arms yield functions: `build`
- * returns either a function of its own or one made from the function the next call returns,
- * which that function calls twice (so this is not the recursion with one recursive call that
- * is exported as loops). A model has no function values: the export is refused at the branch
- * (line 14), saying so. It used to stop with "the dtype of 'arm_out' is not known statically".
+ * returns either a function that adds `h` or one that multiplies by it. A model has no function
+ * values: the export is refused at the branch (line 14), saying so. It used to stop with "the
+ * dtype of 'arm_out' is not known statically".
+ *
  */
 module function_branch
 
@@ -11,7 +11,7 @@ import { Tensor, reshape, sum } from tensor
 import { export_model } from onnx
 
 func build(h: Tensor): (x: Tensor) => Tensor {
-    return if sum(h * h) < 1.0 then (x: Tensor): Tensor => x + h else twice(h, build(h * 0.5))
+    return if sum(h * h) < 1.0 then (x: Tensor): Tensor => x + h else (x: Tensor): Tensor => x * h
 }
 
 func twice(h: Tensor, g: (x: Tensor) => Tensor): (x: Tensor) => Tensor {

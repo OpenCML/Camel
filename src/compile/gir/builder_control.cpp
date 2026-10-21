@@ -29,6 +29,7 @@
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/struct.h"
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
@@ -44,6 +45,7 @@
 
 #include <atomic>
 #include <cctype>
+#include <numeric>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -172,8 +174,8 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
         return true;
     }
     if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
-        const auto *structType = tt::as_ptr<StructType>(type);
-        const auto object      = std::dynamic_pointer_cast<StructData>(data);
+        auto *structType   = tt::as_ptr<StructType>(type);
+        const auto object  = std::dynamic_pointer_cast<StructData>(data);
         if (structType == nullptr || object == nullptr ||
             object->raw().size() != structType->size()) {
             return false;
@@ -222,9 +224,78 @@ bool elementEntersIn(
 
 } // namespace
 
+node_handle_t Builder::convertStructValue(
+    node_handle_t value, StructType *target, const GCT::node_ptr_t &origin) {
+    Type *sourceType = valueTypeOf(nodeTypeOf(value));
+    if (target == nullptr || sourceType == nullptr || sourceType->code() != TypeCode::Struct ||
+        target->size() == 0) {
+        return nullptr;
+    }
+    auto *source = tt::as_ptr<StructType>(sourceType);
+    if (source == nullptr || source->size() != target->size()) {
+        return nullptr;
+    }
+    // The fields must be the same ones, by name, before anything is copied.
+    for (size_t i = 0; i < target->size(); ++i) {
+        if (!source->findField(target->fieldName(i)).has_value()) {
+            return nullptr;
+        }
+    }
+    // A struct of `target`'s shape, its slots filled from the source's fields in the target's
+    // order: the copy is what makes `{ y: 1, x: 2 }` a `Point` (fields by name, declaration
+    // order) and what converts between two named types that write their fields in another
+    // order (design principles 5.2).
+    std::vector<size_t> slots(target->size());
+    std::iota(slots.begin(), slots.end(), 0);
+    const slot_t empty = camel::core::rtdata::toSlot(
+        ::Struct::create(target->size(), camel::core::mm::autoSpace()));
+    auto &draft       = currGraph_->draft();
+    node_handle_t base = draft.ref(draft.materializeStaticValue(empty, target));
+    node_handle_t out  = currGraph_->addFillNode(
+        target, runtime::makeFillPayload(runtime::GCFillKind::Struct, slots));
+    linkNodes(LinkType::Norm, base, out);
+    for (size_t i = 0; i < target->size(); ++i) {
+        const std::string name(target->fieldName(i));
+        const size_t from      = *source->findField(name);
+        Type *sourceFieldType  = source->typeAt(from);
+        Type *targetFieldType  = target->typeAt(i);
+        node_handle_t access =
+            currGraph_->addAccsNode(sourceFieldType, std::string(source->fieldName(from)));
+        linkNodes(LinkType::Norm, valueOf(value), access);
+        node_handle_t field = access;
+        if (targetFieldType != nullptr && sourceFieldType != nullptr &&
+            !targetFieldType->equals(sourceFieldType)) {
+            if (targetFieldType->code() == TypeCode::Struct &&
+                sourceFieldType->code() == TypeCode::Struct) {
+                if (node_handle_t inner = convertStructValue(
+                        access, tt::as_ptr<StructType>(targetFieldType), origin)) {
+                    field = inner;
+                } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
+                    return nullptr;
+                }
+            } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
+                // A field of another type (a refined module type is assignable; a number of
+                // another type is not).
+                return nullptr;
+            }
+        }
+        linkNodes(LinkType::With, valueOf(field), out);
+    }
+    registerNodeOrigin(context_, out, origin, "gir.cast.struct");
+    return out;
+}
+
 node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
     Type *source = valueTypeOf(nodeTypeOf(node));
     if (target->assignableFrom(source)) {
+        // An unnamed struct value whose fields are those of a named type, in the declaration's
+        // order, is a value of that type from here on: the conversion moves nothing (the
+        // fields keep their slots), and the value is used as the type it enters (design
+        // principles 5.2).
+        if (target->code() == TypeCode::Struct && !target->equals(source) &&
+            target->castSafetyFrom(source) == CastSafety::Safe) {
+            return castNodeTo(valueOf(node), target, origin);
+        }
         return node;
     }
     // A literal takes the type of its context (design principles 5.1): `let x: float = 1`,
@@ -241,6 +312,21 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     // element that the type cannot hold is reported here.
     if (node_handle_t typed = compositeLiteralInType(node, target, origin); typed != nullptr) {
         return typed;
+    }
+    // A value that already has an unnamed struct type enters a named type whose fields are
+    // its fields, by name, even when they are written in another order: the value is copied
+    // field by field (design principles 5.2). Between two named types nothing enters by
+    // itself: an `as` is required, and that is the explicit path (visitCastNode).
+    if (target->code() == TypeCode::Struct && source->code() == TypeCode::Struct) {
+        auto *targetStruct = tt::as_ptr<StructType>(target);
+        auto *sourceStruct = tt::as_ptr<StructType>(source);
+        if (targetStruct != nullptr && sourceStruct != nullptr && targetStruct->named() &&
+            !sourceStruct->named()) {
+            if (node_handle_t copied = convertStructValue(node, targetStruct, origin);
+                copied != nullptr) {
+                return copied;
+            }
+        }
     }
     if (!entersImplicitly(target, source)) {
         return nullptr;
@@ -356,8 +442,8 @@ data_ptr_t Builder::compositeDataInType(
         return factory.build();
     }
     if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
-        const auto *structType = tt::as_ptr<StructType>(type);
-        const auto object      = std::dynamic_pointer_cast<StructData>(data);
+        auto *structType   = tt::as_ptr<StructType>(type);
+        const auto object  = std::dynamic_pointer_cast<StructData>(data);
         if (structType == nullptr || object == nullptr ||
             object->raw().size() != structType->size()) {
             return nullptr;
@@ -381,7 +467,10 @@ data_ptr_t Builder::compositeDataInType(
             }
             factory.add(name, converted);
         }
-        return factory.build();
+        // The literal is a value of the type the position gives it: a named struct type stays
+        // named, and its fields are in the declaration's order however they were written
+        // (design principles 5.2).
+        return factory.buildAs(structType);
     }
     return nullptr;
 }
@@ -1783,6 +1872,19 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     }
     // A function that declares T? or T! returns its plain value boxed (see adaptExitValue).
     resNode                    = adaptExitValue(gct, resNode);
+    // The value a `return` gives is a position with an expected type too (design principles
+    // 5.1): a struct whose fields are the declared type's fields, by name but in another
+    // order, is copied into the declared type rather than refused. Between two named types
+    // this does not apply: the value must already be of the declared type (an `as` is written
+    // where it is made).
+    if (Type *expected = expectedExitTypeHere(); expected != nullptr &&
+                                                  expected->code() == TypeCode::Struct &&
+                                                  nodeTypeOf(resNode)->code() == TypeCode::Struct) {
+        if (node_handle_t converted = coerceTo(resNode, expected, gct->at(0));
+            converted != nullptr) {
+            resNode = converted;
+        }
+    }
     node_handle_t outputAnchor = resNode;
     node_vec_t pendingCtrlInputs;
     if (auto modifier = modifierOf(resNode); modifier.has_value()) {

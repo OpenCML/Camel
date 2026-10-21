@@ -561,10 +561,12 @@ c6421a2198b98f5b ok test/cases/compile/literals/context_pattern_out_of_range.cml
 ad0e35bb1aeff8d4 ok test/cases/compile/literals/context_struct_argument_out_of_range.cml
 d013456d6a28093c ok test/cases/compile/literals/context_struct_argument_shape.cml
 cf1e6710f8973e89 ok test/cases/compile/literals/context_struct_field_variable.cml
+993641363bf86021 ok test/cases/compile/literals/context_text_float_out_of_range.cml
+ae931030cc897557 ok test/cases/compile/literals/context_text_out_of_range.cml
 ca826df00abed749 ok test/cases/compile/literals/context_truncated.cml
 2a837f510ae8fd4a ok test/cases/compile/literals/context_variable_declaration.cml
 769a28790e98cbe4 ok test/cases/compile/literals/context_variable_operator.cml
-d4fc165729b42d25 ok test/cases/compile/literals/convert_fits.cml
+19e4153f85d29ce0 ok test/cases/compile/literals/convert_fits.cml
 cccd95ec8b3cccd3 ok test/cases/compile/literals/convert_float_to_int.cml
 3cf27dd300ecdf3a ok test/cases/compile/literals/convert_int_to_i32.cml
 d2e5ff1f70fd2565 ok test/cases/compile/literals/convert_text_to_float.cml
@@ -885,11 +887,14 @@ fb7ff8093f019a8a ok test/cases/consistency/faults/fault_in_unused.cml
 36c66fe3ab4b8053 ok test/cases/consistency/faults/fault_in_wait.cml
 fd40e65ea8959ec8 ok test/cases/consistency/faults/faults_in_map_many.cml
 7ca1c5a1460f937a ok test/cases/consistency/faults/float_nan_to_int.cml
+ef1fdea3515d336e ok test/cases/consistency/faults/float_text_overflow.cml
+1cdd22e03b662b47 ok test/cases/consistency/faults/float_text_underflow.cml
 d2db18859240aedf ok test/cases/consistency/faults/float_to_int_range.cml
 e9bbda33bea885c9 ok test/cases/consistency/faults/head_empty.cml
 e981db18c1d167e9 ok test/cases/consistency/faults/i32_out_of_range.cml
 51c2eb1ff9eaa7e2 ok test/cases/consistency/faults/index_out_of_range.cml
 b86420c372330a2c ok test/cases/consistency/faults/int_text_blank.cml
+fefc25b599777fd6 ok test/cases/consistency/faults/int_text_out_of_range.cml
 b96dcb7f042fd649 ok test/cases/consistency/faults/int_text_trailing.cml
 133124f87792556c ok test/cases/consistency/faults/main_returns_code.cml
 958d0b1bf53b9cab ok test/cases/consistency/faults/mod_zero_in_function.cml
@@ -926,7 +931,7 @@ d4494a3a1dc2f143 ok test/cases/consistency/if_without_else/statement.cml
 ade606a8ca7efaf8 ok test/cases/consistency/limits/depth_isolated.cml
 8d3a48a31570143b ok test/cases/consistency/limits/depth_map.cml
 f7f7aac9d4b95e96 ok test/cases/consistency/limits/depth_value.cml
-d2c992afbc6bd1ab ok test/cases/consistency/limits/macro_depth.cml
+9fd8e58dc2322090 ok test/cases/consistency/limits/macro_depth.cml
 0aa895cca196c8a9 ok test/cases/consistency/limits/tail_under_limit.cml
 dca5f75663f160b8 ok test/cases/consistency/logical/graph.cml
 1b7816da9b4c105a ok test/cases/consistency/logical/graph_if.cml
@@ -1041,7 +1046,7 @@ c542e3cd044fdfd6 ok test/cases/consistency/values/float_to_int.cml
 acda34b5c73604e0 ok test/cases/consistency/values/max_min_special.cml
 ef899bf4bfe53478 ok test/cases/consistency/values/non_tail_deep.cml
 2c0861592fa5c206 ok test/cases/consistency/values/number_fit.cml
-5c7c65fc46a11018 ok test/cases/consistency/values/number_text.cml
+ac693c003b23e670 ok test/cases/consistency/values/number_text.cml
 3540db1f1babe41c ok test/cases/consistency/values/slice_take_drop.cml
 834dd3ff47821b0b ok test/cases/consistency/values/strings.cml
 4d9dbde11aa140e4 ok test/cases/consistency/values/structs_tuples.cml
@@ -1051,7 +1056,7 @@ e1e169ed073c55e5 ok test/cases/consistency/values/tail_deep.cml
 47f632254922b577 ok test/cases/consistency/values/tail_mutual.cml
 578df1b0ce5442d6 ok test/cases/consistency/values/wait_order.cml
 502d2d473cc4a4e9 ok test/cases/consistency/values/with_params.cml
-7a250294764c09f9 ok test/cases/definitions/bad_definitions.cml
+06c3b5c40ca60348 ok test/cases/definitions/bad_definitions.cml
 af3630ffac4ff23b ok test/cases/definitions/broken_definitions.cml
 e74173f109a285b1 ok test/cases/definitions/check.cml
 b6fd085d2a312641 ok test/cases/definitions/grad.cml
@@ -1080,6 +1085,7 @@ fb0cb297c3edc8be ok test/cases/feat/mm/gc/gc_macro_constants.cml
 bff6d6086a0c443f ok test/cases/feat/mm/gc/gc_prl_blocked_worker.cml
 a23ef073b2e65d89 ok test/cases/feat/mm/gc/gc_prl_scheduler.cml
 92d9356278f9e266 ok test/cases/feat/mm/gc/gc_soak.cml
+a2c0dbfba95821fa ok test/cases/feat/mm/gc/graph_space_grad.cml
 7ee6603fba40cc5e ok test/cases/format/fstring.cml
 7a0f8071c0519b31 ok test/cases/format/match_and_type_arguments.cml
 142d55bf675322e8 ok test/cases/format/minus.cml
@@ -1114,7 +1120,7 @@ c77183d971b0c498 ok test/cases/linear/byref/path_assigned_allocs.cml
 33440f32bb34f6e2 ok test/cases/linear/byref/var_function_as_value_function.cml
 9cf7e573f3d55d53 ok test/cases/linear/byref/var_function_to_operator.cml
 5260ee75ecb8de1c ok test/cases/linear/byref/var_param_jit.cml
-cb782b83d68ab99a ok test/cases/linear/byref/var_param_reference.cml
+070636bae9357e08 ok test/cases/linear/byref/var_param_reference.cml
 d0cced69016adf2d ok test/cases/linear/byref/var_read_before_callee_write.cml
 77107e51189384d1 ok test/cases/linear/byref/var_rule_subpasses.cml
 f301a25e716f1753 ok test/cases/linear/byref/var_writes_through_recursion.cml
@@ -1391,7 +1397,7 @@ ecc2e2f433981665 ok test/cases/modules/onnx/refusals/bad_output.cml
 187395bbda449503 ok test/cases/modules/onnx/refusals/bad_path.cml
 d43015f57a9ea7f7 ok test/cases/modules/onnx/refusals/bad_target.cml
 2179cd1655ad8207 ok test/cases/modules/onnx/refusals/example_mismatch.cml
-e0c0f0b220a84bcd ok test/cases/modules/onnx/refusals/function_branch.cml
+0839b5dacfbb3209 ok test/cases/modules/onnx/refusals/function_branch.cml
 2a8ef24aea1e20c4 ok test/cases/modules/onnx/refusals/growth_budget.cml
 a8fa3e15cf5ea732 ok test/cases/modules/onnx/refusals/main_reaches_loop.cml
 85d036a6ff79405b ok test/cases/modules/onnx/refusals/no_request.cml
@@ -1399,7 +1405,7 @@ a8fa3e15cf5ea732 ok test/cases/modules/onnx/refusals/main_reaches_loop.cml
 686aa2ae64163e42 ok test/cases/modules/onnx/refusals/request_in_arm_and_target.cml
 5aa5b6ad2d75e52f ok test/cases/modules/onnx/refusals/tuple_example.cml
 756d4a8423bd57bd ok test/cases/modules/onnx/refusals/two_calls.cml
-85f86c726346934f ok test/cases/modules/onnx/refusals/unended_unrolling.cml
+38f9563c763afb91 ok test/cases/modules/onnx/refusals/unended_unrolling.cml
 d91092e026f0f841 ok test/cases/modules/onnx/refusals/var_arm.cml
 3aae962ef103af94 ok test/cases/modules/onnx/refusals/var_outer.cml
 d02bf5329e412d30 ok test/cases/modules/onnx/refusals/var_param.cml
@@ -1467,7 +1473,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-c9a37b592a0f2f68 ok test/cases/modules/stdlib/registry_all.cml
+3f28469678d9fa41 ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 bc5627b4036b601d ok test/cases/modules/stdlib/str_bytes.cml
@@ -1832,7 +1838,7 @@ b4c8a24177615791 ok test/cases/tools/lsp/fixtures/main.cml
 28f37dfaef9070c7 ok test/cases/tools/lsp/fixtures/shapes.cml
 31b32eb1342bb683 ok test/cases/trans/jgir_duplicate.cml
 4a6ec3390176ac3a ok test/cases/trans/library_module.cml
-f3875ddc8d0d6b42 ok test/cases/trans/port_fill_metadata.cml
+200e7c8118ba5688 ok test/cases/trans/port_fill_metadata.cml
 060c9e37e16da8fb ok test/cases/trans/annotated/boundaries.cml
 197f06d3dac30f20 ok test/cases/trans/cpp/complex_scalar.cml
 1235cae4c47855a2 ok test/cases/trans/cpp/exec_mod_scalar.cml
@@ -1863,7 +1869,7 @@ e62998983c4b023c ok test/cases/trans/macro/chain.cml
 6660d169f5b1237b ok test/cases/trans/macro/closure_isolation.cml
 2bc7122e6095dbe5 ok test/cases/trans/macro/closure_runtime_call.cml
 7b7ee644377c2536 ok test/cases/trans/macro/deep_chain.cml
-7f4e61136192f7ad ok test/cases/trans/macro/failed_depth.cml
+33064237557429cb ok test/cases/trans/macro/failed_depth.cml
 47ce403f74ee1534 ok test/cases/trans/macro/failed_evaluation.cml
 3754c14ae5d51155 ok test/cases/trans/macro/failed_no_rule.cml
 b1027dce101308d5 ok test/cases/trans/macro/failed_unreached.cml

@@ -1046,7 +1046,7 @@ namespace camel::passes::opt {
 
 camel::runtime::DraftInlineResult inlineCallInOrder(
     camel::runtime::RuntimeGraphDraftSession &session, camel::runtime::GraphDraft &draft,
-    gc_node_ref_t funcNodeId) {
+    gc_node_ref_t funcNodeId, bool asArm) {
     const auto *header = draft.header(funcNodeId);
     if (!header || header->kind != GCNodeKind::Func) {
         return {};
@@ -1131,7 +1131,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             joinArms.emplace_back(user, std::move(arms));
         }
     }
-    const auto inlineResult = camel::runtime::inlineCallableInDraft(session, draft, funcNodeId);
+    const auto inlineResult = camel::runtime::inlineCallableInDraft(session, draft, funcNodeId, asArm);
     if (!inlineResult) {
         return inlineResult;
     }
@@ -1171,6 +1171,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
                         .dataType     = tailHeader->dataType,
                         .kind         = GCNodeKind::Gate,
                         .runtimeFlags = 0,
+                        .region       = brch != kInvalidNodeRef ? draft.armRegionOf(brch, arm) : 0,
                         .normInputs   = std::span<const gc_node_ref_t>(&tail, 1),
                         .ctrlInputs   = sources,
                     });

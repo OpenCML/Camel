@@ -23,9 +23,11 @@
  * one through a transaction. Every read is pure: a Program is an immutable snapshot.
  */
 
+#include "facts.h"
 #include "handle.h"
 #include "nodekind.h"
 #include "read.h"
+#include "txn.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
@@ -45,8 +47,12 @@ using namespace camel::core::type;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
 using camel::graphmod::nodeKindType;
+using camel::graphmod::factGroups;
+using camel::graphmod::factKernels;
 using camel::graphmod::readGroups;
 using camel::graphmod::readKernels;
+using camel::graphmod::txnGroups;
+using camel::graphmod::txnKernels;
 
 namespace {
 
@@ -99,6 +105,8 @@ class GraphExecutor final : public Executor {
   private:
     static std::unordered_map<std::string, operator_t> kernels() {
         auto out = readKernels();
+        out.insert(txnKernels().begin(), txnKernels().end());
+        out.insert(factKernels().begin(), factKernels().end());
         out.emplace("current", currentKernel);
         out.emplace("eq", eqKernel);
         out.emplace("ne", neKernel);
@@ -115,6 +123,12 @@ class GraphModule final : public BuiltinModule {
         }
         exportType(Reference("NodeKind"), nodeKindType());
         for (const auto &group : readGroups()) {
+            exportEntity(group->name(), group);
+        }
+        for (const auto &group : txnGroups()) {
+            exportEntity(group->name(), group);
+        }
+        for (const auto &group : factGroups()) {
             exportEntity(group->name(), group);
         }
         exportEntity(
@@ -169,6 +183,15 @@ class GraphModule final : public BuiltinModule {
         table.declare("graph", {{"current", true}, {"eq", true}, {"ne", true}, {"id", true}});
         for (const auto &group : readGroups()) {
             table.declare("graph", {{group->name(), true}});
+        }
+        for (const auto &group : factGroups()) {
+            table.declare("graph", {{group->name(), true}});
+        }
+        // A transaction is a state that edits change: none of its operators is pure, except the
+        // two that read a function value.
+        for (const auto &group : txnGroups()) {
+            const bool reads = group->name() == "program_of" || group->name() == "graph_of";
+            table.declare("graph", {{group->name(), reads}});
         }
         loaded_ = true;
         return true;

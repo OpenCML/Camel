@@ -1,3 +1,34 @@
+# A tool that links libcamel is compiled in two steps so that its imports can be read before
+# libcamel links (H36): the sources become an OBJECT library, and the executable is linked from
+# those objects. Compiling a translation unit needs only the headers, so the object library has
+# no dependency on libcamel and the export-list generation can use it.
+#
+#   camel_add_tool_objects(<name>_objects <sources...>)
+#   add_executable(<name> $<TARGET_OBJECTS:<name>_objects>)
+#
+# Registration with camel_register_export_scan_target is what includes the objects in the scan.
+function(camel_add_tool_objects target)
+  add_library(${target} OBJECT ${ARGN})
+  target_compile_features(${target} PRIVATE cxx_std_23)
+  set_target_properties(${target} PROPERTIES
+    CXX_STANDARD 23
+    CXX_STANDARD_REQUIRED ON
+    CXX_EXTENSIONS OFF
+    POSITION_INDEPENDENT_CODE ON
+  )
+  target_libcamel_tool_options(${target})
+  target_link_libraries(${target} PRIVATE camel_options)
+  target_compile_options(${target} PRIVATE
+    $<$<CONFIG:Release>:-O3>
+    $<$<CONFIG:RelWithDebInfo>:-O2>
+    $<$<CONFIG:RelWithDebInfo>:-g3>
+    $<$<CONFIG:RelWithDebInfo>:-fno-PIE>
+    $<$<CONFIG:Debug>:-O0>
+    $<$<CONFIG:Debug>:-g3>
+  )
+  camel_register_export_scan_target(${target})
+endfunction()
+
 # libcamel 工具的通用配置：RPATH、DELAYLOAD、编译选项等
 # 用法：include 后调用 target_link_libcamel_runtime(TARGET) 和/或 target_libcamel_tool_defaults(TARGET)
 

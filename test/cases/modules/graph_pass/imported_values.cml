@@ -1,0 +1,16 @@
+// A pass written in Camel whose module-level values come from a module written in C++: the
+// value used directly (`pi`) and the values computed from it and from an imported function
+// (`half`, `root`). The computed ones are nodes of the library's root graph, so they are
+// computed by running the program the pass runs as (task H37).
+module imported_values
+import { Program } from graph
+import { pi, sqrt } from math
+
+let half = pi / 2.0
+let root = sqrt(16.0)
+
+export func show(p: Program): Program! sync {
+    println(pi)
+    println(half, root)
+    return p
+}

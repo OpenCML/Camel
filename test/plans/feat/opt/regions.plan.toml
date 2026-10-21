@@ -12,13 +12,13 @@ before (no back end reads regions yet).
 
 [[tests]]
 name = "regions.survive_commit"
-desc = "Two nested Block regions with a result and a port survive a commit and a recommit; the program still runs."
+desc = "Two nested Block regions with a result and a port survive a commit and a recommit, along with the two Arm regions the branch of the program has; the program still runs."
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "test::regions", "std::nvm"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
-expect_output_contains = ["REGIONS count=3 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "tensor("]
+expect_output_contains = ["REGIONS count=5 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -30,7 +30,7 @@ case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "test::regions", "std::opt", "std::nvm"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
-expect_output_contains = ["REGIONS count=3", "tensor("]
+expect_output_contains = ["REGIONS count=5", "tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

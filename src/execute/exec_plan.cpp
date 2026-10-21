@@ -120,6 +120,7 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
             ? camel::execute::collectRuntimeTailJoinArmValues(mutableGraph, plan->tailValueRef)
             : std::vector<gc_node_ref_t>{};
 
+    const camel::execute::BranchArmEntries armEntries(graph, plan->topo);
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t ref = plan->topo[idx];
         const GCNode *node      = graph.node(ref);
@@ -131,12 +132,8 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         if (node && node->kind == GCNodeKind::Brch) {
             const size_t armCount = graph.branchArmsOf(ref).size();
             for (size_t arm = 0; arm < armCount; ++arm) {
-                plan->branchArmEntries.push_back(
-                    camel::execute::resolveRuntimeBranchArmEntry(
-                        mutableGraph,
-                        ref,
-                        arm,
-                        plan->topo));
+                plan->branchArmEntries.push_back(armEntries.entry(ref, arm));
+                plan->branchArmTails.push_back(armEntries.tail(ref, arm));
             }
         }
         if (!node || node->kind != GCNodeKind::Func) {

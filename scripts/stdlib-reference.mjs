@@ -67,6 +67,7 @@ const MODULES = [
     { name: 'crypto', title: '`crypto`', kind: 'cpp' },
     { name: 'para', title: '`para`: unordered iteration', kind: 'cpp' },
     { name: 'this', title: '`this`', kind: 'cpp' },
+    { name: 'graph', title: '`graph`: a program as a value', kind: 'cpp' },
 ]
 
 function sourceOf(module) {

@@ -18,7 +18,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const PARSER_FILES = ['parser.cpp', 'parser_expr.cpp', 'parser_type.cpp'].map((f) =>
+const PARSER_FILES = ['parser.cpp', 'parser_expr.cpp', 'parser_type.cpp', 'parser_rule.cpp'].map((f) =>
     path.join(ROOT, 'src', 'parse', 'syntax', f)
 )
 const TOKENS = path.join(ROOT, 'include', 'camel', 'parse', 'syntax', 'token_kinds.def')

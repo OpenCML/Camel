@@ -113,6 +113,7 @@ ensureValueSlot(GraphDraft &draft, camel::core::type::Type *type, gc_slot_idx_t 
 } // namespace
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
+    requireOneWriting("mutablePayloadOf");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot get mutable payload view from a missing draft node.");
@@ -121,6 +122,7 @@ std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
 }
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
+    requireOneWriting("mutablePayloadOf");
     ++mutations_;
     ASSERT(containsNode(draftNode), "Cannot get mutable payload view from a foreign draft node.");
     touchRefs();
@@ -128,6 +130,7 @@ std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
 }
 
 void GraphDraft::retargetOperNode(gc_node_ref_t id, std::string_view uri) {
+    requireOneWriting("retargetOperNode");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(
@@ -361,6 +364,7 @@ gc_node_ref_t GraphDraft::addDrefNode(camel::core::type::Type *type, gc_slot_idx
 }
 
 void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId) {
+    requireOneWriting("appendInput");
     ++mutations_;
     ASSERT(node(userId) != nullptr, "Cannot append input to a missing draft node.");
     ASSERT(node(inputId) != nullptr, "Cannot append a missing input draft node.");
@@ -389,6 +393,7 @@ void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
 }
 
 bool GraphDraft::unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId) {
+    requireOneWriting("unlinkInput");
     ++mutations_;
     DraftNode *draftNode = node(userId);
     ASSERT(draftNode != nullptr, "Cannot unlink input from a missing draft node.");
@@ -421,6 +426,7 @@ bool GraphDraft::unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_r
 
 void GraphDraft::replaceInput(
     DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId, gc_node_ref_t newInputId) {
+    requireOneWriting("replaceInput");
     ++mutations_;
     ASSERT(node(userId) != nullptr, "Cannot replace input on a missing draft node.");
     ASSERT(node(newInputId) != nullptr, "Cannot replace with a missing draft node.");
@@ -447,6 +453,7 @@ void GraphDraft::replaceInput(
 }
 
 void GraphDraft::setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type) {
+    requireOneWriting("setNodeDataType");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set data type on a missing draft node.");
@@ -478,6 +485,7 @@ void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
 }
 
 void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
+    requireOneWriting("rewriteNode");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot rewrite a missing draft node.");
@@ -552,34 +560,40 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
 }
 
 void GraphDraft::appendNormPort(gc_node_ref_t id) {
+    requireOneWriting("appendNormPort");
     ++mutations_;
     ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a norm port.");
     appendUniqueNodeRef(normPorts_, id);
 }
 
 void GraphDraft::appendWithPort(gc_node_ref_t id) {
+    requireOneWriting("appendWithPort");
     ++mutations_;
     ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a with port.");
     appendUniqueNodeRef(withPorts_, id);
 }
 
 void GraphDraft::appendClosureNode(gc_node_ref_t id) {
+    requireOneWriting("appendClosureNode");
     ++mutations_;
     ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a closure node.");
     appendUniqueNodeRef(closureNodes_, id);
 }
 
 void GraphDraft::removeNormPort(gc_node_ref_t id) {
+    requireOneWriting("removeNormPort");
     ++mutations_;
     std::erase(normPorts_, id);
 }
 
 void GraphDraft::removeWithPort(gc_node_ref_t id) {
+    requireOneWriting("removeWithPort");
     ++mutations_;
     std::erase(withPorts_, id);
 }
 
 void GraphDraft::removeClosureNode(gc_node_ref_t id) {
+    requireOneWriting("removeClosureNode");
     ++mutations_;
     std::erase(closureNodes_, id);
 }

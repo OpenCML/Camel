@@ -105,6 +105,9 @@ class ExecPlan {
     /// the arm has nothing to execute.
     std::vector<uint32_t> branchArmEntryOffsets;
     std::vector<gc_node_ref_t> branchArmEntries;
+    /// The same for where the arm ends: the last node of the arm in `topo`; the JOIN when the arm
+    /// has nothing to execute.
+    std::vector<gc_node_ref_t> branchArmTails;
     /// The node whose value is the result of the graph (see resolveRuntimeTailValueRef); invalid
     /// when the graph returns nothing or the value is not a slot.
     gc_node_ref_t tailValueRef = kInvalidNodeRef;
@@ -160,6 +163,15 @@ class ExecPlan {
     std::span<const gc_node_ref_t> branchArmEntriesOf(size_t topoIndex) const {
         return {
             branchArmEntries.data() + branchArmEntryOffsets[topoIndex],
+            branchArmEntryOffsets[topoIndex + 1] - branchArmEntryOffsets[topoIndex]};
+    }
+    /// Where each arm of the BRCH `brch` ends (see branchArmTails).
+    std::span<const gc_node_ref_t> branchArmTailsOfNode(gc_node_ref_t brch) const {
+        return branchArmTailsOf(topoIndexByRef[brch]);
+    }
+    std::span<const gc_node_ref_t> branchArmTailsOf(size_t topoIndex) const {
+        return {
+            branchArmTails.data() + branchArmEntryOffsets[topoIndex],
             branchArmEntryOffsets[topoIndex + 1] - branchArmEntryOffsets[topoIndex]};
     }
 

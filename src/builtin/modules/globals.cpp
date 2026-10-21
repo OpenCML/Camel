@@ -27,6 +27,7 @@
 #include "builtin/operators/tagged.h"
 #include "builtin/operators/set_value.h"
 #include "camel/core/context/context.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 
@@ -487,7 +488,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (!arrType->elemType()->equals(norm[1]))
+                            if (!arrType->elemType()->assignableFrom(norm[1]))
                                 return nullopt;
                             return arrType;
                         }),
@@ -1815,7 +1816,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             const auto &eleType = arrType->elemType();
-                            if (eleType != Type::Void() && !eleType->equals(with[0]))
+                            // A value of the element type, or an unnamed struct value whose
+                            // fields are its fields in the same order (design principles 5.2):
+                            // the append writes the slot as it is, and the layout agrees.
+                            if (eleType != Type::Void() && !eleType->assignableFrom(with[0]))
                                 return nullopt;
                             return arrType;
                         }),
@@ -1859,7 +1863,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
                             const auto &eleType = arrType->elemType();
-                            if (eleType != Type::Void() && !eleType->equals(with[0]))
+                            if (eleType != Type::Void() && !eleType->assignableFrom(with[0]))
                                 return nullopt;
                             return arrType;
                         }),
@@ -1900,7 +1904,14 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             if (norm[0]->code() != TypeCode::Array)
                                 return nullopt;
                             const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (!arrType->elemType()->equals(with[0]))
+                            Type *elem          = arrType->elemType();
+                            // The value is a value of the element type (design principles 5.2):
+                            // an unnamed struct value whose fields are the element type's
+                            // fields, in the same order, is read as that type without moving
+                            // anything. A value of another named type is not (an `as` says it);
+                            // nor is one whose fields are written in another order, which the
+                            // call would have to copy and this signature cannot ask for.
+                            if (!elem->assignableFrom(with[0]))
                                 return nullopt;
                             return Type::Bool();
                         }),
@@ -2014,13 +2025,20 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             const auto &funcType = tt::as_ptr<FunctionType>(with[0]);
                             if (funcType->normTypesCount() < 2)
                                 return nullopt;
-                            if (!funcType->normTypeAt(1)->equals(arrType->elemType()))
+                            // The accumulator's parameter type is the result type, and the
+                            // elements, the initial value and the callback's result must all be
+                            // values of it. An unnamed struct value whose fields are that
+                            // type's fields in the same order is one (design principles 5.2);
+                            // the call converts it, as `enterStructParameters` does for the
+                            // initial value.
+                            Type *acc = funcType->normTypeAt(0);
+                            if (!funcType->normTypeAt(1)->assignableFrom(arrType->elemType()))
                                 return nullopt;
-                            if (!funcType->normTypeAt(0)->equals(with[1]))
+                            if (!acc->assignableFrom(with[1]))
                                 return nullopt;
-                            if (!funcType->exitType()->equals(with[1]))
+                            if (!acc->assignableFrom(funcType->exitType()))
                                 return nullopt;
-                            return with[1];
+                            return acc;
                         }),
                 },
             }),

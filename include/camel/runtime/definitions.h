@@ -115,6 +115,24 @@ class DefinitionStore {
     /// asking again gives the same answer without compiling again.
     const DefinitionGraph *definitionOf(camel::core::OperId oper, std::string *problem = nullptr);
 
+    /// A function of a library, encoded into a program of its own (kept for as long as the
+    /// context): for a native caller that runs a function written in Camel. `graph` is the root
+    /// graph of that program, whose entry is the function: the module-level values of the
+    /// library are computed before the function runs (design principles 10.1). Its signature is
+    /// the function's.
+    struct LibraryFunction {
+        const Program *program = nullptr;
+        GCGraph *graph         = nullptr;
+    };
+    /// The function `function` exported by the library module `module`, compiled and encoded
+    /// the first time it is asked for. It must be one non-generic function. Returns nothing
+    /// when it cannot be had, and then `problem` says why; the answer is remembered. `absent`
+    /// tells a library that is not there (no such module written in Camel, or it exports no
+    /// such function) from one that is there and refused.
+    std::optional<LibraryFunction> libraryFunction(
+        const std::string &module, const std::string &function, std::string &problem,
+        bool &absent);
+
   private:
     struct Entry {
         /// The key of the declaration it was built for (nullopt: the operator had none).
@@ -137,14 +155,27 @@ class DefinitionStore {
     /// The operators from `oper` back to `oper` through the definitions they use, `oper`
     /// first and last; empty when there is no such cycle.
     std::vector<camel::core::OperId> cycleThrough(camel::core::OperId oper);
-    /// The library module `name`, compiled; nullptr with `problem` set when it cannot be.
+    /// The library module `name`, imported and compiled as a library; nullptr with `problem` set
+    /// when it cannot be.
     std::shared_ptr<camel::core::module::UserDefinedModule>
     library(const std::string &name, std::string &problem);
+    /// The library module `name`, imported only: no compile of its own. What a pass written in
+    /// Camel needs before it is built as a program of its own (compileAsProgram).
+    std::shared_ptr<camel::core::module::UserDefinedModule>
+    importLibrary(const std::string &name, std::string &problem);
 
     camel::core::context::Context &context_;
     std::recursive_mutex mutex_;
     std::unordered_map<camel::core::OperId, Entry> entries_;
     std::map<std::string, std::shared_ptr<camel::core::module::UserDefinedModule>> libraries_;
+    /// The libraries that are not there: no such module, or not written in Camel.
+    std::set<std::string> absentLibraries_;
+    struct FunctionEntry {
+        std::optional<LibraryFunction> found;
+        std::string problem;
+        bool absent = false;
+    };
+    std::map<std::string, FunctionEntry> functions_;
 };
 
 struct ExpandOptions {

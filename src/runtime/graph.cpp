@@ -144,6 +144,7 @@ struct GraphArenaLayout {
     size_t chunkDirBytes    = 0; // the directory of node chunks
     size_t regionBytes      = 0; // the region table
     size_t regionPortBytes  = 0; // the form ports of the regions
+    size_t writingBytes     = 0; // the equivalences between nodes
     size_t normPortBytes    = 0;
     size_t withPortBytes    = 0;
     size_t closureBytes     = 0;
@@ -178,6 +179,9 @@ GraphArenaLayout planGraphArenaLayout(
         .regionPortBytes = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.regionPortCount),
             alignof(gc_node_ref_t)),
+        .writingBytes = camel::core::mm::alignUp(
+            bytesForArray<WritingUnion>(payload.writingCount),
+            alignof(WritingUnion)),
         .normPortBytes = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.normPortCount),
             alignof(gc_node_ref_t)),
@@ -193,7 +197,7 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
+        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.writingBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
         layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
@@ -264,8 +268,18 @@ void validateRuntimeRegions(const GCGraph *graph) {
         if (region.kind == GCRegionKind::Dead) {
             continue;
         }
-        if (region.kind == GCRegionKind::Root || region.parent >= r) {
-            bad("with a parent that does not come before it", r);
+        if (region.kind == GCRegionKind::Root || region.parent >= count) {
+            bad("with a parent that is not a region", r);
+        }
+        // The parents lead to the body, without a cycle.
+        {
+            uint32_t up = r;
+            for (uint32_t hops = 0; up != 0; ++hops) {
+                if (hops > count) {
+                    bad("that is in a cycle of regions", r);
+                }
+                up = graph->region(up)->parent;
+            }
         }
         if (!inGraph(region.owner) || !inGraph(region.result) || !inGraph(region.callSite)) {
             bad("that names a node the graph does not have", r);
@@ -742,6 +756,7 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
             [&](const auto &planned) { return !planned.dead && draft.nodeRegion(planned.draftId) != 0; }),
         .regionCount     = static_cast<gc_cnt_t>(draft.regionCount()),
         .regionPortCount = static_cast<gc_cnt_t>(draft.regionPortCount()),
+        .writingCount    = static_cast<gc_cnt_t>(draft.writings().size()),
         .base = draft.baseGraph(),
     };
 }
@@ -967,6 +982,16 @@ void emitDraftPayload(
     for (uint32_t i = 0; i < draft.regionPortCount(); ++i) {
         payload.regionPorts[i] = mapRegionNode(draft.regionPort(i));
     }
+    // The equivalences name nodes by the numbers the nodes have in this graph.
+    for (size_t i = 0; i < draft.writings().size(); ++i) {
+        WritingUnion entry = draft.writings()[i];
+        entry.a            = mapRegionNode(entry.a);
+        entry.b            = mapRegionNode(entry.b);
+        ASSERT(
+            entry.a != kInvalidNodeRef && entry.b != kInvalidNodeRef,
+            "An equivalence names a node the graph does not have.");
+        payload.writings[i] = entry;
+    }
 
     // A graph without an entry starts at its first node.
     const auto firstNode = std::find_if(
@@ -1057,6 +1082,8 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     payload.regionCount    = shape.regionCount;
     payload.regionPorts    = arenaAllocArray<gc_node_ref_t>(arena, shape.regionPortCount);
     payload.regionPortCount = shape.regionPortCount;
+    payload.writings        = arenaAllocArray<WritingUnion>(arena, shape.writingCount);
+    payload.writingCount    = shape.writingCount;
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure          = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
@@ -1094,6 +1121,8 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload, PayloadS
         .regionPorts      = payload.regionPorts,
         .regionCount      = payload.regionCount,
         .regionPortCount  = payload.regionPortCount,
+        .writings         = payload.writings,
+        .writingCount     = payload.writingCount,
         .inputs           = staging.inputs.data(),
         .payload          = staging.payload.data(),
         .normPorts        = payload.normPorts,
@@ -1510,7 +1539,11 @@ GCGraph::GCGraph(
     camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
     GraphId outerGraph, GraphId *refs, uint8_t *refRoles, gc_cnt_t refCount,
     const GCGraphNativePayload &payload, ::Tuple *staticArea)
-    : id_(id), typeSpecializationRoot_(derivation.typeSpecializationRoot), flags_(derivation.flags),
+    : id_(id), typeSpecializationRoot_(derivation.typeSpecializationRoot),
+      flags_(
+          static_cast<uint8_t>(
+              (derivation.flags & ~kGraphFlagHasWritings) |
+              (payload.writingCount != 0 ? kGraphFlagHasWritings : 0))),
       debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraphId_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),
@@ -1867,6 +1900,11 @@ const GCUseIndex &GCGraph::uses() const {
 const ExecPlan &GCGraph::execPlan() const {
     if (ExecPlan *known = execPlan_.load(std::memory_order_acquire)) {
         return *known;
+    }
+    if (!executable()) [[unlikely]] {
+        throw std::logic_error(
+            "Graph '" + name() + "' has values with several writings: it has no execution plan "
+            "until they are extracted.");
     }
     ExecPlan *built    = buildExecPlan(*this).release();
     ExecPlan *expected = nullptr;

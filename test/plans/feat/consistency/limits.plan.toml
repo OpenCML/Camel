@@ -76,9 +76,9 @@ expect_stdout_starts_with = "start\n[98, 3, 1]\ndone\n"
 
 [[tests]]
 name = "limit.map.exceeds"
-desc = "Limit 100, recursion inside a map element: depth(99) stops with the same diagnostic. The count follows the element onto the thread that runs it under std::prl."
+desc = "Limit 100, recursion inside a map element: depth(130) stops with the same diagnostic. The count follows the element onto the thread that runs it under std::prl."
 case = "../../../cases/consistency/limits/depth_map.cml"
-envs = ["N=99"]
+envs = ["N=130"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_diagnostic_line = 10
@@ -163,10 +163,10 @@ expect_exit = 0
 
 [[tests]]
 name = "limit.default.map_exceeded"
-desc = "depth(999) inside a map element stops with the diagnostic on all four, std::prl included."
+desc = "depth(1300) inside a map element stops with the diagnostic on all four, std::prl included."
 case = "../../../cases/consistency/limits/depth_map.cml"
 args = ["${case}", "${backend}"]
-envs = ["N=999"]
+envs = ["N=1300"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::MaxRecursionDepthExceeded"
 expect_output_contains = ["Maximum recursion depth (1000) exceeded"]
@@ -260,7 +260,7 @@ expect_output_not_contains = ["start"]
 
 [[tests]]
 name = "limit.macro.default"
-desc = "count(40) needs more nested calls than the evaluator's default limit of 64 (two frames a level): std::macro fails the call, naming the limit and how to raise it."
+desc = "count(100) needs more nested calls than the evaluator's default limit of 64 (one frame a level): std::macro fails the call, naming the limit and how to raise it."
 backends = false
 case = "../../../cases/consistency/limits/macro_depth.cml"
 args = ["${case}", "std::macro", "std::nvm"]
@@ -274,7 +274,7 @@ desc = "With --max-macro-depth 200 the call is evaluated ahead of time; the prog
 case = "../../../cases/consistency/limits/macro_depth.cml"
 args = ["--max-macro-depth", "200", "--max-recursion-depth", "4", "${case}", "std::macro", "${backend}"]
 expect_exit = 0
-expect_stdout_starts_with = "40\n"
+expect_stdout_starts_with = "100\n"
 
 [[tests]]
 name = "limit.macro.environment"
@@ -283,7 +283,7 @@ case = "../../../cases/consistency/limits/macro_depth.cml"
 args = ["--max-recursion-depth", "4", "${case}", "std::macro", "std::fvm"]
 envs = ["CAMEL_MAX_MACRO_DEPTH=200"]
 expect_exit = 0
-expect_stdout_starts_with = "40\n"
+expect_stdout_starts_with = "100\n"
 
 [[tests]]
 name = "limit.macro.option.invalid"

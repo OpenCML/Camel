@@ -50,6 +50,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
+| [graph](#graph) | `import { ... } from graph` | C++ | 37 |
 
 <a id="built-in-functions"></a>
 
@@ -3014,3 +3015,424 @@ The Zen of Camel, the text of the file ZEN.
 
 - Pure.
 - Example: `println(zen())`
+
+<a id="graph"></a>
+
+## `graph`: a program as a value
+
+### The program
+
+#### `current`
+
+```camel
+current: () => Program
+```
+
+The Program the running program was compiled to: an immutable snapshot, whose graphs a pass reads.
+
+- Pure.
+- Example: `graphs(current())`
+
+#### `graphs`
+
+```camel
+graphs: (p: Program) => Graph[]
+```
+
+Every graph of the program, in the order of their ids.
+
+- Pure.
+- Example: `len(graphs(current()))`
+
+#### `root`
+
+```camel
+root: (p: Program) => Graph
+```
+
+The entry graph of the program.
+
+- Pure.
+- Example: `name(root(current()))`
+
+#### `name`
+
+```camel
+name: (g: Graph) => string
+```
+
+The name of the graph.
+
+- Pure.
+- Example: `name(root(current()))` gives `'__root__'`
+
+#### `nodes`
+
+```camel
+nodes: (g: Graph) => Node[]
+```
+
+The nodes of the graph in NodeId order; the places of removed nodes are skipped.
+
+- Pure.
+- Example: `nodes(root(current()))`
+
+### Reading nodes
+
+#### `inputs`
+
+```camel
+inputs: (n: Node) => Node[]
+```
+
+The nodes whose values `n` takes as ordinary inputs, in order.
+
+- Pure.
+- Example: `inputs(n)`
+
+#### `with_inputs`
+
+```camel
+with_inputs: (n: Node) => Node[]
+```
+
+The nodes whose values `n` takes as with inputs.
+
+- Pure.
+- Example: `with_inputs(n)`
+
+#### `ctrl_inputs`
+
+```camel
+ctrl_inputs: (n: Node) => Node[]
+```
+
+The nodes `n` waits for (control inputs).
+
+- Pure.
+- Example: `ctrl_inputs(n)`
+
+#### `users`
+
+```camel
+users: (n: Node) => Node[]
+```
+
+The nodes that read `n` as an input of any kind, once each, in NodeId order.
+
+- Pure.
+- Example: `users(n)`
+
+#### `value_users`
+
+```camel
+value_users: (n: Node) => Node[]
+```
+
+The nodes that read the value of `n` (ordinary or with input), once each.
+
+- Pure.
+- Example: `len(value_users(n)) == 0`
+
+#### `kind`
+
+```camel
+kind: (n: Node) => NodeKind
+```
+
+The kind of the node.
+
+- Pure.
+- Example: `kind(n) == NodeKind::Oper`
+
+#### `op`
+
+```camel
+op: (n: Node) => Op?
+```
+
+The operator of an operation node, null for any other node.
+
+- Pure.
+- Example: `op(n)`
+
+#### `op_name`
+
+```camel
+op_name: (o: Op) => string
+```
+
+The URI of the operator, such as `:op/add_l`.
+
+- Pure.
+- Example: `op_name(o)`
+
+#### `is_pure`
+
+```camel
+is_pure: (n: Node) => bool
+```
+
+Whether the node is an operation whose operator is declared pure.
+
+- Pure.
+- Example: `is_pure(n)`
+
+#### `is_anchor`
+
+```camel
+is_anchor: (n: Node) => bool
+```
+
+Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a transaction does not replace or erase it.
+
+- Pure.
+- Example: `is_anchor(n)`
+
+#### `is_written_slot`
+
+```camel
+is_written_slot: (n: Node) => bool
+```
+
+Whether the value of the node may be written in place: it is passed to a `var` parameter or to an operator that changes its operand, directly or through gates. A rewrite must not treat such a node as one value.
+
+- Pure.
+- Example: `is_written_slot(n)`
+
+#### `is_constant`
+
+```camel
+is_constant: (n: Node) => bool
+```
+
+Whether the node is a constant of the graph.
+
+- Pure.
+- Example: `is_constant(n)`
+
+#### `constant`
+
+```camel
+constant: (n: Node, sample: T) => T?
+```
+
+The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
+
+- Pure.
+- Example: `constant(n, 0)` gives `int?`
+
+#### `type_of`
+
+```camel
+type_of: (n: Node) => TypeRef?
+```
+
+The type of the node's value, null when it has none.
+
+- Pure.
+- Example: `type_of(n)`
+
+#### `type_name`
+
+```camel
+type_name: (t: TypeRef) => string
+```
+
+The type as a program writes it.
+
+- Pure.
+- Example: `type_name(t)` gives `'int'`
+
+#### `callee`
+
+```camel
+callee: (n: Node) => Graph?
+```
+
+The graph a call or function node names, null for any other node.
+
+- Pure.
+- Example: `callee(n)`
+
+#### `tags`
+
+```camel
+tags: (n: Node) => string
+```
+
+The attributes of the node as text (empty when there are none).
+
+- Pure.
+- Example: `tags(n)`
+
+#### `origin`
+
+```camel
+origin: (n: Node) => int
+```
+
+The source origin id of the node, 0 when unknown.
+
+- Pure.
+- Example: `origin(n)`
+
+#### `show`
+
+```camel
+show: (n: Node) => string
+```
+
+The node on one line: its id, kind, operator and type.
+
+- Pure.
+- Example: `show(n)` gives `'%2 Oper :op/mul_l : int'`
+
+#### `id`
+
+```camel
+id: (h: Graph) => int
+```
+
+The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
+
+- Pure.
+- Example: `id(n)`
+
+### Facts
+
+#### `effects`
+
+```camel
+effects: (g: Graph) => Effects
+```
+
+What running the graph once does besides computing its value: `external`, `writes_variables`, `may_fault`, `may_not_terminate`.
+
+- Pure.
+- Example: `effects(g).external`
+
+#### `shape`
+
+```camel
+shape: (n: Node) => string?
+```
+
+The tensor shape of the node's value as text, null when its value is no tensor.
+
+- Pure.
+- Example: `shape(n)` gives `'f32 [2, 3]'`
+
+#### `permissions`
+
+```camel
+permissions: (n: Node) => int
+```
+
+The numeric permissions the program granted the node, as a bit set (0 for none).
+
+- Pure.
+- Example: `permissions(n)`
+
+### Function values
+
+#### `program_of`
+
+```camel
+program_of: (f: F) => Program
+```
+
+The Program a function value lives in.
+
+- Pure.
+- Example: `program_of(f)`
+
+#### `graph_of`
+
+```camel
+graph_of: (f: F) => Graph
+```
+
+The graph of a function value.
+
+- Pure.
+- Example: `graph_of(f)`
+
+### Transactions
+
+#### `open`
+
+```camel
+open: (p: Program) => Txn
+```
+
+Opens a transaction on the Program: a private workspace in which graphs are edited. Nothing changes until `commit`.
+
+- With effects: opens a transaction.
+- Example: `let t = open(p)`
+
+#### `replace`
+
+```camel
+replace: (t: Txn, old: Node, new: Node) => void
+```
+
+Puts the node `new` of the same graph in the place of `old`, which is removed; what `old` ordered stays ordered. A fault when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
+
+- With effects: changes the transaction.
+- Example: `replace(t, n, inputs(n)[0])`
+
+#### `erase`
+
+```camel
+erase: (t: Txn, n: Node) => void
+```
+
+Removes a node whose value nobody reads. A fault when the value is read or the node anchors its graph.
+
+- With effects: changes the transaction.
+- Example: `erase(t, n)`
+
+#### `commit`
+
+```camel
+commit: (t: Txn) => Program!
+```
+
+Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
+
+- With effects: changes the transaction.
+- Example: `commit(t)`
+
+#### `abort`
+
+```camel
+abort: (t: Txn) => void
+```
+
+Drops the transaction.
+
+- With effects: changes the transaction.
+- Example: `abort(t)`
+
+#### `open_function`
+
+```camel
+open_function: (f: F) => Txn
+```
+
+Opens a transaction on a function value's graph and the graphs it reaches.
+
+- With effects: opens a transaction.
+- Example: `open_function(f)`
+
+#### `to_function`
+
+```camel
+to_function: (t: Txn, sample: F) => F!
+```
+
+Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
+
+- With effects: changes the transaction.
+- Example: `to_function(t, f)`

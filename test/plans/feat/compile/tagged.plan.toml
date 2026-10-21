@@ -962,7 +962,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "graph.null_then"
-desc = "`a ?? b` on the graph: one OPER reading the tag, one BRCH/JOIN pair with two arms (FUNC subgraphs), and the OPER that takes the value out inside an arm. No node kind of its own."
+desc = "`a ?? b` on the graph: one OPER reading the tag, one BRCH/JOIN pair with two arms (regions of the graph, each feeding the JOIN and ordered after the BRCH), and the OPER that takes the value out inside an arm. No node kind of its own."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_null_then.cml"
 args = ["${case}", "std::gir"]
@@ -984,16 +984,19 @@ assert(count('label=":op/tag_is_null"') === 1, 'one tag read')
 assert(count('label=":op/tag_null_value"') === 1, 'one value read')
 const brch = idOf('BRCH'), join = idOf('JOIN'), tag = idOf(':op/tag_is_null')
 assert(out.includes(tag + ' -> ' + brch + ' [label="0|0", type="NORM"]'), 'the tag is the condition')
-const arms = lines.filter((l) => l.trim().startsWith(brch + ' -> ') && l.includes('type="CTRL"'))
-assert(arms.length === 2, 'BRCH enters two arms')
-for (const arm of arms) {
-  const node = arm.trim().split(' ')[2]
-  assert(lines.some((l) => l.trim().startsWith(node + ' [') && l.includes('type="FUNC"')), 'an arm is a subgraph')
-  assert(lines.some((l) => l.trim().startsWith(node + ' -> ' + join + ' ') && l.includes('type="WITH"')), 'an arm feeds JOIN')
+const edges = lines.filter((l) => l.includes(' -> ') && /type="(CTRL|NORM)"/.test(l)).map((l) => l.trim().split(' ').filter((_, i) => i == 0 || i == 2))
+const after = (node, seen = new Set()) => {
+  if (seen.has(node)) return false
+  seen.add(node)
+  return edges.some(([from, to]) => to === node && (from === brch || after(from, seen)))
 }
-// The value is taken out inside an arm (a nested cluster), not beside the BRCH.
-const indent = (text) => lines.find((l) => l.includes(text)).search(/[^ ]/)
-assert(indent('label=":op/tag_null_value"') > indent('[label="BRCH"'), 'the value read is inside an arm')
+const arms = lines.filter((l) => l.includes(' -> ' + join + ' ') && l.includes('type="WITH"')).map((l) => l.trim().split(' ')[0])
+assert(arms.length === 2, 'BRCH enters two arms')
+for (const node of arms) {
+  assert(after(node), 'an arm runs after the BRCH')
+}
+// The value is taken out inside an arm: it runs after the BRCH.
+assert(after(idOf(':op/tag_null_value')), 'the value read is inside an arm')
 }
 """
 timeout_ms = 8000
