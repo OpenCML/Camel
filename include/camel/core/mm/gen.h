@@ -332,6 +332,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
 
     void noteFinalizable(void *payload) override;
 
+    /// An array took `block` over after allocation (a promoted array growing, a view of an
+    /// inline array, an in-place operation; see mm/alloc/allocator.h). When `owner` is already
+    /// in the elder space the block's bytes pace a major collection exactly as if the block had
+    /// been promoted with the value.
+    void noteBlockHeld(rtdata::Object *owner, Block *block) override;
+
     bool isObjectAddressStable(rtdata::Object *object) const;
 
     void setObjectRootSet(std::vector<rtdata::Object *> *rootSet);
@@ -434,6 +440,11 @@ class GenerationalAllocatorWithGC : public IAllocator {
     // Block bytes allocated since the end of the last collection (see blockBytesAtCollection_).
     size_t blockBytesGrowthUnlocked() const;
 
+    // Adds the bytes `block` has not been counted for to the promoted-block budget and asks
+    // for a major once the window is full. A block reached through several views is thus
+    // counted once, by identity, and a growth after the takeover adds only the delta.
+    void noteElderBlockBytesUnlocked(Block *block);
+
     // Enforces heapLimitBytes for an old-space allocation of `requestBytes` (see definition).
     void checkHeapLimitUnlocked(size_t requestBytes);
 
@@ -527,6 +538,9 @@ class GenerationalAllocatorWithGC : public IAllocator {
     size_t elderBlockBudget_;
     size_t elderBlockBytesSinceSweep_ = 0; // Promoted block bytes since the last sweep
     size_t elderBlockLiveBytes_       = 0; // Promoted block bytes the last sweep left
+    // Identifies one sweep when the live base is summed; a block shared by several surviving
+    // views is added once, by identity (Block::claimSweepGeneration).
+    uint64_t blockSweepGeneration_ = 1;
     size_t minorTriggerBytes_;        // Birth-space occupancy that asks for a minor collection
     size_t heapLimitBytes_;           // 0: none
     bool heapLimitExceeded_ = false;  // Set by an allocation; resolved at the next safepoint

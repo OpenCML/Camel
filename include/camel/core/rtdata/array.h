@@ -632,7 +632,7 @@ class Array : public rtdata::Object {
     void onMoved() override;
     void updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override;
     void finalize() noexcept override;
-    size_t blockBytesHeld() const noexcept override;
+    Block *heldBlock() const noexcept override;
 
   private:
     static constexpr size_t kInlineSlots = 10;
@@ -655,6 +655,11 @@ class Array : public rtdata::Object {
 
     void initLayout(std::span<const int64_t> extents);
     void noteFinalizable();
+    /// Tells the allocator that this array now holds `block`. A collector that paces promoted
+    /// block bytes registers the block at the takeover point, so an array that is already in
+    /// the elder space when it gets a block (a promoted array growing) counts like a block
+    /// promoted with a value. Other allocators ignore it.
+    void noteBlockHeld(Block *block);
     void reallocateSlots(size_t newCapacity, const type::ArrayType *arrayType);
     void growCompact(uint64_t newCapacity);
     void releaseBlock() noexcept;
