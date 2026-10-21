@@ -47,7 +47,11 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     std::vector<runtime_data_idx_t> operIndices_;
     std::vector<slot_t> callArgScratch_;
 
-    slot_t call(camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame);
+    // `program` is the program the graph belongs to, when the caller knows it (the callee of a
+    // direct call is in the caller's program); looked up otherwise.
+    slot_t call(
+        camel::runtime::GCGraph *runtimeGraph, ctx::Frame *rootFrame,
+        const camel::runtime::Program *program = nullptr);
     // Raises MaxRecursionDepthExceeded when one more non-tail call would exceed the limit, or
     // would not fit the native stack (every call() nests on it). It is checked in the caller,
     // before the call, so the diagnostic points at the call expression (as FastVM's does) and

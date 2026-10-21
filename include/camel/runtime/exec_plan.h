@@ -75,7 +75,12 @@ class ExecPlan {
     std::vector<gc_node_ref_t> topo;
     /// The nodes of `topo`, in the same order. Built the first time they are asked for (only a
     /// back end that walks the nodes while it runs needs them), then kept.
-    const std::vector<ExecNode> &nodes() const;
+    const std::vector<ExecNode> &nodes() const {
+        if (nodesReady_.load(std::memory_order_acquire)) [[likely]] {
+            return nodes_;
+        }
+        return buildNodes();
+    }
     /// The position in `topo` of each node, by node reference; kNotInPlan for a node that does
     /// not run (dead).
     static constexpr uint32_t kNotInPlan = UINT32_MAX;
@@ -156,7 +161,10 @@ class ExecPlan {
     }
 
   private:
-    mutable std::once_flag nodesOnce_;
+    const std::vector<ExecNode> &buildNodes() const;
+
+    mutable std::mutex nodesMutex_;
+    mutable std::atomic<bool> nodesReady_{false};
     mutable std::vector<ExecNode> nodes_;
 };
 

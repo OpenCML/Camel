@@ -237,7 +237,9 @@ void NodeVMSchedPass::requireRecursionRoom(const camel::runtime::GCGraph *caller
     }
 }
 
-slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame) {
+slot_t NodeVMSchedPass::call(
+    camel::runtime::GCGraph *rootRuntimeGraph, Frame *rootFrame,
+    const camel::runtime::Program *rootProgram) {
     // Tells a debugger, when one is attached, that an activation starts and ends here
     // (camel/execute/observer.h). One load of a pointer otherwise.
     camel::execute::ActivationScope observedActivation;
@@ -264,7 +266,8 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
         std::span<const gc_node_ref_t> currNodes = currPlan->topo;
         const camel::runtime::ExecNode *currRecords = currPlan->nodes().data();
         // The program the running graph belongs to: its direct callees are in it.
-        const camel::runtime::Program *currProgram = &programs_.of(currRuntimeGraph);
+        const camel::runtime::Program *currProgram =
+            rootProgram != nullptr ? rootProgram : &programs_.of(currRuntimeGraph);
 
         // Branch execution is implemented by skipping until the selected arm's
         // entry, executing through the arm tail, and then resuming at JOIN.
@@ -523,7 +526,6 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                         currRuntimeGraph = runtimeTarget;
                         currPlan         = &currRuntimeGraph->execPlan();
                         currRecords      = currPlan->nodes().data();
-                        currProgram      = &programs_.of(currRuntimeGraph);
                         currNodes        = currPlan->topo;
                     }
                     const auto *layout = &runtimeTarget->execPlan();
@@ -543,7 +545,7 @@ slot_t NodeVMSchedPass::call(camel::runtime::GCGraph *rootRuntimeGraph, Frame *r
                 const auto argSlots = currPlan->directCallArgSlotsOf(i);
                 const auto *layout = &runtimeTarget->execPlan();
                 bindDirectCallFrameSlots(currFrame, funcFrame, layout, argSlots, callArgScratch_);
-                slot_t callResult = call(runtimeTarget, funcFrame);
+                slot_t callResult = call(runtimeTarget, funcFrame, currProgram);
 
                 if (n->dataIndex != 0) {
                     currFrame->set(n->dataIndex, callResult);

@@ -38,8 +38,9 @@ gc_data_idx_t dataIndexOf(const GCGraph &graph, gc_node_ref_t ref) {
 
 } // namespace
 
-const std::vector<ExecNode> &ExecPlan::nodes() const {
-    std::call_once(nodesOnce_, [this] {
+const std::vector<ExecNode> &ExecPlan::buildNodes() const {
+    std::lock_guard lock(nodesMutex_);
+    if (!nodesReady_.load(std::memory_order_relaxed)) {
         const size_t count = topo.size();
         nodes_.resize(count);
         for (size_t idx = 0; idx < count; ++idx) {
@@ -63,7 +64,8 @@ const std::vector<ExecNode> &ExecPlan::nodes() const {
                 en.armCount     = static_cast<uint32_t>(arms.size());
             }
         }
-    });
+        nodesReady_.store(true, std::memory_order_release);
+    }
     return nodes_;
 }
 
