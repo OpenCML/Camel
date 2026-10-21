@@ -832,12 +832,12 @@ timeout_ms = 4000
 
 [[tests]]
 name = "recursion_needs_return_type"
-desc = "A recursive generic function without a declared return type, as for an ordinary function."
+desc = "A recursive generic function without a declared return type calls the instance whose return type is still being inferred (H51 step 2): a cycle, not an incomplete function."
 kind = "negative"
 case = "../../../cases/compile/generics/err_recursive_untyped.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::CallingIncompleteFunction"
+expect_diagnostic_name = "SemanticDiag::GenericInstantiationCycle"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 49
 expect_output_contains = ["in the instance 'count<int>'"]

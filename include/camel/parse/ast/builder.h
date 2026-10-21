@@ -155,7 +155,10 @@ class Builder {
     Value visitAngledValues(syntax::cst::AngledValues context);
     Value visitPattern(syntax::cst::Pattern context);
     Value visitMatchCase(syntax::cst::MatchCase context);
-    /// IfExpr, MatchExpr, TryExpr.
+    Value visitMatchTypeExpr(syntax::cst::MatchTypeExpr context);
+    Value visitTypeCase(syntax::cst::TypeCase context);
+    TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
+    /// IfExpr, MatchExpr, MatchTypeExpr, TryExpr.
     Value visitCtrlExpr(syntax::Node context);
     Value visitWaitExpr(syntax::cst::WaitExpr context);
     Value visitLoopExpr(syntax::cst::LoopExpr context);

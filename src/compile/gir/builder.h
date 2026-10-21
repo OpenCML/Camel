@@ -607,6 +607,16 @@ class Builder {
     using arm_ptr_t = std::shared_ptr<ArmBuild>;
     /// The arms being built, outermost first.
     std::vector<ArmBuild *> armStack_;
+    /// The `match type` arm being built: its cases are not regions (only one is selected),
+    /// but a `return` written in the selected body still gives the value of the match, not of
+    /// the function around it.
+    struct StaticBodyScope {
+        node_handle_t value{};
+        bool returned = false;
+    };
+    StaticBodyScope *activeStaticBody_ = nullptr;
+    /// How many `match type` bodies are being built, to stop a pathological nesting early.
+    size_t staticDepth_ = 0;
     /// The arm whose code the builder is writing now, if it is in one: not a function or a
     /// lambda written inside it.
     ArmBuild *activeArm() const {
@@ -1107,6 +1117,21 @@ class Builder {
     FunctionType *signatureForArgumentContext(node_handle_t target) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
+    /// `match type`: selects a case from the shape of the subject type and builds only that
+    /// case's body, in the current graph (no branch node).
+    node_handle_t visitTypeMatchNode(const GCT::node_ptr_t &gct);
+    bool typeCaseMatches(Type *subject, uint16_t patterns) const;
+
+    /// Whether a name read in a case body that is not selected names something. It walks the
+    /// same layers as visitDRefNode, but builds no node and checks no type (H51 step 1, Q10).
+    bool valueNameExists(const std::string &written, const GCT::node_ptr_t &gct);
+
+    /// Resolve the names of a case body that is not selected: its own `let`/`var` names bind,
+    /// and every other name must exist. No graph node is made and no type is checked.
+    void resolveStaticBodyNames(const GCT::node_ptr_t &body);
+    void walkStaticBodyNames(
+        const GCT::node_ptr_t &node, std::vector<std::unordered_set<std::string>> &locals);
+    static constexpr size_t kMaxStaticMatchDepth = 256;
     /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and the array
     /// where the loop is, its condition and its body as regions of the current graph (built where
     /// they are written, like the arms of a branch), and one LOOP node that has them.

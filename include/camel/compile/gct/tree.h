@@ -121,6 +121,9 @@ class Tree {
     node_ptr_t makeAccs(const std::string &key);
     node_ptr_t makeBrch(BranchKind kind = BranchKind::Cond);
     node_ptr_t makeCase(CaseType type, const std::string &binding = {});
+    /// `match type` (children: TYPE, TCASE...) and one of its cases (child: the body).
+    node_ptr_t makeTypeMatch();
+    node_ptr_t makeTypeCase(uint16_t patterns);
     /// A CASE of an enum variant: `label` the variant as written (`Shape::Rect`), `fields` and
     /// `bindings` the entries of the pattern in the order written (see Node::EnumCase).
     node_ptr_t makeEnumCase(

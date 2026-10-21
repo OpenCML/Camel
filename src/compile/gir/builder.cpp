@@ -435,6 +435,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitCastNode(node);
     case GCT::NodeKind::LOOP:
         return visitLoopNode(node);
+    case GCT::NodeKind::TMTCH:
+        return visitTypeMatchNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
     }
@@ -568,6 +570,9 @@ void Builder::buildFuncBody(
         currentAttrs_,
         camel::core::attr::unite(
             camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first), bodyTags.nodes));
+    // A function (or a lambda) written inside a `match type` arm has returns of its own.
+    StaticBodyScope *outerStaticBody = std::exchange(activeStaticBody_, nullptr);
+    const size_t outerStaticDepth    = std::exchange(staticDepth_, 0);
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -620,6 +625,8 @@ void Builder::buildFuncBody(
     } catch (const camel::core::mm::MemoryExhausted &e) {
         // Say which function was being compiled; the allocator does not know.
         bodyStates_[graph.get()] = BodyState::Built;
+        activeStaticBody_        = outerStaticBody;
+        staticDepth_             = outerStaticDepth;
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
@@ -628,9 +635,13 @@ void Builder::buildFuncBody(
         // The caller entered the scope of `graph`; an error leaves it on the way out.
         bodyStates_[graph.get()] = BodyState::Built;
         failedBodies_.insert(graph.get());
+        activeStaticBody_        = outerStaticBody;
+        staticDepth_             = outerStaticDepth;
         leaveScope();
         throw;
     }
+    activeStaticBody_ = outerStaticBody;
+    staticDepth_      = outerStaticDepth;
 }
 
 

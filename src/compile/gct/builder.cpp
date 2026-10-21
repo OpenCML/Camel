@@ -1840,6 +1840,9 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::MatchExpr:
         dataNode = visitMatchExpr(ast);
         break;
+    case AST::DataType::TypeMatch:
+        dataNode = visitMatchType(ast);
+        break;
     case AST::DataType::TryExpr:
         dataNode = visitTryExpr(ast);
         break;
@@ -2798,6 +2801,41 @@ node_ptr_t Builder::visitMatchExpr(const AST::node_ptr_t &ast) {
     registerGctSemantic(context_, brchNode, ast, std::move(parts), std::move(mergedInputs));
     LEAVE("MatchExpr");
     return brchNode;
+}
+
+/*
+matchTypeExpr
+    : MATCH TYPE typeExpr '{' typeCase* '}'
+    ;
+*/
+node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
+    ENTER("MatchType");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for MatchType");
+    node_ptr_t matchNode = tree_->makeTypeMatch();
+    setOriginFromAst(context_, matchNode, ast, camel::source::OriginKind::GctNode, "gct.match.type");
+
+    const auto &typeAst    = ast->atAs<AST::TypeLoad>(0);
+    Type *subject          = visitType(typeAst);
+    node_ptr_t typeNode    = tree_->makeType(subject, ImplMark::Graph);
+    setOriginFromAst(
+        context_, typeNode, typeAst, camel::source::OriginKind::GctNode, "gct.match.type.subject");
+    *matchNode << typeNode;
+
+    for (const auto &caseAst : *ast->atAs<AST::RepeatedLoad>(1)) {
+        const auto &caseLoad = caseAst->loadAs<AST::TypeCaseLoad>();
+        uint16_t patterns    = 0;
+        for (const AST::TypeCaseKind kind : caseLoad->patterns()) {
+            patterns |= typeCaseBit(static_cast<GCT::TypeCaseKind>(kind));
+        }
+        node_ptr_t caseNode = tree_->makeTypeCase(patterns);
+        setOriginFromAst(
+            context_, caseNode, caseAst, camel::source::OriginKind::GctNode, "gct.match.type.case");
+        node_ptr_t bodyNode = visitStmtBlock(caseAst->atAs<AST::StmtBlockLoad>(0));
+        *caseNode << bodyNode;
+        *matchNode << caseNode;
+    }
+    LEAVE("MatchType");
+    return matchNode;
 }
 
 /*

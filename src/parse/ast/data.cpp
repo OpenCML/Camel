@@ -36,6 +36,10 @@ std::string to_string(DataType type) {
         return "IfExpr";
     case DataType::MatchExpr:
         return "MatchExpr";
+    case DataType::TypeMatch:
+        return "TypeMatch";
+    case DataType::TypeCase:
+        return "TypeCase";
     case DataType::TryExpr:
         return "TryExpr";
     case DataType::LoopExpr:
@@ -57,6 +61,22 @@ std::string to_string(DataType type) {
     default:
         ASSERT(false, "Unknown DataType");
         return "UnknownDataType";
+    }
+}
+
+std::string to_string(TypeCaseKind kind) {
+    switch (kind) {
+    case TypeCaseKind::Struct:
+        return "struct";
+    case TypeCaseKind::Tuple:
+        return "tuple";
+    case TypeCaseKind::Leaf:
+        return "#leaf";
+    case TypeCaseKind::Wildcard:
+        return "_";
+    default:
+        ASSERT(false, "Unknown TypeCaseKind");
+        return "unknown";
     }
 }
 
@@ -181,6 +201,21 @@ const std::string ReservedExprLoad::geneCode() const { return to_string(op_); }
 const std::string IfExprLoad::geneCode() const { return "if"; }
 
 const std::string MatchExprLoad::geneCode() const { return "match"; }
+
+const std::string TypeCaseLoad::geneCode() const {
+    std::string result = "case ";
+    for (size_t i = 0; i < patterns_.size(); ++i) {
+        if (i > 0) {
+            result += " | ";
+        }
+        result += to_string(patterns_[i]);
+    }
+    return result + " =>";
+}
+
+const std::string TypeCaseLoad::toString() const {
+    return "TypeCase(" + geneCode() + ")" + this->status();
+}
 
 const std::string TryExprLoad::geneCode() const { return "try"; }
 

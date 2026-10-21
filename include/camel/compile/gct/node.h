@@ -313,6 +313,12 @@ class Node {
         return (flags_ & kFlagA) != 0;
     }
 
+    /// TCASE: the shapes it selects, as a mask of typeCaseBit (design principles 5.5).
+    uint16_t typeCasePatterns() const {
+        check(NodeKind::TCASE);
+        return tag_;
+    }
+
     /// CAST: the target type.
     Type *targetType() const {
         check(NodeKind::CAST);

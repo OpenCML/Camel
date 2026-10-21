@@ -371,7 +371,36 @@ func main(): int sync {
 
 `try`/`catch`/`finally` 不属于 Camel（它在图上没有稳定的映射）：写了得到 `SemanticDiag::TryCatchNotInLanguage`。可能失败的操作返回 `T!`，用 `!!`、`?->` 与 `case error e` 处理。
 
-### 6.8.3 `loop`
+### 6.8.3 `match type`
+
+`match type` 按**类型的形状**选一条分支，用于泛型函数（[5.5](../design-principles.cn.md)）：`T` 在实例化时已经是具体类型，编译器只把选中的分支建进图里，其余分支不建图、不做类型检查（名字仍然解析）。
+
+```
+match type 类型 {
+    case struct => 分支
+    case tuple  => 分支
+    case #leaf  => 分支
+    case _      => 分支
+}
+```
+
+- `struct` 匹配结构体；`tuple` 匹配**普通**元组；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
+- `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。
+- 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 不比较具体类型名：`case int`、`case MyStruct` 不是这个构造的一部分，标量类型都走 `#leaf`。
+- 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
+- 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
+
+```cml
+func duplicate(t: typeas T) {
+    return match type T {
+        case struct => (t, t)
+        case tuple  => (t, t)
+        case #leaf  => (t, t)
+    }
+}
+```
+
+### 6.8.4 `loop`
 
 循环是一个带状态的表达式（设计原则 3.10）。状态写在循环头上，每个名字只声明一次并给出初值；`do` 后面的表达式是循环体，它的值是下一轮的状态；整个循环的值是最后的状态。
 

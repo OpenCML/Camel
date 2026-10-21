@@ -1,0 +1,30 @@
+/**
+ * A generic function without a return annotation gets one per instance from the selected
+ * branch (H51 step 2). The three instances below have three different result types.
+ */
+module return_inference
+
+func classified(t: typeas T) {
+    return match type T {
+        case struct => 1
+        case tuple => 'two'
+        case #leaf => true
+    }
+}
+
+/** A `return` in the selected case gives the value of the match, not of the function. */
+func inside(t: typeas T): int {
+    let x = match type T {
+        case struct => 8
+        case #leaf => { return 7 }
+    }
+    return x + 1
+}
+
+func main(): int sync {
+    println(classified({a: 1}))
+    println(classified((1, 2)))
+    println(classified(3))
+    println(inside(1))
+    return 0
+}

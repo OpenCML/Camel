@@ -821,6 +821,16 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             if (instance.failed) {
                 throw BuildAbortException();
             }
+            // A recursive call of the instance being built can share its graph, but only once
+            // its return type is known. A function with no declared return type has none yet:
+            // returning the open graph would hand the caller half a type.
+            if (bodyStates_[instance.graph.get()] == BodyState::Open &&
+                !instance.graph->funcType()->hasExitType()) {
+                diags_->of(SemanticDiag::GenericInstantiationCycle)
+                    .atOrigin(call->origin())
+                    .commit(tmpl->name, typeBindingsToString(bindings));
+                throw BuildAbortException();
+            }
             return instance.graph;
         }
     }

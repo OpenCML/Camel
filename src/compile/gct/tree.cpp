@@ -300,6 +300,14 @@ node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
     return node;
 }
 
+node_ptr_t Tree::makeTypeMatch() { return makeNode(NodeKind::TMTCH); }
+
+node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
+    Node *node = makeNode(NodeKind::TCASE);
+    node->tag_ = patterns;
+    return node;
+}
+
 node_ptr_t Tree::makeEnumCase(
     const std::string &label, const std::vector<std::string> &fields,
     const std::vector<std::string> &bindings, bool structShape) {
@@ -529,6 +537,36 @@ std::string Node::toString() const {
         default:
             return "CASE: (error " + binding() + ")";
         }
+    case NodeKind::TMTCH:
+        return "TMTCH";
+    case NodeKind::TCASE: {
+        std::string text = "TCASE: (";
+        bool first       = true;
+        for (const TypeCaseKind kind :
+             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Leaf,
+              TypeCaseKind::Wildcard}) {
+            if ((typeCasePatterns() & typeCaseBit(kind)) == 0) {
+                continue;
+            }
+            text += first ? "" : " | ";
+            first = false;
+            switch (kind) {
+            case TypeCaseKind::Struct:
+                text += "struct";
+                break;
+            case TypeCaseKind::Tuple:
+                text += "tuple";
+                break;
+            case TypeCaseKind::Leaf:
+                text += "#leaf";
+                break;
+            case TypeCaseKind::Wildcard:
+                text += "_";
+                break;
+            }
+        }
+        return text + ")";
+    }
     case NodeKind::CAST:
         return "CAST: " + targetType()->toString();
     case NodeKind::EXIT:

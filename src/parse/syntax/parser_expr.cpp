@@ -95,6 +95,7 @@ bool ParserImpl::startsExpr(TK kind) const {
 /// waitExpr : 'wait'? assignExpr
 /// ctrlExpr : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 ///          | 'match' identRef '{' matchCase+ '}'
+///          | 'match' 'type' typeExpr '{' typeCase* '}'
 ///          | 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 void ParserImpl::parseExpr() {
     Depth depth(*this);
@@ -854,6 +855,10 @@ void ParserImpl::parseIf() {
 /// The subject is any expression; the `{` after it opens the cases (a struct literal after a
 /// name is read only when the name is a variant path, `Shape::Rect { ... }`).
 void ParserImpl::parseMatch() {
+    if (peek(1) == TK::KwType) {
+        parseMatchType();
+        return;
+    }
     const size_t m = mark();
     bump();
     parseLogicalOr();
@@ -874,6 +879,74 @@ void ParserImpl::parseMatch() {
     }
     eat(TK::RBrace);
     close(m, NK::MatchExpr);
+}
+
+/// matchTypeExpr : 'match' 'type' typeExpr '{' typeCase* '}'
+void ParserImpl::parseMatchType() {
+    const size_t m = mark();
+    bump(); // match
+    bump(); // type
+    parseType();
+    if (panic_ || !expect(TK::LBrace)) {
+        return close(m, NK::MatchTypeExpr);
+    }
+    {
+        Scope scope(*this, true);
+        while (cur_ == TK::KwCase && !panic_) {
+            parseTypeCase();
+        }
+        if (!panic_ && cur_ != TK::RBrace) {
+            unexpected({e(TK::KwCase), e(TK::RBrace)});
+        }
+    }
+    eat(TK::RBrace);
+    close(m, NK::MatchTypeExpr);
+}
+
+/// typeCase : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+void ParserImpl::parseTypeCase() {
+    const size_t m = mark();
+    bump(); // case
+    parseTypeCasePattern();
+    while (cur_ == TK::Pipe && !panic_) {
+        bump();
+        parseTypeCasePattern();
+    }
+    if (!panic_ && expect(TK::FatArrow)) {
+        parseBlockExpr();
+    }
+    close(m, NK::TypeCase);
+}
+
+/// typeCasePattern : 'struct' | 'tuple' | '#' 'leaf' | '_'
+/// The words are contextual: only here do they name a shape, not a type.
+void ParserImpl::parseTypeCasePattern() {
+    const size_t m = mark();
+    switch (cur_) {
+    case TK::Identifier: {
+        const std::string_view word = tree_.tokens().text(pos_);
+        if (word != "struct" && word != "tuple") {
+            unexpected({e(TK::Identifier)});
+        }
+        bump();
+        break;
+    }
+    case TK::Hash:
+        bump();
+        if (cur_ == TK::Identifier && tree_.tokens().text(pos_) == "leaf") {
+            bump();
+        } else {
+            unexpected({e(TK::Identifier)});
+        }
+        break;
+    case TK::Underscore:
+        bump();
+        break;
+    default:
+        unexpected({e(TK::Identifier), e(TK::Hash), e(TK::Underscore)});
+        break;
+    }
+    close(m, NK::TypeCasePattern);
 }
 
 /// matchCase : 'case' pattern ('|' pattern)* '=>' blockExpr

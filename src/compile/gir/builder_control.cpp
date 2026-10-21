@@ -676,10 +676,11 @@ Type *Builder::tailPositionType() const {
 }
 
 Type *Builder::expectedExitTypeHere() const {
-    if (activeArm() != nullptr) {
-        // Inside a branch arm the value of a `return` is the arm's value, so its position is
-        // the one the branch stands at; the function's declared return type has nothing to do
-        // with it (design principles 5.1, language reference 7.3).
+    if (activeArm() != nullptr || activeStaticBody_ != nullptr) {
+        // Inside a branch arm, or the selected body of a `match type`, the value of a `return`
+        // is that construct's value, so its position is the one the construct stands at; the
+        // function's declared return type has nothing to do with it (design principles 5.1,
+        // language reference 7.3).
         return expectedValueType_;
     }
     return declaredExitTypeHere();
@@ -2201,6 +2202,11 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         arm->value    = resNode;
         arm->type     = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
         arm->returned = true;
+    } else if (activeStaticBody_ != nullptr) {
+        // The selected body of a `match type` has no region of its own: its `return` gives the
+        // value of the match (visitTypeMatchNode), not of the function around it.
+        activeStaticBody_->value    = outputAnchor;
+        activeStaticBody_->returned = true;
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
         if (!droppedGraphs_.contains(currGraph_.get())) {

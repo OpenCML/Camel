@@ -34,8 +34,9 @@ const END = '<!-- grammar:end -->'
 const TOKEN_CLASSES = new Set(['IDENTIFIER', 'INTEGER', 'REAL', 'STRING', 'MULTI_STR', 'FSTRING', 'SEP', 'EOF', 'OPERATOR'])
 // Contextual keywords: written as a word, but not reserved words, so they are not tokens of
 // token_kinds.def. A production may quote one where the parser decides on the text (`tag` in
-// `tag x on nodes`, `on` and `read_by` in the same production, design principles 6.2).
-const CONTEXTUAL = new Set(['tag', 'on', 'read_by'])
+// `tag x on nodes`, `on` and `read_by` in the same production, design principles 6.2);
+// `struct`, `tuple` and `leaf` in a `match type` case (they stay ordinary names elsewhere).
+const CONTEXTUAL = new Set(['tag', 'on', 'read_by', 'struct', 'tuple', 'leaf'])
 // Productions parsed inside the function of another one.
 const FOLDED = {
     decl: 'parseDecl',
@@ -48,6 +49,7 @@ const FOLDED = {
     dataExpr: 'parseExpr',
     waitExpr: 'parseExpr',
     ctrlExpr: 'parseExpr',
+    matchTypeExpr: 'parseMatchType',
     loopExpr: 'parseLoop',
     namedTypeArgument: 'parseTypeArguments',
     loopState: 'parseLoop',

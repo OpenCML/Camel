@@ -55,6 +55,8 @@ enum class NodeKind : uint8_t {
     EXEC, // a block
     EXPT, // the names a module exports
     LOOP, // a loop (design principles 3.10); children: see Node::loopKind
+    TMTCH, // `match type` (design principles 5.5); children: TYPE, TCASE...
+    TCASE, // a case of `match type`; one child, the body
 };
 
 std::string to_string(NodeKind kind);
@@ -86,6 +88,13 @@ enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, ErrorPass, LogicalA
 ///    5.3). Which variant that is, and what its fields are, the graph builder decides from
 ///    the type of the value matched.
 enum class CaseType : uint8_t { Value, True, Else, Bind, Error, Enum };
+
+/// The shape a `match type` case selects, in the same order as the AST (design principles
+/// 5.5, R3). A TCASE node holds a mask of them: `case struct | tuple` selects either.
+enum class TypeCaseKind : uint8_t { Struct = 0, Tuple = 1, Leaf = 2, Wildcard = 3 };
+inline constexpr uint16_t typeCaseBit(TypeCaseKind kind) {
+    return static_cast<uint16_t>(1u << static_cast<uint8_t>(kind));
+}
 
 /// The reserved name under which the arm of `x ?-> f` finds the value taken out of `x`. It
 /// is not an identifier, so no program can write it.
