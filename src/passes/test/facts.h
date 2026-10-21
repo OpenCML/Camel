@@ -35,13 +35,21 @@
  * `test::facts_seed` and `test::facts_check` bracket other passes (rewrites interact with facts,
  * design 10.5): `camel p.cml test::facts_seed std::opt::inline test::facts_check`. The first
  * computes every core fact of the program and prints how many of each kind (`FACTS seeded <kind>
- * <n>`). The second reads every stored fact against the program as it is now and prints, per graph,
- * how many are valid, revalidated (Cone) and stale, and how many are about graphs the program
- * no longer has (`FACTS graph <name> valid=.. revalidated=.. stale=..`, `FACTS gone <n>`); then
- * it computes again what was stale and verifies every stored fact against a fresh computation
- * (`FACTS verify equal=<n> differ=<n>`): a pass's rewrite is never reused silently. When the
- * program has loops it also lowers them privately, as std::fvm does, and reads the facts on
- * the copy (`FACTS lowered <name> ...`): the graph that held the loop is new, the others are not.
+ * <n>`), the declaration epoch it stamped them with (`FACTS epoch seed=<n>`) and each graph's
+ * revision (`FACTS seed revision <graph> <n>`). The second prints the epoch and revisions it finds
+ * (`FACTS epoch check=<n>`, `FACTS check revision <graph> <n>`), then reads every stored fact
+ * against the program as it is now and prints, per graph, how many are valid, revalidated (Cone)
+ * and stale, per kind on a graph how many of that kind are (`FACTS graph kind <graph> <kind>
+ * valid=.. revalidated=.. stale=..`), and how many are about graphs the program no longer has
+ * (`FACTS graph <name> valid=.. revalidated=.. stale=..`, `FACTS gone <n>`). It then computes
+ * again what was stale, reads every fact a consumer could still read (its graphs and nodes exist)
+ * and prints `FACTS after recompute valid=.. stale=.. gone=<n>`: no readable fact may be stale
+ * after the recompute. Finally it verifies every stored fact against a fresh computation
+ * (`FACTS verify equal=<n> differ=<n>`): a pass's rewrite is never reused silently. Comparing the
+ * two epochs and the two sets of revisions says *why* a fact went stale: a new revision means the
+ * graph changed, a new epoch means a declaration did. When the program has loops it also lowers
+ * them privately, as std::fvm does, and reads the facts on the copy (`FACTS lowered <name> ...`):
+ * the graph that held the loop is new, the others are not.
  *
  * `test::facts_persist` exports the program's facts as a cache would (fact_persist.h), checks
  * that each line of text reads back to the same fact, loads them into an empty store (every
