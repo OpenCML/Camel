@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -918,22 +918,20 @@ node_handle_t Builder::rebindingAppendOf(const GCT::node_ptr_t &gct) {
     // The operator that grows the array in place takes exactly the types `append` takes
     // for an array variable; any other combination is built as written, so that `append`
     // reports what does not fit.
-    const auto group = context_->importModule("")->getNativeEntity(Reference("__assn_append__"));
-    ASSERT(group.has_value() && group->isOperGroup(), "The built-in __assn_append__ is missing.");
+    const oper_group_ptr_t group =
+        context_->importModule("")->nativeOperatorGroup(camel::core::oper::AssnAppend);
+    ASSERT(group != nullptr, "The built-in __assn_append__ is missing.");
     const std::vector<StaticArg> statics(2);
     const bool fits =
-        group->operGroup()
-            ->resolve(
-                {},
-                {valueTypeOf(nodeTypeOf(resolveNodeByRef(name))), valueTypeOf(nodeTypeOf(value))},
-                statics,
-                Modifier::None)
+        group->resolve(
+                 {},
+                 {valueTypeOf(nodeTypeOf(resolveNodeByRef(name))), valueTypeOf(nodeTypeOf(value))},
+                 statics,
+                 Modifier::None)
             .has_value();
     GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
     if (fits) {
-        *rebinding << make(
-                          tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn_append__"),
-                          gct->at(0))
+        *rebinding << make(internalOperatorDref(camel::core::oper::AssnAppend), gct->at(0))
                    << tree_->clone(target) << make(tree_->makeDRef(temporary), valueExpr);
     } else {
         GCT::node_ptr_t with = make(tree_->makeWith(1), binding);
@@ -1051,11 +1049,11 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
         return visitLinkNode(rebinding);
     }
     GCT::node_ptr_t take = make(tree_->makeLink(1), call->at(1));
-    *take << make(tree_->makeDRef(std::string(kBuiltinPrefix) + "__var_take__"), call->at(1))
+    *take << make(internalOperatorDref(camel::core::oper::VarTake), call->at(1))
           << tree_->clone(target);
     *applied << calleeCopy << take;
     inPlaceCalls_.insert(applied);
-    *rebinding << make(tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn_owned__"), gct->at(0))
+    *rebinding << make(internalOperatorDref(camel::core::oper::AssnOwned), gct->at(0))
                << tree_->clone(target) << applied;
     return visitLinkNode(rebinding);
 }
@@ -1233,24 +1231,20 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
             if (outermost && inPlace) {
                 applied = make(tree_->makeLink(1), step.node->at(1));
                 *applied << make(
-                                tree_->makeDRef(std::string(kBuiltinPrefix) + "__var_take__"),
+                                internalOperatorDref(camel::core::oper::VarTake),
                                 step.node->at(1))
                          << tree_->clone(root);
                 inPlaceCalls_.insert(call);
             } else {
                 applied = make(tree_->makeDRef(step.base), step.node->at(1));
             }
-            *call << make(
-                         tree_->makeDRef(std::string(kBuiltinPrefix) + "__set_index__"),
-                         step.node->at(0))
+            *call << make(internalOperatorDref(camel::core::oper::SetIndex), step.node->at(0))
                   << applied << make(tree_->makeDRef(step.selector), step.node->at(2)) << value;
         } else {
             GCT::node_ptr_t field = make(
                 tree_->makeData(std::make_shared<LongData>(static_cast<int64_t>(step.field))),
                 step.node);
-            *call << make(
-                         tree_->makeDRef(std::string(kBuiltinPrefix) + "__set_field__"),
-                         step.node->at(0))
+            *call << make(internalOperatorDref(camel::core::oper::SetField), step.node->at(0))
                   << make(tree_->makeDRef(step.base), step.node->at(0)) << field << value;
         }
         value = call;
@@ -1258,13 +1252,13 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // The store: the variable keeps the new value, and the array as its own when it was written
     // in place (so that the next statement may write it in place again).
     GCT::node_ptr_t rebinding = make(tree_->makeLink(2), gct);
-    *rebinding
-        << make(
-               tree_->makeDRef(
-                   std::string(kBuiltinPrefix) +
-                   (inPlace ? "__assn_owned__" : "__assn__")),
-               gct->at(0))
-        << tree_->clone(root) << value;
+    // `__assn__` is a group of one overload per type, chosen by the operand types (an
+    // assignment the program may also write as `=`): it has no single id and stays by name.
+    *rebinding << make(
+                   inPlace ? internalOperatorDref(camel::core::oper::AssnOwned)
+                           : tree_->makeDRef(std::string(kBuiltinPrefix) + "__assn__"),
+                   gct->at(0))
+               << tree_->clone(root) << value;
     return visitLinkNode(rebinding);
 }
 

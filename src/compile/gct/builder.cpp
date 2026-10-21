@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 09, 2025
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -2368,7 +2368,12 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
 
     case AST::ReservedDataOp::Comp: {
         const auto &rhsASTNode = ast->atAs<AST::DataLoad>(1);
-        node_ptr_t opNode      = tree_->makeDRef("__cmp__");
+        // `cmp` is the compiler's own macro operator (oper::MacroCmp): it is referred to by the
+        // id the table fixed at start-up, not by the name of the built-in module's entity.
+        const oper_group_ptr_t cmpGroup =
+            context_->importModule("")->nativeOperatorGroup(camel::core::oper::MacroCmp);
+        ASSERT(cmpGroup != nullptr, "The built-in __cmp__ is missing.");
+        node_ptr_t opNode  = tree_->makeDRef(camel::core::oper::MacroCmp, cmpGroup->name());
         res                    = tree_->makeLink(2);
         auto compAstBundle     = astSemantic(context_, ast);
         setOriginFromOrigin(

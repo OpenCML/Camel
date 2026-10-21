@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -355,6 +355,20 @@ node_handle_t Builder::lowerDecoratedGraphValue(
 
 node_handle_t
 Builder::applyTagOperator(const char *op, const std::string &name, const GCT::node_ptr_t &origin) {
+    GCT::node_ptr_t callee = tree_->makeDRef(op);
+    callee->setOrigin(origin->origin());
+    return applyTagOperatorCall(callee, name, origin);
+}
+
+node_handle_t Builder::applyTagOperator(
+    camel::core::OperId op, const std::string &name, const GCT::node_ptr_t &origin) {
+    GCT::node_ptr_t callee = internalOperatorDref(op);
+    callee->setOrigin(origin->origin());
+    return applyTagOperatorCall(callee, name, origin);
+}
+
+node_handle_t Builder::applyTagOperatorCall(
+    const GCT::node_ptr_t &callee, const std::string &name, const GCT::node_ptr_t &origin) {
     // An ordinary call, built from a synthesized GCT so that capturing the operand from an
     // enclosing graph, overload resolution and origins are what they are for any call.
     const auto make = [&](GCT::node_ptr_t node) {
@@ -362,7 +376,7 @@ Builder::applyTagOperator(const char *op, const std::string &name, const GCT::no
         return node;
     };
     GCT::node_ptr_t call = make(tree_->makeLink(1));
-    *call << make(tree_->makeDRef(op)) << make(tree_->makeDRef(name));
+    *call << callee << make(tree_->makeDRef(name));
     return visitLinkNode(call);
 }
 

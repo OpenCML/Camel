@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -435,6 +435,26 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
 }
 
 node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
+    if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
+        // A DREF the compiler made for an operator it knows by id: the group is the built-in
+        // module's, which registered it; no name of the program takes part.
+        ENTER("DREF");
+        genericCalleeAllowed_ = false;
+        refOrigin_            = gct->origin();
+        const oper_group_ptr_t group = internalOperatorGroup(*oper);
+        node_handle_t drefNode{currGraph_->addDrefNode(
+            std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
+        registerNodeOrigin(context_, drefNode, gct, "gir.dref");
+        if (recorder_) {
+            std::vector<std::string> signatures;
+            for (const auto &[uri, resolver] : group->resolvers()) {
+                signatures.push_back(resolver->signature());
+            }
+            recorder_->operatorReferenced(gct->origin(), group->name(), std::move(signatures));
+        }
+        LEAVE("DREF");
+        return drefNode;
+    }
     if (const std::string written = gct->name(); written.starts_with(kBuiltinPrefix)) {
         ENTER("DREF");
         genericCalleeAllowed_   = false;
@@ -938,11 +958,25 @@ node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
     return node;
 }
 
-node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
-    const auto entity = importedEntity(group);
-    ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
+oper_group_ptr_t Builder::internalOperatorGroup(camel::core::OperId oper) {
+    const auto group = context_->importModule("")->nativeOperatorGroup(oper);
+    ASSERT(
+        group != nullptr,
+        "The built-in module did not register the operator the compiler emits: " +
+            std::string(camel::core::OperatorTable::instance().uri(oper)));
+    return group;
+}
+
+GCT::node_ptr_t Builder::internalOperatorDref(camel::core::OperId oper) {
+    // The id is the reference; the entity name is only the node's label (a GCT dump, a
+    // diagnostic), as it was when the DREF was made by name.
+    return tree_->makeDRef(oper, internalOperatorGroup(oper)->name());
+}
+
+node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t input) {
+    const auto group = internalOperatorGroup(oper);
     const std::vector<StaticArg> statics(1);
-    const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
+    const auto op = group->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);
     ASSERT(op.has_value(), "Variable operator rejected its operand.");
     node_handle_t node = currGraph_->addOperNode(*op, 0);
     stampPermissions(node);
@@ -953,18 +987,18 @@ node_handle_t Builder::variableOperator(const std::string &group, node_handle_t 
 node_handle_t Builder::newVariable(node_handle_t value) {
     // The variable takes the widened type of its initializer (:var/new), so later assignments
     // may store values with a different refinement (e.g. shape).
-    node_handle_t variable = variableOperator("__var_new__", value);
+    node_handle_t variable = variableOperator(camel::core::oper::VarNew, value);
     variables_.insert(variable);
     return variable;
 }
 
 node_handle_t Builder::readVariable(node_handle_t variable) {
-    return readVariableThrough(variable, "__var_get__");
+    return readVariableThrough(variable, camel::core::oper::VarGet);
 }
 
 node_handle_t Builder::readVariableThrough(
-    node_handle_t variable, const std::string &group) {
-    node_handle_t value = variableOperator(group, variable);
+    node_handle_t variable, camel::core::OperId oper) {
+    node_handle_t value = variableOperator(oper, variable);
     pendingUsesOf(variable).push_back({value, true});
     if (auto modifier = modifierOf(variable); modifier.has_value()) {
         if (sameGraph(*modifier, currGraph_) && linkCheek(*modifier, value)) {
@@ -988,7 +1022,7 @@ node_handle_t Builder::peekVariable(node_handle_t variable) {
     // reading the value it writes must not take the array away from the set that follows.
     // It is a read all the same: ordered after the variable's last writer and, in a sync
     // block, in the block's chain.
-    return readVariableThrough(variable, "__var_peek__");
+    return readVariableThrough(variable, camel::core::oper::VarPeek);
 }
 
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
