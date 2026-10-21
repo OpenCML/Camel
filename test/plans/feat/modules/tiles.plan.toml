@@ -46,6 +46,41 @@ expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 60000
 
 [[tests]]
+name = "cast_like_aliases_the_same_element_type"
+kind = "behavior"
+case = "../../../cases/modules/tiles/cast_like.cml"
+args = ["${case}", "std::macro"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.trim().split('\n');
+assert(lines.length === 4, 'expected the value, the error and two plans');
+assert(lines[0].includes('dtype=float32'), 'cast-to-self changed the element type');
+assert(lines[1] === '0.0', 'gradient of sum(x) is not all ones');
+const withCast = JSON.parse(lines[2]);
+const plain = JSON.parse(lines[3]);
+for (const key of ['values', 'kernels', 'materialized_values', 'allocations', 'logical_bytes', 'allocated_bytes', 'borrowed_inputs', 'borrowed_bytes'])
+    assert(withCast[key] === plain[key], 'cast or cast_like materialized a value: ' + key);
+assert(JSON.stringify(withCast.stages) === JSON.stringify(plain.stages), 'cast or cast_like changed the stage plan');
+assert(withCast.operator_contracts.some(c => c.identity === 'tensor:cast'), 'the cast was not seen');
+assert(withCast.operator_contracts.some(c => c.identity === 'tensor:cast_like'), 'the cast_like was not seen');
+assert(!plain.operator_contracts.some(c => c.identity === 'tensor:cast' || c.identity === 'tensor:cast_like'), 'the plain derivative names a cast');
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "cast_between_element_types_stays_on_cpu"
+kind = "negative"
+case = "../../../cases/modules/tiles/cast_dtype.cml"
+args = ["${case}"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 1
+expect_output_contains = ["operator 'tensor:cast' needs a statically known f32 tensor result"]
+timeout_ms = 10000
+
+[[tests]]
 name = "slice_bounds_rejected_before_cuda"
 kind = "negative"
 case = "../../../cases/modules/tiles/slice_bounds.cml"
@@ -79,7 +114,7 @@ tool = "python"
 case = "../../../cases/modules/tiles/plan_check.py"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["tiles core views: quasi-affine maps, strided simplification, empty domains and rejected mutations passed", "tiles reduction domains: core extents, output permutations, canonical contributions and empty faults passed", "tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected"]
+expect_stdout_contains = ["tiles core views: quasi-affine maps, strided simplification, empty domains and rejected mutations passed", "tiles reduction domains: core extents, output permutations, canonical contributions and empty faults passed", "tiles scalar i64: exact payloads, comparisons and nearest-even f64 casts passed", "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed", "tiles multi-result storage: one producer, distinct writes and inclusive read lifetimes passed", "tiles regions: convexity, boundaries, liveness and dependency order passed", "tiles general reductions: scalar and sum-to core maps preserve contribution order", "tiles axis contracts: mapped traversal, numerical law and row eligibility passed", "tiles pointwise contracts: operand maps, bounds and row eligibility passed", "tiles kernel faults: IEEE conditions, resources and early-exit convergence passed", "tiles reduction laws: declared freedom required for parallel maximum", "tiles scalar expressions: typed rounding, FMA and IEEE bits passed", "tiles plan validation: 33 rejected mutations", "tiles index expressions: composition and checked evaluation passed", "tiles accesses: masked composition and lazy evaluation passed", "tiles ordered reductions: fusion boundaries and plan mutations passed", "tiles scalar inputs: typed payload and shape validation passed", "tiles source cache: values, literals, storage ownership and eviction passed", "tiles operator contracts: absent, replaced and incompatible declarations rejected", "tiles cast_like boundary: plans never name it, and a conversion is rejected"]
 timeout_ms = 10000
 
 [[tests]]

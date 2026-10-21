@@ -1,0 +1,26 @@
+/**
+ * `cast`'s VJP emits `tensor:cast_like`; this derivative is the source-level witness of the
+ * compiler's `cast_like` normalization. `cast(x, "float32")` on an f32 value is the documented
+ * no-op, so both the cast and the cast_like must alias their input: the plan of the derivative
+ * below must equal, in every plan number and stage, the plan of the same derivative without the
+ * cast, while its contract list still shows that both operators were seen. The printed value is
+ * the f32 gradient of `sum(x)`.
+ */
+module tiles_cast_like
+import { Tensor, reshape, sum, cast, abs } from tensor
+import { grad } from autodiff
+import { inspect } from tiles
+with <x: Tensor<f32>>
+func with_cast(): float { return sum(cast(x, "float32")) }
+with <x: Tensor<f32>>
+func without_cast(): float { return sum(x) }
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    let cast_grad = (v: Tensor<f32>): Tensor<f32> => grad(with_cast)<v>()
+    let plain_grad = (v: Tensor<f32>): Tensor<f32> => grad(without_cast)<v>()
+    println(cast_grad(x))
+    println(sum(abs(cast_grad(x) - reshape([1.0, 1.0, 1.0], [3]))))
+    println(inspect<cast_grad>(x))
+    println(inspect<plain_grad>(x))
+    return 0
+}

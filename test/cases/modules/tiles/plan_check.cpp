@@ -185,6 +185,26 @@ void checkLoopSourceCache() {
     mutationMisses([&](auto &region) { region.body.contracts[0].declaration = table.semantics(id); }, false);
     std::cout << "tiles loop source cache: exact domains, embedded bits, bindings and recursive contracts passed\n";
 }
+
+/// H72: `tensor:cast_like` never reaches a plan. The compiler aliases it when the element
+/// types already agree and raises UnsupportedComputation for a conversion, which keeps that
+/// region on the CPU (notes/core-semantics-map.md). A plan that names it is either a scheduler
+/// extension or a compiler regression; H49 step 5 replaces this expectation with the device
+/// conversion test.
+void checkCastLikeBoundary() {
+    Program same;
+    same.nodes = {{.op = "input", .shape = {2}, .data = {1.0f, 2.0f}},
+                  {.op = "input", .shape = {2}, .data = {3.0f, 4.0f}},
+                  {.op = "cast_like", .shape = {2}, .inputs = {0, 1}}};
+    same.outputs = {2};
+    rejects(same, [](auto &) {}, "unknown operation");
+    // Only f64 is the other element type today; bool/int64 tensor storage arrives with H49
+    // step 5, and the same rejection must hold for them.
+    auto conversion = same;
+    conversion.nodes[0] = Node{.op = "input", .dtype = DType::F64, .scalarBits = 0};
+    rejects(conversion, [](auto &) {}, "operand dtype mismatch");
+    std::cout << "tiles cast_like boundary: plans never name it, and a conversion is rejected\n";
+}
 } // namespace
 
 int main() {
@@ -210,6 +230,7 @@ int main() {
         checkMatrixContracts();
         checkLoopSourceCache();
         checkMultiResultStorage();
+        checkCastLikeBoundary();
         using kernel::ScalarExpr;
         using kernel::ScalarValue;
         using kernel::ScalarOp;
