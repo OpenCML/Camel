@@ -12,7 +12,10 @@ args = ["--timeit", "std::nvm/1", "--output-format", "json", "${case}", "${run_n
 expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 120000
+# One timed iteration. The nvm run measured 140.78 s on the host at load 108 (H101), against the
+# 120 s guard it had; H80's run at load 26-54 passed, so the quiet run is under 120 s. 300 s is
+# twice the busiest measurement and still catches a hang.
+timeout_ms = 300000
 
 [[tests]]
 name = "asian_option_mc.prl_timeit"

@@ -194,6 +194,11 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_pacing.churn_prl"
+# The high-water mark is the window the collector lets through plus one block, but a collection
+# is asked for at a safepoint and runs later while the machine is busy: next to seven other test
+# processes the same case measured 9.6 MB (H101) and 12 MB (H80's gate), against 7.2 MB alone.
+# The numbers this case checks are the serial run's, so it runs alone.
+parallel = false
 desc = "The churn case under the parallel scheduler: the program has no two unordered heavy items, so it allocates in the same order and the numbers are those of std::fvm, without the exact-count flakiness the old plan had (bounds, not equalities). Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
