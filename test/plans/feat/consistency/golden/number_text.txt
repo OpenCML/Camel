@@ -79,9 +79,9 @@ error ParseError: '99999999999999999999' is out of the range of an integer
 [.5]
 error InvalidNumberText: Cannot convert the string '.5' to int.
 error InvalidNumberText: Cannot convert the string '.5' to i32.
-0.5
+error InvalidNumberText: Cannot convert the string '.5' to float.
 error ParseError: '.5' is not an integer
-0.5
+error ParseError: '.5' is not a number
 [inf]
 error InvalidNumberText: Cannot convert the string 'inf' to int.
 error InvalidNumberText: Cannot convert the string 'inf' to i32.

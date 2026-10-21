@@ -4247,7 +4247,7 @@ No value was given for the {0} {1} of 'main'.
 **Help**
 
 ```text
-The parameters of 'main' are the inputs of the program. To run it, give each one a value on the command line: --arg name=value (a number, a complex number written as the language writes one such as 1+2i, true/false or text for a scalar, a .npy file for a tensor, a directory of .npy files for a struct of tensors). No default is assumed.
+The parameters of 'main' are the inputs of the program. To run it, give each one a value on the command line: --arg name=value (a number; a complex number written as the language writes one, such as 1+2i or 0.5-0.25i, or a real number such as 1.5 for its real part; true/false or text for a scalar; a .npy file for a tensor; a directory of .npy files for a struct of tensors). No default is assumed.
 ```
 
 **Example** (`test/cases/compile/entry_args/scalars.cml`, run as `camel test/cases/compile/entry_args/scalars.cml --arg n=3`)

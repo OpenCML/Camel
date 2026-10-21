@@ -81,8 +81,10 @@ template <std::signed_integral T> NumberTextStatus parseWholeInteger(std::string
 }
 
 /// Reads `text` as one floating-point number of type T: an optional sign, then a decimal
-/// number with an optional fraction and exponent (`1`, `1.5`, `.5`, `1e-3`), or `inf` / `nan`
-/// as the language prints them. Nothing else: no blanks, no hexadecimal form, no suffix.
+/// number with digits on both sides of its optional fraction and an optional exponent (`1`,
+/// `1.5`, `1e-3`), or `inf` / `nan` as the language prints them. Nothing else: no blanks, no
+/// hexadecimal form, no suffix. A float command-line argument and each part of a complex one
+/// are read by this rule.
 template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_view text, T &out) {
     bool negative = false;
     if (!text.empty() && (text.front() == '+' || text.front() == '-')) {
@@ -100,9 +102,41 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
         out = std::numeric_limits<T>::quiet_NaN();
         return NumberTextStatus::Ok;
     }
-    // Only a digit or a point may start the number (from_chars would also take "infinity",
-    // "nan(...)" and a second sign).
-    if (!(text.front() >= '0' && text.front() <= '9') && text.front() != '.') {
+    // The language writes a float as digits, an optional `.` followed by digits, and an optional
+    // exponent (language reference 2.5.2: there must be digits on both sides of the point).
+    // from_chars and strtod also accept `.5` and `1.`; reject them here, so that a number text
+    // has the language's grammar rather than the C library's.
+    std::size_t i = 0;
+    while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+        ++i;
+    }
+    if (i == 0) {
+        return NumberTextStatus::NotANumber;
+    }
+    if (i < text.size() && text[i] == '.') {
+        ++i;
+        const std::size_t fraction = i;
+        while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+            ++i;
+        }
+        if (i == fraction) {
+            return NumberTextStatus::NotANumber;
+        }
+    }
+    if (i < text.size() && (text[i] == 'e' || text[i] == 'E')) {
+        ++i;
+        if (i < text.size() && (text[i] == '+' || text[i] == '-')) {
+            ++i;
+        }
+        const std::size_t exponent = i;
+        while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+            ++i;
+        }
+        if (i == exponent) {
+            return NumberTextStatus::NotANumber;
+        }
+    }
+    if (i != text.size()) {
         return NumberTextStatus::NotANumber;
     }
     T value{};
@@ -277,9 +311,12 @@ struct ComplexTextParts {
 /// the imaginary part and the imaginary part (`3+4i`, `3-4i`, `0.5-0.25i`), or only the
 /// imaginary part with its sign (`4i`, `-2i`) — into the two part texts. Nothing is read here:
 /// the caller reads each part by the rule of the number type, so a complex value and a real one
-/// are read by the same rule. Returns false when `text` is not a complex number: it must end in
-/// `i`, and its imaginary part must not be empty (`1+` is not one). A sign that belongs to an
-/// exponent (`1e-3i`, `-1e-3i`) is not a separator.
+/// are read by the same rule. Returns false when `text` is not written as a complex number: it
+/// must end in `i`, and its imaginary part must not be empty (`1+` is not one). A sign that
+/// belongs to an exponent (`1e-3i`, `-1e-3i`) is not a separator. A text without `i` is not a
+/// complex text at all; a caller that accepts a real number as the real part (entry arguments:
+/// a literal takes its type from context, design principles 5.1) reads it as a number when this
+/// returns false.
 inline bool splitComplexText(std::string_view text, ComplexTextParts &out) {
     if (text.size() < 2 || text.back() != 'i') {
         return false;
