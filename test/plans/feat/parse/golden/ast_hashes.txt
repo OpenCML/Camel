@@ -1118,7 +1118,7 @@ e1e169ed073c55e5 ok test/cases/consistency/values/tail_deep.cml
 47f632254922b577 ok test/cases/consistency/values/tail_mutual.cml
 578df1b0ce5442d6 ok test/cases/consistency/values/wait_order.cml
 502d2d473cc4a4e9 ok test/cases/consistency/values/with_params.cml
-06c3b5c40ca60348 ok test/cases/definitions/bad_definitions.cml
+40cf3c2885d1494d ok test/cases/definitions/bad_definitions.cml
 af3630ffac4ff23b ok test/cases/definitions/broken_definitions.cml
 e74173f109a285b1 ok test/cases/definitions/check.cml
 b6fd085d2a312641 ok test/cases/definitions/grad.cml
@@ -1384,6 +1384,7 @@ e717022e42281990 ok test/cases/modules/graph_pass/camel_import_values.cml
 705004f7c79f48fa ok test/cases/modules/graph_pass/edits.cml
 09d450553fe79f00 ok test/cases/modules/graph_pass/fold_constants.cml
 61b8d97e867702ff ok test/cases/modules/graph_pass/fold_target.cml
+16cb00d0ac7f3976 ok test/cases/modules/graph_pass/gl.cml
 0e9e6af50c725fed ok test/cases/modules/graph_pass/identity.cml
 1e2a8c855bf281c6 ok test/cases/modules/graph_pass/imported_values.cml
 9970cecb1bf0ac88 ok test/cases/modules/graph_pass/imports.cml
@@ -1405,6 +1406,8 @@ a27a69531b5f7fb9 ok test/cases/modules/graph_pass/typed_target.cml
 a621dfdd89784f98 no test/cases/modules/graph_pass/unparsable_pass.cml
 1f8856de5cc306b4 ok test/cases/modules/graph_pass/unused.cml
 0a9e2a3062f189f4 ok test/cases/modules/graph_pass/unused_target.cml
+2d6aea490e306e67 ok test/cases/modules/graph_pass/valuelib.cml
+1142729079a815a6 ok test/cases/modules/graph_pass/valuereader.cml
 404699370b3c4522 ok test/cases/modules/graph_pass/values.cml
 51d3348fd398d51c ok test/cases/modules/nn/autoencoder.cml
 f32ff1e512b4f4cf ok test/cases/modules/nn/autograd_linear_demo.cml

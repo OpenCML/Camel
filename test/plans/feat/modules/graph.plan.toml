@@ -123,6 +123,26 @@ expect_exit = 0
 expect_stdout_exact = "[1, 2, 2, 3, 3, 4]\n42\n"
 timeout_ms = 10000
 
+[[tests]]
+name = "camel_pass_reads_a_value_imported_from_a_camel_library"
+desc = "A pass reads a value imported from a library written in Camel, and a top-level value built from it and from a call into that library (task H37; H36 allowed the Camel import)."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "valuereader::show", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "5 14\n42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "camel_pass_reads_the_handover_reproduction"
+desc = "The H37 handover brief's program: a module-level literal (`two = 2`) and a module-level value computed by a call (`twelve = two + ten()`), read by the pass."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "gl::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "2 12\n42\n"
+timeout_ms = 10000
+
 # A transaction edits the program being processed and commits a new Program (design 5.1).
 
 [[tests]]

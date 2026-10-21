@@ -31,6 +31,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_inline.h"
@@ -337,9 +338,31 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
 
     // The signature (design 9.2): the operator's operands are the function's ordinary
     // parameters; nothing else is bound.
-    if (graph->normPorts().size() != d.params.size() || !graph->withPorts().empty() ||
-        !graph->closureNodes().empty()) {
+    if (graph->normPorts().size() != d.params.size()) {
         return refuse("its graph does not take exactly the declared parameters");
+    }
+    if (!graph->withPorts().empty()) {
+        return refuse(
+            "its graph takes a with parameter, and a definition is called with the operator's "
+            "operands only");
+    }
+    if (!graph->closureNodes().empty()) {
+        // A capture is a module-level value of the definition's own module (task H37): a
+        // definition library is encoded as the function graph alone, so there is no root graph
+        // that could compute the value and no call site whose closure could carry it.
+        std::string captured;
+        for (const auto name : graph->captureNames()) {
+            if (!captured.empty()) {
+                captured += ", ";
+            }
+            captured += std::format("'{}'", core::symbolText(name));
+        }
+        return refuse(
+            std::format(
+                "its graph captures {} of the module's top level; a definition is a function of "
+                "the operator's operands, so a module-level value cannot be bound",
+                captured.empty() ? std::format("{} value(s)", graph->closureNodes().size())
+                                 : captured));
     }
     // The effects (design 9.2): within the operator's.
     const auto traits           = table.find(oper);

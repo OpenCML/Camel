@@ -1,0 +1,19 @@
+// The reproduction from the H37 handover brief, with its own names: a pass module with a
+// module-level literal (`two`), a module-level value computed by a call (`twelve`), and a pass
+// that prints both. Before H37 this printed `0 0`: the pass function graph was encoded alone, so
+// the module's root graph never ran and the capture ports kept the frame default.
+module gl
+import { Program } from graph
+
+let two = 2
+
+func ten(): int {
+    return 10
+}
+
+let twelve = two + ten()
+
+export func apply(p: Program): Program! sync {
+    println(two, twelve)
+    return p
+}
