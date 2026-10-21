@@ -1,0 +1,23 @@
+/**
+ * The bits belong to the program, not to the pass: tensor::fuse records the group as an
+ * attribute and changes no operator (design principles 9.6), so the program's bytes are the same
+ * with the pass. In safe mode (`tensor::fuse(safe_fp=true)`) the marked group and the unfused
+ * expression are bit-identical (every matmul runs the canonical algorithm, 7.4); in default mode
+ * two runs of the same program are bit-identical (7.6).
+ */
+module fuse_bits
+
+import { Tensor, reshape, relu, to_bytes, sum } from tensor
+import { to_array } from bytes
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
+    let b = reshape([5.0, -0.2], [2])
+    let affine = x @ w + b
+    let activated = relu(affine)
+    println(to_array(to_bytes(affine)))
+    println(to_array(to_bytes(activated)))
+    'fuse_bits sums={} {}'->format<sum(affine), sum(activated)>->println
+    return 0
+}

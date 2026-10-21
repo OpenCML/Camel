@@ -32,10 +32,10 @@
  * option CAMEL_TENSOR_BLAS, off by default), and is `sgemm` otherwise. A BLAS
  * library chooses its own order and grouping of the accumulation (and may not
  * fuse the multiply-adds), so it does not follow the canonical algorithm: it
- * is used only by tensor:matmul_blas, which tensor::fuse puts in place of a
- * tensor:matmul whose node was granted both `reassociate` and
- * `change_precision`. Without those permissions every matmul is canonical.
- * `libraryGemmName()` reports what sgemmLibrary calls.
+ * runs behind `tensor:matmul` when the node's `tensor.kernel` attribute says
+ * "library", which `tensor::fuse` writes for a matmul the 7.3 rule lets use it
+ * (default mode; safe mode withholds it). The operator stays `matmul`
+ * (design principles 9.6). `libraryGemmName()` reports what sgemmLibrary calls.
  *
  * `matmul` follows NumPy semantics: rank-1 operands are promoted to a row or
  * column vector and the promoted dimension is removed from the result; leading
@@ -73,19 +73,6 @@ Array *matmul(
 /// y = x @ weight (+ bias). `weight` is [in, out]; `bias` is [out] or null.
 Array *linear(
     const Array *x, const Array *weight, const Array *bias,
-    mm::IAllocator &allocator);
-
-/**
- * matmul(x, weight) + bias, then relu when `relu` is set: the kernel behind the fused operators
- * produced by the `tensor::fuse` pass. Shapes, dtypes, and errors are those of the unfused
- * expression. When x and weight are float, weight is rank 2, and bias broadcasts only along the
- * last axis, the bias rows are preloaded as C and added by the GEMM after each element's chain
- * (beta = 1), which is the unfused addition `product + bias` bit for bit; relu is then applied
- * in place. Otherwise the unfused operations run. Either way the result is the unfused
- * expression's.
- */
-Array *matmulAdd(
-    const Array *x, const Array *weight, Operand bias, bool relu,
     mm::IAllocator &allocator);
 
 } // namespace camel::tensor::kernels

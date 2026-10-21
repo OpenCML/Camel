@@ -416,19 +416,19 @@ timeout_ms = 6000
 
 [[tests]]
 name = "fused_grad_check"
-desc = "After tensor::fuse (and without std::macro, so grad sees the fused graphs), the derivative rules of matmul_add and matmul_add_relu match finite differences in every operand."
+desc = "After tensor::fuse (and without std::macro), the program's own matmul, add and relu rules differentiate the marked groups: every operand's gradient matches finite differences."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/fused_grad_check.cml"
 args = ["${case}", "tensor::fuse", "${run_nvm}"]
 expect_exit = 0
-expect_stdout_contains = ["matmul_add.x ok", "matmul_add.w ok", "matmul_add.b ok", "matmul_add_relu.x ok", "matmul_add_relu.w ok", "matmul_add_relu.b ok"]
+expect_stdout_contains = ["linear.x ok", "linear.w ok", "linear.b ok", "linear_relu.x ok", "linear_relu.w ok", "linear_relu.b ok"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
 [[tests]]
 name = "fused_grad_check.fused"
-desc = "The functions checked by fused_grad_check are indeed fused: tensor::fuse leaves matmul_add and matmul_add_relu in them."
+desc = "The functions checked by fused_grad_check are indeed the marked groups: tensor::fuse leaves matmul, add and relu in them and writes tensor.fusion on every node of each group."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/fused_grad_check.cml"
 args = ["${case}", "tensor::fuse", "std::gir"]
@@ -437,8 +437,13 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-assert((out.match(/tensor:matmul_add_relu/g) || []).length === 3, 'expected three matmul_add_relu nodes')
-assert((out.match(/tensor:matmul_add"/g) || []).length === 3, 'expected three matmul_add nodes')
+const count = (text) => out.split(text).length - 1
+const q = String.fromCharCode(92) + '"'
+assert(count('label="tensor:matmul"') === 6, `expected six matmul nodes, got ${count('label="tensor:matmul"')}`)
+assert(count('label="tensor:relu"') === 3, `expected three relu nodes, got ${count('label="tensor:relu"')}`)
+assert(count('tensor.fusion=') === 15, `expected 15 grouped nodes, got ${count('tensor.fusion=')}`)
+assert(count('tensor.fusion=' + q + 'linear_relu' + q) === 9, `expected three linear_relu groups, got ${count('tensor.fusion=' + q + 'linear_relu' + q)}`)
+assert(count('matmul_add') === 0, 'no fused operator may appear')
 }
 """
 timeout_ms = 6000

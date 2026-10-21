@@ -84,10 +84,11 @@ one definition.
   - `cblas`: forwards to `cblas_sgemm`. Enabled by the CMake option
     `CAMEL_TENSOR_BLAS` when `find_package(BLAS)` succeeds. A BLAS orders
     the accumulation its own way, so it does not follow matmul's canonical
-    algorithm (design principles 7.1): every operator uses the builtin GEMM,
-    and only `tensor:matmul_blas` calls the BLAS. `tensor::fuse` puts it in
-    place of a matmul whose node was granted both `reassociate` and
-    `change_precision` (`@numeric(...)`).
+    algorithm (design principles 7.1). Per 7.3 it is available by default for
+    an f32 matmul; the graph keeps `tensor:matmul` and `tensor::fuse` records
+    the choice as the node's `tensor.kernel` attribute (`"library"` or
+    `"canonical"`; safe mode and `#strict` nodes are canonical). The operator
+    never changes (design principles 9.6).
 - Convolution is im2col + GEMM. Pooling, normalization, and reductions are
   typed loops over contiguous NCHW buffers.
 
@@ -273,18 +274,21 @@ name `<module>::<pass>` that is not known when the names are checked
 module to use its pass (see `27_entry_parameters_and_pure_export.md`). The tensor
 module contributes `tensor::fuse`:
 
-- It rewrites `x @ w + b` and `relu(x @ w + b)` into `matmul_add` /
-  `matmul_add_relu`, one pattern at a time (a fused add can be the bias of the
-  next pattern, as in GRU gates).
-- Intermediates must be unobserved outside the pattern; their control
-  dependencies move to the fused node, so patterns inside `sync` code fuse too.
-- The fused kernel preloads a row bias as the GEMM accumulator and applies relu
-  in place; for other bias shapes and dtypes it runs the unfused computation, so
-  the rewrite needs no static shape information.
-- The nn module has VJP rules for both fused operators (and for `relu`), so
-  fused training graphs differentiate like the patterns they replace; five nn
-  training tests run a second time under `tensor::fuse`.
-- ONNX lowers the fused operators to MatMul/Add(/Relu).
+- It writes implementation choices on the nodes and changes no operator (design
+  principles 9.6): `tensor.kernel` on every `matmul` (`"library"` when the 7.3
+  rule permits the CPU library GEMM, `"canonical"` in safe mode or on a
+  `#strict` node), and `tensor.fusion` (`"linear"` / `"linear_relu"`) on the
+  nodes of `x @ w + b` and `relu(x @ w + b)` when the product has no other
+  reader, so a backend can run the group as one kernel while the graph keeps
+  `matmul`/`add`/`relu`.
+- The matmul kernel reads its own key through `ArgsView::attrs` (the scheduler
+  hands every operator the attribute set of the node it runs); the core
+  registers no key and reads none.
+- ONNX and Tiles therefore see the program's operators: the exporter needs no
+  lowering for a fused form, and a fused group is eligible for a Tiles region
+  like the unfused one.
+- The graph keeps the composition's derivative rules (matmul, add, relu), so
+  fused training graphs differentiate like the patterns they replace.
 
 ### 3.6 ONNX export (`modules/onnx/`)
 
@@ -437,8 +441,9 @@ Decisions recorded here because they change semantics outside the module:
   ("Tensor shape mismatch in '<op>': <detail>") instead of generic runtime errors.
 - **GEMM dispatch.** The builtin GEMM is compiled twice (portable, AVX2+FMA) and
   selected by a runtime CPU check, so portable builds still use wide vectors.
-  `CAMEL_TENSOR_BLAS=ON` adds a system CBLAS, used only by a matmul granted
-  `reassociate` and `change_precision` (after `tensor::fuse`).
+  `CAMEL_TENSOR_BLAS=ON` adds a system CBLAS; a matmul runs on it when its node's
+  `tensor.kernel` attribute says so, which `tensor::fuse` writes under the 7.3
+  rule (default mode; safe mode withholds it). The operator is still `matmul`.
 - **Operator semantics generalized** (all within the previous behavior for the
   old supported cases): arithmetic and comparison broadcast fully; matmul
   supports batched and vector operands; reductions take any axis and optional
@@ -510,6 +515,11 @@ rejection reason. That resolver extension is part of step 2.
   |---|---|---|---|
   | GRU | 4.75 | 2.6-2.8 | 2.5-2.6 |
   | Transformer | 5.87 | 2.2 | 1.97 |
+
+  (The "kernels + `tensor::fuse`" column measured the fused kernels of that time.
+  Since H102 the pass records the group as a node attribute and keeps the
+  program's operators, so the CPU no longer saves the intermediate tensors of a
+  fused linear layer; the numbers are the measurements of that experiment.)
 
   The container is shared (load average ~2.5 on 4 cores), so sub-millisecond
   results vary by up to 1.7x between runs; paper numbers need a quiet machine

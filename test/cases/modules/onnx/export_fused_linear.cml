@@ -1,0 +1,23 @@
+/**
+ * A fused linear layer exports as the program's operators: `relu(x @ w + b)` is MatMul, Add and
+ * Relu in the ONNX graph, whether tensor::fuse ran or not (design principles 9.6). The exporter
+ * has no fused form to translate, so the ONNX graph is the same before and after the pass.
+ */
+module export_fused_linear
+import { Tensor, reshape, relu, sum } from tensor
+import { export_model } from onnx
+import { get_env } from sys
+
+func net(x: Tensor): Tensor {
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
+    let b = reshape([0.1, -0.2], [2])
+    return relu(x @ w + b)
+}
+
+func main(): int sync {
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
+    println(sum(net(x)))
+    export_model((x: Tensor): Tensor => net(x), x, get_env('ONNX_OUT'))
+    println('exported')
+    return 0
+}

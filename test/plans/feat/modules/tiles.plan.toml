@@ -271,6 +271,25 @@ assert(ordered.excluded.some(n => n.reason === "control_edge") && ordered.region
 timeout_ms = 10000
 
 [[tests]]
+name = "regions.fused"
+desc = "After tensor::fuse, Tiles analyses the program's operators: the matmul, add and relu of a marked linear group form one region. The pass used to leave matmul_add_relu in the graph, which the region analysis has no contract for."
+kind = "behavior"
+case = "../../../cases/modules/tiles/fused_linear.cml"
+args = ["${case}", "tensor::fuse", "std::nvm"]
+envs = ["CAMEL_TILES_DEVICE=invalid"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const plans = input.stdout.trim().split(/\r?\n/).map(JSON.parse)
+assert(plans.length === 1, "expected one graph region analysis")
+const plan = plans[0]
+assert(plan.regions.length === 1, `one region expected, got ${plan.regions.length}: ${JSON.stringify(plan.excluded)}`)
+assert(plan.regions[0].members.length === 3, `matmul, add and relu must be one region, got ${plan.regions[0].members.length}`)
+}
+"""
+timeout_ms = 10000
+
+[[tests]]
 name = "regions.fvm"
 kind = "behavior"
 case = "../../../cases/modules/tiles/regions.cml"

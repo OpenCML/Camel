@@ -266,7 +266,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "fuse_linear_graph"
-desc = "tensor::fuse rewrites four matmul+add patterns and one relu pattern, and keeps the shared product unfused."
+desc = "tensor::fuse changes no operator: the graph keeps every matmul/add/relu and records tensor.kernel on each matmul and tensor.fusion on the nodes of the five groups it found; the product with a second reader is in no group."
 kind = "behavior"
 case = "../../../cases/modules/tensor/fuse_linear.cml"
 args = ["${case}", "tensor::fuse", "std::gir"]
@@ -275,11 +275,39 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
-const count = (uri) => (out.match(new RegExp(`label="${uri}"`, 'g')) || []).length
-assert(count('tensor:matmul_add') === 4, `expected 4 matmul_add, got ${count('tensor:matmul_add')}`)
-assert(count('tensor:matmul_add_relu') === 1, `expected 1 matmul_add_relu, got ${count('tensor:matmul_add_relu')}`)
-assert(count('tensor:matmul') === 1 && count('tensor:add') === 1, 'the shared product and its add must stay unfused')
-assert(count('tensor:relu') === 0, 'the relu must be fused')
+const q = String.fromCharCode(92) + '"'
+const count = (text) => out.split(text).length - 1
+const labels = (uri) => count(`label="${uri}"`)
+assert(labels('tensor:matmul') === 6, `expected 6 matmul, got ${labels('tensor:matmul')}`)
+assert(labels('tensor:add') === 6, `expected 6 add, got ${labels('tensor:add')}`)
+assert(labels('tensor:relu') === 1, `expected 1 relu, got ${labels('tensor:relu')}`)
+assert(count('matmul_add') === 0 && count('matmul_blas') === 0, 'no fused operator may appear')
+const fusion = (value) => count('tensor.fusion=' + q + value + q)
+assert(fusion('linear') === 8, `expected four linear groups, got ${fusion('linear')} nodes`)
+assert(fusion('linear_relu') === 3, `expected one linear_relu group, got ${fusion('linear_relu')} nodes`)
+assert(count('tensor.fusion=') === 11, `expected 11 grouped nodes, got ${count('tensor.fusion=')}`)
+assert(count('tensor.kernel=' + q + 'library' + q) === 6, 'every matmul records how it runs')
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_linear_graph_safe"
+desc = "tensor::fuse(safe_fp=true) keeps the groups but records the canonical algorithm on every matmul (design principles 7.4)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_linear.cml"
+args = ["${case}", "tensor::fuse(safe_fp=true)", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const q = String.fromCharCode(92) + '"'
+const count = (text) => out.split(text).length - 1
+assert(count('label="tensor:matmul"') === 6, `expected 6 matmul, got ${count('label="tensor:matmul"')}`)
+assert(count('tensor.kernel=' + q + 'canonical' + q) === 6, 'safe mode runs the canonical algorithm')
+assert(count('tensor.kernel=' + q + 'library' + q) === 0, 'no library GEMM in safe mode')
+assert(count('matmul_add') === 0, 'no fused operator may appear')
 }
 """
 timeout_ms = 4000
@@ -412,6 +440,66 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "fuse_bits.unfused"
+desc = "The reference bytes of `x @ w + b` and its relu without any pass (the program's own operators)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_bits.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_bits.safe"
+desc = "In safe mode tensor::fuse(safe_fp=true) records the canonical algorithm on the matmul and the group; the bytes of the marked group are exactly the bytes of the unfused expression, bit for bit (7.4)."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_bits.cml"
+args = ["${case}", "tensor::fuse(safe_fp=true)"]
+expect_exit = 0
+expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_bits.default"
+desc = "In default mode the marked group's bytes are still the unfused expression's: the library GEMM name resolves to the canonical kernel in a build without CAMEL_TENSOR_BLAS, and the fusion changed no operator."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_bits.cml"
+args = ["${case}", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_bits.default_again"
+desc = "A second run of the same default-mode program prints the same bytes (7.6): the pass is deterministic and the attribute it writes does not leak into the numbers."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_bits.cml"
+args = ["${case}", "tensor::fuse"]
+expect_exit = 0
+expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_bits.fvm"
+desc = "The FastVM carries the node's attributes into the operator call (the third extra word of OPER): the marked group prints the same bytes as on the node VM."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_bits.cml"
+args = ["${case}", "tensor::fuse", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
+timeout_ms = 4000
+
+[[tests]]
+name = "fuse_bits.jit"
+desc = "The JIT path (which falls back to the interpreter for OPER) prints the same bytes: the attribute is carried, and it changes no number on a build without CAMEL_TENSOR_BLAS."
+kind = "behavior"
+case = "../../../cases/modules/tensor/fuse_bits.cml"
+args = ["${case}", "tensor::fuse", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "[0, 0, 0, 0, 205, 204, 28, 192, 0, 0, 128, 63, 154, 153, 201, 191]\n[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 63, 0, 0, 0, 0]\nfuse_bits sums=-3.0250000953674316 1.0\n"
+timeout_ms = 8000
+
+[[tests]]
 name = "gemm_canonical"
 desc = "The GEMM is matmul's canonical algorithm, one fused multiply-add chain per element in ascending k (K = 600, beyond one cache block, with edge tiles). Reference output of the default GEMM unit."
 kind = "behavior"
@@ -424,7 +512,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "gemm_canonical.fused"
-desc = "tensor::fuse turns `a @ b + bias` and `relu(a @ b + bias)` into matmul_add(_relu), whose GEMM adds the bias after each element's chain: the bits of the unfused expression (they differed for K beyond one cache block)."
+desc = "tensor::fuse records the group as an attribute and changes no operator: the same expression computes the same bits as without the pass (the case's K exceeds one cache block, which is where an accumulation order could show)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gemm_canonical.cml"
 args = ["${case}", "tensor::fuse"]

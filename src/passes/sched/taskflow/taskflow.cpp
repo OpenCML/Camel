@@ -1949,6 +1949,10 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
                 oper.end - oper.normBegin};
             FrameArgsView withView(*frame, wargs);
             FrameArgsView normView(*frame, nargs);
+            // What a pass recorded about this node (design principles 9.6).
+            const auto attrs = graph->nodeAttrs(nodeRef);
+            withView.setAttrs(attrs);
+            normView.setAttrs(attrs);
             if (camel::core::effect_trace::enabled()) [[unlikely]] {
                 camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));
             }
@@ -1986,6 +1990,9 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     data_arr_t nargs{normIndices.data(), normIndices.size()};
     FrameArgsView withView(*frame, wargs);
     FrameArgsView normView(*frame, nargs);
+    const auto attrs = graph->nodeAttrs(nodeRef);
+    withView.setAttrs(attrs);
+    normView.setAttrs(attrs);
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(graph->nodeOrigin(nodeRef));

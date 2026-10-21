@@ -1,0 +1,19 @@
+/**
+ * What Tiles sees after tensor::fuse: the program's operators. The pass records the group as an
+ * attribute and changes no operator (design principles 9.6), so `x @ w + b` and its relu are
+ * `matmul`, `add` and `relu` for the region analysis, which is what makes the group eligible for
+ * one region. Before the change the pass left `matmul_add`/`matmul_add_relu` in the graph, which
+ * the region analysis has no contract for.
+ */
+module tiles_fused_linear
+import { Tensor, reshape, relu } from tensor
+import { regions } from tiles
+
+func linear(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 2]>, b: Tensor<f32, const [2]>): Tensor<f32, const [2, 2]> {
+    return relu(x @ w + b)
+}
+
+func main(): int sync {
+    println(regions<linear>())
+    return 0
+}

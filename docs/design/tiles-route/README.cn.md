@@ -275,7 +275,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 - ~~空张量求 `mean` 时内核与定义图的故障种类不同~~：内核也报 `DivisionByZero`，与定义的除法同一诊断。（Tiles 自己的 `mean of empty tensor` 检查仍是另一种诊断，宜照此统一。）
 - ~~int64 求和以 f64 累加~~：全量与按轴的 int64、布尔求和都在 int64 里精确累加并回绕；全量的 `sum`/`mean` 最后一次转为 f64。声明的归约律 `sum_i64`、`mean_i64` 等的累加类型改为 int64。
 - ~~`exp` 对次正规结果冲刷为零~~：次正规结果在 2 ulp 内（实测正规 1.01 ulp、次正规 0.76 ulp），声明里去掉了 `not_ieee: subnormals`。Tiles 的 `exp` 也应给出次正规结果。
-- ~~可选的 CBLAS 后端不遵守规范算法~~：默认（含 `CAMEL_TENSOR_BLAS` 构建）一律走规范内核；只有节点同时获得 `reassociate` 与 `change_precision` 时，`tensor::fuse` 才把它换成 `tensor:matmul_blas`（用系统 BLAS）。
+- ~~可选的 CBLAS 后端不遵守规范算法~~：按 7.3，CPU 上按库实现的 f32 矩阵乘默认可用，条件是可复现（7.6）；图上仍是 `tensor:matmul`，实现选择记在节点的 `tensor.kernel` 属性上（`tensor::fuse` 写，见 H102）。安全模式（`tensor::fuse(safe_fp=true)`）与 `#strict` 节点用规范算法。库只改累加的顺序与分组，不改算子身份（9.6）。
 - ~~ONNX 导出的 `Slice` 仍截断~~：常量边界在已知长度上于导出时证明；其余边界经一个 `Gather` 守卫，越界时 ONNX Runtime 与 Camel 一样失败；在两臂都计算再选择的分支里这样的切片拒绝导出（带位置的诊断）。
 - `argmax`/`argmin` 按 7.7 比较（第一个 NaN；+0 大于 -0；并列取第一个），新增 `argmin`，二者都有数值与下标声明（律 `ArgMax`/`ArgMin`）。
 

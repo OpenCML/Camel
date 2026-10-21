@@ -53,6 +53,7 @@ tensor:gemm_backend,,
 tensor:gt,1,
 tensor:idx,1,
 tensor:idx2d,1,
+tensor:idx_take,,
 tensor:iter,,
 tensor:layer_norm,17,
 tensor:layer_norm_grad,,13
@@ -63,9 +64,6 @@ tensor:log,1,
 tensor:log_softmax,13,
 tensor:lt,1,
 tensor:matmul,1,
-tensor:matmul_add,1,
-tensor:matmul_add_relu,1,
-tensor:matmul_blas,,
 tensor:matmul_grad_lhs,,13
 tensor:matmul_grad_rhs,,13
 tensor:max_axis,1,
@@ -101,6 +99,7 @@ tensor:show,,
 tensor:sigmoid,1,
 tensor:slice,10,
 tensor:slice_grad,,11
+tensor:slice_sub,,
 tensor:softmax,13,
 tensor:softmax_grad,,13
 tensor:sqrt,1,

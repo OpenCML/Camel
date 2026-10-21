@@ -21,7 +21,7 @@
         },
         {
             "name": "CAMEL_TENSOR_BLAS",
-            "description": "Link a system CBLAS (find_package(BLAS)) for a matmul granted reassociate and change_precision (tensor:matmul_blas); every other GEMM stays on the canonical builtin kernels",
+            "description": "Link a system CBLAS (find_package(BLAS)) for a matmul whose node the 7.3 rule lets run on the library GEMM (tensor.kernel=\"library\", written by tensor::fuse); safe mode and every withheld node stay on the canonical builtin kernels",
             "default": "OFF",
             "type": "bool"
         }

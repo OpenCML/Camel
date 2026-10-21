@@ -1179,6 +1179,53 @@ assert(count('Unsqueeze') === 3 && count('Concat') === 1 && count('Reshape') ===
 timeout_ms = 8000
 
 [[tests]]
+name = "export_fused_linear"
+desc = "A linear group marked by tensor::fuse exports as the program's operators: MatMul, Add and Relu, with no fused operator name (design principles 9.6)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_fused_linear.cml"
+args = ["${case}", "tensor::fuse", "std::nvm"]
+envs = ["ONNX_OUT=${test_tmp}/export_fused_linear.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_fused_linear.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') === 1 && count('Add') === 1 && count('Relu') === 1, `unexpected operators ${model.ops}`)
+assert(!model.ops.some((op) => /MatMulAdd|MatMulBlas|Fused/i.test(op)), `a fused operator name leaked: ${model.ops}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "export_fused_linear.nofuse"
+desc = "The same linear layer without tensor::fuse exports the same three operators: the pass only records an attribute (design principles 9.6), so the exporter's view does not depend on it."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_fused_linear.cml"
+args = ["${case}", "std::nvm"]
+envs = ["ONNX_OUT=${test_tmp}/export_fused_linear_nofuse.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_fused_linear_nofuse.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('MatMul') === 1 && count('Add') === 1 && count('Relu') === 1, `unexpected operators ${model.ops}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
 name = "pass_export_float_array"
 desc = "A float array literal whose elements depend on the model input (`reshape([sum(x * 2.0), 1.5, sum(x)], [3])`) is exported as the 1-D tensor it stands for: three Unsqueeze, one Concat, then the Reshape."
 kind = "behavior"

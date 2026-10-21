@@ -13,27 +13,29 @@
  *
  * Author: Camel Contributors
  * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 /*
- * tensor::fuse: rewrites `x @ w + b` and `relu(x @ w + b)` into single
- * matmul_add / matmul_add_relu operator nodes.
+ * tensor::fuse records implementation choices on the nodes of the program's graphs; it never
+ * changes an operator (design principles 9.6).
  *
- * The fused kernels fold the bias into the GEMM and apply relu in place, which
- * removes one (or two) intermediate tensors and passes over memory per linear
- * layer. They keep the pattern's semantics for every argument shape and dtype
- * (falling back to the unfused computation when the bias is not a row bias),
- * so the rewrite needs no static shape information. A pattern is fused only
- * when nothing outside it observes its intermediate results (their control
- * dependencies move to the fused node).
+ *   tensor.kernel  on every tensor:matmul: "library" when the node may run on the CPU library
+ *                  GEMM, "canonical" otherwise. The rule is the core's one decision (7.3): the
+ *                  node's effective numeric permissions, read through
+ *                  tag::effectivePermissions, which applies the stage's policy
+ *                  (relaxed by default: reassociate allowed) and withholds everything from a
+ *                  `#strict` node. `tensor::fuse(safe_fp=true)` uses the strict policy, so the
+ *                  safe mode's matmul runs the canonical algorithm (7.4).
+ *   tensor.fusion  on the nodes of `x @ w + b` and `relu(x @ w + b)` when nothing outside the
+ *                  pattern observes the product: "linear" or "linear_relu" on the matmul, the
+ *                  add and the relu, so a backend can run the group as one kernel while the
+ *                  graph keeps the program's operators.
  *
- * A remaining tensor:matmul whose node was granted both `reassociate` and
- * `change_precision` (@numeric, design principles 7.5) becomes
- * tensor:matmul_blas, which uses the system BLAS when the build has one
- * (CAMEL_TENSOR_BLAS) and the canonical kernel otherwise. Without those
- * permissions a matmul always runs the canonical fused multiply-add chain.
+ * The matmul kernel reads tensor.kernel through ArgsView::attrs (the scheduler hands the node's
+ * attribute set to the kernel). Because the operators stay matmul/add/relu, the ONNX exporter
+ * and Tiles see the program's operators, and the group is visible to them as the attribute.
  */
 
 #pragma once
@@ -44,10 +46,16 @@ namespace camel::tensor::passes {
 
 class TensorFusePass : public RuntimeGraphRewritePass {
   public:
-    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    TensorFusePass(const camel::core::context::context_ptr_t &ctx, bool safeFp)
+        : RuntimeGraphRewritePass(ctx), safeFp_(safeFp) {}
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
+
+  private:
+    /// tensor::fuse(safe_fp=true): the canonical algorithm for every matmul (design principles
+    /// 7.4); the default uses the stage's relaxed policy (7.3).
+    bool safeFp_ = false;
 };
 
 /// Registers the tensor module's passes (tensor::fuse) with the pass registry.

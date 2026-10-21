@@ -1132,7 +1132,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 
 - `max`/`min`（逐元素的 `maximum`/`minimum`、`max_axis`/`min_axis`）是 IEEE 754-2019 的 `maximum`/`minimum`：任一边是 NaN 得**规范的 quiet NaN**（`0x7fc00000`，符号位为 0，无载荷；与输入是哪个 NaN 无关，所以任意次序、任意分块逐位相同），`-0 < +0`。Tiles 的 `max_axis` 今天保留"首个 NaN 与 ±0 的平局规则"并带下标比较，要改为这条规则，带下标的并行比较可以去掉（6.9 第 6 条）。CUDA 的 `fmaxf` 不是它：用"两边有 NaN 则规范 NaN，否则相等时按位与（取 `+0`）、不等时取大"的比较序列。
 - `relu(x) = maximum(x, +0)`：NaN 得规范 NaN，`-0` 得 `+0`。Tiles 今天的 `a<0.0f?0.0f:a` 对 NaN 给原 NaN、对 `-0` 给 `-0`，两处都要改（6.9 第 3 条）。
-- `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear`/`matmul_add` 先算完链再加偏置。
+- `matmul` 的规范算法是按 k 递增的 FMA 链，从 `+0` 开始（Q7 取乙）：Tiles 现有的 `fmaf` 累加符合；K 尾部"排除而不是补 0"仍是必要的。CPU 的 GEMM 已改为同一算法（以前每 256 个 k 一块分别从 0 累加再相加），`linear` 先算完链再加偏置。库实现（CBLAS）只改累加的顺序与分组，是节点属性 `tensor.kernel` 上的选择，算子是 `matmul`（9.6；H102）。
 - `softmax` 的 CPU 内核与定义 `exp(x - m) / sum(exp(x - m))` 逐位一致（除法，不是乘倒数；和在 f64 里累加、最后舍入为 f32）。Tiles 把 softmax 写成组合，逐位比较时以定义为准。
 
 **查询一个算子的数值语义：**
@@ -1167,7 +1167,7 @@ bool any        = graph->hasNodePermissions();
 ```
 
 - 许可只由程序写 `@numeric(...)` 授予（函数或块，词法上嵌在其中的臂、循环体、lambda 一起），被调用的函数不继承；没有模块级默认、没有命令行开关，**`tiles.run` 等入口不接受许可**。
-- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 与 `tensor::fuse` 不把许可不同的节点合并（融合出的节点带它们共同的许可）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
+- 许可在 OPER 节点上；内联与克隆后各节点带自己的许可；`std::opt::cse` 不把许可不同的节点合并。`tensor::fuse` 不合并节点：它把融合组与库实现的选择记成节点属性（`tensor.fusion`、`tensor.kernel`），图上保留原算子，各节点仍带自己的许可（9.6，H102）。Tiles 自己融合时同样按 6.4 的表：收缩 `a * b + c` 要两个节点都有 `contract`，重新加括号要链上每个节点都有 `reassociate`。
 - 编译缓存的键要包含用到的每个 `OperatorKey` 与每个节点的许可（10.6 的 (iii)）。
 - 许可只允许、不要求：没有许可时必须给规范结果；有许可时给规范结果也总是对的。
 
