@@ -1177,14 +1177,6 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
                     });
                 results[arm] = gated;
                 draft.setWithInputs(user, results);
-                const auto *brchHeader = brch != kInvalidNodeRef ? draft.header(brch) : nullptr;
-                if (brchHeader && brchHeader->kind == GCNodeKind::Brch &&
-                    arm < draft.branchArmsOf(brch).size()) {
-                    auto *arms = reinterpret_cast<camel::runtime::GCBranchArm *>(
-                        draft.mutablePayloadOf(brch).data() +
-                        sizeof(camel::runtime::DraftBrchPayload));
-                    arms[arm].tail = gated;
-                }
             }
             continue;
         }

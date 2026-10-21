@@ -216,7 +216,6 @@ bool raiseArm(
         joined[arm.index]                 = call;
         draft.setWithInputs(join, joined);
     }
-    draft.setBranchArm(brch, arm.index, GCBranchArm{.head = call, .tail = call});
     // What waited on the code of the arm waits on the call.
     for (gc_node_ref_t id : members) {
         const std::vector<gc_node_ref_t> users(
@@ -246,6 +245,7 @@ bool raiseArm(
     draft.retireRegion(region, /*keepRegion=*/true);
     draft.setNodeRegion(call, region);
     draft.setRegionResult(region, call);
+    draft.setRegionInline(region, kInvalidGraphId, call);
     return true;
 }
 

@@ -709,62 +709,27 @@ bool orderedBefore(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
 
 namespace {
 
-/// The nodes each arm of each branch of `graph` reaches: per BRCH, per arm, the nodes its head
-/// reaches forwards (itself included). A node reached by exactly one arm of a branch runs only
-/// when that arm is taken.
-std::vector<std::vector<std::vector<bool>>> armReach(const GCGraph &graph) {
-    std::vector<std::vector<std::vector<bool>>> branches;
-    for (gc_node_ref_t brch = 0; brch < graph.nodeCount(); ++brch) {
-        if (graph.node(brch)->kind != GCNodeKind::Brch) {
+/// Whether `a` and `b` lie in different arms of one branch: never both run. The arms a node is
+/// in are the Arm regions around it.
+bool exclusive(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
+    std::vector<std::pair<gc_node_ref_t, uint32_t>> armsOfA; // (BRCH, arm)
+    for (uint32_t r = graph.nodeRegion(a); r != 0 && r < graph.regionCount();
+         r = graph.region(r)->parent) {
+        const GCRegion &region = *graph.region(r);
+        if (region.kind == GCRegionKind::Arm) {
+            armsOfA.emplace_back(region.owner, region.index);
+        }
+    }
+    for (uint32_t r = graph.nodeRegion(b); r != 0 && r < graph.regionCount();
+         r = graph.region(r)->parent) {
+        const GCRegion &region = *graph.region(r);
+        if (region.kind != GCRegionKind::Arm) {
             continue;
         }
-        std::vector<std::vector<bool>> arms;
-        for (const GCBranchArm &arm : graph.branchArmsOf(brch)) {
-            std::vector<bool> seen(graph.nodeCount(), false);
-            std::vector<gc_node_ref_t> work;
-            if (graph.containsNodeRef(arm.head)) {
-                seen[arm.head] = true;
-                work.push_back(arm.head);
+        for (const auto &[brch, arm] : armsOfA) {
+            if (brch == region.owner && arm != region.index) {
+                return true;
             }
-            while (!work.empty()) {
-                const gc_node_ref_t ref = work.back();
-                work.pop_back();
-                for (const auto outputs :
-                     {graph.normOutputsOf(ref), graph.withOutputsOf(ref), graph.ctrlOutputsOf(ref)}) {
-                    for (gc_node_ref_t next : outputs) {
-                        if (graph.containsNodeRef(next) && !seen[next]) {
-                            seen[next] = true;
-                            work.push_back(next);
-                        }
-                    }
-                }
-            }
-            arms.push_back(std::move(seen));
-        }
-        branches.push_back(std::move(arms));
-    }
-    return branches;
-}
-
-/// Whether `a` and `b` lie in different arms of one branch: never both run.
-bool exclusive(
-    const std::vector<std::vector<std::vector<bool>>> &branches, gc_node_ref_t a, gc_node_ref_t b) {
-    for (const auto &arms : branches) {
-        const auto onlyArm = [&](gc_node_ref_t node) -> std::optional<size_t> {
-            std::optional<size_t> found;
-            for (size_t i = 0; i < arms.size(); ++i) {
-                if (arms[i][node]) {
-                    if (found) {
-                        return std::nullopt; // reached by two arms: after the join
-                    }
-                    found = i;
-                }
-            }
-            return found;
-        };
-        const auto armA = onlyArm(a), armB = onlyArm(b);
-        if (armA && armB && *armA != *armB) {
-            return true;
         }
     }
     return false;
@@ -779,11 +744,10 @@ std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GC
             touching.push_back(ref);
         }
     }
-    const auto branches = armReach(graph);
     std::vector<RequiredOrdering> pairs;
     for (size_t i = 0; i < touching.size(); ++i) {
         for (size_t j = i + 1; j < touching.size(); ++j) {
-            if (exclusive(branches, touching[i], touching[j])) {
+            if (exclusive(graph, touching[i], touching[j])) {
                 continue; // different arms of one branch: they never both run
             }
             const ResourceConflict c = resourceConflict(program, graph, touching[i], touching[j]);

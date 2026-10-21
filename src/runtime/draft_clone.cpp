@@ -79,20 +79,11 @@ std::vector<std::byte> clonePayloadBytes(
     ASSERT(sourceNode != nullptr, "Runtime draft clone encountered a null source node.");
 
     if (sourceNode->kind == GCNodeKind::Brch) {
-        const auto sourceArms = sourceGraph->branchArmsOf(sourceRef);
-        std::vector<std::byte> bytes(sizeof(DraftBrchPayload) + sourceArms.size_bytes());
+        std::vector<std::byte> bytes(sizeof(DraftBrchPayload));
         auto *payload                 = reinterpret_cast<DraftBrchPayload *>(bytes.data());
         const auto *sourceBrchPayload = sourceGraph->nodeBodyAs<GCBrchBody>(sourceRef);
         payload->join                 = remapNodeRef(sourceBrchPayload->join, mapping);
         payload->armCount             = sourceBrchPayload->armCount;
-        payload->defaultArm           = remapNodeRef(sourceBrchPayload->defaultArm, mapping);
-        payload->reserved             = 0;
-
-        auto *arms = reinterpret_cast<GCBranchArm *>(bytes.data() + sizeof(DraftBrchPayload));
-        for (size_t i = 0; i < sourceArms.size(); ++i) {
-            arms[i].head = remapNodeRef(sourceArms[i].head, mapping);
-            arms[i].tail = remapNodeRef(sourceArms[i].tail, mapping);
-        }
         return bytes;
     }
 
@@ -145,21 +136,12 @@ std::vector<std::byte> clonePayloadBytes(
     ASSERT(sourceNode != nullptr, "Draft graph clone encountered a missing source node.");
 
     if (sourceNode->kind == GCNodeKind::Brch) {
-        const auto sourceArms = sourceDraft.branchArmsOf(sourceRef);
-        std::vector<std::byte> bytes(sizeof(DraftBrchPayload) + sourceArms.size_bytes());
+        std::vector<std::byte> bytes(sizeof(DraftBrchPayload));
         auto *payload = reinterpret_cast<DraftBrchPayload *>(bytes.data());
         const auto *sourceBrchPayload =
             reinterpret_cast<const DraftBrchPayload *>(sourceDraft.payloadOf(sourceRef).data());
-        payload->join       = remapNodeRef(sourceBrchPayload->join, mapping);
-        payload->armCount   = sourceBrchPayload->armCount;
-        payload->defaultArm = remapNodeRef(sourceBrchPayload->defaultArm, mapping);
-        payload->reserved   = 0;
-
-        auto *arms = reinterpret_cast<GCBranchArm *>(bytes.data() + sizeof(DraftBrchPayload));
-        for (size_t i = 0; i < sourceArms.size(); ++i) {
-            arms[i].head = remapNodeRef(sourceArms[i].head, mapping);
-            arms[i].tail = remapNodeRef(sourceArms[i].tail, mapping);
-        }
+        payload->join     = remapNodeRef(sourceBrchPayload->join, mapping);
+        payload->armCount = sourceBrchPayload->armCount;
         return bytes;
     }
 
@@ -237,7 +219,7 @@ void adoptRegions(
         owner.setRegionResult(made, mapNode(from.result));
         owner.setRegionOrigin(made, from.origin);
         owner.setRegionAttrs(made, from.attrs);
-        owner.setRegionInline(made, from.inlineOf, kInvalidNodeRef);
+        owner.setRegionInline(made, from.inlineOf, mapNode(from.callSite));
         std::vector<gc_node_ref_t> ports;
         for (gc_node_ref_t port : portsOf(source, r)) {
             ports.push_back(mapNode(port));

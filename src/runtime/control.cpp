@@ -137,7 +137,6 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     }
     const size_t slots = draft.nodeSlotCount();
     std::vector<bool> protectedNode(slots, false);
-    std::vector<bool> anchorNode(slots, false);
     size_t edges   = 0;
     size_t removed = 0;
     // Nothing runs a port or a constant: waiting for one orders nothing. (The front end orders
@@ -173,18 +172,6 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
                  draft.withInputsOf(id).size();
         protectedNode[id] =
             protectedNode[id] || isBoundary(draft, id) || h->kind == GCNodeKind::Loop;
-        if (h->kind == GCNodeKind::Brch) {
-            for (const auto &arm : draft.branchArmsOf(id)) {
-                if (arm.head < slots) {
-                    protectedNode[arm.head] = true;
-                    anchorNode[arm.head]    = true;
-                }
-                if (arm.tail < slots) {
-                    protectedNode[arm.tail] = true;
-                    anchorNode[arm.tail]    = true;
-                }
-            }
-        }
     }
     maxWork = std::min(maxWork, 8 * (slots + edges));
     // Epochs avoid clearing graph-sized scratch arrays for every target. Mandatory value
@@ -249,7 +236,7 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
             seen[node]    = epoch;
             const auto *h = draft.header(node);
             const bool completedBoundary =
-                h && !anchorNode[node] &&
+                h &&
                 (h->kind == GCNodeKind::Join || h->kind == GCNodeKind::Loop);
             if (candidate[node] == epoch && (!protectedNode[node] || completedBoundary)) {
                 redundant[node] = epoch;

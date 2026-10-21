@@ -89,7 +89,6 @@ bool applyMacroRewrite(
 
     draft.replaceAllValueUses(draftNodeId, replacementNodeId);
     draft.replaceAllCtrlUses(draftNodeId, replacementNodeId);
-    draft.retargetBranchArmAnchors(draftNodeId, replacementNodeId, replacementNodeId);
     if (draft.outputNode() == draftNodeId) {
         draft.setOutputNode(replacementNodeId);
     }

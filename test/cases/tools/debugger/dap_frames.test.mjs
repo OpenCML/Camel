@@ -2,7 +2,7 @@
 // 10.2; docs/technical/35_debugger.md 4.2, 5.4, 3.3), on both debuggable back ends:
 //  - the arms of a branch are part of the frame of their function: a line step goes through
 //    an arm as through the rest of the function, the arm's names are the frame's while it
-//    runs; with frames "subgraphs" the arm is the frame it is;
+//    runs and gone when it is over (an arm is a region of the frame);
 //  - a line step that goes past a line nothing uses the result of says so, and so does a
 //    breakpoint on such a line when the program ends without hitting it;
 //  - names are full names: `module::path::name`, without the module for the entry module's
@@ -75,20 +75,6 @@ await runTest(async (t) => {
             const hover = await dap.request('evaluate', { expression: 'big', frameId: stop.top.id, context: 'hover' })
             checkEq(hover.body?.result, '12', on('a name of the arm can be evaluated in the frame'))
 
-            // The switch: the arm as the subgraph frame it is, then folded again.
-            check((await dap.request('camel/setFrames', { frames: 'subgraphs' })).success, on('switched to subgraphs'))
-            const st = (await dap.request('stackTrace', { threadId: 1 })).body?.stackFrames || []
-            checkEq(
-                st.map((f) => f.name),
-                [`pick [arm at line ${L('big')}]`, 'pick', 'main', '__root__'],
-                on('subgraphs: the arm is a frame above the frame of pick'),
-            )
-            const armLocals = await dap.variables(st[0].id)
-            checkEq([armLocals.base?.value, armLocals.big?.value], ['4', '12'], on('subgraphs: the arm has what it was passed and its own names'))
-            const pickLocals = await dap.variables(st[1].id)
-            check(!('big' in pickLocals) && pickLocals.base?.value === '4', on('subgraphs: the frame of pick has its own names only'), pickLocals)
-            check((await dap.request('camel/setFrames', { frames: 'functions' })).success, on('switched back to functions'))
-
             // Out of the arm, back to the function: the join, then the next lines.
             stop = await step(dap, 'next')
             checkEq(at(stop), `pick:${lineOf(FOLDED, 'let r = if')}`, on('next: back in the function where the branch joins'))
@@ -111,17 +97,6 @@ await runTest(async (t) => {
                 dap.outputOf('console'),
             )
             checkEq(dap.outputOf('stdout'), '14\n', on('with the output of the program'))
-            await dap.stop()
-        }
-
-        // ---- frames of subgraphs from the launch: a line step goes over the arm ------------------
-        {
-            const dap = await t.dap()
-            await dap.launch(FOLDED, { passes: [backend], frames: 'subgraphs' }, { [FOLDED]: [L('big')] })
-            let stop = await dap.waitStop()
-            checkEq(at(stop), `pick:${L('big')}`, on('subgraphs: stopped at the call of the arm, in pick'))
-            stop = await step(dap, 'next')
-            checkEq(at(stop), `pick:${lineOf(FOLDED, 'let r = if')}`, on('subgraphs: next steps over the arm, a call of a subgraph'))
             await dap.stop()
         }
 

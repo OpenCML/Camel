@@ -201,9 +201,8 @@ runtime::DraftNodeRef DraftGraphBuilder::addAccsNode(camel::core::type::Type *ty
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addBrchNode(
-    camel::core::type::Type *type, runtime::DraftNodeRef joinNode,
-    std::span<const runtime::GCBranchArm> arms, runtime::DraftNodeRef defaultArm) {
-    return ref(draft_->addBrchNode(type, joinNode.id, arms, defaultArm.id));
+    camel::core::type::Type *type, runtime::DraftNodeRef joinNode, runtime::gc_cnt_t armCount) {
+    return ref(draft_->addBrchNode(type, joinNode.id, armCount));
 }
 
 runtime::DraftNodeRef DraftGraphBuilder::addJoinNode(

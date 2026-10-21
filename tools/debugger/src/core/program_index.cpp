@@ -354,25 +354,6 @@ void ProgramIndex::collect(
                         }
                     }
                 }
-                if (n != nullptr && n->kind == GCNodeKind::Brch && arms != nullptr) {
-                    // An arm that is a call of a subgraph: that graph is the arm, and part of
-                    // the graph that branches.
-                    for (const GCBranchArm &arm : g->branchArmsOf(it.ref())) {
-                        for (gc_node_ref_t ref : {arm.head, arm.tail}) {
-                            const GCNode *armNode =
-                                ref != kInvalidNodeRef ? g->node(ref) : nullptr;
-                            if (armNode != nullptr && armNode->kind == GCNodeKind::Func) {
-                                if (GCGraph *callee = program->calleeOf(*g, ref)) {
-                                    auto &owners = (*arms)[callee];
-                                    if (std::find(owners.begin(), owners.end(), g) ==
-                                        owners.end()) {
-                                        owners.push_back(g);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
                 const origin_t o = g->nodeOrigin(it.ref());
                 if (n == nullptr || o == 0) {
                     continue;
@@ -875,6 +856,29 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
         }
     }
 
+    // The arm or loop region each region is in (the regions that only annotate are looked through).
+    const auto isControl = [](GCRegionKind kind) {
+        return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
+               kind == GCRegionKind::LoopBody;
+    };
+    const auto controlRegionOf = [&](uint32_t r) {
+        for (int guard = 0; r != 0 && guard < 4096; ++guard) {
+            const GCRegion *region = g->region(r);
+            if (region == nullptr) {
+                return uint32_t{0};
+            }
+            if (isControl(region->kind)) {
+                return r;
+            }
+            r = region->parent;
+        }
+        return uint32_t{0};
+    };
+    info->regionOuter.assign(g->regionCount(), 0);
+    for (uint32_t r = 1; r < g->regionCount(); ++r) {
+        info->regionOuter[r] = controlRegionOf(g->region(r)->parent);
+    }
+
     std::unordered_map<int, size_t> functionVotes;
     if (g->hasNodePayload()) {
         for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
@@ -890,6 +894,7 @@ GraphInfo &ProgramIndex::graph(GCGraph *g) {
             node.loc      = loc(node.origin);
             node.function = functionOf(node.loc);
             node.executes = executesKind(n->kind);
+            node.controlRegion = controlRegionOf(g->nodeRegion(node.ref));
             switch (n->kind) {
             case GCNodeKind::Oper: {
                 const auto *body = g->nodeBodyAs<GCOperBody>(node.ref);

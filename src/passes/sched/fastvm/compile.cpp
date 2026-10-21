@@ -374,8 +374,7 @@ static bytecode_vec_t compileRuntimeGraph(
 
         case camel::runtime::GCNodeKind::Brch: {
             appendBytecode(bytecodes, OpCode::BRCH, record->dataIndex, {}, normOps, withOps);
-            const auto branchArms = graph->branchArmsOf(runtimeNodeIndex);
-            for (size_t armIndex = 0; armIndex < branchArms.size(); ++armIndex) {
+            for (size_t armIndex = 0; armIndex < graph->armCountOf(runtimeNodeIndex); ++armIndex) {
                 const auto armEntry = plan.branchArmEntriesOf(i)[armIndex];
                 ASSERT(
                     armEntry != camel::runtime::kInvalidNodeRef,

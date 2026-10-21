@@ -425,9 +425,8 @@ slot_t NodeVMSchedPass::call(
                     camel::execute::selectRuntimeBranchArm(*currPlan, en, currFrame);
                 currFrame->set(n->dataIndex, fromSlot<Int32>(static_cast<Int32>(jumpIdx)));
 
-                const auto arms  = en.branchArms();
                 const auto *body = en.bodyAs<GCBrchBody>();
-                ASSERT(jumpIdx < arms.size(), "Branch arm index out of range in NodeVM.");
+                ASSERT(jumpIdx < en.armCount, "Branch arm index out of range in NodeVM.");
                 // The arm runs from its first executable node in the linear order (not from
                 // its recorded head: after inlining, nodes of the arm can precede the head)
                 // through its tail. An arm with nothing to execute resumes at the JOIN.

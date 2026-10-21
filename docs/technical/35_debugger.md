@@ -74,15 +74,11 @@ located node of line L and the last located node it ran was not on L (or it has 
 Nodes of a callee belong to the callee's frame and do not make the caller leave its line, so
 `let a = f(x) + 1` is entered once even though `f` runs in between.
 
-The arm of a branch is a graph of its own (5.4), but it is code of the function that
-branches. With frames of functions (the default) the frame that enters a line is the
-activation of the function, whichever of its graphs runs the node: a line the branch node and
+The arm of a branch is a region of the graph that branches (5.4). A line the branch node and
 the first node of the arm share is entered once, the lines of the arm are entered as lines of
-the function, and when the arm returns the function enters the line it goes on with (the join
-of `let r = if ... then { ... }` is on the line of the `let`, which is entered again). With
-frames of subgraphs the frame of an arm starts on the line its function is on, so a shared line
-is entered once there too, and a line step that started in the function goes on in an arm that
-replaced the function's frame by a tail call.
+the function, and when the arm is over the function enters the line it goes on with (the join
+of `let r = if ... then { ... }` is on the line of the `let`, which is entered again). The same
+holds for the parts of a loop with frames of functions.
 
 ## 3. Breakpoints
 
@@ -285,48 +281,32 @@ See 4.3: `main [inlined code of g]`, located in `g` (the full name of `g`, 5.5).
 ### 5.4 Arms and lambdas: frames of functions, or of subgraphs
 
 `if c then a else b` (and `match`, `??`, `!!`, `?->`, `&&`, `||` and narrowing, which are the
-same structure) is a branch node and one graph per arm; the builder names these graphs itself
-(`__g_7__`), like the graphs of lambdas. Which graphs are arms, and of which graphs (their
-*owners*, the graphs that hold the branch node), is read from the branch nodes of the running
-program (`GCGraph::branchArmsOf`); a graph the compiler named that is no arm is a lambda.
+same structure) is a branch node and one *arm region* per arm of the graph that holds the
+branch (`GCRegion`, kind `Arm`). The program the debugger shows has its arms lowered like every
+other program, so there is no frame of an arm: an arm is code of the function it is written
+in (design principles 12.1) and runs in that function's frame. A graph the compiler named
+(`__g_7__`) is a lambda or the part of a loop.
 
-Design principles 12.1: an arm is code of the function it is written in, so by default
-(`frames` is `functions`) its frame is part of the frame of that function. The core keeps one
-shadow frame per activation of a graph, as the schedulers run them, and groups them into
-*activations of functions*:
+Names: the index knows, for each node, the innermost arm or loop region it is in. A name
+declared in an arm is there while the code runs in that arm (or in a region inside it) and is
+gone when the arm is over, as the names of a block are; a name of an arm that was not taken is
+not listed.
 
-- the frame of an arm, called by a frame of one of its owners, is part of the caller's
-  activation; so is the frame of an arm that replaced a frame of its owner by a tail call (the
-  branch was the last thing the owner did); an arm of an arm is part of the same activation;
+The core keeps one shadow frame per activation of a graph, as the schedulers run them, and
+groups them into *activations of functions*; a tail call that replaces the only frame of an
+activation replaces the activation (and is counted, 5.2). The parts of a loop, which are still
+graphs, are grouped with the function that holds the `LOOP` node:
+
+- the frame of a loop part, called by a frame of its owner, is part of the caller's activation;
 - every other frame starts an activation: a call of a function or of a lambda, the tail call of
-  one. A tail call that replaces the only frame of an activation replaces the activation (and
-  is counted, 5.2); one that replaces the frame of an arm whose function goes on below is shown
-  as a call by that function.
+  one.
 
-The frames of an activation are adjacent on the shadow stack. Shown as one frame, they have the
-name of the function (the graph the activation started with, or the function the arm belongs
-to when the function's own frame was replaced), the position of the innermost frame, and as
-names: the parameters, the names of the function, and the names declared in the arms that are
-running (a name declared in an arm is there while the arm runs, as a block's names are); a port
-of an arm stands for the function's value of the same name and is not shown twice. When an arm
-replaced its function's frame, a name of the function the arm does not use is
-`<not held: the arm that runs replaced the function's frame and does not use it>`. The stack
-frame carries `function` (the full name) and `subgraphs` (the arms folded in); `graph` and
-`graphId` stay those of the graph that runs, which the graph view and node breakpoints use.
-
-`frames` `subgraphs` shows every shadow frame: an arm is `fact [arm at line 4]` (the nearest
-enclosing graph with a name of the source, and the first line of the graph's nodes), with
-`(tail call, 1 frame replaced)` when it replaced its function's frame, and has its own names
-only. Lambdas are frames of their own in both settings: a function value is a function.
-
-The setting is the core command `configure {frames}`, the DAP launch attribute `frames` and
-custom request `camel/setFrames` (VS Code: *Camel: Toggle Subgraph Frames*), and the REPL
-command `frames`. It changes what the next question about the stack sees, also while the
-program is stopped; a step uses the setting it started with.
-
-An arm takes the values it uses from its function as unnamed `with` ports. The debugger names
-such a port after what the caller passes there (a port of the caller, or the name bound to the
-node), so an arm shows `n`, not `port`.
+`frames` `subgraphs` shows every shadow frame, so the parts of a loop are frames of their own;
+lambdas are frames of their own in both settings: a function value is a function. The setting is
+the core command `configure {frames}`, the DAP launch attribute `frames` and custom request
+`camel/setFrames` (VS Code: *Camel: Toggle Subgraph Frames*), and the REPL command `frames`.
+It changes what the next question about the stack sees, also while the program is stopped; a
+step uses the setting it started with.
 
 A loop (design principles 3.10) will be a `LOOP` node with a condition subgraph and a body
 subgraph; they are code of the function the loop is written in and fold the same way. In the

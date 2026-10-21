@@ -161,6 +161,12 @@ void GraphDraft::retireRegion(uint32_t id, bool keepRegion) {
     }
 }
 
+bool GraphDraft::isArmCall(gc_node_ref_t id) const {
+    const uint32_t r = nodeRegion(id);
+    return r != 0 && r < regions_.size() && regions_[r].kind == GCRegionKind::Arm &&
+           regions_[r].callSite == id;
+}
+
 uint32_t GraphDraft::armRegionOf(gc_node_ref_t brch, size_t index) const {
     for (uint32_t r = 1; r < regions_.size(); ++r) {
         if (regions_[r].kind == GCRegionKind::Arm && regions_[r].owner == brch &&
@@ -180,14 +186,6 @@ void GraphDraft::clearRegions() {
     }
     regions_.clear();
     regionPorts_.clear();
-}
-
-void GraphDraft::setRegionArm(uint32_t id, gc_node_ref_t owner, uint32_t index) {
-    ++mutations_;
-    ASSERT(id > 0 && id < regions_.size(), "No such region.");
-    regions_[id].kind  = GCRegionKind::Arm;
-    regions_[id].owner = owner;
-    regions_[id].index = index;
 }
 
 void GraphDraft::setRegionOrigin(uint32_t id, uint32_t origin) {
@@ -218,16 +216,22 @@ void GraphDraft::regionizeArmCalls() {
         if (!h || h->kind != GCNodeKind::Brch) {
             continue;
         }
-        const std::vector<GCBranchArm> arms(branchArmsOf(brch).begin(), branchArmsOf(brch).end());
-        for (uint32_t k = 0; k < arms.size(); ++k) {
-            const gc_node_ref_t call = arms[k].head;
-            if (call != arms[k].tail || !alive(call) || header(call)->kind != GCNodeKind::Func ||
-                nodeRegion(call) != 0) {
+        // The call of an arm is what the JOIN reads of it, ordered after the BRCH.
+        const gc_node_ref_t join =
+            reinterpret_cast<const DraftBrchPayload *>(payloadOf(brch).data())->join;
+        const std::vector<gc_node_ref_t> results(
+            withInputsOf(join).begin(),
+            withInputsOf(join).end());
+        for (uint32_t k = 0; k < results.size(); ++k) {
+            const gc_node_ref_t call = results[k];
+            if (!alive(call) || header(call)->kind != GCNodeKind::Func || nodeRegion(call) != 0 ||
+                std::ranges::find(ctrlInputsOf(call), brch) == ctrlInputsOf(call).end()) {
                 continue;
             }
             const uint32_t region = addRegion(GCRegionKind::Arm, nodeRegion(brch), brch, k);
             setNodeRegion(call, region);
             setRegionResult(region, call);
+            setRegionInline(region, kInvalidGraphId, call);
         }
     }
 }
