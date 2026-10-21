@@ -203,9 +203,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
     std::unordered_set<const GCGraph *> seen;
     std::vector<GCGraph *> work(roots.rbegin(), roots.rend());
 
-    // The graphs a graph calls directly or uses as values, looking through the arms lowered
-    // in place.
-    std::unordered_set<const GCGraph *> scanning;
+    // The graphs a graph calls directly or uses as values.
     std::function<void(GCGraph *)> scan = [&](GCGraph *graph) {
         for (gc_node_ref_t ref : graph->execPlan().topo) {
             const auto *node = graph->node(ref);
@@ -223,13 +221,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
             if (callee == nullptr) {
                 continue;
             }
-            // An arm is lowered in place, unless it is already being lowered further out (a
-            // rewrite can leave an arm graph that reaches itself): then it is a function.
-            if (isArmCall(*parts_.program, graph, ref) && !scanning.contains(callee)) {
-                scanning.insert(callee);
-                scan(callee);
-                scanning.erase(callee);
-            } else if (!seen.contains(callee)) {
+            if (!seen.contains(callee)) {
                 work.push_back(callee);
             }
         }
@@ -242,7 +234,6 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
             continue;
         }
         functions.push_back(graph);
-        scanning = {graph};
         if (!parts_.functionNames.contains(graph)) {
             const std::string &name = graph->name();
             std::string base        = isAnonymous(name) ? "lambda" : name.substr(0, name.find('$'));

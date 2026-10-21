@@ -942,7 +942,9 @@ gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
     gc_node_ref_t id = static_cast<gc_node_ref_t>(nodesById_.size());
     touchRefs();
     nodesById_.push_back(rebuildNode(id, init));
-    nodesById_[id]->header.region = init.region;
+    // Constants and ports are not executed: they belong to the body, whatever arm is being written.
+    const bool bodyKind = init.kind == GCNodeKind::Data || init.kind == GCNodeKind::Port;
+    nodesById_[id]->header.region = init.region != 0 ? init.region : bodyKind ? 0 : insertRegion_;
     sourceRefsById_.push_back(kInvalidNodeRef);
     noteNodeKind(id, init.kind);
     liveNodeCount_++;

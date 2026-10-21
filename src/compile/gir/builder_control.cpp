@@ -72,7 +72,7 @@ namespace {
 /// needs no case of its own here. What a block can add around the value is an anchor: a GATE
 /// that orders the value after the block's effects forwards it unchanged (`sync { …; r }` ends
 /// in one), and the criterion is the value behind it. A CALL is not looked through: what a call
-/// returns is computed in another graph (a function's, or an arm graph of a branch), whose state
+/// returns is computed in another graph (a function's), whose state
 /// this is not — a loop state is only written in place when the graph that returns it also
 /// builds it.
 node_handle_t loopStateValueOf(node_handle_t node) {
@@ -424,17 +424,44 @@ data_ptr_t Builder::literalElementInType(
     rejectLiteralData(data, type, where, nullptr, writtenAt);
 }
 
-void Builder::coerceArmExit(
-    const compile_graph_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
-    Type *exitType = arm->funcType()->exitType();
+void Builder::coerceGraphExit(
+    const compile_graph_ptr_t &graph, Type *target, const GCT::node_ptr_t &origin) {
+    Type *exitType = graph->funcType()->exitType();
     if (exitType != nullptr && target->assignableFrom(exitType)) {
         return;
     }
-    // The nodes are added to the arm's own graph; no name is looked up, so the scopes of the
-    // position the branch stands at do no harm.
-    const compile_graph_ptr_t outer = std::exchange(currGraph_, arm);
-    node_handle_t output            = arm->draft().ref(arm->draft().exitNode());
+    // The nodes are added to the graph itself; no name is looked up, so the scopes of the
+    // position the loop stands at do no harm.
+    const compile_graph_ptr_t outer = std::exchange(currGraph_, graph);
+    node_handle_t output            = graph->draft().ref(graph->draft().exitNode());
     node_handle_t coerced           = coerceTo(output, target, origin);
+    ASSERT(coerced != nullptr, "A graph is coerced only to a type its value enters.");
+    if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
+        // A literal took the place of the output (`[]`): what the output waited for (the
+        // statements of a sync body) is still waited for.
+        node_handle_t gate = currGraph_->addGateNode(target);
+        linkNodes(LinkType::Norm, coerced, gate);
+        linkNodes(LinkType::Ctrl, output, gate);
+        coerced = gate;
+    }
+    graph->setExitType(target);
+    setGraphReturnFromResult(graph, nodeIdOf(coerced), nodeIdOf(coerced), target);
+    currGraph_ = outer;
+}
+
+void Builder::coerceArmExit(
+    const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin) {
+    Type *exitType = arm->exitType();
+    if (exitType != nullptr && target->assignableFrom(exitType)) {
+        return;
+    }
+    // The nodes are added to the arm's own region; no name is looked up, so the scopes of the
+    // position the branch stands at do no harm.
+    runtime::GraphDraft &draft = arm->graph->draft();
+    const uint32_t outerRegion = draft.insertRegion();
+    draft.setInsertRegion(arm->region);
+    node_handle_t output  = arm->output;
+    node_handle_t coerced = coerceTo(output, target, origin);
     ASSERT(coerced != nullptr, "A branch arm is joined only with a type its value enters.");
     if (normInputsOf(coerced).empty() && !ctrlInputsOf(output).empty()) {
         // A literal took the place of the output (`[]`): what the output waited for (the
@@ -444,27 +471,27 @@ void Builder::coerceArmExit(
         linkNodes(LinkType::Ctrl, output, gate);
         coerced = gate;
     }
-    arm->setExitType(target);
-    setGraphReturnFromResult(arm, nodeIdOf(coerced), nodeIdOf(coerced), target);
-    currGraph_ = outer;
+    draft.setInsertRegion(outerRegion);
+    arm->output = coerced;
+    arm->value  = coerced;
+    arm->type   = target;
 }
 
 Type *Builder::declaredExitTypeHere() const {
-    compile_graph_ptr_t graph = currGraph_;
-    while (graph != nullptr && openArmGraphs_.contains(graph.get())) {
-        graph = graph->outerGraph();
-    }
-    FunctionType *funcType = graph != nullptr ? graph->funcType() : nullptr;
+    FunctionType *funcType = currGraph_ != nullptr ? currGraph_->funcType() : nullptr;
     // An undeclared return type is set from the first value returned (see
     // checkDeclaredReturn): before that, a type that is present was declared.
     if (funcType == nullptr || !funcType->hasExitType() ||
-        graph->draft().exitNode() != runtime::kInvalidNodeRef) {
+        currGraph_->draft().exitNode() != runtime::kInvalidNodeRef) {
         return nullptr;
     }
     return funcType->exitType();
 }
 
 Type *Builder::ownDeclaredExitType() const {
+    if (activeArm() != nullptr) {
+        return nullptr; // an arm declares no type of its own
+    }
     FunctionType *funcType = currGraph_ != nullptr ? currGraph_->funcType() : nullptr;
     if (funcType == nullptr || !funcType->hasExitType() ||
         currGraph_->draft().exitNode() != runtime::kInvalidNodeRef) {
@@ -481,7 +508,7 @@ Type *Builder::tailPositionType() const {
 }
 
 Type *Builder::expectedExitTypeHere() const {
-    if (currGraph_ != nullptr && openArmGraphs_.contains(currGraph_.get())) {
+    if (activeArm() != nullptr) {
         // Inside a branch arm the value of a `return` is the arm's value, so its position is
         // the one the branch stands at; the function's declared return type has nothing to do
         // with it (design principles 5.1, language reference 7.3).
@@ -532,39 +559,128 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     return value;
 }
 
-compile_graph_ptr_t
-Builder::buildArmGraph(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body) {
-    graph_ptr_t subGraph = enterScope(FunctionType::create());
-    registerGraphOrigin(context_, subGraph, exec, "gir.brch.case.graph");
-    bodyStates_[subGraph.get()] = BodyState::Open;
-    openArmGraphs_.insert(subGraph.get());
+void Builder::enterBlockScope() {
+    nodeScope_      = nodeScope_->enter("");
+    graphScope_     = graphScope_->enter("");
+    decoratedScope_ = decoratedScope_->enter("");
+    templateScope_  = templateScope_->enter("");
+}
+
+void Builder::leaveBlockScope() {
+    nodeScope_      = nodeScope_->leave();
+    graphScope_     = graphScope_->leave();
+    decoratedScope_ = decoratedScope_->leave();
+    templateScope_  = templateScope_->leave();
+}
+
+void Builder::noteVariable(node_handle_t variable) {
+    ArmBuild *arm = activeArm();
+    if (arm == nullptr || nodeGraphOf(variable) != arm->graph) {
+        return;
+    }
+    const auto [at, fresh] = arm->touched.try_emplace(variable);
+    if (!fresh) {
+        return;
+    }
+    arm->touchedOrder.push_back(variable);
+    if (auto writer = modifierOf(variable); writer.has_value()) {
+        at->second.writerBefore = nodeIdOf(*writer);
+    }
+    if (auto uses = pendingUses_.find(variable); uses != pendingUses_.end()) {
+        at->second.usesBefore = uses->second;
+    }
+}
+
+Builder::arm_ptr_t
+Builder::buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body) {
+    auto arm                   = std::make_shared<ArmBuild>();
+    runtime::GraphDraft &draft = currGraph_->draft();
+    const uint32_t outerRegion = draft.insertRegion();
+    arm->graph                 = currGraph_.get();
+    arm->region                = draft.addRegion(runtime::GCRegionKind::Arm, outerRegion);
+    arm->firstNode             = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+    if (context_ && context_->sourceContext()) {
+        const auto origin = deriveGirOrigin(
+            context_,
+            exec,
+            camel::source::OriginKind::Graph,
+            "gir.brch.case.graph",
+            {});
+        if (origin != camel::source::kInvalidOriginId) {
+            draft.setRegionOrigin(arm->region, static_cast<uint32_t>(origin));
+        }
+    }
+    enterBlockScope();
+    draft.setInsertRegion(arm->region);
+    armStack_.push_back(arm.get());
     // A body given by the caller is a body of its own like any other (see visitBodyNode).
     const bool outerSynced        = synced_;
     const node_handle_t outerLast = lastSyncedNode_;
-    const auto restore            = [&] {
+    const auto finish             = [&] {
+        for (node_handle_t variable : arm->touchedOrder) {
+            ArmBuild::Touched &touched = arm->touched[variable];
+            if (auto writer = modifierOf(variable);
+                writer.has_value() &&
+                (!touched.writerBefore.has_value() || *touched.writerBefore != nodeIdOf(*writer))) {
+                touched.writerAfter = *writer;
+            }
+            if (auto uses = pendingUses_.find(variable); uses != pendingUses_.end()) {
+                touched.usesAfter = uses->second;
+            }
+            auto &modifiers = nodeModifierMaps_[nodeGraphOf(variable)];
+            if (touched.writerBefore.has_value()) {
+                modifiers[nodeIdOf(variable)] = *touched.writerBefore;
+            } else {
+                modifiers.erase(nodeIdOf(variable));
+            }
+            if (touched.usesBefore.empty()) {
+                pendingUses_.erase(variable);
+            } else {
+                pendingUses_[variable] = touched.usesBefore;
+            }
+        }
         synced_         = outerSynced;
         lastSyncedNode_ = outerLast;
-        openArmGraphs_.erase(subGraph.get());
-        bodyStates_[subGraph.get()] = BodyState::Built;
+        armStack_.pop_back();
+        draft.setInsertRegion(outerRegion);
+        leaveBlockScope();
     };
     try {
         if (body) {
             synced_         = false;
             lastSyncedNode_ = {};
-            setBodyResult(subGraph, body());
+            setArmResult(*arm, body());
         } else {
-            setBodyResult(subGraph, visitBodyNode(exec));
+            setArmResult(*arm, visitBodyNode(exec));
         }
     } catch (...) {
-        restore();
-        leaveScope();
+        finish();
         throw;
     }
-    restore();
-    armGraphs_.insert(subGraph.get());
-    unit_->builtBodies.push_back(subGraph);
-    leaveScope();
-    return subGraph;
+    finish();
+    return arm;
+}
+
+void Builder::setArmResult(ArmBuild &arm, node_handle_t result) {
+    if (arm.returned) {
+        return;
+    }
+    if (result == nullptr) {
+        result     = currGraph_->addStaticDataNode(Data::null());
+        arm.output = result;
+        arm.value  = result;
+        arm.type   = Type::Void();
+        return;
+    }
+    // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
+    // GATE is what the arm gives, the value it forwards is the arm's value.
+    node_handle_t value = result;
+    if (nodeIsKind(result, runtime::GCNodeKind::Gate) && !normInputsOf(result).empty()) {
+        value = nodeDraftOf(result)->ref(normInputsOf(result).front());
+    }
+    arm.output = result;
+    arm.value  = value;
+    arm.type   = nodeTypeOf(value);
 }
 
 node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
@@ -597,17 +713,17 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     node_handle_t tagNode  = applyTagOperator(onNull ? "__is_null__" : "__is_error__", name, gct);
     const char *valueOp    = onNull ? "__null_value__" : "__error_value__";
     const GCT::node_ptr_t exec = gct->at(1)->at(0);
-    std::vector<compile_graph_ptr_t> arms(2);
+    std::vector<arm_ptr_t> arms(2);
 
     if (kind != Kind::ErrorPass) {
         // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
         // evaluated, only when the tag selects it. Arm 1 takes the value out.
-        arms[0] = buildArmGraph(exec);
+        arms[0] = buildArm(exec);
         // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
         // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
         // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
         // taking the value out. Either way it is one branch.
-        Type *fallback   = arms[0]->funcType()->exitType();
+        Type *fallback   = arms[0]->exitType();
         const bool plain = fallback != nullptr && (payload->unify(fallback) != nullptr ||
                                                    entersImplicitly(payload, fallback));
         const bool chained =
@@ -616,10 +732,10 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
             if (payload->unify(fallback) == nullptr) {
                 coerceArmExit(arms[0], payload, gct);
             }
-            arms[1] = buildArmGraph(exec, [&] { return applyTagOperator(valueOp, name, gct); });
+            arms[1] = buildArm(exec, [&] { return applyTagOperator(valueOp, name, gct); });
         } else if (chained) {
             coerceArmExit(arms[0], subjectType, gct);
-            arms[1] = buildArmGraph(exec, [&] {
+            arms[1] = buildArm(exec, [&] {
                 const GCT::node_ptr_t dref = tree_->makeDRef(name);
                 dref->setOrigin(gct->origin());
                 return visitDRefNode(dref);
@@ -641,7 +757,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     // `f` returns a plain `U`); arm 0 hands the failed `x` on as that `U!`. Arm 1 is built
     // first because it is what determines `U`.
     Type *resultType = nullptr;
-    arms[1]          = buildArmGraph(exec, [&] {
+    arms[1]          = buildArm(exec, [&] {
         insertNode(GCT::kPassedValueName, applyTagOperator(valueOp, name, gct));
         node_handle_t result = visitBodyNode(exec);
         ASSERT(result != nullptr, "The call of '?->' produced no node.");
@@ -656,7 +772,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
         resultType = TupleType::fallible(type);
         return castNodeTo(result, resultType, gct);
     });
-    arms[0]          = buildArmGraph(exec, [&] {
+    arms[0]          = buildArm(exec, [&] {
         const GCT::node_ptr_t dref = tree_->makeDRef(name);
         dref->setOrigin(gct->origin());
         node_handle_t failed = visitDRefNode(dref);
@@ -715,14 +831,14 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
         applyTagOperator(type->isNullable() ? "__is_null__" : "__is_error__", name, gct);
     const GCT::node_ptr_t taggedExec = taggedCase->at(taggedCase->size() - 1);
     const GCT::node_ptr_t restExec   = restCase->at(0);
-    std::vector<compile_graph_ptr_t> arms(2);
-    arms[0] = buildArmGraph(taggedExec, [&] {
+    std::vector<arm_ptr_t> arms(2);
+    arms[0] = buildArm(taggedExec, [&] {
         if (type->isFallible()) {
             insertNode(taggedCase->binding(), applyTagOperator("__error_info__", name, taggedCase));
         }
         return visitBodyNode(taggedExec);
     });
-    arms[1] = buildArmGraph(restExec, [&] {
+    arms[1] = buildArm(restExec, [&] {
         if (restCase->caseType() == CaseType::Bind) {
             insertNode(
                 restCase->binding(),
@@ -1023,14 +1139,14 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
         requireBool(nodeTypeOf(condNode), "left", cond);
     }
 
-    const auto buildArm = [&](const Arm &arm) {
+    const auto armOf = [&](const Arm &arm) {
         const size_t errorsBefore = diags_->count(Severity::Error);
         const size_t diagsBefore  = diags_->count();
         try {
             if (arm.opened.empty()) {
-                return buildArmGraph(arm.exec);
+                return buildArm(arm.exec);
             }
-            return buildArmGraph(arm.exec, [&] {
+            return buildArm(arm.exec, [&] {
                 for (const Opened &opened : arm.opened) {
                     // Opened whether or not the arm seems to use the name: a name can be
                     // written where no DREF shows it (the elements of an array literal are
@@ -1063,14 +1179,14 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
     };
     // Arm 0 is the one the condition selects first: the null arm by tag, the then arm else.
     const bool thenFirst = !byTag || thenArm.opened.empty();
-    std::vector<compile_graph_ptr_t> arms(2);
-    arms[thenFirst ? 0 : 1] = buildArm(thenArm);
-    arms[thenFirst ? 1 : 0] = buildArm(elseArm);
+    std::vector<arm_ptr_t> arms(2);
+    arms[thenFirst ? 0 : 1] = armOf(thenArm);
+    arms[thenFirst ? 1 : 0] = armOf(elseArm);
     if (logical) {
         // The right side is the then arm of `&&` and the else arm of `||`.
         const bool rightIsThen = kind == Kind::LogicalAnd;
         requireBool(
-            arms[rightIsThen == thenFirst ? 0 : 1]->funcType()->exitType(),
+            arms[rightIsThen == thenFirst ? 0 : 1]->exitType(),
             "right",
             rightSideOf(gct));
     }
@@ -1177,7 +1293,7 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
 
 node_handle_t Builder::buildBranch(
     const GCT::node_ptr_t &gct, node_handle_t condNode,
-    const std::vector<compile_graph_ptr_t> *arms, bool valueless) {
+    const std::vector<arm_ptr_t> *arms, bool valueless) {
     node_handle_t joinNode = currGraph_->addJoinNode(nullptr, nullptr, 0);
     node_handle_t brchNode = currGraph_->addBrchNode(Type::Int64(), joinNode, 0);
     registerNodeOrigin(context_, brchNode, gct, "gir.brch");
@@ -1211,39 +1327,17 @@ node_handle_t Builder::buildBranch(
     }
 
     linkNodes(LinkType::Norm, condNode, brchNode);
-    std::vector<node_handle_t> branchFuncs;
-    // The variables the arms captured, and whether some arm writes them.
-    std::vector<CapturedUse> captured;
-    std::vector<DraftGraphBuilder *> armGraphs;
-    std::vector<graph_ptr_t> armList;
+    std::vector<arm_ptr_t> armList;
 
-    // Makes `subGraph` the next arm of the branch.
-    const auto addArm = [&](const graph_ptr_t &subGraph) {
+    // Makes `arm` the next arm of the branch.
+    const auto addArm = [&](const arm_ptr_t &arm) {
         if (dropsArmValues) {
             // The arm of an `if` without `else` gives a value nothing takes.
-            rejectDiscardedValue(subGraph.get());
+            rejectDiscardedValue(arm.get());
         }
-        armGraphs.push_back(subGraph.get());
-        armList.push_back(subGraph);
-        for (const CapturedUse &use : capturedUsesOf(subGraph)) {
-            auto known = std::ranges::find(captured, use.variable, &CapturedUse::variable);
-            if (known == captured.end()) {
-                captured.push_back(use);
-            } else {
-                known->written |= use.written;
-            }
-        }
-
-        currGraph_->addDependencyGraph(subGraph);
-        Type *exitType = subGraph->funcType()->exitType();
-
-        // The arm is called by a FUNC node like a function; every value it captures is made
-        // ready before the BRCH node runs (addCaptureSite). This keeps the nodes on every
-        // branch path between BRCH and JOIN tightly grouped in topological order, with no
-        // unrelated external nodes inserted in between, so that the graph scheduler can jump
-        // directly without frequent checks.
-        auto funcNode = createFuncDataNode(subGraph, false, true, brchNode);
-        branchFuncs.push_back(funcNode);
+        bodyValueStatement_.erase(arm.get());
+        armList.push_back(arm);
+        Type *exitType = arm->exitType();
 
         if (absentElse) {
             // Design principles 3.7: an `if` without `else` has no value. Its arm may be of
@@ -1275,14 +1369,10 @@ node_handle_t Builder::buildBranch(
                 throw BuildAbortException();
             }
         }
-
-        linkNodes(LinkType::Ctrl, brchNode, funcNode);
-        linkNodes(LinkType::With, funcNode, joinNode);
     };
-
     const size_t armEnd = arms != nullptr ? arms->size() + 1 : gct->size();
     for (size_t i = 1; i < armEnd; i++) {
-        graph_ptr_t subGraph;
+        arm_ptr_t subGraph;
         if (arms != nullptr) {
             // Arms the caller built (the tagged forms): a boolean condition and two arms.
             subGraph = (*arms)[i - 1];
@@ -1348,35 +1438,31 @@ node_handle_t Builder::buildBranch(
                 ASSERT(false, "Unknown case type in BRCH node.");
             }
 
-            subGraph = buildArmGraph(caseExecNode);
+            subGraph = buildArm(caseExecNode);
         }
         addArm(subGraph);
     }
     if (joinType != nullptr && !absentElse) {
-        for (size_t i = 0; i < armList.size(); ++i) {
-            Type *exitType = armList[i]->funcType()->exitType();
+        for (const arm_ptr_t &arm : armList) {
+            Type *exitType = arm->exitType();
             if (exitType != nullptr && !joinType->assignableFrom(exitType) &&
                 entersImplicitly(joinType, exitType)) {
-                coerceArmExit(armList[i], joinType, gct);
-                // The node that stands for the arm was typed when the arm was added, with
-                // what the arm gave then. A pass that folds the branch to this one arm
-                // reads the value through that type (std::opt::fold read a `float?` box as
-                // a float).
-                // The slot the arm's value is kept in has a type of its own, given when the
-                // node was made: a new slot of the joined type (a `float?` box kept in a
-                // slot typed `float` is not traced by the collector either).
-                setNodeType(branchFuncs[i], joinType);
-                nodeDraftOf(branchFuncs[i])
-                    ->setNodeDataIndex(
-                        nodeIdOf(branchFuncs[i]),
-                        currGraph_->addRuntimeSlot(joinType));
+                coerceArmExit(arm, joinType, gct);
             }
         }
     }
-
+    // The JOIN takes what each arm gives; each arm is the region it was built in, which the
+    // BRCH owns now that it is there.
+    runtime::GraphDraft &draft = currGraph_->draft();
+    for (size_t i = 0; i < armList.size(); ++i) {
+        linkNodes(LinkType::With, armList[i]->output, joinNode);
+        draft.setRegionOwner(armList[i]->region, nodeIdOf(brchNode), static_cast<uint32_t>(i));
+        draft.setRegionResult(armList[i]->region, nodeIdOf(armList[i]->output));
+    }
+    const size_t armCount = armList.size();
     runtime::DraftBrchPayload payload{
         .join     = nodeIdOf(joinNode),
-        .armCount = static_cast<runtime::gc_cnt_t>(branchFuncs.size())};
+        .armCount = static_cast<runtime::gc_cnt_t>(armCount)};
     std::vector<std::byte> brchBytes(sizeof(runtime::DraftBrchPayload));
     std::memcpy(brchBytes.data(), &payload, sizeof(payload));
     std::vector<draft_node_ref_t> brchNormInputs(
@@ -1405,7 +1491,7 @@ node_handle_t Builder::buildBranch(
             .ctrlInputs   = brchCtrlInputs});
     runtime::GCJoinBody joinBody{
         .brch     = nodeIdOf(brchNode),
-        .armCount = static_cast<runtime::gc_cnt_t>(branchFuncs.size())};
+        .armCount = static_cast<runtime::gc_cnt_t>(armCount)};
     std::vector<draft_node_ref_t> joinNormInputs(
         normInputsOf(joinNode).begin(),
         normInputsOf(joinNode).end());
@@ -1431,26 +1517,38 @@ node_handle_t Builder::buildBranch(
             .ctrlInputs   = joinCtrlInputs});
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
+    linkArmEntries(armList, brchNode);
 
-    // Entering an arm is like calling it: the branch uses every variable an arm captured and
-    // writes those an arm writes. It begins at BRCH and is complete at JOIN.
+    // The branch is the user of the variables its arms used, and the writer of those they
+    // wrote. It begins at BRCH and is complete at JOIN.
     std::vector<node_handle_t> capturedWrites;
-    for (const CapturedUse &use : captured) {
-        orderAfterLastWriter(use.variable, brchNode);
-        if (use.written) {
-            capturedWrites.push_back(use.origin);
+    mergeArmVariables(armList, joinNode, brchNode, capturedWrites);
+    const auto originOf = [&](node_handle_t variable) {
+        const auto origin = captureOriginOf_.find(variable);
+        return origin != captureOriginOf_.end() ? origin->second : variable;
+    };
+    std::vector<DraftGraphBuilder *> armCallees;
+    std::set<node_handle_t> directWrites;
+    for (const arm_ptr_t &arm : armList) {
+        armCallees.insert(armCallees.end(), arm->callees.begin(), arm->callees.end());
+        for (node_handle_t variable : arm->directWrites) {
+            directWrites.insert(originOf(variable));
+        }
+    }
+    if (ArmBuild *outer = activeArm()) {
+        // The arms of this branch are part of the arm it is in.
+        outer->callees.insert(outer->callees.end(), armCallees.begin(), armCallees.end());
+        for (const arm_ptr_t &arm : armList) {
+            outer->directWrites.insert(arm->directWrites.begin(), arm->directWrites.end());
         }
     }
     if (!capturedWrites.empty() && !waited_ && !synced_) {
-        unit_->pendingIgnoredWrites.push_back(
-            {armGraphs, capturedWrites, gct->origin(), "The branch", "an arm writes"});
-    }
-    for (const CapturedUse &use : captured) {
-        if (use.written) {
-            recordWrite(use.variable, brchNode, joinNode, true);
-        } else {
-            pendingUses_[use.variable].push_back({joinNode, false});
+        std::vector<node_handle_t> origins;
+        for (node_handle_t variable : capturedWrites) {
+            origins.push_back(originOf(variable));
         }
+        unit_->pendingIgnoredWrites.push_back(
+            {armCallees, origins, directWrites, gct->origin(), "The branch", "an arm writes"});
     }
 
     if (synced_) {
@@ -1460,11 +1558,76 @@ node_handle_t Builder::buildBranch(
         lastSyncedNode_ = joinNode;
         chainedNodes_.insert(brchNode);
         chainedNodes_.insert(joinNode);
-        // The arms run between the BRCH and the JOIN, so in the chain too.
-        chainedNodes_.insert(branchFuncs.begin(), branchFuncs.end());
     }
 
     return joinNode;
+}
+
+void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode) {
+    // The nodes of an arm that read nothing the arm computes wait for the BRCH: the arm runs
+    // only when it is entered.
+    runtime::GraphDraft &draft = currGraph_->draft();
+    const draft_node_ref_t end = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
+    for (const arm_ptr_t &arm : arms) {
+        const auto inArm = [&](draft_node_ref_t id) {
+            return draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), arm->region);
+        };
+        for (draft_node_ref_t id = arm->firstNode; id < end; ++id) {
+            if (!draft.alive(id) || draft.nodeRegion(id) != arm->region) {
+                continue;
+            }
+            switch (draft.header(id)->kind) {
+            case runtime::GCNodeKind::Data:
+            case runtime::GCNodeKind::Port:
+            case runtime::GCNodeKind::Dref:
+                continue;
+            default:
+                break;
+            }
+            bool computed = false;
+            for (auto inputs :
+                 {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+                for (draft_node_ref_t input : inputs) {
+                    computed = computed || inArm(input);
+                }
+            }
+            node_handle_t node = draft.ref(id);
+            if (!computed && linkCheek(brchNode, node)) {
+                linkNodes(LinkType::Ctrl, brchNode, node);
+            }
+        }
+    }
+}
+
+void Builder::mergeArmVariables(
+    const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,
+    std::vector<node_handle_t> &written) {
+    std::vector<node_handle_t> order;
+    std::unordered_map<node_handle_t, bool> wrote;
+    for (const arm_ptr_t &arm : arms) {
+        for (node_handle_t variable : arm->touchedOrder) {
+            const ArmBuild::Touched &touched = arm->touched.at(variable);
+            auto known                       = wrote.find(variable);
+            if (known == wrote.end()) {
+                known = wrote.emplace(variable, false).first;
+                order.push_back(variable);
+            }
+            if (touched.writerAfter.has_value()) {
+                known->second = true;
+                if (linkCheek(*touched.writerAfter, joinNode)) {
+                    linkNodes(LinkType::Ctrl, *touched.writerAfter, joinNode);
+                }
+            }
+        }
+    }
+    for (node_handle_t variable : order) {
+        if (wrote[variable]) {
+            written.push_back(variable);
+            recordWrite(variable, brchNode, joinNode, true);
+        } else {
+            pendingUsesOf(variable).push_back({joinNode, false});
+        }
+    }
 }
 
 void Builder::buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec) {
@@ -1646,7 +1809,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     Type *bodyType = bodyGraph->funcType()->exitType();
     if (bodyType == nullptr || !stateType->assignableFrom(bodyType)) {
         if (bodyType != nullptr && entersImplicitly(stateType, bodyType)) {
-            coerceArmExit(bodyGraph, stateType, gct->loopBody());
+            coerceGraphExit(bodyGraph, stateType, gct->loopBody());
         } else {
             diags_->of(SemanticDiag::LoopBodyTypeMismatch)
                 .atOrigin(gct->loopBody()->origin())
@@ -1689,7 +1852,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     // The captured values are the With inputs, linked by the link step in the graphs' order
     // (the condition graph has the same captures as the body graph).
-    addCaptureSite(loopNode, bodyGraph, nullptr);
+    addCaptureSite(loopNode, bodyGraph);
 
     // Running the loop is like calling its graphs (and entering an arm): it uses every
     // variable they captured and writes those they write.
@@ -1720,13 +1883,13 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             graphs.push_back(condGraph.get());
         }
         unit_->pendingIgnoredWrites.push_back(
-            {graphs, capturedWrites, gct->origin(), "The loop", "its body writes"});
+            {graphs, capturedWrites, {}, gct->origin(), "The loop", "its body writes"});
     }
     for (const CapturedUse &use : captured) {
         if (use.written) {
             recordWrite(use.variable, loopNode, loopNode, true);
         } else {
-            pendingUses_[use.variable].push_back({loopNode, false});
+            pendingUsesOf(use.variable).push_back({loopNode, false});
         }
     }
 
@@ -1793,13 +1956,21 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
-    checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
-    if (!droppedGraphs_.contains(currGraph_.get())) {
-        setGraphReturnFromResult(
-            currGraph_,
-            nodeIdOf(outputAnchor),
-            nodeIdOf(resNode),
-            nodeTypeOf(resNode));
+    if (ArmBuild *arm = activeArm()) {
+        // The value of the arm, not of the function (handover H24).
+        arm->output   = outputAnchor;
+        arm->value    = resNode;
+        arm->type     = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
+        arm->returned = true;
+    } else {
+        checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
+        if (!droppedGraphs_.contains(currGraph_.get())) {
+            setGraphReturnFromResult(
+                currGraph_,
+                nodeIdOf(outputAnchor),
+                nodeIdOf(resNode),
+                nodeTypeOf(resNode));
+        }
     }
 
     LEAVE("EXIT");
@@ -1819,7 +1990,9 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     try {
         result = visitExecNode(gct);
         if (lastBlockStatement_.first != nullptr) {
-            bodyValueStatement_[currGraph_.get()] = lastBlockStatement_;
+            const void *body = activeArm() != nullptr ? static_cast<const void *>(activeArm())
+                                                       : static_cast<const void *>(currGraph_.get());
+            bodyValueStatement_[body] = lastBlockStatement_;
         }
     } catch (...) {
         synced_         = outerSynced;

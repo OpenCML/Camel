@@ -85,8 +85,15 @@ void GraphDraft::setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t call
     regions_[id].callSite = callSite;
 }
 
+void GraphDraft::setRegionOwner(uint32_t id, gc_node_ref_t owner, uint32_t index) {
+    ++mutations_;
+    ASSERT(id > 0 && id < regions_.size(), "No such region.");
+    regions_[id].owner = owner;
+    regions_[id].index = index;
+}
+
 void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
-    if (regions_.size() <= 1) {
+    if (regions_.size() <= 1 || !inheritsRegions_) {
         return;
     }
     DraftNode *reader = node(user);

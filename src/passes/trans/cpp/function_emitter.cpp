@@ -145,23 +145,6 @@ std::string describeFunction(const GCGraph *graph) {
     return std::format("function '{}'", graph->name().substr(0, graph->name().find('$')));
 }
 
-bool isArmCall(const camel::runtime::Program &program, const GCGraph *graph, gc_node_ref_t ref) {
-    const auto *node = graph->node(ref);
-    if (node == nullptr || node->kind != GCNodeKind::Func) {
-        return false;
-    }
-    const GCGraph *callee = program.calleeOf(*graph, ref);
-    if (callee == nullptr || !isAnonymousGraphName(callee->name())) {
-        return false;
-    }
-    for (gc_node_ref_t input : graph->ctrlInputsOf(ref)) {
-        if (const auto *in = graph->node(input); in != nullptr && in->kind == GCNodeKind::Brch) {
-            return true;
-        }
-    }
-    return false;
-}
-
 std::string operatorUri(const GCGraph *graph, gc_node_ref_t ref) {
     return std::string(graph->nodeBodyAs<GCOperBody>(ref)->uri());
 }
@@ -341,7 +324,6 @@ FunctionEmitter::refuse(const GCGraph *graph, gc_node_ref_t ref, std::string rea
 
 Block FunctionEmitter::lowerMember(const Member &member) {
     current_ = &member;
-    inlining_.insert(member.graph);
     Frame top{member.graph, {}, {}, {}};
     for (const Parameter &p : member.params) {
         // A `var` parameter or a captured variable is the variable's cell.
@@ -355,7 +337,6 @@ Block FunctionEmitter::lowerMember(const Member &member) {
         resultOf(member.graph),
         Tail{Tail::Kind::Return, {}});
     current_ = nullptr;
-    inlining_.erase(member.graph);
     return body;
 }
 
@@ -1034,17 +1015,10 @@ bool FunctionEmitter::lowerBranch(
     for (size_t k = 0; k < armCount; ++k) {
         Block body;
         const gc_node_ref_t result = g->withInputsOf(join)[k];
-        if (isArmCall(*program_.program, g, result) &&
-            !inlining_.contains(program_.program->calleeOf(*g, result))) {
-            // The front end's form: the arm is a graph of its own, lowered here.
-            body = lowerArmGraph(frame, result, armTail);
-            frame.consumed.insert(result);
-        } else {
-            const std::vector<gc_node_ref_t> region = regionOf(k);
-            body = lowerSequence(frame, region, resultThrough(g, result), armTail);
-            for (gc_node_ref_t n : region) {
-                frame.consumed.insert(n);
-            }
+        const std::vector<gc_node_ref_t> region = regionOf(k);
+        body = lowerSequence(frame, region, resultThrough(g, result), armTail);
+        for (gc_node_ref_t n : region) {
+            frame.consumed.insert(n);
         }
         std::string condition;
         if (k + 1 < armCount) {
@@ -1062,57 +1036,6 @@ bool FunctionEmitter::lowerBranch(
     frame.consumed.insert(join);
     out.push_back(std::move(branch));
     return joinIsTail;
-}
-
-Block FunctionEmitter::lowerArmGraph(Frame &frame, gc_node_ref_t call, Tail tail) {
-    const GCGraph *g = frame.graph;
-    GCGraph *arm     = program_.program->calleeOf(*g, call);
-    if (!arm->closureNodes().empty()) {
-        refuse(
-            g,
-            call,
-            std::format("an arm of a branch in {} captures a closure", describeFunction(g)));
-    }
-    Frame inner{arm, {}, {}};
-    Block prefix;
-    // The ports take the values the call passes. A value written as an expression that the
-    // arm uses more than once is computed once, at the start of the arm.
-    auto bindPorts =
-        [&](std::span<const gc_node_ref_t> ports, std::span<const gc_node_ref_t> args) {
-            for (size_t i = 0; i < ports.size() && i < args.size(); ++i) {
-                CppValue value    = valueOf(frame, args[i]);
-                const bool simple = value.literal || value.text.find_first_of("()+-*/<>=!&|~ ,") ==
-                                                         std::string::npos;
-                if (!simple && liveUses(arm, ports[i]) > 1) {
-                    const std::string name = locals_.unique(
-                        std::format("v{}_{}", nextValue_++, parameterName(arm, ports[i])));
-                    prefix.push_back(
-                        Stmt::line(
-                            std::format(
-                                "const {} {} = {};",
-                                cppType(arm, ports[i], arm->node(ports[i])->dataType()),
-                                name,
-                                value.text)));
-                    value = CppValue{name, false};
-                }
-                inner.values[ports[i]] = value;
-            }
-        };
-    bindPorts(arm->normPorts(), g->normInputsOf(call));
-    bindPorts(arm->withPorts(), g->withInputsOf(call));
-
-    inlining_.insert(arm);
-    Block body = lowerSequence(
-        inner,
-        arm->execPlan().topo,
-        resultOf(arm),
-        tail);
-    inlining_.erase(arm);
-    prefix.insert(
-        prefix.end(),
-        std::make_move_iterator(body.begin()),
-        std::make_move_iterator(body.end()));
-    return prefix;
 }
 
 std::string FunctionEmitter::callDepth(const GCGraph *graph, gc_node_ref_t ref) {
@@ -1463,32 +1386,6 @@ bool FunctionEmitter::cellEscapes(const GCGraph *graph, gc_node_ref_t cell) {
             if (node->kind == GCNodeKind::Gate) {
                 if (cellEscapes(graph, user)) {
                     return true;
-                }
-                continue;
-            }
-            if (node->kind == GCNodeKind::Func && isArmCall(*program_.program, graph, user) &&
-                !escapeWalk_.contains(program_.program->calleeOf(*graph, user))) {
-                // The arm's port that receives the cell must stay inside the arm too.
-                const GCGraph *arm = program_.program->calleeOf(*graph, user);
-                escapeWalk_.insert(arm);
-                struct Leave {
-                    std::unordered_set<const GCGraph *> &walk;
-                    const GCGraph *arm;
-                    ~Leave() { walk.erase(arm); }
-                } leave{escapeWalk_, arm};
-                const auto args  = graph->withInputsOf(user);
-                const auto ports = arm->withPorts();
-                for (size_t i = 0; i < args.size() && i < ports.size(); ++i) {
-                    if (args[i] == cell && cellEscapes(arm, ports[i])) {
-                        return true;
-                    }
-                }
-                const auto normArgs  = graph->normInputsOf(user);
-                const auto normPorts = arm->normPorts();
-                for (size_t i = 0; i < normArgs.size() && i < normPorts.size(); ++i) {
-                    if (normArgs[i] == cell && cellEscapes(arm, normPorts[i])) {
-                        return true;
-                    }
                 }
                 continue;
             }

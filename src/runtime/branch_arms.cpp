@@ -35,6 +35,7 @@
 
 #include "runtime/graph_build.h"
 
+#include "camel/runtime/control_regions.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
@@ -113,11 +114,6 @@ std::string describe(const Program &program, const GCGraph *graph, gc_node_ref_t
             what));
 }
 
-bool isControl(GCRegionKind kind) {
-    return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
-           kind == GCRegionKind::LoopBody;
-}
-
 } // namespace
 
 void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
@@ -160,53 +156,15 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
         }
     }
 
-    // The innermost control region around each region (itself when it is one).
-    const uint32_t regionCount = static_cast<uint32_t>(graph->regionCount());
-    std::vector<uint32_t> control(regionCount, 0);
-    for (uint32_t r = 1; r < regionCount; ++r) {
-        uint32_t at = r;
-        while (at != 0 && at < regionCount && !isControl(graph->region(at)->kind)) {
-            at = graph->region(at)->parent;
-        }
-        control[r] = at < regionCount && at != 0 && isControl(graph->region(at)->kind) ? at : 0;
-    }
-    const auto controlOf = [&](gc_node_ref_t ref) {
-        const uint32_t r = graph->nodeRegion(ref);
-        return r == 0 || r >= regionCount ? 0u : control[r];
-    };
-    const auto parentControl = [&](uint32_t c) {
-        const uint32_t parent = graph->region(c)->parent;
-        return parent == 0 || parent >= regionCount ? 0u : control[parent];
-    };
-    // `inner` is `outer`, or lies in it.
-    const auto within = [&](uint32_t inner, uint32_t outer) {
-        for (; inner != 0; inner = parentControl(inner)) {
-            if (inner == outer) {
-                return true;
-            }
-        }
-        return outer == 0;
-    };
+    const ControlRegions regions(*graph);
+    const auto controlOf = [&](gc_node_ref_t ref) { return regions.controlOf(ref); };
     // The control region `c` lies in an arm of the BRCH `brch`.
-    const auto inArmOf = [&](uint32_t c, gc_node_ref_t brch) {
-        for (; c != 0; c = parentControl(c)) {
-            const GCRegion &region = *graph->region(c);
-            if (region.kind == GCRegionKind::Arm && region.owner == brch) {
-                return true;
-            }
-        }
-        return false;
-    };
+    const auto inArmOf = [&](uint32_t c, gc_node_ref_t brch) { return regions.armOf(c, brch) >= 0; };
     // The arm of `brch` that the control region `c` lies in, -1 for none.
     const auto armOfControl = [&](uint32_t c, gc_node_ref_t brch) {
-        for (; c != 0; c = parentControl(c)) {
-            const GCRegion &region = *graph->region(c);
-            if (region.kind == GCRegionKind::Arm && region.owner == brch) {
-                return static_cast<int64_t>(region.index);
-            }
-        }
-        return int64_t{-1};
+        return regions.armOf(c, brch);
     };
+    const auto within = [&](uint32_t inner, uint32_t outer) { return regions.within(inner, outer); };
 
     for (const gc_node_ref_t brch : branches) {
         if (!live[brch]) {
@@ -244,16 +202,10 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                     brch,
                     join));
         }
-        const size_t arms = graph->armCountOf(brch);
-        std::vector<uint8_t> hasRegion(arms, 0);
-        for (uint32_t r = 1; r < regionCount; ++r) {
-            const GCRegion &region = *graph->region(r);
-            if (region.kind == GCRegionKind::Arm && region.owner == brch && region.index < arms) {
-                hasRegion[region.index] = 1;
-            }
-        }
+        const size_t arms     = graph->armCountOf(brch);
+        const auto armRegions = regions.armsOf(brch);
         for (size_t k = 0; k < arms; ++k) {
-            if (!hasRegion[k]) {
+            if (k >= armRegions.size() || armRegions[k] == 0) {
                 fail(graph, std::format("arm {} of BRCH {} has no region", k, brch));
             }
         }
@@ -314,7 +266,7 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                 const int64_t theirArm = region.kind == GCRegionKind::Arm
                                              ? static_cast<int64_t>(region.index)
                                              : int64_t{-1};
-                const int64_t ownArm   = here != 0 && graph->region(here)->kind == GCRegionKind::Arm
+                const int64_t ownArm   = region.kind == GCRegionKind::Arm
                                              ? armOfControl(here, region.owner)
                                              : int64_t{-1};
                 if (ownArm >= 0 && ownArm != theirArm) {

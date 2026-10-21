@@ -59,6 +59,7 @@ DraftGraphBuilder::DraftGraphBuilder(camel::core::type::FunctionType *funcType)
     : arena_(std::make_shared<GraphArena>(kInitialArenaBlockBytes)),
       draft_(std::make_unique<runtime::GraphDraft>()) {
     draft_->setFuncType(funcType);
+    draft_->setInheritsRegions(false);
     draftOwners()[draft_.get()] = this;
 }
 

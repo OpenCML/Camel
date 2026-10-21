@@ -526,6 +526,16 @@ class GraphDraft {
     /// True when `id` is the call of the graph that is an arm (GCRegion::callSite): the arm is
     /// that call until lowerBranchArms inlines it.
     bool isArmCall(gc_node_ref_t id) const;
+    /// The region a node is put in when it is added without one (0: the body). The front end
+    /// sets it to the arm it is writing; passes leave it alone.
+    uint32_t insertRegion() const { return insertRegion_; }
+    void setInsertRegion(uint32_t region) { insertRegion_ = region; }
+    /// Whether a node that reads a node of a deeper control region moves into that region
+    /// (inheritRegion). The front end places every node itself, so a read across the border
+    /// of an arm is left for the validator to report.
+    void setInheritsRegions(bool inherits) { inheritsRegions_ = inherits; }
+    /// Sets the owner of a control region made before its BRCH or LOOP node was.
+    void setRegionOwner(uint32_t id, gc_node_ref_t owner, uint32_t index);
     /// The region of arm `index` of the BRCH `brch`; 0 when there is none.
     uint32_t armRegionOf(gc_node_ref_t brch, size_t index) const;
     /// Drops every region: all nodes are in the body.
@@ -629,6 +639,8 @@ class GraphDraft {
     std::vector<DraftNode *> nodesById_;
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<GCRegion> regions_; // empty, or region 0 (the body) then the others
+    uint32_t insertRegion_    = 0;
+    bool inheritsRegions_     = true;
     std::vector<gc_node_ref_t> regionPorts_;
     std::vector<WritingUnion> writings_;
     uint32_t writingScope_ = 0;

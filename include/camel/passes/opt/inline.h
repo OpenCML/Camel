@@ -44,9 +44,9 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     camel::runtime::RuntimeGraphDraftSession &session, camel::runtime::GraphDraft &draft,
     camel::runtime::gc_node_ref_t funcNodeId, bool asArm = false);
 
-/// Inlines the call of every arm of every branch of `program` (the front end builds each arm as
-/// a graph called after the BRCH), so the arms are regions of the graphs that hold the branches.
-/// The program itself when there is none.
+/// Inlines the call of every arm that is the call of a graph (the form `raiseBranchArms` gives
+/// an arm), so the arms are regions of the graphs that hold the branches again. The program
+/// itself when there is none.
 /// With `detached`, the result is a private program of the graphs reachable from `root` (the
 /// program of the context is left as it is).
 const camel::runtime::Program *lowerBranchArms(

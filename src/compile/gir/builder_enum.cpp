@@ -524,12 +524,12 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
     // The arm that runs when no case names the value: the wildcard the program wrote, or,
     // when it wrote every variant, an arm that cannot be reached. The second is needed all
     // the same: the branch it ends offers the join one value of the arms' type.
-    std::function<compile_graph_ptr_t()> defaultArm = [&]() -> compile_graph_ptr_t {
+    std::function<arm_ptr_t()> defaultArm = [&]() -> arm_ptr_t {
         if (wildcard != nullptr) {
-            return buildArmGraph(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
+            return buildArm(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
         }
         const Arm &last = arms.back();
-        return buildArmGraph(last.caseNode, [&] {
+        return buildArm(last.caseNode, [&] {
             bindFields(last);
             return visitBodyNode(last.caseNode);
         });
@@ -546,14 +546,14 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
             nullptr,
             {tree_->makeDRef(tagName), indexData(arm.tag)},
             arm.caseNode);
-        std::vector<compile_graph_ptr_t> two(2);
-        two[0] = buildArmGraph(arm.caseNode, [&] {
+        std::vector<arm_ptr_t> two(2);
+        two[0] = buildArm(arm.caseNode, [&] {
             bindFields(arm);
             return visitBodyNode(arm.caseNode);
         });
         if (k + 1 < arms.size()) {
             const GCT::node_ptr_t next = arms[k + 1].caseNode;
-            two[1]                     = buildArmGraph(next, [&] { return branchAt(k + 1); });
+            two[1]                     = buildArm(next, [&] { return branchAt(k + 1); });
         } else {
             two[1] = defaultArm();
         }
@@ -565,8 +565,8 @@ Builder::visitEnumMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, Enu
         node_handle_t always = currGraph_->addStaticDataNode(
             tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
         registerNodeOrigin(context_, always, gct, "gir.data");
-        std::vector<compile_graph_ptr_t> one(1);
-        one[0] = buildArmGraph(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
+        std::vector<arm_ptr_t> one(1);
+        one[0] = buildArm(wildcard->at(0), [&] { return visitBodyNode(wildcard->at(0)); });
         return buildBranch(gct, always, &one);
     }
     return branchAt(0);
