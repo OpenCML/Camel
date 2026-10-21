@@ -496,3 +496,10 @@ EXPORTS
     ?equals@Variant@rtdata@core@camel@@UEBA_NPEBVObject@234@PEBVType@type@34@_N@Z
     ?print@Variant@rtdata@core@camel@@UEBAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@PEBVType@type@34@@Z
     ?updateRefs@Variant@rtdata@core@camel@@UEAAXAEBV?$function@$$A6APEAVObject@rtdata@core@camel@@PEAV1234@PEBVType@type@34@AEBURefTraceInfo@234@@Z@std@@PEBVType@type@34@@Z
+
+    ; Imported by a target built after this list was derived; regenerate the list when this repeats.
+    ?commitChecked@RuntimeGraphDraftSession@runtime@camel@@QEAAPEBVProgram@23@XZ
+    ?isReplaceable@generic@passes@camel@@YA_NAEBVGraphDraft@runtime@3@I@Z
+    ?reaches@generic@passes@camel@@YA_NAEBVGraphDraft@runtime@3@II@Z
+    ?replaceNode@generic@passes@camel@@YAXAEAVGraphDraft@runtime@3@II@Z
+    ?returnNodeRef@GCGraph@runtime@camel@@QEBAIXZ
