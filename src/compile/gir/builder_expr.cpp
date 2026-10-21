@@ -763,6 +763,18 @@ bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t 
         // does; for a case that is not selected the name is at least qualified.
         return true;
     }
+    if (module_ != nullptr) {
+        // A body-less declaration of this module: a name the module itself declared for a
+        // native operator (handover H19, step 1). `visitDRefNode` looks it up here, before what
+        // an import brings under the same name; a name in a `case` that is not selected must
+        // see the same names, or the case would resolve differently once it is selected.
+        for (const std::string &candidate : {name, written}) {
+            auto native = module_->getNativeEntity(Reference(candidate));
+            if (native.has_value() && native->isOperGroup()) {
+                return true;
+            }
+        }
+    }
     if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
         if (importedEntity(written, ImportLayer::Named).has_value()) {
             return true;

@@ -88,6 +88,17 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
 
+# ---- Names in a `case` that is not selected ----
+
+[[tests]]
+name = "native.unselected_case_sees_declaration"
+desc = "A `case` that is not selected for an instantiation resolves its names with the lookup the selected case uses: the body-less declaration of the same module is found, not reported as an unresolved reference."
+kind = "behavior"
+case = "../../../cases/compile/native/unselected_case_declaration.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "0\n"
+
 # ---- The exception tag ----
 
 [[tests]]
