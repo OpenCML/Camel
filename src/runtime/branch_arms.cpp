@@ -31,6 +31,10 @@
  * computes something else (code of an arm that is not taken runs, an effect or a value of the
  * taken arm is skipped). This file turns that into an error at the commit that produced the
  * graph.
+ *
+ * The same check keeps a loop's regions where the loop is: the condition and the body of a LOOP
+ * inside an arm are regions of that arm (and of a loop nested in another loop's part, regions of
+ * that part), so no part of a loop is laid out outside the arm that runs the loop.
  */
 
 #include "runtime/graph_build.h"
@@ -45,6 +49,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace camel::runtime {
@@ -103,6 +108,24 @@ std::string describe(const Program &program, const GCGraph *graph, gc_node_ref_t
         }
     }
     return text;
+}
+
+/// "the body (region 0)", "arm 1 of BRCH 7 (region 4)", "the body of LOOP 3 (region 5)".
+std::string describeControl(const GCGraph *graph, uint32_t control) {
+    if (control == 0) {
+        return "the body (region 0)";
+    }
+    const GCRegion &region = *graph->region(control);
+    switch (region.kind) {
+    case GCRegionKind::Arm:
+        return std::format("arm {} of BRCH {} (region {})", region.index, region.owner, control);
+    case GCRegionKind::LoopCond:
+        return std::format("the condition of LOOP {} (region {})", region.owner, control);
+    case GCRegionKind::LoopBody:
+        return std::format("the body of LOOP {} (region {})", region.owner, control);
+    default:
+        return std::format("region {}", control);
+    }
 }
 
 [[noreturn]] void fail(const GCGraph *graph, const std::string &what) {
@@ -224,6 +247,43 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                         brch,
                         join));
             }
+        }
+    }
+
+    // The condition and the body of a loop are regions of where the loop is: a LOOP inside a
+    // branch arm has that arm as the region around its parts, a loop inside another loop's part
+    // the other loop's region, a loop in the body the body. A part region left in another region
+    // (moved out of the arm, or built with the wrong parent) is scheduled where the loop does not
+    // run: the loop would bind the ports of the part, or the part's nodes would run outside it.
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        if (!live[ref] || (*it)->kind != GCNodeKind::Loop) {
+            continue;
+        }
+        const auto parts    = regions.loopPartsOf(ref);
+        const uint32_t here = controlOf(ref);
+        const std::array<std::pair<uint32_t, const char *>, 2> named{
+            std::pair{parts[0], "condition"}, std::pair{parts[1], "body"}};
+        for (const auto &[part, what] : named) {
+            if (part == 0) {
+                continue;
+            }
+            const uint32_t parent = regions.parentControl(part);
+            // The part is a region of the region the loop is in, and lies in it (nothing of it
+            // outside the arm the loop runs in).
+            if (parent == here && (here == 0 || within(part, here))) {
+                continue;
+            }
+            fail(
+                graph,
+                std::format(
+                    "{} is in {} but its {} region {} is a region of {}: the condition and the body "
+                    "of a loop are regions of where the loop is",
+                    describe(program, graph, ref),
+                    describeControl(graph, here),
+                    what,
+                    part,
+                    describeControl(graph, parent)));
         }
     }
 

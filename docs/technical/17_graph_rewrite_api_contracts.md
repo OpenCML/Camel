@@ -150,8 +150,8 @@
 已于 2026-10-13 删除（图数据模型迁移第 1 步）；上面的检查取代了它。
 
 测试用的故障注入遍（`src/passes/test/fault.cpp`）只在设置环境变量 `CAMEL_ENABLE_TEST_PASSES` 时可用，
-用来验证破坏结构的图会在提交时被拒绝：`test::drop_call_argument`（条款 7）与
-`test::leak_branch_arm`（条款 6）。
+用来验证破坏结构的图会在提交时被拒绝：`test::drop_call_argument`（条款 7）、`test::leak_branch_arm`
+（条款 6）与 `test::arm_loop_regions`（4.1 里循环区域的规则）。
 
 ### 4.1 分支臂不变量
 
@@ -176,6 +176,19 @@
    只经由 `J` 流出（`J` 读各臂的结果）。读另一条臂里的节点，意味着只有那条臂被选中时它才会算过。
 4. 一个 `BRCH` 被多个 `JOIN` 读（`devirtualizeBranchedCallInDraft`，只在 `enableBranchedCallSplit` 下产生）
    是仅供导出的值 DAG，不可执行，不校验。
+
+**循环的两块区域在循环所在的地方。** 一个 `LOOP` 的条件区域（`LoopCond`）与体区域（`LoopBody`）是它所在区域的
+子区域：循环写在臂里，这两块区域就是这条臂的区域（或臂里更内层区域的子区域）；循环写在另一个循环的体里，它们就在
+那个体里。检查对每个活的 `LOOP` 比较两块的 `parentControl` 与循环的 `controlOf`，并要求 `within(part, 循环所在
+区域)`（没有一块落在外面）；否则报错，同时给出循环、它所在的区域，以及那块区域实际所在的区域。违反的图没有办法从
+源码建出（前端在写循环的地方直接建出这两块区域），只有用 draft API 手工构造才可能；`test::arm_loop_regions` 就是
+这样造一张图并检查提交被拒绝。例：
+
+```
+Runtime graph 'then_for' breaks the branch-arm invariant: LOOP 8 is in arm 0 of BRCH 3 (region 1) but
+its body region 4 is a region of the body (region 0): the condition and the body of a loop are regions
+of where the loop is (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+```
 
 **区域由谁维护。** 前端在写臂的地方直接建出臂：臂的每个节点落在这条臂的区域里（`GraphDraft::setInsertRegion`），
 臂里读外面的节点、等待 `BRCH` 的根节点由建图补上控制边；`JOIN` 的 with 输入就是臂的结果。自动微分把臂提成
