@@ -98,3 +98,27 @@ expect_stdout_contains = ["WRITINGS commuted_is_new_writing ok", "WRITINGS extra
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "writings.driver_extracts"
+desc = "A program in the state with several writings (a pass left `a + 1` also written `1 + a`) reaches the back end with one writing per value: the pipeline driver extracts before a pass that consumes the program, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::tabled", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["15"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.driver_refuses_rewrite"
+desc = "A rewrite pass that does not know the state with several writings does not get the program: the driver stops with a diagnostic that names the pass."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::tabled", "std::opt::fold", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 1
+expect_output_contains = ["several writings", "std::opt::fold"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

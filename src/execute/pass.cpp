@@ -33,6 +33,7 @@
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/writings.h"
+#include "camel/runtime/writings.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/regions.h"
@@ -968,6 +969,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kChunksTestPass, ChunksTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kWritingsTestPass, WritingsTestPass),
+        TEST_PASS(kTabledTestPass, TabledTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
@@ -1270,6 +1272,31 @@ PassApplyResult applyPassesDetailed(
                         diag.atOrigin(origin);
                     }
                     diag.commit(open.size() == 1 ? "parameter" : "parameters", names);
+                    return {nullptr, PassApplyStatus::Failed};
+                }
+            }
+            // A program with graphs that have several writings per value: a pass that consumes
+            // it (a back end, an exporter) gets one writing per value, picked by the default
+            // cost; a pass that does not know the state does not get the program.
+            if (camel::runtime::hasWritings(*program)) {
+                const bool consumes = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ||
+                                      dynamic_cast<GraphTranslatePass *>(pass.get()) != nullptr;
+                if (consumes) {
+                    CAMEL_LOG_INFO_S(
+                        "Pass",
+                        "run | passes | extract before {}: one writing per value, cost model "
+                        "'weighted'",
+                        p);
+                    program = camel::runtime::extractWritings(
+                        ctx, program, *camel::runtime::findCostModel("weighted"));
+                    ctx->settleRuntimeGraphs(program);
+                } else if (!pass->acceptsWritings()) {
+                    setPipelineStage("pass:" + specName(p));
+                    ctx->rtmDiags()->of(RuntimeDiag::PassInternalError)
+                        .commit(
+                            p,
+                            "the program has values with several writings; put an extraction "
+                            "before this pass");
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }

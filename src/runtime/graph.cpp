@@ -1573,7 +1573,8 @@ GCGraph::GCGraph(
     : id_(id), typeSpecializationRoot_(derivation.typeSpecializationRoot),
       flags_(
           static_cast<uint8_t>(
-              derivation.flags | (payload.writingCount != 0 ? kGraphFlagHasWritings : 0))),
+              (derivation.flags & ~kGraphFlagHasWritings) |
+              (payload.writingCount != 0 ? kGraphFlagHasWritings : 0))),
       debug_(debugRecord), funcType_(funcType), runtimeDataType_(runtimeDataType),
       staticDataType_(staticDataType), closureType_(closureType), outerGraphId_(outerGraph),
       refs_(refs), refRoles_(refRoles), refCount_(refCount), nativePayload_(payload),

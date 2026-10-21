@@ -41,6 +41,7 @@
 
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <cstdint>
 #include <memory>
@@ -148,6 +149,15 @@ struct ExtractStats {
     size_t rewired  = 0; // nodes whose inputs were changed to other writings
     size_t erased   = 0; // writings not chosen
 };
+
+/// True when some graph of the program has values with several writings.
+bool hasWritings(const Program &program);
+
+/// The program with one writing per value in every graph that has several, chosen by `model`
+/// (the program itself when it has none).
+const Program *extractWritings(
+    const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
+    const CostModel &model);
 
 /// The writings of the values of a draft: the classes (WritingStore) and the congruence closure
 /// over them. Nodes that compute the same thing from the same classes are one value, so

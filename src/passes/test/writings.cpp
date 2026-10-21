@@ -439,3 +439,31 @@ WritingsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     apart(report, *program);
     return result;
 }
+
+const camel::runtime::Program *
+TabledTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    (void)os;
+    const GCGraph *graph = graphNamed(*program, "f");
+    if (graph == nullptr) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context_, program);
+    GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+    DraftWritings writings(draft);
+    writings.build();
+    const gc_node_ref_t add = firstOperWith(draft, "add");
+    const auto inputs       = std::vector<gc_node_ref_t>(
+        draft.normInputsOf(add).begin(), draft.normInputsOf(add).end());
+    const auto payload =
+        std::vector<std::byte>(draft.payloadOf(add).begin(), draft.payloadOf(add).end());
+    DraftNodeInit init;
+    init.kind        = GCNodeKind::Oper;
+    init.dataType    = draft.header(add)->dataType;
+    init.permissions = draft.nodePermissions(add);
+    init.region      = draft.nodeRegion(add);
+    init.payload     = payload;
+    const gc_node_ref_t commuted = writings.lookupOrAdd(init, std::array{inputs[1], inputs[0]});
+    writings.assertEqual(add, commuted);
+    writings.save();
+    return session.commit();
+}

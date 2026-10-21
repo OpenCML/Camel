@@ -21,6 +21,7 @@
 #include "camel/runtime/writings.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
 #include <algorithm>
@@ -728,6 +729,33 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
     pending_.clear();
     queued_.clear();
     return stats;
+}
+
+bool hasWritings(const Program &program) {
+    for (const GCGraph *graph : program.graphs()) {
+        if (!graph->executable()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+const Program *extractWritings(
+    const std::shared_ptr<camel::core::context::Context> &context, const Program *program,
+    const CostModel &model) {
+    if (program == nullptr || !hasWritings(*program)) {
+        return program;
+    }
+    RuntimeGraphDraftSession session(context, program);
+    for (GCGraph *graph : program->graphs()) {
+        if (graph->executable()) {
+            continue;
+        }
+        GraphDraft &draft = session.edit(graph);
+        DraftWritings writings(draft);
+        writings.extract(model, context.get());
+    }
+    return session.commit();
 }
 
 gc_node_ref_t DraftWritings::find(gc_node_ref_t node) {
