@@ -39,7 +39,7 @@ func three_deep(flag: bool, flag2: bool, xs: int[]): int {
     }
 }
 
-macro func macro_arm(flag: bool): int {
+#macro func macro_arm(flag: bool): int {
     if flag then loop acc = 0 for x in [1, 2, 3] do acc + x else -1
 }
 

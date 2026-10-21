@@ -979,12 +979,12 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                        : instanceName);
         // The body keeps the `on nodes` tags of the generic declaration: they are the same for
         // every instance, and they were resolved once (tagFactsOf remembers by node).
-        buildFuncBody(
-            tmpl->func,
-            graph,
-            funcType,
-            instanceName,
-            tagFactsOf(tmpl->func, camel::core::tag::Nodes));
+        const TagFacts tags = tagFactsOf(tmpl->func, camel::core::tag::Func);
+        if (camel::core::tag::declaresMacro(tags.declaration)) {
+            graph->draft().setFlags(static_cast<uint8_t>(
+                graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+        }
+        buildFuncBody(tmpl->func, graph, funcType, instanceName, tags);
         leaveScope();
     } catch (...) {
         if (instanceIndex < tmpl->instances.size()) {

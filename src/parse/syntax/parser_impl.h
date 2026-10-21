@@ -393,8 +393,7 @@ class ParserImpl {
 };
 
 constexpr bool isModifier(TK kind) {
-    return kind == TK::KwAtomic || kind == TK::KwShared || kind == TK::KwSync ||
-           kind == TK::KwMacro;
+    return kind == TK::KwAtomic || kind == TK::KwShared || kind == TK::KwSync;
 }
 
 } // namespace camel::parse::syntax

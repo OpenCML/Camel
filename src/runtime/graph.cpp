@@ -1630,10 +1630,7 @@ size_t GCGraph::frameSize() const {
     return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeDataType()->size();
 }
 
-bool GCGraph::isMacro() const {
-    auto *type = funcType();
-    return type != nullptr && type->modifiers().macro();
-}
+bool GCGraph::isMacro() const { return (flags_ & kGraphFlagMacro) != 0; }
 
 bool GCGraph::isRoot() const { return !isValid(outerGraphId_); }
 

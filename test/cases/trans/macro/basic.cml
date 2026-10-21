@@ -3,7 +3,7 @@
  */
 module macro_basic
 
-macro func add_one(x: int): int {
+#macro func add_one(x: int): int {
     return x + 1
 }
 

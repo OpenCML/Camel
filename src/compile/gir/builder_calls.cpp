@@ -568,6 +568,12 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph = enterScope(type);
+    if (isMacroGraph(target)) {
+        // A function value of a macro function stays a macro through the forwarder: a call
+        // through the value is still one std::macro may evaluate ahead of time.
+        graph->draft().setFlags(static_cast<uint8_t>(
+            graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+    }
     try {
         auto sourceContext = context_ ? context_->sourceContext() : nullptr;
         auto targetOrigin = sourceContext ? sourceContext->debugMap().graphOrigin(target->graphId())

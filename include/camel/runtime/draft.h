@@ -288,7 +288,7 @@ class GraphDraft {
         return sizeof(camel::core::context::Frame) + sizeof(slot_t) * runtimeSlotTypes_.size();
     }
     bool hasFrameLayout() const { return hasFrameLayout_; }
-    bool isMacroGraph() const { return funcType_ != nullptr && funcType_->modifiers().macro(); }
+    bool isMacroGraph() const { return (flags_ & kGraphFlagMacro) != 0; }
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
     bool empty() const { return liveNodeCount_ == 0; }

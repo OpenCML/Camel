@@ -161,7 +161,7 @@ class ProgramIndex::Recorder final : public camel::compile::SemanticRecorder {
     void operatorReferenced(origin_id_t, const std::string &, std::vector<std::string>) override {}
     void callResolved(
         origin_id_t, origin_id_t, camel::runtime::GraphId, const std::string &,
-        FunctionType *) override {}
+        FunctionType *, bool) override {}
     void functionBuilt(
         origin_id_t func, const std::string &name, camel::runtime::GraphId graph,
         FunctionType *) override {

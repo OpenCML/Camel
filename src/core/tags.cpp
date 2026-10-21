@@ -162,6 +162,16 @@ void declareStandardTags() {
         op.params = {{"uri", "string"}};
         declare(std::move(op));
 
+        // `macro` (design principles 8): the function may be evaluated ahead of time by the
+        // `std::macro` pass, which materialises the result as a constant of the graph. It is a
+        // standard tag, so a program writes it without an import. The pass is optional: without
+        // it the function is an ordinary function, so the tag names no reader.
+        Decl macro;
+        macro.name  = "macro";
+        macro.ident = "macro";
+        macro.on    = Func;
+        declare(std::move(macro));
+
         // `#independent` on a function: its elements do not depend on each other (design
         // principles 3.6), so a scheduler may run its element calls at once. The fact is on
         // the declaration and, through markIndependentElements, on the graph's exit node.
@@ -558,6 +568,18 @@ void markIndependentElements(camel::runtime::GraphDraft &draft, attr::AttrSetId 
     }
     draft.setNodeAttrs(
         exit, attr::unite(draft.nodeAttrs(exit), attr::single(key, attr::unit())));
+}
+
+bool declaresMacro(attr::AttrSetId declaration) {
+    if (declaration == attr::kNoAttrs) {
+        return false;
+    }
+    const auto id = find(std::string_view{}, "macro");
+    if (!id.has_value()) {
+        return false;
+    }
+    const Decl *decl = get(*id);
+    return decl != nullptr && attr::valueOf(declaration, decl->key) != attr::kNoValue;
 }
 
 void attachToField(

@@ -24,10 +24,6 @@ sync func effect(var target: int) {
     wait target += 1
 }
 
-macro func early(n: int): int {
-    return n * 2
-}
-
 atomic shared func marked(): void {
     return null
 }

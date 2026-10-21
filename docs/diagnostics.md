@@ -5154,7 +5154,7 @@ func main(): int sync {
 **Help**
 
 ```text
-Every argument of this macro call is a constant, so std::macro evaluates it ahead of time, and a failed evaluation is a compile-time error. The program is rejected even if the call would never be reached at run time. Without std::macro in the pipeline the call runs with the program.
+Every argument of this macro call is a constant, so std::macro evaluates it ahead of time. A failed evaluation is a fault during the run of the pass, not a compile error: the program stops before it runs, and the output the evaluation produced before the failure stays. Without std::macro in the pipeline the call runs with the program.
 ```
 
 **Example** (`test/cases/compile/collections/refuse_grad.cml`, run as `camel test/cases/compile/collections/refuse_grad.cml std::macro`)

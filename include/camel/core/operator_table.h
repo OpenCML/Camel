@@ -195,6 +195,10 @@ struct OperatorTraits {
     /// sees the program's own graphs, with their structure (a LOOP node and its regions:
     /// docs/design/op-semantics 11.4).
     bool readsGraphs = false;
+    /// The operator is a macro operator (design principles 8): a call of it whose arguments are
+    /// constants is evaluated ahead of time by `std::macro`, and the result is materialised as a
+    /// constant. `grad` and `with_grad` declare it; an ordinary operator does not.
+    bool macro = false;
 };
 
 /**
@@ -329,6 +333,17 @@ class OperatorTable {
     bool readsGraphs(OperId id) const {
         const sem::OperatorSemantics *facts = record(id);
         return facts != nullptr && facts->readsGraphs;
+    }
+
+    /// True when the operator is a macro operator (design principles 8): `std::macro` may
+    /// evaluate a call of it ahead of time. Lock-free.
+    bool isMacro(OperId id) const {
+        const sem::OperatorSemantics *facts = record(id);
+        return facts != nullptr && facts->macro;
+    }
+    bool isMacro(std::string_view uri) const {
+        const std::optional<OperatorTraits> traits = find(uri);
+        return traits.has_value() && traits->macro;
     }
 
     /// True when running the operator is an effect visible outside the program's variables:

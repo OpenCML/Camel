@@ -134,7 +134,7 @@ typeDecl           : frontMatter? implMark? 'type' identRef
                      (typeExpr | STRING)
 retStmt            : ('return' | 'throw') dataList
 implMark           : 'inner' | 'outer'
-modifiers          : ('atomic' | 'shared' | 'sync' | 'macro')+
+modifiers          : ('atomic' | 'shared' | 'sync')+
 identDef           : IDENTIFIER
 identRef           : (IDENTIFIER '::')* IDENTIFIER
 identList          : identDef (',' identDef)*

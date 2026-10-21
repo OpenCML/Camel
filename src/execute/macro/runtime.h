@@ -74,10 +74,11 @@ class MacroEvaluator {
     /// An evaluator belongs to one rewrite round. Only failures from the final round,
     /// in which nothing changes any more, are reported: another expansion can make a
     /// previously unsuccessful call evaluable.
-    /// Reports the failures of the current round as RuntimeDiag::MacroEvaluationFailed errors
-    /// at the call, with the reason, in the runtime diagnostics: a failed evaluation rejects
-    /// the program (design principles 8). An argument that is not a
-    /// constant is not a failure and is never reported here.
+    /// Reports the failures of the current round as run-time faults (`RuntimeDiag::
+    /// MacroEvaluationFailed`) at the call, with the reason, through the run-time diagnostics
+    /// sink: a failed evaluation stops the pipeline like any other fault during the run of a
+    /// pass (design principles 8). An argument that is not a constant is not a failure and is
+    /// never reported here.
     void reportFailures();
 
   private:

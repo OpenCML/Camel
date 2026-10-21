@@ -228,7 +228,6 @@ void ParserImpl::parsePrimaryType() {
         return parseEnumType();
     case TK::Lt:
     case TK::KwSync:
-    case TK::KwMacro:
     case TK::KwAtomic:
     case TK::KwShared:
         return parseFuncType();

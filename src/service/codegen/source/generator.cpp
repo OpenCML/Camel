@@ -484,6 +484,20 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
             continue;
         auto childNode = static_pointer_cast<AST::Node>(child);
 
+        // `#macro` before a declaration is a standard tag (design principles 8), written in
+        // front of the function. The tags of the declaration are this child.
+        if (const auto repeated = dynamic_pointer_cast<AST::RepeatedLoad>(childNode->load());
+            repeated && repeated->nodeName() == "TagUse") {
+            for (size_t j = 0; j < childNode->size(); ++j) {
+                const auto useNode = static_pointer_cast<AST::Node>(childNode->at(j));
+                if (const auto use = dynamic_pointer_cast<AST::TagUseLoad>(useNode->load());
+                    use && use->name().toString() == "macro") {
+                    isMacro = true;
+                }
+            }
+            continue;
+        }
+
         if (childNode->load()->type() == AST::LoadType::Data &&
             dynamic_pointer_cast<AST::FuncDataLoad>(childNode->load())) {
 
@@ -500,7 +514,6 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
                         dynamic_pointer_cast<AST::FuncTypeLoad>(funcDataChildNode->load());
                     if (funcTypeLoad) {
                         const auto &modifiers = funcTypeLoad->modifiers();
-                        isMacro               = modifiers.has(Modifier::Macro);
                         isAtomic              = modifiers.has(Modifier::Atomic);
                         isShared              = modifiers.has(Modifier::Shared);
                         isSync                = modifiers.has(Modifier::Sync);
@@ -567,13 +580,13 @@ string Generator::generateFuncDeclLoad(const AST::node_ptr_t &node) {
         }
     }
 
+    if (isMacro) {
+        code += "#macro ";
+    }
     if (hasWithParams) {
         code += "with <" + withParamsCode + ">\n";
     }
     code += sImplMark;
-    if (isMacro) {
-        code += "macro ";
-    }
     if (isAtomic) {
         code += "atomic ";
     }

@@ -255,7 +255,7 @@ let ys = decode('[[1], [2]]') as int[]     // 元素是两个数组的地址
 
   【实测 `camel …/t18_inline_changes_print.cml` 与 `camel …/t18_inline_changes_print.cml std::opt::inline std::fvm`】内联之后 `println` 的实参节点是 `n` 本身，类型是 `int`。`benchmarks/pipeline/exclusions.json` 为此排除了两个程序。按设计原则 9.6，遍前后行为不同不算缺陷；但它直接说明 `any` 遮住的类型编译器本来就知道。
 - **内联也改变 GC 问题是否暴露。** `examples/t11_gc_user_func.cml` 加 `std::opt::inline` 后（`std::fvm`）前四种设置都对（`any` 形参没了），只剩毒化模式报出；`examples/t07_gc_frame.cml` 加 `std::opt::inline` 后五种设置全对。【实测，附录 A 的矩阵命令加 `PASSES=std::opt::inline`】这不是修复，是时序变了。
-- **`std::macro` 把 `any` 值变成常量。** `macro func table(): any { return decode('[…]') }` 经 `std::macro` 求值后，结果成为 `main` 静态区里一个类型为 `any` 的常量；静态区的追踪同样跳过它（2.5）。`examples/t16_macro_const.cml` 加 `std::macro` 后在强制回收下打印 `300 299`、`300 0`（退出码 0）或崩溃。【实测】
+- **`std::macro` 把 `any` 值变成常量。** `#macro func table(): any { return decode('[…]') }` 经 `std::macro` 求值后，结果成为 `main` 静态区里一个类型为 `any` 的常量；静态区的追踪同样跳过它（2.5）。`examples/t16_macro_const.cml` 加 `std::macro` 后在强制回收下打印 `300 299`、`300 0`（退出码 0）或崩溃。【实测】
 
 ### 2.8 `std::cpp`
 

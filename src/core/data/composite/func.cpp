@@ -49,6 +49,11 @@ camel::runtime::GCGraph *FunctionData::graph() const {
 
 std::string FunctionData::name() const { return graph() ? graph()->name() : "<null>"; }
 
+bool FunctionData::isMacro() const {
+    camel::runtime::GCGraph *runtimeGraph = graph();
+    return runtimeGraph != nullptr && runtimeGraph->isMacro();
+}
+
 FunctionType *FunctionData::funcType() const { return tt::as_ptr<FunctionType>(type_); }
 
 std::vector<std::string> FunctionData::refs() const { return closureRefs_; }

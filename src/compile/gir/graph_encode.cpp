@@ -402,6 +402,9 @@ class EncodeSession {
         prepared.source = graph;
         prepared.draft  = std::make_unique<GraphDraft>();
         prepared.draft->setInheritsRegions(false);
+        // Graph properties fixed before encoding: the macro flag of a `#macro` function is the
+        // one that matters here; a runtime graph keeps it for std::macro (design principles 8).
+        prepared.draft->setFlags(graph->draft().flags());
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());
@@ -1003,7 +1006,8 @@ class EncodeSession {
             prepared.memory,
             prepared.bytes,
             prepared.draft->id(),
-            camel::runtime::GCGraphDerivation{},
+            camel::runtime::GCGraphDerivation{
+                camel::runtime::kInvalidGraphId, prepared.draft->flags()},
             debugRecord,
             prepared.draft->funcType(),
             prepared.draft->frameSlotTypes(),

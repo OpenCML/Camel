@@ -3,7 +3,7 @@
  */
 module macro_static_object_access
 
-macro func score(): int {
+#macro func score(): int {
     let pair = (19, 23)
     let point = { x: pair.0, y: pair.1 }
     return point.x + point.y

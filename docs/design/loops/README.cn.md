@@ -27,7 +27,7 @@
 推荐 (c) 而不是 (a) 的依据是现有编译器上的四个实测事实（第 1、3 节）：
 
 1. 把循环写成尾递归后求梯度，在 `std::nvm`、`std::fvm` 上迭代 200 次就因递归深度 256 而终止（100 次可以）。
-2. `std::macro` 对尾递归写的循环最多提前求值 64 层；100 次迭代是编译期错误。
+2. `std::macro` 对尾递归写的循环最多提前求值 64 层；100 次迭代是运行时故障（`pass:std::macro`）。
 3. `std::opt` 把循环当成“可以按轮展开的递归”，16 轮剥出 16 份循环体的特化副本，循环本身还在。
 4. ONNX 导出器 3997 行里约 1700 行在从递归里恢复循环；一个循环体只写了一次 `tanh` 的程序，导出的模型里有 5 个 `Tanh`。
 
@@ -140,7 +140,7 @@ N=1000 ... std::macro std::tf                               -> 1.3677  0.367695�
 
 原因：自动微分为尾递归函数导出的前向函数是**非尾**递归——每一步的回传函数是一个闭包，捕获下一步的回传函数（`docs/technical/26_autodiff_as_graph_rewrite.md` 4.2：“the pullback of one step captures the pullback of the next”）。前向循环不占栈，它的梯度占栈。
 
-**L2 `std::macro` 提前求值循环最多 64 层。** `examples/macro_loop.cml`：`count(0, 20, 0)` 被求值，`count(0, 100, 0)` 是编译期错误 `'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls`。
+**L2 `std::macro` 提前求值循环最多 64 层。** `examples/macro_loop.cml`：`count(0, 20, 0)` 被求值，`count(0, 100, 0)` 是运行时故障 `'count' could not be evaluated by std::macro: the evaluation needs more than 64 nested calls`。
 
 **L3 `std::opt` 把循环当递归逐轮展开。** `K=3 camel examples/invariant.cml std::opt std::rgir`：循环 `spin(0, 1000000, k, 0)` 的初值是常量，于是每一轮特化出一份 `i` 为下一个常量的副本，16 轮后图里有 `loop$spec7` … `loop$spec20` 逐层嵌套的 14 份循环体，再加原来的 `loop`；每一份里 `k * k` 的乘法都还在。`sum_tail.cml` 的统计：不加遍 5 张图 25 个节点，`std::opt` 之后 22 张图 68 个节点、20 个直接调用。循环没有变快，优化的轮数与增长预算花在了剥皮上。
 
@@ -820,7 +820,7 @@ for x in xs sync {
 
 ### Q9 `std::macro` 求值循环的上限
 
-macro 函数里的循环在 `std::macro` 下被提前求值；不终止的循环会让编译不结束。候选：迭代步数上限（比如十万步，超过算求值失败，按 8 是编译期错误）；不设上限。**建议设上限**，数值请负责人定，并写进 `docs/cli.md` 的资源上限表。
+macro 函数里的循环在 `std::macro` 下被提前求值；不终止的循环会让编译不结束。**已定（H97）**：`--max-macro-rounds`，默认 1000000；超过算求值失败，按第 8 节是运行时故障。见 `docs/cli.md` 的资源上限表。
 
 ### Q10 `wait` 能否直接加在循环与 `if` 前面
 

@@ -63,6 +63,7 @@ OperatorTraits OperatorTable::traitsOf(const sem::OperatorSemantics &facts) {
         // makes the call depend on those functions.
         .callsGraphs = facts.callsGraphs || facts.elementCalls.has_value(),
         .readsGraphs = facts.readsGraphs,
+        .macro       = facts.macro,
     };
 }
 
@@ -123,6 +124,7 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     facts.elementwise  = traits.elementwise;
     facts.callsGraphs  = traits.callsGraphs;
     facts.readsGraphs  = traits.readsGraphs;
+    facts.macro        = traits.macro;
     // "Never faults" is the empty list. Saying it may fault (the default) does not take back
     // a declared empty list; a declaration that does contradict it is refused when the
     // semantics are declared (checkSemantics).
@@ -488,6 +490,7 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
         semantics.elementwise = semantics.elementwise || old->elementwise;
         semantics.callsGraphs = semantics.callsGraphs || old->callsGraphs;
         semantics.readsGraphs = semantics.readsGraphs || old->readsGraphs;
+        semantics.macro       = semantics.macro || old->macro;
         if (!semantics.faults && old->faults) {
             semantics.faults = old->faults;
         }

@@ -731,11 +731,17 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph = enterScope(type);
+    const bool macroOperator =
+        camel::core::OperatorTable::instance().isMacro(op->uri());
+    if (macroOperator) {
+        graph->draft().setFlags(static_cast<uint8_t>(
+            graph->draft().flags() | camel::runtime::kGraphFlagMacro));
+    }
     try {
         bodyStates_[graph.get()] = BodyState::Open;
         node_handle_t call       = graph->addOperNode(op, 0);
         stampPermissions(call);
-        if (opType->modifiers().macro()) {
+        if (macroOperator) {
             setNodeMacro(call, true);
         }
         registerNodeOrigin(context_, call, origin, "gir.link.oper");
@@ -2157,7 +2163,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 }
                 return false;
             };
-            const bool callsArguments = !targetOperator->funcType()->modifiers().macro();
+            const bool targetIsMacro =
+                camel::core::OperatorTable::instance().isMacro(targetOperator->uri());
+            const bool callsArguments = !targetIsMacro;
             for (const auto *inputs : {&withInputs, &normInputs}) {
                 for (const Argument &input : *inputs) {
                     Type *type = valueTypeOf(nodeTypeOf(input.node));
@@ -2175,9 +2183,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
             stampPermissions(targetNode);
-            // An operator whose resolved type is macro runs in std::macro once its inputs are
-            // static, like a call of a macro function.
-            if (targetOperator->funcType()->modifiers().macro()) {
+            // An operator declared macro runs in std::macro once its inputs are static, like a call
+            // of a macro function.
+            if (targetIsMacro) {
                 setNodeMacro(targetNode, true);
             }
             registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
@@ -2283,12 +2291,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         enterStructParameters(targetFuncType);
     }
     if (recorder_) {
+        const bool macroCallee =
+            targetGraph != nullptr
+                ? isMacroGraph(targetGraph)
+                : (targetOperator != nullptr &&
+                   camel::core::OperatorTable::instance().isMacro(targetOperator->uri()));
         recorder_->callResolved(
             gct->origin(),
             gct->at(0)->origin(),
             targetGraph ? targetGraph->graphId() : runtime::kInvalidGraphId,
             targetOperator ? targetOperator->uri() : std::string(),
-            targetFuncType);
+            targetFuncType,
+            macroCallee);
     }
     // A call is located at the call expression -- the callee and its argument list together --
     // not at the callee's definition (a FUNC node is made with its graph's origin) and not at
