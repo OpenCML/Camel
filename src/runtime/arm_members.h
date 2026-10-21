@@ -21,7 +21,7 @@
  * The nodes of an arm of a BRCH, found from the BRCH, its arm anchors and the users and inputs
  * of the nodes, over any graph that offers the View below (a frozen graph, a draft). One
  * algorithm for the execution plan, which looks for where an arm starts, and for the regions
- * that record the arms (GraphDraft::refreshArmRegions).
+ * that record the arms.
  *
  * The arm is what runs only when it is taken: the nodes that follow its head down to the JOIN
  * (a dead node is not followed), its tail when the tail is inside the branch, and what these

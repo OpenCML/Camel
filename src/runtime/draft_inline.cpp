@@ -1898,9 +1898,29 @@ DraftInlineResult inlineCallableInDraft(
     const bool hasExternalCtrl = !ctrlPreds.empty();
 
     // The body goes in a region of its own, inside the region of the call: where the code
-    // came from stays recorded after the call is gone.
+    // came from stays recorded after the call is gone. The body of an arm of a branch is the
+    // Arm region of that arm.
+    gc_node_ref_t armOf = kInvalidNodeRef;
+    uint32_t armIndex   = 0;
+    for (gc_node_ref_t ctrlPred : draft.ctrlInputsOf(funcNodeId)) {
+        const DraftNodeHeader *predHeader = draft.header(ctrlPred);
+        if (!predHeader || predHeader->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        const auto arms = draft.branchArmsOf(ctrlPred);
+        for (uint32_t k = 0; k < arms.size(); ++k) {
+            if (arms[k].head == funcNodeId) {
+                armOf    = ctrlPred;
+                armIndex = k;
+            }
+        }
+    }
+    const size_t slotsBefore = draft.nodeSlotCount();
     const uint32_t inlineRegion =
         draft.addInlineRegion(draft.nodeRegion(funcNodeId), calleeGraph->id(), kInvalidNodeRef);
+    if (armOf != kInvalidNodeRef) {
+        draft.setRegionArm(inlineRegion, armOf, armIndex);
+    }
     draft.setRegionOrigin(inlineRegion, static_cast<uint32_t>(draft.nodeOrigin(funcNodeId)));
     DraftGraphCloneResult cloned =
         calleeDraftView ? cloneDraftGraphIntoDraft(draft, *calleeDraftView, inlineRegion)
@@ -2102,6 +2122,19 @@ DraftInlineResult inlineCallableInDraft(
         result.ctrlEntry = result.ctrlExit;
     }
     draft.retargetBranchArmAnchors(funcNodeId, result.ctrlEntry, result.ctrlExit);
+    // What the splice added around the body (the gates of the arguments, the SYNC of several
+    // entries, the bridge gate of the result) is where the body is: in the arm, or where the
+    // call was.
+    const uint32_t spliceRegion = armOf != kInvalidNodeRef ? inlineRegion : draft.nodeRegion(funcNodeId);
+    for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
+         ++id) {
+        if (spliceRegion != 0 && draft.alive(id) && draft.nodeRegion(id) == 0) {
+            draft.setNodeRegion(id, spliceRegion);
+        }
+    }
+    if (armOf != kInvalidNodeRef) {
+        draft.setRegionResult(inlineRegion, result.valueExit);
+    }
 
     // Value users and control users observing the call result now observe the
     // inlined output/completion anchor instead.

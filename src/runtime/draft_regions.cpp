@@ -20,12 +20,6 @@
 /* The regions of a graph under construction (camel/runtime/graph.h, GCRegion). */
 #include "camel/runtime/draft.h"
 
-#include "runtime/arm_members.h"
-
-#include <algorithm>
-#include <map>
-#include <unordered_map>
-
 #include <stdexcept>
 
 namespace camel::runtime {
@@ -89,6 +83,71 @@ void GraphDraft::setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t call
     regions_[id].callSite = callSite;
 }
 
+void GraphDraft::dissolveRegionsOf(gc_node_ref_t id) {
+    for (uint32_t r = 1; r < regions_.size(); ++r) {
+        GCRegion &region = regions_[r];
+        const bool control = region.kind == GCRegionKind::Arm ||
+                             region.kind == GCRegionKind::LoopCond ||
+                             region.kind == GCRegionKind::LoopBody;
+        if (!control || region.owner != id) {
+            continue;
+        }
+        const uint32_t around = region.parent;
+        for (DraftNode *held : nodesById_) {
+            if (held && held->header.region == r) {
+                held->header.region = around;
+            }
+        }
+        for (uint32_t other = 1; other < regions_.size(); ++other) {
+            if (regions_[other].kind != GCRegionKind::Dead && regions_[other].parent == r) {
+                regions_[other].parent = around;
+            }
+        }
+        regions_[r].kind   = GCRegionKind::Dead;
+        regions_[r].owner  = kInvalidNodeRef;
+        regions_[r].result = kInvalidNodeRef;
+        ++mutations_;
+    }
+}
+
+void GraphDraft::retireRegion(uint32_t id) {
+    ++mutations_;
+    ASSERT(id > 0 && id < regions_.size(), "No such region.");
+    const uint32_t around = regions_[id].parent;
+    for (uint32_t r = 1; r < regions_.size(); ++r) {
+        if (regions_[r].kind == GCRegionKind::Dead || !regionWithin(r, id)) {
+            continue;
+        }
+        for (DraftNode *held : nodesById_) {
+            if (held && held->header.region == r) {
+                held->header.region = around;
+            }
+        }
+        regions_[r].kind   = GCRegionKind::Dead;
+        regions_[r].owner  = kInvalidNodeRef;
+        regions_[r].result = kInvalidNodeRef;
+    }
+}
+
+void GraphDraft::clearRegions() {
+    ++mutations_;
+    for (DraftNode *held : nodesById_) {
+        if (held) {
+            held->header.region = 0;
+        }
+    }
+    regions_.clear();
+    regionPorts_.clear();
+}
+
+void GraphDraft::setRegionArm(uint32_t id, gc_node_ref_t owner, uint32_t index) {
+    ++mutations_;
+    ASSERT(id > 0 && id < regions_.size(), "No such region.");
+    regions_[id].kind  = GCRegionKind::Arm;
+    regions_[id].owner = owner;
+    regions_[id].index = index;
+}
+
 void GraphDraft::setRegionOrigin(uint32_t id, uint32_t origin) {
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
@@ -109,186 +168,6 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
         inner = regions_[inner].parent;
     }
     return true;
-}
-
-namespace {
-
-/// Reads a draft the way armMembers asks.
-struct DraftView {
-    const GraphDraft &draft;
-    const std::vector<uint8_t> &liveNodes;
-    bool contains(gc_node_ref_t r) const { return draft.alive(r); }
-    bool live(gc_node_ref_t r) const { return r < liveNodes.size() && liveNodes[r]; }
-    gc_node_ref_t join(gc_node_ref_t brch) const {
-        return reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
-    }
-    GCBranchArm arm(gc_node_ref_t brch, size_t k) const { return draft.branchArmsOf(brch)[k]; }
-    std::span<const gc_node_ref_t> ctrlIn(gc_node_ref_t r) const { return draft.ctrlInputsOf(r); }
-    std::span<const gc_node_ref_t> normIn(gc_node_ref_t r) const { return draft.normInputsOf(r); }
-    std::span<const gc_node_ref_t> withIn(gc_node_ref_t r) const { return draft.withInputsOf(r); }
-    std::span<const gc_node_ref_t> ctrlOut(gc_node_ref_t r) const { return draft.ctrlUsersOf(r); }
-    std::span<const gc_node_ref_t> normOut(gc_node_ref_t r) const { return draft.normUsersOf(r); }
-    std::span<const gc_node_ref_t> withOut(gc_node_ref_t r) const { return draft.withUsersOf(r); }
-};
-
-} // namespace
-
-void GraphDraft::refreshArmRegions() {
-    // Nothing to do for a draft that has neither a branch nor an arm region.
-    bool hasArmRegion = false;
-    for (const GCRegion &region : regions_) {
-        hasArmRegion = hasArmRegion || region.kind == GCRegionKind::Arm;
-    }
-    std::vector<gc_node_ref_t> branches;
-    for (gc_node_ref_t id : brchIds_) {
-        const DraftNodeHeader *h = header(id);
-        if (h && h->kind == GCNodeKind::Brch && !branchArmsOf(id).empty() &&
-            std::find(branches.begin(), branches.end(), id) == branches.end()) {
-            branches.push_back(id);
-        }
-    }
-    if (branches.empty() && !hasArmRegion) {
-        return;
-    }
-    ++mutations_;
-    ++revision_;
-
-    // The arms found so far take back their nodes: each goes to the nearest region that is not an
-    // arm, and the arms are not there until they are found again.
-    const auto outsideArms = [&](uint32_t r) {
-        while (r != 0 && r < regions_.size() &&
-               (regions_[r].kind == GCRegionKind::Arm || regions_[r].kind == GCRegionKind::Dead)) {
-            r = regions_[r].parent;
-        }
-        return r;
-    };
-    std::map<std::pair<gc_node_ref_t, uint32_t>, uint32_t> known; // (BRCH, arm) -> region
-    for (uint32_t r = 1; r < regions_.size(); ++r) {
-        if (regions_[r].kind == GCRegionKind::Arm) {
-            known[{regions_[r].owner, regions_[r].index}] = r;
-        }
-    }
-    for (gc_node_ref_t id = 0; id < nodesById_.size(); ++id) {
-        if (nodesById_[id] && nodesById_[id]->header.region != 0) {
-            nodesById_[id]->header.region = outsideArms(nodesById_[id]->header.region);
-        }
-    }
-    for (uint32_t r = 1; r < regions_.size(); ++r) {
-        if (regions_[r].kind != GCRegionKind::Arm && regions_[r].kind != GCRegionKind::Dead) {
-            regions_[r].parent = outsideArms(regions_[r].parent);
-        }
-    }
-    for (auto &[key, r] : known) {
-        regions_[r].kind   = GCRegionKind::Dead;
-        regions_[r].result = kInvalidNodeRef;
-    }
-
-    // What the exit depends on is what runs.
-    std::vector<uint8_t> liveNodes(nodesById_.size(), 0);
-    {
-        std::vector<gc_node_ref_t> work{exit_ != kInvalidNodeRef ? exit_ : returnNode_};
-        while (!work.empty()) {
-            const gc_node_ref_t n = work.back();
-            work.pop_back();
-            if (!alive(n) || liveNodes[n]) {
-                continue;
-            }
-            liveNodes[n] = 1;
-            for (auto inputs : {ctrlInputsOf(n), normInputsOf(n), withInputsOf(n)}) {
-                work.insert(work.end(), inputs.begin(), inputs.end());
-            }
-        }
-    }
-
-    struct Found {
-        gc_node_ref_t brch;
-        uint32_t arm;
-        std::unordered_set<gc_node_ref_t> nodes;
-    };
-    std::vector<Found> arms;
-    const DraftView view{*this, liveNodes};
-    for (gc_node_ref_t brch : branches) {
-        const size_t count = branchArmsOf(brch).size();
-        for (uint32_t k = 0; k < count; ++k) {
-            arms.push_back({brch, k, armMembers(view, brch, k)});
-        }
-    }
-    // Outer arms first: the arms inside them are smaller, and take their nodes from them.
-    std::stable_sort(arms.begin(), arms.end(), [](const Found &a, const Found &b) {
-        return a.nodes.size() > b.nodes.size();
-    });
-
-    // The arms each node is in; what an arm and another one (of this branch or of another)
-    // both hold is read before the branches and stands outside both.
-    std::unordered_map<gc_node_ref_t, std::vector<uint32_t>> armsOf; // node -> indexes in `arms`
-    for (uint32_t i = 0; i < arms.size(); ++i) {
-        for (gc_node_ref_t n : arms[i].nodes) {
-            armsOf[n].push_back(i);
-        }
-    }
-    std::vector<uint32_t> armRegion(arms.size(), 0);
-    // `a` and `b` joined: the deeper when one holds the other, else the region both are in.
-    const auto combine = [&](uint32_t a, uint32_t b) {
-        if (regionWithin(b, a)) {
-            return b;
-        }
-        if (regionWithin(a, b)) {
-            return a;
-        }
-        while (!regionWithin(b, a)) {
-            a = regions_[a].parent;
-        }
-        return a;
-    };
-    for (uint32_t i = 0; i < arms.size(); ++i) {
-        // The region of the branch: where the arms that hold it (outer ones, made before) say,
-        // else where it was.
-        uint32_t parent = nodeRegion(arms[i].brch);
-        if (const auto outer = armsOf.find(arms[i].brch); outer != armsOf.end()) {
-            bool first = true;
-            uint32_t joined = 0;
-            for (uint32_t j : outer->second) {
-                if (j < i) {
-                    joined = first ? armRegion[j] : combine(joined, armRegion[j]);
-                    first  = false;
-                }
-            }
-            if (!first) {
-                parent = joined;
-            }
-        }
-        uint32_t id;
-        if (const auto it = known.find({arms[i].brch, arms[i].arm}); it != known.end()) {
-            id                = it->second;
-            regions_[id].kind = GCRegionKind::Arm;
-        } else {
-            if (regions_.empty()) {
-                regions_.push_back(GCRegion{});
-            }
-            GCRegion region;
-            region.kind  = GCRegionKind::Arm;
-            region.owner = arms[i].brch;
-            region.index = arms[i].arm;
-            regions_.push_back(region);
-            id = static_cast<uint32_t>(regions_.size() - 1);
-        }
-        regions_[id].parent = parent;
-        regions_[id].result = branchArmsOf(arms[i].brch)[arms[i].arm].tail;
-        if (!alive(regions_[id].result)) {
-            regions_[id].result = kInvalidNodeRef;
-        }
-        armRegion[i] = id;
-    }
-    for (const auto &[n, in] : armsOf) {
-        if (!alive(n)) {
-            continue;
-        }
-        uint32_t joined = armRegion[in.front()];
-        for (size_t k = 1; k < in.size(); ++k) {
-            joined = combine(joined, armRegion[in[k]]);
-        }
-        nodesById_[n]->header.region = joined;
-    }
 }
 
 } // namespace camel::runtime

@@ -89,3 +89,17 @@ Commits after the report above, in order:
 Results: smoke, compile, opt, linear, trans, mm, para, modules, tools, consistency pass 4248 of 4261 with `fs.remove_permissions` and `grammar.tables` failing (environmental; both fail on the base build as well).
 
 Open: decode and encode are still O(n) (the draft's node storage is per node); NodeVM reads the chunk directory per node (+3% on fib.deep nvm; belongs to the execution plan); the 16-byte record split was dropped by agreement. Plans: gs-layout-plan.md, gs-regions-plan.md.
+
+## Regions (R0, R1, R2a, front-end lowering)
+
+R0/R1 and the region clusters are merged. R2a and the next step, on gs/wide after fsh-dev b29afa66:
+
+- `src/runtime/arm_members.h`: one reckoning of the nodes of a branch arm, over a frozen graph or a draft.
+- The front end still builds each arm as a graph called after the BRCH. `Context::materializeRuntimeProgram` now ends with `passes::opt::lowerBranchArms` (src/passes/opt/inline/arms.cpp): it inlines every arm call (`inlineCallInOrder`), the splice makes the Arm region of the arm (owner BRCH, index, result), and the graphs of the arms leave the program. Debugging (inspection mode) keeps the arms as graphs; tools/debugger shows them as frames.
+- `modules/autodiff` differentiates arm by arm: `buildGradientGraph` first outlines the Arm regions of the closure back into graphs (`runtime::raiseBranchArms`, src/runtime/arm_raise.cpp) and lowers the gradient again.
+- Draft: `eraseNode` of a BRCH/LOOP retires the control regions it owns; `dropUncalledGraphs`, `setBranchArm`, `retireRegion`, `clearRegions`.
+- `reduceControlDependencies` drops control inputs that are ports or constants; fold evaluates a pure node it cannot replace (an arm head) to give the ConstantExpressionFaults warning.
+
+Transition debt (to delete when the back ends read the regions, R2b): `test::arm_regions`, `verifyBranchArmRegions`, the reckoning in `graph_runtime_support.cpp`, the `regions.arm_derivation*` tests; the inspection-mode exception for the debugger.
+
+Test expectations changed by design (arms are no longer calls): recursion depth limits count one frame a level, not two (failed_depth, limit.macro.*, limit.map.*, limit.default.map_exceeded); jit compiles `fib`/`depth` as frameless code; node and edge counts and the dot goldens of the dumps; resources `countdown` ids; `regions.survive_*` count the arm regions; `graph.null_then`; port_fill_metadata captures; ONNX function_branch refusal case; exhaust_perm_space is now a test pass (the old trigger, a recursion that bypassed the type-specialization bound through its arm graphs, no longer exhausts). Fast tier: 4405 of 4418, `fs.remove_permissions` and `grammar.tables` environmental. fib 30: nvm -7%, fvm -17%, jit 0.11 s to 0.004 s.

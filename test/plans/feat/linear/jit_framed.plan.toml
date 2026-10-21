@@ -30,14 +30,14 @@ expect_stdout_starts_with = "collatz 111 118\nrepeat >ababababab\nsum_at 31\nmea
 
 [[tests]]
 name = "framed.operators.compiled"
-desc = "Under std::jit those functions are compiled as framed code, and the values are the same."
+desc = "Under std::jit those functions are compiled as framed code (fib, whose branch arms are part of it, as frameless code), and the values are the same."
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
 args = ["-vv", "${case}", "std::jit"]
 envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'sum_at' as framed code", "compiled & cached graph 'mean' as framed code", "compiled & cached graph 'name_of' as framed code", "compiled & cached graph 'weight' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'walk' as framed code", "compiled & cached graph 'swap_sum' as framed code", "compiled & cached graph 'is_even' as framed code", "compiled & cached graph 'is_odd' as framed code", "compiled & cached graph 'fib' as framed code", "compiled & cached graph 'twice' as framed code", "compiled & cached graph 'scaled_total' as framed code", "compiled & cached graph 'totals' as framed code", "collatz 111 118", "weigh 3210", "twice 284626", "totals 14415"]
+expect_output_contains = ["compiled & cached graph 'collatz' as framed code", "compiled & cached graph 'repeat' as framed code", "compiled & cached graph 'sum_at' as framed code", "compiled & cached graph 'mean' as framed code", "compiled & cached graph 'name_of' as framed code", "compiled & cached graph 'weight' as framed code", "compiled & cached graph 'weigh' as framed code", "compiled & cached graph 'walk' as framed code", "compiled & cached graph 'swap_sum' as framed code", "compiled & cached graph 'is_even' as framed code", "compiled & cached graph 'is_odd' as framed code", "compiled & cached graph 'fib' as frameless code", "compiled & cached graph 'twice' as framed code", "compiled & cached graph 'scaled_total' as framed code", "compiled & cached graph 'totals' as framed code", "collatz 111 118", "weigh 3210", "twice 284626", "totals 14415"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core"]
 
 [[tests]]

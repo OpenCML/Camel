@@ -705,7 +705,10 @@ void verifyBranchArmRegions(
         // What the arm holds, the region holds, or the node is read by another arm that is
         // neither inside this one nor around it: it runs before either (outside both).
         for (gc_node_ref_t n : check.expected) {
-            if (n >= ordered.size() || !ordered[n] || within(graph->nodeRegion(n), check.region)) {
+            // Constants and ports run nothing: where they are is no matter.
+            const auto kind = graph->node(n)->kind;
+            if (n >= ordered.size() || !ordered[n] || within(graph->nodeRegion(n), check.region) ||
+                kind == GCNodeKind::Data || kind == GCNodeKind::Port) {
                 continue;
             }
             bool shared = false;

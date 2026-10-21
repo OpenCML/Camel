@@ -349,6 +349,9 @@ class GraphDraft {
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
     const std::vector<GraphId> &dependencies() const { return dependencies_; }
     const std::vector<GraphId> &subGraphs() const { return subGraphs_; }
+    /// Forgets the graphs in `graphs` that no node calls any more (the graphs that held code now
+    /// spliced into this one).
+    void dropUncalledGraphs(std::span<const GraphId> graphs);
     const std::vector<GraphId> &staticGraphRefs() const { return staticGraphRefs_; }
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
@@ -462,6 +465,8 @@ class GraphDraft {
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
+    /// Makes the anchors of arm `index` of the BRCH `brch` `arm`.
+    void setBranchArm(gc_node_ref_t brch, size_t index, GCBranchArm arm);
     void
     retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
@@ -501,11 +506,16 @@ class GraphDraft {
     void setRegionOrigin(uint32_t id, uint32_t origin);
     void setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t callSite);
     void setRegionAttrs(uint32_t id, uint32_t attrs);
-    /// Makes the Arm regions of the BRCH nodes match the arms the graph has now: one region per
-    /// arm (its id kept while the arm is), holding what runs only when the arm is taken
-    /// (arm_members.h), nested as the branches are. Costs a walk per branch; only test::arm_regions
-    /// runs it, until the front end builds the arm regions itself.
-    void refreshArmRegions();
+    /// The control regions that node `id` owns end with it: what they held is in the region
+    /// around them, and the regions inside them are inside that one. (Done by eraseNode.)
+    void dissolveRegionsOf(gc_node_ref_t id);
+    /// Ends the region `id` and the regions inside it; nodes that are still in them go to the
+    /// region around.
+    void retireRegion(uint32_t id);
+    /// Drops every region: all nodes are in the body.
+    void clearRegions();
+    /// Makes the Inline region `id` the Arm region of arm `index` of the BRCH `owner`.
+    void setRegionArm(uint32_t id, gc_node_ref_t owner, uint32_t index);
     /// True when `inner` is `outer` or lies in it.
     bool regionWithin(uint32_t inner, uint32_t outer) const;
     /// Source origin of node `id` (see DraftNodeHeader::origin).

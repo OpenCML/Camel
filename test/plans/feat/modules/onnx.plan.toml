@@ -2400,7 +2400,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "function_branch.pass"
-desc = "A branch on a condition that depends on the model input whose arms yield functions, outside the recursion with one recursive call that is exported as loops (the returned function calls the next one twice), is refused at the branch, saying that a function value would be chosen when the model runs. It used to stop with 'the dtype of 'arm_out' is not known statically'. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
+desc = "A branch on a condition that depends on the model input whose arms yield functions is refused at the branch, saying that a function value would be chosen when the model runs. It used to stop with 'the dtype of 'arm_out' is not known statically'. By the pass (std::macro std::opt onnx::export): TranslationRefused at the construct."
 kind = "negative"
 case = "../../../cases/modules/onnx/refusals/function_branch.cml"
 args = ["${case}", "std::macro", "std::opt", "onnx::export"]

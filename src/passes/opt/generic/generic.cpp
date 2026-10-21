@@ -719,12 +719,18 @@ size_t foldDraft(
                 }
                 continue;
             }
-            if (!isPureOper(draft, id) || !isFoldable(draft, id)) {
+            if (!isPureOper(draft, id)) {
                 continue;
             }
-            auto with = staticArgs(draft, draft.withInputsOf(id));
-            auto norm = staticArgs(draft, draft.normInputsOf(id));
+            // A node that cannot be replaced (the head of a branch arm) is still evaluated, to
+            // tell the user of a constant that faults where it is written.
+            const bool foldable = isFoldable(draft, id);
+            auto with           = staticArgs(draft, draft.withInputsOf(id));
+            auto norm           = staticArgs(draft, draft.normInputsOf(id));
             if (!with || !norm) {
+                if (!foldable) {
+                    continue;
+                }
                 // Not all arguments are constants, but their types may fix the result (e.g. the
                 // shape of a tensor whose type carries it).
                 if (foldFromTypes(draft, id, roots)) {
@@ -761,6 +767,9 @@ size_t foldDraft(
                 continue;
             } catch (...) {
                 continue; // leave the failure to be reported when the program runs
+            }
+            if (!foldable) {
+                continue;
             }
             if (resultType && type::isGCTraced(resultType->code()) && result != NullSlot) {
                 // Keep the value alive until commit moves it into the graph's static area.

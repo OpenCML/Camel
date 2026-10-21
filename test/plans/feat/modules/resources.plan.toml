@@ -62,16 +62,16 @@ for (const l of [
   'RESOURCES node main 20 algo:sort_in_place: rmw object (node 19); result same 0',
   'RESOURCES node main 23 rand:seed: write ambient rand:generator; external',
   'RESOURCES node main 29 fs:exists: read ambient fs; external',
-  'RESOURCES node countdown 10 FUNC __g_6__: rmw variable (node 0); result unknown',
+  'RESOURCES node countdown 19 FUNC countdown: rmw variable (node 20); result unknown',
   'RESOURCES order main 8 9 resource ordered by data',
   'RESOURCES order main 9 10 resource ordered by control',
   'RESOURCES order main 12 34 resource ordered by control',
   'RESOURCES order main 19 21 resource ordered by data',
   'RESOURCES order main 23 24 external ordered by control',
-  'RESOURCES order countdown 4 10 resource ordered by control',
+  'RESOURCES order countdown 4 19 resource ordered by control',
   'true', 'false', '4', '16', '[1, 2, 3]',
 ]) line(l)
-assert(!out.includes('RESOURCES order countdown 9 10'), 'the two arms of a branch are not a pair')
+assert(!out.includes('RESOURCES order countdown 13 19'), 'the two arms of a branch are not a pair')
 assert(!/RESOURCES order main (2|5|18) /.test(out), 'making a cell conflicts with nothing')
 assert(!/RESOURCES order main 12 (8|9|10|15|32) /.test(out), 'the cells of c and d are different resources')
 assert(!out.includes(' unordered'), 'the program orders every conflicting pair')

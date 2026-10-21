@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "camel/core/context/context.h"
 #include "camel/runtime/draft_inline.h"
 
 namespace camel::passes::opt {
@@ -41,5 +42,14 @@ namespace camel::passes::opt {
 camel::runtime::DraftInlineResult inlineCallInOrder(
     camel::runtime::RuntimeGraphDraftSession &session, camel::runtime::GraphDraft &draft,
     camel::runtime::gc_node_ref_t funcNodeId);
+
+/// Inlines the call of every arm of every branch of `program` (the front end builds each arm as
+/// a graph called after the BRCH), so the arms are regions of the graphs that hold the branches.
+/// The program itself when there is none.
+/// With `detached`, the result is a private program of the graphs reachable from `root` (the
+/// program of the context is left as it is).
+const camel::runtime::Program *lowerBranchArms(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GCGraph *root = nullptr, bool detached = false);
 
 } // namespace camel::passes::opt
