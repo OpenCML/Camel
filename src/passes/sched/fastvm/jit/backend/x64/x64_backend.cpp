@@ -143,6 +143,9 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
         if (firstOnly && !found.empty())
             return found;
         const Bytecode &bc = unit.bytecodes[pc];
+        if (bc.opcode == OpCode::LBEG || bc.opcode == OpCode::LTST || bc.opcode == OpCode::LEND) {
+            add(pc, "LOOP", "pc=" + std::to_string(pc) + " a loop is not compiled (the graph is interpreted)");
+        }
         if (bc.opcode == OpCode::BRCH) {
             // The lowering jumps to the entries of the jump table.
             const size_t table = pc + bc.opsize;

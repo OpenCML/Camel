@@ -128,6 +128,10 @@ const Program *regionizeLoops(
                 loopGraphs.push_back(graphs.condGraph);
                 results.push_back(embedPart(draft, loop, cond, GCRegionKind::LoopCond, captured));
             }
+            // The round: a slot of the frame the back ends count the rounds of the loop in.
+            results.push_back(draft.addPortNode(
+                camel::core::type::Type::Int64(),
+                draft.allocateRuntimeSlot(camel::core::type::Type::Int64())));
             draft.setWithInputs(loop, results);
             draft.setLoopGraphs(loop, kInvalidGraphId, kInvalidGraphId);
             changed = true;

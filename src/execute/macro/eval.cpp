@@ -43,8 +43,7 @@
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/loop_driver.h"
-#include "camel/runtime/loop.h"
-#include "camel/runtime/loop_outline.h"
+#include "camel/execute/loop_frame.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -746,143 +745,6 @@ slot_t MacroEvaluator::executeFunction(
     }
 }
 
-const camel::runtime::Program *MacroEvaluator::programWithLoopGraphs(GCGraph *graph) {
-    if (loopProgram_ == nullptr) {
-        loopProgram_ = camel::runtime::outlineLoopRegions(context_, program_, program_->root());
-    }
-    if (loopProgram_->graph(graph->id()) != nullptr) {
-        return loopProgram_;
-    }
-    auto &own = loopPrograms_[graph->id()];
-    if (own == nullptr) {
-        own = camel::runtime::outlineLoopRegions(context_, program_, graph);
-    }
-    return own;
-}
-
-slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *regionGraph, gc_node_ref_t node) {
-    // The loop as two graphs, in a program that holds them; the graph that has the node is the
-    // same one with the same nodes and slots.
-    const camel::runtime::Program *loopProgram = programWithLoopGraphs(regionGraph);
-    GCGraph *graph                             = loopProgram->graph(regionGraph->id());
-    const camel::runtime::LoopView loop(*loopProgram, *graph, node);
-    const size_t k           = loop.stateCount();
-    const size_t collections = loop.collectionCount();
-    const bool wraps         = k > 1 || collections != 0;
-    const auto *valueType    = wraps ? static_cast<const TupleType *>(loop.valueType()) : nullptr;
-    // The state lives in a rooted tuple: the condition and the body run safepoints. When the
-    // loop collects, that tuple is (state…, tape…), the value itself (LoopView::valueType).
-    std::vector<Type *> stateTypes;
-    for (size_t j = 0; j < k; ++j) {
-        stateTypes.push_back(loop.stateType(j));
-    }
-    auto *stateTupleType = wraps ? valueType : TupleType::create(stateTypes);
-    mm::RootHandle state(
-        mm::autoSpace(),
-        ::Tuple::create(wraps ? k + collections : k, mm::autoSpace()),
-        stateTupleType,
-        "MacroEvaluator.loop");
-    const auto captures = loop.captures();
-    // The rounds are the loop's (camel/execute/loop_driver.h); this evaluator supplies a call
-    // for each, with the state in a tuple the evaluator roots.
-    struct Host {
-        MacroEvaluator &evaluator;
-        const camel::runtime::Program *loopProgram;
-        Frame *frame;
-        GCGraph *graph;
-        camel::runtime::LoopView loop;
-        std::span<const gc_node_ref_t> captures;
-        std::optional<gc_node_ref_t> iterableNode;
-        mm::RootHandle &state;
-        const TupleType *stateTupleType;
-        size_t k;
-        bool wraps;
-        size_t maxRounds;
-
-        void beforeRound(size_t round) {
-            if (round >= maxRounds) {
-                throw MacroExecutionError(
-                    std::format(
-                        "the loop in '{}' runs more than {} rounds ahead of time. The limit is set "
-                        "with {} <n> or {}=<n>",
-                        graph->name(),
-                        maxRounds,
-                        camel::execute::kMaxMacroRoundsOption,
-                        camel::execute::kMaxMacroRoundsEnvVar));
-            }
-            mm::safepoint("macro loop round");
-        }
-        slot_t initialState(size_t j) {
-            return frame->get<slot_t>(dataIndexOf(graph, loop.initialState(j)));
-        }
-        slot_t stateValue() {
-            return wraps ? toSlot<Object *>(state.get()) : state.getAs<::Tuple>()->get<slot_t>(0);
-        }
-        void setStateValue(slot_t value) {
-            if (wraps) {
-                state.reset(fromSlot<Object *>(value), stateTupleType);
-            } else {
-                state.getAs<::Tuple>()->set(0, value, stateTupleType);
-            }
-        }
-        slot_t
-        callRound(const camel::execute::LoopShape &shape, GCGraph *callee, const slot_t *element) {
-            auto *funcObj = ::Function::create(
-                loopProgram,
-                callee->id(),
-                ensureMacroClosureType(callee),
-                mm::autoSpace());
-            return evaluator.executeFunction(
-                funcObj,
-                [&](Frame *calleeFrame, GCGraph *) {
-                    camel::execute::bindLoopRound(
-                        calleeFrame,
-                        callee,
-                        k,
-                        element,
-                        captures.size(),
-                        [&](size_t j) {
-                            return camel::execute::loopStateComponent(shape, stateValue(), j);
-                        },
-                        [&](size_t c) {
-                            return frame->get<slot_t>(dataIndexOf(graph, captures[c]));
-                        });
-                },
-                false);
-        }
-        ::Array *iterable() { return frame->get<::Array *>(dataIndexOf(graph, *iterableNode)); }
-    } host{
-        *this,
-        loopProgram,
-        frame,
-        graph,
-        loop,
-        captures,
-        loop.iterable(),
-        state,
-        stateTupleType,
-        k,
-        wraps,
-        camel::execute::macroRoundLimit(*context_)};
-    camel::execute::driveLoopRounds(
-        camel::execute::LoopShape{
-            .cond            = loop.condGraph(),
-            .body            = loop.bodyGraph(),
-            .iterates        = loop.iterable().has_value(),
-            .stateCount      = k,
-            .collectionCount = collections,
-            .valueType       = valueType,
-            .origin          = graph->nodeOrigin(node),
-        },
-        host);
-    // The value of the loop: the state, or the tuple of its values and tapes (a new object: the
-    // one the loop kept is the evaluator's).
-    if (!wraps) {
-        return state.getAs<::Tuple>()->get<slot_t>(0);
-    }
-    return toSlot<Object *>(state.getAs<::Tuple>()->clone(mm::autoSpace(), stateTupleType, false));
-}
-
 slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     ASSERT(runtimeGraph != nullptr, "Macro runtime graph execution requires a runtime graph.");
     if (recursionDepth_ > maxDepth_) {
@@ -1098,7 +960,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
         } break;
 
         case GCNodeKind::Loop:
-            frame->set(node->dataIndex, executeLoop(frame, runtimeGraph, runtimeNodeIndex));
+            // The rounds ran at the events of the plan; the state is the value.
             break;
 
         case GCNodeKind::Data:
@@ -1115,12 +977,41 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
         }
     };
 
-    for (uint32_t runtimeNodeIndex : runtimeTopoIndices) {
+    const auto &plan = runtimeGraph->execPlan();
+    uint32_t resumedLoop = camel::execute::kNoLoop;
+    const size_t maxRounds = plan.loops.empty() ? 0 : camel::execute::macroRoundLimit(*context_);
+    for (size_t at = 0; at < runtimeTopoIndices.size(); ++at) {
+        const uint32_t runtimeNodeIndex = runtimeTopoIndices[at];
         mm::safepoint("macro node boundary");
         if (tillRuntimeIndex.has_value()) {
             if (*tillRuntimeIndex == runtimeNodeIndex) {
                 tillRuntimeIndex.reset();
             } else {
+                continue;
+            }
+        }
+        // A loop of the graph starts, tests its round, or ends one here (stepLoops).
+        if (!plan.loops.empty()) {
+            const size_t resume = camel::execute::stepLoops(
+                plan,
+                at,
+                *frame,
+                resumedLoop,
+                [&](const camel::runtime::ExecLoop &, size_t rounds) {
+                    if (rounds >= maxRounds) {
+                        throw MacroExecutionError(
+                            std::format(
+                                "the loop in '{}' runs more than {} rounds ahead of time. The "
+                                "limit is set with {} <n> or {}=<n>",
+                                runtimeGraph->name(),
+                                maxRounds,
+                                camel::execute::kMaxMacroRoundsOption,
+                                camel::execute::kMaxMacroRoundsEnvVar));
+                    }
+                    mm::safepoint("macro loop round");
+                });
+            if (resume != camel::execute::kNoLoopJump) {
+                at = resume - 1;
                 continue;
             }
         }

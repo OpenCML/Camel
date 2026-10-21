@@ -44,8 +44,13 @@ std::vector<rt::gc_node_ref_t> loopInternals(const rt::GCGraph &source, rt::gc_n
     const uint32_t cond = source.loopRegionOf(loop, rt::GCRegionKind::LoopCond);
     const uint32_t body = source.loopRegionOf(loop, rt::GCRegionKind::LoopBody);
     std::vector<rt::gc_node_ref_t> nodes;
+    const rt::gc_node_ref_t round = source.withInputsOf(loop).back(); // the loop's own port
     for (rt::gc_node_ref_t ref = 0; ref < source.nodeCount(); ++ref) {
         if (!source.containsNodeRef(ref) || source.node(ref) == nullptr) {
+            continue;
+        }
+        if (ref == round) {
+            nodes.push_back(ref);
             continue;
         }
         for (uint32_t at = source.nodeRegion(ref); at != 0; at = source.region(at)->parent) {

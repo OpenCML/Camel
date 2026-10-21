@@ -35,6 +35,7 @@ namespace type = camel::core::type;
 namespace camel::runtime {
 class GCGraph;
 struct GCFillBody;
+struct ExecLoop;
 } // namespace camel::runtime
 
 // Densely packed bytecode instruction set.
@@ -56,6 +57,16 @@ enum class OpCode : uint8_t {
     TAIL, // Mark tail calls.
     OPER,
     SCHD, // Use fastop[0] as the scheduling strategy ID.
+
+    // The three events of a loop that is a region of the graph (camel/runtime/exec_plan.h,
+    // ExecLoop; camel/execute/loop_frame.h). The extra word is the ExecLoop. LBEG starts the loop;
+    // LTST runs after the condition and jumps to the pc in fastop[0] (the LEND) when the loop
+    // stops; LEND runs after the body and jumps to the pc in fastop[0] (the first instruction of
+    // the round) when another round follows. Like a JUMP, the target is graph-relative until the
+    // linker makes it absolute (getJumpTargetPc).
+    LBEG,
+    LTST,
+    LEND,
 
     // Common arithmetic shortcuts (fixed arity): binary arithmetic/comparison; both operands are
     // slot indices.
@@ -114,6 +125,11 @@ enum class OpCode : uint8_t {
     DGE,
 };
 
+/// The instructions that jump to the pc in their operands (getJumpTargetPc).
+inline bool hasJumpTarget(OpCode opcode) {
+    return opcode == OpCode::JUMP || opcode == OpCode::LTST || opcode == OpCode::LEND;
+}
+
 inline bool hasDynamicOperands(OpCode opcode) {
     // BRCH .. SCHD: variable-arity instructions
     switch (opcode) {
@@ -148,18 +164,7 @@ enum class MarkOpCode {
     FilterArr,
     ForeachArr,
     Isolate, // the fault-isolation node (camel/execute/fault_isolation.h)
-    // A LOOP node (camel/runtime/loop.h), one mark per form. The SCHD instruction of a loop has
-    // three extra words: the condition graph (null for For), the body graph, then the mark (the
-    // word extra() reads); see loopGraphsOf.
-    LoopWhile,
-    LoopFor,
-    LoopForWhile,
 };
-
-inline bool isLoopMark(MarkOpCode mark) {
-    return mark == MarkOpCode::LoopWhile || mark == MarkOpCode::LoopFor ||
-           mark == MarkOpCode::LoopForWhile;
-}
 
 // 0 means null; positive values are dynamic data indices, negative values are the negated static
 // data indices.
@@ -292,6 +297,12 @@ struct BytecodeHeader {                  // 16 bytes
             [[fallthrough]];
         case OpCode::JOIN:
             [[fallthrough]];
+        case OpCode::LBEG:
+            [[fallthrough]];
+        case OpCode::LTST:
+            [[fallthrough]];
+        case OpCode::LEND:
+            [[fallthrough]];
         case OpCode::SCHD:
             return 1;
         case OpCode::OPER: // Native function pointer followed by its OperId.
@@ -398,12 +409,9 @@ union BytecodeExtra {                           // 8 bytes
     type::Type *pType;                          // for CAST
     camel::runtime::GCGraph *runtimeGraph;      // runtime FUNC/TAIL target
     const camel::runtime::GCFillBody *fillBody; // FILL slot mapping payload
+    const camel::runtime::ExecLoop *loop;       // LBEG, LTST, LEND
     operator_t func;                            // for OPER
     MarkOpCode mark;                            // for SCHD
-    struct {
-        MarkOpCode mark;          // for SCHD
-        uint32_t collectionCount; // LOOP: its collection slots (camel/runtime/loop.h)
-    } loop;
     uint64_t raw; // generic
 
     std::string toString(OpCode opcode) const;

@@ -112,6 +112,70 @@ inline ::Array *newCollectionArray(const camel::core::type::ArrayType *arrayType
 
 } // namespace detail
 
+/// Makes the first state of a loop, through `host` (initialState, setStateValue): the value when
+/// k = 1 without collection, a k-tuple if not, and, when the loop collects, the tuple of the state
+/// and one empty array per collection slot.
+template <typename Host> inline void startLoopState(const LoopShape &shape, Host &host) {
+    const size_t k = shape.stateCount;
+    if (!shape.collecting()) {
+        if (k == 1) {
+            host.setStateValue(host.initialState(0));
+        } else {
+            ::Tuple *state = ::Tuple::create(k, camel::core::mm::autoSpace());
+            for (size_t j = 0; j < k; ++j) {
+                state->set(j, host.initialState(j), shape.valueType);
+            }
+            host.setStateValue(camel::core::rtdata::toSlot(state));
+        }
+        return;
+    }
+    // A collecting loop's state is (state_0 ... state_{k-1}, tape_0 ... tape_{s-1}) and stays in
+    // that one tuple: the tapes are appended to, never copied.
+    ASSERT(
+        shape.valueType != nullptr && shape.valueType->size() == k + shape.collectionCount,
+        "A collecting loop's value type does not have its k + s components.");
+    ::Tuple *work = ::Tuple::create(k + shape.collectionCount, camel::core::mm::autoSpace());
+    for (size_t j = 0; j < k; ++j) {
+        work->set(j, host.initialState(j), shape.valueType);
+    }
+    for (size_t c = 0; c < shape.collectionCount; ++c) {
+        const auto *arrayType =
+            static_cast<const camel::core::type::ArrayType *>(shape.valueType->typeAt(k + c));
+        work->set(k + c, detail::newCollectionArray(arrayType), shape.valueType);
+    }
+    host.setStateValue(camel::core::rtdata::toSlot(work));
+}
+
+/// Takes `result`, what the body returned for a round, as the next state (and appends the values
+/// it collected to the tapes).
+template <typename Host>
+inline void takeLoopRound(const LoopShape &shape, Host &host, slot_t result) {
+    if (!shape.collecting()) {
+        host.setStateValue(result);
+        return;
+    }
+    const size_t k = shape.stateCount;
+    // Growing a tape is the loop's allocation. A memory exhaustion anywhere in the rounds is
+    // reported at the loop rather than as a bare pass failure: the tapes are the only values a
+    // collecting loop keeps across rounds, so the loop is what outgrew the limit (the GC may
+    // notice it at a safepoint between rounds, not at the append that made it grow).
+    try {
+        const auto *produced = camel::core::rtdata::fromSlot<::Tuple *>(result);
+        auto *state          = camel::core::rtdata::fromSlot<::Tuple *>(host.stateValue());
+        for (size_t j = 0; j < k; ++j) {
+            state->set(j, produced->get<slot_t>(j), shape.valueType);
+        }
+        for (size_t c = 0; c < shape.collectionCount; ++c) {
+            const auto *arrayType =
+                static_cast<const camel::core::type::ArrayType *>(shape.valueType->typeAt(k + c));
+            auto *array = state->template get<::Array *>(k + c);
+            array->append(produced->get<slot_t>(k + c), arrayType);
+        }
+    } catch (const camel::core::mm::MemoryExhausted &e) {
+        throw e.during("collecting the values a loop produces each round", shape.origin);
+    }
+}
+
 /**
  * Runs the rounds of a loop whose state `host` does not hold yet. The host provides:
  *
@@ -129,60 +193,7 @@ inline ::Array *newCollectionArray(const camel::core::type::ArrayType *arrayType
  *   Array *iterable()                         the array a `for` iterates, read at each round
  */
 template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Host &host) {
-    const size_t k = shape.stateCount;
-
-    if (!shape.collecting()) {
-        // The state as before collection existed: the value when k = 1, a k-tuple if not.
-        if (k == 1) {
-            host.setStateValue(host.initialState(0));
-        } else {
-            ::Tuple *state = ::Tuple::create(k, camel::core::mm::autoSpace());
-            for (size_t j = 0; j < k; ++j) {
-                state->set(j, host.initialState(j), shape.valueType);
-            }
-            host.setStateValue(camel::core::rtdata::toSlot(state));
-        }
-        for (size_t round = 0;; ++round) {
-            host.beforeRound(round);
-            if (shape.cond != nullptr &&
-                !camel::core::rtdata::fromSlot<bool>(host.callRound(shape, shape.cond, nullptr))) {
-                break;
-            }
-            slot_t element = NullSlot;
-            if (shape.iterates) {
-                ::Array *array = host.iterable();
-                if (round >= array->size()) {
-                    break;
-                }
-                element = array->getSlot(round);
-            }
-            const slot_t next =
-                host.callRound(shape, shape.body, shape.iterates ? &element : nullptr);
-            host.setStateValue(next);
-        }
-        return;
-    }
-
-    // A collecting loop's state is (state_0 … state_{k-1}, tape_0 … tape_{s-1}) and stays in
-    // that one tuple: the tapes are appended to, never copied.
-    ASSERT(
-        shape.valueType != nullptr && shape.valueType->size() == k + shape.collectionCount,
-        "A collecting loop's value type does not have its k + s components.");
-    ::Tuple *work = ::Tuple::create(k + shape.collectionCount, camel::core::mm::autoSpace());
-    for (size_t j = 0; j < k; ++j) {
-        work->set(j, host.initialState(j), shape.valueType);
-    }
-    for (size_t c = 0; c < shape.collectionCount; ++c) {
-        const auto *arrayType =
-            static_cast<const camel::core::type::ArrayType *>(shape.valueType->typeAt(k + c));
-        work->set(k + c, detail::newCollectionArray(arrayType), shape.valueType);
-    }
-    host.setStateValue(camel::core::rtdata::toSlot(work));
-
-    // Growing a tape is the loop's allocation. A memory exhaustion anywhere in the rounds is
-    // reported at the loop rather than as a bare pass failure: the tapes are the only values a
-    // collecting loop keeps across rounds, so the loop is what outgrew the limit (the GC may
-    // notice it at a safepoint between rounds, not at the append that made it grow).
+    startLoopState(shape, host);
     try {
         for (size_t round = 0;; ++round) {
             host.beforeRound(round);
@@ -199,21 +210,15 @@ template <typename Host> inline void driveLoopRounds(const LoopShape &shape, Hos
                 }
                 element = array->getSlot(round);
             }
-            const slot_t result =
-                host.callRound(shape, shape.body, shape.iterates ? &element : nullptr);
-            const auto *produced = camel::core::rtdata::fromSlot<::Tuple *>(result);
-            auto *state = camel::core::rtdata::fromSlot<::Tuple *>(host.stateValue());
-            for (size_t j = 0; j < k; ++j) {
-                state->set(j, produced->get<slot_t>(j), shape.valueType);
-            }
-            for (size_t c = 0; c < shape.collectionCount; ++c) {
-                const auto *arrayType = static_cast<const camel::core::type::ArrayType *>(
-                    shape.valueType->typeAt(k + c));
-                auto *array = state->template get<::Array *>(k + c);
-                array->append(produced->get<slot_t>(k + c), arrayType);
-            }
+            takeLoopRound(
+                shape,
+                host,
+                host.callRound(shape, shape.body, shape.iterates ? &element : nullptr));
         }
     } catch (const camel::core::mm::MemoryExhausted &e) {
+        if (!shape.collecting()) {
+            throw;
+        }
         throw e.during("collecting the values a loop produces each round", shape.origin);
     }
 }

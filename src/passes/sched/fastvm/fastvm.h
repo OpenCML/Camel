@@ -99,9 +99,6 @@ struct FastVMConfig {
     JitMode jitMode        = JitMode::Disabled;
     size_t jitHotThreshold = 1;
     bool enableJitTraceMir = false;
-    /// Run the program's own LOOP nodes natively instead of lowering them to tail recursion
-    /// (`std::fvm(native_loop=true)`; always the case under a debugger).
-    bool nativeLoop = false;
     /// File that receives per-graph bytecode and execution counts at the end of the run
     /// (`std::fvm(stats="file")`); empty: none.
     std::string statsPath;
@@ -267,9 +264,6 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     // every bytecode it runs; otherwise it is null and the interpreter is not slowed.
     struct Stats;
     std::shared_ptr<Stats> stats_;
-    bool nativeLoop_ = false;
-    bool loopsNative_ = false; // this run keeps its loops as LOOP nodes
-    std::unordered_map<camel::runtime::GCGraph *, camel::runtime::GCGraph *> loopFreeGraphs_;
     std::string statsPath_;
     uint64_t *opCounts_ = nullptr;
     size_t graphLengthOf(camel::runtime::GCGraph *graph) const; // in bytecode units; 0 unknown
@@ -316,10 +310,6 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).
     void compileLate(camel::runtime::GCGraph *graph);
     HigherOrderCallSite higherOrderCallSite(Function *func);
-    /// The graph a function value runs: its own, or, when it has a loop (a function made in a
-    /// program of its own, such as a gradient), the graph with its loops lowered the way the main
-    /// program's are.
-    camel::runtime::GCGraph *functionGraph(Function *function);
 
     void push(size_t pc, ctx::Frame *frame);
     std::pair<size_t, ctx::Frame *> pop();
@@ -327,12 +317,6 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     void evalMarkedOperator(
         const MarkOpCode op, data_idx_t self, data_arr_t nargs, data_arr_t wargs,
         ctx::Frame &currFrame);
-    /// Runs the SCHD instruction of a LOOP node (camel/runtime/loop.h) natively: one call of
-    /// the condition graph and one of the body graph per round, as a higher-order operator
-    /// calls its function, the state kept in the instruction's result slot. A round is not a
-    /// recursion: each call returns before the next, so no number of rounds reaches the limit.
-    void evalLoop(const Bytecode &bc, ctx::Frame &currFrame);
-
     void evalMarkedOperator_map_arr(
         data_idx_t self, data_arr_t nargs, data_arr_t wargs, ctx::Frame &currFrame);
     void evalMarkedOperator_filter_arr(
@@ -375,7 +359,6 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
           enableJitTraceMir_(config.enableJitTraceMir)
 #endif
     {
-        nativeLoop_ = config.nativeLoop;
         statsPath_  = config.statsPath;
         framePool_.registerGcTracer();
     }

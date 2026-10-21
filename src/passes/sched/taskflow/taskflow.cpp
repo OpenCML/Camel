@@ -18,8 +18,8 @@
  */
 
 #include "taskflow.h"
+#include "camel/execute/loop_frame.h"
 #include "camel/execute/function_call.h"
-#include "camel/runtime/loop_lowering.h"
 #include "handoff.h"
 
 #include "camel/core/effect_trace.h"
@@ -504,29 +504,6 @@ uint64_t TaskflowExecSchedPass::nextPlanEpoch() {
     return next.fetch_add(1, std::memory_order_relaxed);
 }
 
-GCGraph *TaskflowExecSchedPass::executionGraph(GCGraph *graph) {
-    camel::core::mm::NoCollectionScope noCollection;
-    std::lock_guard lock(loweringMutex_);
-    if (const auto found = executionGraphs_.find(graph); found != executionGraphs_.end()) {
-        return found->second;
-    }
-    // Inspect this graph's executable nodes only.
-    bool hasLoop = false;
-    for (gc_node_ref_t ref = 0; !hasLoop && ref < graph->nodeCount(); ++ref) {
-        hasLoop = graph->node(ref)->kind == GCNodeKind::Loop;
-    }
-    GCGraph *target = graph;
-    if (hasLoop) {
-        const camel::runtime::Program *lowered =
-            camel::runtime::lowerLoopsToTailRecursion(context_, &programs_.of(graph), graph);
-        programs_.note(lowered);
-        target = lowered->root();
-    }
-    executionGraphs_.emplace(graph, target);
-    executionGraphs_.emplace(target, target);
-    return target;
-}
-
 TaskflowExecSchedPass::GraphPlan *TaskflowExecSchedPass::planFor(GCGraph *graph) {
     ASSERT(graph != nullptr, "Taskflow plan lookup requires a runtime graph.");
     // Every call looks the plan of its callee up. The plans a thread used last are remembered
@@ -554,7 +531,7 @@ TaskflowExecSchedPass::GraphPlan *TaskflowExecSchedPass::planFor(GCGraph *graph)
         // Built outside the lock; two workers that meet a graph for the first time may both
         // build it, and the first to publish wins. A published plan is never changed or
         // removed while the run lasts.
-        auto built = buildGraphPlan(executionGraph(graph));
+        auto built = buildGraphPlan(graph);
         std::unique_lock lock(plansMutex_);
         auto [it, inserted] = plans_.try_emplace(graph, std::move(built));
         (void)inserted;
@@ -676,6 +653,11 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
     const size_t blocks    = graph->nodeCount();
     constexpr uint32_t kNo = std::numeric_limits<uint32_t>::max();
 
+    // The rounds of a loop run in the frame, in the order of the plan: a graph with one is
+    // evaluated node by node (and, when it is serial, as bytecode).
+    if (!plan.shared->loops.empty()) {
+        throw PlanMismatch{"it has a loop"};
+    }
     std::vector<uint32_t> pos(blocks, kNo);
     for (size_t i = 0; i < topo.size(); ++i) {
         if (topo[i] >= blocks) {
@@ -1049,12 +1031,7 @@ const camel::runtime::Program *
 TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostream & /*os*/) {
     camel::runtime::GCGraph *graph = program->root();
     ASSERT(graph != nullptr, "Taskflow requires a non-null runtime root graph.");
-    // Loops run as the tail recursion they mean, on a private copy of the program (the
-    // context's program keeps its LOOP nodes: camel/runtime/loop_lowering.h).
-    const camel::runtime::Program *lowered =
-        camel::runtime::lowerLoopsToTailRecursion(context_, program);
-    camel::execute::RunScope runScope(programs_, *context_, lowered);
-    graph = lowered->root();
+    camel::execute::RunScope runScope(programs_, *context_, program);
 
     forceLinear_ = options_.linear;
     fanOutAll_   = options_.fanOutAll;
@@ -1068,10 +1045,6 @@ TaskflowExecSchedPass::apply(const camel::runtime::Program *program, std::ostrea
         std::unique_lock lock(plansMutex_);
         plans_.clear();
         planEpoch_ = nextPlanEpoch();
-    }
-    {
-        std::lock_guard lock(loweringMutex_);
-        executionGraphs_.clear();
     }
     linearArmEntryCache_.clear();
     const bool gcStats = options_.gcStats > 0;
@@ -1397,6 +1370,8 @@ void TaskflowExecSchedPass::runLinearBody(
     // Same as NodeVM: the (tail, join) pairs of the arms that enclose a nested branch.
     std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
 
+    const auto &shared = *plan.shared;
+    uint32_t resumedLoop = camel::execute::kNoLoop;
     for (size_t i = 0; i < nodes.size(); ++i) {
         const gc_node_ref_t nodeRef = nodes[i];
         const auto *node            = requireNode(graph, nodeRef);
@@ -1405,6 +1380,23 @@ void TaskflowExecSchedPass::runLinearBody(
             if (tillNode == nodeRef) {
                 tillNode = kInvalidNodeRef;
             } else {
+                continue;
+            }
+        }
+        // A loop of the graph starts, tests its round, or ends one here (stepLoops).
+        if (!shared.loops.empty()) {
+            const size_t resume = camel::execute::stepLoops(
+                shared,
+                i,
+                *frame,
+                resumedLoop,
+                camel::execute::loopRoundSafepoint([&] {
+                    region.leave();
+                    region.poll("taskflow loop round");
+                    region.enter();
+                }));
+            if (resume != camel::execute::kNoLoopJump) {
+                i = resume - 1;
                 continue;
             }
         }
@@ -1456,6 +1448,9 @@ void TaskflowExecSchedPass::runLinearBody(
         case GCNodeKind::Data:
         case GCNodeKind::Port:
         case GCNodeKind::Sync:
+            break;
+        case GCNodeKind::Loop:
+            // The rounds ran at the events of the plan; the state is the value.
             break;
         case GCNodeKind::Oper:
             if (OperatorTable::instance().isMarked(graph->nodeBodyAs<GCOperBody>(nodeRef)->oper)) {

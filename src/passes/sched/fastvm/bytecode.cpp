@@ -47,6 +47,12 @@ std::string to_string(const OpCode &op) {
         return "OPER";
     case OpCode::SCHD:
         return "SCHD";
+    case OpCode::LBEG:
+        return "LBEG";
+    case OpCode::LTST:
+        return "LTST";
+    case OpCode::LEND:
+        return "LEND";
 
     case OpCode::IADD:
         return "IADD";
@@ -156,12 +162,6 @@ std::string to_string(const MarkOpCode &op) {
         return "ForeachArr";
     case MarkOpCode::Isolate:
         return "Isolate";
-    case MarkOpCode::LoopWhile:
-        return "LoopWhile";
-    case MarkOpCode::LoopFor:
-        return "LoopFor";
-    case MarkOpCode::LoopForWhile:
-        return "LoopForWhile";
     default:
         ASSERT(false, "Unknown MarkOpCode encountered.");
         return "UNKNOWN";

@@ -3,7 +3,7 @@ order = 348
 tier = "fast"
 debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "loops"]
-desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
+desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm, fvm and jit in the frame of the function, prl through the private lowering to tail recursion), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
 [[tests]]
 name = "loops.native_callback"
@@ -162,45 +162,6 @@ case = "../../../cases/loops/iterate_macro.cml"
 args = ["${case}", "std::macro", "std::rgir"]
 expect_exit = 0
 expect_stdout_contains = ["label=\"2\", type=\"DATA\"", "label=\"3\", type=\"DATA\""]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "loops.iterate_string.native_loop"
-desc = "The native loop instruction of std::fvm and std::jit takes the elements of a string the same way the lowering does."
-kind = "behavior"
-case = "../../../cases/loops/iterate_string.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["3 3 中文 2 7 2 3"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "loops.iterate_map.native_loop"
-desc = "The native loop instruction of std::fvm and std::jit over a map's key-ordered pairs."
-kind = "behavior"
-case = "../../../cases/loops/iterate_map.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["abc 3 1 6 ab 9 3 ab"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "loops.iterate_tensor.native_loop"
-desc = "The native loop instruction of std::fvm and std::jit over a tensor's first-dimension elements."
-kind = "behavior"
-case = "../../../cases/loops/iterate_tensor.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["21 3 3 6 7 21 3"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -518,32 +479,6 @@ expect_exit = 1
 expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
-
-[[tests]]
-name = "loops.native_fvm"
-desc = "The native loop instruction of std::fvm and std::jit (std::fvm(native_loop=true); it is also what a debugger runs): the four shapes, captures and nesting, the edges, give what the lowering gives."
-kind = "behavior"
-case = "../../../cases/loops/captures.cml"
-args = ["${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["24 306 42 25 4"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "loops.native_fvm_shapes"
-desc = "The four shapes and the edges (a million rounds, a recursion limit of 3) on the native loop instruction of std::fvm and std::jit."
-kind = "behavior"
-case = "../../../cases/loops/edges.cml"
-args = ["--max-recursion-depth", "3", "${case}", "${backend}"]
-backends = ["fvm_native_loop", "jit_native_loop"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_contains = ["7 5 832040 [1, 4, 9, 16, 25] 2999997"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 60000
 
 [[tests]]
 name = "loops.state_in_place"

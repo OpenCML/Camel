@@ -1,7 +1,7 @@
 // A loop in the debugger, on both debuggable back ends: its body is part of the frame of the
 // function the loop is written in (design principles 12.1: like the arms of a branch), a
 // breakpoint in the body stops once per round with the names of the round, and `frames
-// subgraphs` shows the body graph as the subgraph it is.
+// subgraphs` has no frame to add for it.
 
 import { runTest, check, fixture, lineOf } from '../../../tools/debugger/client.mjs'
 
@@ -27,10 +27,11 @@ await runTest(async (t) => {
         has(await repl.command('print acc'), /^acc: int = 0$/m, 'the first state')
 
         has(await repl.command('frames subgraphs'), /^Frames: subgraphs/m, 'frames subgraphs')
+        // The body is a region of the frame of the function: there is no frame of its own to show.
         has(
             await repl.command('bt'),
-            new RegExp(`^#0  squares \\[loop body at line ${L('body')}\\]  loops\\.cml:${L('body')}:`, 'm'),
-            'bt: the body as the subgraph frame it is',
+            new RegExp(`^#0  squares  loops\\.cml:${L('body')}:`, 'm'),
+            'bt: the body is part of the frame of the function, also by subgraphs',
         )
         await repl.command('frames functions')
 

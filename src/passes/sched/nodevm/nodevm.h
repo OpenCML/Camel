@@ -19,7 +19,6 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <memory>
 #include <span>
 #include <vector>
@@ -46,10 +45,6 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // The programs whose graphs this run executes (a frozen graph names its callees by id).
     camel::execute::RunPrograms programs_;
     std::vector<runtime_data_idx_t> operIndices_;
-    /// The graph a function value runs: its own, or, when it has a loop (a function made in a
-    /// program of its own, such as a gradient), the graph with its loops as two graphs each.
-    camel::runtime::GCGraph *functionGraph(::Function *function);
-    std::unordered_map<camel::runtime::GCGraph *, camel::runtime::GCGraph *> loopGraphs_;
     std::vector<slot_t> callArgScratch_;
 
     // `program` is the program the graph belongs to, when the caller knows it (the callee of a
@@ -109,13 +104,6 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
     __attribute__((noinline)) void evalMarkedOperator_isolate(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
-        ctx::Frame &currFrame);
-    /// Runs the LOOP node `nodeRef` (camel/runtime/loop.h) natively: one call of the condition
-    /// graph and one of the body graph per round, the state kept in the node's own slot of
-    /// `currFrame` (so the collector traces it). A round is not a recursion: each call is one
-    /// level deep and returns before the next, so no number of rounds reaches the limit.
-    __attribute__((noinline)) void evalLoop(
         camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef,
         ctx::Frame &currFrame);
 };
