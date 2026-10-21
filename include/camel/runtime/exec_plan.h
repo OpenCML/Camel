@@ -139,6 +139,9 @@ class ExecPlan {
         uintptr_t jitEntry         = 0;
         uintptr_t flags            = 0;
         uintptr_t indirectCallCount = 0;
+        /// Keeps the bytecode range of the version in the interpreter's code space; gives it
+        /// back when the version is freed (the plan is freed with it).
+        std::shared_ptr<void> codeLease;
     };
     mutable FastVmState fastVm;
 

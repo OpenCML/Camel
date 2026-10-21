@@ -1,6 +1,7 @@
 id = "linear.closures_and_state"
 order = 342
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "closures", "state"]
 
 [[tests]]

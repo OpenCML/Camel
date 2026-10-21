@@ -142,6 +142,8 @@ struct GraphArenaLayout {
     size_t refRoleBytes     = 0; // its roles, padded to the next array's alignment
     size_t tupleBytes       = 0;
     size_t chunkDirBytes    = 0; // the directory of node chunks
+    size_t regionBytes      = 0; // the region table
+    size_t regionPortBytes  = 0; // the form ports of the regions
     size_t normPortBytes    = 0;
     size_t withPortBytes    = 0;
     size_t closureBytes     = 0;
@@ -172,6 +174,10 @@ GraphArenaLayout planGraphArenaLayout(
         .chunkDirBytes = camel::core::mm::alignUp(
             sizeof(GCNodeChunk *) * std::max<size_t>(nodeChunkCount(payload.nodeCount), 1),
             alignof(GCNodeChunk *)),
+        .regionBytes     = bytesForArray<GCRegion>(payload.regionCount),
+        .regionPortBytes = camel::core::mm::alignUp(
+            bytesForArray<gc_node_ref_t>(payload.regionPortCount),
+            alignof(gc_node_ref_t)),
         .normPortBytes = camel::core::mm::alignUp(
             bytesForArray<gc_node_ref_t>(payload.normPortCount),
             alignof(gc_node_ref_t)),
@@ -187,7 +193,7 @@ GraphArenaLayout planGraphArenaLayout(
     };
     const size_t beforeFrameLayout =
         layout.graphBytes + layout.refBytes + layout.refRoleBytes + layout.tupleBytes +
-        layout.chunkDirBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
+        layout.chunkDirBytes + layout.regionBytes + layout.regionPortBytes + layout.normPortBytes + layout.withPortBytes + layout.closureBytes +
         layout.branchArmBytes;
     // The frame layout comes last. The arrays before it may end at any 4-byte boundary, so the
     // padding up to the layout's alignment is part of its share.
@@ -237,6 +243,63 @@ bool shouldTraverseStaticSlotType(Type *type) {
     return true;
 }
 
+/// The regions of a graph are a tree rooted at the body, every node is in one of them, and the
+/// nodes a region names are nodes of the graph. (Which nodes may read which is checked once
+/// control regions exist.)
+void validateRuntimeRegions(const GCGraph *graph) {
+    const gc_cnt_t count = graph->regionCount();
+    const auto bad       = [&](std::string_view what, uint32_t region) {
+        throw std::runtime_error(
+            std::format("Runtime graph '{}' has region {} {}.", graph->name(), region, what));
+    };
+    const auto inGraph = [&](gc_node_ref_t ref) {
+        return ref == kInvalidNodeRef || (graph->containsNodeRef(ref) &&
+                                          graph->node(ref)->kind != GCNodeKind::Dead);
+    };
+    if (count != 0 && graph->region(0)->kind != GCRegionKind::Root) {
+        bad("as its body, which is not a root", 0);
+    }
+    for (uint32_t r = 1; r < count; ++r) {
+        const GCRegion &region = *graph->region(r);
+        if (region.kind == GCRegionKind::Dead) {
+            continue;
+        }
+        if (region.kind == GCRegionKind::Root || region.parent >= r) {
+            bad("with a parent that does not come before it", r);
+        }
+        if (!inGraph(region.owner) || !inGraph(region.result) || !inGraph(region.callSite)) {
+            bad("that names a node the graph does not have", r);
+        }
+        const bool control = region.kind == GCRegionKind::Arm ||
+                             region.kind == GCRegionKind::LoopCond ||
+                             region.kind == GCRegionKind::LoopBody;
+        if (control != (region.owner != kInvalidNodeRef)) {
+            bad("whose owner does not fit its kind", r);
+        }
+        if (region.portBegin + static_cast<uint64_t>(region.portCount) >
+            graph->nodePayload()->regionPortCount) {
+            bad("with ports outside the table", r);
+        }
+        for (gc_node_ref_t port : graph->regionPorts(r)) {
+            // An annotation region keeps no port a rewrite removed; a control region needs all.
+            if (!inGraph(port) || (control && port == kInvalidNodeRef)) {
+                bad("with a port the graph does not have", r);
+            }
+        }
+    }
+    for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+        const uint32_t region = graph->nodeRegion(ref);
+        if (region != 0 && (region >= count || graph->region(region)->kind == GCRegionKind::Dead)) {
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has node {} in region {}, which is not there.",
+                    graph->name(),
+                    ref,
+                    region));
+        }
+    }
+}
+
 void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
     if (!graph) {
         return;
@@ -245,6 +308,7 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
         throw std::runtime_error(
             std::format("Runtime graph '{}' has no native node payload.", graph->name()));
     }
+    validateRuntimeRegions(graph);
 
     const auto validateRef = [&](gc_node_ref_t ref, std::string_view what) {
         if (ref == kInvalidNodeRef) {
@@ -672,6 +736,12 @@ GCGraphPayloadShape describeDraftPayload(const GraphDraft &draft, const DraftPay
             plan.nodes.begin(),
             plan.nodes.end(),
             [&](const auto &planned) { return draft.nodeAttrs(planned.draftId) != 0; }),
+        .regions = std::any_of(
+            plan.nodes.begin(),
+            plan.nodes.end(),
+            [&](const auto &planned) { return !planned.dead && draft.nodeRegion(planned.draftId) != 0; }),
+        .regionCount     = static_cast<gc_cnt_t>(draft.regionCount()),
+        .regionPortCount = static_cast<gc_cnt_t>(draft.regionPortCount()),
         .base = draft.baseGraph(),
     };
 }
@@ -750,6 +820,9 @@ void emitDraftPayload(
         }
         if (payload.attrs) {
             payload.attrs[planned.ref] = draft.nodeAttrs(planned.draftId);
+        }
+        if (payload.regions) {
+            payload.regions[planned.ref] = draft.nodeRegion(planned.draftId);
         }
         const GCNode &header = record;
 
@@ -878,6 +951,23 @@ void emitDraftPayload(
         payload.closure[i] = plan.runtimeRefsByDraftId[draft.closureNodes()[i]];
     }
 
+    // The regions: the node references in them follow the numbering of the nodes; one to a node
+    // a rewrite erased becomes "none".
+    const auto mapRegionNode = [&](gc_node_ref_t ref) {
+        return ref < plan.runtimeRefsByDraftId.size() ? plan.runtimeRefsByDraftId[ref]
+                                                       : kInvalidNodeRef;
+    };
+    for (uint32_t r = 0; r < draft.regionCount(); ++r) {
+        GCRegion region        = draft.region(r);
+        region.owner           = mapRegionNode(region.owner);
+        region.result          = mapRegionNode(region.result);
+        region.callSite        = mapRegionNode(region.callSite);
+        payload.regionTable[r] = region;
+    }
+    for (uint32_t i = 0; i < draft.regionPortCount(); ++i) {
+        payload.regionPorts[i] = mapRegionNode(draft.regionPort(i));
+    }
+
     // A graph without an entry starts at its first node.
     const auto firstNode = std::find_if(
         plan.nodes.begin(),
@@ -962,6 +1052,11 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
     std::fill_n(payload.chunks, std::max<size_t>(payload.chunkCount, 1), nullptr);
     payload.hasPermissions = shape.permissions;
     payload.hasAttrs       = shape.attrs;
+    payload.hasRegions     = shape.regions;
+    payload.regionTable    = arenaAllocArray<GCRegion>(arena, shape.regionCount);
+    payload.regionCount    = shape.regionCount;
+    payload.regionPorts    = arenaAllocArray<gc_node_ref_t>(arena, shape.regionPortCount);
+    payload.regionPortCount = shape.regionPortCount;
     payload.normPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.normPortCount);
     payload.withPorts        = arenaAllocArray<gc_node_ref_t>(arena, shape.withPortCount);
     payload.closure          = arenaAllocArray<gc_node_ref_t>(arena, shape.closureCount);
@@ -983,6 +1078,7 @@ struct PayloadStaging {
     std::vector<uint32_t> origins;
     std::vector<uint8_t> permissions;
     std::vector<uint32_t> attrs;
+    std::vector<uint32_t> regions;
     std::vector<gc_node_ref_t> inputs;
     std::vector<gc_payload_word_t> payload;
 };
@@ -993,6 +1089,11 @@ GCGraphPayloadArena makePayloadArenaView(GCGraphNativePayload &payload, PayloadS
         .origins          = staging.origins.data(),
         .permissions      = staging.permissions.empty() ? nullptr : staging.permissions.data(),
         .attrs            = staging.attrs.empty() ? nullptr : staging.attrs.data(),
+        .regions          = staging.regions.empty() ? nullptr : staging.regions.data(),
+        .regionTable      = payload.regionTable,
+        .regionPorts      = payload.regionPorts,
+        .regionCount      = payload.regionCount,
+        .regionPortCount  = payload.regionPortCount,
         .inputs           = staging.inputs.data(),
         .payload          = staging.payload.data(),
         .normPorts        = payload.normPorts,
@@ -1047,6 +1148,7 @@ bool chunkHolds(
     return same(chunk.origins, staging.origins.data() + first, count) &&
            (!chunk.permissions || same(chunk.permissions, staging.permissions.data() + first, count)) &&
            (!chunk.attrs || same(chunk.attrs, staging.attrs.data() + first, count)) &&
+           (!chunk.regions || same(chunk.regions, staging.regions.data() + first, count)) &&
            same(chunk.edges, staging.inputs.data() + edgeBegin, edges) &&
            same(chunk.payload, staging.payload.data() + payBegin, words);
 }
@@ -1070,7 +1172,8 @@ void buildNodeChunks(
     // The chunks of the graph the draft came from can stand for the new ones that equal them,
     // when the two graphs have the same columns.
     const GCGraphNativePayload *old = shape.base ? shape.base->nodePayload() : nullptr;
-    if (old && (old->hasPermissions != shape.permissions || old->hasAttrs != shape.attrs)) {
+    if (old && (old->hasPermissions != shape.permissions || old->hasAttrs != shape.attrs ||
+                old->hasRegions != shape.regions)) {
         old = nullptr;
     }
     size_t built = 0;
@@ -1098,7 +1201,8 @@ void buildNodeChunks(
             const size_t originsAt = align8(recordsAt + count * sizeof(GCNode));
             const size_t permsAt   = originsAt + align8(count * sizeof(uint32_t));
             const size_t attrsAt   = permsAt + (shape.permissions ? align8(count) : 0);
-            const size_t edgesAt = attrsAt + (shape.attrs ? align8(count * sizeof(uint32_t)) : 0);
+            const size_t regionsAt = attrsAt + (shape.attrs ? align8(count * sizeof(uint32_t)) : 0);
+            const size_t edgesAt = regionsAt + (shape.regions ? align8(count * sizeof(uint32_t)) : 0);
             const size_t payloadAt = edgesAt + align8(edges * sizeof(gc_node_ref_t));
             const size_t bytes     = payloadAt + words * sizeof(gc_payload_word_t);
             auto *base =
@@ -1111,6 +1215,7 @@ void buildNodeChunks(
             chunk->permissions =
                 shape.permissions ? reinterpret_cast<uint8_t *>(base + permsAt) : nullptr;
             chunk->attrs   = shape.attrs ? reinterpret_cast<uint32_t *>(base + attrsAt) : nullptr;
+            chunk->regions = shape.regions ? reinterpret_cast<uint32_t *>(base + regionsAt) : nullptr;
             chunk->edges   = reinterpret_cast<gc_node_ref_t *>(base + edgesAt);
             chunk->payload = reinterpret_cast<gc_payload_word_t *>(base + payloadAt);
 
@@ -1131,6 +1236,12 @@ void buildNodeChunks(
             }
             if (chunk->attrs) {
                 std::memcpy(chunk->attrs, staging.attrs.data() + first, count * sizeof(uint32_t));
+            }
+            if (chunk->regions) {
+                std::memcpy(
+                    chunk->regions,
+                    staging.regions.data() + first,
+                    count * sizeof(uint32_t));
             }
             if (edges != 0) {
                 std::memcpy(
@@ -1313,6 +1424,9 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     }
     if (payloadShape.attrs) {
         staging.attrs.resize(payloadShape.nodeCount);
+    }
+    if (payloadShape.regions) {
+        staging.regions.resize(payloadShape.nodeCount);
     }
     staging.inputs.resize(payloadShape.edgeCount);
     staging.payload.resize(payloadShape.payloadWordCount);

@@ -33,12 +33,17 @@
  *     an input of the model).
  *
  * How the text of a value is read depends on the declared type of the parameter:
- *   int / float / bool / string   the literal itself (`3`, `0.5`, `true`, any text);
+ *   int / float / bool / string   the literal itself (`3`, `0.5`, `true`, any text); a float is
+ *                                 one whole number token by camel::utils::parseWholeFloat (no
+ *                                 hexadecimal form, no `Infinity`, no blanks);
  *   c64 / c128                    a complex number as the language writes one: the real part,
  *                                 the sign of the imaginary part and the imaginary part
  *                                 (`1+2i`, `0.5-0.25i`), or only the imaginary part with its
- *                                 sign (`-2i`); each part is read as a float is. A real text is
- *                                 not a complex number;
+ *                                 sign (`-2i`); each part is one whole number token by
+ *                                 parseWholeFloat at the declared width. A number that is not
+ *                                 written as a complex one is taken as its real part, with an
+ *                                 imaginary part of zero (`1.5` is `1.5+0i`: a literal takes its
+ *                                 type from context, design principles 5.1);
  *   a struct or tuple             a directory: every leaf is read from
  *                                 `<dir>/<field.path>` (fields and tuple indices joined by
  *                                 dots, the layout nn.save_params writes);

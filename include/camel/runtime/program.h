@@ -25,14 +25,16 @@
  *
  * A Program is built once, while the encoder or a commit is still producing the graphs it
  * holds (bind, setRoot), and is not changed after it is published; a rewrite makes a new one.
- * Programs are owned by the GCGraphManager of the context and live as long as it does; the
- * graphs a Program names are freed when a later Program replaces the one they belong to
- * (graph.h, GCGraphManager). Graphs a transform creates while the program runs (the gradient
- * of a function) form a Program of their own, holding just those graphs.
+ * A Program is an object of the graph space, like the graphs: it traces the graphs of its
+ * table, a function value traces the Program it was made in, and what no root, no function
+ * value and no running call reaches is freed (graph.h, GCGraphManager). A graph version lives
+ * as long as some Program holds it. Graphs a transform creates while the program runs (the
+ * gradient of a function) form a Program of their own on top of the one they were made over.
  */
 
 #pragma once
 
+#include "camel/core/rtdata/base.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_id.h"
 
@@ -45,8 +47,48 @@ class Context;
 
 namespace camel::runtime {
 
-class Program {
+class GCGraphManager;
+
+class Program final : public camel::core::rtdata::Object {
   public:
+    Program() = default;
+    /// A copy holds the same graphs; it is not the manager's (a working table of a session).
+    Program(const Program &other)
+        : camel::core::rtdata::Object(), byId_(other.byId_), own_(other.own_),
+          satellite_(other.satellite_), version_(other.version_), count_(other.count_),
+          root_(other.root_), original_(other.original_) {}
+    /// Assigning replaces the table and keeps whose program this is.
+    Program &operator=(const Program &other) {
+        byId_      = other.byId_;
+        own_       = other.own_;
+        satellite_ = other.satellite_;
+        version_   = other.version_ + 1;
+        count_     = other.count_;
+        root_      = other.root_;
+        original_  = other.original_;
+        if (manager_ != nullptr) {
+            noteAll();
+        }
+        return *this;
+    }
+
+    // Object: the collector traces the graphs of the table and the program this one copies.
+    bool equals(
+        const camel::core::rtdata::Object *other, const camel::core::type::Type *type,
+        bool deep = false) const override {
+        (void)type;
+        (void)deep;
+        return other == this;
+    }
+    camel::core::rtdata::Object *clone(
+        camel::core::mm::IAllocator &allocator, const camel::core::type::Type *type,
+        bool deep = false) const override;
+    void print(std::ostream &os, const camel::core::type::Type *type) const override;
+    void onMoved() override {}
+    void updateRefs(
+        const camel::core::rtdata::Object::RefRelocator &relocate,
+        const camel::core::type::Type *type) override;
+
     /// The version of graph `id` this program holds; nullptr when it holds none.
     GCGraph *graph(GraphId id) const {
         const size_t index = toValue(id);
@@ -165,6 +207,9 @@ class Program {
     /// Construction; see the file comment.
     void bind(GraphId id, GCGraph *graph) {
         ++version_;
+        if (manager_ != nullptr && graph != nullptr) {
+            note(graph);
+        }
         const size_t index = toValue(id);
         if (index >= byId_.size()) {
             byId_.resize(index + 1, nullptr);
@@ -180,6 +225,10 @@ class Program {
     void setOriginal(const Program *original) { original_ = original; }
 
   private:
+    friend class GCGraphManager;
+    void note(GCGraph *graph);
+    void noteAll();
+    GCGraphManager *manager_ = nullptr; // set for a program the manager owns
     std::vector<GCGraph *> byId_; // indexed by the value of the GraphId; nullptr where absent
     std::vector<uint8_t> own_;    // satellite: 1 where the graph is one it adds
     bool satellite_          = false;
@@ -188,6 +237,12 @@ class Program {
     GCGraph *root_           = nullptr;
     const Program *original_ = nullptr;
 };
+
+/// Makes the function values among the static values of `graph` name `to` where `to` holds the
+/// version of their graph that they find today. A graph a commit left as it was keeps its static
+/// values; they would otherwise name the program before, and through it every version that
+/// program holds.
+void retargetFunctions(GCGraph *graph, const Program &to);
 
 /// A program of its own, owned by `context`, for graphs created while the program runs and
 /// belonging to no commit (the gradient of a function, an outlined region): the graphs of

@@ -92,6 +92,19 @@ counts the graph versions that hold it (`shares`), so a version can share the
 chunks it did not change; the last one that lets go frees it
 (`GCGraphManager::freeGraph`).
 
+## 5b. Regions
+
+A region is a set of the nodes of one graph that is named (docs/design/graph-store 3.3).
+`GCGraph::region(id)` is a `GCRegion` of the graph's region table (kind, parent, owning node,
+index, result node, form ports, origin, tags, and for an inlined body the function and the
+call); `GCGraph::nodeRegion(ref)` is the innermost region of a node, from a column of the node
+chunks that is absent while every node is in the body. Region 0 is the body of the function;
+a graph with no other region has an empty table. Region ids are not reused, as node ids are
+not. Today only annotation regions are made: `std::opt::inline` puts the body of each function it inlines in an `Inline` region inside the region of the call (the regions show in `std::jgir`), and no back end reads them;
+the control kinds (`Arm`, `LoopCond`, `LoopBody`) are for the branch and loop rewrite.
+`validateRuntimeGraphPayload` checks the table (a tree rooted at the body, nodes named exist,
+every node in a region that is there).
+
 ## 6. Edges: the Input Table
 
 Each edge is stored **once**, as an entry of the input table:
@@ -308,9 +321,12 @@ the graph is read in holds under it (`Program::graph(id)`; the accessors
 therefore has a `Program` in hand: a pass has the one it is given, an activation
 the program of the function value it was called through (`Function::program()`),
 a draft the one it was decoded against (`GraphDraft::program()`). A graph does not
-keep other graphs alive either: a program does (a `Program` is rooted as a whole,
-`GCGraphManager`), and a graph a transformation makes outside every commit is
-kept by `Context::retainRuntimeGraphs`.
+keep other graphs alive either: a `Program` does. A `Program` is an object of the graph space
+that traces the graphs of its table, a function value traces the `Program` it was made in, and
+`GCGraphManager` frees the `Program`s and graph versions that nothing reaches (see
+`docs/technical/23_gc_runtime_lifetime.md`, "Graph space lifetime"). A graph a transformation
+makes outside every commit (a gradient built while the program runs) is a `Program` on top of
+the one it was made over; it lives as long as a function value of it does.
 
 The payload of a draft `FUNC` and `LOOP` node is the same index (`GCFuncRef`,
 `GCLoopRef`) into the draft's own table `GraphDraft::payloadGraphs()`, whose entries are

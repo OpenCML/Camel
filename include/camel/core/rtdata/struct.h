@@ -84,13 +84,16 @@ class Struct : public rtdata::Object {
         return structType->findField(name).has_value();
     }
 
-    template <typename T> T get(size_t index) const {
+    /// One field as the raw slot it is stored as, without the initialized check: a printer
+    /// renders a value that may still be under construction (a collection a higher-order
+    /// operator is filling) and shows its unwritten elements instead of aborting (H31).
+    slot_t slotAt(size_t index) const {
         ASSERT(index < size(), "Index out of range");
         if (isView()) {
             const ViewData *view = viewData();
             if (view->layout->slotShaped) {
-                // Every field is an 8-byte leaf: the bytes are slot data, so get is one load.
-                return rtdata::fromSlot<T>(reinterpret_cast<const slot_t *>(view->bytes)[index]);
+                // Every field is an 8-byte leaf: the bytes are slot data, so this is one load.
+                return reinterpret_cast<const slot_t *>(view->bytes)[index];
             }
             const auto *structType = static_cast<const type::StructType *>(view->type);
             ASSERT(index < structType->size(), "Index out of range");
@@ -100,13 +103,15 @@ class Struct : public rtdata::Object {
                 fieldType->code() == type::TypeCode::Tuple) {
                 const type::DataLayout *layout = type::pureDataLayout(fieldType);
                 ASSERT(layout != nullptr, "A compact field has a layout");
-                return rtdata::fromSlot<T>(
-                    rtdata::pureViewOf(at, fieldType, layout, layout->size));
+                return rtdata::pureViewOf(at, fieldType, layout, layout->size);
             }
-            return rtdata::fromSlot<T>(
-                rtdata::readPureScalar(at, fieldType->code()));
+            return rtdata::readPureScalar(at, fieldType->code());
         }
-        return rtdata::fromSlot<T>(data_[index]);
+        return data_[index];
+    }
+
+    template <typename T> T get(size_t index) const {
+        return rtdata::fromSlot<T>(slotAt(index));
     }
 
     template <typename T> T get(std::string_view name, const type::Type *type) const {

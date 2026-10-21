@@ -123,6 +123,32 @@ std::string dumpJsonRuntimeGraph(
             graph["contextPorts"].push_back(nodeId(g, n));
         for (auto n : g->closureNodes())
             graph["capturePorts"].push_back(nodeId(g, n));
+        // The regions, when the graph has any besides the body (an inlined function is one).
+        if (g->regionCount() > 1) {
+            static const char *const kRegionKinds[] =
+                {"body", "arm", "loop_cond", "loop_body", "inline", "block"};
+            json regions = json::array();
+            for (uint32_t r = 1; r < g->regionCount(); ++r) {
+                const GCRegion &region = *g->region(r);
+                if (region.kind == GCRegionKind::Dead) {
+                    continue;
+                }
+                json entry{
+                    {"id", std::format("{}r{}", ids.at(g), r)},
+                    {"kind", kRegionKinds[static_cast<size_t>(region.kind)]},
+                    {"parent", std::format("{}r{}", ids.at(g), region.parent)}};
+                if (region.owner != kInvalidNodeRef)
+                    entry["owner"] = nodeId(g, region.owner);
+                if (region.result != kInvalidNodeRef)
+                    entry["result"] = nodeId(g, region.result);
+                if (region.kind == GCRegionKind::Inline) {
+                    if (const GCGraph *source = program.graph(region.inlineOf))
+                        entry["inlined"] = source->name();
+                }
+                regions.push_back(std::move(entry));
+            }
+            graph["regions"] = std::move(regions);
+        }
         for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
             const auto ref   = it.ref();
             const auto *node = *it;
@@ -134,6 +160,8 @@ std::string dumpJsonRuntimeGraph(
                 {"kind", kind},
                 {"label", recordLabel(program, g, ref, *node)},
                 {"outputType", nullptr}};
+            if (const uint32_t region = g->nodeRegion(ref))
+                value["region"] = std::format("{}r{}", ids.at(g), region);
             if (const auto *type = nodeStaticSlotType(g, *node))
                 value["outputType"] = camel::core::type::sourceTypeSpelling(type->toString());
             if (node->kind == GCNodeKind::Port) {

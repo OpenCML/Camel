@@ -405,6 +405,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                 }
             }
         }
+        const size_t lineStart = res.size();
         if (!config_.rich) {
             res += std::format(
                 "{}{}{} [label=\"{}\", type=\"{}\"{}{}];\n",
@@ -431,6 +432,52 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     ? ""
                     : std::format(", fillcolor=\"{}\", role=\"{}\"", roleFill, roleAttr),
                 std::format("{}\\n{}{}", escape(label), escape(tooltip), roleTooltip));
+        }
+        // A node in a region stands in the cluster of the region, inside those of the regions
+        // it is in; dot merges the clusters of one name.
+        if (config_.regions && graph->regionCount() > 1 && graph->nodeRegion(nodeRef) != 0) {
+            std::vector<uint32_t> chain;
+            for (uint32_t r = graph->nodeRegion(nodeRef); r != 0; r = graph->region(r)->parent) {
+                chain.push_back(r);
+            }
+            string line = res.substr(lineStart);
+            res.resize(lineStart);
+            for (auto at = chain.rbegin(); at != chain.rend(); ++at) {
+                const camel::runtime::GCRegion &region = *graph->region(*at);
+                string title                           = "region";
+                switch (region.kind) {
+                case camel::runtime::GCRegionKind::Arm:
+                    title = std::format("arm {}", region.index);
+                    break;
+                case camel::runtime::GCRegionKind::LoopCond:
+                    title = "loop condition";
+                    break;
+                case camel::runtime::GCRegionKind::LoopBody:
+                    title = "loop body";
+                    break;
+                case camel::runtime::GCRegionKind::Inline: {
+                    const auto *source = program_->graph(region.inlineOf);
+                    title              = "inlined " + (source ? source->name() : string("?"));
+                    break;
+                }
+                case camel::runtime::GCRegionKind::Block:
+                    title = "block";
+                    break;
+                default:
+                    break;
+                }
+                res += std::format(
+                    "{}{}subgraph cluster_{}_r{} {{ label=\"{}\";\n",
+                    baseIndent_,
+                    indent_,
+                    funcId,
+                    *at,
+                    escape(title));
+            }
+            res += line;
+            for (size_t i = 0; i < chain.size(); ++i) {
+                res += baseIndent_ + indent_ + "}\n";
+            }
         }
     }
 

@@ -265,9 +265,12 @@ uint64_t contentHash(const GCGraph &graph) {
         bytes(chunk.origins, nodes * sizeof(*chunk.origins));
         bytes(chunk.permissions, chunk.permissions ? nodes : 0);
         bytes(chunk.attrs, chunk.attrs ? nodes * sizeof(*chunk.attrs) : 0);
+        bytes(chunk.regions, chunk.regions ? nodes * sizeof(*chunk.regions) : 0);
         bytes(chunk.edges, chunk.edgeCount * sizeof(*chunk.edges));
         bytes(chunk.payload, chunk.payloadWordCount * sizeof(*chunk.payload));
     }
+    bytes(native->regionTable, native->regionCount * sizeof(*native->regionTable));
+    bytes(native->regionPorts, native->regionPortCount * sizeof(*native->regionPorts));
     bytes(native->normPorts, native->normPortCount * sizeof(*native->normPorts));
     bytes(native->withPorts, native->withPortCount * sizeof(*native->withPorts));
     bytes(native->closure, native->closureCount * sizeof(*native->closure));

@@ -59,6 +59,10 @@ struct GCGraphPayloadShape {
     bool permissions = false;
     // Whether some node has attributes: only then the graph has an attribute column.
     bool attrs = false;
+    // Whether some node is in a region but the body: only then the graph has a region column.
+    bool regions = false;
+    gc_cnt_t regionCount     = 0;
+    gc_cnt_t regionPortCount = 0;
     // The graph the draft was decoded from: a chunk of the new graph that has all the content of
     // the same chunk of this one is that chunk (GCNodeChunk::shares). nullptr: none.
     const GCGraph *base = nullptr;
@@ -74,6 +78,11 @@ struct GCGraphPayloadArena {
     uint32_t *origins          = nullptr; // nodeCount source origins
     uint8_t *permissions       = nullptr; // nodeCount numeric permissions, or null
     uint32_t *attrs            = nullptr; // nodeCount attribute sets, or null
+    uint32_t *regions          = nullptr; // nodeCount regions, or null
+    GCRegion *regionTable      = nullptr; // regionCount regions
+    gc_node_ref_t *regionPorts = nullptr; // regionPortCount form ports
+    gc_cnt_t regionCount       = 0;
+    gc_cnt_t regionPortCount   = 0;
     gc_node_ref_t *inputs      = nullptr;
     gc_payload_word_t *payload = nullptr;
     gc_node_ref_t *normPorts   = nullptr;

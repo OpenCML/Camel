@@ -657,17 +657,25 @@ LinkedBytecodeResult compileAndLink(
 
 LinkedBytecodeResult compileAndLinkFrom(
     context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
-    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset) {
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset,
+    bool registerOrigins) {
     std::vector<camel::runtime::GCGraph *> uniqueGraphs =
         camel::runtime::collectReachableGraphs(program, entry);
     reverse(uniqueGraphs.begin(), uniqueGraphs.end());
-    return compileAndLinkGraphs(std::move(ctx), program, uniqueGraphs, opt, known, baseOffset);
+    return compileAndLinkGraphs(
+        std::move(ctx),
+        program,
+        uniqueGraphs,
+        opt,
+        known,
+        baseOffset,
+        registerOrigins);
 }
 
 LinkedBytecodeResult compileAndLinkGraphs(
     context_ptr_t ctx, const camel::runtime::Program &program,
     std::span<camel::runtime::GCGraph *const> uniqueGraphs, const CompileStrategy &opt,
-    const KnownEntryPc &known, size_t baseOffset) {
+    const KnownEntryPc &known, size_t baseOffset, bool registerOrigins) {
     bytecode_vec_t linked;
     std::vector<BytecodeIndex> graphs;
     std::unordered_map<camel::runtime::GCGraph *, size_t> offsetMap;
@@ -694,7 +702,7 @@ LinkedBytecodeResult compileAndLinkGraphs(
         graphs.push_back({start, codes.size(), runtimeGraph});
 
         linked.insert(linked.end(), codes.begin(), codes.end());
-        if (auto sourceContext = ctx ? ctx->sourceContext() : nullptr) {
+        if (auto sourceContext = registerOrigins && ctx ? ctx->sourceContext() : nullptr) {
             for (const auto &[localPc, origin] : localPcOrigins) {
                 sourceContext->debugMap().registerPcOrigin(start + localPc, origin);
             }

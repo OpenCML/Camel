@@ -110,7 +110,10 @@ void visitGraphsInStaticSlot(
         }
         visitor(func->graphId(), func->program());
         if (::Tuple *closure = func->tuple()) {
-            auto *closureType = const_cast<TupleType *>(func->tupleType());
+            // The layout the function was created with, not the one resolved through the graph:
+            // a graph of the group being encoded is bound only after its bytes are collected,
+            // and this function value names it already.
+            auto *closureType = const_cast<TupleType *>(func->closureType());
             for (size_t i = 0; i < closureType->size(); ++i) {
                 if (!shouldTraverseStaticSlotType(closureType->typeAt(i))) {
                     continue;
@@ -211,13 +214,13 @@ slot_t cloneStaticSlot(
         auto *cloned = ::Function::create(
             program->graph(func->graphId()) != nullptr ? program : func->program(),
             func->graphId(),
-            func->tupleType(),
+            func->closureType(),
             mm::autoSpace());
         objectCache.emplace(object, cloned);
 
         if (::Tuple *closure = func->tuple()) {
             ::Tuple *clonedClosure       = cloned->tuple();
-            const TupleType *closureType = cloned->tupleType();
+            const TupleType *closureType = cloned->closureType();
             for (size_t i = 0; i < closureType->size(); ++i) {
                 clonedClosure->set<slot_t>(
                     i,
@@ -648,7 +651,7 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
         before.funcType() != after.funcType() || before.closureType() != after.closureType() ||
         before.staticDataType() != after.staticDataType() ||
         before.hasNodePermissions() != after.hasNodePermissions() ||
-        before.hasNodeAttrs() != after.hasNodeAttrs()) {
+        before.hasNodeAttrs() != after.hasNodeAttrs() || a->hasRegions != b->hasRegions) {
         return false;
     }
     // The columns, chunk by chunk: a chunk both graphs hold is the same chunk.
@@ -662,9 +665,15 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
             !sameArray(x.nodes(), y.nodes(), x.nodeCount) ||
             !sameArray(x.edges, y.edges, x.edgeCount) ||
             (a->hasPermissions && !sameArray(x.permissions, y.permissions, x.nodeCount)) ||
-            (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount))) {
+            (a->hasAttrs && !sameArray(x.attrs, y.attrs, x.nodeCount)) ||
+            (a->hasRegions && !sameArray(x.regions, y.regions, x.nodeCount))) {
             return false;
         }
+    }
+    if (a->regionCount != b->regionCount || a->regionPortCount != b->regionPortCount ||
+        !sameArray(a->regionTable, b->regionTable, a->regionCount) ||
+        !sameArray(a->regionPorts, b->regionPorts, a->regionPortCount)) {
+        return false;
     }
     if (!sameArray(a->normPorts, b->normPorts, a->normPortCount) ||
         !sameArray(a->withPorts, b->withPorts, a->withPortCount) ||
@@ -1083,7 +1092,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         if (graph->staticGraphRefs().empty() && sameContent(*graph, *copy)) {
             committed->bind(graph->id(), graph);
             fresh.erase(graph);
-            GCGraphManager::release(copy);
+            context_->releaseRuntimeGraph(copy);
             edited_.erase(graph);
             continue;
         }
@@ -1188,6 +1197,13 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
+    // A graph left as it was names, in its function values, the program before: they name the
+    // new one, which holds the same versions of everything they reach.
+    for (GCGraph *graph : closure) {
+        if (!fresh.contains(graph) && graph->hasStaticGraphRefs()) {
+            retargetFunctions(graph, *committed);
+        }
+    }
 
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
@@ -1262,12 +1278,10 @@ void GraphDraftGroup::encode() {
     ASSERT(!encoded_, "Graph draft group was already encoded.");
     std::unordered_map<GraphId, GCGraph *> graphs;
     std::unordered_map<GraphId, size_t> bytes;
-    std::vector<GCGraph *> members;
     for (GraphId id : order_) {
         Member &m = member(id);
         bytes.emplace(id, draftGraphBytes(context_, *m.draft, nullptr));
         graphs.emplace(id, allocateGraph(context_, m.identity, *m.draft, bytes.at(id)));
-        members.push_back(graphs.at(id));
     }
     // The members form a program with the graphs of the one the group is made over.
     for (GraphId id : order_) {
@@ -1288,8 +1302,6 @@ void GraphDraftGroup::encode() {
     for (GraphId id : order_) {
         member(id).encoded = graphs.at(id);
     }
-    // Nothing else keeps the members alive: the context's program does not hold them.
-    context_->retainRuntimeGraphs(members);
     encoded_ = true;
 }
 

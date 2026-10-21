@@ -1,12 +1,14 @@
 /**
- * 将 build/debug/profile 构建产物收集到 out/latest/{bin,include,libs,stdlib}
+ * 将 build/debug/profile 构建产物收集到 out/<目录>/{bin,include,libs,stdlib}
  * 所有 tools 下的可执行文件放到 bin/，libcamel 共享库放到 libs/（exe 会从 ./libs 查找）
  *
- * 输出策略：始终写入 out/latest/（保证为本次编译产物）。若当前 HEAD 带有 git tag，
- * 则在完成后将整棵 out/latest/ 再镜像一份到 out/<每个 tag>/（与 latest 内容相同）。
+ * 输出策略：Release 写入 out/latest/，Debug 写入 out/debug/（H30：两种配置可以同时存在，
+ * 测试运行器的 --build debug 层读取 out/debug，绝不会读到 Release 的二进制）。profile 仍写
+ * out/latest/。Release 构建后若当前 HEAD 带有 git tag，则把整棵 out/latest/ 再镜像一份到
+ * out/<每个 tag>/（与 latest 内容相同）。
  *
  * 用法: node scripts/collect-out.js [build|debug|profile]
- *   build  -> Release, debug -> Debug, profile -> RelWithDebInfo
+ *   build  -> Release / out/latest, debug -> Debug / out/debug, profile -> RelWithDebInfo / out/latest
  *   默认 build (Release)
  */
 import { execFileSync } from 'child_process'
@@ -27,10 +29,13 @@ import {
     outArtifactStdlib
 } from './common.js'
 
+// The Debug build has its own artifact directory: the Release tree stays at out/latest, so the
+// test runner can address a Debug binary by path (--build debug) instead of guessing which
+// configuration last overwrote out/latest.
 const CONFIG_MAP = {
-    build: 'Release',
-    debug: 'Debug',
-    profile: 'RelWithDebInfo'
+    build: { config: 'Release', tag: 'latest' },
+    debug: { config: 'Debug', tag: 'debug' },
+    profile: { config: 'RelWithDebInfo', tag: 'latest' }
 }
 
 function ensureDir(dir) {
@@ -183,8 +188,7 @@ function collectPythonRuntimeDlls(BASEDIR) {
 
 const COLLECT_PRIMARY_TAG = 'latest'
 
-function collect(config) {
-    const tag = COLLECT_PRIMARY_TAG
+function collect(config, tag) {
     const outRoot = outArtifactRoot(tag)
     const binDir = outArtifactBin(tag)
     const includeDir = outArtifactInclude(tag)
@@ -303,6 +307,11 @@ function collect(config) {
 
     logDone(`Artifacts collected to out/${tag}/`)
 
+    // Only the Release tree is the installation a tag names; the Debug tree is a local test
+    // artifact and must not become a release mirror.
+    if (tag !== COLLECT_PRIMARY_TAG) {
+        return
+    }
     const tagsAtHead = getGitTagsAtHead()
     for (const mirrorTag of tagsAtHead) {
         if (mirrorTag === COLLECT_PRIMARY_TAG) {
@@ -319,8 +328,8 @@ function collect(config) {
 }
 
 const arg = process.argv[2] || 'build'
-const config = CONFIG_MAP[arg] ?? CONFIG_MAP.build
-if (!CONFIG_MAP[arg]) {
+const entry = CONFIG_MAP[arg]
+if (!entry) {
     logWarn(`Unknown config "${arg}", using Release. Valid: build, debug, profile`)
 }
-collect(config)
+collect(entry ? entry.config : CONFIG_MAP.build.config, entry ? entry.tag : CONFIG_MAP.build.tag)

@@ -68,6 +68,7 @@
 #include <span>
 #include <string_view>
 #include <type_traits>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::runtime {
@@ -379,12 +380,43 @@ static_assert(std::is_trivially_copyable_v<GCOperBody>);
 inline constexpr uint32_t kNodeChunkShift = 8;
 inline constexpr uint32_t kNodeChunkNodes = 1u << kNodeChunkShift;
 
+/// What a region is (docs/design/graph-store 3.3). A control region is executed, or not, as a
+/// whole, with the node that owns it; an annotation region only records where nodes came from.
+/// Region 0 is the function body; the table of a graph that has no other region is empty.
+enum class GCRegionKind : uint8_t {
+    Root     = 0,
+    Arm      = 1, // an arm of a BRCH node (owner), `index` the arm
+    LoopCond = 2, // the condition of a LOOP node (owner)
+    LoopBody = 3, // the body of a LOOP node (owner)
+    Inline   = 4, // the body of a function inlined here: inlineOf, called at callSite
+    Block    = 5, // a block that carries tags or a decorator
+    Dead     = 255, // the place of a region a rewrite removed (ids are not reused)
+};
+
+struct GCRegion {
+    GCRegionKind kind    = GCRegionKind::Root;
+    uint8_t reserved0    = 0;
+    uint16_t reserved1   = 0;
+    uint32_t parent      = 0;                // the region it is in; 0 for the body
+    gc_node_ref_t owner  = kInvalidNodeRef;  // control regions: the BRCH or LOOP node
+    uint32_t index       = 0;                // Arm: which arm
+    gc_node_ref_t result = kInvalidNodeRef;  // the node whose value the region yields, if any
+    uint32_t portBegin   = 0;                // its form ports: regionPorts[portBegin ..< +portCount]
+    uint32_t portCount   = 0;
+    uint32_t origin      = 0;                // source origin (0: none)
+    uint32_t attrs       = 0;                // the tag set of the region (camel/core/node_attrs.h)
+    GraphId inlineOf     = kInvalidGraphId;  // Inline: the function whose body this is
+    gc_node_ref_t callSite = kInvalidNodeRef; // Inline: the call it replaced
+};
+static_assert(std::is_trivially_copyable_v<GCRegion>);
+
 struct GCNodeChunk {
     std::atomic<uint32_t> shares{1};
     uint32_t nodeCount        = 0;
     uint32_t edgeCount        = 0;
     uint32_t payloadWordCount = 0;
     uint32_t *origins         = nullptr; // nodeCount source origins (0: none)
+    uint32_t *regions         = nullptr; // nodeCount regions of the nodes; null when all are 0
     uint8_t *permissions      = nullptr; // nodeCount numeric permissions; null when all are 0
     uint32_t *attrs           = nullptr; // nodeCount attribute sets; null when all are 0
     gc_node_ref_t *edges      = nullptr; // edgeCount entries: the input runs of the nodes in order
@@ -403,6 +435,11 @@ struct GCGraphNativePayload {
     gc_cnt_t chunkCount        = 0;
     bool hasPermissions        = false; // some node has numeric permissions
     bool hasAttrs              = false; // some node has attributes
+    bool hasRegions            = false; // some node is in a region other than the body
+    GCRegion *regionTable      = nullptr; // regionCount regions; region 0 is the body
+    gc_cnt_t regionCount       = 0;       // 0 when the graph has no region but the body
+    gc_node_ref_t *regionPorts = nullptr;
+    gc_cnt_t regionPortCount   = 0;
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
@@ -467,6 +504,28 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
     /// graph has no attribute column when no node has any.
     uint32_t nodeAttrs(gc_node_ref_t ref) const;
+    /// The number of regions; 0 for a graph with the body only. Region ids are 0 .. count - 1.
+    gc_cnt_t regionCount() const { return nativePayload_.regionCount; }
+    /// Region `id` (0 is the body); nullptr when the graph has no such region.
+    const GCRegion *region(uint32_t id) const {
+        return id < nativePayload_.regionCount ? nativePayload_.regionTable + id : nullptr;
+    }
+    /// The region node `ref` is in: the innermost; 0 for the body.
+    uint32_t nodeRegion(gc_node_ref_t ref) const {
+        if (!containsNodeRef(ref)) {
+            return 0;
+        }
+        const GCNodeChunk &c = chunkOf(ref);
+        return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
+    }
+    /// The form ports of region `id`, in order.
+    std::span<const gc_node_ref_t> regionPorts(uint32_t id) const {
+        const GCRegion *r = region(id);
+        return r ? std::span<const gc_node_ref_t>(
+                       nativePayload_.regionPorts + r->portBegin,
+                       r->portCount)
+                 : std::span<const gc_node_ref_t>();
+    }
     /// True when some node of the graph has attributes.
     bool hasNodeAttrs() const { return nativePayload_.hasAttrs; }
     /// The names of the values the function captures from where it was written, in the order
@@ -502,6 +561,15 @@ class GCGraph : public camel::core::rtdata::Object {
     std::span<const GraphId> refs() const { return {refs_, refCount_}; }
     /// The roles of entry `index` of the reference table (GCGraphRefRole bits).
     uint8_t refRoles(size_t index) const { return refRoles_[index]; }
+    /// True when a function constant of the static area names a graph (kGraphRefStatic).
+    bool hasStaticGraphRefs() const {
+        for (gc_cnt_t i = 0; i < refCount_; ++i) {
+            if (refRoles_[i] & kGraphRefStatic) {
+                return true;
+            }
+        }
+        return false;
+    }
     /// The entries of the reference table with role `role`, in table order.
     std::vector<GraphId> refsWithRole(uint8_t role) const;
     /// The graphs called directly, written inside this one, referred to by a function
@@ -713,17 +781,31 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
     };
 }
 
-/// Owns the Programs of a context and keeps the graphs they name alive (program.cpp).
+/// The Programs and graph versions of a context (program.cpp). Both live in the graph space and
+/// are freed when nothing reaches them: a graph version when no live Program holds it, a Program
+/// when no root, no function value and no Program that copies it names it.
+///
+/// What roots a Program: being the installed program of the context, a detached program a back
+/// end is running (trackDetached), a pinned one (operator definitions), a program the pipeline
+/// has made and not yet settled (reserve ... settle), and a program a running call was entered
+/// through (rootForRun). Everything else is reached from those: a Program traces its graphs, a
+/// graph its static values, a function value its Program.
+///
+/// Two collections free what is unreached, and both mark through the heap, so that a function
+/// value of a Program keeps it. Between passes (nothing runs) collect() has the heap marked
+/// without sweeping it (GenerationalAllocatorWithGC::collectGraphSpace). While a program runs
+/// the collector of run-time values does it with a major collection (sweepMarked). The manager
+/// frees the Programs and graphs nothing marked.
 class GCGraphManager {
   public:
-    GCGraphManager() = default;
+    GCGraphManager();
     ~GCGraphManager();
 
-    /// A new, empty Program, owned by the manager for its lifetime; the caller binds its graphs
-    /// (Program::bind) while it builds them.
+    /// A new, empty Program of the graph space, owned by the manager and rooted until settle();
+    /// the caller binds its graphs (Program::bind) while it builds them.
     Program *reserve();
-    /// Installs `program` as the program of the context, the first one or a replacement: the
-    /// graphs of the previous program that `program` does not hold are freed.
+    /// Installs `program` as the program of the context, the first one or a replacement; what
+    /// the previous program held and nothing else holds is freed.
     void adoptRoot(const Program *program);
     void replaceRoot(const Program *program);
     /// The installed program, nullptr when there is none.
@@ -733,48 +815,71 @@ class GCGraphManager {
     std::vector<camel::core::rtdata::Object *> &gcRoots() { return gcRoots_; }
     const std::vector<camel::core::rtdata::Object *> &gcRoots() const { return gcRoots_; }
 
+    /// Drops the installed program.
     void clear();
 
     /// Keeps a program that a rewrite of a detached root produced (a function being exported,
-    /// see RuntimeGraphDraftSession::commit), and its graphs, alive and traced until
-    /// releaseDetached().
+    /// see RuntimeGraphDraftSession::commit) alive until releaseDetached().
     void trackDetached(const Program *program);
-    /// Frees the graphs of the tracked detached programs that the program does not hold.
+    /// Lets go of the tracked detached programs.
     void releaseDetached();
-    /// Roots `graphs`, which no Program of the manager owns (graphs a transform creates while
-    /// the program runs), for as long as the manager.
-    void retain(std::span<GCGraph *const> graphs);
+    /// Ends the rooting of the programs the pipeline made since the last settle: from here they
+    /// live as long as something reaches them.
+    void settle(const Program *keep = nullptr);
+    /// Roots `program` while a call that was entered through it runs (and unroots it).
+    void rootForRun(const Program *program);
+    void unrootForRun(const Program *program);
+    /// While programs run, the explicit collection is off: the heap may hold their function
+    /// values, which only the collector of run-time values sees.
+    void enterRun() { ++running_; }
+    void leaveRun() { --running_; }
     /// Frees a graph no program holds (a commit's encoding it did not need).
-    static void release(GCGraph *graph) { freeGraph(graph); }
+    void release(GCGraph *graph);
     /// The newest program of the manager that holds this version of `graph`, nullptr when none
     /// does. A version a commit left unchanged is held by the program before it too, and names
     /// the graphs it calls by id: what it calls is what the program it is read in holds. This
     /// answers for a view of the latest program (a dump, the debugger); whoever runs or
     /// rewrites a graph has the program it was given.
     const Program *programOf(const GCGraph *graph) const;
-    /// Keeps a program that belongs to no context program alive and traced for as long as the
-    /// manager: the definition graphs of operators (camel/runtime/definitions.h). Neither
-    /// clear() nor releaseDetached() frees it; a rewrite that uses one encodes a copy into the
-    /// program.
+    /// Keeps a program that belongs to no context program alive for as long as the manager:
+    /// the definition graphs of operators (camel/runtime/definitions.h).
     void pin(const Program *program);
 
+    /// Frees the Programs and graph versions nothing reaches, marking from the roots and the
+    /// heap. Does nothing while a program runs.
+    void collect();
+    /// The collector of run-time values has marked what it reaches: frees the marked-not Programs
+    /// and graph versions.
+    void sweepMarked();
+
+    /// Called by Program::bind for a program the manager owns.
+    void noteGraph(GCGraph *graph);
+
   private:
+    friend class Program;
     void rebuildGcRoots();
     static void freeGraph(GCGraph *graph);
+    static void freeProgram(Program *program);
+    void
+    freeDead(const std::vector<Program *> &deadPrograms, const std::vector<GCGraph *> &deadGraphs);
 
-    // Publishing a detached graph can happen on different execution workers.
-    // Recursive because the lifecycle operations below compose (adopt/replace,
-    // destruction/release/clear); the lock is never held through graph execution.
     mutable std::recursive_mutex mutex_;
-    std::vector<std::unique_ptr<Program>> programs_;
+    std::vector<Program *> programs_;
+    std::unordered_set<GCGraph *> graphs_;
     const Program *current_ = nullptr;
-    /// The graphs the manager frees when the program is replaced: those of the installed
-    /// program and of the programs its detached copies were made from.
-    std::vector<GCGraph *> owned_;
     std::vector<const Program *> detached_;
     std::vector<const Program *> pinned_;
-    std::vector<GCGraph *> retained_;
+    std::vector<const Program *> provisional_;
+    std::vector<const Program *> runRoots_;
     std::vector<camel::core::rtdata::Object *> gcRoots_;
+    int running_ = 0;
+    /// The graph space is collected when it holds this much more than it did after the last
+    /// collection (the floor, or its size then).
+    size_t liveBytes_       = 0;
+    size_t collectionFloor_ = size_t{64} << 20;
+    void noteGrowth();
+    void collectIfGrown();
+    void noteSwept();
 };
 
 } // namespace camel::runtime

@@ -120,12 +120,13 @@ slot_t __reduce_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
     mm::RootHandle cell(mm::autoSpace(), created, cellType, "reduce accumulator");
     for (size_t i = 0; i < n; ++i) {
         const slot_t args[] = {cell.getAs<Array>()->get<slot_t>(0), useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i)};
-        const slot_t next   = invokeFunction(ctx, functionOf(with), {}, args);
-        // The accumulator is the value the next round reads; a view here would name the element
-        // this round read (H29). The cell store is the boundary: setSlot excludes a view from its
-        // byte-copy fast path and materialises it. The assertion checks that invariant in Debug.
-        CAMEL_ASSERT_NOT_VIEW(next, cellType->elemType(), "the reduce accumulator");
-        cell.getAs<Array>()->set<slot_t>(0, next, cellType);
+        const slot_t raw    = invokeFunction(ctx, functionOf(with), {}, args);
+        // The accumulator is the value the next round reads, so it is a value, not a view of the
+        // element this round read (H29). Materialise here, as the bytecode VM does; the store
+        // then asserts that no view reached it.
+        const slot_t next = materializeCallResult(
+            raw, functionOf(with)->graph()->funcType()->exitType());
+        storeReduceAccumulator(cell.getAs<Array>(), next, cellType);
     }
     return cell.getAs<Array>()->get<slot_t>(0);
 }

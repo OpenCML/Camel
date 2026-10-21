@@ -170,7 +170,7 @@ namespace detail {
 
 /// One argument of `format`, classified as the runtime hands it to fmt.
 struct FormatArg {
-    enum class Kind { Integer, Float32, Float64, Complex32, Complex64, Text } kind;
+    enum class Kind { Integer, Float32, Float64, C64, C128, Text } kind;
     int64_t integer    = 0;
     double real        = 0;
     double imaginary   = 0;
@@ -182,10 +182,10 @@ inline FormatArg formatArg(int32_t v) { return {FormatArg::Kind::Integer, v, 0, 
 inline FormatArg formatArg(double v) { return {FormatArg::Kind::Float64, 0, v, 0, {}}; }
 inline FormatArg formatArg(float v) { return {FormatArg::Kind::Float32, 0, v, 0, {}}; }
 inline FormatArg formatArg(std::complex<float> v) {
-    return {FormatArg::Kind::Complex32, 0, v.real(), v.imag(), {}};
+    return {FormatArg::Kind::C64, 0, v.real(), v.imag(), {}};
 }
 inline FormatArg formatArg(std::complex<double> v) {
-    return {FormatArg::Kind::Complex64, 0, v.real(), v.imag(), {}};
+    return {FormatArg::Kind::C128, 0, v.real(), v.imag(), {}};
 }
 template <typename T> FormatArg formatArg(const T &v) {
     FormatArg arg{FormatArg::Kind::Text, 0, 0, 0, {}};
@@ -505,10 +505,10 @@ inline std::string formatOne(const FormatArg &arg, std::string_view specText, bo
     case FormatArg::Kind::Float64:
         return hasSpec ? formatFloat(arg.real, parseSpec(specText))
                        : camel::utils::floatText(arg.real);
-    case FormatArg::Kind::Complex32:
+    case FormatArg::Kind::C64:
         return formatComplex(
             static_cast<float>(arg.real), static_cast<float>(arg.imaginary), specText, hasSpec);
-    case FormatArg::Kind::Complex64:
+    case FormatArg::Kind::C128:
         return formatComplex(arg.real, arg.imaginary, specText, hasSpec);
     case FormatArg::Kind::Text:
     default:

@@ -1,0 +1,28 @@
+/**
+ * A gradient built while the program runs is a Program and graphs of the graph space. 4000
+ * calls build 4000 of them; none is reachable after its call, so the graph space holds a few at
+ * a time (the collector sweeps it) instead of all.
+ * Run: camel graph_space_grad.cml std::nvm   (no std::macro: grad is built when it is called)
+ */
+module graph_space_grad
+
+import { grad } from autodiff
+
+func sq(x: float): float {
+    return x * x
+}
+
+with <x: float>
+func h(): float {
+    return sq(x) + 3.0 * sq(x + 1.0)
+}
+
+func step(acc: float, i: int): float {
+    return acc + grad(h)<0.5>()
+}
+
+func main(): int sync {
+    let total = range(0, 4000)->reduce<step, 0.0>
+    println(total)
+    return 0
+}

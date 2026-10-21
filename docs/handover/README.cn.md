@@ -186,6 +186,7 @@
 | H17d | 查清 fvm/jit 上约 5% 的残留（按存储类别特化热循环）；H17c 评审第 1、2 项 | 无 | 乙车道，H28 之前 |
 | H28 | 数据块：缓冲区提升为通用机制 | H17d | **已完成**（检查意见 reviews/H17-H22.md） |
 | H29 | fvm/jit 上元组数组的 `reduce` 结果错误 | 无 | **已完成**（检查意见 reviews/H17-H22.md） |
+| H31 | 诊断并修复 Debug 层的 `Accessing uninitialized slot`（经 `materializeCallResult`，9 项） | 无 | 乙车道，优先 |
 | H30 | Debug 构建能链接，测试运行器增加 Debug 层，视图逃逸断言真正运行 | 无 | 己车道，优先 |
 | H15d | 带符号 NaN 在格式说明下打印为 `nan`；复数入口参数 | 无 | 甲车道 |
 | H15c | 复数收尾：格式说明作用于两部分、数值契约条目、`^`、`std::cpp` 降低（或先定位拒绝）、DLPack 往返测试 | 无 | 甲车道 |
