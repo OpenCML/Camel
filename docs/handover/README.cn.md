@@ -165,13 +165,14 @@
 
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
-| H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **部分完成**（运行器已严格、`expect_stdout_exact` 真正比较：`handover/H52-runner-fields`；暴露 9 条真实失败，其中 8 条循环梯度回归在 H54、第 9 条交给 H38；报告 reports/H52.md） |
+| H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **部分完成**（运行器已严格、`expect_stdout_exact` 真正比较：`handover/H52-runner-fields`；暴露 9 条真实失败，全部已修（8 条循环梯度回归与第 9 条 `extract` 死写法见 H59）；报告 reports/H52.md） |
 | H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **进行中**（`handover/H54-cpu-op-cost`） |
 | H51 | 泛型第一期：按结构展开（`match type`、`static for`、`static loop`、`t.[n]`、可变元数），`tree_map` 等改用 Camel 写（先交计划） | 无 | **计划已批**（reviews/H51-plan.md），按 15 步实施 |
 | H50 | GPU G4–G5：支持面（bf16/Tensor Core 等）、使用已授予的许可、融合、优化器多张量融合（先交计划） | H49 计划获批 | **未开始** |
 | H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **未开始**（第 0 步按 H47 的证据先做：逐叶传输合批 `handover/H49a-tiles-transfer`） |
 | H47 | Tiles 现状与差距报告（只读，可并入 H48 的第一份报告） | 无 | **已完成**（报告 reports/H47.md：区域选择按类型、反向看不见、逐叶串行传输、回退 1000×） |
 | H48 | GPU G0：剖析工具与 GPU 基准 | 无 | **已完成**（`std::profile` 与训练步基准；报告 reports/H48.md；今日没有算子被放到设备上） |
+| H59 | **严格运行器暴露的真实失败**：H43b 区域化 autodiff 让复合循环状态的梯度在投影处静默丢失（8 条，首次坏提交 `914c0eda`）；`saturate_all`/`extract` 保留饱和造出的死写法（第 9 条） | 无 | **已完成**（报告 reports/H59.md；新增回归用例 `loop_grad_composite_read`） |
 | H1 | `enum` | 无 | **已完成**（检查意见 reviews/H1.md） |
 | H8 | 基础与清理工作 | 无 | **部分完成**（第 1、2、4–7 项已合入 `927cdcb0`；第 3 项未做；报告 reports/H8.md） |
 | H14 | 反引号字符串插值 | 无 | **已完成**（`2f4e413b`；报告 reports/H14.md） |

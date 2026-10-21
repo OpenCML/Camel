@@ -383,6 +383,18 @@ std::vector<gc_node_ref_t> valueOrder(
             continue;
         }
         stack.emplace_back(node, true);
+        // A loop's value depends on the values its regions read from around them: they are
+        // dependencies of the node though not graph edges. Without them a read that the loop's
+        // own inputs do not reach would not be visited, and its gradient would be lost at the
+        // loop's site without a diagnostic.
+        if (kindOf(draft, node) == GCNodeKind::Loop) {
+            for (gc_node_ref_t read :
+                 rt::LoopDraftView(*draft.program(), draft, node).externalInputs(false)) {
+                if (!seen.contains(read) && regionMember(draft, draft.nodeRegion(read), region)) {
+                    stack.emplace_back(read, false);
+                }
+            }
+        }
         if (extra != nullptr) {
             if (const auto it = extra->find(node); it != extra->end()) {
                 for (gc_node_ref_t input : it->second) {
@@ -2576,6 +2588,43 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         return type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
                type->code() == TypeCode::Bool;
     };
+    // A branch's arms and a loop's condition and body are regions, not values the control node is
+    // passed: what the node depends on is what its regions read from around them. Without this,
+    // a branch or a loop whose value is used after it would be taken for a constant, and the
+    // gradient of the arm or of the state would be dropped silently.
+    const auto readsActive = [&](gc_node_ref_t read, const auto &self) -> bool {
+        if (active_.contains(read) || tainted_.contains(read)) {
+            return true;
+        }
+        if (kindOf(forward_, read) == GCNodeKind::Join) {
+            const auto payload = forward_.payloadOf(read);
+            if (payload.size() < sizeof(rt::GCJoinBody)) {
+                return false;
+            }
+            const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
+            for (size_t i = 0; i < body->armCount; ++i) {
+                const uint32_t region = forward_.armRegionOf(body->brch, i);
+                if (region == 0) {
+                    continue;
+                }
+                for (gc_node_ref_t inner : externalInputsOf(forward_, region)) {
+                    if (self(inner, self)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        if (kindOf(forward_, read) == GCNodeKind::Loop) {
+            for (gc_node_ref_t inner :
+                 rt::LoopDraftView(*forward_.program(), forward_, read).externalInputs(false)) {
+                if (self(inner, self)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    };
     for (gc_node_ref_t node : order) {
         Type *const type   = typeOf(forward_, node);
         const bool carrier = holdsFunction(type);
@@ -2589,41 +2638,37 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 }
             }
         }
-        // A branch's arms are regions, not values the JOIN is passed: what the JOIN depends on is
-        // what its arms read from around them. Without this, a branch whose value is used after
-        // the branch would be taken for a constant, and the arm's gradient dropped silently.
         if (kindOf(forward_, node) == GCNodeKind::Join) {
-            const auto readsActive = [&](uint32_t region, const auto &self) -> bool {
-                for (gc_node_ref_t read : externalInputsOf(forward_, region)) {
-                    if (active_.contains(read) || tainted_.contains(read)) {
-                        return true;
-                    }
-                    if (kindOf(forward_, read) != GCNodeKind::Join) {
-                        continue;
-                    }
-                    const auto payload = forward_.payloadOf(read);
-                    if (payload.size() < sizeof(rt::GCJoinBody)) {
-                        continue;
-                    }
-                    const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
-                    for (size_t i = 0; i < body->armCount; ++i) {
-                        const uint32_t sub = forward_.armRegionOf(body->brch, i);
-                        if (sub != 0 && self(sub, self)) {
-                            return true;
-                        }
-                    }
-                }
-                return false;
-            };
             const auto payload = forward_.payloadOf(node);
             if (payload.size() >= sizeof(rt::GCJoinBody)) {
                 const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
                 for (size_t i = 0; i < body->armCount; ++i) {
                     const uint32_t region = forward_.armRegionOf(body->brch, i);
-                    if (region != 0 && readsActive(region, readsActive)) {
-                        inputActive = true;
+                    if (region == 0) {
+                        continue;
+                    }
+                    for (gc_node_ref_t read : externalInputsOf(forward_, region)) {
+                        if (readsActive(read, readsActive)) {
+                            inputActive = true;
+                            break;
+                        }
+                    }
+                    if (inputActive) {
                         break;
                     }
+                }
+            }
+        }
+        // A loop's value may be an aggregate, read after the loop through a projection
+        // (Fill/Accs). The projection only passes its gradient on when the loop counts as
+        // active, so the loop must see what its regions read: otherwise the gradient of a
+        // composite state is dropped at the projection without a diagnostic.
+        if (kindOf(forward_, node) == GCNodeKind::Loop && !inputActive) {
+            for (gc_node_ref_t read :
+                 rt::LoopDraftView(*forward_.program(), forward_, node).externalInputs(false)) {
+                if (readsActive(read, readsActive)) {
+                    inputActive = true;
+                    break;
                 }
             }
         }

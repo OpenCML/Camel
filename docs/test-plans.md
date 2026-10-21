@@ -183,8 +183,21 @@ Each plan file may define:
   Free-form string array for indexing and search.
 - `desc`
   Optional plan description shown in logs.
+- `[defaults]`
+  A table of test fields every entry of the plan inherits (see "Plan Defaults").
 - `[[tests]]`
   Repeated test entries.
+- `[[sweeps]]`
+  Repeated sweep entries (see "Sweeps").
+
+The schema is closed: a key that is not listed here, in "Common Test Fields", or in the section
+of the kind it configures is an **error**, not a comment. A plan with an unknown key fails as
+one failing `<invalid plan>` test in that plan — the error names the plan file, the test and the
+key (with a suggestion when the key is a near miss), the plan's tests do not run, and the rest of
+the run continues to its summary. A key the runner silently ignored used to be the worse
+failure: the test passed while asserting nothing (H52). There is deliberately no escape hatch,
+neither in the plan file nor in the environment: a plan the runner only partly understands is
+not evidence.
 
 ## Common Test Fields
 
@@ -196,6 +209,8 @@ Every `[[tests]]` entry may use these common fields:
   Optional human-readable description.
 - `kind`
   Required. Supported values are `behavior`, `snapshot`, `differential`, and `benchmark`.
+  `negative` is also in use: it is an ordinary behavior test whose case is expected to fail, and
+  the runner treats it as `behavior`; it is a label for readers, not a different execution path.
 - `case`
   Required. Path to the `.cml` case, resolved relative to the plan file.
 - `args`
@@ -206,9 +221,9 @@ Every `[[tests]]` entry may use these common fields:
   Optional process timeout in milliseconds. Default is `10000`.
 - `normalizers`
   Optional string array applied to captured output before assertions.
-- `env`
+- `envs`
   Optional string array of `NAME=value` entries merged into the child process environment for this
-  test only.
+  test only. (`env` is not a field: a plan that writes it is rejected.)
 - `failure_note`
   Optional explanatory note printed only when the test fails.
 - `skip_unless`
@@ -288,7 +303,8 @@ Normalizers affect:
 
 - inline and path-based verification payloads under `input.normalized.*`
 - snapshot comparisons
-- `expect_stdout_contains`, `expect_stderr_contains`, `expect_output_contains` and
+- `expect_stdout_contains`, `expect_stdout_exact`, `expect_stdout`,
+  `expect_stdout_starts_with`, `expect_stderr_contains`, `expect_output_contains` and
   `expect_output_not_contains`
 - differential field comparisons that use normalized streams
 
@@ -304,6 +320,8 @@ Behavior-style tests may combine:
 
 - `expect_exit`
 - `expect_stdout_contains`
+- `expect_stdout_exact`
+- `expect_stdout`
 - `expect_stdout_starts_with`
 - `expect_stderr_contains`
 - `expect_output_contains`
@@ -316,9 +334,31 @@ Behavior-style tests may combine:
 - `verify_script_path`
 - `verify_timeout_ms`
 
+Every assertion above is checked in addition to the others: a test may combine them. The runner
+checks every field it is given; a field it does not know is a plan-schema error (see "Top-Level
+Plan Fields"), never a silent no-op.
+
 ### `expect_stdout_contains` / `expect_stderr_contains`
 
 Use these for simple substring checks after normalizers are applied.
+
+### `expect_stdout_exact` / `expect_stdout`
+
+The whole normalized standard output must equal the string, character for character: the trailing
+newline a program printed is part of the comparison, and so is a trailing space. Use it when the
+test is about exactly what the program printed — the order of lines, the absence of an extra
+line, the formatting. Prefer it over a set of `expect_stdout_contains` strings when the output is
+short enough to state once.
+
+`expect_stdout` is the older name of the same comparison; new tests use
+`expect_stdout_exact`. Both keys may be written (they then assert the same output), but a test
+does not need both. The failure names the first differing offset and shows the whole text when it
+is short (the text around it when it is long).
+
+A multiline value written as `"""` followed by a newline starts with that newline, exactly as TOML
+specifies; put the first output line on the same line as the opening `"""` when the program does
+not print a leading blank line. The reader of a failing test should not have to discover that
+difference by hand.
 
 ### `expect_stdout_starts_with`
 
@@ -509,6 +549,10 @@ Benchmark tests may use:
 - `kind = "benchmark"`
 - `perf_budget_mean_ms`
 - `perf_budget_tolerance_pct`
+- `perf_budget_platform`
+  Optional string naming the platform the budget was recorded on (`local.sample` in
+  `perf/fib.plan.toml`). It is provenance, not an assertion: the runner accepts it, copies it
+  into the test's `meta.json`, and does not change the budget comparison with it.
 
 The case must emit the expected JSON benchmark payload format used by the runner.
 
@@ -554,6 +598,10 @@ instances run at the same time without seeing each other's files. A case run out
 
 ## Field Constraints And Style
 
+- A field must be one this document defines. The runner rejects an unknown key (and a known key
+  of the wrong type for the fields it types) with an error naming the plan file, the test and
+  the key; fix the plan, do not work around the runner. A new field is added to the runner and
+  to this document in the same change, so the next plan can rely on it.
 - Prefer explicit `expect_exit = 0` for successful behavior tests.
 - Prefer `verify_script` over `verify_script_path` for short, local checks.
 - Prefer `verify_script_path` for reusable or multi-test logic.
@@ -568,3 +616,6 @@ instances run at the same time without seeing each other's files. A case run out
 
 - `verify_script` for inline JavaScript
 - `verify_script_path` for external scripts
+
+`expect_stdout` is the older name of `expect_stdout_exact`; both are supported and compare the
+whole normalized standard output. New tests use `expect_stdout_exact`.

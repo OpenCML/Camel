@@ -2,6 +2,9 @@
 //
 //   * the back-end matrix (`backends`, `backends_agree`, `known_fail`, the `[defaults]` table):
 //     matrix.plan.toml, whose tests pass and fail on purpose;
+//   * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
+//     the file, the test and the key named, while a valid plan in the same directory still runs;
+//     `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
 //   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
 //     another test's (or an earlier run's) files in its `${test_tmp}` directory; the scratch
 //     directory must lie under this run's `tmp/test/run-<pid>`; a file another run keeps under
@@ -65,7 +68,14 @@ function readIntervals(file) {
 const matrix = runRunner([path.join(here, 'matrix.plan.toml')])
 const output = matrix.output
 const backends = ['nvm', 'fvm', 'jit', 'prl']
-const expected = { plain: 'PASS', starts_with: 'PASS', starts_with_fails: 'FAIL' }
+const expected = {
+    plain: 'PASS',
+    starts_with: 'PASS',
+    starts_with_fails: 'FAIL',
+    exact: 'PASS',
+    exact_fails: 'FAIL',
+    exact_legacy: 'PASS',
+}
 const expectAll = (name, status, exceptions = {}) => {
     for (const backend of backends) {
         expected[`${name}.${backend}`] = exceptions[backend] || status
@@ -96,7 +106,8 @@ const mustContain = [
     "marked known_fail on 'prl' but passes: remove the mark",
     "the fixture's jit prints 41",
     'stdout does not start with "2\\n"',
-    '[SUMMARY] total: 31, pass: 25, fail: 5, known failures: 1',
+    'expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)',
+    '[SUMMARY] total: 34, pass: 27, fail: 6, known failures: 1',
 ]
 for (const text of mustContain) {
     if (!output.includes(text)) problems.push(`output lacks: ${text}`)
@@ -112,6 +123,34 @@ if (!output.includes(`[INFO] test scratch kept: ${matrixRoot}`)) {
 }
 if (!fs.existsSync(matrixRoot)) problems.push(`the failed run removed its root: ${matrixRoot}`)
 fs.rmSync(matrixRoot, { recursive: true, force: true })
+
+// --- the plan schema: an unknown key or a bad type fails its own plan -------------------------
+// Three plan files share one directory: a misspelled key, a known key of the wrong type, and a
+// valid plan. The two invalid plans must fail with the file, the test and the key named; the
+// valid one must still run, so the error fails the plan and not the run.
+const strictDir = path.join(here, 'strict')
+const strict = runRunner([strictDir])
+if (strict.status !== 1) problems.push(`strict: runner exit ${strict.status}, expected 1`)
+if (!strict.output.includes('[SUMMARY] total: 3, pass: 1, fail: 2')) {
+    problems.push(`strict: unexpected summary (${summaryLine(strict.output)})`)
+}
+if (!strict.output.includes('[PASS] valid')) problems.push('strict: the valid plan did not run')
+if (!strict.output.includes('[FAIL] <invalid plan>')) {
+    problems.push('strict: an invalid plan was not reported as a failing plan')
+}
+for (const text of [
+    "test/tools/selftest/strict/unknown_key.plan.toml: test 'unknown': unknown key "
+        + "'expect_stdout_exactt'; did you mean 'expect_stdout_exact'?",
+    "test/tools/selftest/strict/wrong_type.plan.toml: test 'wrong_type': "
+        + 'expect_stdout_exact must be a string, got 42',
+]) {
+    if (!strict.output.includes(text)) problems.push(`strict: output lacks: ${text}`)
+}
+const strictRoot = path.join(scratchRoot, `run-${strict.pid}`)
+if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
+    problems.push('strict: the failed run did not print the kept test root')
+}
+fs.rmSync(strictRoot, { recursive: true, force: true })
 
 // --- the per-test scratch directory -----------------------------------------------------------
 // A model written by one test must not be visible to another; a second run must inherit nothing

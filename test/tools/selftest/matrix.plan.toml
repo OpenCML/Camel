@@ -63,6 +63,27 @@ args = ["${case}", "same", "std::nvm"]
 expect_stdout_starts_with = "2\n"
 
 [[tests]]
+name = "exact"
+desc = "expect_stdout_exact compares the whole normalized stdout, not a substring of it."
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_exact = "42\n"
+
+[[tests]]
+name = "exact_fails"
+desc = "A trailing space is a difference: the whole output is compared, byte for byte after normalizers."
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_exact = "42 \n"
+
+[[tests]]
+name = "exact_legacy"
+desc = "expect_stdout is the legacy name of the same exact comparison, not a substring check."
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_stdout = "42\n"
+
+[[tests]]
 name = "plain"
 desc = "An entry without backends is one test, as before; the defaults table still applies."
 backends = false

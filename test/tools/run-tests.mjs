@@ -24,6 +24,149 @@ const BUILDS = {
     debug: { dir: 'debug', label: 'Debug' },
 }
 
+/**
+ * The fields a plan file may contain. A key that is not here is an error, not a comment: a test
+ * that wrote `expect_stdout_exact` under a misspelled name used to pass while asserting nothing.
+ * `desc` is human-readable documentation, and `perf_budget_platform` is the provenance of a
+ * benchmark budget; both are accepted, and neither turns into an assertion.
+ */
+const PLAN_FIELDS = new Set([
+    'id', 'desc', 'order', 'tier', 'debug_tier', 'parallel', 'tags', 'defaults', 'tests', 'sweeps',
+])
+const TEST_FIELDS = new Set([
+    'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'verify_timeout_ms',
+    'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep',
+    'known_fail', 'known_fail_note', 'failure_note',
+    'backends', 'backends_agree', 'compare_to', 'compare_fields',
+    'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
+    'expect_exit', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
+    'expect_stdout_starts_with', 'expect_stderr_contains',
+    'expect_output_contains', 'expect_output_not_contains',
+    'expect_diagnostic_name', 'expect_diagnostic_code',
+    'expect_diagnostic_line', 'expect_diagnostic_column',
+    'perf_budget_mean_ms', 'perf_budget_tolerance_pct', 'perf_budget_platform',
+    'verify_script', 'verify_script_path', 'verify_js',
+])
+const SWEEP_FIELDS = new Set([
+    'name', 'plans', 'exclude', 'envs', 'skip_env_prefix', 'timeout_scale',
+    'fast_sample', 'risk_tags', 'risk_sample',
+])
+
+/** A plan file that contradicts the schema; it fails the plan, not the run. */
+class PlanSchemaError extends Error {
+    constructor(message) {
+        super(message)
+        this.name = 'PlanSchemaError'
+    }
+}
+
+function planLabel(planPath) {
+    const relative = path.relative(REPO_ROOT, planPath)
+    if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
+        return relative.split(path.sep).join('/')
+    }
+    return planPath
+}
+
+/** Levenshtein distance, for "did you mean": a one-letter typo must name the field it meant. */
+function editDistance(lhs, rhs) {
+    let previous = Array.from({ length: rhs.length + 1 }, (_, index) => index)
+    for (let i = 1; i <= lhs.length; i++) {
+        const current = [i]
+        for (let j = 1; j <= rhs.length; j++) {
+            const substitute = previous[j - 1] + (lhs[i - 1] === rhs[j - 1] ? 0 : 1)
+            current[j] = Math.min(previous[j] + 1, current[j - 1] + 1, substitute)
+        }
+        previous = current
+    }
+    return previous[rhs.length]
+}
+
+function closestField(key, allowed) {
+    let best = null
+    let bestDistance = 3
+    for (const field of allowed) {
+        const distance = editDistance(key, field)
+        if (distance < bestDistance) {
+            best = field
+            bestDistance = distance
+        }
+    }
+    return best
+}
+
+function checkFields(planPath, entry, allowed, where) {
+    for (const key of Object.keys(entry)) {
+        if (allowed.has(key)) continue
+        const suggestion = closestField(key, allowed)
+        const hint = suggestion ? `; did you mean '${suggestion}'?` : ''
+        throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: unknown key '${key}'${hint}`)
+    }
+}
+
+function checkFieldType(planPath, entry, field, where, type) {
+    const value = entry[field]
+    if (value === undefined) return
+    const ok = type === 'string'
+        ? typeof value === 'string'
+        : type === 'number'
+            ? typeof value === 'number' && Number.isFinite(value)
+            : false
+    if (ok) return
+    const shown = type === 'string' ? JSON.stringify(value) : String(value)
+    throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
+}
+
+/**
+ * Refuse a plan the runner does not fully understand before any of its tests run. Every key of
+ * the plan, of `[defaults]`, of a `[[tests]]` entry and of a `[[sweeps]]` entry is checked, so a
+ * misspelled assertion cannot silently assert nothing. There is deliberately no way to turn
+ * this off from a plan file (or from the environment): a plan that the runner only partly
+ * understands is not evidence.
+ */
+function validatePlanSchema(doc, planPath) {
+    checkFields(planPath, doc, PLAN_FIELDS, 'plan')
+    if (doc.defaults !== undefined) {
+        if (doc.defaults === null || typeof doc.defaults !== 'object' || Array.isArray(doc.defaults)) {
+            throw new PlanSchemaError(`${planLabel(planPath)}: [defaults] must be a table`)
+        }
+        checkFields(planPath, doc.defaults, TEST_FIELDS, '[defaults]')
+    }
+    for (const [index, test] of (doc.tests || []).entries()) {
+        if (test === null || typeof test !== 'object' || Array.isArray(test)) {
+            throw new PlanSchemaError(`${planLabel(planPath)}: test #${index + 1} is not a table`)
+        }
+        const where = typeof test.name === 'string' && test.name.length > 0
+            ? `test '${test.name}'`
+            : `test #${index + 1}`
+        checkFields(planPath, test, TEST_FIELDS, where)
+    }
+    for (const [index, sweep] of (doc.sweeps || []).entries()) {
+        if (sweep === null || typeof sweep !== 'object' || Array.isArray(sweep)) {
+            throw new PlanSchemaError(`${planLabel(planPath)}: [[sweeps]] entry #${index + 1} is not a table`)
+        }
+        const where = typeof sweep.name === 'string' && sweep.name.length > 0
+            ? `[[sweeps]] entry '${sweep.name}'`
+            : `[[sweeps]] entry #${index + 1}`
+        checkFields(planPath, sweep, SWEEP_FIELDS, where)
+    }
+    // The fields this change implemented get a type check too: a plan that sets one of them to a
+    // number must fail here, where the file and the test are named, not later inside an assertion.
+    const entries = [
+        ['[defaults]', doc.defaults],
+        ...(doc.tests || []).map((test, index) => [
+            typeof test.name === 'string' && test.name.length > 0 ? `test '${test.name}'` : `test #${index + 1}`,
+            test,
+        ]),
+    ]
+    for (const [where, entry] of entries) {
+        if (!entry) continue
+        checkFieldType(planPath, entry, 'expect_stdout_exact', where, 'string')
+        checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
+        checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
+    }
+}
+
 function camelHome(build) {
     return path.join(REPO_ROOT, 'out', BUILDS[build].dir)
 }
@@ -843,6 +986,28 @@ function verifyFailureLines(verification) {
     return lines
 }
 
+/**
+ * Where two strings first differ, with the text around the difference. An exact comparison that
+ * only said "differs" would send the reader to the log for a trailing space; this names the
+ * offset and shows both sides.
+ */
+function describeTextDifference(expected, actual) {
+    const shared = Math.min(expected.length, actual.length)
+    let index = 0
+    while (index < shared && expected[index] === actual[index]) index++
+    const window = (text) => {
+        const start = Math.max(0, index - 30)
+        const end = Math.min(text.length, index + 70)
+        return `${start > 0 ? '...' : ''}${text.slice(start, end)}${end < text.length ? '...' : ''}`
+    }
+    // A short output is shown whole: the reader should not have to open the log to see the
+    // trailing space or the extra line that made the comparison fail.
+    const whole = expected.length + actual.length <= 400
+    return `first difference at offset ${index} (expected ${expected.length} chars, got ${actual.length} chars): `
+        + `expected ${JSON.stringify(whole ? expected : window(expected))}, `
+        + `got ${JSON.stringify(whole ? actual : window(actual))}`
+}
+
 function compareField(field, actual, baseline) {
     if (field === 'exit_code') return actual.exitCode === baseline.exitCode
     if (field === 'stdout_normalized') return actual.normalized.stdout === baseline.normalized.stdout
@@ -880,6 +1045,16 @@ async function validateTest(test, result, context) {
         const needle = expandTextTokens(rawNeedle, scope)
         if (!result.normalized.stdout.includes(needle)) {
             failures.push(`stdout does not contain '${needle}'`)
+        }
+    }
+    // `expect_stdout` is the legacy name of the same byte-exact comparison: a plan written
+    // before `expect_stdout_exact` existed meant the whole output, and the values it holds are
+    // whole outputs. Both compare the normalized stdout, as the other expectations do.
+    for (const field of ['expect_stdout_exact', 'expect_stdout']) {
+        if (typeof test[field] !== 'string') continue
+        const expected = expandTextTokens(test[field], scope)
+        if (result.normalized.stdout !== expected) {
+            failures.push(`${field} differs: ${describeTextDifference(expected, result.normalized.stdout)}`)
         }
     }
     if (typeof test.expect_stdout_starts_with === 'string') {
@@ -997,6 +1172,9 @@ async function validateTest(test, result, context) {
 
 async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative) {
     const casePath = path.resolve(path.dirname(test.__planPath), test.case)
+    if (test.__planError) {
+        return runnerErrorResult(casePath, test.__planError)
+    }
     const toolName = test.tool || 'camel'
     const toolExe = toolName === 'python' ? pythonExecutable() : toolExecutable(toolName, logContext.options.build)
     if (!toolExe) {
@@ -1109,6 +1287,7 @@ function writeLogFiles(plan, test, result, status, logDir) {
                 failure_note: test.failure_note || null,
                 failures: result.failures,
                 diagnostics: result.diagnostics,
+                perf_budget_platform: test.perf_budget_platform || null,
                 metrics: result.benchmark
                     ? {
                         mean_ms: result.benchmark.mean_ms,
@@ -1168,11 +1347,35 @@ function expandBackends(test) {
 
 function loadPlanTests(planPath) {
     const doc = parseTomlFile(planPath)
+    validatePlanSchema(doc, planPath)
     const planId = doc.id || path.basename(planPath, '.plan.toml')
     const tests = (doc.tests || [])
         .map((test) => ({ ...(doc.defaults || {}), ...test, __planPath: planPath, __planId: planId }))
         .flatMap(expandBackends)
     return { doc, tests }
+}
+
+/**
+ * A plan the schema rejected. It becomes one failing test of that plan, so the rest of the run
+ * still runs and reports; the failure names the plan file, the test and the key. Silently
+ * dropping the plan would hide exactly the defect this exists to expose.
+ */
+function invalidPlan(planPath, error) {
+    const id = path.basename(planPath, '.plan.toml')
+    return {
+        id,
+        __planPath: planPath,
+        __error: error.message,
+        tests: [{
+            name: '<invalid plan>',
+            kind: 'behavior',
+            case: path.basename(planPath),
+            args: [],
+            __planPath: planPath,
+            __planId: id,
+            __planError: error.message,
+        }],
+    }
 }
 
 /**
@@ -1299,6 +1502,9 @@ function selectTier(plans, tier, namedPlans = new Set()) {
         for (const test of plan.tests) order.push({ plan, test })
     }
     const wants = (plan, test) => {
+        // A plan the schema rejected fails in every layer: its tests never ran, so no layer can
+        // honestly say the plan is clean.
+        if (test.__planError) return true
         if (tier === 'all') return testTier(plan, test) !== 'debug'
         if (tier === 'debug') return plan.debug_tier === true || testTier(plan, test) === 'debug'
         return testTier(plan, test) === tier
@@ -1363,9 +1569,16 @@ function loadPlans(targets, tier) {
     const planPaths = [...new Set(discovered.map((planPath) => path.resolve(planPath)))]
     const plans = planPaths
         .map((planPath) => {
-            const { doc, tests: ownTests } = loadPlanTests(planPath)
-            const tests = [...ownTests, ...expandSweeps(doc, planPath)]
-            return { ...doc, __planPath: planPath, tests }
+            try {
+                const { doc, tests: ownTests } = loadPlanTests(planPath)
+                const tests = [...ownTests, ...expandSweeps(doc, planPath)]
+                return { ...doc, __planPath: planPath, tests }
+            } catch (error) {
+                // A schema error is a property of this plan file: fail this plan and go on. Any
+                // other error is a defect of the runner or of a sweep target, and stays fatal.
+                if (!(error instanceof PlanSchemaError)) throw error
+                return invalidPlan(planPath, error)
+            }
         })
         .sort((lhs, rhs) => {
             const lhsOrder = Number.isFinite(lhs.order) ? lhs.order : Number.MAX_SAFE_INTEGER

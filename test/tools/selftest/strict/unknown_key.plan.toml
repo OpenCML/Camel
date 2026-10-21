@@ -1,0 +1,14 @@
+# Fixture of test/tools/selftest/run.mjs: a misspelled assertion key must fail this plan, naming
+# the file, the test and the key, instead of silently asserting nothing (H52).
+id = "selftest.strict.unknown_key"
+order = 6
+tier = "fast"
+
+[[tests]]
+name = "unknown"
+desc = "`expect_stdout_exactt` is not a field: the typo must not pass as a test that asserts nothing."
+kind = "behavior"
+tool = "node"
+case = "../backend_echo.mjs"
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_exactt = "42\n"

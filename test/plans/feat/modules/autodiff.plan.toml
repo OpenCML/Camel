@@ -2288,6 +2288,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "loop_grad_composite_read"
+desc = "A composite loop state whose gradient comes from a value computed outside the loop and read only inside its body: the two-value state adds `s = w * 2` each round (value 12, gradient 6), and an array state grown by `append<a>` with `a = w + 1` outside the loop gives the gradient of `xs[1] + xs[2]` (2). The loop's value is read after the loop through a projection, which must pass the gradient on to the loop's site."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_composite_read.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_composite_read vg=(12.0, 6.0) d=2.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "with_grad.old_name_removed"
 desc = "The old name `value_and_grad` is deleted outright: it is an ordinary unresolved reference, not an alias and not a pointing diagnostic."
 kind = "negative"

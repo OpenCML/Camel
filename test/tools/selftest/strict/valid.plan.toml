@@ -1,0 +1,16 @@
+# Fixture of test/tools/selftest/run.mjs: the valid plan next to the two rejected ones still
+# runs, so a schema error fails its own plan and not the whole run.
+id = "selftest.strict.valid"
+order = 8
+tier = "fast"
+
+[[tests]]
+name = "valid"
+desc = "A valid exact-stdout assertion next to two invalid plans."
+kind = "behavior"
+tool = "node"
+case = "../backend_echo.mjs"
+args = ["${case}", "same", "std::nvm"]
+normalizers = ["normalize_newlines"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
