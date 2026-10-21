@@ -208,6 +208,12 @@ class RuntimeGraphDraftSession {
 
     camel::core::context::context_ptr_t context_;
     const Program *program_ = nullptr;
+    /// Whether a commit may replace the context's program: true when the session was opened over
+    /// that program (it may have been overtaken since: the commit merges), or when the program it
+    /// works on is the context's now (someone installed it). A session over a function value's
+    /// program (a detached program: the ONNX export, a tile region, a gradient) hands its commit
+    /// back to its owner and never publishes it, whatever the context's program is.
+    bool mayPublish_ = false;
     mutable std::unique_ptr<Program> work_;
     GCGraph *runtimeRoot_ = nullptr;
     GraphState graphState_ = GraphState::Executable;
