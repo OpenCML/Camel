@@ -499,3 +499,124 @@ expect_exit = 0
 expect_stdout_contains = ["nan\n0.0\ninf\n-0.0\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+[[tests]]
+name = "rules.tensor_laws_counts"
+desc = "The tensor element laws of the standard rules, by operator count: `tensor_f32_combine` folds x*3 + x*5 under the default reassociate, the mixed and the product-chain laws wait for the permissions their guards name, `tensor_f32_double` (exact doubling) needs none, the bare-operand laws fold x*c + x with the same permissions as the two-term combine, `tensor_f32_add_self` turns t + t into t*2, the neutral laws reach a bare tensor, coefficients f32 does not hold exactly are left alone, and an i64 tensor keeps its own add (the f32 laws are typed and must not read it)."
+kind = "behavior"
+case = "../../../cases/modules/rules/tensor_target.cml"
+args = ["${case}", "tensor_counts::report", "rules::simplify", "tensor_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["combine 1 2\ncombine_mixed 1 2\ncombine_mixed_granted 1 2\nfold 0 2\nfold_granted 0 2\ndouble 1 2\nself 1 0\none 1 1\none_other 1 1\none_mixed 1 1\none_mixed_granted 1 1\nneutral 1 1\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\ncombine 0 1\ncombine_mixed 1 2\ncombine_mixed_granted 0 1\nfold 0 2\nfold_granted 0 1\ndouble 0 1\nself 0 1\none 0 1\none_other 0 1\none_mixed 1 1\none_mixed_granted 0 1\nneutral 0 0\ninexact 1 2\ninexact_one 1 1\ni64_self 1 0\ni64_distribute 1 1\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.tensor_laws_execute"
+desc = "The same tensor program after `rules::simplify` computes the values the laws promise, on the interpreter and the bytecode back ends alike."
+kind = "behavior"
+case = "../../../cases/modules/rules/tensor_target.cml"
+args = ["${case}", "rules::simplify", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["tensor([      8.,      16.,      24.], dtype=float32)", "tensor([      6.,      12.,      18.], dtype=float32) tensor([     15.,      30.,      45.], dtype=float32)", "tensor([      3.,       6.,       9.], dtype=float32)", "tensor([      1.,       2.,       3.], dtype=float32)", "tensor([    0.3,     0.6,     0.9], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.tensor_guards_hold"
+desc = "The tensor coefficient laws' value guards at the values they are about: an overflowing f32 coefficient sum (x*3e38 + x*3e38 at 0 is 0, not NaN), a product of coefficients that underflows to zero in f32 while the program's own chain does not ((x*1e-30)*1e-30 at 1e30 is 1e-30), and coefficients that cancel (x*3 + x*-3 at -1 is +0, not -0). The guarded rules do not fire and `rules::simplify` leaves the values alone."
+kind = "behavior"
+case = "../../../cases/modules/rules/tensor_boundary.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["tensor([      0.,       0.,       0.], dtype=float32) 0.0", "tensor([  1e-30,       0.,       0.], dtype=float32) 1e-30", "tensor([      0.,       0.,       0.], dtype=float32) 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.tensor_guards_are_real"
+desc = "The same boundary program under the three unguarded tensor coefficient laws: the overflowing sum becomes NaN, the underflowing product 0, and the cancelling product -0, so the boundary test above would have caught a law that fired."
+kind = "behavior"
+case = "../../../cases/modules/rules/tensor_boundary.cml"
+args = ["${case}", "tensor_boundary::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["tensor([   -nan,    -nan,    -nan], dtype=float32) 0.0", "tensor([      0.,       0.,       0.], dtype=float32) 1e-30", "tensor([     -0.,       0.,      -0.], dtype=float32) 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.tensor_saturation_keeps_values"
+desc = "The tensor saturation (both ways, including the i64 distribution over tensor add) rewrites the same program to writings that still compute the values of the program as written: the point of a two-way law is that either direction is the same value."
+kind = "behavior"
+case = "../../../cases/modules/rules/tensor_target.cml"
+args = ["${case}", "rules::saturate_all", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["tensor([      8.,      16.,      24.], dtype=float32)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "rules.strict_policy_refuses_reassociation"
+desc = "The numeric policy of the rewrite pass is its own parameter (design principles 7.4, 7.5): `rules::simplify` grants the default permissions and folds x*3 + x*5 into x*8 (0 adds, 1 product), and the exact doubling law fires under both policies."
+kind = "behavior"
+case = "../../../cases/modules/rules/strict_target.cml"
+args = ["${case}", "strict_target::report", "rules::simplify", "strict_target::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["combine 1 2\ndouble 1 2\ncombine 0 1\ndouble 0 1\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.strict_policy_keeps_exact_laws"
+desc = "The same program under `rules::simplify_strict`, which grants no permission: the reassociating combine does not fire (1 add, 2 products), while the exact doubling still does (0 adds, 1 product). A uniform policy would either hide the second law or let the first fire."
+kind = "behavior"
+case = "../../../cases/modules/rules/strict_target.cml"
+args = ["${case}", "strict_target::report", "rules::simplify_strict", "strict_target::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["combine 1 2\ndouble 1 2\ncombine 1 2\ndouble 0 1\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.strict_saturation_runs"
+desc = "The strict saturation, the two-way pass with the same policy parameter, runs and preserves the values of the program."
+kind = "behavior"
+case = "../../../cases/modules/rules/strict_target.cml"
+args = ["${case}", "rules::saturate_all_strict", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["16.0 12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+[[tests]]
+name = "rules.element_bare_term_laws"
+desc = "The bare-operand coefficient law on the four element families, in both orders: `x*3 + x` becomes `x*4` (one product, no addition, the counts go from 1 add and 1 product to 1 product), the i32 sum wraps as the program's does (2147483647 + 1 is INT_MIN), and the guards keep what they are about: `c = -1` (whose sum is zero), a mixed pair without the finite_math grant (1 add and 1 product stay), and the same pair with the grant, which folds."
+kind = "behavior"
+case = "../../../cases/modules/rules/bare_target.cml"
+args = ["${case}", "bare_counts::report", "rules::simplify", "bare_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["i32_combine_one 1 1\ni32_one_combine 1 1\ni32_combine_one_wrap 1 1\ni64_combine_one 1 1\ni64_one_combine 1 1\nf32_combine_one 1 1\nf32_one_combine 1 1\nf32_combine_one_zero 1 1\nf32_combine_one_mixed 1 1\nf32_combine_one_mixed_ok 1 1\nf64_combine_one 1 1\nf64_one_combine 1 1\nf64_combine_one_zero 1 1\ni32_combine_one 0 1\ni32_one_combine 0 1\ni32_combine_one_wrap 0 1\ni64_combine_one 0 1\ni64_one_combine 0 1\nf32_combine_one 0 1\nf32_one_combine 0 1\nf32_combine_one_zero 1 1\nf32_combine_one_mixed 1 1\nf32_combine_one_mixed_ok 0 1\nf64_combine_one 0 1\nf64_one_combine 0 1\nf64_combine_one_zero 1 1\n8 8 -2147483648\n12 12\n8.0 8.0 0.0 -4.0 -4.0\n8.0 8.0 0.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.element_bare_term_boundaries"
+desc = "The bare-term law at the boundaries its guards name: `x * -1.0 + x` (whose coefficient sum is zero) keeps the program's +0.0 for -0.0, and `x * 0.0 + x` at infinity keeps the program's NaN (the implicit `x*1` is a product with zero, which the law would drop)."
+kind = "behavior"
+case = "../../../cases/modules/rules/bare_boundary.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["0.0 0.0\nnan inf\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.element_bare_term_boundaries_are_real"
+desc = "The same program under the bare-term law without its guards: the -0.0 case becomes -0.0 and the infinite case becomes infinity, so each boundary line collapses."
+kind = "behavior"
+case = "../../../cases/modules/rules/bare_boundary.cml"
+args = ["${case}", "bare_boundary::apply", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["-0.0 0.0\ninf inf\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000

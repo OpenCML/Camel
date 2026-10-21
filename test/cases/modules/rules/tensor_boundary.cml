@@ -1,0 +1,53 @@
+/**
+ * The boundaries the tensor laws must not cross. Each line prints what the program computes next
+ * to the value the tempting wrong law would have produced; the two differ, so a rewrite that
+ * fired would collapse the pair. `apply` is the same program under the unguarded laws, which the
+ * last test of the plan runs: the boundary lines then collapse.
+ */
+module tensor_boundary
+
+import { Tensor, reshape } from tensor
+import { Program } from graph
+import { rewrite } from rewrite
+
+type Vec = Tensor<f32, const [3]>
+
+/// The f32 sum of the coefficients overflows: at x = 0 the products are 0, but a coefficient of
+/// f32 infinity makes the rewrite 0 * inf = NaN.
+func overflow(x: Vec): Vec { return x * 3.0e38 + x * 3.0e38 }
+
+/// The product of the coefficients underflows to zero in f32, while the program's own chain does
+/// not: at x = 1e30 the original is 1e-30 per element, the rewritten coefficient is 0.
+@numeric(no_infs)
+func underflow(x: Vec): Vec { return (x * 1.0e-30) * 1.0e-30 }
+
+/// Coefficients that cancel: the rewrite would multiply by a zero of the other sign.
+@numeric(finite_math)
+func mixed_zero(x: Vec): Vec { return x * 3.0 + x * -3.0 }
+
+// ---- The unguarded laws: the same patterns without the conditions ----
+
+rule combine_unguarded(x: Vec, const c1: float, const c2: float) {
+    x * c1 + x * c2 => x * (c1 + c2)
+}
+
+rule fold_unguarded(x: Vec, const c1: float, const c2: float) {
+    (x * c1) * c2 => x * (c1 * c2)
+}
+
+rule mixed_unguarded(x: Vec, const c1: float, const c2: float) {
+    x * c1 + x * c2 => x * (c1 + c2)
+}
+
+func main(): int sync {
+    let y = reshape([1.0e30, 1.0, 2.0], [3])
+    println(overflow(reshape([0.0, 0.0, 0.0], [3])), 0.0)
+    println(underflow(y), 1.0e-30)
+    println(mixed_zero(reshape([-1.0, 1.0, -0.0], [3])), 0.0)
+    return 0
+}
+
+/// The unguarded laws, applied to the same program: the boundary lines collapse.
+export func apply(p: Program): Program! {
+    return rewrite(p, [combine_unguarded, fold_unguarded, mixed_unguarded])
+}
