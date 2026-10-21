@@ -1134,7 +1134,8 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             if (entry == body->join) {
                 skipRuntimeIndex.reset();
             } else {
-                skipRuntimeIndex = arms[jumpIdx].tail;
+                skipRuntimeIndex =
+                    runtimeGraph->execPlan().branchArmTailsOfNode(runtimeNodeIndex)[jumpIdx];
             }
         }
     }

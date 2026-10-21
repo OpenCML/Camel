@@ -1,5 +1,5 @@
 /**
- * A macro recursion of depth D evaluated ahead of time by std::macro. D is 40: more than the
+ * A macro recursion of depth D evaluated ahead of time by std::macro. D is 100: more than the
  * default limit of the evaluator allows, fine with --max-macro-depth 200.
  */
 module macro_depth
@@ -9,6 +9,6 @@ macro func count(n: int): int {
 }
 
 func main(): int sync {
-    println(count(40))
+    println(count(100))
     return 0
 }

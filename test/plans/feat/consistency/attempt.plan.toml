@@ -107,13 +107,13 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 # the collector (see docs/technical/07_jit_architecture.md, 17.4), so the test names the default
 # one.
 sweep = false
-desc = "Under std::jit the straight-line callee is compiled as frameless code, and the recursive callee, whose arms are graphs of their own, as framed code."
+desc = "Under std::jit the straight-line callee is compiled as frameless code, and so is the recursive callee, whose branch arms are part of it."
 kind = "behavior"
 backends = false
 case = "../../../cases/consistency/attempt/compiled.cml"
 args = ["-vv", "${case}", "std::jit"]
 envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
-expect_output_contains = ["compiled & cached graph 'quot' as frameless code", "compiled & cached graph 'depth' as framed code"]
+expect_output_contains = ["compiled & cached graph 'quot' as frameless code", "compiled & cached graph 'depth' as frameless code"]
 
 [[tests]]
 name = "attempt.library"

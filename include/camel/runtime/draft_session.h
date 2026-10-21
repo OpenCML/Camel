@@ -263,6 +263,8 @@ class GraphDraftGroup {
     void adopt(const Program &program);
     /// Encodes all members.
     void encode();
+    /// The members, in the order they were reserved.
+    const std::vector<GraphId> &ids() const { return order_; }
     /// The graph encoded for `id`.
     GCGraph *encoded(GraphId id) const;
     /// The program of the group: the graphs of the program it is made over, and the members

@@ -146,40 +146,75 @@ std::string describeNode(const camel::runtime::GCGraph *graph, gc_node_ref_t ref
         formatRefList(graph->withInputsOf(ref)));
 }
 
-gc_node_ref_t findRuntimeMatchedJoinIndex(camel::runtime::GCGraph *graph, gc_node_ref_t headIndex) {
-    ASSERT(graph != nullptr, "Runtime matched-JOIN lookup requires a graph.");
-    ASSERT(graph->containsNodeRef(headIndex), "Runtime branch arm head ref is out of range.");
-
-    std::queue<gc_node_ref_t> worklist;
-    std::unordered_set<gc_node_ref_t> visited;
-    worklist.push(headIndex);
-    visited.insert(headIndex);
-
-    while (!worklist.empty()) {
-        gc_node_ref_t currentIndex = worklist.front();
-        worklist.pop();
-
-        const auto *current = graph->node(currentIndex);
-        ASSERT(current != nullptr, "Runtime branch traversal resolved to a null node record.");
-        if (current->kind == camel::runtime::GCNodeKind::Join) {
-            return currentIndex;
-        }
-
-        auto push_outputs = [&](std::span<const gc_node_ref_t> outputs) {
-            for (gc_node_ref_t outputIndex : outputs) {
-                if (graph->containsNodeRef(outputIndex) && visited.insert(outputIndex).second) {
-                    worklist.push(outputIndex);
-                }
+/// What the arm regions of a graph say: the control region each node is in, and the region of
+/// each arm of each BRCH. A control region is an arm (or, later, a part of a loop).
+class ArmRegions {
+  public:
+    explicit ArmRegions(const camel::runtime::GCGraph &graph) : graph_(graph) {
+        const uint32_t count = static_cast<uint32_t>(graph.regionCount());
+        enclosing_.assign(count, 0);
+        std::vector<uint8_t> done(count, 0);
+        std::function<uint32_t(uint32_t)> controlOfRegion = [&](uint32_t r) -> uint32_t {
+            if (r == 0 || r >= count) {
+                return 0;
             }
+            if (done[r]) {
+                return enclosing_[r];
+            }
+            done[r]                   = 1;
+            const camel::runtime::GCRegion &region = *graph.region(r);
+            enclosing_[r] = isControl(region.kind) ? r : controlOfRegion(region.parent);
+            return enclosing_[r];
         };
-
-        push_outputs(graph->ctrlOutputsOf(currentIndex));
-        push_outputs(graph->normOutputsOf(currentIndex));
-        push_outputs(graph->withOutputsOf(currentIndex));
+        for (uint32_t r = 1; r < count; ++r) {
+            const camel::runtime::GCRegion &region = *graph.region(r);
+            controlOfRegion(r);
+            if (region.kind == camel::runtime::GCRegionKind::Arm) {
+                auto &arms = armsOf_[region.owner];
+                if (arms.size() <= region.index) {
+                    arms.resize(region.index + 1, 0);
+                }
+                arms[region.index] = r;
+            }
+        }
+    }
+    bool any() const { return !armsOf_.empty(); }
+    /// The innermost control region around `node`; 0 when it is in none.
+    uint32_t controlOf(gc_node_ref_t node) const {
+        const uint32_t r = graph_.nodeRegion(node);
+        return r == 0 || r >= enclosing_.size() ? 0 : enclosing_[r];
+    }
+    uint32_t parentControl(uint32_t control) const {
+        const uint32_t parent = graph_.region(control)->parent;
+        return parent == 0 || parent >= enclosing_.size() ? 0 : enclosing_[parent];
+    }
+    /// The region of every arm of `brch`, by arm index (0 where an arm has none).
+    std::span<const uint32_t> armsOf(gc_node_ref_t brch) const {
+        const auto it = armsOf_.find(brch);
+        return it == armsOf_.end() ? std::span<const uint32_t>{} : std::span<const uint32_t>(it->second);
+    }
+    /// True when `node` runs in an arm of `brch` (in one of its arms, or deeper).
+    bool inBranch(gc_node_ref_t node, gc_node_ref_t brch) const {
+        for (uint32_t c = controlOf(node); c != 0; c = parentControl(c)) {
+            const camel::runtime::GCRegion &region = *graph_.region(c);
+            if (region.kind == camel::runtime::GCRegionKind::Arm && region.owner == brch) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    throw std::runtime_error("Runtime branch arm does not reach a JOIN node.");
-}
+  private:
+    static bool isControl(camel::runtime::GCRegionKind kind) {
+        return kind == camel::runtime::GCRegionKind::Arm ||
+               kind == camel::runtime::GCRegionKind::LoopCond ||
+               kind == camel::runtime::GCRegionKind::LoopBody;
+    }
+
+    const camel::runtime::GCGraph &graph_;
+    std::vector<uint32_t> enclosing_; // by region: the innermost control region it is in (or is)
+    std::unordered_map<gc_node_ref_t, std::vector<uint32_t>> armsOf_;
+};
 
 } // namespace
 
@@ -216,6 +251,22 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             for (auto inputs :
                  {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
                 work.insert(work.end(), inputs.begin(), inputs.end());
+            }
+        }
+    }
+
+    // The live nodes of each arm region, nested branches included, in node order.
+    const ArmRegions regions(*graph);
+    std::unordered_map<uint32_t, std::vector<gc_node_ref_t>> membersOf;
+    if (regions.any()) {
+        for (gc_node_ref_t n = 0; n < live.size(); ++n) {
+            if (!live[n]) {
+                continue;
+            }
+            for (uint32_t c = regions.controlOf(n); c != 0; c = regions.parentControl(c)) {
+                if (graph->region(c)->kind == camel::runtime::GCRegionKind::Arm) {
+                    membersOf[c].push_back(n);
+                }
             }
         }
     }
@@ -264,67 +315,52 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         state[index] = 1;
         stack.push_back(index);
 
-        // Schedulers run a taken arm as the range from its head to its tail and skip everything
-        // else between the BRCH and the JOIN. A value an arm reads from outside the branch runs
-        // unconditionally, so it must come before the BRCH; left to the depth-first order, it
-        // could land between the BRCH and an arm's head (e.g. after a rewrite removed the branch
-        // that used to enclose it) and be skipped.
+        // Schedulers run a taken arm as the range of its region and skip everything else between
+        // the BRCH and the JOIN, so each arm is laid out as one piece, one after the other, and
+        // what an arm reads from outside the branch comes before the BRCH: it runs whether the
+        // arm is taken or not.
         if (const auto *node = graph->node(index);
             node && node->kind == camel::runtime::GCNodeKind::Join &&
             !graph->normInputsOf(index).empty()) {
             const gc_node_ref_t brch = graph->normInputsOf(index).front();
-            std::unordered_set<gc_node_ref_t> inBranch;
-            std::vector<gc_node_ref_t> work;
-            const auto pushUsers = [&](gc_node_ref_t n) {
-                for (auto users :
-                     {graph->ctrlOutputsOf(n), graph->normOutputsOf(n), graph->withOutputsOf(n)}) {
-                    work.insert(work.end(), users.begin(), users.end());
-                }
-            };
-            pushUsers(brch);
-            while (!work.empty()) {
-                const gc_node_ref_t n = work.back();
-                work.pop_back();
-                // A dead user is not part of the branch: visiting its inputs would lay out
-                // code that must not run (a dead BRCH without its JOIN sent every back end
-                // astray: nothing after it ran, or the order was entered again and again).
-                if (n == index || n == brch || !graph->containsNodeRef(n) || !live[n] ||
-                    !inBranch.insert(n).second) {
-                    continue;
-                }
-                pushUsers(n);
-            }
-            // In node order: the order of a hash set would depend on the library.
-            std::vector<gc_node_ref_t> branchNodes(inBranch.begin(), inBranch.end());
-            std::ranges::sort(branchNodes);
-            for (gc_node_ref_t n : branchNodes) {
-                for (auto inputs :
-                     {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
-                    for (gc_node_ref_t input : inputs) {
-                        if (input != brch && !inBranch.contains(input)) {
-                            visit(input);
+            const auto arms          = regions.armsOf(brch);
+            for (uint32_t arm : arms) {
+                for (gc_node_ref_t n : membersOf[arm]) {
+                    for (auto inputs :
+                         {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
+                        for (gc_node_ref_t input : inputs) {
+                            if (input != brch && !regions.inBranch(input, brch)) {
+                                visit(input);
+                            }
                         }
                     }
                 }
             }
-
-            // Each arm must also be laid out as one piece: the code of an arm that is not taken
-            // is skipped as a range, and an arm that falls into another one's code runs it. The
-            // JOIN may wait on nodes inside an arm (a rewrite that removed an inner branch hands
-            // what that branch waited on to the users of its JOIN). Visiting those first would
-            // lay a part of that arm before the other arms and the rest of it after them. So:
-            // what the JOIN waits on outside the branch, then the BRCH, then one arm after the
-            // other from its tail; the waits inside an arm are reached from that arm's tail.
             for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
-                if (!inBranch.contains(input)) {
+                if (!regions.inBranch(input, brch)) {
                     visit(input);
                 }
             }
             for (gc_node_ref_t input : graph->normInputsOf(index)) {
                 visit(input);
             }
-            for (gc_node_ref_t input : graph->withInputsOf(index)) {
-                visit(input);
+            const auto results = graph->withInputsOf(index);
+            for (size_t k = 0; k < arms.size(); ++k) {
+                if (arms[k] == 0) {
+                    continue;
+                }
+                if (k < results.size() && regions.inBranch(results[k], brch)) {
+                    visit(results[k]);
+                }
+                // The nodes of the arm itself first, then those of the branches inside it.
+                for (gc_node_ref_t n : membersOf[arms[k]]) {
+                    if (regions.controlOf(n) == arms[k]) {
+                        visit(n);
+                    }
+                }
+                for (gc_node_ref_t n : membersOf[arms[k]]) {
+                    visit(n);
+                }
             }
         }
 
@@ -534,231 +570,110 @@ RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
         graph->node(brchIndex)->kind == camel::runtime::GCNodeKind::Brch,
         "Runtime branch region collection requires a BRCH node.");
 
-    const auto armHeads = graph->ctrlOutputsOf(brchIndex);
-    ASSERT(armIndex < armHeads.size(), "Runtime BRCH arm index is out of range.");
-    const gc_node_ref_t headIndex = armHeads[armIndex];
-    const gc_node_ref_t joinIndex = findRuntimeMatchedJoinIndex(graph, headIndex);
+    const ArmRegions regions(*graph);
+    const auto arms = regions.armsOf(brchIndex);
+    ASSERT(
+        armIndex < arms.size() && arms[armIndex] != 0,
+        std::format(
+            "Graph '{}': arm {} of branch {} has no region.",
+            graph->name(),
+            armIndex,
+            brchIndex));
+    const uint32_t armRegion = arms[armIndex];
+    const auto *brchBody     = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brchIndex);
+    ASSERT(brchBody != nullptr, "Runtime BRCH body is missing.");
 
-    const auto joinInputs = graph->withInputsOf(joinIndex);
-    ASSERT(armIndex < joinInputs.size(), "Runtime JOIN arm-tail index is out of range.");
-    const gc_node_ref_t tailIndex = joinInputs[armIndex];
-
-    std::unordered_set<gc_node_ref_t> forward;
-    std::vector<gc_node_ref_t> worklist{headIndex};
-    while (!worklist.empty()) {
-        const gc_node_ref_t currentIndex = worklist.back();
-        worklist.pop_back();
-        if (!graph->containsNodeRef(currentIndex) || currentIndex == joinIndex ||
-            forward.contains(currentIndex)) {
+    std::vector<uint8_t> member(graph->nodeCount(), 0);
+    for (gc_node_ref_t n = 0; n < graph->nodeCount(); ++n) {
+        if (!graph->containsNodeRef(n)) {
             continue;
         }
-        forward.insert(currentIndex);
-
-        auto push_outputs = [&](std::span<const gc_node_ref_t> outputs) {
-            for (gc_node_ref_t outputIndex : outputs) {
-                if (graph->containsNodeRef(outputIndex) && outputIndex != joinIndex) {
-                    worklist.push_back(outputIndex);
-                }
-            }
-        };
-
-        push_outputs(graph->ctrlOutputsOf(currentIndex));
-        push_outputs(graph->normOutputsOf(currentIndex));
-        push_outputs(graph->withOutputsOf(currentIndex));
+        for (uint32_t c = regions.controlOf(n); c != 0; c = regions.parentControl(c)) {
+            member[n] = member[n] || c == armRegion;
+        }
     }
-
+    const auto joinInputs = graph->withInputsOf(brchBody->join);
     RuntimeBranchArmRegion arm{
-        .headIndex   = headIndex,
-        .tailIndex   = tailIndex,
-        .joinIndex   = joinIndex,
+        .headIndex = camel::runtime::kInvalidNodeRef,
+        .tailIndex = armIndex < joinInputs.size() ? joinInputs[armIndex]
+                                                  : graph->region(armRegion)->result,
+        .joinIndex = brchBody->join,
         .topoIndices = {},
     };
-    std::unordered_set<gc_node_ref_t> visited;
-    std::function<void(gc_node_ref_t)> visit = [&](gc_node_ref_t currentIndex) {
-        if (!graph->containsNodeRef(currentIndex) || !forward.contains(currentIndex) ||
-            visited.contains(currentIndex)) {
+    // In the order the nodes depend on one another: from the tail, then the nodes nothing in the
+    // arm depends on (effects).
+    std::vector<uint8_t> visited(graph->nodeCount(), 0);
+    std::function<void(gc_node_ref_t)> visit = [&](gc_node_ref_t n) {
+        if (n >= member.size() || !member[n] || visited[n]) {
             return;
         }
-        visited.insert(currentIndex);
-
-        auto visit_inputs = [&](std::span<const gc_node_ref_t> inputs) {
-            for (gc_node_ref_t inputIndex : inputs) {
-                if (forward.contains(inputIndex)) {
-                    visit(inputIndex);
-                }
+        visited[n] = 1;
+        for (auto inputs :
+             {graph->ctrlInputsOf(n), graph->normInputsOf(n), graph->withInputsOf(n)}) {
+            for (gc_node_ref_t input : inputs) {
+                visit(input);
             }
-        };
-
-        visit_inputs(graph->ctrlInputsOf(currentIndex));
-        visit_inputs(graph->normInputsOf(currentIndex));
-        visit_inputs(graph->withInputsOf(currentIndex));
-        arm.topoIndices.push_back(currentIndex);
+        }
+        arm.topoIndices.push_back(n);
     };
-    visit(tailIndex);
+    visit(arm.tailIndex);
+    for (gc_node_ref_t n = 0; n < member.size(); ++n) {
+        visit(n);
+    }
     ASSERT(
         !arm.topoIndices.empty(),
         "Runtime branch arm collection produced an empty execution region.");
+    arm.headIndex = arm.topoIndices.front();
     return arm;
 }
 
-gc_node_ref_t resolveRuntimeBranchArmEntry(
-    camel::runtime::GCGraph *graph, gc_node_ref_t brchRef, size_t armIndex,
-    std::span<const gc_node_ref_t> topoOrder) {
-    ASSERT(graph != nullptr, "Runtime branch-arm entry resolution requires a graph.");
-
-    const auto branchArms = graph->branchArmsOf(brchRef);
-    ASSERT(armIndex < branchArms.size(), "Runtime BRCH arm index is out of range.");
-    const auto *brchBody = graph->nodeBodyAs<camel::runtime::GCBrchBody>(brchRef);
-    ASSERT(brchBody != nullptr, "Runtime BRCH body is missing.");
-
-    std::unordered_set<gc_node_ref_t> preBranchDeps;
-    std::function<void(gc_node_ref_t)> collectPreBranchDeps = [&](gc_node_ref_t nodeRef) {
-        if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
-            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) ||
-            !preBranchDeps.insert(nodeRef).second) {
-            return;
-        }
-        for (auto inputRef : graph->ctrlInputsOf(nodeRef)) {
-            collectPreBranchDeps(inputRef);
-        }
-        for (auto inputRef : graph->normInputsOf(nodeRef)) {
-            collectPreBranchDeps(inputRef);
-        }
-        for (auto inputRef : graph->withInputsOf(nodeRef)) {
-            collectPreBranchDeps(inputRef);
-        }
-    };
-    for (auto inputRef : graph->ctrlInputsOf(brchRef)) {
-        collectPreBranchDeps(inputRef);
+BranchArmEntries::BranchArmEntries(
+    const camel::runtime::GCGraph &graph, std::span<const gc_node_ref_t> topoOrder) {
+    const ArmRegions regions(graph);
+    if (!regions.any()) {
+        return;
     }
-    for (auto inputRef : graph->normInputsOf(brchRef)) {
-        collectPreBranchDeps(inputRef);
-    }
-    for (auto inputRef : graph->withInputsOf(brchRef)) {
-        collectPreBranchDeps(inputRef);
-    }
-
-    // Nodes outside the execution order are dead (nothing the exit depends on uses them). They
-    // are no part of an arm, and what they read need not be either: followed, a dead user of
-    // this arm that also reads another arm would pull that arm's code into this one's region.
-    std::vector<uint8_t> ordered(graph->nodeCount(), 0);
-    for (gc_node_ref_t nodeRef : topoOrder) {
-        if (nodeRef < ordered.size()) {
-            ordered[nodeRef] = 1;
-        }
-    }
-    const auto isDead = [&](gc_node_ref_t nodeRef) {
-        return nodeRef >= ordered.size() || !ordered[nodeRef];
-    };
-
-    std::unordered_set<gc_node_ref_t> armRegion;
-    std::vector<gc_node_ref_t> worklist{branchArms[armIndex].head};
-    while (!worklist.empty()) {
-        const auto nodeRef = worklist.back();
-        worklist.pop_back();
-        if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
-            nodeRef == brchBody->join || !graph->containsNodeRef(nodeRef) || isDead(nodeRef) ||
-            !armRegion.insert(nodeRef).second) {
-            continue;
-        }
-
-        auto pushOutputs = [&](std::span<const gc_node_ref_t> outputs) {
-            for (auto outputRef : outputs) {
-                if (outputRef != brchBody->join) {
-                    worklist.push_back(outputRef);
+    // The first node of each arm region that runs something, in the order of the plan: a
+    // constant, a port or a forwarding GATE is not where the arm starts.
+    std::unordered_map<uint32_t, gc_node_ref_t> first, last;
+    // A node of an arm laid out before its BRCH was needed by code outside the branch and runs
+    // whether the arm is taken or not: it is no part of the range the BRCH jumps over.
+    std::unordered_set<gc_node_ref_t> reached;
+    for (gc_node_ref_t ref : topoOrder) {
+        const auto kind = graph.node(ref)->kind;
+        reached.insert(ref);
+        const bool runs = kind != camel::runtime::GCNodeKind::Data &&
+                          kind != camel::runtime::GCNodeKind::Port &&
+                          kind != camel::runtime::GCNodeKind::Sync &&
+                          kind != camel::runtime::GCNodeKind::Gate;
+        for (uint32_t c = regions.controlOf(ref); c != 0; c = regions.parentControl(c)) {
+            if (graph.region(c)->kind == camel::runtime::GCRegionKind::Arm &&
+                reached.contains(graph.region(c)->owner)) {
+                if (runs) {
+                    first.try_emplace(c, ref);
                 }
-            }
-        };
-        pushOutputs(graph->ctrlOutputsOf(nodeRef));
-        pushOutputs(graph->normOutputsOf(nodeRef));
-        pushOutputs(graph->withOutputsOf(nodeRef));
-    }
-
-    // An arm's code is also what its tail depends on inside the branch. The head alone does not
-    // find it: a rewrite can leave the head a node nothing in the arm follows any more (a pure
-    // value whose only user was removed, or was pruned with an inner branch) while the rest of
-    // the arm waits on the BRCH directly. The execution order lays an arm out from its tail
-    // (buildReachableExecutionTopoIndices), so the tail is where the arm is looked for here too;
-    // otherwise the arm is taken to be empty and its effects never run. A tail outside the
-    // branch (a value computed before it) is not code of the arm.
-    if (const gc_node_ref_t tail = branchArms[armIndex].tail;
-        tail != camel::runtime::kInvalidNodeRef && tail != brchRef && tail != brchBody->join &&
-        graph->containsNodeRef(tail) && !armRegion.contains(tail)) {
-        std::unordered_set<gc_node_ref_t> seen;
-        std::vector<gc_node_ref_t> work{brchRef};
-        bool inBranch = false;
-        while (!work.empty() && !inBranch) {
-            const gc_node_ref_t nodeRef = work.back();
-            work.pop_back();
-            for (auto outputs :
-                 {graph->ctrlOutputsOf(nodeRef),
-                  graph->normOutputsOf(nodeRef),
-                  graph->withOutputsOf(nodeRef)}) {
-                for (gc_node_ref_t outputRef : outputs) {
-                    if (outputRef == tail) {
-                        inBranch = true;
-                    } else if (outputRef != brchBody->join && seen.insert(outputRef).second) {
-                        work.push_back(outputRef);
-                    }
-                }
+                last[c] = ref;
             }
         }
-        if (inBranch) {
-            armRegion.insert(tail);
-        }
     }
-
-    std::unordered_set<gc_node_ref_t> dependencyVisited;
-    std::function<void(gc_node_ref_t)> collectInputs = [&](gc_node_ref_t nodeRef) {
-        if (nodeRef == camel::runtime::kInvalidNodeRef || nodeRef == brchRef ||
-            nodeRef == brchBody->join || preBranchDeps.contains(nodeRef) ||
-            !graph->containsNodeRef(nodeRef) || !dependencyVisited.insert(nodeRef).second) {
-            return;
-        }
-        // Branch-arm bytecode must jump to the first executable node that still
-        // belongs to the selected arm. Inputs already needed to evaluate the
-        // BRCH selector have been executed before branch dispatch and therefore
-        // must not pull the arm entry back to the graph prefix.
-        armRegion.insert(nodeRef);
-
-        for (auto inputRef : graph->ctrlInputsOf(nodeRef)) {
-            collectInputs(inputRef);
-        }
-        for (auto inputRef : graph->normInputsOf(nodeRef)) {
-            collectInputs(inputRef);
-        }
-        for (auto inputRef : graph->withInputsOf(nodeRef)) {
-            collectInputs(inputRef);
-        }
-    };
-
-    std::vector<gc_node_ref_t> regionNodes(armRegion.begin(), armRegion.end());
-    for (auto nodeRef : regionNodes) {
-        collectInputs(nodeRef);
-    }
-    // Only code laid out after the BRCH is still to run: an input of the arm placed before it
-    // (a value the arm reads, computed earlier but not for the selector) has already run, and
-    // entering there would re-run the graph from that point.
-    auto afterBrch = std::find(topoOrder.begin(), topoOrder.end(), brchRef);
-    if (afterBrch != topoOrder.end()) {
-        ++afterBrch;
-    } else {
-        afterBrch = topoOrder.begin();
-    }
-    for (auto it = afterBrch; it != topoOrder.end(); ++it) {
-        const auto nodeRef = *it;
-        if (!armRegion.contains(nodeRef)) {
+    for (gc_node_ref_t ref : topoOrder) {
+        if (graph.node(ref)->kind != camel::runtime::GCNodeKind::Brch) {
             continue;
         }
-        const auto *node = graph->node(nodeRef);
-        if (node && node->kind != camel::runtime::GCNodeKind::Data &&
-            node->kind != camel::runtime::GCNodeKind::Port &&
-            node->kind != camel::runtime::GCNodeKind::Sync &&
-            node->kind != camel::runtime::GCNodeKind::Gate) {
-            return nodeRef;
+        const auto *body = graph.nodeBodyAs<camel::runtime::GCBrchBody>(ref);
+        const auto arms  = regions.armsOf(ref);
+        ASSERT(
+            arms.size() >= graph.branchArmsOf(ref).size(),
+            std::format("Graph '{}': branch {} has arms without a region.", graph.name(), ref));
+        auto &entries = entries_[ref];
+        auto &tails   = tails_[ref];
+        for (size_t k = 0; k < graph.branchArmsOf(ref).size(); ++k) {
+            const auto at = arms[k] != 0 ? first.find(arms[k]) : first.end();
+            entries.push_back(at != first.end() ? at->second : body->join);
+            const auto end = at != first.end() ? last.find(arms[k]) : last.end();
+            tails.push_back(end != last.end() ? end->second : body->join);
         }
     }
-    return brchBody->join;
 }
 
 namespace {

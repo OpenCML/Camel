@@ -136,10 +136,10 @@ TaskflowExecSchedPass::buildRuntimeBuildInfo(GCGraph *graph) {
         if (node->kind != GCNodeKind::Brch) {
             continue;
         }
-        const auto ctrlOutputs = graph->ctrlOutputsOf(nodeRef);
-        auto &arms             = info.branchArms[nodeRef];
-        arms.reserve(ctrlOutputs.size());
-        for (size_t armIndex = 0; armIndex < ctrlOutputs.size(); ++armIndex) {
+        const size_t armCount = graph->branchArmsOf(nodeRef).size();
+        auto &arms            = info.branchArms[nodeRef];
+        arms.reserve(armCount);
+        for (size_t armIndex = 0; armIndex < armCount; ++armIndex) {
             auto arm = camel::execute::collectRuntimeBranchArmRegion(graph, nodeRef, armIndex);
             for (gc_node_ref_t bodyRef : arm.topoIndices) {
                 if (bodyRef < info.skipNodes.size()) {
@@ -761,7 +761,8 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                             armScopes.push_back(-1);
                             continue;
                         }
-                        const gc_node_ref_t tail = arms[arm].tail;
+                        const gc_node_ref_t tail =
+                            graph->execPlan().branchArmTailsOfNode(ref)[arm];
                         if (entry >= blocks || tail >= blocks || pos[entry] == kNo ||
                             pos[tail] == kNo) {
                             throw PlanMismatch{"a branch arm is not in the linear order"};
@@ -1434,7 +1435,9 @@ void TaskflowExecSchedPass::runLinearBody(
             }
             joinNode = body->join;
             tillNode = branchArmEntryForLinear(graph, nodeRef, jumpIdx, nodes);
-            skipNode = tillNode == joinNode ? kInvalidNodeRef : arms[jumpIdx].tail;
+            skipNode = tillNode == joinNode
+                           ? kInvalidNodeRef
+                           : graph->execPlan().branchArmTailsOfNode(nodeRef)[jumpIdx];
             continue;
         }
 

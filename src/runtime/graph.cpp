@@ -268,8 +268,18 @@ void validateRuntimeRegions(const GCGraph *graph) {
         if (region.kind == GCRegionKind::Dead) {
             continue;
         }
-        if (region.kind == GCRegionKind::Root || region.parent >= r) {
-            bad("with a parent that does not come before it", r);
+        if (region.kind == GCRegionKind::Root || region.parent >= count) {
+            bad("with a parent that is not a region", r);
+        }
+        // The parents lead to the body, without a cycle.
+        {
+            uint32_t up = r;
+            for (uint32_t hops = 0; up != 0; ++hops) {
+                if (hops > count) {
+                    bad("that is in a cycle of regions", r);
+                }
+                up = graph->region(up)->parent;
+            }
         }
         if (!inGraph(region.owner) || !inGraph(region.result) || !inGraph(region.callSite)) {
             bad("that names a node the graph does not have", r);

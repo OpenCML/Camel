@@ -436,7 +436,9 @@ slot_t NodeVMSchedPass::call(
                 }
                 joinNode = body->join;
                 tillNode = currPlan->branchArmEntriesOf(i)[jumpIdx];
-                skipNode = tillNode == joinNode ? kInvalidNodeRef : arms[jumpIdx].tail;
+                skipNode = tillNode == joinNode
+                               ? kInvalidNodeRef
+                               : currPlan->branchArmTailsOf(i)[jumpIdx];
                 EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
                     "NodeVM",
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",

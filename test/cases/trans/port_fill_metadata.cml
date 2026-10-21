@@ -6,6 +6,7 @@ func assemble(items: int[]): int[] {
     let make = (): int[] => [offset, count]
     let pair = (offset, count)
     let record = { value: offset, size: count }
-    return if count > 0 then make() else [pair.0, record.size]
+    let other = (): int[] => [pair.0, record.size]
+    return if count > 0 then make() else other()
 }
 func main(): int[] { return assemble<3>([1, 2]) }

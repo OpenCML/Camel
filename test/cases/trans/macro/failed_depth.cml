@@ -1,9 +1,9 @@
 module failed_depth
 
-// Ahead-of-time evaluation is limited to 64 nested evaluator frames (a self-recursion of 32
-// levels). count(20) is folded to a constant. count(40) exceeds the limit, which is a failed
+// Ahead-of-time evaluation is limited to 64 nested evaluator frames (a self-recursion of 64
+// levels). count(20) is folded to a constant. count(100) exceeds the limit, which is a failed
 // evaluation: a compile-time error at the call (line 17) naming the limit. Without std::macro
-// the program runs and prints 20, 40, 7.
+// the program runs and prints 20, 100, 7.
 macro func count(n: int): int {
     return if n == 0 then 0 else 1 + count(n - 1)
 }
@@ -14,7 +14,7 @@ func run(n: int): int {
 
 func main(): int sync {
     println(count(20))
-    println(count(40))
+    println(count(100))
     println(run(7))
     return 0
 }

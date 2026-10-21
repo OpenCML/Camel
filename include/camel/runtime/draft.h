@@ -349,6 +349,9 @@ class GraphDraft {
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
     const std::vector<GraphId> &dependencies() const { return dependencies_; }
     const std::vector<GraphId> &subGraphs() const { return subGraphs_; }
+    /// Forgets the graphs in `graphs` that no node calls any more (the graphs that held code now
+    /// spliced into this one).
+    void dropUncalledGraphs(std::span<const GraphId> graphs);
     const std::vector<GraphId> &staticGraphRefs() const { return staticGraphRefs_; }
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
@@ -462,6 +465,8 @@ class GraphDraft {
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId);
+    /// Makes the anchors of arm `index` of the BRCH `brch` `arm`.
+    void setBranchArm(gc_node_ref_t brch, size_t index, GCBranchArm arm);
     void
     retargetBranchArmAnchors(gc_node_ref_t oldId, gc_node_ref_t newHeadId, gc_node_ref_t newTailId);
     /// Removes GATEs that wait on nothing (no control input): such a gate only forwards its value,
@@ -517,6 +522,21 @@ class GraphDraft {
     void setRegionOrigin(uint32_t id, uint32_t origin);
     void setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t callSite);
     void setRegionAttrs(uint32_t id, uint32_t attrs);
+    /// The control regions that node `id` owns end with it: what they held is in the region
+    /// around them, and the regions inside them are inside that one. (Done by eraseNode.)
+    void dissolveRegionsOf(gc_node_ref_t id);
+    /// Ends the region `id` (unless `keepRegion`) and the regions inside it; nodes that are still
+    /// in them go to the region around.
+    void retireRegion(uint32_t id, bool keepRegion = false);
+    /// Gives each arm that is the call of a graph (the form the front end builds) its region, the
+    /// call alone in it.
+    void regionizeArmCalls();
+    /// The region of arm `index` of the BRCH `brch`; 0 when there is none.
+    uint32_t armRegionOf(gc_node_ref_t brch, size_t index) const;
+    /// Drops every region: all nodes are in the body.
+    void clearRegions();
+    /// Makes the Inline region `id` the Arm region of arm `index` of the BRCH `owner`.
+    void setRegionArm(uint32_t id, gc_node_ref_t owner, uint32_t index);
     /// True when `inner` is `outer` or lies in it.
     bool regionWithin(uint32_t inner, uint32_t outer) const;
     /// Source origin of node `id` (see DraftNodeHeader::origin).
@@ -578,6 +598,10 @@ class GraphDraft {
     void replaceNodeStorage(gc_node_ref_t id, DraftNode *node);
     void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
+    /// A node that reads a node of a control region (an arm, a loop part) is in that region, or in
+    /// one inside it: it cannot run before what it reads. A JOIN reads the results of its arms and
+    /// stays where the branch is.
+    void inheritRegion(gc_node_ref_t input, gc_node_ref_t user);
     std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeKind kind) const;
     std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeKind kind);
     std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeKind kind);

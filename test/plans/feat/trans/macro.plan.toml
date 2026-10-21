@@ -260,7 +260,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "failed_depth.without_macro"
-desc = "The program that std::macro rejects for the evaluation depth runs without the pass and prints 20, 40, 7."
+desc = "The program that std::macro rejects for the evaluation depth runs without the pass and prints 20, 100, 7."
 kind = "behavior"
 case = "../../../cases/trans/macro/failed_depth.cml"
 args = ["${case}", "std::nvm"]
@@ -268,7 +268,7 @@ expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
 ({ input, assert }) => {
-assert(input.normalized.stdout.trim() === '20\n40\n7', `unexpected stdout: ${input.normalized.stdout}`)
+assert(input.normalized.stdout.trim() === '20\n100\n7', `unexpected stdout: ${input.normalized.stdout}`)
 assert(input.normalized.stderr === '', `stderr: ${input.normalized.stderr}`)
 }
 """

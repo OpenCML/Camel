@@ -138,7 +138,32 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     const size_t slots = draft.nodeSlotCount();
     std::vector<bool> protectedNode(slots, false);
     std::vector<bool> anchorNode(slots, false);
-    size_t edges = 0;
+    size_t edges   = 0;
+    size_t removed = 0;
+    // Nothing runs a port or a constant: waiting for one orders nothing. (The front end orders
+    // the code of a branch arm after the values the arm reads, whatever they are.) A GATE
+    // keeps its control input, which it needs.
+    for (gc_node_ref_t id = 0; id < slots; ++id) {
+        const auto *h = draft.header(id);
+        if (!h || draft.ctrlInputsOf(id).empty()) {
+            continue;
+        }
+        std::vector<gc_node_ref_t> keep;
+        for (gc_node_ref_t pred : draft.ctrlInputsOf(id)) {
+            const auto *source = draft.header(pred);
+            if (source && (source->kind == GCNodeKind::Port || source->kind == GCNodeKind::Data)) {
+                continue;
+            }
+            keep.push_back(pred);
+        }
+        if (keep.empty() && h->kind == GCNodeKind::Gate) {
+            continue;
+        }
+        if (keep.size() < draft.ctrlInputsOf(id).size()) {
+            removed += draft.ctrlInputsOf(id).size() - keep.size();
+            draft.setCtrlInputs(id, keep);
+        }
+    }
     for (gc_node_ref_t id = 0; id < slots; ++id) {
         const auto *h = draft.header(id);
         if (!h) {
@@ -167,7 +192,6 @@ size_t reduceControlDependencies(GraphDraft &draft, size_t maxWork) {
     // cannot prove itself. JOIN arm values are alternatives, never mandatory predecessors:
     // a walk may reach a completed JOIN/LOOP as its endpoint but cannot walk through it.
     std::vector<size_t> candidate(slots, 0), seen(slots, 0), redundant(slots, 0);
-    size_t removed = 0;
     for (gc_node_ref_t target = 0; target < slots && maxWork; ++target) {
         if (protectedNode[target] || draft.ctrlInputsOf(target).empty()) {
             continue;

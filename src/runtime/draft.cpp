@@ -883,6 +883,7 @@ void GraphDraft::appendUserRef(
     if (node(id) == nullptr) {
         return;
     }
+    inheritRegion(id, userId);
     const auto appendUnique = [&](DraftEdgeKind kind) {
         auto &items = userListOf(id, kind);
         DraftUserLists &lists = *users_[id];
@@ -1046,6 +1047,9 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
+    if (draftNode->header.kind == GCNodeKind::Brch || draftNode->header.kind == GCNodeKind::Loop) {
+        dissolveRegionsOf(id);
+    }
 
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
@@ -1261,6 +1265,40 @@ void GraphDraft::replaceAllValueUses(gc_node_ref_t oldId, gc_node_ref_t newId) {
     ++mutations_;
     replaceAllNormUses(oldId, newId);
     replaceAllWithUses(oldId, newId);
+}
+
+void GraphDraft::dropUncalledGraphs(std::span<const GraphId> graphs) {
+    ++mutations_;
+    std::vector<GraphId> called;
+    for (gc_node_ref_t id = 0; id < nodesById_.size(); ++id) {
+        const DraftNodeHeader *h = header(id);
+        if (h && h->kind == GCNodeKind::Func) {
+            called.push_back(calleeIdOf(id));
+        } else if (h && h->kind == GCNodeKind::Loop) {
+            const GCLoopBody loop = loopGraphsOf(id);
+            called.push_back(loop.condGraph);
+            called.push_back(loop.bodyGraph);
+        }
+    }
+    const auto gone = [&](GraphId graph) {
+        return std::ranges::find(graphs, graph) != graphs.end() &&
+               std::ranges::find(called, graph) == called.end();
+    };
+    std::erase_if(dependencies_, gone);
+    std::erase_if(subGraphs_, gone);
+    touchRefs();
+}
+
+void GraphDraft::setBranchArm(gc_node_ref_t brch, size_t index, GCBranchArm arm) {
+    ++mutations_;
+    DraftNode *draftNode = node(brch);
+    ASSERT(
+        draftNode != nullptr && draftNode->header.kind == GCNodeKind::Brch,
+        "Not a BRCH node.");
+    auto *payload = DraftNodeView::payloadAs<DraftBrchPayload>(draftNode);
+    ASSERT(index < payload->armCount, "No such arm.");
+    reinterpret_cast<GCBranchArm *>(
+        DraftNodeView::payload(draftNode).data() + sizeof(DraftBrchPayload))[index] = arm;
 }
 
 void GraphDraft::retargetBranchArmAnchors(
