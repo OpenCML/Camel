@@ -294,6 +294,112 @@ normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
+name = "entry_args.i32_boundaries_fit"
+desc = "An `i32` parameter is read as an int32 and an `f32` as a float all the way (H15g): the boundary values of each fit and are converted once, at the declared width. 2147483647 is the largest i32 and 3.4028235e38 the largest f32 (printed as its shortest round-trip text)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=2147483647", "--arg", "rate=3.4028235e38"]
+expect_exit = 0
+expect_stdout_contains = ["2147483647 3.4028235e+38"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.i32_min_and_f32_subnormal_fit"
+desc = "The smallest i32 and the smallest positive f32 (a subnormal, 1.4e-45) fit: the width rule refuses a value the type cannot hold, not every value near its end."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=-2147483648", "--arg", "rate=1.4e-45"]
+expect_exit = 0
+expect_stdout_contains = ["-2147483648 1e-45"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.i32_overflow_refused"
+desc = "3000000000 is a number an `i32` cannot hold: it is refused as out of range, naming the declared type `i32` and its range, not read as an int64 and narrowed (H15g)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=3000000000", "--arg", "rate=0.5"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 8
+expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert '3000000000' to i32: the value is outside the range of i32 (-2147483648 to 2147483647)"]
+expect_output_not_contains = ["2147483647 0.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.i32_underflow_refused"
+desc = "-2147483649 is one below the smallest i32: refused as out of range, naming `i32` and its range."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=-2147483649", "--arg", "rate=0.5"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 8
+expect_output_contains = ["Cannot convert '-2147483649' to i32: the value is outside the range of i32 (-2147483648 to 2147483647)"]
+expect_output_not_contains = ["2147483647 0.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.i32_not_a_number_names_i32"
+desc = "Text that is not an integer names the declared type too: the cause is InvalidNumberText and the message says `i32`."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=three", "--arg", "rate=0.5"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 8
+expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert the string 'three' to i32"]
+expect_output_not_contains = ["2147483647 0.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.f32_overflow_refused"
+desc = "3.5e38 is a number an `f32` cannot hold: refused as out of range, naming `f32` and its range, rather than read as a double and narrowed to an infinity."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=3.5e38"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 8
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '3.5e38' to f32: the value is outside the range of f32 (at most about 3.4e38 in magnitude)"]
+expect_output_not_contains = ["3 inf"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.f32_underflow_refused"
+desc = "1e-50 is a number an `f32` cannot hold (it would round to zero): refused as out of range, naming `f32` and its range, rather than read as a double and narrowed to zero."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-50"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 8
+expect_output_contains = ["Cannot convert '1e-50' to f32: the value is outside the range of f32 (at most about 3.4e38 in magnitude)"]
+expect_output_not_contains = ["3 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.f32_once_at_width"
+desc = "A value that fits is converted once, at the declared width (H15g): 1.00000005960464479 sits just above the float midpoint 1 + 2^-24, out of the f32 range's even value but so close that a double rounds it to the midpoint and a second narrowing would give 1.0. Read once as a float it is the next float, 1.0000001."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "--arg", "n=1", "--arg", "rate=1.00000005960464479"]
+expect_exit = 0
+expect_stdout_contains = ["1 1.0000001"]
+expect_output_not_contains = ["1 1.0 "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "entry_args.float_leading_plus"
 desc = "A leading `+` is the number's sign in the language (reference 2.5.1) and is accepted: `+0.5` is `0.5`."
 kind = "behavior"
@@ -504,6 +610,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "entry_args.cpp_width_open"
+desc = "An `i32` / `f32` parameter left open is read by the generated program at its declared width (H15g): rt::EntryKind::Int32 / Float32, with the refusals rendered for `i32` / `f32` and their ranges. That the program's output and reports agree with camel's byte for byte is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/widths.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["{{\"n\", rt::EntryKind::Int32}, {\"rate\", rt::EntryKind::Float32}}", "args.integer32(0), args.number32(1)", "Cannot convert the string '\\0370' to i32.", "Cannot convert '\\0370' to i32: the value is outside the range of i32 (-2147483648 to 2147483647).", "Cannot convert '\\0370' to f32: the value is outside the range of f32 (at most about 3.4e38 in magnitude)."]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "entry_args.complex_text"
 desc = "A c128 and a c64 parameter are read from the language's complex text: `1+2i` has both parts, `0.5-0.25i` a negative imaginary part; each part is printed by the width the parameter declares (c128 as double, c64 as f32)."
 kind = "behavior"
@@ -709,6 +827,46 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 11
 expect_output_contains = ["Cannot bind the argument 'w' of 'main': Cannot convert '1+1e-9999i' to c64: the imaginary part is outside the range of c64 (each part at most about 3.4e38 in magnitude)"]
+expect_output_not_contains = ["1+2i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_c64_part_boundary_fit"
+desc = "Each part of a c64 is a float (H15g): the largest f32 is a part it holds, converted once at that width, and the value prints as the f32 it was read as."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=3.4028235e38+1i"]
+expect_exit = 0
+expect_stdout_contains = ["1+2i 3.4028235e+38+1i", "3.4028235e+38 1.0"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_c64_real_part_out_of_range"
+desc = "3.5e38 is a number a c64's real part cannot hold: refused as out of range, naming the part and `c64` with its range, rather than read at c128 width and narrowed."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=3.5e38+1i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'w' of 'main': Cannot convert '3.5e38+1i' to c64: the real part is outside the range of c64 (each part at most about 3.4e38 in magnitude)"]
+expect_output_not_contains = ["1+2i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_c64_imaginary_part_out_of_range"
+desc = "The same for the imaginary part of a c64: 3.5e38 does not fit a float, and the message names the imaginary part."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=1+3.5e38i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot convert '1+3.5e38i' to c64: the imaginary part is outside the range of c64 (each part at most about 3.4e38 in magnitude)"]
 expect_output_not_contains = ["1+2i"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
