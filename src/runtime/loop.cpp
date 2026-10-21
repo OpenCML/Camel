@@ -30,6 +30,7 @@
 #include "camel/runtime/draft.h"
 #include "camel/utils/assert.h"
 
+#include <algorithm>
 #include <format>
 #include <stdexcept>
 #include <unordered_map>
@@ -85,21 +86,25 @@ fillComponent(const GCGraph *graph, gc_node_ref_t result, size_t slot) {
 
 LoopDraftView::LoopDraftView(const Program &program, const GraphDraft &draft, gc_node_ref_t node)
     : draft_(&draft), node_(node) {
-    const DraftNodeHeader *header = draft.header(node);
+    (void)program;
+    [[maybe_unused]] const DraftNodeHeader *header = draft.header(node);
     ASSERT(
         header != nullptr && header->kind == GCNodeKind::Loop,
         "LoopDraftView of a node that is not a LOOP node.");
     const GCLoopBody body = draft.loopGraphsOf(node);
-    kind_             = body.kind;
-    cond_             = program.graph(body.condGraph);
-    body_             = program.graph(body.bodyGraph);
-    stateCount_       = draft.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
-    collectionCount_  = body.collectionCount;
+    kind_                 = body.kind;
+    condRegion_           = draft.loopRegionOf(node, GCRegionKind::LoopCond);
+    bodyRegion_           = draft.loopRegionOf(node, GCRegionKind::LoopBody);
+    ASSERT(bodyRegion_ != 0, "A LOOP node has no body region.");
+    stateCount_      = draft.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
+    collectionCount_ = body.collectionCount;
 }
 
 Type *LoopDraftView::valueType() const { return draft_->header(node_)->dataType; }
 
-Type *LoopDraftView::stateType(size_t j) const { return body_->node(bodyStateParam(j))->dataType(); }
+Type *LoopDraftView::stateType(size_t j) const {
+    return draft_->header(bodyStateParam(j))->dataType;
+}
 
 Type *LoopDraftView::collectionArrayType(size_t c) const {
     ASSERT(c < collectionCount_, "LoopDraftView: the loop has no such collection slot.");
@@ -130,61 +135,96 @@ gc_node_ref_t LoopDraftView::initialState(size_t j) const {
     return draft_->normInputsOf(node_)[j + (loopHasIterable(kind_) ? 1 : 0)];
 }
 
-std::span<const gc_node_ref_t> LoopDraftView::captures() const {
-    return draft_->withInputsOf(node_);
+std::vector<gc_node_ref_t> LoopDraftView::regionNodes() const {
+    const auto inParts = [&](uint32_t region) {
+        for (int guard = 0; region != 0 && guard < 4096; ++guard) {
+            if ((condRegion_ != 0 && region == condRegion_) || region == bodyRegion_) {
+                return true;
+            }
+            region = draft_->region(region).parent;
+        }
+        return false;
+    };
+    std::vector<gc_node_ref_t> nodes;
+    for (gc_node_ref_t ref = 0; ref < draft_->nodeSlotCount(); ++ref) {
+        if (draft_->alive(ref) && inParts(draft_->nodeRegion(ref))) {
+            nodes.push_back(ref);
+        }
+    }
+    nodes.push_back(draft_->withInputsOf(node_).back()); // the round slot
+    std::sort(nodes.begin(), nodes.end());
+    nodes.erase(std::unique(nodes.begin(), nodes.end()), nodes.end());
+    return nodes;
+}
+
+std::vector<gc_node_ref_t> LoopDraftView::externalInputs(bool constants) const {
+    const std::vector<gc_node_ref_t> nodes = regionNodes();
+    std::unordered_set<gc_node_ref_t> inside(nodes.begin(), nodes.end());
+    std::unordered_set<gc_node_ref_t> seen;
+    std::vector<gc_node_ref_t> externals;
+    for (gc_node_ref_t ref : nodes) {
+        for (auto inputs : {draft_->normInputsOf(ref), draft_->withInputsOf(ref)}) {
+            for (gc_node_ref_t input : inputs) {
+                if ((constants || draft_->header(input)->kind != GCNodeKind::Data) &&
+                    !inside.contains(input) && seen.insert(input).second) {
+                    externals.push_back(input);
+                }
+            }
+        }
+    }
+    return externals;
 }
 
 gc_node_ref_t LoopDraftView::condStateParam(size_t j) const {
-    ASSERT(cond_ != nullptr && j < stateCount_, "LoopDraftView: no such condition parameter.");
-    return cond_->normPorts()[j];
+    ASSERT(condRegion_ != 0 && j < stateCount_, "LoopDraftView: no such condition parameter.");
+    return draft_->regionPortsOf(condRegion_)[j];
 }
 
 std::optional<gc_node_ref_t> LoopDraftView::bodyElementParam() const {
     if (!loopHasIterable(kind_)) {
         return std::nullopt;
     }
-    return body_->normPorts().front();
+    return draft_->regionPortsOf(bodyRegion_).front();
 }
 
 gc_node_ref_t LoopDraftView::bodyStateParam(size_t j) const {
     ASSERT(j < stateCount_, "LoopDraftView: no such body parameter.");
-    return body_->normPorts()[j + (loopHasIterable(kind_) ? 1 : 0)];
+    const size_t at = j + (loopHasIterable(kind_) ? 1 : 0);
+    return draft_->regionPortsOf(bodyRegion_)[at];
 }
 
-gc_node_ref_t LoopDraftView::condCapturePort(size_t c) const {
-    ASSERT(cond_ != nullptr, "LoopDraftView: a For loop has no condition graph.");
-    return capturePortsOf(cond_)[c];
+gc_node_ref_t LoopDraftView::bodyResult() const { return draft_->region(bodyRegion_).result; }
+
+gc_node_ref_t LoopDraftView::nextState() const {
+    gc_node_ref_t at = bodyResult();
+    for (int guard = 0; guard < 64; ++guard) {
+        const auto *header = draft_->header(at);
+        if (header == nullptr || header->kind != GCNodeKind::Gate ||
+            draft_->normInputsOf(at).empty()) {
+            break;
+        }
+        at = draft_->normInputsOf(at).front();
+    }
+    return at;
 }
 
-gc_node_ref_t LoopDraftView::bodyCapturePort(size_t c) const {
-    return capturePortsOf(body_)[c];
-}
-
-gc_node_ref_t LoopDraftView::nextState() const { return body_->returnNodeRef(); }
-
-Type *LoopDraftView::bodyResultType() const { return body_->funcType()->exitType(); }
+Type *LoopDraftView::bodyResultType() const { return draft_->header(nextState())->dataType; }
 
 LoopView::LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t node)
     : program_(&program), graph_(&graph), node_(node) {
-    const GCNode *record = graph.node(node);
+    [[maybe_unused]] const GCNode *record = graph.node(node);
     ASSERT(
         record != nullptr && record->kind == GCNodeKind::Loop,
         "LoopView of a node that is not a LOOP node.");
-    kind_            = graph.loopKindOf(node);
-    cond_            = program.loopCondOf(graph, node);
-    body_            = program.loopBodyOf(graph, node);
-    if (body_ == nullptr) {
-        condRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopCond);
-        bodyRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopBody);
-        ASSERT(bodyRegion_ != 0, "A LOOP node has neither a body graph nor a body region.");
-    }
+    kind_       = graph.loopKindOf(node);
+    condRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopCond);
+    bodyRegion_ = graph.loopRegionOf(node, GCRegionKind::LoopBody);
+    ASSERT(bodyRegion_ != 0, "A LOOP node has no body region.");
     stateCount_      = graph.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
     collectionCount_ = graph.loopCollectionCountOf(node);
 }
 
-Type *LoopView::stateType(size_t j) const {
-    return (body_ != nullptr ? body_ : graph_)->node(bodyStateParam(j))->dataType();
-}
+Type *LoopView::stateType(size_t j) const { return graph_->node(bodyStateParam(j))->dataType(); }
 
 Type *LoopView::collectionArrayType(size_t c) const {
     ASSERT(c < collectionCount_, "LoopView: the loop has no such collection slot.");
@@ -216,33 +256,25 @@ gc_node_ref_t LoopView::initialState(size_t j) const {
 }
 
 gc_node_ref_t LoopView::condStateParam(size_t j) const {
-    ASSERT(j < stateCount_, "LoopView: no such condition parameter.");
-    if (inRegions()) {
-        ASSERT(condRegion_ != 0, "LoopView: a For loop has no condition.");
-        return graph_->regionPorts(condRegion_)[j];
-    }
-    ASSERT(cond_ != nullptr, "LoopView: a For loop has no condition graph.");
-    return cond_->normPorts()[j];
+    ASSERT(condRegion_ != 0 && j < stateCount_, "LoopView: no such condition parameter.");
+    return graph_->regionPorts(condRegion_)[j];
 }
 
 std::optional<gc_node_ref_t> LoopView::bodyElementParam() const {
     if (!loopHasIterable(kind_)) {
         return std::nullopt;
     }
-    return inRegions() ? graph_->regionPorts(bodyRegion_).front() : body_->normPorts().front();
+    return graph_->regionPorts(bodyRegion_).front();
 }
 
 gc_node_ref_t LoopView::bodyStateParam(size_t j) const {
     ASSERT(j < stateCount_, "LoopView: no such body parameter.");
     const size_t at = j + (loopHasIterable(kind_) ? 1 : 0);
-    return inRegions() ? graph_->regionPorts(bodyRegion_)[at] : body_->normPorts()[at];
+    return graph_->regionPorts(bodyRegion_)[at];
 }
 
 std::vector<gc_node_ref_t> LoopView::regionNodes() const {
     std::vector<gc_node_ref_t> nodes;
-    if (!inRegions()) {
-        return nodes;
-    }
     const auto inParts = [&](uint32_t region) {
         for (int guard = 0; region != 0 && guard < 4096; ++guard) {
             if ((region == condRegion_ && condRegion_ != 0) || region == bodyRegion_) {
@@ -267,9 +299,6 @@ std::vector<gc_node_ref_t> LoopView::regionNodes() const {
 
 std::vector<gc_node_ref_t> LoopView::externalInputs(bool constants) const {
     std::vector<gc_node_ref_t> externals;
-    if (!inRegions()) {
-        return externals;
-    }
     const std::vector<gc_node_ref_t> nodes = regionNodes();
     std::unordered_set<gc_node_ref_t> inside(nodes.begin(), nodes.end());
     std::unordered_set<gc_node_ref_t> seen;
@@ -288,31 +317,13 @@ std::vector<gc_node_ref_t> LoopView::externalInputs(bool constants) const {
     return externals;
 }
 
-gc_node_ref_t LoopView::condCapturePort(size_t c) const {
-    ASSERT(cond_ != nullptr, "LoopView: only a loop in graph form has a condition graph.");
-    return capturePortsOf(cond_)[c];
-}
-
-gc_node_ref_t LoopView::bodyCapturePort(size_t c) const {
-    ASSERT(body_ != nullptr, "LoopView: only a loop in graph form has a body graph.");
-    return capturePortsOf(body_)[c];
-}
-
-gc_node_ref_t LoopView::bodyResult() const {
-    return inRegions() ? graph_->withInputsOf(node_)[0] : body_->exitNodeRef();
-}
+gc_node_ref_t LoopView::bodyResult() const { return graph_->withInputsOf(node_)[0]; }
 
 gc_node_ref_t LoopView::condResult() const {
-    if (inRegions()) {
-        return condRegion_ != 0 ? graph_->withInputsOf(node_)[1] : kInvalidNodeRef;
-    }
-    return cond_ != nullptr ? cond_->exitNodeRef() : kInvalidNodeRef;
+    return condRegion_ != 0 ? graph_->withInputsOf(node_)[1] : kInvalidNodeRef;
 }
 
 gc_node_ref_t LoopView::nextState() const {
-    if (!inRegions()) {
-        return body_->returnNodeRef();
-    }
     // The value behind the GATEs that order it after the statements of the body.
     gc_node_ref_t at = bodyResult();
     for (int guard = 0; guard < 64; ++guard) {
@@ -325,32 +336,28 @@ gc_node_ref_t LoopView::nextState() const {
     return at;
 }
 
-Type *LoopView::bodyResultType() const {
-    return inRegions() ? graph_->node(nextState())->dataType() : body_->funcType()->exitType();
-}
+Type *LoopView::bodyResultType() const { return graph_->node(nextState())->dataType(); }
 
 EffectSummary LoopView::condEffects() const {
-    return inRegions() ? effectSummaryOfRegion(*program_, graph_, condRegion_)
-                       : effectSummaryOf(*program_, cond_);
+    return effectSummaryOfRegion(*program_, graph_, condRegion_);
 }
 
 EffectSummary LoopView::bodyEffects() const {
-    return inRegions() ? effectSummaryOfRegion(*program_, graph_, bodyRegion_)
-                       : effectSummaryOf(*program_, body_);
+    return effectSummaryOfRegion(*program_, graph_, bodyRegion_);
 }
 
 std::optional<gc_node_ref_t> LoopView::nextStateComponent(size_t j) const {
     if (!nextStateIsTuple()) {
         return std::nullopt;
     }
-    return fillComponent(inRegions() ? graph_ : body_, nextState(), j);
+    return fillComponent(graph_, nextState(), j);
 }
 
 std::optional<gc_node_ref_t> LoopView::nextCollectionComponent(size_t c) const {
     if (collectionCount_ == 0 || c >= collectionCount_) {
         return std::nullopt;
     }
-    return fillComponent(inRegions() ? graph_ : body_, nextState(), collectionValueIndex(c));
+    return fillComponent(graph_, nextState(), collectionValueIndex(c));
 }
 
 EffectSummary LoopView::effects() const {

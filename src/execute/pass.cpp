@@ -47,7 +47,6 @@
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/exec_plan.h"
-#include "camel/passes/test/outline_loops.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/arm_loop_regions.h"
 #include "camel/passes/trans/json/gir.h"
@@ -1066,7 +1065,6 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
         TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
-        TEST_PASS(kOutlineLoopsTestPass, OutlineLoopsTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),

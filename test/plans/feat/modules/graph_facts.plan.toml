@@ -98,7 +98,7 @@ assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'l
 
 [[tests]]
 name = "rewrite_inline"
-desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the shapes of the nodes it left where they were: a shape is about a node's own version (Dependency::Node), so it holds although the graph's revision changed (the shapes of the nodes the rewrite did touch read stale); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation. A private loop lowering (as std::fvm does) makes the graphs that held a loop, and those referring to them, new; the others keep their facts."
+desc = "Facts computed before std::opt::inline: the graphs it changed (main, which gets the callees' bodies, the root and twice, which refer to them) read stale, apart from the shapes of the nodes it left where they were: a shape is about a node's own version (Dependency::Node), so it holds although the graph's revision changed (the shapes of the nodes the rewrite did touch read stale); the graphs it did not change keep every fact. Everything stale is computed again and every stored fact then equals a fresh computation."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::opt::inline", "test::facts_check"]
@@ -115,8 +115,7 @@ for (const l of [
   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=7 revalidated=0 stale=0',
   'FACTS graph main valid=2 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   'FACTS gone 0',
-'FACTS outlined count valid=0 revalidated=0 stale=2', 'FACTS outlined twice valid=1 revalidated=0 stale=6',
-  'FACTS outlined layer valid=6 revalidated=0 stale=0',
+
   '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')

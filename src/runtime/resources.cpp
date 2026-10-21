@@ -441,29 +441,11 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) {
     });
 }
 
-NodeResources Resolver::loop(const GCGraph &graph, gc_node_ref_t ref) {
-    const LoopView view(program_, graph, ref);
-    const auto captures = view.captures();
+NodeResources Resolver::loop(const GCGraph &, gc_node_ref_t) {
+    // The condition and the body are regions of the same graph: the walk visits their nodes like
+    // any other, so the loop node itself only says that its result is anything.
     NodeResources r;
     r.result = ResultAlias{.kind = ResultAlias::Kind::Unknown};
-    for (const GCGraph *part : {static_cast<const GCGraph *>(view.condGraph()),
-                                static_cast<const GCGraph *>(view.bodyGraph())}) {
-        if (part == nullptr) {
-            continue;
-        }
-        // The capture ports of a loop graph are its with ports once it is called, its closure
-        // ports otherwise (as LoopView reads them); its norm ports are the element and the state,
-        // which change from round to round: not an input of the node.
-        const bool capturesAreWith = !part->withPorts().empty();
-        NodeResources partR = fromFootprint(footprint_(part), [&](const sem::ResourceBinding &b) {
-            const bool capture = capturesAreWith ? b.kind == sem::ResourceBinding::Kind::With
-                                                 : b.kind == sem::ResourceBinding::Kind::Capture;
-            return capture && b.index < captures.size() ? captures[b.index] : kInvalidNodeRef;
-        });
-        r.accesses.insert(r.accesses.end(), partR.accesses.begin(), partR.accesses.end());
-        r.external |= partR.external;
-        r.declared &= partR.declared;
-    }
     return r;
 }
 

@@ -54,7 +54,7 @@ uint8_t OperatorTable::encode(OperatorTraits traits) {
     return static_cast<uint8_t>(
         kDeclared | (traits.pure ? kPure : 0) | (traits.elementwise ? kElementwise : 0) |
         (traits.stateOnly ? kStateOnly : 0) | (traits.mayFault ? 0 : kNoFault) |
-        (traits.callsGraphs ? kCallsGraphs : 0) | (traits.inspectsGraphs ? kInspectsGraphs : 0));
+        (traits.callsGraphs ? kCallsGraphs : 0) | (traits.readsGraphs ? kReadsGraphs : 0));
 }
 
 OperatorTraits OperatorTable::decode(uint8_t bits) {
@@ -64,7 +64,7 @@ OperatorTraits OperatorTable::decode(uint8_t bits) {
         .stateOnly      = (bits & kStateOnly) != 0,
         .mayFault       = (bits & kNoFault) == 0,
         .callsGraphs    = (bits & kCallsGraphs) != 0,
-        .inspectsGraphs = (bits & kInspectsGraphs) != 0,
+        .readsGraphs    = (bits & kReadsGraphs) != 0,
     };
 }
 
@@ -198,7 +198,7 @@ bool OperatorTable::writesOperand(OperId id, bool isWith, size_t index) const {
     // Not pure and undeclared: it may write every operand, except that the operands of one that
     // runs or reads the graphs of function values (a higher-order operator, a macro operator, an
     // exporter) are those functions, which are no resource; what a callee does is the callee's.
-    return !traits->pure && !traits->callsGraphs && !traits->inspectsGraphs;
+    return !traits->pure && !traits->callsGraphs && !traits->readsGraphs;
 }
 
 bool OperatorTable::touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly) const {

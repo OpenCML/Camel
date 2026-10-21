@@ -137,7 +137,7 @@ uint64_t ownContentHash(const Program &program, const GCGraph &graph) {
                     ? 0xFF
                     : (uint64_t(traits->pure) | uint64_t(traits->elementwise) << 1 |
                        uint64_t(traits->stateOnly) << 2 | uint64_t(traits->mayFault) << 3 |
-                       uint64_t(traits->callsGraphs) << 4 | uint64_t(traits->inspectsGraphs) << 5));
+                       uint64_t(traits->callsGraphs) << 4 | uint64_t(traits->readsGraphs) << 5));
             break;
         }
         case GCNodeKind::Func:

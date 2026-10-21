@@ -191,8 +191,7 @@ of where the loop is (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1)
 ```
 
 **区域由谁维护。** 前端在写臂的地方直接建出臂：臂的每个节点落在这条臂的区域里（`GraphDraft::setInsertRegion`），
-臂里读外面的节点、等待 `BRCH` 的根节点由建图补上控制边；`JOIN` 的 with 输入就是臂的结果。自动微分把臂提成
-子图再放回时用 `raiseBranchArms` / `lowerBranchArms`（`callSite` 标出还是一次调用的臂）。改写遍
+臂里读外面的节点、等待 `BRCH` 的根节点由建图补上控制边；`JOIN` 的 with 输入就是臂的结果。自动微分在原地改写臂区域（`GraphDraft::armRegionOf`），不再把臂提成子图。改写遍
 维护区域：新加或改接输入的节点落在其输入中最内层的控制区域里（`GraphDraft::inheritRegion`，`JOIN` 除外）；
 `rewriteNode` 保留区域；擦除 `BRCH`/`LOOP` 时它拥有的区域并入外层（`dissolveRegionsOf`）；一个遍替换节点时，
 新节点要放进被替换节点所在的区域（`DraftNodeInit::region`、`setNodeRegion`）。
