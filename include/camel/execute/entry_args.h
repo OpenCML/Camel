@@ -34,6 +34,11 @@
  *
  * How the text of a value is read depends on the declared type of the parameter:
  *   int / float / bool / string   the literal itself (`3`, `0.5`, `true`, any text);
+ *   c64 / c128                    a complex number as the language writes one: the real part,
+ *                                 the sign of the imaginary part and the imaginary part
+ *                                 (`1+2i`, `0.5-0.25i`), or only the imaginary part with its
+ *                                 sign (`-2i`); each part is read as a float is. A real text is
+ *                                 not a complex number;
  *   a struct or tuple             a directory: every leaf is read from
  *                                 `<dir>/<field.path>` (fields and tuple indices joined by
  *                                 dots, the layout nn.save_params writes);

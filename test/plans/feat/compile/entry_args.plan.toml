@@ -366,13 +366,117 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "entry_args.complex_text"
+desc = "A c128 and a c64 parameter are read from the language's complex text: `1+2i` has both parts, `0.5-0.25i` a negative imaginary part; each part is printed by the width the parameter declares (c128 as double, c64 as f32)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=0.5-0.25i"]
+expect_exit = 0
+expect_stdout_contains = ["1+2i 0.5-0.25i", "1.0 2.0", "0.5 -0.25", "1.5+1.75i"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_imaginary_only"
+desc = "A text with no real part is the imaginary part only, with its sign: `-2i` is `0-2i` and `4i` is `0+4i` (language reference 2.5.3)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=-2i", "--arg", "w=4i"]
+expect_exit = 0
+expect_stdout_contains = ["0-2i 0+4i", "0.0 -2.0", "0.0 4.0"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_negative_parts"
+desc = "A negative real part and a negative imaginary part: `-1.5-0.25i`; the sign of the imaginary part is the separator."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=-1.5-0.25i", "--arg", "w=-2i"]
+expect_exit = 0
+expect_stdout_contains = ["-1.5-0.25i 0-2i", "-1.5 -0.25", "-1.5-2.25i"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_refused"
+desc = "A real text for a complex parameter is refused: a complex number is not read from a real one (the value is not taken as the real part), and the error is EntryArgumentInvalid at the argument, located at main."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1.5", "--arg", "w=4i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_code = "0x04000011"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 1
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'1.5' is not a complex number (write 1+2i, -2i or 0.5-0.25i)"]
+expect_output_not_contains = ["4i", "0+4i", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_malformed"
+desc = "A malformed complex text is the same located error at the argument, naming it and showing the text; the program does not run. `1+2` has no imaginary part (`i`), so it is not a complex number."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2", "--arg", "w=4i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 9
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'1+2' is not a complex number"]
+expect_output_not_contains = ["0+4i", ":?:?:"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_malformed_suffix"
+desc = "The imaginary part must be the language's `i`: `1+2j` is refused like any other malformed complex text."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2j", "--arg", "w=4i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 9
+expect_output_contains = ["'1+2j' is not a complex number"]
+expect_output_not_contains = ["0+4i"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.cpp_complex_open"
+desc = "A c64 / c128 parameter left open is read by the generated program from its command line: std::cpp used to refuse a complex entry parameter (TranslationRefused) and now writes rt::EntryKind::ComplexFloat / ComplexDouble. That the two agree is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["{\"z\", rt::EntryKind::ComplexDouble}, {\"w\", rt::EntryKind::ComplexFloat}", "args.complexDouble(0), args.complexFloat(1)"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.cpp_complex_bound"
+desc = "A complex value bound with --arg when std::cpp translates is a constant of the program, a std::complex of the parameter's width."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=0.5-0.25i", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["std::complex<double>{1.0, 2.0}", "std::complex<float>{0.5f, -0.25f}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "entry_args.cpp_struct_refused"
 desc = "A parameter of a type the command line gives camel through files (a struct) is refused by std::cpp, located at main and naming the parameter."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/struct_scalars.cml"
 args = ["-E", "short", "${case}", "std::cpp"]
 expect_exit = 1
-expect_output_contains = ["RuntimeDiag::TranslationRefused", ".cml:5:1:", "the parameter 'p' of 'main' has type", "std::cpp reads from the command line only the parameters of type int, i32, float, f32, bool and string"]
+expect_output_contains = ["RuntimeDiag::TranslationRefused", ".cml:5:1:", "the parameter 'p' of 'main' has type", "std::cpp reads from the command line only the parameters of type int, i32, float, f32, c64, c128, bool and string"]
 expect_output_not_contains = ["internal error", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
