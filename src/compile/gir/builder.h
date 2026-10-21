@@ -69,10 +69,25 @@ using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
 /// the function is called, so that a function keeps its meaning wherever it is used.
 class Builder {
   public:
-    explicit Builder(const camel::core::context::context_ptr_t &context) : context_(context) {}
+    /// A builder for a program of its own: it owns the program's export table (ProgramExports).
+    explicit Builder(const camel::core::context::context_ptr_t &context)
+        : context_(context), exports_(&ownExports_) {}
+
+    /// A builder that declares its modules into `exports`: the program the table belongs to
+    /// (the context's own program, whose table other readers use too).
+    Builder(
+        const camel::core::context::context_ptr_t &context,
+        camel::core::module::ProgramExports &exports)
+        : context_(context), exports_(&exports) {}
 
     /// The builder of the program compiled on `context`, created on first use.
     static Builder &of(const camel::core::context::context_ptr_t &context);
+
+    /// The entities the modules of this program export. One table per program: declaring a
+    /// module again for another program (a pass compiled as a program of its own) writes that
+    /// program's table, not this one (task H42).
+    camel::core::module::ProgramExports &exports() { return *exports_; }
+    const camel::core::module::ProgramExports &exports() const { return *exports_; }
 
     // Loading is three steps (the graph model, 3.9.4): declare every module, build, link.
 
@@ -300,6 +315,11 @@ class Builder {
     camel::core::context::context_ptr_t context_;
     camel::core::module::module_ptr_t module_;
     camel::core::error::diagnostics_ptr_t diags_;
+    /// The program's export table (see the constructors): `exports_` points at `ownExports_`
+    /// for a builder of a program of its own, or at the context's table for the context's
+    /// program. Never at a module's table: that is the module's own (native) declarations.
+    camel::core::module::ProgramExports ownExports_;
+    camel::core::module::ProgramExports *exports_;
 
     bool waited_;
     bool synced_;
@@ -1263,9 +1283,25 @@ class Builder {
 
     /// Collects the overloads of the operator `group` visible here.
     OperatorOverloads operatorOverloadsOf(const std::string &group);
-    /// The overloads of `group` the current module imported (Module::importedOperatorOverloads),
-    /// the operator groups merged into one; computed once per module and operator (the module
-    /// changes while an instance of an imported generic function is built).
+    /// The entity a name the current module imports stands for in this program
+    /// (ProgramExports::importedEntity): the import bindings resolved against this program's
+    /// exported entities. The same module in two programs may see different graphs (task H42).
+    std::optional<camel::core::module::entity> importedEntity(
+        const Reference &ref,
+        camel::core::module::ImportLayer layer = camel::core::module::ImportLayer::All) {
+        return exports_->importedEntity(*module_, ref, layer);
+    }
+    /// The type an imported name stands for. A type declaration is the module's own and the
+    /// same in every program, so this does not consult the program's table.
+    std::optional<Type *> importedType(
+        const Reference &ref,
+        camel::core::module::ImportLayer layer = camel::core::module::ImportLayer::All) {
+        return module_->getImportedType(ref, layer);
+    }
+    /// The overloads of `group` the current module imported
+    /// (ProgramExports::importedOperatorOverloads), the operator groups merged into one;
+    /// computed once per module and operator (the module changes while an instance of an
+    /// imported generic function is built).
     const OperatorOverloads &importedOperatorOverloadsOf(const std::string &group);
     std::map<std::pair<const void *, std::string>, OperatorOverloads> importedOperators_;
     /// The DREF for a use of the operator `group` (visitDRefNode).

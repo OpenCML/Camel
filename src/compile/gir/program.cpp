@@ -202,7 +202,9 @@ Builder &Builder::of(const context_ptr_t &context) {
     ASSERT(context != nullptr, "The graph builder of a program needs its context.");
     auto &session = context->graphBuildSession();
     if (!session) {
-        session = std::make_shared<Builder>(context);
+        // The context's own program declares its modules into the context's export table: other
+        // readers of the program (the semantic analysis, definition lookups) see the same names.
+        session = std::make_shared<Builder>(context, context->programExports());
     }
     return *std::static_pointer_cast<Builder>(session);
 }
