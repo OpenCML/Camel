@@ -316,7 +316,10 @@ class ParserImpl {
     void parseFuncData();
     void parseIf();
     void parseMatch();
+    void parseMatchType();
     void parseMatchCase();
+    void parseTypeCase();
+    void parseTypeCasePattern();
     void parseEnumTuplePattern();
     void parseEnumStructPattern();
     void parsePattern();

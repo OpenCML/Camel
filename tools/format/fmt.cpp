@@ -994,6 +994,42 @@ any Formatter::visitMatchCase(cst::MatchCase context) {
 }
 
 /*
+matchTypeExpr
+    : MATCH TYPE typeExpr '{' typeCase* '}'
+    ;
+*/
+any Formatter::visitMatchTypeExpr(cst::MatchTypeExpr context) {
+    return "match type " + any_cast<string>(visitType(context->type())) + " {" +
+           formatList(
+               vec(context->all<cst::TypeCase>()),
+               context,
+               " ",
+               "",
+               PaddingNL | Multiline | PushScope) +
+           "}";
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+any Formatter::visitTypeCase(cst::TypeCase context) {
+    return "case " +
+           formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") + " => " +
+           any_cast<string>(visitBlockExpr(context->lastChild().node()));
+}
+
+/*
+typeCasePattern
+    : 'struct' | 'tuple' | '#' 'leaf' | '_'
+    ;
+*/
+any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) {
+    return context->text();
+}
+
+/*
 catchClause
     : CATCH identDef ':' typeExpr stmtBlock
     ;
@@ -1012,6 +1048,9 @@ ctrlExpr
     ;
 */
 any Formatter::visitCtrlExpr(syn::Node context) {
+    if (context.is(NK::MatchTypeExpr)) {
+        return visitMatchTypeExpr(cst::MatchTypeExpr(context));
+    }
     switch (context.is(NK::IfExpr) ? 1 : context.is(NK::MatchExpr) ? 2 : 3) {
     case 1: // IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     {
@@ -1645,6 +1684,9 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(AngledValues)
         CAMEL_FORMAT(Pattern)
         CAMEL_FORMAT(MatchCase)
+        CAMEL_FORMAT(MatchTypeExpr)
+        CAMEL_FORMAT(TypeCase)
+        CAMEL_FORMAT(TypeCasePattern)
         CAMEL_FORMAT(CatchClause)
         CAMEL_FORMAT(MemberAccess)
         CAMEL_FORMAT(TypeList)

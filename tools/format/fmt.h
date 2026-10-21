@@ -523,6 +523,12 @@ class Formatter {
 
     std::any visitMatchCase(cst::MatchCase context);
 
+    std::any visitMatchTypeExpr(cst::MatchTypeExpr context);
+
+    std::any visitTypeCase(cst::TypeCase context);
+
+    std::any visitTypeCasePattern(cst::TypeCasePattern context);
+
     std::any visitCatchClause(cst::CatchClause context);
 
     std::any visitCtrlExpr(syn::Node context);

@@ -31,6 +31,8 @@ enum class DataType {
     IfExpr,
     MatchExpr,
     MatchCase,
+    TypeMatch,
+    TypeCase,
     TryExpr,
     LoopExpr,
     Literal,
@@ -42,6 +44,12 @@ enum class DataType {
     ConstAs,
     EnumPattern
 };
+
+/// The shapes a `match type` case selects (design principles 5.5, R3):
+/// a structure, an ordinary tuple, every leaf (including `T?` / `T!` and cells), or anything.
+enum class TypeCaseKind : uint8_t { Struct = 0, Tuple = 1, Leaf = 2, Wildcard = 3 };
+
+std::string to_string(TypeCaseKind kind);
 
 enum class UnaryDataOp { Not, Neg, Inv };
 
@@ -191,6 +199,31 @@ class MatchExprLoad : public DataLoad {
 
     const std::string toString() const override { return "MatchExpr" + this->status(); }
     const std::string geneCode() const override;
+};
+
+/// `match type T { case ... => ... }`: children [0] the type, [1] Repeated TypeCase.
+/// The cases are all kept: the graph builder selects one when the type is known.
+class TypeMatchLoad : public DataLoad {
+  public:
+    TypeMatchLoad() : DataLoad(DataType::TypeMatch) {}
+
+    const std::string toString() const override { return "TypeMatch" + this->status(); }
+    const std::string geneCode() const override { return "match type"; }
+};
+
+/// One case of `match type`; the body is child [0]. The patterns are kept in the load
+/// because they are shapes, not expressions or types.
+class TypeCaseLoad : public DataLoad {
+  public:
+    explicit TypeCaseLoad(std::vector<TypeCaseKind> patterns)
+        : DataLoad(DataType::TypeCase), patterns_(std::move(patterns)) {}
+
+    const std::vector<TypeCaseKind> &patterns() const { return patterns_; }
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    std::vector<TypeCaseKind> patterns_;
 };
 
 class MatchCaseLoad : public DataLoad {

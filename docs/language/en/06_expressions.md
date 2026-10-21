@@ -371,7 +371,36 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 
 `try`/`catch`/`finally` is not part of Camel (it has no stable mapping onto the graph): writing it gives `SemanticDiag::TryCatchNotInLanguage`. An operation that may fail returns `T!`, handled with `!!`, `?->` and `case error e`.
 
-### 6.8.3 `loop`
+### 6.8.3 `match type`
+
+`match type` selects a branch by the **shape of a type**, for generic functions (design principles 5.5): `T` is concrete when the function is instantiated, the compiler builds only the selected branch, and the other branches are neither built nor type-checked (their names are still resolved).
+
+```
+match type type {
+    case struct => branch
+    case tuple  => branch
+    case #leaf  => branch
+    case _      => branch
+}
+```
+
+- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
+- `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape.
+- With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct does not compare concrete type names: `case int` or `case MyStruct` is not part of it, and every scalar goes through `#leaf`.
+- The selected branch becomes straight-line code at that position; the graph has no branch node. Its value is the value of the `match type`, and an empty branch has type `void`.
+- A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
+
+```cml
+func duplicate(t: typeas T) {
+    return match type T {
+        case struct => (t, t)
+        case tuple  => (t, t)
+        case #leaf  => (t, t)
+    }
+}
+```
+
+### 6.8.4 `loop`
 
 A loop is an expression with a state (design principles 3.10). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 

@@ -2318,6 +2318,94 @@ Value Builder::visitMatchCase(cst::MatchCase context) {
 }
 
 /*
+matchTypeExpr
+    : MATCH TYPE typeExpr '{' typeCase* '}'
+    ;
+*/
+Value Builder::visitMatchTypeExpr(cst::MatchTypeExpr context) {
+    ENTER("MatchTypeExpr");
+    node_ptr_t matchNode = createNodeAs<TypeMatchLoad>();
+    setNodeTokenRangeByContext(matchNode, context);
+    node_ptr_t typeNode = any2node(visitType(context->type()));
+    *matchNode << typeNode;
+    node_ptr_t casesNode = createNodeAs<RepeatedLoad>("TypeCase");
+    setNodeTokenRangeByContext(casesNode, context);
+    for (const auto typeCase : context->all<cst::TypeCase>()) {
+        *casesNode << any2node(visitTypeCase(typeCase));
+    }
+    *matchNode << casesNode;
+    registerAstSemanticBundle(
+        matchNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(matchNode, context->tok(TK::KwMatch), "ast.match.type"),
+                -1,
+                "match"),
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(matchNode, context->tok(TK::KwType), "ast.match.type.type"),
+                -1,
+                "type"),
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                nodeOrigin(typeNode),
+                -1,
+                "type"),
+        });
+    LEAVE("MatchTypeExpr");
+    return matchNode;
+}
+
+TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
+    const std::string text = pattern.text();
+    if (text == "struct") {
+        return TypeCaseKind::Struct;
+    }
+    if (text == "tuple") {
+        return TypeCaseKind::Tuple;
+    }
+    if (text == "#leaf") {
+        return TypeCaseKind::Leaf;
+    }
+    ASSERT(text == "_", "Unknown match type pattern");
+    return TypeCaseKind::Wildcard;
+}
+
+/*
+typeCase
+    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    ;
+*/
+Value Builder::visitTypeCase(cst::TypeCase context) {
+    ENTER("TypeCase");
+    std::vector<TypeCaseKind> patterns;
+    for (const auto pattern : context->all<cst::TypeCasePattern>()) {
+        patterns.push_back(typeCaseKindOf(pattern));
+    }
+    node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
+    setNodeTokenRangeByContext(caseNode, context);
+    node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
+    *caseNode << bodyNode;
+    registerAstSemanticBundle(
+        caseNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(caseNode, context->tok(TK::KwCase), "ast.match.type.case"),
+                -1,
+                "case"),
+            semanticPart(
+                camel::source::SemanticRole::CaseBody,
+                nodeOrigin(bodyNode),
+                -1,
+                "body"),
+        });
+    LEAVE("TypeCase");
+    return caseNode;
+}
+
+/*
 ctrlExpr
     : IF logicalOrExpr THEN blockExpr (ELSE blockExpr)?
     | MATCH identRef '{' matchCase+ '}'
@@ -2383,6 +2471,10 @@ Value Builder::visitCtrlExpr(syn::Node context) {
                     1,
                     "else"),
             });
+    } break;
+    case NK::MatchTypeExpr: // MATCH TYPE typeExpr '{' typeCase* '}'
+    {
+        ctrlNode = any2node(visitMatchTypeExpr(cst::MatchTypeExpr(context)));
     } break;
     case NK::MatchExpr: // MATCH logicalOrExpr '{' matchCase+ '}'
     {
@@ -4275,6 +4367,7 @@ Value Builder::visitExpr(syn::Node context) {
         return visitWaitExpr(cst::WaitExpr(context));
     case NK::IfExpr:
     case NK::MatchExpr:
+    case NK::MatchTypeExpr:
     case NK::TryExpr:
         return visitCtrlExpr(context);
     case NK::LoopExpr:

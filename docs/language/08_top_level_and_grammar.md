@@ -149,6 +149,7 @@ dataExpr           : waitExpr | ctrlExpr | loopExpr
 waitExpr           : 'wait'? assignExpr
 ctrlExpr           : 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
                      | 'match' identRef '{' matchCase+ '}'
+                     | 'match' 'type' typeExpr '{' typeCase* '}'
                      | 'try' stmtBlock catchClause+ ('finally' stmtBlock)?
 assignExpr         : logicalOrExpr (('=' | '+=' | '-=' | '*=' | '/=' | '%=' | '^=' | '@=' | '&='
                      | '|=') logicalOrExpr)?
@@ -191,6 +192,9 @@ arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' data
 structData         : '{' (pairedValues ','?)? '}'
 tupleData          : '(' dataList? ','? ')'
 funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
+matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
+typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+typeCasePattern    : 'struct' | 'tuple' | '#' 'leaf' | '_'
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
                      | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
