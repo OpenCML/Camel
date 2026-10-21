@@ -85,9 +85,13 @@ class AlgebraPass : public RuntimeGraphRewritePass {
 
 class DeadCodePass : public RuntimeGraphRewritePass {
   public:
-    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    explicit DeadCodePass(const camel::core::context::context_ptr_t &ctx, bool valuesOnly = false)
+        : RuntimeGraphRewritePass(ctx), valuesOnly_(valuesOnly) {}
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
+
+  private:
+    bool valuesOnly_;
 };
 
 class ControlReductionPass : public RuntimeGraphRewritePass {

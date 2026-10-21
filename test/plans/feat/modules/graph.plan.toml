@@ -176,3 +176,38 @@ args = ["${case}", "neutral::integers", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "7\n11\n7\n10\n"
 timeout_ms = 20000
+
+# Unused values: after folding and inlining, constants and pure operations that no node reads are
+# left behind. unused::values (Camel) removes them like std::opt::dce restricted to values.
+
+[[tests]]
+name = "unused_values_by_std_opt_dce"
+desc = "The reference: std::opt::dce restricted to values, after folding and inlining."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/unused_target.cml"
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "std::opt::dce(values_only=true)", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unused_values_by_a_camel_pass"
+desc = "unused::values, written in Camel with the graph module, gives the same graphs."
+kind = "differential"
+case = "../../../cases/modules/graph_pass/unused_target.cml"
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "unused::values", "std::jgir"]
+expect_exit = 0
+compare_to = "unused_values_by_std_opt_dce"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths", "normalize_origins"]
+timeout_ms = 20000
+
+[[tests]]
+name = "unused_values_program_still_runs"
+desc = "The program after the Camel pass computes what it did."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/unused_target.cml"
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::opt::fold", "unused::values", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n4\n"
+timeout_ms = 20000

@@ -490,6 +490,21 @@ PassDescriptor devirtualizeDescriptor() {
     return d;
 }
 
+PassDescriptor dceDescriptor() {
+    PassDescriptor d;
+    d.doc    = "dead code elimination";
+    d.params = {PassParam{
+        "values_only",
+        PassParamType::Bool,
+        false,
+        "remove only the constants and pure operations that no node reads, not gates and syncs "
+        "(the reference for passes that do the same, such as one written in Camel)"}};
+    d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<DeadCodePass>(ctx, args.getBool("values_only"));
+    };
+    return d;
+}
+
 PassDescriptor algebraDescriptor() {
     PassDescriptor d;
     d.doc    = "algebraic simplification";
@@ -692,7 +707,7 @@ PassScopePtr initPassScope() {
                              {"fold", def(PASS(ConstantFoldPass))},
                              {"algebra", def(algebraDescriptor())},
                              {"cse", def(PASS(CommonSubexpressionPass))},
-                             {"dce", def(PASS(DeadCodePass))},
+                             {"dce", def(dceDescriptor())},
                              {"ctrl", def(PASS(ControlReductionPass))},
                          })},
                     {"taskflow", def(taskflowDescriptor())},
