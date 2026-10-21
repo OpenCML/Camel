@@ -24,6 +24,7 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/mm.h"
+#include "camel/core/tags.h"
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
@@ -729,6 +730,20 @@ PassScopePtr initPassScope() {
                 }),
             },
         }));
+    // The core passes that read tag facts: the dumps show a node's attributes and numeric
+    // permissions, and std::opt keeps them across rewrites (CSE combines by their merge rules).
+    // A tag's `read_by` names one of these (or a module's pass that registers itself).
+    for (const char *reader :
+         {"std::gir",
+          "std::rgir",
+          "std::gir_regions",
+          "std::rgir_regions",
+          "std::jgir",
+          "std::agir",
+          "std::argir",
+          "std::opt"}) {
+        camel::core::tag::declareReader(reader);
+    }
     return root;
 }
 
@@ -947,9 +962,23 @@ void setPassWarningHandler(PassWarningHandler handler, void *userData) {
 }
 
 void registerModulePass(const std::string &path, PassDescriptor descriptor) {
+    const bool readsTags = descriptor.readsTags;
     auto &registry = modulePasses();
-    std::lock_guard lock(registry.mutex);
-    registry.passes.insert_or_assign(path, std::move(descriptor));
+    {
+        std::lock_guard lock(registry.mutex);
+        registry.passes.insert_or_assign(path, std::move(descriptor));
+    }
+    if (readsTags) {
+        // The pass is a reader of tag facts; so is every alias that already names it.
+        camel::core::tag::declareReader(path);
+        auto &aliases = moduleAliases();
+        std::lock_guard lock(aliases.mutex);
+        for (const auto &[alias, target] : aliases.aliases) {
+            if (target == path) {
+                camel::core::tag::declareReader(alias);
+            }
+        }
+    }
 }
 
 void registerModulePass(const std::string &path, PassFactory factory) {
@@ -971,8 +1000,14 @@ void registerPassAlias(const std::string &alias, const std::string &target) {
         return;
     }
     auto &registry = moduleAliases();
-    std::lock_guard lock(registry.mutex);
-    registry.aliases.insert_or_assign(alias, target);
+    {
+        std::lock_guard lock(registry.mutex);
+        registry.aliases.insert_or_assign(alias, target);
+    }
+    // An alias of a reader is a reader too: a tag may name the short name.
+    if (camel::core::tag::isReader(target)) {
+        camel::core::tag::declareReader(alias);
+    }
 }
 
 namespace {
@@ -1298,6 +1333,12 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
     for (const auto &use : ctx->tagUses()) {
         bool read = false;
         for (const std::string &reader : use.readBy) {
+            // Only a pass that declared itself a reader of tag facts counts: a name that
+            // happens to be in the pipeline but reads no facts leaves the tag with no effect,
+            // which is what the warning says.
+            if (!camel::core::tag::isReader(reader)) {
+                continue;
+            }
             for (const std::string &name : inPipeline) {
                 if (name == reader || name.starts_with(reader + "::")) {
                     read = true;

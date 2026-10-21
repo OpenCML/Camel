@@ -1,0 +1,24 @@
+/**
+ * Rules with a requirement: the tags before a rule declaration are its permissions
+ * (`#requires<...>`, design principles 7.2). The mask reaches the rewrite engines through
+ * `__rule`, which skip a rule whose requirement the numeric policy of the nodes does not meet.
+ * `apply` needs `approx_math`, which must be granted; `apply_default` needs `reassociate`, which
+ * the defaults already allow (7.3).
+ */
+module requires
+import { Program } from graph
+import { rewrite } from rewrite
+
+#requires<approx_math>
+rule mul_one(x: float) { x * 1.0 => x }
+
+#requires<reassociate>
+rule fold_reassociate(x: float) { x * 1.0 => x }
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [mul_one])
+}
+
+export func apply_default(p: Program): Program! {
+    return rewrite(p, [fold_reassociate])
+}

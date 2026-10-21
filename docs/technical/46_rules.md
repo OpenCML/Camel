@@ -47,6 +47,22 @@ like any function. A list of rules is an array of such functions (`[mul_one, com
 The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refused by the compiler
 (`ConstructNotSupported`) until generics land (H38 item 5).
 
+A rule may state the numeric permissions it needs with `#requires<...>` before the declaration
+(design principles 7.2): a rule that rewrites `x * c1 + x * c2` into `x * (c1 + c2)` is only
+correct where `reassociate` is allowed. `#requires<reassociate, contract>` names permissions (not
+tags of the program); the group `finite_math` names the four assumptions it groups, so
+`#requires<finite_math>` needs all four. The mask is the third argument of `__rule`
+(`__rule('name', twoWay, needs, consts, lhs, rhs)`); the fourth is the mask of `const`
+parameters, as before.
+
+The check and the engines ask the numeric policy of the nodes for the mask: a rule whose `needs`
+the policy does not allow is skipped at that function (and a rule that needs nothing always
+applies). With the defaults of 7.3, a rule that needs `reassociate` or `contract` applies without
+any `@numeric`; one that needs `approx_math`, `change_precision` or an assumption of `finite_math`
+applies only where the program grants it, written `@numeric(...)` or as the tag `#approx_math`.
+A requirement that names no permission is a located error (`SemanticDiag::TagNotAPermission`), and
+so is a tag other than `#requires` before a rule (`SemanticDiag::RuleTagNotRequires`).
+
 ## 2. From a rule to the engine
 
 `compileRule(RuleSource)` (`runtime/rules.h`) reads the two functions: the left one's result is the
@@ -105,8 +121,9 @@ not touch (`x * 1.0`, `x + -0.0`, `x - 0.0`, `x / 1.0`, double negation, commuta
 `rules::saturate_all` (every rule, both ways where it holds both ways, then the smallest writing
 of each value). No rule enters the file before `check` passes it: `check_library.cml` runs the
 check over every rule of it (the plan `modules.rules`). The float laws that depend on a
-permission (`x*c1 + x*c2`, `(x*c1)*c2`) and the ones that need a condition (`x*c + x*c` for a
-whole `c`) wait for `#requires` and `when`; `std::opt::algebra` keeps doing them.
+permission (`x*c1 + x*c2`, `(x*c1)*c2`) can now be written with `#requires`; the ones that need a
+condition (`x*c + x*c` for a whole `c`) still wait for `when`; `std::opt::algebra` keeps doing
+them.
 
 ## 6. The rest of the engine (H38)
 
@@ -141,9 +158,13 @@ propagated in post-order, joined at JOIN nodes and across the writings of a valu
 graph revision and per draft revision. Which of a clause's variables are values and which are
 facts is the open question the design's example leaves ambiguous; the plan recommends Nodes.
 
-**`#requires`.** `#requires<reassociate, finite_math>` before a rule maps the tag arguments to
-`sem::PermissionMask` and fills the `needs` slot that `Rule` already carries; the engine and the
-check use it. It waits for H2's tag registry.
+**`#requires` (implemented, H2b).** `#requires<reassociate, finite_math>` before a rule resolves the
+names to `sem::PermissionMask` -- `finite_math` expands to its four bits -- and fills the `needs`
+slot `Rule` already carries, so the engine and the check gate on it with no engine change. A name
+that is not a permission is a located `TagNotAPermission`, another tag before a rule is
+`RuleTagNotRequires`, an empty list a `TagArgumentCount`, and `#requires` anywhere but before a rule
+an undeclared tag. Program tags are declared after the AST is built, so only core permission names
+resolve here.
 
 **Generic rules.** `rule comm<T>(…) where T: numeric` is one rule per instantiation, with the
 operator family selected by the instantiated type (the table `AlgebraPass::Families` reads in the

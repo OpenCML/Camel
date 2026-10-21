@@ -20,6 +20,7 @@
 // Export the materialized runtime graph: IDs and references are data, never parsed labels.
 #include "camel/passes/trans/json/gir.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/tags.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/source/manager.h"
@@ -208,12 +209,12 @@ std::string dumpJsonRuntimeGraph(
                     }
                 }
             }
-            const auto permissions = g->nodePermissions(ref);
-            if (permissions)
-                value["numeric"] = camel::core::sem::permissionsText(permissions);
-            if (const auto attrs = g->nodeAttrs(ref)) {
+            const camel::core::tag::Facts facts = camel::core::tag::factsOf(*g, ref);
+            if (facts.permissions)
+                value["numeric"] = camel::core::sem::permissionsText(facts.permissions);
+            if (facts.tags != 0) {
                 value["attrs"] = json::object();
-                for (const auto &a : camel::core::attr::entries(attrs))
+                for (const auto &a : camel::core::attr::entries(facts.tags))
                     value["attrs"][std::string(camel::core::attr::keyName(a.key))] =
                         attrValueJson(a.value);
             }

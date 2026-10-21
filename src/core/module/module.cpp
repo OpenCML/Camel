@@ -555,16 +555,66 @@ void Module::addDeclaredTag(const std::string &ident, uint32_t tag) {
 
 camel::core::attr::AttrSetId Module::declarationTags(const Reference &name) const {
     const auto it = declarationTags_.find(name.toString());
-    return it == declarationTags_.end() ? camel::core::attr::kNoAttrs : it->second;
+    if (it == declarationTags_.end()) {
+        return camel::core::attr::kNoAttrs;
+    }
+    // The name-level query sees every overload of the name (an operator's, normally).
+    camel::core::attr::AttrSetId all = camel::core::attr::kNoAttrs;
+    for (const auto &[signature, tags] : it->second) {
+        all = camel::core::attr::unite(all, tags);
+    }
+    return all;
+}
+
+camel::core::attr::AttrSetId
+Module::declarationTags(const Reference &name, std::string_view signature) const {
+    const auto outer = declarationTags_.find(name.toString());
+    if (outer == declarationTags_.end()) {
+        return camel::core::attr::kNoAttrs;
+    }
+    const auto inner = outer->second.find(std::string(signature));
+    return inner == outer->second.end() ? camel::core::attr::kNoAttrs : inner->second;
+}
+
+void Module::setDeclarationTags(const Reference &name, camel::core::attr::AttrSetId tags) {
+    setDeclarationTags(name, std::string_view{}, tags);
 }
 
 void Module::setDeclarationTags(
-    const Reference &name, camel::core::attr::AttrSetId tags) {
-    const std::string key = name.toString();
-    const auto it         = declarationTags_.find(key);
-    declarationTags_[key] = it == declarationTags_.end()
-                                ? tags
-                                : camel::core::attr::unite(it->second, tags);
+    const Reference &name, std::string_view signature, camel::core::attr::AttrSetId tags) {
+    auto &bySignature = declarationTags_[name.toString()];
+    const auto it     = bySignature.find(std::string(signature));
+    bySignature[std::string(signature)] =
+        it == bySignature.end() ? tags : camel::core::attr::unite(it->second, tags);
+}
+
+uint8_t Module::declarationPermissions(const Reference &name) const {
+    const auto it = declarationPermissions_.find(name.toString());
+    if (it == declarationPermissions_.end()) {
+        return 0;
+    }
+    uint8_t all = 0;
+    for (const auto &[signature, permissions] : it->second) {
+        all = static_cast<uint8_t>(all | permissions);
+    }
+    return all;
+}
+
+uint8_t Module::declarationPermissions(const Reference &name, std::string_view signature) const {
+    const auto outer = declarationPermissions_.find(name.toString());
+    if (outer == declarationPermissions_.end()) {
+        return 0;
+    }
+    const auto inner = outer->second.find(std::string(signature));
+    return inner == outer->second.end() ? 0 : inner->second;
+}
+
+void Module::setDeclarationPermissions(
+    const Reference &name, std::string_view signature, uint8_t permissions) {
+    // The permissions of a declaration are the union of everything written on it; a second
+    // record (an instance built after the template) must not lose the first.
+    uint8_t &slot = declarationPermissions_[name.toString()][std::string(signature)];
+    slot          = static_cast<uint8_t>(slot | permissions);
 }
 
 camel::core::attr::AttrSetId Module::fieldTags(const Reference &typeName, size_t index) const {

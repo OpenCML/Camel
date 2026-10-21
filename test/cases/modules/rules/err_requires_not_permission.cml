@@ -1,0 +1,9 @@
+/// A requirement that names a tag of the program: only the core's permission tags qualify.
+module err_requires_not_permission
+
+tag plain on func
+
+#requires<plain>
+rule r(x: int) { x + 0 => x }
+
+func main(): int { return 0 }

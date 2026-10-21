@@ -10,6 +10,7 @@
 
 // Translate the supported pure tensor subgraphs without running user operators on the host.
 #include "camel/core/rtdata/array.h"
+#include "camel/core/tags.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -594,8 +595,10 @@ class Compiler {
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
+                const uint8_t permissions =
+                    camel::core::tag::factsOf(*g, id).permissions;
                 for (size_t i = first; i < program.nodes.size(); ++i) {
-                    program.nodes[i].permissions = g->nodePermissions(id);
+                    program.nodes[i].permissions = permissions;
                     if (program.nodes[i].semantic == SIZE_MAX)
                         program.nodes[i].semantic = semantic;
                 }
