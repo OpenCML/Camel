@@ -585,7 +585,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 3. **按模块分批迁移**：去重（`sleep`、排序、`has`/`contains`、`min`/`max`/`sum` 等）、改名与拆分（`stats`、`env`、`process`、`io`）、错误约定（`fs`、`env`、`time`）、资源名、能用 Camel 写的改为 Camel（`array`、`stats`、`random` 的组合部分、`Map`/`Set` 的组合操作、排序之外的 `algo`）；工具类移出（`test`、`bench`、`profiler`；`this`、`rendezvous` 进测试设施）。每批一次提交，能构建、相关测试通过；测试与示例随之改写（内测阶段不考虑兼容）。
 4. 不在本项：网络、流、键式随机数、优化器、扩展库（另行指派）。
 
-**剩下什么**：第 0、1 步已入（`handover/H76-stdlib-step1`，报告 reports/H76.md）；H94 的六条裁定解决了第 1 步报告第 6 节的大部分待决问题（`.cml` 与 `.cmo` 是同一个模块、泛型声明之间的重叠检查、私有声明、入口前缀、只能声明自己的算子）。第 10 步的模块批次已由 H104 开始（`str`，报告 reports/H104.md）；`io` 的终端部分已由 H116 从 `os` 拆出并声明化（`stdlib/io.cml`，5 个算子；报告 reports/H116.md）。`math`/`fs`/`time`/`json`/`re`/`random` 可按同一做法继续；第 4 步其余的 `sys`→`env`、`os`→`process`、`exit`/`sleep`，第 8 步的 `crypto`→`hash` 与 `str::bytes`/`from_bytes` 删除，以及第 2–3、5–9 步仍未开始。
+**剩下什么**：第 0、1 步已入（`handover/H76-stdlib-step1`，报告 reports/H76.md）；H94 的六条裁定解决了第 1 步报告第 6 节的大部分待决问题（`.cml` 与 `.cmo` 是同一个模块、泛型声明之间的重叠检查、私有声明、入口前缀、只能声明自己的算子）。第 10 步的模块批次已由 H104 开始（`str`，报告 reports/H104.md）；`io` 的终端部分已由 H116 从 `os` 拆出并声明化（`stdlib/io.cml`，5 个算子；报告 reports/H116.md）。`math`/`fs`/`time`/`json`/`re`/`random` 可按同一做法继续；第 4 步其余的 `sys`→`env`、`os`→`process`、`exit`/`sleep`，第 8 步的 `crypto`→`hash`（`str::bytes`/`from_bytes` 删除已由 H122 完成），以及第 2–3、5–9 步仍未开始。
 
 ### H20：H13、H14 检查后的小项（2026-10-20 指派）
 
