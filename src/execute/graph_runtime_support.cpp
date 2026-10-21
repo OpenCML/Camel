@@ -45,6 +45,7 @@
 #include <format>
 #include <functional>
 #include <queue>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -55,6 +56,15 @@ namespace camel::execute {
 void RunPrograms::begin(
     camel::core::context::Context &context, const camel::runtime::Program *main) {
     end();
+    if (main != nullptr) {
+        for (const camel::runtime::GCGraph *graph : main->graphs()) {
+            if (!graph->executable()) {
+                throw std::logic_error(
+                    "Graph '" + graph->name() +
+                    "' has values with several writings and cannot be run; extract first.");
+            }
+        }
+    }
     std::lock_guard lock(mutex_);
     context_ = &context;
     main_    = main;

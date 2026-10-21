@@ -94,7 +94,7 @@ int: (x: string) => int
 x as a 64-bit integer.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer (blanks and a trailing part included); fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or a float that is NaN, infinite or beyond the range; use parse_int to handle text in the program.
 - Example: `int(2.9)` gives `2`
 
 #### `i64`
@@ -110,7 +110,7 @@ i64: (x: string) => int
 The same as int.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN.
 - Example: `i64('42')` gives `42`
 
 #### `i32`
@@ -126,7 +126,7 @@ i32: (x: string) => i32
 x as a 32-bit integer.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is an int or a float beyond the range of i32, or NaN.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one integer; fault `ConversionOutOfRange` when x is a string that is an integer beyond the range, or an int or a float beyond the range of i32, or NaN.
 - Example: `i32(7)` gives `7`
 
 #### `float`
@@ -142,7 +142,7 @@ float: (x: string) => float
 x as a 64-bit float.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one number; use parse_float to handle that in the program.
+- Failure: fault `InvalidNumberText` when x is a string that is not, as a whole, one number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow); use parse_float to handle that in the program.
 - Example: `float(3)` gives `3`
 
 #### `f64`
@@ -158,7 +158,7 @@ f64: (x: string) => float
 The same as float.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not a number.
+- Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of float (overflow or underflow).
 - Example: `f64('2.5')` gives `2.5`
 
 #### `f32`
@@ -174,7 +174,7 @@ f32: (x: string) => f32
 x as a 32-bit float.
 
 - Pure.
-- Failure: fault `InvalidNumberText` when x is a string that is not a number.
+- Failure: fault `InvalidNumberText` when x is a string that is not a number; fault `ConversionOutOfRange` when x is a string that is a number beyond the range of f32 (overflow or underflow).
 - Example: `f32(0.5)` gives `0.5`
 
 #### `c64`

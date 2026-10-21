@@ -1,7 +1,9 @@
 /**
  * Text to number: the whole string must be one number (design principles 5.1). `int(s)` and
  * `float(s)` fault on anything else, blanks included; `parse_int` and `parse_float` read by
- * the same rule and give an error value instead. The faults are shown through `attempt`.
+ * the same rule and give an error value instead. A text that is a number its type cannot hold
+ * is out of range (ConversionOutOfRange), which is not the same fault as text that is not a
+ * number (InvalidNumberText). The faults are shown through `attempt`.
  */
 module number_text
 
@@ -10,7 +12,7 @@ func to_i32(s: string): i32 { return i32(s) }
 func to_float(s: string): float { return float(s) }
 
 func main(): int sync {
-    let texts = ['12', '-12', '+12', ' 7', '7 ', '12abc', '', '1.5', '1e3', '0x10', '1_000', '3000000000', '99999999999999999999', '.5', 'inf', '-inf', 'nan', 'Infinity', '1e999']
+    let texts = ['12', '-12', '+12', ' 7', '7 ', '12abc', '', '1.5', '1e3', '0x10', '1_000', '3000000000', '99999999999999999999', '.5', 'inf', '-inf', 'nan', 'Infinity', '1e999', '1e-9999']
     texts->foreach<(s: string) => sync {
         println('[' + s + ']')
         println(attempt(to_int, s))

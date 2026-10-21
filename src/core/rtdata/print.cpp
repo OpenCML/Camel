@@ -51,6 +51,7 @@
 
 #include "collection_tree.h"
 
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -151,7 +152,11 @@ void pushError(std::vector<PrintItem> &stack, slot_t error) {
 
 } // namespace
 
-void printValue(std::ostream &os, slot_t data, Type *type) {
+namespace {
+
+/// The shared body of printValue and printSlotCapped. `arrayLimit` applies to every array met
+/// at any depth: a larger array prints as its type, address and length.
+void printValueImpl(std::ostream &os, slot_t data, Type *type, size_t arrayLimit) {
     ASSERT(
         data != DeadSlot,
         std::format("Accessing uninitialized slot in printSlot: {}", type->toString()));
@@ -206,6 +211,14 @@ void printValue(std::ostream &os, slot_t data, Type *type) {
         case TypeCode::Array: {
             const auto *array    = fromSlot<const Array *>(v);
             const Type *elemType = static_cast<const ArrayType *>(t)->elemType();
+            if (array->size() > arrayLimit) {
+                // Type, address and length: enough to identify the collection without the
+                // element-by-element text a log line must not pay for (H31).
+                os << "<" << t->toString() << " at 0x" << std::hex
+                   << static_cast<uint64_t>(v) << std::dec << ", " << array->size()
+                   << " elements>";
+                continue;
+            }
             pushText(stack, "]");
             for (size_t i = array->size(); i-- > 0;) {
                 pushSlot(stack, array->getSlot(i), elemType);
@@ -334,6 +347,16 @@ void printValue(std::ostream &os, slot_t data, Type *type) {
         // Not a composite after all: an object type whose print does not descend into values.
         printScalar(os, v, t);
     }
+}
+
+} // namespace
+
+void printValue(std::ostream &os, slot_t data, Type *type) {
+    printValueImpl(os, data, type, std::numeric_limits<size_t>::max());
+}
+
+void printSlotCapped(std::ostream &os, slot_t data, Type *type, size_t arrayLimit) {
+    printValueImpl(os, data, type, arrayLimit);
 }
 
 } // namespace camel::core::rtdata

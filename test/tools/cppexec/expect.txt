@@ -31,6 +31,9 @@ test/cases/opt/inline/arm_call_then_effect.cml
 # Faults, limits, exit codes, the result of main.
 test/cases/consistency/faults/i32_out_of_range.cml
 test/cases/consistency/faults/int_text_trailing.cml
+test/cases/consistency/faults/int_text_out_of_range.cml
+test/cases/consistency/faults/float_text_overflow.cml
+test/cases/consistency/faults/float_text_underflow.cml
 test/cases/consistency/faults/exit_code.cml
 test/cases/consistency/cleanup/unflushed_print_fault.cml
 test/cases/consistency/entry/undeclared_int.cml
@@ -100,12 +103,16 @@ test/cases/compile/entry_args/complex.cml --arg z=1. --arg w=-2
 test/cases/compile/entry_args/complex.cml --arg z=1+2 --arg w=4i
 test/cases/compile/entry_args/complex.cml --arg z=abc --arg w=4i
 test/cases/compile/entry_args/complex.cml --arg z=1+ --arg w=4i
+test/cases/compile/entry_args/complex.cml --arg z=1e9999+2i --arg w=4i
+test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=1+1e-9999i
 
 # The float parameter reads the same whole-token grammar: a leading `+` is its sign; the
 # hexadecimal float and a value out of range are refused, as camel refuses them.
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=+0.5 --arg name=hi --arg loud=true
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=0x1.8p1 --arg name=hi --arg loud=true
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=1e9999 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=1e-9999 --arg name=hi --arg loud=true
+test/cases/compile/entry_args/scalars.cml --arg n=99999999999999999999 --arg rate=0.5 --arg name=hi --arg loud=true
 
 # Loops (design principles 3.10), run through the private lowering to tail recursion.
 test/cases/loops/shapes.cml

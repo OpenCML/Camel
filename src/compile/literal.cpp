@@ -1253,17 +1253,17 @@ std::string rangeText(camel::core::type::Type *type) {
     }
     switch (type->code()) {
     case TypeCode::Int32:
-        return "-2147483648 to 2147483647";
+        return camel::utils::integerRangeText<int32_t>();
     case TypeCode::Int64:
-        return "-9223372036854775808 to 9223372036854775807";
+        return camel::utils::integerRangeText<int64_t>();
     case TypeCode::Float32:
-        return "at most about 3.4e38 in magnitude";
+        return std::string(camel::utils::floatRangeText<float>());
     case TypeCode::Float64:
-        return "at most about 1.8e308 in magnitude";
+        return std::string(camel::utils::floatRangeText<double>());
     case TypeCode::Complex64:
-        return "each part at most about 3.4e38 in magnitude";
+        return camel::utils::complexRangeText<float>();
     case TypeCode::Complex128:
-        return "each part at most about 1.8e308 in magnitude";
+        return camel::utils::complexRangeText<double>();
     default:
         return {};
     }

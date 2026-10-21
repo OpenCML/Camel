@@ -55,6 +55,7 @@ class EdgeChecker {
         : program_(program), graph_(graph), state_(state) {}
 
     std::vector<std::string> run() {
+        checkWritings();
         if (state_ != GraphState::NonExecutable) {
             findCycle();
         }
@@ -65,6 +66,51 @@ class EdgeChecker {
     }
 
   private:
+    /// The equivalences between nodes (the Tabled state): a graph validated as another state has
+    /// none; in this one each names two nodes that compute a value of the same type, in the same
+    /// region, and the graph says so by its flag.
+    void checkWritings() {
+        const auto log = graph_.writings();
+        if (log.empty() != graph_.executable()) {
+            violations_.push_back(
+                std::format(
+                    "graph '{}': {} equivalences between nodes but {} the flag that says so",
+                    graph_.name(),
+                    log.empty() ? "has no" : "has",
+                    log.empty() ? "has" : "lacks"));
+        }
+        if (log.empty()) {
+            return;
+        }
+        if (state_ != GraphState::Tabled) {
+            violations_.push_back(
+                std::format(
+                    "graph '{}': values have several writings, which this state does not allow",
+                    graph_.name()));
+            return;
+        }
+        for (size_t i = 0; i < log.size(); ++i) {
+            const WritingUnion &entry = log[i];
+            const auto bad            = [&](const char *what) {
+                violations_.push_back(
+                    std::format("graph '{}': equivalence {} {}", graph_.name(), i, what));
+            };
+            if (!graph_.containsNodeRef(entry.a) || !graph_.containsNodeRef(entry.b)) {
+                bad("names a node the graph does not have");
+                continue;
+            }
+            const GCNode *a = graph_.node(entry.a);
+            const GCNode *b = graph_.node(entry.b);
+            if (a->kind == GCNodeKind::Dead || b->kind == GCNodeKind::Dead) {
+                bad("names a node a rewrite removed");
+            } else if (a->typeId != b->typeId) {
+                bad("is between nodes of different types");
+            } else if (graph_.nodeRegion(entry.a) != graph_.nodeRegion(entry.b)) {
+                bad("is between nodes of different regions");
+            }
+        }
+    }
+
     Type *typeOf(gc_node_ref_t ref) const {
         const GCNode *node = graph_.node(ref);
         return node ? node->dataType() : nullptr;

@@ -19,6 +19,7 @@
 
 #include "operator_rules.h"
 
+#include "camel/core/numeric_convert.h"
 #include "fault_sites.h"
 
 #include <format>
@@ -200,6 +201,31 @@ checkedConversion(const char *function, const char *to, const char *target, Runt
     };
 }
 
+/// A text conversion that can fault with either cause (cast.cpp, camel/core/numeric_convert.h):
+/// `rt::fn<To>(x, invalidSite, rangeSite)`. The two reports say what a text that is not a number
+/// is refused with, and what a number the type cannot hold is refused with (the target, what the
+/// text must be, and the range are in the rendered messages); only the text itself is a value
+/// when the fault happens.
+OperatorRule checkedTextConversion(
+    const char *function, const char *to, const char *target, const char *what,
+    std::string rangeReason) {
+    return {
+        [function, to, target, what, rangeReason = std::move(rangeReason)](
+            OperatorCall &c) -> std::optional<std::string> {
+            const std::string text = SiteTable::valueMark(0);
+            return std::format(
+                "rt::{}<{}>({}, {}, {})",
+                function,
+                to,
+                c.norm(0).text,
+                c.site(RuntimeDiag::InvalidNumberText, {text, target, what}),
+                c.site(
+                    RuntimeDiag::ConversionOutOfRange,
+                    {"'" + text + "'", target, rangeReason}));
+        },
+        false};
+}
+
 /// `std::f(x)` of <cmath> (modules/math/operators.cpp). With `toFloat`, an integer argument
 /// is converted first, as __math_sqrt__ does: an i32 to f32, an int to float.
 OperatorRule cmath(const char *function, bool toFloat = false) {
@@ -329,14 +355,20 @@ Rules buildRules() {
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
     r[":op/dtol"] =
         checkedConversion("truncate", "int64_t", "int", RuntimeDiag::ConversionOutOfRange);
-    r[":op/stoi"] =
-        checkedConversion("integerFromText", "int32_t", "i32", RuntimeDiag::InvalidNumberText);
-    r[":op/stol"] =
-        checkedConversion("integerFromText", "int64_t", "int", RuntimeDiag::InvalidNumberText);
-    r[":op/stof"] =
-        checkedConversion("floatFromText", "float", "f32", RuntimeDiag::InvalidNumberText);
-    r[":op/stod"] =
-        checkedConversion("floatFromText", "double", "float", RuntimeDiag::InvalidNumberText);
+    r[":op/stoi"] = checkedTextConversion(
+        "integerFromText", "int32_t", "i32", "an integer",
+        camel::core::integerRangeReason<int32_t>("i32"));
+    r[":op/stol"] = checkedTextConversion(
+        "integerFromText", "int64_t", "int", "an integer",
+        camel::core::integerRangeReason<int64_t>("int"));
+    r[":op/stof"] = checkedTextConversion(
+        "floatFromText", "float", "f32", "a number", camel::core::floatRangeReason<float>("f32"));
+    r[":op/stod"] = checkedTextConversion(
+        "floatFromText",
+        "double",
+        "float",
+        "a number",
+        camel::core::floatRangeReason<double>("float"));
     for (const char *t : {"i", "l", "f", "d", "a"}) {
         r[std::format(":op/{}tos", t)] = runtimeFunction("toText");
     }

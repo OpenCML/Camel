@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-167 diagnostics: 150 errors, 17 warnings.
+168 diagnostics: 151 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -182,6 +182,7 @@ prints one entry.
 | `0x04000052` | [RuntimeDiag::SliceOutOfRange](#sliceoutofrange) | Error |
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
 | `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
+| `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -4575,7 +4576,7 @@ Cannot convert {0} to {1}: {2}.
 **Help**
 
 ```text
-A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, or an integer beyond the range of a narrower integer type. Check the value before converting it, or clamp it (min, max) to the range of the target.
+A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, an integer beyond the range of a narrower integer type, or a text that is a number the type cannot hold (out of range, which is not the same as text that is not a number: that is InvalidNumberText). Check the value before converting it, or clamp it (min, max) to the range of the target.
 ```
 
 **Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel `)
@@ -4706,6 +4707,40 @@ A pass written in Camel returned an error value instead of a program, and the me
 module tiny
 func main(): int sync {
     println(21 * 2)
+    return 0
+}
+```
+
+### PassNeedsExtraction
+
+`0x04000062` · Error · `RuntimeDiag::PassNeedsExtraction`
+
+**Message**
+
+```text
+Pass '{0}' cannot take the program: some values of it have several writings.
+```
+
+**Help**
+
+```text
+An earlier pass (a saturation) left values with several writings, which only the passes that work on them and the passes that run or translate the program accept. Put 'std::opt::extract' before '{0}': it chooses one writing for every value by a cost model (its parameter 'cost', 'weighted' by default).
+```
+
+**Example** (`test/cases/feat/mm/writings/congruence.cml`, run as `CAMEL_ENABLE_TEST_PASSES=1 camel test/cases/feat/mm/writings/congruence.cml test::tabled std::opt::fold std::nvm`)
+
+```camel
+module congruence
+
+func f(a: int, b: int): int {
+    let p = a + 1
+    let q = b + 1
+    let r = a + 1
+    return p * q + r
+}
+
+func main(): int sync {
+    println(f(2, 3))
     return 0
 }
 ```
