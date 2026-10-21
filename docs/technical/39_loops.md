@@ -203,6 +203,16 @@ at a position (`ExecLoopEvent`: `Begin`, `Test`, `End`) are run by the functions
 interpreter that walks the nodes). A nested loop starts again in every round of the loop around
 it; going back to the start of a round does not start or test the loops around it.
 
+**A loop in an arm of a branch.** The nodes of an arm are one range between its BRCH and its JOIN
+(`17_graph_rewrite_api_contracts.md`, 4.1), and a loop inside the arm is laid out inside that
+range: its condition, its body and the LOOP node. The arm's entry in the plan is the **first**
+node of the range, not the first node of it that does something: a loop's first position is the
+first node of its regions, which is usually a port of the body, and the `Begin`/`Test` events of
+the first round sit at that position. An entry chosen past it would skip the events, so the first
+round would run with unbound ports and the loop would lose it (the bug H45 fixed). Every back end
+that jumps to an arm entry — NodeVM, FastVM/JIT, Taskflow, the macro evaluator — starts at the
+range's first node, so a loop in an arm gives the value of the same loop in the function body.
+
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
 `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
@@ -267,6 +277,14 @@ string), and progen's `loop` feature (all forms, sync bodies with effects).
 refusals), `parse.rulings` (syntax, AST, GCT, graph), `tools.debugger` `debugger.loop_frames`,
 three loop programs in `test/tools/cppexec/expect.txt`, and progen's `loop` feature (all forms,
 sync bodies with effects).
+
+`test/plans/feat/linear/loops_in_arms.plan.toml` is the matrix of a loop written in a branch arm
+(section 4): the whole `then` and `else` arm, a `while`, two values of state, statements after the
+loop in the arm, an `if` in the body, a `match` arm, two loops in two arms, a collecting loop, a
+loop in the root graph's arm, and the edges (no round, `for … while`, a loop inside a loop's body,
+a macro function's arm, a value computed in the arm) — every value the one the loop gives in the
+function body, on `std::nvm`, `std::fvm`, `std::jit` (compiled, also without inlining), `std::prl`
+(also `bytecode=false`) and `std::macro`.
 
 `test/plans/feat/linear/loop_collect.plan.toml` covers collection slots through two test-only
 passes (`test::loop_collect`, `test::loop_collect_summary`, enabled by

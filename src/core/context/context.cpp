@@ -743,6 +743,16 @@ Context::adoptRuntimeProgram(const camel::runtime::Program *program) {
     return program;
 }
 
+bool Context::installRuntimeProgramIfCurrent(
+    const camel::runtime::Program *expected, const camel::runtime::Program *program) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    if (!runtimeGraphMgr_->replaceRootIfCurrent(expected, program)) {
+        return false;
+    }
+    registerRuntimeGraphDebugInfo(program);
+    return true;
+}
+
 const camel::runtime::Program *Context::currentRuntimeProgram() const {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     return runtimeGraphMgr_->root();
@@ -796,6 +806,11 @@ void Context::leaveRun() {
 void Context::releaseRuntimeGraph(camel::runtime::GCGraph *graph) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->release(graph);
+}
+
+void Context::noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph) {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->noteUnbound(graph);
 }
 
 const camel::runtime::Program *

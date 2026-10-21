@@ -1728,6 +1728,42 @@ std::span<const std::byte> GCGraph::nodePayloadBytes(gc_node_ref_t ref) const {
     return {body, words * kPayloadWordBytes};
 }
 
+uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    if (n == nullptr) {
+        return 0;
+    }
+    // FNV-1a over the node: its record, the run of nodes it consumes and its payload (see the
+    // declaration in graph.h).
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    const auto mix = [&hash](const void *data, size_t bytes) {
+        const auto *read = static_cast<const uint8_t *>(data);
+        for (size_t i = 0; i < bytes; ++i) {
+            hash ^= read[i];
+            hash *= 0x100000001b3ULL;
+        }
+    };
+    const auto mixValue = [&mix](const auto &value) { mix(&value, sizeof(value)); };
+    const auto mixInputs = [&mix, &mixValue](std::span<const gc_node_ref_t> inputs) {
+        mixValue(static_cast<uint64_t>(inputs.size()));
+        for (gc_node_ref_t input : inputs) {
+            mixValue(input);
+        }
+    };
+    mixValue(n->kind);
+    mixValue(n->flags);
+    mixValue(n->reserved);
+    mixValue(n->dataIndex);
+    mixValue(n->typeId);
+    mixInputs(normInputsOf(ref));
+    mixInputs(withInputsOf(ref));
+    mixInputs(ctrlInputsOf(ref));
+    const std::span<const std::byte> payload = nodePayloadBytes(ref);
+    mixValue(static_cast<uint64_t>(payload.size()));
+    mix(payload.data(), payload.size());
+    return hash;
+}
+
 GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
     const GCNode *n = node(ref);
     if (!n || n->kind != GCNodeKind::Func || !n->hasPayload()) {

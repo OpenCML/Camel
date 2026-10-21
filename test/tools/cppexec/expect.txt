@@ -156,6 +156,10 @@ test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=1+3.5e38i
 test/cases/loops/shapes.cml
 test/cases/loops/effects.cml
 test/cases/loops/captures.cml
+# A loop written in a branch arm (H45): the emitter cuts an arm by its region, not by the plan's
+# arm entry, so the `for (;;)` lands inside the `if` and the value is the one the interpreters give.
+test/cases/loops/arm_loops.cml
+test/cases/loops/arm_loops_edges.cml
 # A loop state appended in place (H17 item 4, single and multiple states): the private copy of
 # the first value translates to the array value itself, which `append` copies when it is shared.
 test/cases/trans/cpp/loop_state_in_place.cml

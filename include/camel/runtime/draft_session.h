@@ -180,11 +180,16 @@ class RuntimeGraphDraftSession {
     const Program *commit(bool detached = false);
     /// The graphs the session read or wrote (decoded or edited) whose version in the context's
     /// program is not the one it started from; empty while the context's program is still the
-    /// session's. A commit of a stale session does not fail: it makes a program of its own from
-    /// the one it started from, which is not the context's (the callers that run a function
-    /// value of the old program do this routinely). A caller that means to replace the context's
-    /// program asks first (optimistic concurrency, design 4.3.1).
+    /// session's. A commit of a stale session with no conflict does not fail: it merges its
+    /// graphs into the context's newest program (design 4.3.1) and replaces it. A commit that
+    /// does conflict makes a program of its own from the one it started from, which is not the
+    /// context's (the callers that run a function value of the old program do this routinely). A
+    /// caller that means to replace the context's program and must not fork asks first
+    /// (optimistic concurrency, design 4.3.1).
     std::vector<GraphId> conflicts() const;
+    /// conflicts() against `current`, which the caller names: the compare-and-swap of a commit
+    /// that lost the race to another one re-checks against the program that is there now.
+    std::vector<GraphId> conflictsWithProgram(const camel::runtime::Program *current) const;
     /// commit(), but throws GraphCommitConflict when conflicts() is not empty.
     const Program *commitChecked();
 
@@ -203,6 +208,12 @@ class RuntimeGraphDraftSession {
 
     camel::core::context::context_ptr_t context_;
     const Program *program_ = nullptr;
+    /// Whether a commit may replace the context's program: true when the session was opened over
+    /// that program (it may have been overtaken since: the commit merges), or when the program it
+    /// works on is the context's now (someone installed it). A session over a function value's
+    /// program (a detached program: the ONNX export, a tile region, a gradient) hands its commit
+    /// back to its owner and never publishes it, whatever the context's program is.
+    bool mayPublish_ = false;
     mutable std::unique_ptr<Program> work_;
     GCGraph *runtimeRoot_ = nullptr;
     GraphState graphState_ = GraphState::Executable;

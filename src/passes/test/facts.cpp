@@ -49,7 +49,7 @@ using namespace camel::runtime::fact;
 
 /// The kinds of this test, of the owner `facttest`, registered once per process.
 struct TestKinds {
-    KindId kind, nodecl, cone, target, content, pair;
+    KindId kind, nodecl, cone, target, content, pair, node;
 };
 
 /// The kind of node a node is, as an int: a value any node has.
@@ -107,6 +107,13 @@ const TestKinds &testKinds() {
             .owner = "facttest",
             .scope = Scope::CrossGraph,
             .print = [](const std::string &s) { return s; },
+        });
+        k.node = registerKind(KindSpec<int>{
+            .key        = "facttest.node",
+            .owner      = "facttest",
+            .dependency = Dependency::Node,
+            .compute    = nodeKind,
+            .print      = printInt,
         });
         return k;
     }();
@@ -536,4 +543,47 @@ FactPersistTestPass::apply(const camel::runtime::Program *program, std::ostream 
         }
     }
     return changedProgram;
+}
+
+// ---- Node versions ---------------------------------------------------------------------------
+
+const camel::runtime::Program *
+FactNodeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    FactStore &store   = context_->facts();
+    const TestKinds &k = testKinds();
+    GCGraph *root      = program->root();
+    // The entry node: a node no edit of another node of the graph rewrites, and one whose place
+    // the rewrite keeps (the encoder keeps the ids of a graph it rewrites).
+    const gc_node_ref_t kept = root->entryNodeRef();
+    const Anchor anchor{program, root, kept};
+    (void)store.obtain<int>(k.node, anchor);
+    (void)store.obtain<int>(k.kind, anchor); // the conservative rule, for the contrast
+    const uint64_t version  = root->nodeContentHash(kept);
+    const uint64_t revision = root->revision();
+
+    // A node more at the end of the root: its revision changes, the record of `kept` does not.
+    RuntimeGraphDraftSession session(context_, program);
+    (void)session.edit(root).addSyncNode();
+    const camel::runtime::Program *grown = session.commit();
+    GCGraph *grownRoot                   = grown->root();
+    const Anchor grownAnchor{grown, grownRoot, kept};
+    os << "FACTS node_revision " << (grownRoot->revision() == revision ? "kept" : "new") << "\n";
+    os << "FACTS node_version " << (grownRoot->nodeContentHash(kept) == version ? "kept" : "new")
+       << "\n";
+    os << "FACTS node_other node="
+       << statusName(store.probe(k.node, std::vector<Anchor>{grownAnchor}))
+       << " graph=" << statusName(store.probe(k.kind, std::vector<Anchor>{grownAnchor})) << "\n";
+
+    // The node itself: another slot index, a commit, another version of the node. The commit
+    // after it puts the index back, so that the program this pass returns runs as it did.
+    const gc_slot_idx_t index = grownRoot->node(kept)->dataIndex;
+    RuntimeGraphDraftSession edit(context_, grown);
+    edit.edit(grownRoot).setNodeDataIndex(kept, index + 1);
+    const camel::runtime::Program *changed = edit.commit();
+    os << "FACTS node_self node="
+       << statusName(store.probe(k.node, std::vector<Anchor>{Anchor{changed, changed->root(), kept}}))
+       << "\n";
+    RuntimeGraphDraftSession restore(context_, changed);
+    restore.edit(changed->root()).setNodeDataIndex(kept, index);
+    return restore.commit();
 }

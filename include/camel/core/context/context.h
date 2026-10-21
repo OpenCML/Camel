@@ -201,6 +201,10 @@ class Context : public std::enable_shared_from_this<Context> {
     const camel::runtime::Program *materializeRuntimeProgram();
     const camel::runtime::Program *adoptRuntimeProgram(const camel::runtime::Program *program);
     const camel::runtime::Program *installRuntimeProgram(const camel::runtime::Program *program);
+    /// installRuntimeProgram, but only while `expected` is still the installed program (see
+    /// GCGraphManager::replaceRootIfCurrent): answers whether it installed it.
+    bool installRuntimeProgramIfCurrent(const camel::runtime::Program *expected,
+                                        const camel::runtime::Program *program);
     const camel::runtime::Program *currentRuntimeProgram() const;
     void clearRuntimeGraphs();
     /// A new, empty Program owned by the context, for whoever builds one.
@@ -217,6 +221,9 @@ class Context : public std::enable_shared_from_this<Context> {
     void enterRun();
     void leaveRun();
     void releaseRuntimeGraph(camel::runtime::GCGraph *graph);
+    /// See GCGraphManager::noteUnbound: a graph a rewrite encoded and has not bound in a
+    /// program yet, which the collector frees once the pass is over if nothing binds it.
+    void noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph);
     /// The newest program of the context that holds this version of `graph` (see
     /// GCGraphManager::programOf), nullptr when none does.
     const camel::runtime::Program *

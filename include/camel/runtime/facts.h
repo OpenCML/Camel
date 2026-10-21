@@ -62,6 +62,11 @@
  * A kind with Dependency::Cone also stores a hash of what it read (its dependency cone); when a
  * revision changed, the cone is hashed again and, when it is equal, the fact stays valid with a
  * new stamp (the precise rule, design 10.3).
+ * A kind with Dependency::Node is about a node's own version (design 4.4): its stamp holds, per
+ * anchored node, the hash of the node's record and of what it carries (GCGraph::nodeContentHash)
+ * and the fact holds while that is the same, though the revision of its graph changed. It is the
+ * rule for a kind whose compute reads the records of its anchored nodes and nothing else; a node
+ * the commit moved to another place, or renumbered, reads as changed.
  *
  * The store belongs to the program: Context::facts(). Facts are process-local; they are not
  * copied into the graphs and do not change any dump of the program.
@@ -105,6 +110,7 @@ enum class Scope : uint8_t {
 enum class Dependency : uint8_t {
     Anchors, // stale when the revision of an anchored graph changed (the conservative rule)
     Cone,    // as Anchors, but rehash the dependency cone first: equal means still valid
+    Node,    // stale when an anchored node changed: the node's version, not the graph's
 };
 
 using KindId = uint32_t;
@@ -126,6 +132,17 @@ using Value = std::shared_ptr<const void>;
 struct Stamp {
     /// (GraphId, revision) of every graph the fact read, one per distinct anchored graph.
     std::vector<std::pair<GraphId, uint64_t>> graphs;
+    /// One anchored node of a Dependency::Node fact: where it is, and its version
+    /// (GCGraph::nodeContentHash: the hash of its record, of the nodes it consumes and of its
+    /// payload).
+    struct NodeMark {
+        GraphId graph;
+        gc_node_ref_t node;
+        uint64_t hash;
+    };
+    /// The anchors that name a node, for Dependency::Node: the fact holds while these do, though
+    /// a graph's revision changed (design 4.4: a fact is valid on a node version).
+    std::vector<NodeMark> nodes;
     /// OperatorTable::declarationEpoch() when computed; 0 for a kind that reads no declaration.
     uint64_t declarationEpoch = 0;
     /// The hash of the target configuration (class iii); 0 for target-independent kinds.
@@ -384,9 +401,9 @@ void computeFacts(FactStore &store, const Program &program);
  * `root`: the stored facts whose stamp matches those graphs, then the GraphContent facts read
  * from them. Fields: "kind", "version", "class" ("content", "derived", "target"), "anchors"
  * (a list of {"graph", "node"}, the node omitted for a graph as a whole), "value" (the kind's
- * print), "stamp" ({"revisions": [{"graph", "revision"}], "epoch", "target", "cone"}; null for
- * GraphContent). Stale facts are not printed (and are dropped). Ordered by kind, then graph and
- * node.
+ * print), "stamp" ({"revisions": [{"graph", "revision"}], "nodes": [{"graph", "node", "hash"}]
+ * for Dependency::Node, "epoch", "target", "cone"}; null for GraphContent). Stale facts are not
+ * printed (and are dropped). Ordered by kind, then graph and node.
  */
 void dumpFacts(FactStore &store, const Program &program, std::ostream &os);
 
