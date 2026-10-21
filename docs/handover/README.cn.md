@@ -200,7 +200,7 @@
 | H41 | **缺陷**：`ort_loop_values`、`ort_grad_loop_values`、`lsp.editing`、`examples.ml.export_onnx_translate` 在 fsh-dev 上失败（H5 名义结构体之后） | 无 | 丁车道，优先 |
 | H40 | C2 峰值内存因每步 `take` 升高 150 MB：查清数据块回收是否及时触发并修复 | 无 | 乙车道 |
 | H38 | 规则引擎的其余部分（`when`、`#requires`、分析、替换 `algebra.cpp`；先交计划） | H2（`#requires` 部分） | 丙车道交给施工方 |
-| H39 | 图存储的技术债（过期提交合并进最新快照、未绑定的编码图、`jitFnToGraph_`、节点级事实标记、草稿改为块存储） | 无 | 丙车道交给施工方 |
+| H39 | 图存储的技术债（过期提交合并进最新快照、未绑定的编码图、`jitFnToGraph_`、节点级事实标记、草稿改为块存储） | 无 | **已完成**（复核报告 reports/H39.md；第 5 项按剖析结论不做） |
 | H37 | **缺陷（最优先）**：库程序（Camel 写的遍所在的模块）中模块级 `let` 的值读成 0 | 无 | 丙车道交给施工方，最优先 |
 | H36 | Camel 图 API 的收尾（导入 Camel 库、遍参数、新值的根规则、区域读取等） | 无 | 丙车道（交给施工方） |
 | H35 | Windows 构建核对 `graph` 模块 C7–C9 新增的导出项（手写的修饰名，未在 Windows 上链接过） | 无 | 己车道，下次 Windows 构建时 |
