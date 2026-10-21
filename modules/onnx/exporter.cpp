@@ -55,6 +55,7 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/reachable.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -415,6 +416,33 @@ Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
 /// specializations of them) mean nothing in the source; the source position says more.
 bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
 
+/// How the export refuses a LOOP node: the translation of a LOOP to an ONNX Loop is the next
+/// step (docs/design/loops 5.7), so it is refused where it is written instead of being lowered
+/// to a recursion the export would have to recover again. The translation reports it when a
+/// LOOP node reaches it (evalNode); refuseLoopNodes reports the same text before the export
+/// simplifies the function.
+std::string loopRefusalText(const GCGraph &graph) {
+    const std::string what =
+        "a 'loop' expression is not exported to ONNX yet; write the loop as a "
+        "tail-recursive function, which is exported as an ONNX Loop";
+    const std::string name = graph.name().substr(0, graph.name().find('$'));
+    return isSourceName(name) ? std::format("in '{}': {}", name, what) : what;
+}
+
+/// "file:line:column" of `origin`, or nothing when the origin has no source position.
+std::string sourceLocationOf(
+    const camel::source::source_context_ptr_t &source, uint64_t origin) {
+    if (!source || origin == camel::source::kInvalidOriginId) {
+        return {};
+    }
+    const auto *file = source->fileForOrigin(origin);
+    if (!file) {
+        return {};
+    }
+    const auto range = source->resolveOrigin(origin);
+    return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
+}
+
 /// The operator of a node, or an empty view for any other node kind.
 std::string_view operUriOf(const GCGraph *g, gc_node_ref_t ref) {
     const auto *n = g->node(ref);
@@ -619,15 +647,7 @@ Value Evaluator::eval(Activation &act, gc_node_ref_t ref) {
 }
 
 std::string Evaluator::locationOf(uint64_t origin) const {
-    if (!source_ || origin == camel::source::kInvalidOriginId) {
-        return {};
-    }
-    const auto *file = source_->fileForOrigin(origin);
-    if (!file) {
-        return {};
-    }
-    const auto range = source_->resolveOrigin(origin);
-    return std::format("{}:{}:{}", file->path, range.start.line + 1, range.start.character + 1);
+    return sourceLocationOf(source_, origin);
 }
 
 std::vector<Value> Evaluator::evalAll(Activation &act, std::span<const gc_node_ref_t> refs) {
@@ -707,10 +727,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
         // A LOOP node maps one to one onto an ONNX Loop (docs/design/loops 5.7); that
         // translation is the next step. Until then the export refuses it where it is written
         // rather than lowering it to a recursion it would have to recover again.
-        unsupported(
-            act,
-            "a 'loop' expression is not exported to ONNX yet; write the loop as a "
-            "tail-recursive function, which is exported as an ONNX Loop");
+        throw ExportError(loopRefusalText(*g));
     default:
         unsupported(
             act,
@@ -4248,12 +4265,45 @@ void refuseUnendedUnrolling(
         ExportError::Kind::Other);
 }
 
+/// Refuses a LOOP node before the export simplifies the bound function (translatePrepared).
+///
+/// The translation itself refuses a LOOP node where it is written (evalNode), but the export
+/// simplifies the function first, and the algebraic stage of that simplification is the rules
+/// library (`std::opt::algebra` is `rules::simplify`): the rules pass edits a draft of the
+/// export's private copy and commits it with the checked commit, which compares the draft with
+/// the program the copy came from. A graph an earlier round of the simplification rewrote is a
+/// newer version in the copy, so the check reports `RewriteInvalid` and the loop is never
+/// reached. Refusing here keeps the exporter's diagnosis, at the loop, before any of that.
+///
+/// No pass removes a LOOP node (it runs its graphs, which may have effects), so a loop of the
+/// bound function still reaches the translation; the refusal is the same one, only reported
+/// earlier.
+void refuseLoops(
+    core::context::Context &ctx, const camel::runtime::Program &program, GCGraph *root) {
+    for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, root)) {
+        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+            if (*it == nullptr || (*it)->kind != GCNodeKind::Loop) {
+                continue;
+            }
+            const uint64_t origin = graph->nodeOrigin(it.ref());
+            throw ExportError(
+                loopRefusalText(*graph),
+                sourceLocationOf(ctx.sourceContext(), origin),
+                origin);
+        }
+    }
+}
+
 Model translatePrepared(
     core::context::Context &ctx, Emitter &emitter, const camel::runtime::Program *program,
     std::span<const Value> inputs, std::unordered_map<slot_t, std::string> names,
     const ExportOptions &options, Preparation preparation) {
     const auto context = ctx.shared_from_this();
     GCGraph *root      = program->root();
+    // A LOOP is refused before the simplification below, which can fail on the graphs of a
+    // function a loop is part of (see refuseLoops) and would then report its own failure
+    // instead of the loop.
+    refuseLoops(ctx, *program, root);
     std::ostringstream log;
     // The pass entry (ShapesOnly): the preceding passes simplified the program without two
     // things only the export knows: the shapes of the examples (binding their types above
