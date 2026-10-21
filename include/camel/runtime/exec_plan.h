@@ -91,6 +91,7 @@ struct ExecLoop {
     /// condition's ports (when hasCond), then the body's ports: the element first (when it
     /// iterates), then k.
     uint32_t slotsOffset = 0;
+    const gc_data_idx_t *slots = nullptr; // &loopSlots[slotsOffset]
     /// The value type of the node when it wraps its state (k > 1 or it collects); else null.
     const camel::core::type::TupleType *valueType = nullptr;
     uint64_t origin = 0;

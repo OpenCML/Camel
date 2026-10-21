@@ -176,6 +176,9 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
     if (plan.loops.empty()) {
         return;
     }
+    for (ExecLoop &loop : plan.loops) {
+        loop.slots = plan.loopSlots.data() + loop.slotsOffset;
+    }
     std::stable_sort(events.begin(), events.end(), [](const Event &a, const Event &b) {
         if (a.position != b.position) {
             return a.position < b.position;

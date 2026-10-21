@@ -325,18 +325,8 @@ slot_t NodeVMSchedPass::call(
                     i,
                     *currFrame,
                     resumedLoop,
-                    [&](const camel::runtime::ExecLoop &loop, size_t) {
-                        try {
-                            gcSafepoint("nodevm loop round");
-                        } catch (const camel::core::mm::MemoryExhausted &e) {
-                            if (loop.collectionCount == 0) {
-                                throw;
-                            }
-                            throw e.during(
-                                "collecting the values a loop produces each round",
-                                loop.origin);
-                        }
-                    });
+                    camel::execute::loopRoundSafepoint(
+                        [&] { gcSafepoint("nodevm loop round"); }));
                 if (resume != camel::execute::kNoLoopJump) {
                     i = resume - 1;
                     continue;

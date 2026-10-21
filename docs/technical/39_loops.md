@@ -85,8 +85,8 @@ leave the program, and a graph that has loops holds their nodes: the passes, the
 validator see them as nodes of one graph with regions. `LoopView` reads both forms
 (`inRegions()`); a loop in graph form only exists for the code that reads a loop as two graphs.
 `runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`) makes that form from the region
-form, in a private program: FastVM (native loops under a debugger),
-the lowering to tail recursion and autodiff use it; autodiff regionizes its gradient again.
+form, in a private program: the lowering to tail recursion (std::prl, std::cpp) and autodiff use
+it; autodiff regionizes its gradient again.
 `test::outline_loops` shows the result in a dump.
 
 `std::rgir` shows the node (`LOOP while`); in graph form it names the graphs:
@@ -195,13 +195,13 @@ contribution would be dropped without a sign of it.
 | Consumer | How it runs a LOOP |
 |---|---|
 | `std::nvm` | natively, in the frame of the function: the plan lays the nodes of the condition, those of the body and the LOOP node out as one range (`ExecLoop`), and the interpreter starts, tests and ends rounds at the positions the plan names (`ExecLoopEvent`); the state is in the node's slot |
-| `std::fvm`, `std::jit` | the private lowering at its entry, by default (faster today, section 5). Natively under a debugger and with `std::fvm(native_loop=true)`: one `SCHD` instruction (marks `LoopWhile`, `LoopFor`, `LoopForWhile`, the two graphs in extra words), run by `FastVMSchedPass::evalLoop` through the call path of the higher-order operators (a compiled body runs compiled), so that a debugger shows the loop's own graphs |
-| `std::macro` evaluator | natively, round by round, at most 1,000,000 rounds |
+| `std::fvm`, `std::jit` | natively, as bytecode: the plan's events are three instructions, `LBEG` (the loop starts), `LTST` (the condition has run: stop, or bind the body's ports) and `LEND` (the body has run: the next state, and a backward jump to the start of a round), run by the same functions as NodeVM's (`loopBegin`, `loopTest`, `loopEnd`). A graph with a loop is not compiled by the JIT yet: it runs in the interpreter, and the functions it calls are compiled |
+| `std::macro` evaluator | natively, in the frame of the function (`stepLoops`), at most 1,000,000 rounds |
 | `std::prl` | the private lowering at its entry and when a runtime callback supplies an original graph containing a loop |
 | `std::cpp` | the private lowering at its entry; the generated tail calls are loops |
 | ONNX export | refused where the loop is written (the LOOP to ONNX Loop translation is the next step) |
 | autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
-| debugger | the loop's graphs are arms of their function: folded into its frame by default |
+| debugger | the condition and the body are regions of the graph of their function: part of its frame, with the names of their ports |
 
 **The lowering** (`camel/runtime/loop_lowering.h`): per loop, three graphs,
 `rec(i, S; c, xs) = if go then next(S; c, i, xs) else done(S)`, `next = rec(i + 1, body(xs[i],
@@ -263,34 +263,21 @@ with two hidden operators, `:loop/collector` (a fresh array, once before the loo
 `:loop/collect` (append in place, returns the tape), effectful by default so no pass removes or
 reorders them; `next` carries the `(state…, tape…)` tuple.
 
-**Lowered or native on std::fvm and std::jit.** The choice is made once at the entry: native when
-an observer asks for loop frames (`ExecutionObserver::wantsLoopFrames`, true for the debugger) or
-with `CAMEL_FVM_NATIVE_LOOP=1`, lowered otherwise; the choice is logged under the `FastVM` scope.
-The two give the same results, faults and output.
-
 ## 5. Timings
 
-Ten million rounds, whole process, one container, three runs each, the median
-(`docs/design/loops/examples/bench_loop.cml` with two values of state and `bench_tail.cml`, the
-same as a hand-written tail recursion; the one-value pair counts `i` to 10,000,000):
+Ten million rounds of a `while` loop with two values of state (`acc + i % 7`, `i + 1`), whole
+process, one container, the median of three runs:
 
-| Program | `std::nvm` | `std::fvm` | `std::jit` |
-|---|---|---|---|
-| loop, two values of state (default: nvm native, fvm/jit lowered) | 1.71 s | 1.33 s | 1.50 s |
-| the same, native instruction (`std::fvm(native_loop=true)`) | | 2.61 s | 2.62 s |
-| the same, hand-written tail recursion | 0.98 s | 0.49 s | 0.49 s |
-| loop, one value of state (default) | 0.94 s | 0.48 s | 0.82 s |
-| the same, native instruction | | 0.62 s | 0.59 s |
-| the same, hand-written tail recursion | 0.70 s | 0.38 s | 0.37 s |
+| `std::nvm` | `std::fvm` | `std::jit` |
+|---|---|---|
+| 2.06 s | 1.08 s | 1.07 s |
 
-The native instruction pays a nested interpreter entry for each of its two calls a round, where
-the lowered loop's calls stay in the dispatch loop; it is therefore not the default on std::fvm
-and std::jit. A loop with several values of state also builds the tuple of the next state every
-round (the body's FILL), which a hand-written recursion over separate parameters does not.
+Before the loops were bytecode, FastVM and the JIT ran the private lowering (1.67 s, 1.88 s) and
+the first native instruction was slower than that (it entered the interpreter again for each of
+its two calls a round). A loop with several values of state builds the tuple of the next state
+every round (the body's FILL), which a hand-written recursion over separate parameters does not.
 
-Next steps: a bytecode loop on std::fvm (the state in frame slots of its own, the two calls in
-the dispatch loop, a backward jump), at least as fast as the lowering, then made the default;
-compiling it with the JIT; passing the k values of the state separately in the lowering when the
+Next steps: compiling a loop with the JIT; passing the k values of the state separately when the
 body ends in a tuple FILL; and in their turn std::prl, std::cpp, ONNX and autodiff.
 
 ## 6. Tests
@@ -298,7 +285,7 @@ body ends in a tuple FILL; and in their turn std::prl, std::cpp, ONNX and autodi
 `test/plans/feat/linear/loops.plan.toml` (shapes, effects, captures, nesting, edges, a million
 rounds under a recursion limit of 3, faults, passes, std::macro, dumps, the five diagnostics, the
 refusals, and the iterables: `loops.iterate_string`, `loops.iterate_map`, `loops.iterate_tensor`,
-`loops.iterate_empty`, the `*.native_loop` and `.macro` forms, `loops.err_not_iterable`,
+`loops.iterate_empty`, the `.macro` forms, `loops.err_not_iterable`,
 `loops.err_tensor_rank0` and `loops.fault_tensor_rank0`), `parse.rulings` (syntax, AST, GCT, graph), `tools.debugger`
 `debugger.loop_frames`, four loop programs in `test/tools/cppexec/expect.txt` (one of them over a
 string), and progen's `loop` feature (all forms, sync bodies with effects).
@@ -310,7 +297,7 @@ sync bodies with effects).
 `test/plans/feat/linear/loop_collect.plan.toml` covers collection slots through two test-only
 passes (`test::loop_collect`, `test::loop_collect_summary`, enabled by
 `CAMEL_ENABLE_TEST_PASSES=1`): the four shapes and the three ways a loop runs no rounds; the same
-on `std::nvm`, `std::fvm`, `std::jit`, `std::prl`, and the native FastVM loop on fvm and jit,
+on `std::nvm`, `std::fvm`, `std::jit`, `std::prl`,
 with the back ends' output compared; `std::macro` on the two-value loop of `macro.cml`; a hundred
 thousand rounds of a `while` and a `for` loop with the tapes summarised by their lengths; and a
 tape that outgrows `CAMEL_GC_HEAP_LIMIT_MB`, which every executor reports as
