@@ -1338,6 +1338,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NativeDeclarationOverlap,
+            {
+                "NativeDeclarationOverlap",
+                "Two declarations of '{0}' can take the same call: '{1}' and '{2}'.",
+                "An operator has one meaning for one call: which rule applies must be decided by "
+                "the types of the arguments, never by the order the declarations are written in. "
+                "Give the declarations parameter types that cannot both accept one argument "
+                "list, or keep one of them.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",

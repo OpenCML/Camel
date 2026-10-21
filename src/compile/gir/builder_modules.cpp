@@ -58,6 +58,165 @@ using namespace camel::core::type;
 
 namespace camel::compile::gir {
 
+namespace {
+
+/// Whether one and the same argument can have both types, for some instantiation of the type
+/// variables of two declarations: `T[]` and `int[]` can (`T` is `int`), `T[]` and `string`
+/// cannot, and `T` can be whatever the other side is. A value written at a `T?` or `T!`
+/// position enters it, so `T?` and `int` can be the type of one argument, and so can `T?` and
+/// `U!` (a plain value enters either). `left` and `right` remember what each side's variables
+/// stand for, so that `(T, T)` and `(int, string)` are told apart. Two types with no variable
+/// are compared exactly.
+///
+/// The answer is used to refuse two generic declarations of one name that one call could enter
+/// (design principles 4.3, 5.1; handover H94, ruling 2). Where this does not look into a type
+/// (an application of a type function, for one) it says they can agree: refusing a pair that
+/// cannot overlap is a diagnostic to remove, while letting one through is a call whose meaning
+/// the declaration order decides.
+bool typesCanAgree(
+    Type *left, Type *right, std::unordered_map<std::string, Type *> &leftBindings,
+    std::unordered_map<std::string, Type *> &rightBindings) {
+    if (left == nullptr || right == nullptr) {
+        return true;
+    }
+    if (left->code() == TypeCode::TypeVar) {
+        const auto *var = static_cast<const TypeVarType *>(left);
+        if (const auto bound = leftBindings.find(var->name()); bound != leftBindings.end()) {
+            return typesCanAgree(bound->second, right, leftBindings, rightBindings);
+        }
+        leftBindings.emplace(var->name(), right);
+        return true;
+    }
+    if (right->code() == TypeCode::TypeVar) {
+        const auto *var = static_cast<const TypeVarType *>(right);
+        if (const auto bound = rightBindings.find(var->name()); bound != rightBindings.end()) {
+            return typesCanAgree(left, bound->second, leftBindings, rightBindings);
+        }
+        rightBindings.emplace(var->name(), left);
+        return true;
+    }
+    if (TupleType *tagged = asTagged(left)) {
+        TupleType *other = asTagged(right);
+        return typesCanAgree(
+            tagged->payloadType(), other != nullptr ? other->payloadType() : right, leftBindings,
+            rightBindings);
+    }
+    if (TupleType *tagged = asTagged(right)) {
+        return typesCanAgree(left, tagged->payloadType(), leftBindings, rightBindings);
+    }
+    if (!containsTypeVar(left) && !containsTypeVar(right)) {
+        return left->equals(right);
+    }
+    if (left->code() != right->code()) {
+        return false;
+    }
+    switch (left->code()) {
+    case TypeCode::Array:
+        return typesCanAgree(
+            static_cast<ArrayType *>(left)->elemType(),
+            static_cast<ArrayType *>(right)->elemType(), leftBindings, rightBindings);
+    case TypeCode::Tuple: {
+        auto *want = static_cast<TupleType *>(left);
+        auto *have = static_cast<TupleType *>(right);
+        if (want->size() != have->size() || want->isCell() != have->isCell() ||
+            want->tag() != have->tag()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->size(); ++i) {
+            if (!typesCanAgree(
+                    want->typeAt(i), have->typeAt(i), leftBindings, rightBindings)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case TypeCode::Struct: {
+        auto *want = static_cast<StructType *>(left);
+        auto *have = static_cast<StructType *>(right);
+        if (want->named() || have->named()) {
+            if (!want->named() || !have->named() || want->decl() != have->decl() ||
+                want->typeArgCount() != have->typeArgCount()) {
+                return false;
+            }
+            for (size_t i = 0; i < want->typeArgCount(); ++i) {
+                if (!typesCanAgree(
+                        want->typeArgAt(i), have->typeArgAt(i), leftBindings, rightBindings)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (want->size() != have->size()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->size(); ++i) {
+            const auto field = have->findField(want->fieldName(i));
+            if (!field.has_value() ||
+                !typesCanAgree(
+                    want->typeAt(i), have->typeAt(*field), leftBindings, rightBindings)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    case TypeCode::Function: {
+        auto *want = static_cast<FunctionType *>(left);
+        auto *have = static_cast<FunctionType *>(right);
+        if (want->withTypesCount() != have->withTypesCount() ||
+            want->normTypesCount() != have->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < want->withTypesCount(); ++i) {
+            if (!typesCanAgree(
+                    want->withTypeAt(i), have->withTypeAt(i), leftBindings, rightBindings)) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < want->normTypesCount(); ++i) {
+            if (!typesCanAgree(
+                    want->normTypeAt(i), have->normTypeAt(i), leftBindings, rightBindings)) {
+                return false;
+            }
+        }
+        if (want->hasExitType() && have->hasExitType()) {
+            return typesCanAgree(
+                want->exitType(), have->exitType(), leftBindings, rightBindings);
+        }
+        return true;
+    }
+    default:
+        break;
+    }
+    return true;
+}
+
+/// Whether one call could be an instance of both signatures: the same number of parameters of
+/// both kinds, and one argument list that both can take (`typesCanAgree` above).
+bool signaturesCanAgree(FunctionType *left, FunctionType *right) {
+    if (left == nullptr || right == nullptr ||
+        left->withTypesCount() != right->withTypesCount() ||
+        left->normTypesCount() != right->normTypesCount()) {
+        return false;
+    }
+    std::unordered_map<std::string, Type *> leftBindings;
+    std::unordered_map<std::string, Type *> rightBindings;
+    for (size_t i = 0; i < left->withTypesCount(); ++i) {
+        if (!typesCanAgree(
+                left->withTypeAt(i), right->withTypeAt(i), leftBindings, rightBindings)) {
+            return false;
+        }
+    }
+    for (size_t i = 0; i < left->normTypesCount(); ++i) {
+        if (!typesCanAgree(
+                left->normTypeAt(i), right->normTypeAt(i), leftBindings, rightBindings)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 void Builder::reportImportNameConflicts() {
     // Two imports by name that bring functions of the same name and the same parameter types
     // (design principles 10.2): the call used to take the function of the import written
@@ -243,6 +402,12 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     };
     // Two rules of a name that accept the same parameters cannot both be meant (the operator
     // group refuses them the same way); nor may a declaration repeat a function of the module.
+    // Two *generic* declarations are checked alike, by what a call of the name could enter: a
+    // call both accept would be decided by the order the declarations are written in, which no
+    // rule of the language allows (design principles 4.3, 5.1; handover H94, ruling 2). A fixed
+    // declaration beside a generic one is no such pair: the fixed one is the more specific, and
+    // a call it accepts is its own.
+    const bool generic = resolver->fixedSignature() == nullptr;
     for (auto &group : unit_->nativeOperators) {
         if (group.name != name) {
             continue;
@@ -250,6 +415,18 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         for (const auto &[otherUri, other] : group.rules) {
             if (sameParameters(other->fixedSignature(), resolver->fixedSignature())) {
                 diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+                throw BuildAbortException();
+            }
+            const auto *otherDeclared = dynamic_cast<const DeclaredFuncTypeResolver *>(other.get());
+            if (!generic || otherDeclared == nullptr ||
+                otherDeclared->fixedSignature() != nullptr) {
+                continue;
+            }
+            if (signaturesCanAgree(otherDeclared->funcType(), funcType)) {
+                diags_->of(SemanticDiag::NativeDeclarationOverlap)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        name, otherDeclared->funcType()->toString(), funcType->toString());
                 throw BuildAbortException();
             }
         }
@@ -286,7 +463,16 @@ void Builder::exportNativeOperators() {
             diags_->of(SemanticDiag::Redeclaration).atOrigin(group.origin).commit(group.name);
             throw BuildAbortException();
         }
-        const oper_group_ptr_t ops = OperatorGroup::create(group.name, std::move(group.rules));
+        // A fixed declaration is the more specific rule: a call that both it and a generic
+        // declaration accept is its own (design principles 4.3; handover H94, ruling 2). The
+        // group answers in the order of its rules, so the fixed ones come first.
+        std::stable_sort(
+            group.rules.begin(), group.rules.end(), [](const auto &a, const auto &b) {
+                return a.second->fixedSignature() != nullptr &&
+                       b.second->fixedSignature() == nullptr;
+            });
+        const oper_group_ptr_t ops =
+            OperatorGroup::create(group.name, std::move(group.rules));
         if (existing.has_value()) {
             // The C++ module exports an operator group of this name too: the declaration is the
             // module's signature for it, so it replaces the group instead of being a second

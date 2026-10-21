@@ -197,6 +197,9 @@ enum class SemanticDiag : uint32_t {
     NativeDeclarationIncomplete = 0x00017B,
     NativeDeclarationNotLoaded  = 0x00017C,
     DeclarationModuleHasBody    = 0x00017D,
+    // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
+    /// Two generic declarations of one name can take the same call (ruling 2).
+    NativeDeclarationOverlap = 0x00017E,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

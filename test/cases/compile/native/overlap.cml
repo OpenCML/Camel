@@ -1,0 +1,20 @@
+/**
+ * Two generic declarations of one name that a single call could enter are refused where the
+ * second one is written: which rule a call means must come from the types of its arguments,
+ * never from the order the declarations are written in (design principles 4.3, 5.1; handover
+ * H94, ruling 2).
+ */
+module native_overlap
+
+#op<':op/idx_arr'>
+export func pick(xs: (typeas T)[], i: int): T
+
+// The same call: an array of some element type and an index. `T` and `U` are no help — every
+// call of one is a call of the other.
+#op<':op/idx_arr'>
+export func pick(xs: (typeas U)[], i: int): U
+
+func main(): int sync {
+    println(pick([10, 20, 30], 1))
+    return 0
+}

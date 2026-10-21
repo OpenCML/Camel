@@ -111,6 +111,32 @@ Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group
         }
     }
     set.ops = imported.ops;
+    // The rules of this module's own body-less declarations are its operator overloads too
+    // (design principles 10.2; handover H94, ruling 2): a call written here reaches them, and
+    // the comparison of the candidates counts them. They come before what an import brings, and
+    // a fixed rule before a generic one (a call both accept is the more specific rule's).
+    if (module_ != nullptr) {
+        if (const auto own = module_->getNativeEntity(Reference(group));
+            own.has_value() && own->isOperGroup() && own->operGroup() != nullptr) {
+            std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
+            for (const auto &overload : own->operGroup()->resolvers()) {
+                resolvers.push_back(overload);
+            }
+            for (const auto &overload : imported.ops->resolvers()) {
+                const bool known = std::ranges::any_of(resolvers, [&](const auto &have) {
+                    return have.first == overload.first && have.second == overload.second;
+                });
+                if (!known) {
+                    resolvers.push_back(overload);
+                }
+            }
+            std::stable_sort(resolvers.begin(), resolvers.end(), [](const auto &a, const auto &b) {
+                return a.second->fixedSignature() != nullptr &&
+                       b.second->fixedSignature() == nullptr;
+            });
+            set.ops = OperatorGroup::merged(group, std::move(resolvers));
+        }
+    }
     return set;
 }
 
