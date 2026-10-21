@@ -174,6 +174,7 @@
 | H61 | 规则引擎按作者裁定的三项：`analysis` 接收多个模式变量；抽取的保留边界写进设计稿；`algebra.cpp` 对等的次序（先元素类型定律、再张量定律；`safe_fp` 就是 `#strict`） | 无 | **部分完成**（第 1、2 项完成；第 3 项只记后果、未实施；报告 reports/H61.md。§3.2 记下的抽取缺陷由 H63 修复；措辞张力按作者更正解决——裁定括注"按依赖求值只适用于纯计算"是协调者的误写、已删除，设计原则 3.1 不变，见 reports/H63.md） |
 | H58 | **过期测试**：DAP 尾递归步进的 6 个断言仍按 `fda0d21f` 之前的“臂是独立影子帧”写；按 12.1 的区域模型更正断言，并补尾调用点的 `next`/`stepOut` | 无 | **已完成**（报告 reports/H58.md；无源码改动，不是缺陷修复） |
 | H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **已完成**（运行器已严格、`expect_stdout_exact`/`expect_stdout_not_contains` 真正比较；暴露的 9 条真实失败全部已修，8 条循环梯度与第 9 条 `extract` 死写法都由 H59 定位并修好；报告 reports/H52.md） |
+| H82 | Debug 构建在安全点检查重写会话打开的草稿是否都已登记为根（H74 第 9 节的强制机制） | 无 | — |
 | H81 | 核心的 `CAMEL_*` 环境变量改为命令行选项、遍参数或 `std::profile`（见 reviews/H24-H25-H26.md 末尾） | 无 | **排队中**（`CAMEL_GC`/`CAMEL_GRAPH_GC_MB`/`CAMEL_GC_STATS`/`CAMEL_TYPE_STATS`/`CAMEL_EFFECT_TRACE`/`CAMEL_NATIVE_STACK_GUARD`/`CAMEL_PROFILE_MODE`/`CAMEL_ENABLE_TEST_PASSES`；`CAMEL_TILES_DEVICE` 归 H49 的 `--devices`。工具链定位类（`CAMEL_TILES_NVRTC`）保留为环境变量） |
 | H75 | `gpu/tiles` 慢层 16 项失败（H80-gpu-tiles-failures.txt） | 无 | **进行中**（handover/H75-tiles-regions；先分清几类根因，再定回归/过期期望/待 H49） |
 | H73 | GC：`collfuzz` 在 nvm 上的失败、`gc_live_gb` 期望 | 无 | **进行中**（handover/H73-gc-collfuzz；已排除帧地址复用；`gc_live_gb` 的 elder 期望已由 H80 改为计 young+elder） |
