@@ -17,9 +17,12 @@ tags = ["perf", "training", "gpu"]
 # The budgets are the mean of ten runs on the reference host (32 cores, Release); they are a
 # regression guard, not a goal, and the per-step numbers these programs print are in
 # docs/handover/reports/H48.md. The host is shared: the same plan measures 1.3-1.6x slower while
-# eight agents are building on it (dependency_chain.nvm 29.2 ms alone, 33.5 ms under load, against
-# a 22 ms reference), so the tolerance is 100 % -- a real regression is still caught, a busy
-# neighbour is not a failure. Tighten it only on a machine this project owns.
+# eight agents are building on it (dependency_chain.nvm 29.2 ms alone, 33.5 ms under load), so the
+# tolerance is 100 % -- a real regression is still caught, a busy neighbour is not a failure.
+#
+# std::nvm has no budget at all: by the author's ruling (reviews/H24-H25-H26.md, H43 item 7) it
+# is the node-at-a-time reference implementation, the performance is fvm's and jit's to carry, and
+# its per-step numbers are recorded here only to be compared against.
 
 [[tests]]
 name = "dependency_chain.nvm"
@@ -31,9 +34,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 22
-perf_budget_tolerance_pct = 100
 
 [[tests]]
 name = "dependency_chain.fvm"
@@ -59,9 +59,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 500
-perf_budget_tolerance_pct = 100
 
 [[tests]]
 name = "mlp_step.fvm"
@@ -87,9 +84,6 @@ expect_exit = 0
 snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
-perf_budget_platform = "local.sample"
-perf_budget_mean_ms = 16
-perf_budget_tolerance_pct = 100
 
 # The numbers of a step, from the profiler rather than from the clock of the program.
 [[tests]]
