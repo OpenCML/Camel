@@ -33,6 +33,7 @@
 #include "camel/core/mm.h"
 #include "camel/execute/limits.h"
 #include "camel/execute/pass/params.h"
+#include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/path.h"
 #include "camel/utils/str.h"
@@ -192,6 +193,62 @@ bool readRoundLimit(
     return true;
 }
 
+/// The largest limit a memory option accepts, in megabytes (1 TiB): a value that is not a
+/// positive integer below it is no limit.
+constexpr size_t kMaxMemoryOptionMb = size_t{1} << 20;
+
+bool readMegabyteLimit(const std::string &text, const char *option, size_t &out) {
+    if (text.empty()) {
+        return true;
+    }
+    unsigned long long megabytes = 0;
+    const char *begin            = text.data();
+    const char *end              = text.data() + text.size();
+    auto [ptr, ec]               = std::from_chars(begin, end, megabytes);
+    if (ec != std::errc() || ptr != end || megabytes == 0 || megabytes > kMaxMemoryOptionMb) {
+        std::cerr << "Invalid " << option << " value: '" << text
+                  << "'. Expected a number of megabytes from 1 to " << kMaxMemoryOptionMb << "."
+                  << std::endl;
+        return false;
+    }
+    out = static_cast<size_t>(megabytes);
+    return true;
+}
+
+/// A switch that used to be an environment variable of the core. The variable is not read any
+/// more: setting it is refused with the option or pass parameter that replaced it, so an old
+/// command line stops with a reason instead of silently running with the default.
+struct RetiredEnvironmentVariable {
+    const char *name;
+    const char *replacement;
+};
+
+constexpr RetiredEnvironmentVariable kRetiredEnvironmentVariables[] = {
+    {"CAMEL_GC", "give the collector with --gc <generational|mark-sweep>"},
+    {"CAMEL_BLOCK_LIMIT_MB", "give the limit with --block-limit <megabytes>"},
+    {"CAMEL_GRAPH_GC_MB", "give the floor with --graph-gc-mb <megabytes>"},
+    {"CAMEL_GC_STATS", "ask for them with 'std::profile(gc_stats=1)' in the pipeline"},
+    {"CAMEL_TYPE_STATS", "ask for them with 'std::profile(type_stats=true)' in the pipeline"},
+    {"CAMEL_EFFECT_TRACE",
+     "ask for the trace with 'std::profile(effect_trace=\"<file>\")' in the pipeline"},
+    {"CAMEL_NATIVE_STACK_GUARD", "give the switch with --native-stack-guard <on|off>"},
+    {"CAMEL_PROFILE_MODE", "give the mode with --profile-mode <normal|full>"},
+    {"CAMEL_ENABLE_TEST_PASSES",
+     "the test-only passes (test::*) need no switch; name the pass in the pipeline"},
+};
+
+bool rejectRetiredEnvironmentVariables() {
+    bool ok = true;
+    for (const auto &retired : kRetiredEnvironmentVariables) {
+        if (const char *value = std::getenv(retired.name); value != nullptr) {
+            std::cerr << "Error: the environment variable " << retired.name
+                      << " is retired; " << retired.replacement << "." << std::endl;
+            ok = false;
+        }
+    }
+    return ok;
+}
+
 /// Left-to-right over argv: last `--log-level` / `-v*` wins; then applies preset/include and stderr
 /// sink.
 void applyCamelCliLogging(int argc, char **argv) {
@@ -317,6 +374,10 @@ string maxRecursionDepthOpt = ""; // raw --max-recursion-depth
 string maxMacroDepthOpt     = ""; // raw --max-macro-depth
 string maxMacroRoundsOpt    = ""; // raw --max-macro-rounds
 string gcModeOpt            = ""; // raw --gc
+string blockLimitOpt        = ""; // raw --block-limit (megabytes)
+string graphGcMbOpt         = ""; // raw --graph-gc-mb (megabytes)
+string nativeStackGuardOpt  = ""; // raw --native-stack-guard (on|off)
+string profileModeOpt       = ""; // raw --profile-mode (normal|full)
 size_t maxRecursionDepth    = 0;  // 0: not given on the command line
 size_t maxMacroDepth        = 0;
 size_t maxMacroRounds       = 0;
@@ -573,6 +634,12 @@ void printCliArgs(Command selected) {
 }
 
 bool parseArgs(int argc, char *argv[]) {
+    // A switch that moved out of the environment is refused when the old variable is still set:
+    // the run stops with the name of what replaced it instead of silently using the default.
+    if (!rejectRetiredEnvironmentVariables()) {
+        exitCode = 1;
+        return false;
+    }
     const bool startupProfile = std::getenv("CAMEL_STARTUP_PROFILE") != nullptr;
     auto startupLast          = std::chrono::steady_clock::now();
     auto startupMark          = [&](const char *stage) {
@@ -632,7 +699,19 @@ bool parseArgs(int argc, char *argv[]) {
              "1000000; also CAMEL_MAX_MACRO_ROUNDS)",
          (option("--gc") & value("collector", gcModeOpt)) %
              "collector of run-time values: generational (default; young objects are copied) or "
-             "mark-sweep (objects keep their address); also CAMEL_GC",
+             "mark-sweep (objects keep their address)",
+         (option("--block-limit") & value("megabytes", blockLimitOpt)) %
+             "limit of the data-block space in megabytes (default 2048); raise it for a run that "
+             "builds several large models in one process",
+         (option("--graph-gc-mb") & value("megabytes", graphGcMbOpt)) %
+             "the graph space asks for a collection when it holds this many megabytes more than "
+             "after the last one (default 64)",
+         (option("--native-stack-guard") & value("on|off", nativeStackGuardOpt)) %
+             "check the native stack on every nested call (default on); off measures where the "
+             "stack really ends and is not for normal use",
+         (option("--profile-mode") & value("normal|full", profileModeOpt)) %
+             "mode of the profiler of --profile: full also opens the Perfetto UI when the report "
+             "is written",
          option("-n", "--no-cache").set(noCache) % "do not use cache",
          (option("-I", "--include") & values("include dir", includeDirs)) % "add include directory",
          (option("-L", "--stdlib") & value("stdlib path", stdLibPath)) % "add stdlib path",
@@ -877,7 +956,7 @@ bool parseArgs(int argc, char *argv[]) {
             std::exit(1);
         }
 
-        // The collector: the option, else the environment (read by the allocator itself).
+        // The collector: --gc, which the allocator applies before its heap exists.
         if (!Run::gcModeOpt.empty()) {
             const auto mode = camel::core::mm::parseCollectorMode(Run::gcModeOpt);
             if (!mode) {
@@ -888,6 +967,52 @@ bool parseArgs(int argc, char *argv[]) {
             if (!camel::core::mm::selectCollectorMode(*mode)) {
                 std::cerr << "Error: --gc was read after the run-time heap was set up."
                           << std::endl;
+                std::exit(1);
+            }
+        }
+
+        // The memory limits: --block-limit and --graph-gc-mb. Both must be read before the
+        // spaces they bound exist.
+        size_t blockLimitMb  = 0;
+        size_t graphGcFloorMb = 0;
+        if (!readMegabyteLimit(Run::blockLimitOpt, "--block-limit", blockLimitMb) ||
+            !readMegabyteLimit(Run::graphGcMbOpt, "--graph-gc-mb", graphGcFloorMb)) {
+            std::exit(1);
+        }
+        if (blockLimitMb != 0 &&
+            !camel::core::mm::selectBlockSpaceLimit(
+                blockLimitMb * camel::core::mm::MB)) {
+            std::cerr << "Error: --block-limit was read after the data-block space was set up."
+                      << std::endl;
+            std::exit(1);
+        }
+        if (graphGcFloorMb != 0) {
+            camel::runtime::setGraphCollectionFloorBytes(
+                graphGcFloorMb * camel::core::mm::MB);
+        }
+
+        // --native-stack-guard: off is the switch for measuring where the stack ends.
+        if (!Run::nativeStackGuardOpt.empty()) {
+            if (Run::nativeStackGuardOpt == "off") {
+                camel::execute::setNativeStackGuardEnabled(false);
+            } else if (Run::nativeStackGuardOpt == "on") {
+                camel::execute::setNativeStackGuardEnabled(true);
+            } else {
+                std::cerr << "Invalid --native-stack-guard value: '" << Run::nativeStackGuardOpt
+                          << "'. Expected on or off." << std::endl;
+                std::exit(1);
+            }
+        }
+
+        // --profile-mode: the mode of the advanced profiler that --profile starts.
+        if (!Run::profileModeOpt.empty()) {
+            if (Run::profileModeOpt != "normal" && Run::profileModeOpt != "full") {
+                std::cerr << "Invalid --profile-mode value: '" << Run::profileModeOpt
+                          << "'. Expected normal or full." << std::endl;
+                std::exit(1);
+            }
+            if (!Run::profile) {
+                std::cerr << "Error: --profile-mode needs --profile." << std::endl;
                 std::exit(1);
             }
         }

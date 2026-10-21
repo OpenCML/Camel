@@ -839,6 +839,12 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
 /// without sweeping it (GenerationalAllocatorWithGC::collectGraphSpace). While a program runs
 /// the collector of run-time values does it with a major collection (sweepMarked). The manager
 /// frees the Programs and graphs nothing marked.
+/// The floor of the graph-space collection (`--graph-gc-mb <megabytes>`, default 64): the graph
+/// space asks for a major collection when it holds this much more than it did after the last
+/// one. Chosen by the command line before the first program exists; a manager made later reads
+/// it. The size after the last collection replaces it once it is larger.
+void setGraphCollectionFloorBytes(size_t bytes);
+
 class GCGraphManager {
   public:
     GCGraphManager();

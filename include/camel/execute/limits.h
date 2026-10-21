@@ -119,10 +119,12 @@ size_t macroRoundLimit(const core::context::Context &context);
 /// end that raises it itself.
 std::string nativeStackExhaustedDetail(size_t openCalls);
 
-/// False when the environment variable CAMEL_NATIVE_STACK_GUARD is 0: the checks of the native
-/// stack are then skipped and only the counts stop a recursion. A switch for measuring where
-/// the stack really ends (a raised limit then ends in a crash); not for normal use.
+/// False when `--native-stack-guard off` was given: the checks of the native stack are then
+/// skipped and only the counts stop a recursion. A switch for measuring where the stack really
+/// ends (a raised limit then ends in a crash); not for normal use.
 bool nativeStackGuardEnabled();
+/// Applies `--native-stack-guard <on|off>`, before anything runs.
+void setNativeStackGuardEnabled(bool enabled);
 /// The bounds of the calling thread's native stack (it grows down from `high`); both 0 where
 /// they cannot be read. Read once per thread.
 void nativeStackBounds(uintptr_t &low, uintptr_t &high);

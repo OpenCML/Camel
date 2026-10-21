@@ -23,6 +23,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 
@@ -96,27 +97,27 @@ GenerationalAllocatorWithGC::CollectionKind envCollectionKind() {
 std::atomic<int> selectedCollectorMode{-1};
 std::atomic<bool> autoSpaceCreated{false};
 
-// The collector the environment asks for; generational unless CAMEL_GC names mark-sweep
-// (design principles 10.5: generational collection is the default once usable).
-// CAMEL_GC_ENABLE_YOUNG_COPYING, the older name of CAMEL_GC=generational, no longer changes
-// anything; safepoint poisoning is a mode of the moving collector and implies it.
-CollectorMode collectorModeFromEnv() {
-    if (envFlag("CAMEL_GC_POISON")) {
-        return CollectorMode::Generational;
-    }
-    if (const std::string raw = envString(kCollectorModeEnv); !raw.empty()) {
-        if (const auto mode = parseCollectorMode(lowerAscii(raw))) {
-            return *mode;
-        }
-        std::cerr << "[camel] " << kCollectorModeEnv << "=" << raw
-                  << " is not a collector (mark-sweep, generational); using generational\n";
-        return CollectorMode::Generational;
-    }
-    return CollectorMode::Generational;
-}
+// --block-limit: what the command line chose before the block space existed (0: the default).
+std::atomic<size_t> selectedBlockLimitBytes{0};
+std::atomic<bool> blockSpaceCreated{false};
 
-// The allocator whose statistics are printed at exit (CAMEL_GC_STATS).
+// std::profile(gc_stats=<level>): the statistics asked for, kept until the allocator exists.
+std::atomic<int> requestedStatsLevel{0};
+std::once_flag statsAtExitOnce;
+
+// The allocator whose statistics are printed at exit.
 GenerationalAllocatorWithGC *statsInstance = nullptr;
+
+void installStatsAtExit() {
+    std::call_once(statsAtExitOnce, [] {
+        std::atexit([] {
+            if (statsInstance != nullptr) {
+                statsInstance->reportStats(std::cerr);
+            }
+            reportSpaceUsage(std::cerr);
+        });
+    });
+}
 
 size_t largeObjectBudgetFromEnv() {
     const size_t megabytes = envSize("CAMEL_GC_LARGE_BUDGET_MB");
@@ -211,12 +212,37 @@ CollectorMode collectorMode() {
         return autoSpace().youngGenCopyingEnabled() ? CollectorMode::Generational
                                                     : CollectorMode::MarkSweep;
     }
-    const int selected = selectedCollectorMode.load(std::memory_order_acquire);
+    // Safepoint poisoning is a mode of the moving collector, so it turns it on.
     if (envFlag("CAMEL_GC_POISON")) {
         return CollectorMode::Generational;
     }
-    return selected >= 0 ? static_cast<CollectorMode>(selected) : collectorModeFromEnv();
+    const int selected = selectedCollectorMode.load(std::memory_order_acquire);
+    // Generational is the default (design principles 10.5: generational collection is the
+    // default once usable); --gc names the other collector.
+    return selected >= 0 ? static_cast<CollectorMode>(selected) : CollectorMode::Generational;
 }
+
+bool selectBlockSpaceLimit(size_t bytes) {
+    if (blockSpaceCreated.load(std::memory_order_acquire)) {
+        return false;
+    }
+    selectedBlockLimitBytes.store(bytes, std::memory_order_release);
+    return true;
+}
+
+void enableStatsReport(int level) {
+    if (level <= 0) {
+        return;
+    }
+    requestedStatsLevel.store(level, std::memory_order_release);
+    if (autoSpaceCreated.load(std::memory_order_acquire)) {
+        autoSpace().setStatsLevel(level);
+        statsInstance = &autoSpace();
+        installStatsAtExit();
+    }
+}
+
+bool statsReportEnabled() { return requestedStatsLevel.load(std::memory_order_acquire) != 0; }
 
 // Managed automatically by the GC system and must remain reachable from roots.
 GenerationalAllocatorWithGC &autoSpace() {
@@ -265,15 +291,13 @@ GenerationalAllocatorWithGC &autoSpace() {
                 .enableYoungGenCopying = youngCopying});
         instance->configureDebug(debugConfig);
         maybePrintDebugConfig(youngCopying, debugConfig);
-        // CAMEL_GC_STATS=1: one line of pacing statistics on stderr at exit; =2: also one line
-        // per major collection.
-        if (const size_t level = envSize("CAMEL_GC_STATS"); level != 0) {
-            instance->setStatsLevel(static_cast<int>(level));
+        // std::profile(gc_stats=1): one line of pacing statistics on stderr at exit; =2: also
+        // one line per major collection. The request is kept until the allocator exists, since
+        // the pass may run before the heap is first used.
+        if (const int level = requestedStatsLevel.load(std::memory_order_acquire); level != 0) {
+            instance->setStatsLevel(level);
             statsInstance = instance;
-            std::atexit([] {
-                statsInstance->reportStats(std::cerr);
-                reportSpaceUsage(std::cerr);
-            });
+            installStatsAtExit();
         }
         return instance;
     }();
@@ -356,10 +380,16 @@ GrowableFreeListAllocator &blockSpace() {
         // process legitimately needs hundreds of megabytes, and the space gives memory back as soon
         // as the last owner goes, so its limit only has to catch a runaway allocation. Its default
         // is therefore of the same order as the collected heap, not the 256 MB of the program
-        // spaces.
-        GrowableSpaceConfig config =
-            spaceConfig("block", "data blocks", 8 * MB, 2048 * MB, kBlockSpaceLimitEnv);
+        // spaces; --block-limit raises it before the space exists.
+        const size_t selected = selectedBlockLimitBytes.load(std::memory_order_acquire);
+        GrowableSpaceConfig config = spaceConfig(
+            "block",
+            "data blocks",
+            8 * MB,
+            selected != 0 ? selected : kDefaultBlockSpaceLimitBytes,
+            "--block-limit");
         config.sizesFromHeaders = true;
+        blockSpaceCreated.store(true, std::memory_order_release);
         return config;
     })());
     return *allocator;

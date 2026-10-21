@@ -274,8 +274,8 @@ class GenerationalAllocatorWithGC : public IAllocator {
         uint64_t lastTracedRootReferenceCount = 0;
         size_t rememberedSetSize              = 0;
         size_t rootSourceCount                = 0;
-        // Pacing (reported with CAMEL_GC_STATS). Requests are counted once per collection they
-        // lead to, by the cause that asked first; deferredCollections counts every repeat.
+        // Pacing (reported with std::profile(gc_stats=1)). Requests are counted once per collection
+        // they lead to, by the cause that asked first; deferredCollections counts every repeat.
         uint64_t largeBudgetRequests      = 0;
         uint64_t elderExhaustedRequests   = 0;
         uint64_t elderBlockBudgetRequests = 0; // Promoted block bytes, see below
@@ -369,7 +369,7 @@ class GenerationalAllocatorWithGC : public IAllocator {
     RuntimeStats stats() const;
 
     // 0: silent; 1: reportStats is meant to be called at exit; 2: also one line on stderr per
-    // major collection (CAMEL_GC_STATS).
+    // major collection (std::profile(gc_stats=<level>)).
     void setStatsLevel(int level);
 
     // One line: collections, requests by cause, bytes allocated per space, the large-object
