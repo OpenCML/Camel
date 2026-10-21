@@ -1,0 +1,30 @@
+/**
+ * Blocks held by promoted arrays pace the major collections. A rolling window of `rows` arrays
+ * of `size` elements is kept: each step allocates a new row, appends it and drops the oldest, so
+ * a row survives the four minor collections that promote it and is then garbage. A minor
+ * collection cannot release the block of a promoted array, so without a major collection driven
+ * by these bytes the window would grow with the number of steps. The plan asserts the major
+ * collection is asked for by the promoted-block budget (CAMEL_GC_GROWTH_PERCENT of the block
+ * bytes the last sweep left, above the CAMEL_GC_LARGE_BUDGET_MB floor) and that the high-water
+ * mark does not grow with `steps`.
+ */
+module gc_promoted_blocks
+
+import { drop } from array
+
+func main(steps: int, rows: int, size: int): int sync {
+    let start = std::mem::blocks()
+    let base = start.bytes
+    let seed: int[][] = []
+    let (iLeft, window, peak, low, released, total) = loop i = steps, window = seed, peak = 0, low = 1000000000000, released = 0, total = 0 while i > 0 do {
+        let row = range(0, size)
+        let grown = window->append<row>
+        let next = if len(grown) > rows then grown->drop<1> else grown
+        let now = std::mem::blocks()
+        let bytes = now.bytes
+        let n = len(row)
+        (i - 1, next, if bytes > peak then bytes else peak, if bytes < low then bytes else low, now.frees - start.frees, total + n)
+    }
+    println('gc_promoted_blocks base={} peak={} low={} released={} total={}'->format<base, peak, low, released, total>)
+    return 0
+}
