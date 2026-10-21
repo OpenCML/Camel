@@ -558,6 +558,15 @@ cab3302faced01db ok test/cases/compile/generics/type_import.cml
 601fed65ec23c1f8 ok test/cases/compile/generics/type_lib.cml
 ba61c070244c5f96 ok test/cases/compile/generics/unused_body.cml
 b2c7183a3863ab1f ok test/cases/compile/gir/sync_ctrl_dedup.cml
+b07a520ccbf24e40 ok test/cases/compile/lambda_inference/arity.cml
+b25ceb9ce9b4dda6 ok test/cases/compile/lambda_inference/call_in_place.cml
+07acca4a7c2ef1d1 no test/cases/compile/lambda_inference/func_type.cml
+a15544ad42bcd1ea ok test/cases/compile/lambda_inference/generic.cml
+7d2b2e3fb9163485 ok test/cases/compile/lambda_inference/no_expected.cml
+8945b0e36a051510 ok test/cases/compile/lambda_inference/not_function.cml
+7ca97e96922aaf3f ok test/cases/compile/lambda_inference/overload_typed.cml
+c985ed3ce9562911 ok test/cases/compile/lambda_inference/overload_untyped.cml
+48365eb69e19d499 ok test/cases/compile/lambda_inference/positions.cml
 b35d067767f18ce7 ok test/cases/compile/literals/context_argument_field_text.cml
 bf47c6018ccceea4 ok test/cases/compile/literals/context_argument_name.cml
 d3be0d7fca3ed697 ok test/cases/compile/literals/context_argument_out_of_range.cml
@@ -1244,7 +1253,7 @@ c3ec908702304769 ok test/cases/linear/byref/let_to_var_with_param.cml
 bdda7724b9a64bf3 ok test/cases/linear/byref/param_sorted.cml
 6fdfbac84dc5e04f ok test/cases/linear/byref/param_to_var_param.cml
 da80fe2dd24ffa18 ok test/cases/linear/byref/path_assigned.cml
-c77183d971b0c498 ok test/cases/linear/byref/path_assigned_allocs.cml
+a5169632ba5c8837 ok test/cases/linear/byref/path_assigned_allocs.cml
 5b9b8251b1daec44 ok test/cases/linear/byref/var_capture_reference.cml
 33440f32bb34f6e2 ok test/cases/linear/byref/var_function_as_value_function.cml
 9cf7e573f3d55d53 ok test/cases/linear/byref/var_function_to_operator.cml
@@ -1330,7 +1339,8 @@ de83013195ae27f6 ok test/cases/linear/runtime/divide_by_zero.cml
 1606512358f47df6 ok test/cases/linear/runtime/sync_literal_operands.cml
 fe49614e1062aab1 ok test/cases/loops/arm_loops.cml
 204f94cee8ddce2e ok test/cases/loops/arm_loops_edges.cml
-092b61923ca3ef5e ok test/cases/loops/captures.cml
+92079bf05e4cf5ec ok test/cases/loops/captures.cml
+7065bdadf32575cc ok test/cases/loops/captures_constants.cml
 86e1cd983fa4c0f2 ok test/cases/loops/collection.cml
 701a7d8e245c7f8d ok test/cases/loops/collection_in_place.cml
 fbf6da4c49894b32 ok test/cases/loops/collection_large.cml

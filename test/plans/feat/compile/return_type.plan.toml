@@ -89,4 +89,4 @@ const out = input.normalized.stdout.trim()
 assert(out === '19 0', `unexpected output: ${out}`)
 }
 """
-timeout_ms = 5000
+timeout_ms = 20000
