@@ -127,7 +127,9 @@ tracer that relocates the draft's static values and the constant slots copied in
 patterns (a condition call is a safepoint). `check` compares the two sides only through the
 engine for a conditional rule. Tests: `test/cases/modules/rules/when_rules.cml` with
 `when_target.cml` (fact, shape and type conditions, each firing and refusing, all four backends,
-saturation) and `check_when.cml`.
+saturation) and `check_when.cml`. A rule, its target and the pass that applies it may also live
+in one module (`same_module_pass.cml`): the pass module is a program of its own, and the program
+it is also part of is built afterwards (H38 report §2.5).
 
 **`analysis`.** `analysis range: Interval { initial => …; join(a,b) => …; widen(a,b) => …; on (x +
 y) => range(x) + range(y) }` declares a lattice and its transfer clauses; it compiles to
