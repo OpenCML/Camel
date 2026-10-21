@@ -89,20 +89,31 @@ extern "C" slot_t directSelfFuncInvoke(slot_t *callerSlots, void *ctx, const Byt
 // Helpers framed code calls (MirOp::CallHelper). `slots` is the slot base of the activation's
 // pool frame, slots[0] its Frame*. None of them throws: an exception is stored in
 // JitContext::pending with faultKind = PendingException, and the code that called leaves through
-// its fault exit. None of them reaches a safepoint of the collector or calls a Camel function
-// (those bytecodes are left to the driver).
+// its fault exit. None of them calls a Camel function (those bytecodes are left to the driver).
+// One of them reaches a safepoint: jitHelperLoopEnd, at the round boundary, where the loop's
+// rounds are interruptible as they are under the interpreter.
 // An operator that reaches a safepoint itself does so with the framed code that called
 // jitHelperOper on the machine stack. That is allowed: the code holds nothing the collector
 // would have to see or update (everything is in its pool frame, and it reads the frame again
 // after the call). The collector's rule "no safepoint under compiled code" is a rule about
 // frameless code, and the count that enforces it (mm::detail::nativeCodeDepth) is taken around
-// the entry into frameless code only (docs/technical/36_gc_handle_rules.md, section 4).
+// the entry into frameless code only (docs/technical/36_gc_handle_rules.md, section 4). The loop
+// event at a round boundary (jitHelperLoopEnd) polls the same safepoint with the same argument.
 // OPER: calls the operator, stores and returns its result.
 extern "C" slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc);
 // CAST, COPY, ACCS, FILL, and a JOIN of more than two arms: runs the bytecode on the frame.
 extern "C" slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc);
 // BRCH with case values (match): the index of the arm taken, also stored in the result slot.
 extern "C" slot_t jitHelperBranchArm(slot_t *slots, void *ctx, size_t pc);
+// The three events of a loop of regions (camel/execute/loop_frame.h), on the frame of the
+// activation exactly as the interpreters run them: LBEG starts a loop (its first state),
+// LTST returns 1 when the round's condition stops the loop (or the iterable is exhausted) and
+// otherwise binds the ports of the body, LEND returns 1 when another round follows (taking the
+// body's result as the state and polled at the round safepoint). A loop's rounds stay
+// interruptible at the safepoint FastVM has: LEND polls it, as the interpreter does.
+extern "C" slot_t jitHelperLoopBegin(slot_t *slots, void *ctx, size_t pc);
+extern "C" slot_t jitHelperLoopTest(slot_t *slots, void *ctx, size_t pc);
+extern "C" slot_t jitHelperLoopEnd(slot_t *slots, void *ctx, size_t pc);
 
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
 /** Win64 asm trampoline: call fn(slots,ctx), store result, jmp to return_addr (avoids Release
