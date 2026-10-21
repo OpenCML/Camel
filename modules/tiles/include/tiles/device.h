@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <memory>
 #include <span>
+#include <vector>
 
 namespace camel::tiles {
 // Backend-owned storage has a checked dynamic type. It must never retain Camel
@@ -38,6 +39,18 @@ struct DeviceValue {
     std::shared_ptr<DeviceStorage> owner;
     std::shared_ptr<DeviceCompletion> completion;
 };
+// One host leaf of a transfer batch. `bytes` must outlive the call; the batch is
+// synchronous, so no pointer is retained afterwards.
+struct HostLeaf {
+    Shape shape;
+    DType dtype = DType::F32;
+    std::span<const std::byte> bytes;
+};
+// A tree's leaves move together: one stream, one pinned staging region and one
+// synchronisation per direction, while every leaf keeps its own device block
+// layout. Result order matches input order.
+std::vector<std::shared_ptr<DeviceValue>> uploadValues(std::span<const HostLeaf> values);
+std::vector<std::vector<std::byte>> downloadValues(std::span<const DeviceValue *const> values);
 std::shared_ptr<DeviceValue>
 uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data);
 std::vector<std::byte> downloadValue(const DeviceValue &value);
