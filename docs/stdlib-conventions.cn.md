@@ -23,7 +23,7 @@
 C++ 模块不再重复写签名：没有函数体的声明就是签名本身，调用方按它检查，运行时由 `module:function`（例如 `bytes:len`）找到算子的执行器。声明名与算子名不同、或同一模块的算子用别的前缀（`random` 的 `rand:`）时用 `#op<'...'>` 标出；另一个模块的算子不能在这里声明。`docs/stdlib-reference.md` 由这些声明生成，不手改。
 
 - 一个名字按类型有各自的执行器 URI 时（`math` 的 `abs_i`、`abs_l`、…），声明逐个写、各带确切的 `#op<'模块:算子'>`；不能用一个 `(typeas T)` 的泛型声明代替，因为泛型声明仍只绑定一个 URI，而执行器是按类型分名的。签名文件里的 `*` 通配只作参考，不是声明可用的写法：`ExecutorManager` 与 `OperatorTable` 都按确切的 URI 查找。
-- 计算签名的算子（C++ 的 `DynamicFuncTypeResolver`，结果类型取自实参）留在 C++；声明文件里用 `// dynamic func 名字(...): 类型` 的注释记录参考页条目与文档，不写成声明。`math` 的 `sqrt`（`i32`→`f32`、`int`→`float`）与 `shl`/`shr`（结果取第一个参数的类型）是这样三条。
+- 计算签名的算子（C++ 的 `DynamicFuncTypeResolver`，结果类型取自实参）留在 C++；声明文件里用 `// dynamic func 名字(...): 类型` 的注释记录参考页条目与文档，不写成声明。`math` 的 `sqrt`（`i32`→`f32`、`int`→`float`）与 `shl`/`shr`（结果取第一个参数的类型）是这样三条。也可以把这几条留在 `stdlib/signatures/<模块>.cml` 里，模块条目的 `computed` 字段指向它，参考页与 `--verify-ops` 把声明文件与它合起来对账（`json`、`random`）。
 - C++ 导出的值（`math::pi`）没有可写的声明：`export let` 必须有初始值，写了就是第二份值。声明模块里用 `// value 名字: 类型` 的注释记录参考页条目，`///` 说明与 `@example` 照常写在它上方；值本身仍由 C++ 导出。
 
 ## 2. 声明
@@ -73,7 +73,7 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 | 用 Camel 写的模块 | `stdlib/<模块>.cml` |
 | C++ 实现的模块 | `modules/<模块>/`（执行器、算子表、资源、语义），签名在 `stdlib/<模块>.cml` |
 | 尚未声明化的 C++ 模块（过渡） | `stdlib/signatures/<模块>.cml`，只作参考、不参与编译；每搬一个模块删一个文件 |
-| 已声明化模块里算不出来的签名（过渡） | 同一个 `stdlib/signatures/<模块>.cml` 里只留那几条，只作参考；其余声明在 `stdlib/<模块>.cml`，两处由 `--verify-ops` 一起对账 |
+| 已声明化模块里算不出来的签名（过渡） | 同一个 `stdlib/signatures/<模块>.cml` 里只留那几条，只作参考；其余声明在 `stdlib/<模块>.cml`，两处由 `--verify-ops` 一起对账。也可以像 `math` 那样用 `// dynamic func` 写进声明文件，不保留签名文件；`json`、`random` 用的是签名文件加 `computed` 字段 |
 | 测试用例 | `test/cases/`，计划在 `test/plans/` |
 
 模块名就是导入名，也是算子 URI 的前缀。新模块按分层放：前奏（内置，尽量小）／基础（`str`、`bytes`、`array`、`math`、`random`、`stats`、`time`、`re`、`json`、`hash`）／系统（`fs`、`io`、`env`、`process`）／数值（`tensor` 栈）／工具（`test_support`、`bench`、`profiler`）。

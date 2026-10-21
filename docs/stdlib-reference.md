@@ -2208,8 +2208,9 @@ primitive behind `sort_by` of the `array` module.
 
 ## `random`
 
-One generator for the whole process. Every function reads or advances it and is declared with
-effects; none is ever folded or merged by a pass.
+One generator for the whole process, and keyed functions that read none. The functions that
+draw from the generator are declared with effects and are never folded or merged by a pass;
+the keyed ones are pure, and the same key gives the same bits everywhere.
 
 After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
 Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
@@ -2218,6 +2219,41 @@ distributions, which differ between libraries: a float in [0, 1) is the generato
 times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
 method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
 output modulo the number of places left.
+
+#### `choice`
+
+```camel
+choice: (xs: T[]) => T
+```
+
+One element of xs, drawn uniformly.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when xs is empty.
+- Example: `choice(['a', 'b', 'c'])` gives `'b'`
+
+#### `sample`
+
+```camel
+sample: (xs: T[], n: int) => T[]
+```
+
+n elements of xs drawn without replacement, as a new array.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
+- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
+
+#### `shuffle`
+
+```camel
+shuffle: (xs: T[]) => T[]
+```
+
+The elements of xs in a random order, as a new array; xs is not changed.
+
+- With effects: advances the generator.
+- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `seed`
 
@@ -2263,41 +2299,6 @@ above high.
 
 - With effects: advances the generator.
 - Example: `randint(1, 6)` gives `4`
-
-#### `choice`
-
-```camel
-choice: (xs: T[]) => T
-```
-
-One element of xs, drawn uniformly.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when xs is empty.
-- Example: `choice(['a', 'b', 'c'])` gives `'b'`
-
-#### `sample`
-
-```camel
-sample: (xs: T[], n: int) => T[]
-```
-
-n elements of xs drawn without replacement, as a new array.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
-- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
-
-#### `shuffle`
-
-```camel
-shuffle: (xs: T[]) => T[]
-```
-
-The elements of xs in a random order, as a new array; xs is not changed.
-
-- With effects: advances the generator.
-- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `key`
 

@@ -1,0 +1,79 @@
+/**
+ * One generator for the whole process, and keyed functions that read none. The functions that
+ * draw from the generator are declared with effects and are never folded or merged by a pass;
+ * the keyed ones are pure, and the same key gives the same bits everywhere.
+ *
+ * After a seed the numbers are the same on every platform. The generator is the 64-bit Mersenne
+ * Twister (std::mt19937_64, seeded with the value as an unsigned 64-bit integer), and the draws
+ * are made by the project's own code (include/camel/utils/random.h), not by the C++ library's
+ * distributions, which differ between libraries: a float in [0, 1) is the generator's 64 bits
+ * times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
+ * method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
+ * output modulo the number of places left.
+ */
+
+// The declarations of the operators of the C++ module `modules/random` (design principles 6.4;
+// handover H19, step 10). This file is the one source of their signatures; the C++ side keeps
+// the kernels, the executor, the operator traits and the resources. Every operator of this
+// module answers on `rand:` rather than on the module's name, so each declaration carries the
+// `#op` tag that names its operator. `choice`, `sample` and `shuffle` take their result type
+// from the element type of their array argument; that computation stays in the C++ resolver
+// (a `DynamicFuncTypeResolver`), and `stdlib/signatures/random.cml` keeps their reference
+// entries, as `json` does with its computed signatures (handover H115, H128).
+
+module random
+
+/// Sets the state of the generator: the same seed gives the same sequence.
+/// @effect sets the generator
+/// @example seed(42)
+#op<'rand:seed'>
+export func seed(value: int): void
+
+/// A float drawn uniformly from 0 (included) to 1 (excluded).
+/// @effect advances the generator
+/// @example rand()    // 0.374540
+#op<'rand:rand'>
+export func rand(): float
+
+/// A float drawn from the normal distribution with mean 0 and deviation 1.
+/// @effect advances the generator
+/// @example randn()    // -0.138264
+#op<'rand:randn'>
+export func randn(): float
+
+/// An integer drawn uniformly from low to high, both included; the two are swapped when low is
+/// above high.
+/// @effect advances the generator
+/// @example randint(1, 6)    // 4
+#op<'rand:randint'>
+export func randint(low: int, high: int): int
+
+// `choice`, `sample` and `shuffle` take their result type from the element type of their array
+// argument: that signature is computed by a `DynamicFuncTypeResolver` and stays in C++, so it is
+// not declared here. Their reference entries (docs, `@effect`, `@fails`, `@example`, `#op`) are in
+// `stdlib/signatures/random.cml`, and the module entry of scripts/stdlib-reference.mjs names it
+// with `computed:`; `--verify-ops` reads the declaration file and that one together.
+
+/// A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
+/// half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
+/// on every scheduler, in translated C++, and on every platform.
+/// @pure
+/// @example key(42)    // { hi: 1350887118657991639, lo: -7139630017956984517 }
+#op<'rand:key'>
+export func key(seed: int): Key
+
+/// Two independent keys derived from key: split(key) gives the same pair every time, and does
+/// not change key.
+/// @pure
+/// @example let (a, b) = split(key(42))
+#op<'rand:split'>
+export func split(key: Key): (Key, Key)
+
+/// A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
+/// stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
+/// and does not change key; n = 0 gives [] and n = 1 gives [0].
+/// @pure
+/// @fails fault `InvalidArgument` when n is negative
+/// @example permutation(key(42), 4)    // [1, 0, 2, 3]
+#op<'rand:permutation'>
+export func permutation(key: Key, n: int): int[]
