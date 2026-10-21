@@ -323,11 +323,11 @@ let area = match b {
 3. **节点标签**（`on nodes`）用现有的节点属性实现：区域上的事实累积，同名带参的内层为准。**声明标签**（`on func`、`on type`、`on field`）存在声明上，C++ 查询接口可读；编译期代码中的读取（`match type`、`fields`）随泛型第一期接入，本任务只提供存储与 C++ 查询。
 4. **数值许可改为标签，默认值按设计原则 7.4**：`reassociate`、`contract` 默认授予，其余用标签授予；新增标签 `#strict`（不使用任何许可，含默认许可）；核心的 `NumericPolicy` 以 7.3 为默认策略，安全模式参数即严格策略。标准库把 `reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` 声明为 `on nodes` 的标签，`finite_math` 为别名组。删除编译器前端的 `numeric` 分支与名单、`@name(...)` 写法（旧写法给出指向 `#[reassociate]` 的诊断）、一字节许可列；核心语义层通过节点标签读取许可（标签与含义的对应只在一处）；所有读者（算式优化、`tensor::fuse`、`inspect`、`std::jgir`、Tiles）改为同一个辅助函数。Tiles 只改到能编译。
 5. **`@vjp` 改为 `#vjp<rule>`**（声明标签，值为规则函数的图引用），自动微分直接读取，删除靠宏求值与 `attachRule` 的做法。
-6. **`macro` 改为标准标签 `#macro`**（不用导入）：`std::macro` 读标签，含义按设计原则第 8 节不变；求值失败按运行时故障处理，与任何遍运行中的故障相同；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。
+6. **`macro` 改为标准标签 `#macro`**（不用导入）：`std::macro` 读标签，含义按设计原则第 8 节不变；求值失败按运行时故障处理，与任何遍运行中的故障相同；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。**已完成（`#macro` 部分，报告 `reports/H97.md`）**；**未做**：删除关键字 `inner`、`outer`、`atomic`、`shared`，见报告第 8 节。
 8. **标签可声明读取它的遍**：`tag 名 ... read_by 遍名`（写法可调整，报告中说明）；流水线中没有该遍时给出"标签没有效果"的警告。
 7. 许可、宏、自定义导数的原有测试改为新写法后全部通过；语言参考、标准库参考、诊断目录同步更新。
 
-**剩下什么**：只剩第 6 项（`#macro` 尚未成为标准标签）；第 4 项由 `7b4147c1` 完成，第 5 项由本分支后续提交完成（报告 reports/H77.md）；第 1–3、7、8 项早已完成（`856af859`）。
+**剩下什么**：第 6 项的 `#macro` 已完成（报告 `reports/H97.md`）；同一行里的关键字删除 `inner`、`outer`、`atomic`、`shared` 仍未做，见该报告第 8 节。第 4 项由 `7b4147c1` 完成，第 5 项由本分支后续提交完成（报告 reports/H77.md）；第 1–3、7、8 项早已完成（`856af859`）。
 
 ### H3：依赖节点属性的后续
 
