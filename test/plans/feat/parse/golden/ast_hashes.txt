@@ -576,7 +576,7 @@ cccd95ec8b3cccd3 ok test/cases/compile/literals/convert_float_to_int.cml
 3cf27dd300ecdf3a ok test/cases/compile/literals/convert_int_to_i32.cml
 d2e5ff1f70fd2565 ok test/cases/compile/literals/convert_text_to_float.cml
 dd122058fbbdf90e ok test/cases/compile/literals/convert_text_to_int.cml
-a386b2c1c8a9b0e3 ok test/cases/compile/literals/empty_array_context.cml
+bea3560d0664475c ok test/cases/compile/literals/empty_array_context.cml
 f2090dca344cbe23 ok test/cases/compile/literals/f32_too_large.cml
 e6044490abc2a5d4 ok test/cases/compile/literals/float_too_large.cml
 42bab9b1f2857216 ok test/cases/compile/literals/i32_nullable_too_large.cml
