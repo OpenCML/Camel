@@ -2856,17 +2856,17 @@ The annotation '@{0}' is not accepted: {1}.
 **Help**
 
 ```text
-A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@numeric(...)' grants numeric permissions to a function or a block (design principles 7.5). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).
+A line that starts with '@' annotates the function declaration or the block that follows. '@name' and '@name<args>' are decorators of a function or of a block; '@name(args)' is no longer accepted (numeric permissions are tags, design principles 7.2). A tag is written with '#': '#name', '#name<args>' or '#[a, b<v>]' (design principles 6.2).
 ```
 
-**Example** (`test/cases/compile/tags/err_old_annotation.cml`, run as `camel test/cases/compile/tags/err_old_annotation.cml`)
+**Example** (`test/cases/compile/tags/err_numeric_annotation.cml`, run as `camel test/cases/compile/tags/err_numeric_annotation.cml`)
 
 ```camel
-/// The old `@name(...)` form of a tag: a located diagnostic points at `#[...]`.
-module err_old_annotation
+/// The removed `@numeric(...)` spelling: a located diagnostic points at the tag form that
+/// replaced it (design principles 7.2 made numeric permissions tags).
+module err_numeric_annotation
 
-@kernel(base)
-
+@numeric(contract)
 func main(): int { return 0 }
 ```
 
@@ -3789,13 +3789,13 @@ func main(): int { return 0 }
 **Message**
 
 ```text
-The tag '{0}' is declared with the name of a permission of the language.
+The tag '{0}' is declared with the name of a tag of the language.
 ```
 
 **Help**
 
 ```text
-A numeric permission (design principles 7.2) is a tag of the core and a program may not declare a tag of that name: the core's permission would still be what '#{0}' means, and the declaration would never be read. Rename the tag.
+A numeric permission (design principles 7.2) and its group and `strict` (7.4) are tags of the core, and a program may not declare a tag of that name: the core's tag would still be what '#{0}' means, and the declaration would never be read. Rename the tag.
 ```
 
 **Example** (`test/cases/compile/tags/err_tag_shadows_permission.cml`, run as `camel test/cases/compile/tags/err_tag_shadows_permission.cml`)

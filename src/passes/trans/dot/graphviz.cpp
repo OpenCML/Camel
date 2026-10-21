@@ -370,8 +370,8 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         const auto *outputType = nodeStaticSlotType(graph, *node);
         const string valueType =
             outputType ? camel::core::type::sourceTypeSpelling(outputType->toString()) : "";
-        // The numeric permissions the program granted with @numeric(...) (design principles
-        // 7.5) and the attributes libraries attached to the node (language reference 7.6), read
+        // The numeric permissions the program granted with permission tags (design principles
+        // 7.2) and the attributes libraries attached to the node (language reference 7.6), read
         // through the one query for the facts of a node (camel/core/tags.h): an attribute only
         // on the nodes that have any, so that the dump of a program without tags is unchanged.
         const camel::core::tag::Facts facts = camel::core::tag::factsOf(*graph, nodeRef);

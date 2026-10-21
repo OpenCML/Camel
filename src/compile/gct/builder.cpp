@@ -1076,10 +1076,10 @@ void Builder::visitTagDecl(const AST::node_ptr_t &ast) {
     camel::core::tag::Decl tag;
     tag.module = module_->name();
     tag.ident  = decl->ref().toString();
-    // A program may not declare a tag with the name of a core permission: `#reassociate` in the
-    // program would still mean the core's permission, so the declaration would never be read
-    // (design principles 6.2, log 2026-10-21).
-    if (tag.ident == "finite_math" ||
+    // A program may not declare a tag with the name of a core permission or of `strict`: `#reassociate`
+    // in the program would still mean the core's permission, so the declaration would never be read
+    // (design principles 6.2, 7.4, log 2026-10-21).
+    if (tag.ident == "finite_math" || tag.ident == "strict" ||
         camel::core::sem::parsePermission(tag.ident).has_value()) {
         diags_->of(SemanticDiag::TagShadowsPermission)
             .at(ast->load()->tokenRange())
@@ -1672,11 +1672,9 @@ void Builder::reportExitInUnusedArm(const AST::node_ptr_t &exit, bool isThrow) {
         .commit(keyword, branch);
 }
 
-/// An EXEC with the numeric permissions in force here (GCT::Node::numericPermissions).
+/// An EXEC of the statement block.
 node_ptr_t Builder::makeExec(bool synced, bool operands) {
-    node_ptr_t exec = tree_->makeExec(synced, operands);
-    exec->setNumericPermissions(numericPermissions_);
-    return exec;
+    return tree_->makeExec(synced, operands);
 }
 
 /*
@@ -1734,14 +1732,8 @@ node_ptr_t Builder::visitStmtBlock(const AST::node_ptr_t &ast, bool decorators) 
                 "to run the statements of a block in order");
         throw BuildAbortException();
     }
-    // The block's own grant joins those of the blocks it is in, for everything written in it.
-    const camel::core::sem::PermissionMask outerPermissions = numericPermissions_;
-    numericPermissions_ |= stmtBlock->numeric();
-    struct PermissionScope {
-        camel::core::sem::PermissionMask &current;
-        camel::core::sem::PermissionMask outer;
-        ~PermissionScope() { current = outer; }
-    } permissionScope{numericPermissions_, outerPermissions};
+    // Numeric permissions are permission tags, resolved by the graph builder where they are
+    // written (design principles 7.2, 7.5): the statement block carries none of its own.
     node_ptr_t execNode = makeExec(stmtBlock->synced());
 
     // Push a new scope for the statement block
@@ -2640,9 +2632,9 @@ LoopExpr(state, binder) : Repeated Data inits, Optional Data sequence, Optional 
                           StmtBlock body ;
 A loop (design principles 3.10) becomes one LOOP node (camel/compile/gct/node.h,
 Node::loopKind): the first values and the sequence are expressions where the loop is; the
-condition and the body are scopes of their own, the way the arms of an `if` are, each with
-the numeric permissions in force here (7.5: a loop body written in a block or a function
-under @numeric is part of it). The names of the state and of the element are declared by the
+condition and the body are scopes of their own, the way the arms of an `if` are; a loop body
+written in a block or a function under a permission tag is part of it. The names of the state
+and of the element are declared by the
 graph builder, which gives the condition and the body their own graphs.
 */
 node_ptr_t Builder::visitLoopExpr(const AST::node_ptr_t &ast) {

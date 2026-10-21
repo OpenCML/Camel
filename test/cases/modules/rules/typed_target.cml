@@ -29,17 +29,17 @@ func f32_combine(x: f32): f32 { return x * 3.0 + x * 5.0 }
 func f32_combine_over(x: f32): f32 { return x * 3.0e38 + x * 3.0e38 }
 func f32_fold(x: f32): f32 { return (x * 3.0) * 5.0 }
 
-@numeric(no_infs)
+#[no_infs]
 func f32_fold_granted(x: f32): f32 { return (x * 1.0e30) * 1.0e-30 }
 
 func f32_double(x: f32): f32 { return x * 3.0 + x * 3.0 }
 func f32_double_big(x: f32): f32 { return x * 8388609.0 + x * 8388609.0 }
 func f32_double_frac(x: f32): f32 { return x * 0.1 + x * 0.1 }
 
-@numeric(finite_math)
+#[finite_math]
 func f32_mixed_ok(x: f32): f32 { return x * 3.0 + x * -5.0 }
 
-@numeric(finite_math)
+#[finite_math]
 func f32_mixed_zero(x: f32): f32 { return x * 3.0 + x * -3.0 }
 
 func f32_mixed_ungranted(x: f32): f32 { return x * 3.0 + x * -5.0 }
@@ -50,16 +50,16 @@ func f64_combine(x: float): float { return x * 3.0 + x * 5.0 }
 func f64_add_self(x: float): float { return x + x }
 func f64_combine_over(x: float): float { return x * 1.0e308 + x * 1.0e308 }
 
-@numeric(no_infs)
+#[no_infs]
 func f64_fold_zero(x: float): float { return (x * 1.0e-200) * 1.0e-200 }
 
-@numeric(no_infs)
+#[no_infs]
 func f64_fold_over(x: float): float { return (x * 1.0e200) * 1.0e200 }
 
-@numeric(finite_math)
+#[finite_math]
 func f64_mixed_zero(x: float): float { return x * 3.0 + x * -3.0 }
 
-@numeric(finite_math)
+#[finite_math]
 func f64_mixed_ok(x: float): float { return x * 3.0 + x * -5.0 }
 
 func main(): int sync {

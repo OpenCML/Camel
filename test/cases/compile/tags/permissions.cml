@@ -1,18 +1,14 @@
 /**
- * The numeric permissions of design principles 7.2 and 7.3, written as tags: `#contract` and
- * `#reassociate` grant exactly what `@numeric(contract)` and `@numeric(reassociate)` grant, on a
- * declaration or on a block; `#finite_math` is the group of the four assumptions. The facts reach
- * the nodes through the permission column, not through the attribute set, so a dump shows the
- * same `numeric=` either way.
+ * The numeric permissions of design principles 7.2 and 7.4, written as tags: `#reassociate` and
+ * `#contract` are granted by default (7.3) and a tag only widens the set; `#finite_math` is the
+ * group of the four assumptions; `#strict` is the tag of 7.4 -- the code it marks uses no
+ * permission at all, the default grants included. A permission tag is a fact of the permission
+ * column, not a node attribute; `#strict` is a tag of the code and reaches the nodes as an
+ * attribute, which is where the readers of a node's effective permissions look for it.
  */
 module permissions
 
 func plain(x: float): float {
-    return x * 1.0
-}
-
-@numeric(contract)
-func annotated(x: float): float {
     return x * 1.0
 }
 
@@ -25,11 +21,6 @@ func blockTagged(x: float): float {
     #contract {
         return x * 1.0
     }
-}
-
-@numeric(reassociate)
-func annotated2(x: float): float {
-    return x + 2.0
 }
 
 #reassociate
@@ -52,7 +43,25 @@ func drifting(x: float): float {
     return x + 2.0
 }
 
+#strict
+func strict(x: float): float {
+    return x * 1.0 + 2.0
+}
+
+func strictBlock(x: float): float {
+    #strict {
+        return x * 1.0 + 2.0
+    }
+}
+
+#strict
+func strictTagged(x: float): float {
+    #contract {
+        return x * 1.0 + 2.0
+    }
+}
+
 func main(): int sync {
-    println(plain(1.0), annotated(2.0), tagged(3.0), blockTagged(4.0), annotated2(5.0), tagged2(6.0), finite(7.0), grouped(8.0))
+    println(plain(1.0), tagged(2.0), blockTagged(3.0), tagged2(4.0), finite(5.0), grouped(6.0), drifting(7.0), strict(8.0), strictBlock(9.0), strictTagged(10.0))
     return 0
 }

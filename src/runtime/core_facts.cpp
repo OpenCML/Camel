@@ -31,6 +31,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tags.h"
 #include "camel/runtime/operator_instance.h"
 
 #include <charconv>
@@ -285,7 +286,8 @@ std::vector<std::vector<Anchor>> loopAnchors(const Program &program, const GCGra
 // ---- core.permissions ------------------------------------------------------------------------
 
 std::optional<int> computePermissions(std::span<const Anchor> anchors) {
-    const camel::core::sem::PermissionMask mask = anchors[0].graph->nodePermissions(anchors[0].node);
+    const camel::core::sem::PermissionMask mask =
+        camel::core::tag::permissionsOf(*anchors[0].graph, anchors[0].node);
     return mask != 0 ? std::optional<int>(mask) : std::nullopt;
 }
 

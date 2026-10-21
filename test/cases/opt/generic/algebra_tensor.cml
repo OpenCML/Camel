@@ -14,7 +14,7 @@ func merged(x: Vec): Vec {
     return x * 3.0 + x * 5.0
 }
 
-@numeric(reassociate)
+#[reassociate]
 func merged_explicit(x: Vec): Vec {
     return x * 3.0 + x * 5.0
 }

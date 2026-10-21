@@ -309,7 +309,7 @@ expect_output_contains = ["The tag 'requires' takes 1 parameter(s), but 0 argume
 
 [[tests]]
 name = "rules.requires_program_group"
-desc = "A requirement may name a group of permissions the program declares (`tag fast = [reassociate, contract]`): `#requires<fast>` is the union of its members, so the rule applies to `kept` (which grants `contract`) and not to `scaled`."
+desc = "A requirement may name a group of permissions the program declares (`tag fast = [reassociate, contract]`): `#requires<fast>` is the union of its members, so the rule applies to `kept` (which grants `contract`) and not to `scaled` (`#strict`: no permission at all, the defaults included)."
 kind = "behavior"
 case = "../../../cases/modules/rules/requires_group_target.cml"
 args = ["${case}", "counts::report_requires", "requires_group::apply", "counts::report_requires", "std::nvm"]

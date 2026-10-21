@@ -2,7 +2,7 @@ id = "compile.tag_permissions"
 order = 227
 tier = "fast"
 tags = ["feat", "compile", "tags", "numeric", "permissions", "semantics"]
-desc = "Numeric permissions written as tags (design principles 7.2): `#reassociate`, `#contract`, `#approx_math`, `#change_precision`, the four finite-math assumptions and their group `finite_math` are standard tags of the core, written before a function or a block. They grant exactly what `@numeric(...)` grants, through the same permission column, so a dump shows the same `numeric=` and the attribute set is untouched; the defaults of 7.3 do not change (a permission that is allowed by default stays allowed with or without the tag)."
+desc = "Numeric permissions are tags (design principles 7.2): `#reassociate`, `#contract`, `#approx_math`, `#change_precision`, the four finite-math assumptions and their group `finite_math` are standard tags of the core; `reassociate` and `contract` are the default grants of 7.3, and every other permission is a tag. A permission tag is a fact of the node's permission column, not an attribute. `#strict` (7.4) is a tag of the code: the nodes it marks carry it, and every reader of permissions asks tag::effectivePermissions, which returns the empty set for them -- the default grants included. `std::opt` reassociates a default-permitted sum and leaves the same sum alone under `#strict`."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -10,18 +10,18 @@ timeout_ms = 10000
 
 [[tests]]
 name = "permissions.results"
-desc = "Tags grant permissions only: the program prints the same values in the byte-code interpreter and the parallel scheduler, and the group `finite_math` is accepted."
+desc = "Tags grant permissions only: the program prints the same values in the byte-code interpreter and the parallel scheduler, and the group `finite_math`, `#strict` on a function and on a block are accepted."
 kind = "behavior"
 case = "../../../cases/compile/tags/permissions.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "1.0 2.0 3.0 4.0 7.0 8.0 9.0 10.0\n"
+expect_stdout_exact = "1.0 2.0 3.0 6.0 7.0 8.0 9.0 10.0 11.0 12.0\n"
 
 [[tests]]
 name = "permissions.gir"
-desc = "std::gir shows the permission on the nodes, in the same `numeric=` column `@numeric(...)` writes: `annotated` and `tagged` agree byte for byte (as do `annotated2` and `tagged2`), a tag before a block grants inside it, `plain` has none, and `#finite_math` is printed as `finite_math` (the four assumptions grouped, as permissionsText always prints them). The tag is not written into `attrs=`: a permission is one fact in one place."
+desc = "std::gir shows a permission tag in the `numeric=` column and never in `attrs=`: `tagged` has contract, `tagged2` reassociate, `finite` the group, `grouped` both, `drifting` nondeterministic; a tag before a block grants inside it; `plain` has none. `#strict` is a tag of the code: its nodes carry `strict` in `attrs=` and keep their explicit permissions in `numeric=` (the effective set is empty, but the facts are what the code wrote), and an inner `#contract` inside `#strict` still shows contract."
 kind = "behavior"
 case = "../../../cases/compile/tags/permissions.cml"
 args = ["${case}", "std::gir"]
@@ -31,6 +31,7 @@ verify_script = """
 const out = input.normalized.stdout
 const stack = []
 const numeric = {}
+const attrs = {}
 for (const line of out.split('\n')) {
   const t = line.trim()
   if (t.startsWith('subgraph cluster_')) { stack.push(''); continue }
@@ -40,25 +41,82 @@ for (const line of out.split('\n')) {
   if (t.includes('type="OPER"')) {
     const fn = stack.length ? stack[stack.length - 1] : ''
     const m = t.match(/numeric="([^"]*)"/)
+    const a = t.match(/attrs="([^"]*)"/)
     ;(numeric[fn] ||= []).push(m ? m[1] : '')
-    assert(!t.includes('attrs="'), `a permission tag must not be an attribute: ${t}`)
+    ;(attrs[fn] ||= []).push(a ? a[1] : '')
+    for (const permission of ['reassociate', 'contract', 'approx_math', 'change_precision', 'finite_math', 'nondeterministic', 'no_nans', 'no_infs', 'no_signed_zeros', 'flush_subnormals']) {
+      assert(!t.includes('attrs="') || !a[1].includes(permission), `a permission tag must not be an attribute: ${t}`)
+    }
   }
 }
 const of = (fn) => numeric[fn] || []
-for (const fn of ['plain', 'annotated', 'tagged', 'blockTagged', 'annotated2', 'tagged2', 'finite', 'grouped', 'drifting', 'main']) {
+const at = (fn) => attrs[fn] || []
+for (const fn of ['plain', 'tagged', 'blockTagged', 'tagged2', 'finite', 'grouped', 'drifting', 'strict', 'strictBlock', 'strictTagged', 'main']) {
   assert(of(fn).length > 0, `no OPER nodes in ${fn}`)
 }
 for (const value of of('plain')) assert(value === '', `plain has no permission, got '${value}'`)
-for (const value of of('annotated')) assert(value === 'contract', `annotated: '${value}'`)
 for (const value of of('tagged')) assert(value === 'contract', `tagged: '${value}'`)
 for (const value of of('blockTagged')) assert(value === 'contract', `blockTagged: '${value}'`)
-for (const value of of('annotated2')) assert(value === 'reassociate', `annotated2: '${value}'`)
 for (const value of of('tagged2')) assert(value === 'reassociate', `tagged2: '${value}'`)
 for (const value of of('finite')) assert(value === 'finite_math', `finite: '${value}'`)
 for (const value of of('grouped')) assert(value === 'reassociate, contract', `grouped: '${value}'`)
 for (const value of of('drifting')) assert(value === 'nondeterministic', `drifting: '${value}'`)
+for (const value of of('strict')) assert(value === '', `strict carries no explicit permission, got '${value}'`)
+for (const value of of('strictBlock')) assert(value === '', `strictBlock carries no explicit permission, got '${value}'`)
+for (const value of of('strictTagged')) assert(value === 'contract', `strictTagged keeps its inner tag: '${value}'`)
 for (const value of of('main')) assert(value === '', `main: '${value}'`)
-assert(JSON.stringify(of('annotated')) === JSON.stringify(of('tagged')), 'the tag and @numeric must agree')
-assert(JSON.stringify(of('annotated2')) === JSON.stringify(of('tagged2')), 'the tag and @numeric must agree')
+for (const fn of ['strict', 'strictBlock', 'strictTagged']) {
+  for (const value of at(fn)) assert(value === 'strict', `${fn} carries strict in attrs, got '${value}'`)
+}
+for (const fn of ['plain', 'tagged', 'blockTagged', 'tagged2', 'finite', 'grouped', 'drifting']) {
+  for (const value of at(fn)) assert(value === '', `${fn} has no attribute, got '${value}'`)
+}
 }
 """
+
+[[tests]]
+name = "permissions.strict_algebra"
+desc = "std::opt reassociates `x*0.1 + x*0.1` into `x*0.2` under the default policy (reassociate is granted by 7.3) and leaves it alone on a function and on a block marked `#strict` (7.4: no permission at all): after the pass the loose function has one product and no sum, the two strict ones keep their sum over the one product common-subexpression merging left (strict turns off the rewrites that change results, not CSE)."
+kind = "behavior"
+case = "../../../cases/compile/tags/strict_algebra.cml"
+args = ["${case}", "std::opt", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stack = []
+const ops = {}
+for (const line of out.split('\n')) {
+  const t = line.trim()
+  if (t.startsWith('subgraph cluster_')) { stack.push(''); continue }
+  if (t === '}') { if (stack.length) stack.pop(); continue }
+  const label = t.match(/^label="([^"]+)";$/)
+  if (label && stack.length) { stack[stack.length - 1] = label[1]; continue }
+  const op = t.match(/label=":op\/([a-z0-9_]+)"/)
+  if (op) {
+    const fn = stack.length ? stack[stack.length - 1] : ''
+    ;(ops[fn] ||= []).push(op[1])
+  }
+}
+// The label carries the element type (`mul_d`, `add_f`): count by the operator name.
+const count = (fn, op) => (ops[fn] || []).filter((x) => x === op || x.startsWith(`${op}_`)).length
+assert(count('loose', 'mul') === 1, `loose must fold its two products into one, got ${JSON.stringify(ops['loose'])}`)
+assert(count('loose', 'add') === 0, `loose must fold the sum away, got ${JSON.stringify(ops['loose'])}`)
+for (const fn of ['tight', 'tightBlock']) {
+  assert(count(fn, 'mul') === 1, `${fn} keeps the product CSE left, got ${JSON.stringify(ops[fn])}`)
+  assert(count(fn, 'add') === 1, `${fn} keeps its sum, got ${JSON.stringify(ops[fn])}`)
+}
+}
+"""
+
+[[tests]]
+name = "permissions.old_numeric"
+desc = "The removed `@numeric(...)` spelling is a located error at the annotation; the message names the tag form that replaced it. Nothing is granted."
+kind = "negative"
+case = "../../../cases/compile/tags/err_numeric_annotation.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 1
+expect_output_contains = ["@numeric", "write '#[reassociate]'"]

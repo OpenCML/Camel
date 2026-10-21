@@ -195,21 +195,6 @@ class Node {
         return (flags_ & kFlagB) != 0;
     }
 
-    /// EXEC: the numeric permissions (camel/core/operator_semantics.h, PermissionMask) in
-    /// force in this scope: those granted by the permission tags written on it, on the
-    /// function whose body it is, and on every block and function it is lexically nested in
-    /// (design principles 7.5: an arm, a loop body or a lambda written in the code is part of
-    /// the code). Every EXEC the GCT builder makes carries them, so the graph builder reads
-    /// them from the nearest EXEC whatever order it builds graphs in. 0 when none is granted.
-    camel::core::sem::PermissionMask numericPermissions() const {
-        check(NodeKind::EXEC);
-        return static_cast<camel::core::sem::PermissionMask>(tag_);
-    }
-    void setNumericPermissions(camel::core::sem::PermissionMask permissions) {
-        check(NodeKind::EXEC);
-        tag_ = static_cast<uint16_t>(permissions);
-    }
-
     /// EXPT: the exported names.
     size_t exportCount() const {
         check(NodeKind::EXPT);

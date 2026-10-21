@@ -496,15 +496,9 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
             *module_, Reference(name), signature, tags.declaration);
     }
     if (!name.empty()) {
-        // What the declaration grants: the permission tags written before it and the
-        // `@numeric(...)` (or permission tags) of its body, which the GCT already summed.
-        camel::core::sem::PermissionMask granted = tags.permissions;
-        if (gct->size() > 1 && gct->at(1) != nullptr &&
-            gct->at(1)->type() == GCT::NodeKind::EXEC) {
-            granted = static_cast<camel::core::sem::PermissionMask>(granted | gct->at(1)->numericPermissions());
-        }
+        // What the declaration grants: the permission tags written before it.
         camel::core::tag::attachPermissionsToDeclaration(
-            *module_, Reference(name), signature, granted);
+            *module_, Reference(name), signature, tags.permissions);
     }
     if (isGenericHere(type)) {
         // A generic function: registered as a template when its block was entered
@@ -557,12 +551,15 @@ void Builder::buildFuncBody(
     // code it is written in), not those of the place that asked for it to be built (a call
     // that instantiates a generic function, a block that declares it). The permission tags
     // written before the declaration (`#[contract] func f`) grant to the body too.
-    const GCT::node_ptr_t body = gct->size() > 1 ? gct->at(1) : nullptr;
+    // A lambda is different: its body is an expression written where the lambda is, so it also
+    // inherits the permissions in force there (`#[reassociate] func f` grants to the lambda in
+    // f's body, design principles 7.5). A named function is built on demand, possibly from a
+    // call site, so it must not take the permissions of the place that built it.
+    const camel::core::sem::PermissionMask inherited =
+        name.empty() ? numericPermissions_ : camel::core::sem::kNoPermissions;
     NumericPermissionScope permissions(
         numericPermissions_,
-        static_cast<camel::core::sem::PermissionMask>(
-            (body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0) |
-            bodyTags.permissions));
+        static_cast<camel::core::sem::PermissionMask>(inherited | bodyTags.permissions));
     // The attributes its decorators grant join those in force where it is written (each key's
     // combine rule, camel/core/node_attrs.h), for everything written in it; so do the facts of
     // the tags written before it, which hold for the nodes of its body (`on nodes`).
@@ -652,12 +649,11 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     const TagFacts blockTags = tagFactsOf(gct, camel::core::tag::Nodes);
     // The permissions of this scope (they include those of the enclosing ones) are in force
     // for everything built in it, arms and lambdas included. A permission written as a tag
-    // (`#[contract] { ... }`) grants exactly what `@numeric(contract)` grants; both reach the
-    // nodes through this one column.
+    // (`#[contract] { ... }`) reaches the nodes through this one column.
     NumericPermissionScope permissions(
         numericPermissions_,
         static_cast<camel::core::sem::PermissionMask>(
-            gct->numericPermissions() | numericPermissions_ | blockTags.permissions));
+            numericPermissions_ | blockTags.permissions));
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(currentAttrs_, blockTags.nodes));

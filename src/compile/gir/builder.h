@@ -842,8 +842,8 @@ class Builder {
         camel::core::attr::AttrSetId declaration = camel::core::attr::kNoAttrs;
         camel::core::attr::AttrSetId nodes       = camel::core::attr::kNoAttrs;
         /// The numeric permissions the permission tags written here grant (design principles
-        /// 7.2: a permission is a tag). They go to the same column `@numeric(...)` uses, never
-        /// to the attribute set: one fact, one place.
+        /// 7.2: a permission is a tag). They go to the node's permission column, never to the
+        /// attribute set: one fact, one place.
         camel::core::sem::PermissionMask permissions = 0;
     };
     /// The facts of the tag uses written on `gct`, which is written at `at` (Func, Type or

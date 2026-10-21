@@ -11,12 +11,12 @@ func plain(x: Tensor, w: Tensor): Tensor {
     return x @ w
 }
 
-@numeric(reassociate)
+#[reassociate]
 func reordered(x: Tensor, w: Tensor): Tensor {
     return x @ w
 }
 
-@numeric(reassociate, change_precision)
+#[reassociate, change_precision]
 func relaxed(x: Tensor, w: Tensor): Tensor {
     return x @ w
 }

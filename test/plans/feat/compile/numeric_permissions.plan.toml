@@ -2,7 +2,7 @@ id = "compile.numeric_permissions"
 order = 214
 tier = "fast"
 tags = ["feat", "compile", "numeric", "semantics"]
-desc = "`@numeric(...)` on a function or a block grants numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 7.5; docs/design/op-semantics 6.3, 6.4). The graph keeps them in a per-node column beside the source positions; std::gir shows them as a `numeric` attribute on the nodes that have any. Rewrites keep them, CSE and tensor::fuse do not merge nodes granted different ones, and the CPU back ends compute the canonical results with or without them."
+desc = "Permission tags on a function or a block grant numeric permissions to the code written in it, arms, loop bodies and lambdas included, never to a function it calls (design principles 7.2, 7.5; docs/design/op-semantics 6.3, 6.4). `#[reassociate]`, `#[contract]` and the other standard tags are written where the old `@numeric(...)` was; `#[finite_math]` is the group. The graph keeps the grants in a per-node column beside the source positions; std::gir shows them as a `numeric` attribute on the nodes that have any. Rewrites keep them, CSE and tensor::fuse do not merge nodes granted different ones, and the CPU back ends compute the canonical results with or without them."
 
 [defaults]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -116,22 +116,13 @@ expect_exit = 0
 expect_stdout_exact = "fuse split=-12.825000286102295 whole=-12.825000286102295\n"
 
 [[tests]]
-name = "trees"
-desc = "The AST shows a block's own grant, the GCT the permissions in force in every EXEC (the enclosing grants joined); nothing is shown where none is granted."
-kind = "behavior"
-case = "../../../cases/compile/numeric/permissions.cml"
-args = ["inspect", "-a", "-c", "${case}"]
-expect_exit = 0
-expect_stdout_contains = ["StmtBlock: numeric(reassociate, contract)", "StmtBlock: numeric(contract)", "StmtBlock: numeric(finite_math)", "EXEC: numeric(reassociate, contract)", "EXEC: numeric(finite_math)"]
-
-[[tests]]
 name = "invalid"
-desc = "An unknown permission, another annotation with names in parentheses and an empty @numeric() are SemanticDiag::InvalidAnnotation, each at its line. (A decorator on a block is accepted, language reference 7.6: compile.decorators.)"
+desc = "An annotation with names in parentheses, the removed `@numeric(...)` spelling included, is SemanticDiag::InvalidAnnotation at its line; the message names the tag form that replaced it."
 kind = "negative"
 case = "../../../cases/compile/numeric/invalid.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["'fast' is not a permission", "invalid.cml:8:1", "The annotation '@kernelish' is not accepted", "invalid.cml:11:1", "it names no permission", "invalid.cml:14:1"]
+expect_output_contains = ["The annotation '@kernelish' is not accepted", "invalid.cml:8:1", "The annotation '@numeric' is not accepted", "invalid.cml:11:1", "#[reassociate]"]
 
 [[tests]]
 name = "library_gemm"

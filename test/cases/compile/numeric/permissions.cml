@@ -1,5 +1,5 @@
 /**
- * @numeric(...) grants numeric permissions to a function or a block, and to the code written
+ * Permission tags grant numeric permissions to a function or a block, and to the code written
  * in it: arms, loop bodies, lambdas (design principles 7.5). A function it calls does not
  * inherit them. Permissions only allow other results; the CPU back ends compute the canonical
  * results with or without them, so this program prints the same with every back end.
@@ -11,16 +11,16 @@ func plain(a: float, b: float): float {
     return a * b + 1.0
 }
 
-@numeric(reassociate, contract)
+#[reassociate, contract]
 func fused(a: float, b: float, c: float, d: float): float {
     return a * b + c * d
 }
 
-@numeric(reassociate)
+#[reassociate]
 func nested(k: float): float {
     let f = (v: float) => v * k + 0.5
     let z = if k > 0.0 then k * 2.0 else k / 2.0
-    @numeric(contract)
+    #[contract]
     {
         return f(z) + plain(k, 3.0)
     }
@@ -28,7 +28,7 @@ func nested(k: float): float {
 
 func blocky(x: float): float {
     let y = x * 3.0
-    @numeric(finite_math)
+    #[finite_math]
     {
         return y / 7.0 - 1.0
     }

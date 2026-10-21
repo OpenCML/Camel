@@ -2,10 +2,10 @@ module mixed_checks
 import { Tensor, ones, reshape, sum, abs, randn, seed, set_num_threads } from tensor
 import { run, inspect } from tiles
 
-@numeric(reassociate, change_precision, finite_math)
+#[reassociate, change_precision, finite_math]
 func mixed(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
 func strict(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
-@numeric(change_precision)
+#[change_precision]
 func incomplete(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
 
 func main(run_gpu: bool): int sync {

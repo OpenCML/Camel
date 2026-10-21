@@ -110,7 +110,7 @@ void declareStandardTags() {
             decl.permission = permission;
             declare(std::move(decl));
         };
-        const Positions on = static_cast<Positions>(Func | Nodes);
+        const Positions on = Nodes;
         add("reassociate", sem::kReassociate, on);
         add("contract", sem::kContract, on);
         add("approx_math", sem::kApproxMath, on);
@@ -125,12 +125,22 @@ void declareStandardTags() {
         Decl finite;
         finite.name    = "finite_math";
         finite.ident   = "finite_math";
+        finite.on      = on;
         finite.aliases = {
             Reference("no_nans"),
             Reference("no_infs"),
             Reference("no_signed_zeros"),
             Reference("flush_subnormals")};
         declare(std::move(finite));
+        // `strict` (design principles 7.4): the function or block it marks uses no permission at
+        // all, the default grants of 7.3 included. It is a tag, not a permission: it grants no
+        // bit, and it is the one tag whose meaning is that the effective set is empty (see
+        // effectivePermissions).
+        Decl strict;
+        strict.name  = "strict";
+        strict.ident = "strict";
+        strict.on    = static_cast<Positions>(Func | Nodes);
+        declare(std::move(strict));
         // `reads`, written on a Camel pass function: the tags the pass reads. Its arguments are
         // tag names, not values, and there may be any number of them (`#reads<reassociate,
         // contract>`); `registerCamelPass` records the pass as a reader of each.
@@ -407,10 +417,37 @@ sem::PermissionMask permissionsOfTags(attr::AttrSetId tags) {
     return mask;
 }
 
+/// The tag `strict` (design principles 7.4): a standard tag, declared once with the others.
+TagId strictTag() {
+    static const TagId id = [] {
+        const auto found = find(std::string_view{}, "strict");
+        return found.has_value() ? *found : kNoTag;
+    }();
+    return id;
+}
+
+bool hasStrictTag(attr::AttrSetId tags) {
+    const TagId strict = strictTag();
+    if (strict == kNoTag || tags == attr::kNoAttrs) {
+        return false;
+    }
+    const Decl *decl = get(strict);
+    if (decl == nullptr) {
+        return false;
+    }
+    for (const attr::Attr &entry : attr::entries(tags)) {
+        if (entry.key == decl->key) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Facts factsOfSet(attr::AttrSetId tags, sem::PermissionMask permissions) {
     Facts facts;
     facts.tags        = tags;
     facts.permissions = static_cast<sem::PermissionMask>(permissions | permissionsOfTags(tags));
+    facts.strict      = hasStrictTag(tags);
     facts.readers     = readersOf(tags);
     return facts;
 }
@@ -437,6 +474,30 @@ Facts factsOf(const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_r
 
 Facts factsOf(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node) {
     return factsOfSet(graph.nodeAttrs(node), graph.nodePermissions(node));
+}
+
+sem::PermissionMask
+permissionsOf(const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node) {
+    return factsOf(draft, node).permissions;
+}
+
+sem::PermissionMask
+permissionsOf(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node) {
+    return factsOf(graph, node).permissions;
+}
+
+sem::PermissionMask effectivePermissions(
+    const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node,
+    const sem::NumericPolicy &policy) {
+    const Facts facts = factsOf(draft, node);
+    return facts.strict ? sem::kNoPermissions : policy.effective(facts.permissions);
+}
+
+sem::PermissionMask effectivePermissions(
+    const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node,
+    const sem::NumericPolicy &policy) {
+    const Facts facts = factsOf(graph, node);
+    return facts.strict ? sem::kNoPermissions : policy.effective(facts.permissions);
 }
 
 void attachToField(

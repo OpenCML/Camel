@@ -1,13 +1,13 @@
 module tiles_loop_benchmark
 import { benchmark } from tiles
-@numeric(contract)
+#[contract]
 func relaxed(a: float): float {
     return loop s = a for k in [1, 2] do s * a + a
 }
 func strict(a: float): float {
     return loop s = a for k in [1, 2] do s * a + a
 }
-@numeric(contract)
+#[contract]
 func empty(a: float): float {
     let domain: int[] = []
     return loop s = a for k in domain do s * a + a

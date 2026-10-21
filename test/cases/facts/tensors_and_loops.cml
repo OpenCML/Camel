@@ -7,7 +7,7 @@ func layer(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 4]>): Tensor<f
     return matmul(x, w)
 }
 
-@numeric(reassociate)
+#[reassociate]
 func total(x: Tensor<f32, const [2, 4]>): float {
     return sum(x)
 }

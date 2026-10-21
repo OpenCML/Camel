@@ -22,12 +22,12 @@ func double(x: float): float {
     return x * 3.0 + x * 3.0
 }
 
-@numeric(finite_math)
+#[finite_math]
 func granted_mixed(x: float): float {
     return x * 3.0 + x * -5.0
 }
 
-@numeric(no_infs)
+#[no_infs]
 func granted_chain(x: float): float {
     return (x * 3.0) * 2.0
 }

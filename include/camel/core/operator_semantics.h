@@ -203,8 +203,10 @@ struct NumericSemantics {
  * reorderFreedom (camel/core/index_semantics.h) takes the policy with the node's permissions.
  */
 struct NumericPolicy {
-    /// Permissions every node has under this policy, with or without a tag.
-    PermissionMask defaultGrants = kNoPermissions;
+    /// Permissions every node has under this policy, with or without a tag: the defaults of
+    /// 7.3, `reassociate` and `contract`.
+    PermissionMask defaultGrants =
+        static_cast<PermissionMask>(kReassociate | kContract);
     /// Whether the permissions a node carries count. A strict policy ignores them: even a node
     /// with wider permissions keeps its canonical rounding path (7.4, safe mode).
     bool nodeGrants = true;
@@ -212,9 +214,11 @@ struct NumericPolicy {
     /// Nothing but what the program writes (what the node's own permissions give).
     static constexpr NumericPolicy explicitOnly() { return {kNoPermissions, true}; }
     /// The default of 7.3: the order and grouping of a sum or product may change
-    /// (kReassociate), nothing else is assumed. Precision, approximate math, fused multiply-add
-    /// and the special values still need their permission.
-    static constexpr NumericPolicy relaxed() { return {kReassociate, true}; }
+    /// (kReassociate), and a multiply and an add may fuse (kContract), nothing else is assumed.
+    /// Precision, approximate math and the special values still need their permission.
+    static constexpr NumericPolicy relaxed() {
+        return {static_cast<PermissionMask>(kReassociate | kContract), true};
+    }
     /// The safe mode (`safe_fp=true`): only what is exactly equivalent.
     static constexpr NumericPolicy strict() { return {kNoPermissions, false}; }
 

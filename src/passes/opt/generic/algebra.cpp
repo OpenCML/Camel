@@ -31,6 +31,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/tags.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft_writes.h"
 
@@ -386,7 +387,8 @@ bool simplify(
                                   std::signbit(left.coefficient) == std::signbit(right.coefficient);
             const uint8_t required =
                 sem::kReassociate | (sameSign ? 0 : sem::kNoInfs | sem::kNoSignedZeros);
-            if (!exact && !policy.permits(draft.nodePermissions(node), required)) {
+            if (!exact &&
+                (tag::effectivePermissions(draft, node, policy) & required) != required) {
                 return false;
             }
         }
@@ -397,7 +399,8 @@ bool simplify(
         if constexpr (std::is_floating_point_v<T>) {
             // Reassociation may remove an overflowing intermediate product. The default
             // policy changes rounding, but does not also assume infinities away.
-            if (!policy.permits(draft.nodePermissions(node), sem::kReassociate | sem::kNoInfs)) {
+            if ((tag::effectivePermissions(draft, node, policy) &
+                 (sem::kReassociate | sem::kNoInfs)) != (sem::kReassociate | sem::kNoInfs)) {
                 return false;
             }
         }

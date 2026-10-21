@@ -20,6 +20,7 @@
 #include "camel/runtime/writings.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_writes.h"
 
@@ -278,7 +279,7 @@ DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy 
 DraftWritings::~DraftWritings() = default;
 
 camel::core::sem::PermissionMask DraftWritings::contextOf(gc_node_ref_t node) const {
-    return policy_.effective(draft_.nodePermissions(node));
+    return camel::core::tag::effectivePermissions(draft_, node, policy_);
 }
 
 namespace {

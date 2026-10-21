@@ -123,7 +123,10 @@ reorderFreedomOf(const GCGraph &graph, gc_node_ref_t node, const core::sem::Nume
     const core::sem::OperatorSemantics *s =
         core::OperatorTable::instance().semantics(graph.nodeBodyAs<GCOperBody>(node)->oper);
     // instantiate validated the law's index against these semantics.
-    return core::sem::reorderFreedom(s->laws[instance->law], graph.nodePermissions(node), policy);
+    return core::sem::reorderFreedom(
+        s->laws[instance->law],
+        core::tag::effectivePermissions(graph, node, policy),
+        policy);
 }
 
 namespace {

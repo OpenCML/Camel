@@ -600,14 +600,12 @@ Value Builder::visitBlockStmt(cst::BlockStmt context) {
     if (context->tok(TK::KwWait)) {
         unwrapNodeAs<StmtBlockLoad>(res)->wait();
     }
-    // `@numeric(...)` before a block grants its permissions to the block (design principles
-    // 7.5). A decorator before a block decorates the block as a function of no parameters
-    // called where it is written (language reference 7.6): the decorators are the block's second
-    // child.
+    // A decorator before a block decorates the block as a function of no parameters called where
+    // it is written (language reference 7.6): the decorators are the block's second child. The
+    // removed `@name(args)` spelling is reported here and grants nothing.
     node_ptr_t decorators = nullptr;
     for (const auto &anno : context->all<cst::FuncAnno>()) {
-        if (const auto permissions = numericAnnotationOf(anno)) {
-            unwrapNodeAs<StmtBlockLoad>(res)->grantNumeric(*permissions);
+        if (rejectParenthesizedName(anno)) {
             continue;
         }
         if (!decorators) {
@@ -768,47 +766,25 @@ Value Builder::visitFuncData(cst::FuncData context) {
 
 /*
 funcAnno   : '@' identRef (angledValues | parentIdents)? ;
-`@numeric(name, ...)`: the numeric permissions the program grants (design principles 7.5).
+A decorator (`@name`, `@name<args>`). Names in parentheses are the removed `@numeric(...)`
+spelling: it is reported here, where it is written, and names the tag form that replaced it.
 */
-std::optional<camel::core::sem::PermissionMask> Builder::numericAnnotationOf(cst::FuncAnno context) {
-    const auto names = context->get<cst::ParentIdents>();
-    if (!names) {
-        return std::nullopt;
+bool Builder::rejectParenthesizedName(cst::FuncAnno context) {
+    if (!context->get<cst::ParentIdents>()) {
+        return false;
     }
     const std::string annotation = context->get<cst::IdentRef>()->text();
-    auto reject                  = [&](const std::string &why) {
-        diags_->of(SemanticDiag::InvalidAnnotation)
-            .at(rangeOf(context->firstToken(), context->lastToken()))
-            .commit(annotation, why);
-    };
-    if (annotation != "numeric") {
-        reject(
-            "the only annotation that takes names in parentheses is '@numeric(...)'; a tag is "
-            "written '#name' or '#name<args>' (or '#[a, b]'), never '@name(args)'");
-        return camel::core::sem::PermissionMask{0};
-    }
-    camel::core::sem::PermissionMask granted = 0;
-    const auto list = names->get<cst::IdentList>();
-    if (!list) {
-        reject(
-            "it names no permission; write one or more of reassociate, contract, "
-            "approx_math, change_precision, nondeterministic, finite_math, no_nans, no_infs, "
-            "no_signed_zeros, flush_subnormals");
-        return camel::core::sem::PermissionMask{0};
-    }
-    for (const auto &ident : list->all<cst::IdentDef>()) {
-        const std::string name(ident->text());
-        if (const auto permission = camel::core::sem::parsePermission(name)) {
-            granted |= *permission;
-        } else {
-            reject(
-                "'" + name +
-                "' is not a permission; the permissions are reassociate, contract, "
-                "approx_math, change_precision, nondeterministic, finite_math (no_nans, no_infs, "
-                "no_signed_zeros, flush_subnormals)");
-        }
-    }
-    return granted;
+    const std::string why =
+        annotation == "numeric"
+            ? "the numeric permissions are tags now: write '#[reassociate]' (or "
+              "'#[reassociate, contract]', '#[finite_math]', ...) before the function or the "
+              "block"
+            : "an annotation takes '<...>' arguments, not '(...)'; a tag is written '#name', "
+              "'#name<args>' or '#[a, b]'";
+    diags_->of(SemanticDiag::InvalidAnnotation)
+        .at(rangeOf(context->firstToken(), context->lastToken()))
+        .commit(annotation, why);
+    return true;
 }
 
 Value Builder::visitFuncAnno(cst::FuncAnno context) {
@@ -1614,13 +1590,11 @@ void Builder::addTagUses(const node_ptr_t &owner, const syn::Node &context) {
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
     ENTER("FuncDecl");
 
-    // Decorators are applied to the function; `@numeric(...)` grants its permissions to the
-    // function's body (design principles 7.5), which is where the GCT builder reads them.
-    node_ptr_t annoListNode    = nullptr;
-    camel::core::sem::PermissionMask numericPermissions = 0;
+    // Decorators are applied to the function. The removed `@name(args)` spelling is reported and
+    // adds no decorator (numeric permissions are tags now, design principles 7.2).
+    node_ptr_t annoListNode = nullptr;
     for (const auto &funcAnno : context->all<cst::FuncAnno>()) {
-        if (const auto permissions = numericAnnotationOf(funcAnno)) {
-            numericPermissions |= *permissions;
+        if (rejectParenthesizedName(funcAnno)) {
             continue;
         }
         if (!annoListNode) {
@@ -1717,7 +1691,6 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     }
 
     node_ptr_t blockNode = any2node(visitStmtBlock(context->get<cst::StmtBlock>()));
-    unwrapNodeAs<StmtBlockLoad>(blockNode)->grantNumeric(numericPermissions);
 
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
