@@ -1291,6 +1291,7 @@ a12697fd5ca6ce5f ok test/cases/loops/collection_oom.cml
 2c37f729452a430f ok test/cases/loops/compiled.cml
 8ee3b22037ffd43b ok test/cases/loops/compiled_churn.cml
 255673e8bc714173 ok test/cases/loops/compiled_fault.cml
+62b550c7d0417e87 ok test/cases/loops/compiled_native.cml
 0113133f73e7a008 ok test/cases/loops/discrete_effectful_value.cml
 87c8a7daf81143df ok test/cases/loops/discrete_loop_iterable.cml
 45d9005cca79a3ec ok test/cases/loops/discrete_loop_state.cml
@@ -1555,6 +1556,7 @@ d02bf5329e412d30 ok test/cases/modules/onnx/refusals/var_param.cml
 9ef2758057679ea9 ok test/cases/modules/random/permutation_negative.cml
 a4167c31852a3565 ok test/cases/modules/random/random_independence.cml
 5848ceb70884974f ok test/cases/modules/rules/analysis_lib.cml
+502a08d03e1d1c89 ok test/cases/modules/rules/analysis_parts.cml
 ba6c69862cc7f282 ok test/cases/modules/rules/analysis_target.cml
 1f6d0b3ce21e8f81 ok test/cases/modules/rules/check_bound.cml
 d2f93128bac41249 ok test/cases/modules/rules/check_library.cml

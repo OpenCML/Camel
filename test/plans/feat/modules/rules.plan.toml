@@ -333,6 +333,16 @@ expect_stdout_contains = ["sum 3 mixed 2 one 1 two 1\nsum 3 mixed 2 one 0 two 1\
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.analysis_takes_the_parts_of_a_compound"
+desc = "A declaration with parameters (`analysis mul_by_one(a: Node, b: Node): bool`) is a multi-parameter query: a rule's condition hands it the pattern variables, and the fact is the one of the compound whose parts they are. `mul_one_by_parts` rewrites `x * 1` to `x` because `mul_by_one(x, c)` reads `sign(c) == 1` through the `x * y` clause; `x * 2` keeps its product because the query answers false. The first report prints one product in each function, the second only in `two`, and the values are unchanged."
+kind = "behavior"
+case = "../../../cases/modules/rules/analysis_parts.cml"
+args = ["${case}", "analysis_parts::report", "analysis_parts::apply", "analysis_parts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["one 1 two 1\none 0 two 1\n7 14\n"]
+timeout_ms = 20000
+
+[[tests]]
 name = "rules.requires_nondeterministic"
 desc = "`nondeterministic` is a permission like the others (design principles 7.2): a rule may require it and a function grant it, and the rule is applied only where it is granted."
 kind = "behavior"

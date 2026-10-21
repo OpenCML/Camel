@@ -119,11 +119,14 @@ void ParserImpl::parseRuleBody() {
 }
 
 /// Whether the current token starts an analysis declaration: the name `analysis` followed by
-/// the name of the analysis, then `:` (`analysis range: Interval`). `n` is the offset of the
-/// `analysis` token (1 after `export`).
+/// the name of the analysis, then its parameters or `:` (`analysis range: Interval`,
+/// `analysis pair(a, b): bool`). `n` is the offset of the `analysis` token (1 after `export`).
 bool ParserImpl::atAnalysisDecl(uint32_t n) const {
-    if (peek(n) != TK::Identifier || peek(n + 1) != TK::Identifier ||
-        peek(n + 2) != TK::Colon) {
+    if (peek(n) != TK::Identifier || peek(n + 1) != TK::Identifier) {
+        return false;
+    }
+    const TK after = peek(n + 2);
+    if (after != TK::LParen && after != TK::Colon) {
         return false;
     }
     uint32_t i = pos_;
@@ -136,9 +139,12 @@ bool ParserImpl::atAnalysisDecl(uint32_t n) const {
     return tree_.tokens_.text(i) == "analysis";
 }
 
-/// analysisDecl : frontMatter? 'export'? IDENTIFIER identDef ':' typeExpr '{' analysisClause* '}'
-/// The IDENTIFIER is the name nalysis, which has a meaning only here: a program may use it
-/// as an ordinary name elsewhere.
+/// analysisDecl : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
+///                '{' analysisClause* '}'
+/// The IDENTIFIER is the name `analysis`, which has a meaning only here: a program may use it
+/// as an ordinary name elsewhere. The parameters are pattern variables: a query within a rule's
+/// condition hands it the parts of the matched value (`analysis pair(a: Node, b: Node)` is read
+/// as `pair(x, y)`); a declaration without them is queried with the value itself.
 void ParserImpl::parseAnalysisDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -149,6 +155,9 @@ void ParserImpl::parseAnalysisDeclRest(size_t m) {
     eat(TK::KwExport);
     bump(); // `analysis`
     parseIdentDef();
+    if (cur_ == TK::LParen) {
+        parseParentParams();
+    }
     if (!panic_ && expect(TK::Colon)) {
         parseType();
     }

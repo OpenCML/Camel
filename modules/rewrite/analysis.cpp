@@ -27,6 +27,13 @@
  * in order; a value with no operands takes `initial`. A value that is its own dependency (a
  * loop) takes the join of what has been computed so far and `initial` — the first version has
  * no widening and says so by returning `initial`.
+ *
+ * A declaration with parameters (`analysis pair(a: Node, b: Node): bool`) is queried with the
+ * parts of a value instead of the value itself: a rule's condition `pair(x, y)` hands over the
+ * nodes its pattern variables name, and the fact is the one of the value those parts belong to
+ * — the value a user of the first part with exactly these parts as its operands, one of the `on`
+ * clauses matching it. This is how a condition reads the fact of the compound it is rewriting
+ * without a syntax naming the whole match.
  */
 
 #include "analysis.h"
@@ -45,6 +52,7 @@
 #include "camel/runtime/program.h"
 #include "src/passes/sched/nodevm/nodevm.h"
 
+#include <algorithm>
 #include <format>
 #include <memory>
 #include <mutex>
@@ -159,6 +167,12 @@ struct Source {
         const auto inputs = draft ? draft->normInputsOf(ref) : graph->normInputsOf(ref);
         return std::vector<gc_node_ref_t>(inputs.begin(), inputs.end());
     }
+    /// The values that read `ref` as a normal input: the candidates for the root of a
+    /// multi-parameter query, asked of the draft or of the frozen graph's use index.
+    std::span<const gc_node_ref_t> normUsers(gc_node_ref_t ref) const {
+        return draft ? draft->normUsersOf(ref) : graph->uses().norm(ref);
+    }
+    bool alive(gc_node_ref_t ref) const { return draft ? draft->alive(ref) : true; }
     bool constant(gc_node_ref_t ref, slot_t &value, type::Type *&type) const {
         if (kind(ref) != GCNodeKind::Data) {
             return false;
@@ -370,6 +384,63 @@ slot_t evaluate(Frame &frame, gc_node_ref_t ref) {
     return fact;
 }
 
+/// Whether the value `ref` is the compound the parts belong to: `clause` matches it with the
+/// parts bound to its variables in the order the pattern binds them. The candidate must have
+/// exactly these operands, which is what makes the parts a way to name the value.
+bool matchesParts(
+    Frame &frame, gc_node_ref_t ref, const Definition::Clause &clause,
+    std::span<const gc_node_ref_t> parts) {
+    if (ref == camel::runtime::kInvalidNodeRef || !frame.source.alive(ref)) {
+        return false;
+    }
+    if (patternVariables(clause.pattern) != parts.size()) {
+        return false;
+    }
+    std::vector<gc_node_ref_t> refs(parts.begin(), parts.end());
+    std::vector<slot_t> values(parts.size(), 0);
+    return matchNode(frame, ref, clause.pattern, refs, values, clause.constParams);
+}
+
+/// The fact a query answers, and the value it is the fact of: the queried value itself, or the
+/// value the parts belong to. A multi-parameter query looks at the values that read the first
+/// part, takes the clauses in the order they are written and the values in node order, so the
+/// answer does not depend on the order of a user list; naming parts that no value of the graph
+/// has is an error, not an `initial` fact.
+slot_t evaluateQuery(
+    Frame &frame, std::span<const gc_node_ref_t> parts, gc_node_ref_t &anchor) {
+    if (parts.size() == 1) {
+        anchor = parts[0];
+        return evaluate(frame, anchor);
+    }
+    for (gc_node_ref_t part : parts) {
+        if (part == camel::runtime::kInvalidNodeRef) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                "analysis",
+                "a query names a pattern variable the left side does not bind to a node");
+        }
+    }
+    std::vector<gc_node_ref_t> candidates(
+        frame.source.normUsers(parts[0]).begin(), frame.source.normUsers(parts[0]).end());
+    std::sort(candidates.begin(), candidates.end());
+    candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+    for (const auto &clause : frame.definition->clauses) {
+        for (gc_node_ref_t candidate : candidates) {
+            if (matchesParts(frame, candidate, clause, parts)) {
+                anchor = candidate;
+                return evaluate(frame, candidate);
+            }
+        }
+    }
+    err::throwRuntimeFault(
+        err::RuntimeDiag::InvalidArgument,
+        "analysis",
+        std::format(
+            "the analysis '{}' has no value whose operands are these {} nodes",
+            frame.definition->name,
+            parts.size()));
+}
+
 NodePattern compilePattern(
     const GCGraph &graph, gc_node_ref_t ref, uint64_t constParams,
     const std::vector<type::Type *> &portTypes, std::vector<gc_node_ref_t> &ports) {
@@ -433,10 +504,12 @@ NodePattern compilePattern(
 }
 
 std::shared_ptr<Definition> buildDefinition(
-    camel::core::context::Context &ctx, ArgsView &norm, const std::string &name) {
+    camel::core::context::Context &ctx, ArgsView &norm, const std::string &name,
+    size_t nodeCount) {
     auto definition      = std::make_shared<Definition>();
     definition->name     = name;
     const size_t count   = norm.size();
+    const size_t onBegin = 4 + nodeCount;
     auto root = [&](size_t index) {
         auto *fn      = norm.get<::Function *>(index);
         auto *handle  = new mm::RootHandle(mm::autoSpace(), fn, nullptr, "rewrite.analysis");
@@ -462,7 +535,7 @@ std::shared_ptr<Definition> buildDefinition(
             "analysis",
             "the fact type of an analysis must be a scalar (int, float or bool)");
     }
-    for (size_t index = 5; index + 2 < count; index += 3) {
+    for (size_t index = onBegin; index + 2 < count; index += 3) {
         ::Function *patternFn = norm.get<::Function *>(index);
         definition->roots.push_back(root(index));     // pattern
         definition->roots.push_back(root(index + 1)); // fact
@@ -512,21 +585,50 @@ camel::runtime::fact::KindId factKindOf(const std::string &name) {
 
 slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context &ctx) {
     const std::string name(norm.get<String *>(0)->view());
-    auto *handle = norm.get<camel::graphmod::Handle *>(4);
-    if (handle->kind() != camel::graphmod::HandleKind::Node) {
-        err::throwRuntimeFault(
-            err::RuntimeDiag::InvalidArgument, "analysis", "the second argument is not a node");
+    // The query's pattern variables: the `Node` handles right after the four descriptions, one
+    // in the one-value form and one per parameter in a multi-parameter declaration. The `on`
+    // descriptions follow as triples.
+    const size_t count = norm.size();
+    size_t nodeCount   = 0;
+    while (4 + nodeCount < count &&
+           camel::graphmod::HandleType::is(
+               norm.type(4 + nodeCount), camel::graphmod::HandleKind::Node)) {
+        ++nodeCount;
     }
-    const bool fromDraft = handle->draft() != nullptr;
-    const gc_node_ref_t ref = handle->index();
+    if (nodeCount == 0 || 4 + nodeCount >= count || (count - 4 - nodeCount) % 3 != 0) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "analysis",
+            "a query takes one or more nodes and then the patterns of its `on` clauses");
+    }
+    // The values behind the handles are the parts the fact is asked about; the integers stay
+    // valid when the handles move at a safepoint.
+    std::vector<gc_node_ref_t> parts;
+    parts.reserve(nodeCount);
+    for (size_t i = 0; i < nodeCount; ++i) {
+        auto *handle = norm.get<camel::graphmod::Handle *>(4 + i);
+        if (handle->kind() != camel::graphmod::HandleKind::Node) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                "analysis",
+                "a query parameter is not a node");
+        }
+        parts.push_back(handle->index());
+    }
+    auto *first = norm.get<camel::graphmod::Handle *>(4);
+    const GraphDraft *draft = first->draft();
+    const bool fromDraft    = draft != nullptr;
+    const Program *program = fromDraft ? nullptr : first->program();
+    const camel::runtime::GraphId graphId =
+        fromDraft ? camel::runtime::GraphId::Invalid : first->graph();
     if (currentFrame != nullptr && currentFrame->definition->name == name) {
         const bool sameSource =
-            fromDraft ? currentFrame->source.draft == handle->draft()
-                      : currentFrame->source.program == handle->program() &&
-                            currentFrame->source.graph ==
-                                handle->program()->graph(handle->graph());
+            fromDraft ? currentFrame->source.draft == draft
+                      : currentFrame->source.program == program &&
+                            currentFrame->source.graph == program->graph(graphId);
         if (sameSource) {
-            return evaluate(*currentFrame, ref);
+            gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
+            return evaluateQuery(*currentFrame, parts, anchor);
         }
     }
     std::shared_ptr<Definition> definition;
@@ -538,7 +640,7 @@ slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context 
         }
     }
     if (!definition) {
-        definition = buildDefinition(ctx, norm, name);
+        definition = buildDefinition(ctx, norm, name, nodeCount);
         std::lock_guard lock(descriptionsMutex);
         descriptions.emplace(name, definition);
     }
@@ -546,11 +648,11 @@ slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context 
 
     Source source;
     if (fromDraft) {
-        source.draft = handle->draft();
+        source.draft = draft;
     } else {
-        source.program = handle->program();
-        source.graphId = handle->graph();
-        source.graph   = source.program->graph(source.graphId);
+        source.program = program;
+        source.graphId = graphId;
+        source.graph   = program->graph(graphId);
     }
     Frame frame;
     frame.definition = definition.get();
@@ -559,15 +661,16 @@ slot_t analysisKernel(ArgsView &, ArgsView &norm, camel::core::context::Context 
     frame.vm         = std::make_unique<NodeVMSchedPass>(ctx.shared_from_this());
     Frame *previous  = currentFrame;
     currentFrame     = &frame;
-    const slot_t fact = evaluate(frame, ref);
+    gc_node_ref_t anchor = camel::runtime::kInvalidNodeRef;
+    const slot_t fact = evaluateQuery(frame, parts, anchor);
     currentFrame      = previous;
 
     if (!fromDraft) {
-        const camel::runtime::fact::Anchor anchor{source.program, source.graph, ref};
+        const camel::runtime::fact::Anchor factAnchor{source.program, source.graph, anchor};
         AnalysisFact stored{
             fact, static_cast<uint8_t>(definition->factType->code())};
         try {
-            ctx.facts().put<AnalysisFact>(kind, anchor, stored);
+            ctx.facts().put<AnalysisFact>(kind, factAnchor, stored);
         } catch (const std::exception &) {
             // A kind registered by another module under the same name: the value is still
             // answered, it is just not stored.

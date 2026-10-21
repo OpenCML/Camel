@@ -1127,7 +1127,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
 }
 
 /*
-analysisDecl : frontMatter? 'export'? 'analysis' identDef ':' typeExpr '{' analysisClause* '}'
+analysisDecl : frontMatter? 'export'? 'analysis' identDef parentParams? ':' typeExpr
+               '{' analysisClause* '}'
 analysisClause : 'initial' '=>' dataExpr
                | ('join' | 'widen') '(' identList? ')' '=>' dataExpr
                | 'on' '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
@@ -1146,6 +1147,12 @@ The pattern function carries the shape the matcher reads: its parameters are the
 variables (typed `int` unless the clause declares a `const c: T`), and its body is the operator
 expression. The fact function takes the matched nodes (or the values of `const` parameters) and
 computes the fact. `__analysis` is an operator of the module `rewrite`, imported here.
+
+A declaration with parameters (`analysis pair(a: Node, b: Node): bool`) is a multi-parameter
+query: the parameters are the pattern variables a rule's condition hands it (`pair(x, y)`), and
+`__analysis` receives one node per parameter instead of the single queried value. The engine
+reads the fact of the value those parts belong to; the declaration without parameters keeps the
+one-value form (`range(n)`).
 */
 Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
     ENTER("AnalysisDecl");
@@ -1385,9 +1392,25 @@ Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
         compiled.push_back({prefix, prefix + "_fact", mask});
     }
 
-    // The query function: `func name(n: Node): T => __analysis(...)`.
+    // The query function: `func name(a: Node, b: Node): T => __analysis(...)`. Its parameters
+    // are the pattern variables a rule's condition hands it; without a parameter list the query
+    // takes the value itself (`range(n)`), as it always has.
     std::vector<std::pair<std::string, node_ptr_t>> queryParams;
-    queryParams.emplace_back("n", refType("Node"));
+    std::vector<std::string> queryArgs;
+    if (const auto params = context->get<cst::ParentParams>()) {
+        if (const auto paired = params->get<cst::PairedParams>()) {
+            for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                const std::string pname(pair->get<cst::IdentDef>()->text());
+                node_ptr_t ptype = pair->type() ? typeOf(pair->type()) : refType("Node");
+                queryParams.emplace_back(pname, ptype);
+                queryArgs.push_back(pname);
+            }
+        }
+    }
+    if (queryParams.empty()) {
+        queryParams.emplace_back("n", refType("Node"));
+        queryArgs.push_back("n");
+    }
     node_ptr_t args = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(args, context);
     const auto literal = [&](LiteralType type, const std::string &text) {
@@ -1404,7 +1427,9 @@ Value Builder::visitAnalysisDecl(cst::AnalysisDecl context) {
     *args << reference(name + "__initial");
     *args << reference(name + "__join");
     *args << reference(widenExpr ? name + "__widen" : name + "__join");
-    *args << reference("n");
+    for (const std::string &arg : queryArgs) {
+        *args << reference(arg);
+    }
     for (const CompiledOn &on : compiled) {
         *args << reference(on.patternFn);
         *args << reference(on.factFn);

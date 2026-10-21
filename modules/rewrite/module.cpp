@@ -762,8 +762,9 @@ class RewriteModule final : public BuiltinModule {
                           return RuleType::get();
                       })}}));
         // `__analysis` (rewrite design 4): the compiled form of an `analysis` declaration. Its
-        // arity is 5 + 3n: name, initial, join, widen, the queried node, then for each `on`
-        // clause its pattern function, its fact function and the mask of its `const` parameters.
+        // arity is 4 + k + 3n: name, initial, join, widen, the k pattern variables the query was
+        // called with (one node, `n`, in the one-value form), then for each `on` clause its
+        // pattern function, its fact function and the mask of its `const` parameters.
         exportEntity(
             "__analysis",
             OperatorGroup::create(
@@ -774,8 +775,7 @@ class RewriteModule final : public BuiltinModule {
                       "(name: string, initial: F, join: F, widen: F, node: Node, ...) => T",
                       [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
-                          if (norm.size() < 5 || (norm.size() - 5) % 3 != 0 ||
-                              norm[0]->code() != TypeCode::String) {
+                          if (norm.size() < 5 || norm[0]->code() != TypeCode::String) {
                               return std::nullopt;
                           }
                           for (size_t i = 1; i < 4; ++i) {
@@ -783,10 +783,16 @@ class RewriteModule final : public BuiltinModule {
                                   return std::nullopt;
                               }
                           }
-                          if (!HandleType::is(norm[4], HandleKind::Node)) {
+                          // The query's pattern variables come first, one `Node` each; the `on`
+                          // descriptions follow as triples that begin with a function.
+                          size_t at = 4;
+                          while (at < norm.size() && HandleType::is(norm[at], HandleKind::Node)) {
+                              ++at;
+                          }
+                          if (at == 4 || at >= norm.size() || (norm.size() - at) % 3 != 0) {
                               return std::nullopt;
                           }
-                          for (size_t i = 5; i < norm.size(); i += 3) {
+                          for (size_t i = at; i < norm.size(); i += 3) {
                               if (norm[i]->code() != TypeCode::Function ||
                                   norm[i + 1]->code() != TypeCode::Function ||
                                   norm[i + 2]->code() != TypeCode::Int64) {

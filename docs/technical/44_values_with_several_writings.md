@@ -88,6 +88,20 @@ equivalences are dropped. Cost models are replaceable and registered by name (`n
 `weighted`); the hook receives the node and a `CostContext` (draft and context) so a target can
 read facts.
 
+**What extraction keeps** is the boundary of the design (graph store 3.5 and 3.6): a node with a
+side effect is always kept — its execution is the meaning of the program, and evaluation by
+dependency (design principles 3) applies to pure computation only — and a pure node is kept only
+when it is reachable from what the graph names (ports, entry, exit, return, region results). A
+pure writing that is a candidate of a class and read by nothing is erased.
+
+The code's test for "always kept" is wider than that boundary. It selects every node with
+`!multi[node] && !takesPart(node)`, and `takesPart` is true only for shape 1. Shape 2 also covers
+impure operators, control nodes and written variables (the nodes the comment at that line names),
+but shape 3 — a pure node that has control inputs, which can only be the root of a rule — is just
+as selected, and so is any kind `shapeTakesPart` does not cover. A pure node with control inputs
+that a saturation added and that nothing reads therefore stays in the extracted program. See
+section 7.
+
 ## 6. The pipeline
 
 Back ends and exporters keep refusing a graph with writings (`GCGraph::execPlan`,
@@ -97,6 +111,13 @@ declare `acceptsWritings()` gets a diagnostic instead of the program.
 
 ## 7. Open points
 
+- **The retention boundary and the code differ for pure nodes** (defect, H61). Section 5 says a
+  pure node stays only when reachable; `DraftWritings::extract` keeps every node that takes no
+  part in congruence unconditionally. That covers a pure node with control inputs (`shapeOf`
+  returns 3), and structural nodes such as `FUNC` and a pure `CALL`. A pure node with control
+  inputs that a saturation added and that nothing reads therefore stays in the extracted
+  program. Fixing it means deciding "kept" by "has a side effect or carries an order" rather
+  than by "does not take part in congruence"; the design's sentences are the authority.
 - Matching tries each rule at every node with its head operator each round, rebuilding that index
   every round; an index kept up to date between rounds would only matter for graphs where most
   nodes are new each round.

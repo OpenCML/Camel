@@ -228,7 +228,8 @@ ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef ruleContext? par
                      '}' (IDENTIFIER dataExpr)?
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
-analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef ':' typeExpr '{' analysisClause* '}'
+analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
+                     '{' analysisClause* '}'
 analysisClause     : IDENTIFIER '=>' dataExpr
                      | IDENTIFIER '(' identList? ')' '=>' dataExpr
                      | IDENTIFIER '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
