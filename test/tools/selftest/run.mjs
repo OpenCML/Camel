@@ -88,6 +88,8 @@ expectAll('known_but_passes', 'PASS', { prl: 'FAIL' })
 expectAll('column_differs', 'PASS', { fvm: 'FAIL' })
 expectAll('exit_differs', 'PASS', { prl: 'FAIL' })
 expectAll('fields_not_listed', 'PASS')
+expected['not_contains'] = 'PASS'
+expected['not_contains_fails'] = 'FAIL'
 
 const actual = {}
 for (const [, status, name] of output.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP)\] (\S+)/gm)) {
@@ -106,8 +108,9 @@ const mustContain = [
     "marked known_fail on 'prl' but passes: remove the mark",
     "the fixture's jit prints 41",
     'stdout does not start with "2\\n"',
+    "stdout contains '42'",
     'expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)',
-    '[SUMMARY] total: 34, pass: 27, fail: 6, known failures: 1',
+    '[SUMMARY] total: 36, pass: 28, fail: 7, known failures: 1',
 ]
 for (const text of mustContain) {
     if (!output.includes(text)) problems.push(`output lacks: ${text}`)

@@ -89,3 +89,17 @@ desc = "An entry without backends is one test, as before; the defaults table sti
 backends = false
 args = ["${case}", "same", "std::nvm"]
 expect_exit = 0
+
+[[tests]]
+name = "not_contains"
+desc = "expect_stdout_not_contains: the text must be absent; a run that says nothing about something passes."
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_not_contains = ["PROFILE", "41"]
+
+[[tests]]
+name = "not_contains_fails"
+desc = "The same assertion fails when the text is there: 42 is printed, so it is not absent."
+backends = false
+args = ["${case}", "same", "std::nvm"]
+expect_stdout_not_contains = ["42"]

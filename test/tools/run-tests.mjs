@@ -40,7 +40,7 @@ const TEST_FIELDS = new Set([
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
     'expect_exit', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
-    'expect_stdout_starts_with', 'expect_stderr_contains',
+    'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
     'expect_output_contains', 'expect_output_not_contains',
     'expect_diagnostic_name', 'expect_diagnostic_code',
     'expect_diagnostic_line', 'expect_diagnostic_column',
@@ -1061,6 +1061,15 @@ async function validateTest(test, result, context) {
         const expectedStart = expandTextTokens(test.expect_stdout_starts_with, scope)
         if (!result.normalized.stdout.startsWith(expectedStart)) {
             failures.push(`stdout does not start with ${JSON.stringify(expectedStart)}`)
+        }
+    }
+    // The other direction: a plan that asserts a run says nothing about something (the profiler
+    // off is silent, a diagnostic is not printed for a program that has no fault) needs a
+    // negative assertion, and a missing one is not the same as a passing one.
+    for (const rawNeedle of test.expect_stdout_not_contains || []) {
+        const needle = expandTextTokens(rawNeedle, scope)
+        if (result.normalized.stdout.includes(needle)) {
+            failures.push(`stdout contains '${needle}'`)
         }
     }
     for (const rawNeedle of test.expect_stderr_contains || []) {
