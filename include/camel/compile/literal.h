@@ -91,9 +91,14 @@ class Value {
 
     /// The value as a constant of a numeric primitive type. An integer target takes an
     /// integer value only, and only one that fits. A float target takes either kind, rounded
-    /// to nearest with ties to even; a magnitude below the smallest subnormal becomes zero.
-    /// Null when the value is not one the type can hold.
+    /// to nearest with ties to even. Null when the value is not one the type can hold: an
+    /// overflow and an underflow are both "cannot hold" (H15i), never a zero.
     std::optional<camel::core::data::data_ptr_t> toData(camel::core::type::Type *type) const;
+    /// True when this is a nonzero value whose magnitude is below half the smallest subnormal
+    /// of `type` (a float type, or either part of a complex one): the nearest value of the
+    /// type is zero, so the value cannot be represented and is refused rather than rounded
+    /// away (H15i). False for zero, for integer types, and for a magnitude that fits.
+    bool underflows(camel::core::type::Type *type) const;
     /// Integer kind and fitting an int64.
     std::optional<std::int64_t> asInt64() const;
 

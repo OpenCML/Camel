@@ -355,13 +355,13 @@ timeout_ms = 8000
 
 [[tests]]
 name = "literal_range.exponent_is_float"
-desc = "A literal with an exponent is a floating-point number (design principles 5.1): `1e-2` is 0.01 and `15e-1` is 1.5; nothing is truncated and nothing is warned about."
+desc = "A literal with an exponent is a floating-point number (design principles 5.1): `1e-2` is 0.01 and `15e-1` is 1.5; nothing is truncated and nothing is warned about. The warning the old reading used here (`IntegerLiteralTruncated`) was unreachable after H15h and is deleted (H15i)."
 kind = "behavior"
 case = "../../../cases/compile/literals/int_negative_exponent.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 0
 expect_stdout_contains = ["0.01 1.5 15"]
-expect_output_not_contains = ["IntegerLiteralTruncated", "Warn"]
+expect_output_not_contains = ["Warn"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -432,14 +432,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "number_token_forms"
-desc = "The number tokens a literal and an entry argument share (H15h): hexadecimal, binary and octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `077` 63.0 — octal, not 77), and a real token too small to tell from zero is zero (`1e-9999` is 0.0). The same forms of `--arg` bind a parameter in entry_args.integer_hex / integer_octal_value / integer_binary_and_underflow, and the translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
+desc = "The number tokens a literal and an entry argument share (H15i): hexadecimal, binary and `0o` octal integer tokens take a float position (`0xFF` is 255.0, `0b1010` 10.0, `0o77` 63.0), and a real token with leading zeros is unambiguous (`077.5` is 77.5). A leading-zero decimal integer (`077`) is a lexical error in source, while an entry argument reads it as 77 (entry_args.integer_leading_zero_is_decimal). The translated program is compared with camel on all of them (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/literals/number_token_forms.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "255.0 10.0 63.0 0.0\n255 10 63\n"
+expect_stdout = "255.0 10.0 63.0 77.5\n255 10 63\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

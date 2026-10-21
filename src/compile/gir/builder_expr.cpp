@@ -782,8 +782,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             if (data_ptr_t converted = data->convertTo(payload)) {
                 valueNode = currGraph_->addStaticDataNode(converted);
                 registerNodeOrigin(context_, valueNode, gct->at(0), "gir.data");
-            } else if (const std::string limits = literalRangeViolation(data, payload);
-                       !limits.empty()) {
+            } else if (
+                const std::string notFit = literalNotFitReason(data, payload); !notFit.empty()) {
                 rejectLiteralData(data, payload, gct->origin(), gct->at(0));
             }
         }

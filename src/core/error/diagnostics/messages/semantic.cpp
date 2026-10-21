@@ -888,16 +888,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::IntegerLiteralTruncated,
-            {
-                "IntegerLiteralTruncated",
-                "The integer literal '{0}' is not a whole number: its value is {1}, the "
-                "fraction is dropped.",
-                "A number written without a decimal point is an 'int', with an exponent too. "
-                "For the floating-point number write the decimal point: '{2}'.",
-            },
-        },
-        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

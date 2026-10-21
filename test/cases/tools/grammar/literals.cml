@@ -4,7 +4,7 @@ module literals
 // INTEGER: DEC, OCT, HEX, BIN, each with an optional exponent
 let dec = 0
 let big = 100000
-let oct = 0755
+let oct = 0o755
 let hex = 0xFF
 let hex_low = 0x1e5
 let bin = 0b1010

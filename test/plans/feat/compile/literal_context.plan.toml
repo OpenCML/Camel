@@ -433,6 +433,7 @@ const out = input.normalized.stdout.trim()
 const want = [
   "1.5 1.0 3.25 0",
   "25.0 12.0 3.0",
+  "3.5",
   "2.5 8.0",
   "3.0 [1.0, 2.0]",
   "3.0 1.0",
@@ -508,6 +509,39 @@ expect_output_contains = ["context_struct_argument_shape.cml:13:17: [Error]: No 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# Underflow (H15i): a nonzero real whose nearest value in the declared type is zero is refused
+# with that reason, not rounded to zero. H15h read the first as 0.0.
+
+[[tests]]
+name = "context.underflow_float"
+desc = "`let x: float = 1e-9999` is LiteralNotRepresentable with the reason that the nearest value is zero; it is not read as 0.0 (H15i, superseding H15h)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_underflow_float.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 20
+expect_output_contains = ["'1e-9999'", "type 'float'", "too small to be represented (the nearest value is zero)"]
+expect_output_not_contains = ["out of range"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.underflow_f32"
+desc = "`let x: f32 = 1e-50` is the same refusal at the narrower type: a double that fits a double but whose nearest f32 is zero is not an f32 value (H15i)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_underflow_f32.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["'1e-50'", "type 'f32'", "too small to be represented (the nearest value is zero)"]
+expect_output_not_contains = ["out of range"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 # A text where a field expects a number (H15h). The field is the position that cannot take the
 # value, so the mismatch is reported there in each shape a composite literal has: a struct field
 # by name, a positional tuple element, a field of a nested literal, a field of an argument, and a
@@ -540,6 +574,21 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 30
 expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
 expect_output_not_contains = ["LiteralNotRepresentable", "the text is not a number"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.tuple_argument_text"
+desc = "A tuple literal argument takes the parameter's tuple type element by element (H15i): the text element is DeclaredTypeMismatch at that element, naming `string` and `float`, not a call that matches no overload. The numeric sibling `pairSum((1, 2.5))` is in context.composite_argument."
+kind = "negative"
+case = "../../../cases/compile/literals/context_tuple_argument_text.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 10
+expect_diagnostic_column = 22
+expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
+expect_output_not_contains = ["NoMatchingFunction", "LiteralNotRepresentable"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

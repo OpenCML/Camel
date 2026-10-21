@@ -534,33 +534,81 @@ TokenBuffer Lexer::tokenizeImpl(std::string source, size_t from, size_t to) {
                 i = k;
                 continue;
             }
-            // INTEGER: decimal without a leading zero, `0`, `0` and octal digits, `0x` and
-            // hexadecimal digits, `0b` and binary digits; then an exponent. A digit run that
-            // is none of them is cut where the longest of them ends (`089` is `0`, `89`).
-            size_t end = j;
+            // INTEGER: decimal (`0`, `42`), `0x` and hexadecimal digits, `0b` and binary
+            // digits, `0o` and octal digits; then an exponent on a decimal number. A decimal
+            // digit run that starts with `0` and has more than that one digit (`09`, `077`) is
+            // not a number token: it is refused here as a whole, with a located error, instead
+            // of being cut into `0` and `9` (H15i). Octal is written `0o77`. A prefixed form
+            // with no digit of its base is refused the same way instead of being cut.
+            size_t end   = j;
+            bool invalid = false;
             if (c == '0') {
-                if (at(i + 1) == 'x' && isHexDigit(at(i + 2))) {
-                    end = i + 3;
+                if (at(i + 1) == 'x') {
+                    end = i + 2;
                     while (isHexDigit(at(end))) {
                         ++end;
                     }
+                    if (end == i + 2) {
+                        invalid = true;
+                    }
                     // `0xFFe-3`: the longest match gives the final `e` to a signed exponent
                     // (the literal is rejected later: an exponent is decimal only).
-                    if ((at(end - 1) == 'e' || at(end - 1) == 'E') && end - 1 > i + 2 &&
+                    if (!invalid && (at(end - 1) == 'e' || at(end - 1) == 'E') && end - 1 > i + 2 &&
                         (at(end) == '+' || at(end) == '-') && isDigit(at(end + 1))) {
                         --end;
                     }
-                } else if (at(i + 1) == 'b' && (at(i + 2) == '0' || at(i + 2) == '1')) {
-                    end = i + 3;
+                } else if (at(i + 1) == 'b') {
+                    end = i + 2;
                     while (at(end) == '0' || at(end) == '1') {
                         ++end;
                     }
-                } else {
-                    end = i + 1;
+                    if (end == i + 2 || isDigit(at(end))) {
+                        invalid = true;
+                        while (isDigit(at(end))) {
+                            ++end;
+                        }
+                    }
+                } else if (at(i + 1) == 'o') {
+                    end = i + 2;
                     while (at(end) >= '0' && at(end) <= '7') {
                         ++end;
                     }
+                    if (end == i + 2 || at(end) == '8' || at(end) == '9') {
+                        invalid = true;
+                        while (isDigit(at(end))) {
+                            ++end;
+                        }
+                    }
+                } else if (isDigit(at(i + 1))) {
+                    // A leading-zero decimal run: `09`, `077`, `077e2`, `09i`. It is refused as
+                    // one token, so a source program cannot quietly read `0` and then a stray
+                    // statement; the entry reader and a conversion text read the same digits as
+                    // decimal data text (reference 2.5.2).
+                    invalid = true;
+                    end     = exponentEnd(j);
+                    if (at(end) == 'i' && !isIdentPart(at(end + 1))) {
+                        ++end;
+                    }
+                } else {
+                    end = i + 1; // `0` itself
                 }
+            }
+            if (invalid) {
+                // A prefixed form with no digits after it consumes an identifier-like tail so
+                // that the diagnostic covers the whole written run (`0x`, `0xG`).
+                if (end == i + 2) {
+                    while (isIdentPart(at(end))) {
+                        ++end;
+                    }
+                }
+                buffer.errors_.push_back(
+                    LexError{
+                        LexErrorKind::InvalidNumber,
+                        static_cast<uint32_t>(i),
+                        static_cast<uint32_t>(end)});
+                emitTrivia(TokenKind::Error, i, end, false);
+                i = end;
+                continue;
             }
             // A decimal number with an exponent is a floating-point literal (`1e5` is
             // 100000.0). On a hexadecimal, binary or octal number an exponent is an error

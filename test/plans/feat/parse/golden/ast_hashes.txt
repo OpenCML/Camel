@@ -554,7 +554,7 @@ f11cad6f44dba18e ok test/cases/compile/literals/context_arm_value.cml
 1c51fb33272d886f ok test/cases/compile/literals/context_array_argument_element_text.cml
 742648c8fd0f5945 ok test/cases/compile/literals/context_array_argument_out_of_range.cml
 765b61012a832ef5 ok test/cases/compile/literals/context_array_element_out_of_range.cml
-4af40959dc39fde6 ok test/cases/compile/literals/context_composite_argument.cml
+a0a2eba37e96891d ok test/cases/compile/literals/context_composite_argument.cml
 2b250bf48d0f255f ok test/cases/compile/literals/context_composite_rounding.cml
 e207990e87658c8a ok test/cases/compile/literals/context_conversion_out_of_range.cml
 974af32a1255df31 ok test/cases/compile/literals/context_data_literal.cml
@@ -588,7 +588,7 @@ ce8fab5dd166eae8 ok test/cases/compile/literals/int_hex_too_large.cml
 0304eff31e30d9ec ok test/cases/compile/literals/int_negative_exponent.cml
 ed37f8db3621ba08 ok test/cases/compile/literals/int_too_large.cml
 95e5fa3706ed89a4 ok test/cases/compile/literals/int_too_small.cml
-fc99bb0f6cc412e8 ok test/cases/compile/literals/integer_limits.cml
+112900630437c3ba ok test/cases/compile/literals/integer_limits.cml
 61dec437409c5c60 ok test/cases/compile/literals/literal_context.cml
 62fe6d837e3f0a35 ok test/cases/compile/literals/real_literals.cml
 6814615485faeebe ok test/cases/compile/module_imports/conf_b.cml
@@ -1019,7 +1019,7 @@ e8b8c53cd02c54bf ok test/cases/consistency/partial_application/overload_choice.c
 444e6ddc322d7a4a ok test/cases/consistency/partial_application/values.cml
 1deb0f6987e78c4c ok test/cases/consistency/surface/lambda_call.cml
 685c979fd7a61501 ok test/cases/consistency/surface/member_chain.cml
-2d0e0a7b500e7944 ok test/cases/consistency/surface/minus.cml
+bab7da383928dd87 ok test/cases/consistency/surface/minus.cml
 d4f13f2219953ff5 ok test/cases/consistency/surface/operator_values.cml
 8e26a3132888f115 ok test/cases/consistency/surface/zip_many.cml
 e5c6cc6fa1fb1e77 ok test/cases/consistency/unused_fallible/if_arms.cml
@@ -1052,7 +1052,7 @@ c542e3cd044fdfd6 ok test/cases/consistency/values/float_to_int.cml
 acda34b5c73604e0 ok test/cases/consistency/values/max_min_special.cml
 ef899bf4bfe53478 ok test/cases/consistency/values/non_tail_deep.cml
 2c0861592fa5c206 ok test/cases/consistency/values/number_fit.cml
-ac693c003b23e670 ok test/cases/consistency/values/number_text.cml
+1b078ac1c63b797c ok test/cases/consistency/values/number_text.cml
 3540db1f1babe41c ok test/cases/consistency/values/slice_take_drop.cml
 834dd3ff47821b0b ok test/cases/consistency/values/strings.cml
 4d9dbde11aa140e4 ok test/cases/consistency/values/structs_tuples.cml
@@ -1835,7 +1835,7 @@ de2b4111ac30bce6 ok test/cases/tools/debugger/fixtures/unhandled.cml
 9ea2e7cbbf1b10ce ok test/cases/tools/grammar/comments.cml
 6aad29dc1f920033 ok test/cases/tools/grammar/functions.cml
 d1b1fea632363f9c no test/cases/tools/grammar/keywords.cml
-64a3f16ccaa182a6 ok test/cases/tools/grammar/literals.cml
+1eeb4911d31e2a27 ok test/cases/tools/grammar/literals.cml
 d7f0b21101169429 ok test/cases/tools/grammar/modules.cml
 2205ea17169f2f20 no test/cases/tools/grammar/operators.cml
 5b89a02b11b0ecee ok test/cases/tools/grammar/types.cml
@@ -2024,7 +2024,7 @@ a47ef3d6236e641d ok probes/probe_s088.cml
 3706849ea5595a60 ok probes/probe_s092.cml
 38e8ceef063558f5 ok probes/probe_s093.cml
 1831e38f43da5072 ok probes/probe_s094.cml
-89db0a7b32180a63 ok probes/probe_s095.cml
+7b67578b77522d63 ok probes/probe_s095.cml
 13215b1bc4081634 ok probes/probe_s096.cml
 8073a686d82207c7 ok probes/probe_s097.cml
 b1a1f306f51033d0 ok probes/probe_s098.cml

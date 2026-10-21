@@ -47,11 +47,13 @@ namespace camel::utils {
 
 /// Reading a text as a number: it is one number of the language's grammar and the type holds
 /// it, or it is not a number at all, or it is a number the type cannot hold (overflow or
-/// underflow). The two refusals are different causes and are reported differently.
+/// underflow). The three refusals are different causes and are reported differently.
+/// `Underflow` is a nonzero number too small to tell from zero at the target width (H15i): it
+/// is refused like an overflow, never read as zero, and the reason can say which it is.
 /// `OutOfRangeInteger` is a number written as an integer token whose value does not fit an
 /// int64 (the widest integer a literal has): a float entry argument is refused with the
 /// integer's range rather than the float's, which would be a false statement about the text.
-enum class NumberTextStatus { Ok, NotANumber, OutOfRange, OutOfRangeInteger };
+enum class NumberTextStatus { Ok, NotANumber, Underflow, OutOfRange, OutOfRangeInteger };
 
 /// The range of the integer type T as a diagnostic writes it (`-2147483648 to 2147483647`).
 template <std::signed_integral T> std::string integerRangeText() {
@@ -159,9 +161,16 @@ inline bool splitNumberSign(std::string_view &text, bool &negative) {
     return true;
 }
 
-/// The body of an integer token (reference 2.5.1): decimal digits without a leading zero (`0`),
-/// octal digits with a leading `0`, `0x` and hexadecimal digits, or `0b` and binary digits.
-/// Nothing else; `digits` is written without the radix prefix.
+/// The body of a number token read as an integer (reference 2.5.1): decimal digits, `0x` and
+/// hexadecimal digits, `0b` and binary digits, or `0o` and octal digits. Nothing else; `digits`
+/// is written without the radix prefix.
+///
+/// A leading `0` is decimal here, not octal (H15i): `077` is the number 77. The source lexer
+/// refuses a leading-zero digit run before a number token reaches this function, so a literal
+/// cannot be written that way; an entry argument can, and so can the decimal text of a
+/// conversion function (data text, language reference 2.5.2). Octal in source is written
+/// `0o77`, which the source lexer and the entry reader accept; `parseWholeInteger` reads decimal
+/// digits only, so `int('0o77')` is not an integer text.
 struct IntegerParts {
     unsigned radix = 10;
     std::string_view digits;
@@ -185,15 +194,11 @@ inline bool integerParts(std::string_view body, IntegerParts &parts) {
         parts = {2, body.substr(2)};
         return true;
     }
-    if (body.size() == 1 && body[0] == '0') {
-        parts = {10, body};
-        return true;
-    }
-    if (body[0] == '0') {
-        if (!allOctalDigits(body.substr(1))) {
+    if (body.size() >= 2 && body[0] == '0' && body[1] == 'o') {
+        if (!allOctalDigits(body.substr(2))) {
             return false;
         }
-        parts = {8, body.substr(1)};
+        parts = {8, body.substr(2)};
         return true;
     }
     if (!allDecimalDigits(body)) {
@@ -280,12 +285,11 @@ NumberTextStatus integerValue(
     return NumberTextStatus::Ok;
 }
 
-/// The value of a real body. `underflowIsZero` says what a number too small to tell from zero
-/// is: a literal (and an entry argument) reads it as zero, as the language's literal parser
-/// does; a conversion call refuses it as out of range (H15f).
+/// The value of a real body. A number too small to tell from zero is Underflow and a number too
+/// large is OutOfRange; neither is read as a value (H15i). The two are told apart at T's own
+/// width: 3.5e38 overflows a float but is a finite double, and 1e-9999 underflows both.
 template <std::floating_point T>
-NumberTextStatus realValue(
-    std::string_view body, bool negative, T &out, bool underflowIsZero) {
+NumberTextStatus realValue(std::string_view body, bool negative, T &out) {
     T value{};
     if constexpr (requires(const char *p, T &v) { std::from_chars(p, p, v); }) {
         const auto [end, ec] = std::from_chars(
@@ -298,7 +302,7 @@ NumberTextStatus realValue(
             // tell from zero; a C conversion at T's own width tells the two apart without
             // losing the grammar, which the checks above have already pinned. It must be T's
             // width: 3.5e38 overflows a float but is a finite double, and reading it as a double
-            // would call it an underflow and give zero.
+            // would call it an underflow.
             const std::string numeral(body);
             errno         = 0;
             char *end     = nullptr;
@@ -311,10 +315,7 @@ NumberTextStatus realValue(
             if (std::isinf(spread)) {
                 return NumberTextStatus::OutOfRange;
             }
-            if (!underflowIsZero) {
-                return NumberTextStatus::OutOfRange;
-            }
-            value = T{};
+            return NumberTextStatus::Underflow;
         }
     } else {
         // libc++ before version 20 has no from_chars for floating point. The characters were
@@ -330,9 +331,7 @@ NumberTextStatus realValue(
             return NumberTextStatus::NotANumber;
         }
         if (errno == ERANGE && (std::isinf(value) || value == T{})) {
-            if (std::isinf(value) || !underflowIsZero) {
-                return NumberTextStatus::OutOfRange;
-            }
+            return std::isinf(value) ? NumberTextStatus::OutOfRange : NumberTextStatus::Underflow;
         }
     }
     out = negative ? -value : value;
@@ -360,8 +359,9 @@ template <std::signed_integral T> NumberTextStatus parseWholeInteger(std::string
 /// sign, then a decimal number with digits on both sides of its optional fraction and an
 /// optional exponent (`1`, `1.5`, `1e-3`), or `inf` / `nan` as the language prints them.
 /// Nothing else: no blanks, no hexadecimal form, no suffix. A number too small to tell from zero
-/// is out of range here (H15f); the entry reader and a source literal read it as zero
-/// (parseNumberToken).
+/// is refused as out of range here (`ConversionOutOfRange`), the same rule the literal and the
+/// entry argument apply (H15i); a conversion reports both overflow and underflow with one
+/// diagnostic, so the distinction is folded into OutOfRange.
 template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_view text, T &out) {
     bool negative = false;
     if (!number_text_detail::splitNumberSign(text, negative)) {
@@ -386,15 +386,18 @@ template <std::floating_point T> NumberTextStatus parseWholeFloat(std::string_vi
     if (!number_text_detail::realParts(text, parts)) {
         return NumberTextStatus::NotANumber;
     }
-    return number_text_detail::realValue(text, negative, out, false);
+    const NumberTextStatus status = number_text_detail::realValue(text, negative, out);
+    return status == NumberTextStatus::Underflow ? NumberTextStatus::OutOfRange : status;
 }
 
 /// Reads `text` as one whole number token of the language, the rule a source literal and an
 /// entry argument share (reference 2.5.1, 2.5.2): an optional sign, then an integer token
-/// (decimal, `0x` hexadecimal, `0b` binary, or octal with a leading `0`) or a real token (digits
-/// with a point and digits after it, and/or an exponent), and nothing else. A real token too
-/// small to tell from zero is zero, as a source literal is; one too large is out of range. For
-/// an integer T only an integer token fits (`12`, `0x10`, `077`; `1.5` and `1e3` do not).
+/// (decimal, `0x` hexadecimal, `0b` binary, `0o` octal) or a real token (digits with a point and
+/// digits after it, and/or an exponent), and nothing else. A real token too small to tell from
+/// zero is Underflow and one too large is OutOfRange (H15i); neither is a value. For an integer
+/// T only an integer token fits (`12`, `0x10`, `0o77`; `1.5` and `1e3` do not). A leading zero
+/// is decimal (`077` is 77): the lexer keeps such a run out of a source literal, but an entry
+/// argument and a conversion text read it, as data text (2.5.2).
 template <std::signed_integral T> NumberTextStatus parseNumberToken(std::string_view text, T &out) {
     bool negative = false;
     if (!number_text_detail::splitNumberSign(text, negative)) {
@@ -423,8 +426,9 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
         out = std::numeric_limits<T>::quiet_NaN();
         return NumberTextStatus::Ok;
     }
-    // An integer token first: `077` is octal 63, not the decimal 77 a real-token reading would
-    // give it, and `0xFF` is 255. A source literal takes the integer token it is written as.
+    // An integer token first: `0o77` is octal 63, and `0xFF` is 255. A source literal is written
+    // that way; a leading zero (`077`, `09`) is plain decimal data text, which the lexer refuses
+    // in source but an entry argument and a conversion text read (H15i, reference 2.5.2).
     number_text_detail::IntegerParts integer;
     if (number_text_detail::integerParts(text, integer)) {
         int64_t value = 0;
@@ -441,18 +445,14 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
         }
         return NumberTextStatus::Ok;
     }
-    // Then a real token. Without a point it is a real token only when an exponent makes it one,
-    // and the lexer's real path does not take a leading-zero digit run with an exponent
-    // (`077e2` is not a token): the digits are the plain decimal kind only when they are not
-    // that ambiguous run.
+    // Then a real token: digits, an optional point, an optional exponent. A leading-zero digit
+    // run with an exponent (`077e2`) is decimal data text, like `077`; the lexer refuses it in
+    // source before a literal can be built from it.
     number_text_detail::RealParts real;
     if (!number_text_detail::realParts(text, real)) {
         return NumberTextStatus::NotANumber;
     }
-    if (!real.point && real.integerDigits > 1 && text.front() == '0') {
-        return NumberTextStatus::NotANumber;
-    }
-    return number_text_detail::realValue(text, negative, out, true);
+    return number_text_detail::realValue(text, negative, out);
 }
 
 /// The text of a floating-point number: the shortest digits that read back as the same number

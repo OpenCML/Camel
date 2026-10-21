@@ -1101,7 +1101,13 @@ void Builder::rejectLiteralValue(
     }
     const std::string range = literal::rangeText(type);
     std::string reason;
-    if (!range.empty()) {
+    if (value.underflows(type)) {
+        // A nonzero value whose nearest value of the type is zero (H15i): not a range above its
+        // largest, and not rounded away.
+        reason = folded ? "the value " + value.toString() +
+                              " is too small to be represented (the nearest value is zero)"
+                        : "too small to be represented (the nearest value is zero)";
+    } else if (!range.empty()) {
         // A folded expression is quoted as written, so the value it came to is also said.
         reason = folded ? "the value " + value.toString() + " is out of range (" + range + ")"
                         : "out of range (" + range + ")";
@@ -1123,8 +1129,8 @@ void Builder::rejectLiteralData(
         // A refusal the conversion already explained (`int('99999999999999999999')` is out of
         // range, not text that is not a number).
         reason = reasonGiven;
-    } else if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
-        reason = "out of range (" + limits + ")";
+    } else if (const std::string notFit = literalNotFitReason(data, type); !notFit.empty()) {
+        reason = notFit;
     } else if (data->type()->isPrimitive() && isIntegerType(type)) {
         // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
         // is out of the range.

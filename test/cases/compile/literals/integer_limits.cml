@@ -4,8 +4,8 @@
  */
 func main(): int sync {
     println(-9223372036854775808, 9223372036854775807)
-    println(0x7fffffffffffffff, -0x8000000000000000, 0b111, 0777, -0777)
-    println(0, 00)
+    println(0x7fffffffffffffff, -0x8000000000000000, 0b111, 0o777, -0o777)
+    println(0, 0o0)
     let a: i32 = 2147483647
     let b: i32 = -2147483648
     let c: f32 = 1.5

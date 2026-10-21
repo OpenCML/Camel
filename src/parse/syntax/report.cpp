@@ -184,6 +184,15 @@ void reportLexicalErrors(const TokenBuffer &buffer, Diagnostics &diagnostics) {
         const size_t column = buffer.columnOf(error.begin);
         const CharRange range{{line, column}, {line, column + 1}};
         switch (error.kind) {
+        case LexErrorKind::InvalidNumber: {
+            // The whole written run (`09`, `077`, `0o8`), not one character of it: the text is
+            // what the reader has to change (H15i).
+            const std::string text(buffer.source().substr(error.begin, error.end - error.begin));
+            diagnostics.of(LexicalDiag::InvalidNumberFormat)
+                .at(CharRange{{line, column}, {line, buffer.columnOf(error.end)}})
+                .commit(text);
+            break;
+        }
         case LexErrorKind::UnclosedString:
             diagnostics.of(LexicalDiag::UnclosedStringLiteral)
                 .at(range)

@@ -933,22 +933,11 @@ template <typename T> std::optional<T> toFloating(const Rational &value, bool ne
     }
     const std::string text = exactDecimal(value).value_or(approximateDecimal(value, 50));
     T converted{};
+    // parseWholeFloat refuses an overflow and an underflow alike (H15i): neither is a value the
+    // type holds, so neither is rounded to zero or to an infinity here.
     const auto status = camel::utils::parseWholeFloat<T>(text, converted);
-    if (status == camel::utils::NumberTextStatus::Ok) {
-        return converted;
-    }
-    if (status == camel::utils::NumberTextStatus::NotANumber) {
-        return std::nullopt;
-    }
-    // Below the smallest value the type can show, the value becomes zero (and keeps its
-    // sign); above its largest, it does not fit.
-    constexpr int kHalfUlpExponent =
-        std::numeric_limits<T>::digits - std::numeric_limits<T>::min_exponent + 1;
-    if (atMostTiny(value, kHalfUlpExponent)) {
-        T zero{};
-        return value.num.isNegative() ? -zero : zero;
-    }
-    return std::nullopt;
+    return status == camel::utils::NumberTextStatus::Ok ? std::optional<T>(converted)
+                                                        : std::nullopt;
 }
 
 } // namespace
@@ -1012,6 +1001,41 @@ std::optional<camel::core::data::data_ptr_t> Value::toData(camel::core::type::Ty
     }
     default:
         return std::nullopt;
+    }
+}
+
+namespace {
+
+/// Whether one part of a value is nonzero and below half the smallest subnormal of T.
+template <typename T> bool partUnderflows(const Rational &value) {
+    if (value.num.isZero()) {
+        return false;
+    }
+    // The same boundary toFloating used before H15i: 2^-kHalfUlpExponent is half the smallest
+    // subnormal of T, the largest magnitude that rounds to zero.
+    constexpr int kHalfUlpExponent =
+        std::numeric_limits<T>::digits - std::numeric_limits<T>::min_exponent + 1;
+    return atMostTiny(value, kHalfUlpExponent);
+}
+
+} // namespace
+
+bool Value::underflows(camel::core::type::Type *type) const {
+    using camel::core::type::TypeCode;
+    if (type == nullptr) {
+        return false;
+    }
+    switch (type->code()) {
+    case TypeCode::Float32:
+        return !hasImaginaryPart() && partUnderflows<float>(rep_->rational);
+    case TypeCode::Float64:
+        return !hasImaginaryPart() && partUnderflows<double>(rep_->rational);
+    case TypeCode::Complex64:
+        return partUnderflows<float>(rep_->rational) || partUnderflows<float>(rep_->imaginary);
+    case TypeCode::Complex128:
+        return partUnderflows<double>(rep_->rational) || partUnderflows<double>(rep_->imaginary);
+    default:
+        return false;
     }
 }
 
