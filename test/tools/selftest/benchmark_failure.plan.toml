@@ -1,0 +1,19 @@
+# Fixture of test/tools/selftest/run.mjs: a benchmark whose timed pass fails. `--timeit` then
+# reports the failed iteration and no mean (H66); the runner must report that as the test's
+# failure instead of throwing on the missing metric. It is not under test/plans, so no plan
+# discovery runs it by accident.
+id = "selftest.benchmark_failure"
+order = 1
+tier = "fast"
+
+[defaults]
+tool = "camel"
+kind = "benchmark"
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "failing_pass"
+desc = "The timed pass divides by zero, so the payload has `failed` and no `mean_ms`."
+case = "benchmark_failure.cml"
+args = ["--timeit", "std::nvm/2", "--output-format", "json", "${case}", "std::nvm"]
+expect_exit = 0
