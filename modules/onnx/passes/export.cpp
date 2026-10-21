@@ -101,9 +101,27 @@ uint64_t originNear(const GCGraph *g, gc_node_ref_t ref) {
     return camel::source::kInvalidOriginId;
 }
 
-/// The value of `ref` when it is a constant of the graph (a DATA node in the static area).
+/// The value of `ref` when it is a constant of the graph (a DATA node in the static area), or a
+/// constant under a struct conversion that moves nothing (an anonymous struct literal entering
+/// the named type it is written at; design principles 5.2). The exporter translates such a
+/// value by its fields, so the conversion needs no node: the constant is as good a constant
+/// under its declared type as before the conversion.
 std::optional<Example> constantOf(const GCGraph *g, gc_node_ref_t ref) {
     const auto *n = g->node(ref);
+    if (n->kind == GCNodeKind::Cast) {
+        const gc_node_ref_t source = g->normInputsOf(ref).front();
+        core::type::Type *target   = n->dataType();
+        core::type::Type *from     = g->node(source)->dataType();
+        if (target != nullptr && from != nullptr && target->code() == TypeCode::Struct &&
+            from->code() == TypeCode::Struct &&
+            target->castSafetyFrom(from) == core::type::CastSafety::Safe) {
+            if (auto value = constantOf(g, source)) {
+                value->type = target;
+                return value;
+            }
+        }
+        return std::nullopt;
+    }
     if (n->kind != GCNodeKind::Data || n->dataIndex >= 0) {
         return std::nullopt;
     }
