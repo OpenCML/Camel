@@ -1430,28 +1430,24 @@ bool devirtualizeBranchedCallInDraft(
     if (brchPayload->join != join) {
         return false;
     }
-    const auto arms       = draft.withInputsOf(join);
-    const auto armAnchors = draft.branchArmsOf(brch);
-    if (arms.empty() || armAnchors.size() != arms.size()) {
+    const auto arms = draft.withInputsOf(join);
+    if (arms.empty() || brchPayload->armCount != arms.size()) {
         return false;
     }
 
     // Every value user of the JOIN projects one of its slots; collect them by slot. A
     // projection that another call uses as its callee would be turned into a value JOIN here,
-    // stranding that call, so that shape is left alone. Nodes an outer branch anchors on are
-    // left alone too: erasing them would dangle that branch's arms.
+    // stranding that call, so that shape is left alone.
     std::map<size_t, std::vector<gc_node_ref_t>> joinProjections;
     for (auto users : {draft.normUsersOf(join), draft.withUsersOf(join)}) {
         for (gc_node_ref_t user : users) {
             // The projections may carry control edges (sync code orders reads after the JOIN
-            // or the call); the split retargets those waits onto the replacement JOINs. Nodes
-            // an outer branch anchors on are still left alone: erasing them would dangle that
-            // branch's arms.
+            // or the call); the split retargets those waits onto the replacement JOINs.
             const DraftNodeHeader *userHeader = draft.header(user);
             if (!userHeader || userHeader->kind != GCNodeKind::Accs ||
                 draft.normInputsOf(user).size() != 1 || draft.normInputsOf(user).front() != join ||
-                draft.isBranchArmAnchor(user) || user == draft.exitNode() ||
-                user == draft.outputNode() || user == draft.returnNode()) {
+                user == draft.exitNode() || user == draft.outputNode() ||
+                user == draft.returnNode()) {
                 return false;
             }
             const auto *body = reinterpret_cast<const GCAccsBody *>(draft.payloadOf(user).data());
@@ -1497,7 +1493,7 @@ bool devirtualizeBranchedCallInDraft(
         return false;
     }
 
-    // Arms are tuple FILLs read only by the JOIN, anchored as the arm tails; the callee slot
+    // Arms are tuple FILLs read only by the JOIN, the results of the arms; the callee slot
     // and every projected slot must be filled explicitly in every arm.
     const size_t armCount = arms.size();
     std::vector<gc_node_ref_t> armCallees(armCount, kInvalidNodeRef);
@@ -1505,7 +1501,7 @@ bool devirtualizeBranchedCallInDraft(
     for (size_t i = 0; i < armCount; ++i) {
         const gc_node_ref_t armFill       = arms[i];
         const DraftNodeHeader *fillHeader = draft.header(armFill);
-        if (!fillHeader || fillHeader->kind != GCNodeKind::Fill || armAnchors[i].tail != armFill ||
+        if (!fillHeader || fillHeader->kind != GCNodeKind::Fill ||
             !draft.ctrlUsersOf(armFill).empty()) {
             return false;
         }
@@ -1632,8 +1628,8 @@ bool devirtualizeBranchedCallInDraft(
     const size_t mainSlot = callProjections.begin()->first;
 
     // Per arm: a call of the arm's callee, then one projection per used result slot. The
-    // projection feeding the main JOIN closes the arm (tail anchor, ctrl-waiting on the arm's
-    // other new nodes, the arm's other projected values, and the arm's head).
+    // projection feeding the main JOIN closes the arm (ctrl-waiting on the arm's other new nodes
+    // and the arm's other projected values).
     std::vector<gc_node_ref_t> mainArms(armCount, kInvalidNodeRef);
     std::map<size_t, std::vector<gc_node_ref_t>> callProjArms; // result slot -> per-arm ACCS
     for (size_t i = 0; i < armCount; ++i) {
@@ -1644,6 +1640,7 @@ bool devirtualizeBranchedCallInDraft(
         draft.setWithInputs(armCall, withInputs);
         draft.setCtrlInputs(armCall, keptCtrl);
         draft.setNodeOrigin(armCall, origin);
+        draft.setNodeRegion(armCall, draft.armRegionOf(brch, i));
         for (const auto &[slot, users] : callProjections) {
             camel::core::type::Type *projType = draft.header(users.front())->dataType;
             const gc_node_ref_t proj = draft.addAccsNode(projType, static_cast<uint32_t>(slot));
@@ -1663,12 +1660,6 @@ bool devirtualizeBranchedCallInDraft(
                 std::find(armCtrl.begin(), armCtrl.end(), elems[i]) == armCtrl.end()) {
                 armCtrl.push_back(elems[i]);
             }
-        }
-        const gc_node_ref_t head = armAnchors[i].head;
-        if (head != kInvalidNodeRef && head != armTail &&
-            std::find(armCtrl.begin(), armCtrl.end(), head) == armCtrl.end() &&
-            !draftReaches(draft, armTail, head)) {
-            armCtrl.push_back(head);
         }
         draft.setCtrlInputs(armTail, armCtrl);
         mainArms[i] = armTail;
@@ -1730,9 +1721,6 @@ bool devirtualizeBranchedCallInDraft(
     draft.eraseNode(calleeAccs);
     draft.replaceAllCtrlUses(join, mainJoin);
     draft.eraseNode(join);
-    for (size_t i = 0; i < armCount; ++i) {
-        draft.retargetBranchArmAnchors(arms[i], mainArms[i], mainArms[i]);
-    }
     CAMEL_LOG_INFO_S(
         "DraftOpt",
         "Devirtualized branched CALL node {}: {} arm call(s) under BRCH {}, main JOIN {}.",
@@ -1744,88 +1732,6 @@ bool devirtualizeBranchedCallInDraft(
 }
 
 namespace {
-
-/// `id` and everything it runs after (its transitive inputs of every kind).
-std::vector<bool> draftUpstream(const GraphDraft &draft, gc_node_ref_t id) {
-    std::vector<bool> seen(draft.nodeSlotCount(), false);
-    std::vector<gc_node_ref_t> work{id};
-    while (!work.empty()) {
-        const gc_node_ref_t n = work.back();
-        work.pop_back();
-        if (n >= seen.size() || seen[n] || !draft.header(n)) {
-            continue;
-        }
-        seen[n] = true;
-        for (auto inputs : {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
-            work.insert(work.end(), inputs.begin(), inputs.end());
-        }
-    }
-    return seen;
-}
-
-/**
- * The arguments of call `callId` that alone keep it inside a branch arm.
- *
- * The schedulers run, when an arm is taken, the nodes that run after the arm's head and not
- * after the JOIN, and everything else of the graph unconditionally, before the BRCH. A call is
- * placed by its inputs: it is inside an arm when one of its control predecessors or one of its
- * arguments is. The nodes of the callee's body are placed by their own inputs, and a node of
- * the body that reads no parameter (a branch on a constant, a call without arguments, an
- * effect) has none in the caller. The control predecessors of the call are handed to the
- * body's entry roots; an argument is not. So where the call was inside an arm through an
- * argument only, such a node left the arm. It then ran when the arm was not taken (a fault
- * there ended a program that never reached that code), or did not run when it was (an effect
- * that waits on the BRCH but not on the arm's head is not part of what the arm runs), and a
- * BRCH could leave while its JOIN stayed inside, which no scheduler can lay out.
- *
- * Returned are the arguments needed to cover every arm the call is in and that its control
- * predecessors do not already place it in. The splice makes the body wait on them, as the call
- * itself did.
- */
-std::vector<gc_node_ref_t> armPlacingArguments(const GraphDraft &draft, gc_node_ref_t callId) {
-    const std::vector<bool> before = draftUpstream(draft, callId);
-    std::vector<gc_node_ref_t> open; // the heads of the arms the call is in
-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        const DraftNodeHeader *h = draft.header(id);
-        if (!before[id] || !h || h->kind != GCNodeKind::Brch) {
-            continue;
-        }
-        const gc_node_ref_t join =
-            reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(id).data())->join;
-        if (join != kInvalidNodeRef && join < before.size() && before[join]) {
-            continue; // the call runs after the whole branch
-        }
-        for (const GCBranchArm &arm : draft.branchArmsOf(id)) {
-            // The call that is itself the head stays the head: the splice moves the anchor.
-            if (arm.head != kInvalidNodeRef && arm.head != callId && arm.head < before.size() &&
-                before[arm.head]) {
-                open.push_back(arm.head);
-            }
-        }
-    }
-    std::vector<gc_node_ref_t> placing;
-    if (open.empty()) {
-        return placing;
-    }
-    const auto cover = [&](gc_node_ref_t input) {
-        const std::vector<bool> reached = draftUpstream(draft, input);
-        return std::erase_if(open, [&](gc_node_ref_t head) { return reached[head]; }) > 0;
-    };
-    for (gc_node_ref_t pred : draft.ctrlInputsOf(callId)) {
-        (void)cover(pred);
-    }
-    for (auto inputs : {draft.normInputsOf(callId), draft.withInputsOf(callId)}) {
-        for (gc_node_ref_t input : inputs) {
-            if (open.empty()) {
-                return placing;
-            }
-            if (cover(input) && std::ranges::find(placing, input) == placing.end()) {
-                placing.push_back(input);
-            }
-        }
-    }
-    return placing;
-}
 
 } // namespace
 
@@ -1884,55 +1790,33 @@ DraftInlineResult inlineCallableInDraft(
         funcNodeId,
         static_cast<void *>(calleeGraph));
 
-    // What the body has to wait on: the control predecessors of the call, and the arguments
-    // that place the call inside a branch arm (see armPlacingArguments).
+    // What the body has to wait on: the control predecessors of the call.
     std::vector<gc_node_ref_t> ctrlPreds(
         draft.ctrlInputsOf(funcNodeId).begin(),
         draft.ctrlInputsOf(funcNodeId).end());
-    for (gc_node_ref_t argument : armPlacingArguments(draft, funcNodeId)) {
-        if (std::find(ctrlPreds.begin(), ctrlPreds.end(), argument) == ctrlPreds.end()) {
-            ctrlPreds.push_back(argument);
-        }
-    }
     ctrlPreds                  = controlFrontier(draft, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
 
     // The body goes in a region of its own, inside the region of the call: where the code
     // came from stays recorded after the call is gone. The body of an arm of a branch is the
     // Arm region of that arm.
-    gc_node_ref_t armOf = kInvalidNodeRef;
-    uint32_t armIndex   = 0;
-    for (gc_node_ref_t ctrlPred : draft.ctrlInputsOf(funcNodeId)) {
-        const DraftNodeHeader *predHeader = draft.header(ctrlPred);
-        if (!asArm || !predHeader || predHeader->kind != GCNodeKind::Brch) {
-            continue;
-        }
-        const auto arms = draft.branchArmsOf(ctrlPred);
-        for (uint32_t k = 0; k < arms.size(); ++k) {
-            if (arms[k].head == funcNodeId) {
-                armOf    = ctrlPred;
-                armIndex = k;
-            }
-        }
-    }
+    const bool intoArm = asArm;
+    ASSERT(
+        !intoArm || (draft.nodeRegion(funcNodeId) != 0 &&
+                     draft.region(draft.nodeRegion(funcNodeId)).kind == GCRegionKind::Arm),
+        "The call of an arm is the node of the region of its arm.");
     const size_t slotsBefore = draft.nodeSlotCount();
     // The call is the whole of its arm, which already has its region: the body goes into it.
-    uint32_t armRegion = 0;
-    if (armOf != kInvalidNodeRef) {
-        const uint32_t around = draft.nodeRegion(funcNodeId);
-        if (around != 0 && draft.region(around).kind == GCRegionKind::Arm &&
-            draft.region(around).owner == armOf && draft.region(around).index == armIndex) {
-            armRegion = around;
-        }
-    }
     const uint32_t inlineRegion =
-        armRegion != 0
-            ? armRegion
-            : draft.addInlineRegion(draft.nodeRegion(funcNodeId), calleeGraph->id(), kInvalidNodeRef);
-    if (armOf != kInvalidNodeRef && armRegion == 0) {
-        draft.setRegionArm(inlineRegion, armOf, armIndex);
-    }
+        intoArm ? draft.nodeRegion(funcNodeId)
+                : draft.addInlineRegion(
+                      draft.nodeRegion(funcNodeId),
+                      calleeGraph->id(),
+                      kInvalidNodeRef);
     draft.setRegionOrigin(inlineRegion, static_cast<uint32_t>(draft.nodeOrigin(funcNodeId)));
+    if (intoArm) {
+        draft.setRegionInline(inlineRegion, kInvalidGraphId, kInvalidNodeRef);
+    }
     DraftGraphCloneResult cloned =
         calleeDraftView ? cloneDraftGraphIntoDraft(draft, *calleeDraftView, inlineRegion)
                         : cloneRuntimeGraphIntoDraft(draft, calleeGraph, inlineRegion);
@@ -2132,11 +2016,10 @@ DraftInlineResult inlineCallableInDraft(
     if (result.ctrlEntry == kInvalidNodeRef) {
         result.ctrlEntry = result.ctrlExit;
     }
-    draft.retargetBranchArmAnchors(funcNodeId, result.ctrlEntry, result.ctrlExit);
     // What the splice added around the body (the gates of the arguments, the SYNC of several
     // entries, the bridge gate of the result) is where the body is: in the arm, or where the
     // call was.
-    const uint32_t spliceRegion = armOf != kInvalidNodeRef ? inlineRegion : draft.nodeRegion(funcNodeId);
+    const uint32_t spliceRegion = intoArm ? inlineRegion : draft.nodeRegion(funcNodeId);
     for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
          ++id) {
         if (spliceRegion != 0 && draft.alive(id) &&
@@ -2144,7 +2027,7 @@ DraftInlineResult inlineCallableInDraft(
             draft.setNodeRegion(id, spliceRegion);
         }
     }
-    if (armOf != kInvalidNodeRef) {
+    if (intoArm) {
         draft.setRegionResult(inlineRegion, result.valueExit);
     }
 

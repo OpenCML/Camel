@@ -54,7 +54,6 @@ struct GCGraphPayloadShape {
     gc_cnt_t normPortCount    = 0;
     gc_cnt_t withPortCount    = 0;
     gc_cnt_t closureCount     = 0;
-    gc_cnt_t branchArmCount   = 0;
     // Whether some node has numeric permissions: only then the graph has a permission column.
     bool permissions = false;
     // Whether some node has attributes: only then the graph has an attribute column.
@@ -93,7 +92,6 @@ struct GCGraphPayloadArena {
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
-    GCBranchArm *branchArms    = nullptr;
 
     gc_cnt_t nodeCount        = 0;
     gc_cnt_t edgeCount        = 0;
@@ -101,7 +99,6 @@ struct GCGraphPayloadArena {
     gc_cnt_t normPortCount    = 0;
     gc_cnt_t withPortCount    = 0;
     gc_cnt_t closureCount     = 0;
-    gc_cnt_t branchArmCount   = 0;
 
     gc_node_ref_t entryNode  = kInvalidNodeRef;
     gc_node_ref_t exitNode   = kInvalidNodeRef;

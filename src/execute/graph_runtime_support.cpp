@@ -663,11 +663,11 @@ BranchArmEntries::BranchArmEntries(
         const auto *body = graph.nodeBodyAs<camel::runtime::GCBrchBody>(ref);
         const auto arms  = regions.armsOf(ref);
         ASSERT(
-            arms.size() >= graph.branchArmsOf(ref).size(),
+            arms.size() >= graph.armCountOf(ref),
             std::format("Graph '{}': branch {} has arms without a region.", graph.name(), ref));
         auto &entries = entries_[ref];
         auto &tails   = tails_[ref];
-        for (size_t k = 0; k < graph.branchArmsOf(ref).size(); ++k) {
+        for (size_t k = 0; k < graph.armCountOf(ref); ++k) {
             const auto at = arms[k] != 0 ? first.find(arms[k]) : first.end();
             entries.push_back(at != first.end() ? at->second : body->join);
             const auto end = at != first.end() ? last.find(arms[k]) : last.end();

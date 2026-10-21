@@ -59,9 +59,7 @@ const std::vector<ExecNode> &ExecPlan::buildNodes() const {
                 en.body = graph->nodePayloadBytes(ref).data();
             }
             if (en.node->kind == GCNodeKind::Brch) {
-                const auto arms = graph->branchArmsOf(ref);
-                en.arms         = arms.data();
-                en.armCount     = static_cast<uint32_t>(arms.size());
+                en.armCount = graph->armCountOf(ref);
             }
         }
         nodesReady_.store(true, std::memory_order_release);
@@ -130,7 +128,7 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         plan->directCallArgOffsets[idx]    = static_cast<uint32_t>(plan->directCallArgSlots.size());
         plan->branchArmEntryOffsets[idx]   = static_cast<uint32_t>(plan->branchArmEntries.size());
         if (node && node->kind == GCNodeKind::Brch) {
-            const size_t armCount = graph.branchArmsOf(ref).size();
+            const size_t armCount = graph.armCountOf(ref);
             for (size_t arm = 0; arm < armCount; ++arm) {
                 plan->branchArmEntries.push_back(armEntries.entry(ref, arm));
                 plan->branchArmTails.push_back(armEntries.tail(ref, arm));

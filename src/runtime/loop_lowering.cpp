@@ -344,11 +344,7 @@ std::unique_ptr<GraphDraft> buildRec(const LoopShape &loop, GraphId next, GraphI
     draft->addDependency(done);
     draft->addSubGraph(next);
     draft->addSubGraph(done);
-    const std::array<GCBranchArm, 2> arms{
-        GCBranchArm{.head = goOn, .tail = goOn},
-        GCBranchArm{.head = stop, .tail = stop},
-    };
-    const gc_node_ref_t brch = draft->addBrchNode(Type::Int64(), join, arms);
+    const gc_node_ref_t brch = draft->addBrchNode(Type::Int64(), join, 2);
     draft->setNormInputs(brch, std::span<const gc_node_ref_t>(&go, 1));
     draft->setCtrlInputs(brch, nextWith);
     reinterpret_cast<GCJoinBody *>(draft->mutablePayloadOf(join).data())->brch = brch;

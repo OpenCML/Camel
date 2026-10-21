@@ -77,7 +77,6 @@ using camel::runtime::DraftBrchPayload;
 using camel::runtime::DraftNodeInit;
 using camel::runtime::emitDraftNativePayload;
 using camel::runtime::GCAccsBody;
-using camel::runtime::GCBranchArm;
 using camel::runtime::GCBrchBody;
 using camel::runtime::GCCallBody;
 using camel::runtime::GCFillBody;
@@ -277,11 +276,6 @@ std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
                 reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(current).data());
             if (payload != nullptr) {
                 pushRoot(payload->join);
-                pushRoot(payload->defaultArm);
-            }
-            for (const GCBranchArm &arm : draft.branchArmsOf(current)) {
-                pushRoot(arm.head);
-                pushRoot(arm.tail);
             }
         } else if (header->kind == GCNodeKind::Join) {
             const auto *payload =
@@ -500,21 +494,12 @@ class EncodeSession {
                 const auto *sourceBody = reinterpret_cast<const DraftBrchPayload *>(
                     graph->draft().payloadOf(sourceId).data());
                 ASSERT(sourceBody != nullptr, "Compile BRCH node is missing payload.");
-                std::vector<std::byte> bytes(
-                    sizeof(DraftBrchPayload) + graph->draft().branchArmsOf(sourceId).size_bytes());
+                std::vector<std::byte> bytes(sizeof(DraftBrchPayload));
                 DraftBrchPayload body{
-                    .join       = remapNodeRef(sourceBody->join, sourceToPrepared),
-                    .armCount   = sourceBody->armCount,
-                    .defaultArm = remapNodeRef(sourceBody->defaultArm, sourceToPrepared),
-                    .reserved   = 0,
+                    .join     = remapNodeRef(sourceBody->join, sourceToPrepared),
+                    .armCount = sourceBody->armCount,
                 };
                 std::memcpy(bytes.data(), &body, sizeof(body));
-                auto *arms = reinterpret_cast<GCBranchArm *>(bytes.data() + sizeof(body));
-                const auto sourceArms = graph->draft().branchArmsOf(sourceId);
-                for (size_t i = 0; i < sourceArms.size(); ++i) {
-                    arms[i].head = remapNodeRef(sourceArms[i].head, sourceToPrepared);
-                    arms[i].tail = remapNodeRef(sourceArms[i].tail, sourceToPrepared);
-                }
                 payloadStorage = std::move(bytes);
             } break;
             case GCNodeKind::Join: {

@@ -34,8 +34,7 @@
 
 - `GraphDraft::decode(graph)` 得到副本；节点用 `gc_node_ref_t` 标识，输入与使用者两个方向由 `GraphDraft`
   一起维护（`appendInput` / `unlinkInput` / `replaceInput` / `set*Inputs` / `replaceAll*Uses` / `eraseNode`）；
-- 分支的臂锚点（见 4.1）存在 `BRCH` 的负载里，节点被替换时用 `retargetBranchArmAnchors` 迁移；
-  `isBranchArmAnchor(id)` 为真的节点不可随意删除；
+- 分支的臂是区域（见 4.1），节点属于哪条臂由它的区域决定；替换节点时新节点要放进旧节点的区域；
 - 被调图的引用（`FUNC` 的被调图、静态 `Function` 值）在草稿里仍是 `GCGraph *`，提交时由会话换成重新编码后的图。
 
 ### 1.3 `GraphDraftGroup`（新建图）
@@ -122,7 +121,7 @@
 
 - 形参 `PORT` 的值使用全部改读实参；
 - 形参 `PORT` 上的控制使用也改到实参上，不丢弃。前端只在一处产生这种边：分支捕获了某个形参时，
-  `PORT -> BRCH`（“被捕获的值在 `BRCH` 之前就绪”，见 4.1 的条款 5）。
+  `PORT -> BRCH`（“被捕获的值在 `BRCH` 之前就绪”）。
 
 ---
 
@@ -138,7 +137,7 @@
 
 1. 入口/出口/输出/返回锚点、端口、闭包节点、所有边的节点引用有效；数据槽位在范围内；无残留 `DREF`；
 2. 邻接表双向一致（每条输入边在对端的输出表中出现，反之亦然）；
-3. `BRCH` 有唯一选择输入，`BRCH`/`JOIN` 的臂数与负载一致，臂头臂尾的引用有效；
+3. `BRCH` 有唯一选择输入，`BRCH`/`JOIN` 的臂数与负载一致；
 4. `GATE` 同时有值输入与控制输入；
 5. `FUNC` 有被调图，`CALL` 有被调输入；
 6. 分支臂不变量（4.1；`validateRuntimeBranchArms`，`src/runtime/branch_arms.cpp`）。
@@ -156,77 +155,41 @@
 
 ### 4.1 分支臂不变量
 
+**臂是区域。** 一个 `BRCH` 的每条臂是图里的一个 `Arm` 区域（`GCRegion`，`owner` 为该 `BRCH`，`index` 为臂号）；
+臂里的代码就是属于这个区域（或嵌在其中的区域）的节点。`BRCH` 的负载只有它的 `JOIN` 与臂数；`JOIN` 的第 `i`
+个 with 输入是第 `i` 条臂的结果。没有臂头、臂尾这样的记录。
+
 **后端怎样执行一个分支。** 四个调度器（NodeVM、FastVM 及其 JIT、Taskflow）和宏求值器都从同一个线性顺序出发
-（`buildReachableExecutionTopoIndices`，`src/execute/graph_runtime_support.cpp`）：从出口沿三种输入边
-（norm / with / ctrl）做后序遍历。遇到 `JOIN` 时，先排好分支内部从外面读的一切，再排 `BRCH`，然后**按臂的
-顺序从各臂的臂尾出发**排出各臂，最后是 `JOIN`。于是 `BRCH` 与 `JOIN` 之间是每条臂一段连续的区间，各以
-臂尾结束。执行时 `BRCH` 跳到被选中那条臂的区间起点（`resolveRuntimeBranchArmEntry`），臂尾之后跳到
-`JOIN`；其余区间整段跳过。
+（`computeExecutionOrder`，`src/execute/graph_runtime_support.cpp`）：从出口沿三种输入边（norm / with / ctrl）
+做后序遍历。遇到 `JOIN` 时，先排好各臂从分支外面读的一切，再排 `BRCH`，然后**按臂的顺序**把各臂区域的节点
+各排成一段连续的区间，最后是 `JOIN`。执行计划（`ExecPlan::branchArmEntries`、`branchArmTails`）给出每条臂的
+入口（区间里第一个真正执行的节点）与末尾：`BRCH` 跳到被选中那条臂的入口，末尾之后跳到 `JOIN`；其余区间整段
+跳过。
 
-这只有在“因 `BRCH` 而执行的节点恰好分成各条臂”时才是这张图的一次正确执行。精确表述如下。
+**不变量**（`validateRuntimeBranchArms`，`src/runtime/branch_arms.cpp`，每次提交都检查；只看活节点，即出口沿
+输入边可达的节点）。对每个活的 `BRCH` `B`，`J` 是它负载里的 `JOIN`：
 
-**定义。** 设 `B` 是一个 `BRCH`，`J` 是它负载里记录的 `JOIN`，`tail_i` 是 `J` 的第 `i` 个 with 输入，
-`head_i` 是 `B` 记录的第 `i` 条臂的臂头。
+1. **配对**：`J` 是 `JOIN`，它的 norm 输入是 `B`；`J` 是活的；`B` 的每条臂都有一个区域。
+2. **等待 `B` 的节点在某条臂里**：以 `B` 为控制输入的节点（`J` 除外）属于 `B` 的某条臂。否则没有后端会执行它。
+3. **只读一定会执行的节点**：一个节点只读与它同一个控制区域、或包住它的控制区域里的节点；分支内部的值与完成
+   只经由 `J` 流出（`J` 读各臂的结果）。读另一条臂里的节点，意味着只有那条臂被选中时它才会算过。
+4. 一个 `BRCH` 被多个 `JOIN` 读（`devirtualizeBranchedCallInDraft`，只在 `enableBranchedCallSplit` 下产生）
+   是仅供导出的值 DAG，不可执行，不校验。
 
-- **活节点**：出口（没有出口时为返回节点）沿输入边可达的节点。只有活节点会被排进线性顺序。死节点不参与下面
-  任何一条（改写会留下无人使用的节点，例如被内联体里结果没人读的内层分支；它们不执行）。
-- **分支内部** `I(B)`：从 `B` 出发沿三种输出边可达、且路径不经过 `J` 的活节点（不含 `B`、`J`）。三种边同等
-  对待：读了分支内部的值，或者等待分支内部的节点，都使一个节点落在分支内部。
-- **第 `i` 条臂** `A_i`：`I(B)` 中 `tail_i` 沿输入边（三种边）可达的节点，含 `tail_i` 本身（当它在
-  `I(B)` 中时）。`tail_i` 不在 `I(B)` 中（分支之外算好的值、常量）表示这条臂没有代码。
+**区域由谁维护。** 前端把臂建成一张子图，在 `BRCH` 之后用一个 `FUNC` 调用它（该区域里只有这个调用，区域的
+`callSite` 指向它）；物化程序时 `lowerBranchArms` 把这些调用内联进拥有分支的图，臂的节点进入臂的区域。改写遍
+维护区域：新加或改接输入的节点落在其输入中最内层的控制区域里（`GraphDraft::inheritRegion`，`JOIN` 除外）；
+`rewriteNode` 保留区域；擦除 `BRCH`/`LOOP` 时它拥有的区域并入外层（`dissolveRegionsOf`）；一个遍替换节点时，
+新节点要放进被替换节点所在的区域（`DraftNodeInit::region`、`setNodeRegion`）。
 
-**不变量。** 对每个活的 `B`：
-
-1. **配对**：`J` 是 `JOIN`，它的 norm 输入是 `B`；`J` 是活的；`J` 的 with 输入数等于 `B` 的臂数，且
-   `B` 记录的第 `i` 条臂的臂尾就是 `tail_i`。
-2. **恰好一条臂**：`I(B)` 的每个节点恰好属于一个 `A_i`。
-   - 属于两条臂（两个臂尾都依赖它）：它只会排进先排的那条臂的区间，另一条臂被选中时读到的是没有算过的值；
-   - 不属于任何臂（等待 `B`，却没有哪条臂的结果依赖它）：没有任何后端会执行它；`J` 的控制输入若在
-     `I(B)` 中，也必须属于某条臂。
-   - 推论：分支内部的节点除 `J` 之外没有分支外的使用者（那样的使用者按定义也落在 `I(B)` 中，同样要属于
-     恰好一条臂）。分支的值与完成只经由 `J` 流出。
-3. **臂头**：`head_i` 是活节点时，从它出发沿输出边（不经过 `B`、`J`）到达的 `I(B)` 中的节点都属于
-   `A_i`。后端从臂头与臂尾两头找一条臂的入口，臂头之后若有别的臂的节点，入口就会落到别的臂里。
-   臂头本身**不要求**是臂的第一个节点，臂里的节点也不要求都在臂头之后：内联之后臂的节点可以直接等待
-   `B`（见下面“臂头不是臂的定义”）。
-4. **不交叉**：`I(B)` 中的 `JOIN`，它的 `BRCH` 也在 `I(B)` 中。即两个分支要么互不相交，要么一个整体位于
-   另一个的某条臂里（嵌套分支的 `BRCH`、`JOIN` 与全部臂属于外层的同一条臂——这由条款 2 得出）。
-5. **臂捕获的外部值**：`I(B)` 的节点读到的、不在 `I(B)` 中的值无条件执行，并且排在 `B` 之前（线性顺序在排
-   `B` 之前先访问它们）。它们不属于任何臂，不受本不变量约束；所以改写不得把“只应在某条臂被选中时执行”的
-   节点留在分支外面（例如带副作用的节点、可能出故障的节点）——这一条**无法**从结构上校验，由各改写负责
-   （内联的做法见 3.3）。
-
-各种情形怎么算：
-
-| 情形 | 归属 |
-|---|---|
-| 臂内的调用（`FUNC` / `CALL`） | 一个普通节点，属于它所在的臂；被调图是另一张图，单独校验 |
-| 嵌套分支 | 内层的 `BRCH`、`JOIN` 与各臂的节点都是外层 `I(B)` 的节点，属于外层的同一条臂 |
-| 臂捕获的外部值（包括常量、形参） | 不在 `I(B)` 中，见条款 5 |
-| 值恰为外部值或常量的臂 | 没有代码；`B` 直接跳到 `J` |
-| 数据边与控制边 | 定义 `I(B)` 与 `A_i` 时不加区分 |
-| 死节点 | 不参与；可以仍然是记录的臂头 |
-| 一个 `BRCH` 被多个 `JOIN` 读（`devirtualizeBranchedCallInDraft`，只在 `enableBranchedCallSplit` 下产生） | 仅供导出的值 DAG，不可执行，不校验 |
-
-**臂头不是臂的定义。** 前端建出的臂是单个 `FUNC` 节点，既是臂头也是臂尾。内联之后，臂的多个节点各自直接
-等待 `B`（内联体的各个入口根、形参上的 `GATE`），后续改写还可能让记录的臂头变成没人使用的死节点。因此
-后端与本不变量都以**臂尾**定义一条臂；臂头只是找入口时的一个起点（条款 3）。把“臂 = 臂头之后的节点”当作
-约定去维护是此前多个缺陷的来源（`test/cases/opt/progen/README.md` 的根因 A、B、C、C1）。
-
-**违反时的报告。** 一条 `PassInternalError`，说明是哪张图、哪个节点（种类、编号、算子或被调函数名）、
-属于哪两条臂或不属于任何臂、是哪个 `BRCH`/`JOIN`；pass 名由诊断的阶段给出。例：
+**违反时的报告。** 一条 `PassInternalError`，说明是哪张图、哪个节点（种类、编号、算子或被调函数名）、属于哪个
+`BRCH` 的哪条臂；pass 名由诊断的阶段给出。例：
 
 ```
 Pass 'test::leak_branch_arm' failed with an internal error: Runtime graph 'main' breaks the
-branch-arm invariant: OPER 12 (:io/println) runs between BRCH 7 and its JOIN 6 and belongs to
-no arm (no arm's result depends on it): no back end would run it (see
-docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+branch-arm invariant: SYNC 12 runs between BRCH 7 and its JOIN 6 and belongs to no arm: it waits on
+the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
 ```
-
-**开销。** 每张图一次活性遍历，每个分支一次限于分支内部的遍历（到 `JOIN` 为止），总体与图的大小近似成
-线性。在 `benchmarks/` 的 mlp、gru、resnet、transformer、resnetbn 上经
-`std::macro std::opt std::stats`（每个程序校验 544–1164 张次图）累计 1.0–2.2 毫秒，占编译用时的
-0.25%–1.1%（Release 构建，2026-10-12）。因此没有开关，所有构建模式下都执行。
 
 ### 4.2 边的不变量（`graph_edges.cpp`）
 
@@ -248,10 +211,6 @@ docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
 - 通过 `RuntimeGraphDraftSession` 完成改写，不直接改已编码的图；
 - 不要假设“值出口等于控制完成出口”，统一使用 `DraftInlineResult` 的三个字段；
 - 删除或替换节点时用 `replaceNode`（`src/passes/opt/generic/rewrite.h`）：它把被删节点的顺序约束交给使用者，
-  并且不越过臂头；
-- 不要让 `JOIN` 直接等待某条臂内部的节点：那个等待属于这条臂的臂尾。需要时在臂尾与 `JOIN` 之间插入一个
-  `GATE`（值输入为原臂尾，控制输入为要等待的节点），并把 `BRCH` 记录的臂尾改成它（`inlineCallInOrder`，
-  `src/passes/opt/inline/engine.cpp`）；
-- 涉及 `BRCH`/`JOIN` 时，按 4.1 判断一个节点属于哪条臂（`branchArmNodes` / `armRegions`，
-  `src/passes/opt/generic/generic.cpp`，与校验用的是同一个定义），不要只从臂头向后找；
-- 新增改写时，先想清楚它对 4.1 的五条各意味着什么：提交时的校验能拦住条款 1–4，条款 5 要靠改写自己。
+  ；
+- 涉及 `BRCH`/`JOIN` 时，一个节点属于哪条臂由它的区域决定（`nodeRegion`、`armRegionOf`）；加节点时给对区域，
+  提交时的校验会拦住读了另一条臂、或等待 `BRCH` 却不在任何臂里的节点。

@@ -382,14 +382,15 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 
 ### 7.5 使用者重定向
 
-最后三步把调用节点从图中换下：
+最后两步把调用节点从图中换下：
 
-1. `retargetBranchArmAnchors`：调用节点若是某个 `BRCH` 的臂首，臂首改为 `ctrlEntry`；若是臂尾，
-   臂尾改为 `ctrlExit`；
-2. `replaceAllValueUses(funcNodeId, valueExit)`：值使用者（普通与 `with` 输入）以及 draft 的输出/返回
+1. `replaceAllValueUses(funcNodeId, valueExit)`：值使用者（普通与 `with` 输入）以及 draft 的输出/返回
    锚点改指 `valueExit`；`replaceAllCtrlUses(funcNodeId, ctrlExit)`：控制使用者以及 draft 的入口/出口
    锚点改指 `ctrlExit`；
-3. 删除原 `FUNC` 节点。
+2. 删除原 `FUNC` 节点。
+
+拼入的节点进入调用点所在的区域，外加一个 `Inline` 标注区域；调用若是前端建的臂（所在区域的 `callSite`
+是它），节点进入这条臂的 `Arm` 区域，拼接时新增的 `GATE`/`SYNC` 也放进该区域。
 
 ---
 
@@ -453,7 +454,7 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
   - `decode` / `encode`：与不可变的 `GCGraph` 互相转换；
   - 节点 id 在 draft 生命周期内稳定，删除节点不影响其他节点的 id；
   - 节点与边的编辑：`addNode`、`eraseNode`、`setCtrlInputs`、`appendInput`、`replaceInput`、
-    `replaceAllValueUses`、`replaceAllCtrlUses`、`retargetBranchArmAnchors` 等；
+    `replaceAllValueUses`、`replaceAllCtrlUses` 等；
   - 图级锚点（入口、出口、输出、返回）与端口表；
   - 跨图登记表：`addDependency`、`addSubGraph`、`addStaticGraphRef`。
 

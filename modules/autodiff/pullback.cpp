@@ -944,7 +944,7 @@ void ForwardRewrite::followFunctionValues() {
             }
             const GCNodeKind kind = kindOf(draft_, id);
             if ((kind != GCNodeKind::Func && kind != GCNodeKind::Call) ||
-                !carriesFunctionValue(id) || draft_.isBranchArmAnchor(id)) {
+                !carriesFunctionValue(id) || draft_.isArmCall(id)) {
                 continue;
             }
             // The function whose body would come in (for a closure, the function it closes).

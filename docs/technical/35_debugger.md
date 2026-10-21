@@ -288,7 +288,7 @@ See 4.3: `main [inlined code of g]`, located in `g` (the full name of `g`, 5.5).
 same structure) is a branch node and one graph per arm; the builder names these graphs itself
 (`__g_7__`), like the graphs of lambdas. Which graphs are arms, and of which graphs (their
 *owners*, the graphs that hold the branch node), is read from the branch nodes of the running
-program (`GCGraph::branchArmsOf`); a graph the compiler named that is no arm is a lambda.
+program (the calls the JOIN reads, `GCBrchBody::join`); a graph the compiler named that is no arm is a lambda.
 
 Design principles 12.1: an arm is code of the function it is written in, so by default
 (`frames` is `functions`) its frame is part of the frame of that function. The core keeps one

@@ -333,33 +333,11 @@ The payload of a draft `FUNC` and `LOOP` node is the same index (`GCFuncRef`,
 `GraphId`s. The encoder builds the frozen table from the graphs the nodes and the static
 values name and rewrites each index through the graph id.
 
-## 12. Branch Arm Arena
+## 12. Branch arms
 
-Branch-arm metadata is intentionally kept in a separate packed arena:
-
-```cpp
-struct GCBranchArm {
-    gc_node_ref_t head = 0;
-    gc_node_ref_t tail = 0;
-};
-```
-
-Graph payload:
-
-```cpp
-GCBranchArm *branchArms = nullptr;
-gc_cnt_t branchArmCount = 0;
-```
-
-The reason for keeping this arena is that branch-arm head/tail information is
-control-structure metadata, not just ordinary adjacency.
-
-The runtime uses it to answer questions such as:
-
-- where does arm `k` begin?
-- which tail node feeds the corresponding join arm?
-
-without requiring repeated graph searches during execution or scheduling.
+The arms of a BRCH are Arm regions (section 5b). The BRCH payload is `GCBrchBody{join, armCount}`;
+the JOIN reads the result of arm `i` as its `i`-th with input. There is no separate arena for arm
+metadata.
 
 ## 13. Ports, Closure, and Return Metadata
 

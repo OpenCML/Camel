@@ -254,17 +254,15 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     const gc_node_ref_t join =
         reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
-    const std::vector<camel::runtime::GCBranchArm> arms(
-        draft.branchArmsOf(brch).begin(),
-        draft.branchArmsOf(brch).end());
+    const size_t armCount  = draft.armCountOf(brch);
     const auto *joinHeader = draft.header(join);
-    if (*arm >= arms.size() || !joinHeader || joinHeader->kind != GCNodeKind::Join ||
-        draft.withInputsOf(join).size() != arms.size()) {
+    if (*arm >= armCount || !joinHeader || joinHeader->kind != GCNodeKind::Join ||
+        draft.withInputsOf(join).size() != armCount) {
         return false;
     }
     const gc_node_ref_t result = draft.withInputsOf(join)[*arm];
 
-    auto found = branchArmNodes(draft, brch, arms.size());
+    auto found = branchArmNodes(draft, brch, armCount);
     if (!found) {
         return false;
     }
@@ -304,20 +302,6 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         }
     }
     const auto removed = [&](gc_node_ref_t n) { return static_cast<bool>(dropped[n]); };
-    // A removed node must not anchor another branch that stays (inlining can make one value the
-    // result of two branches).
-    for (gc_node_ref_t other = 0; other < draft.nodeSlotCount(); ++other) {
-        const auto *h = draft.header(other);
-        if (other == brch || !h || h->kind != GCNodeKind::Brch || dropped[other]) {
-            continue;
-        }
-        for (const auto &a : draft.branchArmsOf(other)) {
-            if ((a.head != kInvalidNodeRef && a.head < dropped.size() && dropped[a.head]) ||
-                (a.tail != kInvalidNodeRef && a.tail < dropped.size() && dropped[a.tail])) {
-                return false;
-            }
-        }
-    }
     const auto &preds = brchPreds;
     const std::vector<gc_node_ref_t> brchCtrlUsers(
         draft.ctrlUsersOf(brch).begin(),
@@ -384,14 +368,6 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
         draft.setReturnNode(result, draft.returnKind());
     }
 
-    // An enclosing branch may be anchored on this one: its arm starts at the BRCH or ends at the
-    // JOIN. It now starts where the taken arm starts and ends at the taken result.
-    const gc_node_ref_t takenHead = arms[*arm].head;
-    const gc_node_ref_t newHead =
-        takenHead != kInvalidNodeRef && draft.header(takenHead) && !dropped[takenHead] ? takenHead
-                                                                                       : result;
-    draft.retargetBranchArmAnchors(join, result, result);
-    draft.retargetBranchArmAnchors(brch, newHead, result);
     draft.eraseNode(join);
     draft.eraseNode(brch);
     for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {

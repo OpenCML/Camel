@@ -244,7 +244,7 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                     brch,
                     join));
         }
-        const size_t arms = graph->branchArmsOf(brch).size();
+        const size_t arms = graph->armCountOf(brch);
         std::vector<uint8_t> hasRegion(arms, 0);
         for (uint32_t r = 1; r < regionCount; ++r) {
             const GCRegion &region = *graph->region(r);

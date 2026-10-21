@@ -143,7 +143,6 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
             case GCNodeKind::Brch: {
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
                 const auto arms       = runtimeGraph->ctrlOutputsOf(nodeRef);
-                const auto armPairs   = runtimeGraph->branchArmsOf(nodeRef);
                 string res            = format(
                     "BRCH: {} slot={}",
                     normInputs.empty() ? "<missing-cond>" : formatNodeIdent(normInputs.front()),
@@ -156,19 +155,6 @@ TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream 
                         }
                         res += formatNodeIdent(arms[i]);
                     }
-                }
-                if (!armPairs.empty()) {
-                    res += " heads/tails=[";
-                    for (size_t i = 0; i < armPairs.size(); ++i) {
-                        if (i != 0) {
-                            res += ", ";
-                        }
-                        res += format(
-                            "{}->{}",
-                            formatNodeIdent(armPairs[i].head),
-                            formatNodeIdent(armPairs[i].tail));
-                    }
-                    res += "]";
                 }
                 return res;
             }
