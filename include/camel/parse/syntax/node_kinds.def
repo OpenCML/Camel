@@ -33,6 +33,9 @@ CAMEL_NODE(StmtBlock, Other)           // 'sync'? '{' stmtList? '}'
 CAMEL_NODE(FuncAnno, Other)            // '@' identRef (angledValues | parentIdents)?
 CAMEL_NODE(FuncDecl, Other)            // funcAnno* ('with' angledParams)? 'export'? implMark? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock
 CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the name `operator`, read so only after 'func' (provisional notation)
+CAMEL_NODE(RuleDecl, Other)            // 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}' (IDENTIFIER dataExpr)?
+CAMEL_NODE(RuleContext, Other)         // '<' identDef (',' identDef)* ','? '>'
+CAMEL_NODE(RuleBody, Other)            // dataExpr ('=>' | '<=>') dataExpr
 CAMEL_NODE(DataDecl, Other)            // ('let' | 'var') carrier (':' typeList)? '=' dataList
 CAMEL_NODE(TypeDecl, Other)            // implMark? 'type' identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>=')) (typeExpr | STRING)
 CAMEL_NODE(RetStmt, Other)             // ('return' | 'throw') dataList

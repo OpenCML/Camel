@@ -38,6 +38,7 @@ class Generator {
     std::string generateExportLoad(const AST::node_ptr_t &node);
     std::string generateDataDeclLoad(const AST::node_ptr_t &node);
     std::string generateFuncDeclLoad(const AST::node_ptr_t &node);
+    std::string generateRuleDeclLoad(const AST::node_ptr_t &node);
     std::string extractReturnType(const AST::node_ptr_t &funcTypeNode);
     void collectParamsFromNode(
         const AST::node_ptr_t &node, std::vector<std::string> &paramsVec, Generator *generator);

@@ -571,7 +571,7 @@
         { "name": "keyword.operator.spread.camel", "match": "\\.\\.\\." },
         { "name": "keyword.operator.compose.camel", "match": "\\?\\.\\.|\\.\\." },
         { "name": "keyword.operator.pipe.camel", "match": "\\?->|->" },
-        { "name": "keyword.operator.arrow.camel", "match": "=>" },
+        { "name": "keyword.operator.arrow.camel", "match": "<=>|=>" },
         { "name": "keyword.operator.comparison.camel", "match": "===|!==|==|!=|<=|>=" },
         { "name": "keyword.operator.assignment.compound.camel", "match": "\\+=|-=|\\*=|/=|%=|\\^=|@=|&=|\\|=" },
         { "name": "keyword.operator.logical.camel", "match": "&&|\\|\\||\\|" },

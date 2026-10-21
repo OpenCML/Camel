@@ -767,6 +767,11 @@ node_ptr_t Builder::visitStmt(const AST::node_ptr_t &ast) {
     case AST::StmtType::Block:
         stmtNode = visitStmtBlock(ast);
         break;
+    case AST::StmtType::Rule:
+        diags_->of(SemanticDiag::ConstructNotSupported)
+            .at(ast->load()->tokenRange())
+            .commit("rule", "rule declarations are read but not compiled yet");
+        throw BuildAbortException();
     default:
         throw std::runtime_error("Unknown statement type");
     }
