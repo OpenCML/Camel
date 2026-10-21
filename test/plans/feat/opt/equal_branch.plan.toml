@@ -31,7 +31,7 @@ verify_script = '''
 ({ input, assert }) => {
  const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
  const count = label => g.nodes.filter(n => n.label === label).length
- assert(count(':op/mul_d') === 3, 'wrong remaining scalar arithmetic')
+ assert(count(':op/mul_d') === 1, 'wrong remaining scalar arithmetic')
  assert(count('JOIN') === 3 && count('BRCH') === 3, 'branch structure lost')
  assert(count('sys:get_env') === 1, 'runtime condition lost')
 }
