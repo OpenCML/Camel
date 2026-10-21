@@ -181,7 +181,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 ### 3.9 Errors and faults
 
 - **The error value is one fixed built-in structure**: a kind name, a message, and the source location where it arose. All functions that may fail share this one error.
-- **A value that may fail is written only `T!`**, and there is only one type of error value (distinguished by Kind); when typed errors are needed later, they will be added in the form `T ! E` once `enum` exists. `?` is only the nullable mark. `int?!` is allowed; `int??` and `int!!` are not.
+- **A value that may fail is written only `T!`**, and there is only one type of error value (distinguished by Kind); when typed errors are needed later, they will be added in the form `T ! E` once `enum` exists. `?` is only the nullable mark. `int?!` is allowed; `int??` and `int!!` are not. The marks are written from the innermost outwards, so `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)).
 - **`a !! b` handles errors**; the right side may be nullable, with the same rules as `??`. `x ?-> f` passes the error on unchanged when `x` is an error, and calls `f` otherwise. On the graph all of them are branches.
 - **`throw` is kept, and it means returning an error value**, the same structure as `return`, and it accepts only an error value: `throw error('Kind', 'message')`, with the location filled in by the compiler. `try`/`catch` does not enter the language: it has no stable mapping on the graph. Writing it should produce a diagnostic that points to `!!`, `?->` and fault isolation. `raise` is not part of the syntax and is not a reserved word.
 - **Errors and faults are two different things.** Only operations declared as able to fail (reading a file, parsing, the network and so on) return an error value. Division by zero, out-of-bounds access and recursion that is too deep are faults; they do not become error values, otherwise every division and every subscript would have to handle an error.
@@ -617,7 +617,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 - `json.decode` returns the self-describing `Json` type, and `decode_as<T>` is provided (for explicit type arguments see 5.9).
 - For bad JSON text, `decode` returns the error value of `Json!`, not a fault.
 - The accessors of `Json` accept `Json?` and `Json!`, for chained access (access can be chained even when parsing failed); `as_float` accepts integers; `get<index>` out of range gives `null`.
-- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json?!`, handled with `!!` or `??`. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
+- **When `Json` accessors take a `Json!`, the error passes through unchanged**: `decode(text)->get<'a'>` has type `Json!?`, handled with `!!` or `??`. A document that is too deep reports `JsonTooDeep` (distinct from malformed text); the default depth limit is 10000, to become an optional parameter of `decode`.
 
 ### 11.3 Collections and sorting
 
@@ -714,6 +714,7 @@ These are all misreadings that have actually happened; check against them before
 9. Treating the preconditions of automatic differentiation as constraints of the language core. — They are constraints of the library.
 10. Picking one derived characteristic as Camel's "core selling point" (for example "one body of code, many uses"). — The core is graph-native; the rest are natural consequences.
 11. Changing the semantics to make a test pass. — First confirm the semantics, then judge whether the test or the implementation is wrong.
+12. Reading the order of two marks backwards (taking `T?!` for nullable-over-fallible). — Marks are written from the innermost outwards: `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)); the parser and the printer agree (found by H115, documents corrected by H123).
 
 ---
 

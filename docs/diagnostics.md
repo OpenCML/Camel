@@ -2232,16 +2232,17 @@ This 'match' on a value of type '{0}' is not well formed: {1}.
 A 'match' on a 'T?' has exactly the cases 'case null' and one other ('case v' binds the value, 'case _' ignores it). A 'match' on a 'T!' has exactly 'case error e' and one other.
 ```
 
-**Example** (`test/cases/compile/tagged/err_match_missing.cml`, run as `camel test/cases/compile/tagged/err_match_missing.cml`)
+**Example** (`test/cases/compile/tagged/err_two_layer_null.cml`, run as `camel test/cases/compile/tagged/err_two_layer_null.cml`)
 
 ```camel
-module err_match_missing
+module err_two_layer_null
 
 func main(): int sync {
     println('never printed')
-    let r = parse_int('1')
+    let r: int?! = 5
     let s = match r {
-        case v => v
+        case null => 0
+        case v => v ?? 1
     }
     println(s)
     return 0
