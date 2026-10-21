@@ -37,6 +37,7 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/typevar.h"
 
 #include <atomic>
 #include <cctype>
@@ -495,6 +496,9 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 
 compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     ENTER("FUNC");
+    // The function type the position of this lambda expects (design principles 5.9). A body
+    // clears the expected type, so it is read before the scope that does so.
+    Type *const expectedHere = expectedValueType_;
     ExpectedValueScope functionScope(expectedValueType_, nullptr);
     std::string name         = gct->name();
     GCT::node_ptr_t typeLoad = gct->at(0);
@@ -536,6 +540,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         // with the type variables replaced.
         funcType = instantiateFunctionType(funcType, typeBindings_);
     }
+    if (name.empty()) {
+        // A lambda's parameters that write no type take it from the function type of the
+        // position the lambda stands in (design principles 5.9).
+        funcType = completeLambdaSignature(gct, funcType, expectedHere);
+    }
     rejectRedeclaredFunction(name, funcType, gct);
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
@@ -564,6 +573,108 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
 
     LEAVE("FUNC");
     return graph;
+}
+
+FunctionType *Builder::completeLambdaSignature(
+    const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected) {
+    const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct);
+    if (unwritten == nullptr || unwritten->empty()) {
+        return funcType;
+    }
+    // A lambda takes the types it does not write from the function type of the position it
+    // stands in (design principles 5.9). That expected type reaches this point through the one
+    // channel of the expected type (`expected`): an argument to a parameter of function type,
+    // the value of a declared type, or the result of a function whose result type is a function
+    // type.
+    if (expected == nullptr) {
+        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        diags_->of(SemanticDiag::LambdaParameterWithoutType)
+            .atOrigin((*unwritten)[0].origin)
+            .commit(name, "nothing here expects a function type");
+        throw BuildAbortException();
+    }
+    if (expected->code() != TypeCode::Function) {
+        const std::string name(funcType->argNameAt((*unwritten)[0].index));
+        diags_->of(SemanticDiag::LambdaParameterWithoutType)
+            .atOrigin((*unwritten)[0].origin)
+            .commit(
+                name,
+                std::format(
+                    "the type expected here, '{}', is not a function type", expected->toString()));
+        throw BuildAbortException();
+    }
+    const auto *expectedFunc = tt::as_ptr<FunctionType>(expected);
+    const size_t withCount   = funcType->withTypesCount();
+    const size_t total       = withCount + funcType->normTypesCount();
+    const auto report        = [&](const GCT::Tree::UnwrittenParam &param,
+                           const std::string &reason) -> void {
+        const std::string name(funcType->argNameAt(param.index));
+        diags_->of(SemanticDiag::LambdaParameterWithoutType)
+            .atOrigin(param.origin)
+            .commit(name, reason);
+        throw BuildAbortException();
+    };
+    if (expectedFunc->withTypesCount() != withCount ||
+        expectedFunc->normTypesCount() != funcType->normTypesCount()) {
+        report(
+            (*unwritten)[0],
+            std::format(
+                "the expected type '{}' takes {} parameters and the lambda {}",
+                expectedFunc->toString(),
+                expectedFunc->withTypesCount() + expectedFunc->normTypesCount(),
+                total));
+    }
+    const auto typeAt = [&](size_t index) -> Type * {
+        return index < withCount ? funcType->withTypeAt(index)
+                                 : funcType->normTypeAt(index - withCount);
+    };
+    const auto nameAt = [&](size_t index) -> std::string {
+        return funcType->hasArgNames() ? std::string(funcType->argNameAt(index)) : std::string{};
+    };
+    FunctionTypeFactory factory;
+    factory.setImplMark(funcType->implMark());
+    factory.setModifiers(funcType->modifiers());
+    factory.setHasCompileInfo(funcType->hasArgNames());
+    // The result type: the one written, or the one the expected function type gives. An
+    // expected result that still holds a type variable says nothing, and the body decides.
+    Type *exitType = funcType->hasExitType() ? funcType->exitType() : nullptr;
+    if (exitType == nullptr && expectedFunc->hasExitType() &&
+        !containsTypeVar(expectedFunc->exitType())) {
+        exitType = expectedFunc->exitType();
+    }
+    factory.setExitType(exitType);
+    size_t hole = 0;
+    for (size_t i = 0; i < total; ++i) {
+        Type *type   = typeAt(i);
+        bool isHole  = hole < unwritten->size() && (*unwritten)[hole].index == i;
+        if (isHole) {
+            const GCT::Tree::UnwrittenParam &param = (*unwritten)[hole++];
+            Type *const wanted                     = i < withCount
+                                                         ? expectedFunc->withTypeAt(i)
+                                                         : expectedFunc->normTypeAt(i - withCount);
+            if (wanted == nullptr) {
+                report(param, "the expected function type does not say what this parameter is");
+            }
+            if (containsTypeVar(wanted)) {
+                std::vector<std::string> names;
+                collectTypeVars(wanted, names);
+                report(
+                    param,
+                    std::format(
+                        "the expected type '{}' still holds the type variable '{}', which this "
+                        "position does not bind",
+                        expectedFunc->toString(),
+                        names.empty() ? std::string("?") : names.front()));
+            }
+            type = wanted;
+        }
+        if (i < withCount) {
+            factory.addWithArg(nameAt(i), type, funcType->withIsVarAt(i));
+        } else {
+            factory.addNormArg(nameAt(i), type, funcType->normIsVarAt(i - withCount));
+        }
+    }
+    return factory.buildOpen();
 }
 
 void Builder::stampPermissions(node_handle_t operNode) const {

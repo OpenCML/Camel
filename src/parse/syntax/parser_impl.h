@@ -69,6 +69,11 @@ class ParserImpl {
     uint32_t angle_    = kNone;
     bool constData_    = false; // the expression being parsed is a `const` type argument
     uint32_t spacedGt_ = kNone; // a `>` after a space read as a comparison inside angle_
+    // The parameter list being parsed belongs to a lambda, where a parameter's type may be
+    // left out: it comes from the function type of the position the lambda stands in (design
+    // principles 5.9). A function declaration's or a function type's parameters always write
+    // their types.
+    bool lambdaParams_ = false;
 
     bool panic_     = false; // an error was reported and the parser has not resynchronized
     uint32_t depth_ = 0;     // nesting of expressions, types and blocks

@@ -799,16 +799,19 @@ any Formatter::visitKeyValuePair(cst::KeyValuePair context) {
 }
 
 /*
-keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
+keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)? ;
 */
 any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
     string result = context->tok(TK::KwVar) ? "var " : context->tok(TK::KwConst) ? "const " : "";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
-    result += ": " + any_cast<string>(visitType(typeExpr));
-    if (dataExpr) {
-        result += " = " + any_cast<string>(visitExpr(dataExpr));
+    // A lambda's parameter may leave its type out (design principles 5.9).
+    if (typeExpr) {
+        result += ": " + any_cast<string>(visitType(typeExpr));
+        if (dataExpr) {
+            result += " = " + any_cast<string>(visitExpr(dataExpr));
+        }
     }
     return result;
 }

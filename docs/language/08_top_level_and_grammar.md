@@ -141,7 +141,7 @@ identList          : identDef (',' identDef)*
 parentIdents       : '(' identList? ','? ')'
 bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
-keyParamPair       : ('var' | 'const')? identDef ':' typeExpr ('=' dataExpr)?
+keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
@@ -250,7 +250,7 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 
 | 位置 | 判定 |
 |---|---|
-| `(` 开头：lambda 还是元组／括号表达式 | `(名字:`、`(var`，或空表后跟 `=>`、`:` 时是 lambda |
+| `(` 开头：lambda 还是元组／括号表达式 | `(名字:`、`(var`，`(名字)` 或 `(名字, ...)` 且其后是 `=>`、`:`，或空表后跟 `=>`、`:` 时是 lambda |
 | 类型里的 `(` | `(名字:`、`(var`、空表后跟 `=>` 是函数类型；`(T)` 是括号类型；其余是元组类型 |
 | `{` 开头：结构体还是块 | `{ 名字 :`、`{ ...` 是结构体；`{}` 作分支臂、lambda 体时是空块，作语句时是空结构体 |
 | 实参：位置实参还是具名实参 | 第一个 `名字 :` 起是具名实参 |

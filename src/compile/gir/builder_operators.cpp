@@ -1361,16 +1361,33 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     };
 
     FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    // `v = e`: the value takes the type of the place it is written to, as inPlaceRebindingOf
+    // already does for the forms it rewrites. The assignment's own signature follows the
+    // place's type, so the call gives the value no expected type of its own; here only a
+    // function type is handed on, for a lambda's unwritten parameter types (design principles
+    // 5.9). Any other type leaves the value as it was.
+    const bool isAssignment = gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
+                              gct->at(0)->name() == "__assn__";
+    Type *assignedType = nullptr;
     for (size_t i = 1; i < gct->size(); i++) {
         Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
                            ? argumentSignature->normTypeAt(i - 1)
                            : nullptr;
+        if (isAssignment && i == 2 && assignedType != nullptr) {
+            wanted = assignedType;
+        }
         ExpectedValueScope argumentScope(
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
         normInputs.push_back({inputNode, gct->at(i)});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
+        if (isAssignment && i == 1) {
+            Type *place = valueTypeOf(nodeTypeOf(inputNode));
+            if (place != nullptr && place->code() == TypeCode::Function) {
+                assignedType = place;
+            }
+        }
     }
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         // An operator that declares it takes the position of its call at this many arguments

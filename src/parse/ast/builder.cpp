@@ -2025,7 +2025,9 @@ Value Builder::visitKeyValuePair(cst::KeyValuePair context) {
 }
 
 /*
-keyParamPair : VAR? identDef ':' typeExpr ('=' dataExpr)? ;
+keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)? ;
+A type left out is a lambda's parameter (design principles 5.9): it stands as an InferTypeLoad,
+which GCT lowers to a hole and GIR fills from the function type the position expects.
 */
 Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
@@ -2037,7 +2039,13 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     Reference ref(context->get<cst::IdentDef>()->text());
     node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst);
     setNodeTokenRangeByContext(namedPairNode, context);
-    *namedPairNode << any2node(visitType(context->type()));
+    if (context->type()) {
+        *namedPairNode << any2node(visitType(context->type()));
+    } else {
+        node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
+        setNodeTokenRangeByContext(inferNode, context->get<cst::IdentDef>());
+        *namedPairNode << inferNode;
+    }
     node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
     if (context->expr()) {
         setNodeTokenRangeByContext(dataExprOptNode, context->expr());

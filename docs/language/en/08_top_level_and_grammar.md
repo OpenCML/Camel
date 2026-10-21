@@ -141,7 +141,7 @@ identList          : identDef (',' identDef)*
 parentIdents       : '(' identList? ','? ')'
 bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
-keyParamPair       : ('var' | 'const')? identDef ':' typeExpr ('=' dataExpr)?
+keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
@@ -250,7 +250,7 @@ Where there is more than one reading, the following rules decide, each on a boun
 
 | Place | Decision |
 |---|---|
-| `(`: lambda, or tuple / parenthesized expression | a lambda for `(name:`, `(var`, or an empty list followed by `=>` or `:` |
+| `(`: lambda, or tuple / parenthesized expression | a lambda for `(name:`, `(var`, for `(name)` or `(name, ...)` followed by `=>` or `:`, or for an empty list followed by `=>` or `:` |
 | `(` in a type | a function type for `(name:`, `(var`, an empty list followed by `=>`; `(T)` is the parenthesized type; anything else a tuple type |
 | `{`: struct or block | a struct for `{ name :` and `{ ...`; `{}` is the empty block as a branch arm or a lambda body and the empty struct as a statement |
 | Arguments: positional or named | named from the first `name :` on |

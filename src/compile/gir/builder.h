@@ -1164,6 +1164,13 @@ class Builder {
 
     void_ptr_t visitDeclNode(const GCT::node_ptr_t &gct);
     compile_graph_ptr_t visitFuncNode(const GCT::node_ptr_t &gct);
+    /// The signature of a lambda whose parameters leave their type out (design principles 5.9),
+    /// with those types taken from the function type the position of the lambda expects
+    /// (`expected`, the one channel of the expected type). A parameter that type does not
+    /// determine is reported, at the parameter, with a located diagnostic. Any other signature
+    /// is returned as it is.
+    FunctionType *
+    completeLambdaSignature(const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected);
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
