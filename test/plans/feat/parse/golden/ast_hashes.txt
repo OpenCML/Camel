@@ -1399,7 +1399,7 @@ d1678e3a74fcd6f2 ok test/cases/modules/autodiff/nn_grad_check.cml
 84749c7d24f117be ok test/cases/modules/autodiff/scalar_grad.cml
 f8932a27309a2449 ok test/cases/modules/autodiff/second_order.cml
 777509353a6ac756 ok test/cases/modules/autodiff/tensor_grad_check.cml
-dfdec1a46aa0d915 ok test/cases/modules/autodiff/var_array_append.cml
+3b41b150732228ac ok test/cases/modules/autodiff/var_array_append.cml
 2dd9721c781a6dce ok test/cases/modules/autodiff/var_tensor_local.cml
 50471c7646ebd8d9 ok test/cases/modules/autodiff/var_tensor_read.cml
 eb59e7e14d901e74 ok test/cases/modules/autodiff/var_tensor_read_after_call.cml

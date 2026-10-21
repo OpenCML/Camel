@@ -104,7 +104,7 @@ const expect = {
   ':var/take': 'rmw variable norm 0 whole; result may_alias 0',
   ':op/assn_l': 'write variable norm 0 whole; result may_alias 1',
   ':op/assn_add_l': 'rmw variable norm 0 whole',
-  ':op/assn_append': 'rmw variable norm 0 whole; result may_alias 0',
+  ':op/assn_owned': 'write variable norm 0 whole; result may_alias 1',
   ':io/println': 'write ambient io:stdout; external',
   ':io/input': 'rmw ambient io:stdin; external',
   'fs:read_text': 'read ambient fs; external',

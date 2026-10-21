@@ -167,7 +167,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 登记发生在模块加载时：
 
-- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get` 登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_append`（写成语句的 `acc = acc->append<v>`）属于 `op/assn` 族，不纯。
+- 全局内置模块：`GlobalsBuiltinModule` 构造时调用 `registerBuiltinOperatorTraits()`（`src/builtin/executors/builtin.cpp`）。`op/` 下除 `op/assn` 原地赋值族之外的算子、`coll/` 下的全部算子，以及一份列明的字符串与数组辅助算子登记为纯；`:var/new`、`:var/get`、`:var/peek`、`:var/take` 与各算子的原地形式（`:struct/append_arr_in_place`、`:op/set_index_in_place`）登记为 `stateOnly`；`io/`、`profiler/` 不登记。`append`、`extend` 返回新数组，登记为纯（设计原则 11.3）；`:op/assn_owned`（写成语句的 `acc = acc->append<v>`、`xs = xs->sort`）属于 `op/assn` 族，不纯。
 - `.cmo` 模块：在 `load()` 中直接调用 `OperatorTable::instance().set(uri, traits)`。例如 `modules/math/module.cpp` 把 `getMathOpsMap()` 中的全部算子登记为纯。
 
 另有两处按 URI 或按值类型登记的信息，供需要的模块使用：

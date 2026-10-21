@@ -195,6 +195,9 @@ class FunctionEmitter {
     void lowerCast(Frame &frame, gc_node_ref_t ref);
     /// `:var/new`, `:var/get` and the assignments; false for any other operator.
     bool lowerVariable(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
+    /// The in-place form of `append` over `:var/take(xs)` (design principles 11.3): grows the
+    /// variable's array with `rt::append` once; false when the node is not that shape.
+    bool lowerAppendInPlace(Frame &frame, gc_node_ref_t ref, Block &out);
     /// `map`, `filter`, `reduce`, `foreach`, `attempt`; false for any other operator.
     bool lowerHigherOrder(Frame &frame, gc_node_ref_t ref, const std::string &uri, Block &out);
     /// Whether the variable whose cell is `cell` is used outside this function (design note

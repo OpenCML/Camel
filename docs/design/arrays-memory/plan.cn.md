@@ -102,7 +102,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 
 - `Array::size()` 已经是第一维、`numel()` 是元素总数、`strides_` 已按行主序填好；运行时已经能创建 rank-n 数组。
 - 但类型说不了形状：`Tensor<f32>` 是模块类型，`f32[3]` 的语法不存在；`map`/`filter` 等的算子规则（`src/builtin/modules/globals.cpp` 1890–2050）按 `arrType->elemType()` 得出元素类型，对 rank-n 数组按第一维的语义还没有实现。
-- 原地写：`OperatorTable::setInPlaceForm` + `Builder::inPlaceRebindingOf` 把 `xs = xs->sort()` 改写成调用原地形式；今天注册的只有 `modules/algo` 的排序家族与 `:op/set_index`。`append` 走另一条 `:op/assn_append`。`src/core/rtdata/array.cpp` 的 `reusableBlock`/`adoptBlock`/`canWriteInPlace` 是现成的积木。
+- 原地写：`OperatorTable::setInPlaceForm` + `Builder::inPlaceRebindingOf` 把 `xs = xs->sort()` 改写成调用原地形式；今天注册的有 `modules/algo` 的排序家族、`:op/set_index` 与 `append`（`:struct/append_arr_in_place`）。`src/core/rtdata/array.cpp` 的 `reusableBlock`/`adoptBlock`/`canWriteInPlace` 是现成的积木。
 
 ### 1.5 缺口清单
 
@@ -508,7 +508,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 
 | 算子 | 原地？ | 方式 | 不做的理由 |
 |---|---|---|---|
-| `append`（`xs = xs + [v]`） | **是**（已落地） | `:op/assn_append`，1.5 倍预留 | — |
+| `append`（`xs = xs + [v]`） | **是**（已落地） | `:struct/append_arr_in_place`（`setInPlaceForm` 声明），就地追加 | — |
 | `extend` | **是** | 复用操作数 0 的块，追加 | — |
 | `concat`（`xs = xs + ys`） | **是** | 结果以操作数 0 为底 | — |
 | `merge_sorted_arrays` | **是** | 从尾部合并进操作数 0 | — |

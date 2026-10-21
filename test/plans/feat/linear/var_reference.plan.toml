@@ -3703,7 +3703,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "var_array_append.macro"
-desc = "A differentiated function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 11.3) and reads its length (`:var/peek`): no gradient flows through the array; value and gradient are those of the plain call, under std::macro on the node VM and the bytecode VM."
+desc = "A differentiated function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_owned`, design principles 11.3) and reads its length (`:var/peek`): no gradient flows through the array; value and gradient are those of the plain call, under std::macro on the node VM and the bytecode VM."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/var_array_append.cml"
 args = ["${case}", "std::macro", "${backend}"]

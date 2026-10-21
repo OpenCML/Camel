@@ -106,6 +106,8 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/mem_blocks", __builtin__mem_blocks__},
         // `xs->append<v>` written by the loop-state rewrite; not a group a program can name.
         {"struct/append_arr_owned", __append_owned_arr__},
+        // The in-place form of `append` (Builder::inPlaceRebindingOf); likewise internal.
+        {"struct/append_arr_in_place", __append_in_place_arr__},
         // The private copy of an array a rewritten loop starts from; likewise internal.
         {"struct/copy_arr", __copy_arr__},
 
@@ -128,7 +130,6 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"op/assn_b", __builtin__assn__},
         {"op/assn", __builtin__assn__},
         // `acc = acc->append<v>` as a statement; not a group a program can name.
-        {"op/assn_append", __builtin__assn_append__},
         {"op/assn_owned", __builtin__assn_owned__},
 
         // The `set` operators a path assignment lowers to (Builder::pathAssignmentOf) and the
@@ -477,6 +478,11 @@ void registerBuiltinOperatorTraits() {
     registry.set(":op/set_index_in_place", {.stateOnly = true, .mayFault = true});
     registry.setInPlaceForm(":op/set_index", ":op/set_index_in_place");
     registry.declareReusesOperand(":op/set_index_in_place");
+    // The in-place append (Builder::inPlaceRebindingOf): the array :var/take handed it is
+    // appended to and returned; it changes nothing outside the program's own variables.
+    registry.set(":struct/append_arr_in_place", {.stateOnly = true});
+    registry.setInPlaceForm(":struct/append_arr", ":struct/append_arr_in_place");
+    registry.declareReusesOperand(":struct/append_arr_in_place");
     // What the compiler does at a call because of the operator (design principles log 2.17).
     registry.declareCallSpec(":op/error_new", {.callSiteAtArity = 2});
     registry.declareCallSpec(":mark/foreach_arr", {.discardsCallbackResult = true});

@@ -435,7 +435,11 @@ core::OperId operIdOf(const GCGraph *g, gc_node_ref_t ref) {
 
 /// Reading a variable (`:var/get`) or storing into one (`=`, `+=`, ...).
 bool readsOrAssignsVariable(core::OperId id) {
-    return core::oper::isVariableRead(id) || core::OperatorTable::instance().isAssignment(id);
+    // `:var/take` hands the variable's own value to an in-place form: reading it, in the same
+    // sense as `:var/get`, and subject to the same rule (only a local variable's content can be
+    // exported).
+    return id == core::oper::VarTake || core::oper::isVariableRead(id) ||
+           core::OperatorTable::instance().isAssignment(id);
 }
 
 /// A variable declared in `g` itself (`var v = e` is the operator `:var/new`): its content
@@ -477,6 +481,11 @@ constexpr const char *kOuterVariable =
     "captured variable, a variable used in a branch arm): its content is state that an ONNX "
     "model cannot hold; only a variable declared, read and assigned directly in one function "
     "can be exported. Pass the value as an argument and return the new value instead";
+
+/// Why an exported function cannot grow an array in a variable (design principles 11.3).
+constexpr const char *kGrowingArray =
+    "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds no growing "
+    "arrays: compute the values as a tensor instead";
 
 /// Whether running `from` is a precondition of running `to` (data or control edges).
 bool runsBefore(const GCGraph *g, gc_node_ref_t from, gc_node_ref_t to) {
@@ -528,12 +537,29 @@ void Evaluator::refuseEffects(GCGraph *root) {
                     body->oper == core::oper::VarNew ||
                     (readsOrAssignsVariable(body->oper) && !g->normInputsOf(ref).empty() &&
                      isLocalVariable(g, g->normInputsOf(ref).front()));
-                if (!onLocalVariable && !core::OperatorTable::instance().isPure(body->oper)) {
+                // An in-place form handed `:var/take` of a local variable changes only that
+                // variable's own array (design principles 11.3). The read of the variable
+                // translates or refuses that assignment with its own diagnostic
+                // (variableValueAt), so the form itself is not an effect of the model.
+                const bool inPlaceOnLocalVariable = [&] {
+                    if (!core::OperatorTable::instance().reusesOperand(body->uri())) {
+                        return false;
+                    }
+                    const auto norm = g->normInputsOf(ref);
+                    if (norm.size() != 1 || operIdOf(g, norm.front()) != core::oper::VarTake) {
+                        return false;
+                    }
+                    const auto cell = g->normInputsOf(norm.front());
+                    return !cell.empty() && isLocalVariable(g, cell.front());
+                }();
+                if (!onLocalVariable && !inPlaceOnLocalVariable &&
+                    !core::OperatorTable::instance().isPure(body->oper)) {
                     const std::string uri(body->uri());
                     const uint64_t origin = g->nodeOrigin(ref);
                     const std::string what =
                         readsOrAssignsVariable(body->oper)
                             ? std::string(kOuterVariable)
+                        : uri == ":struct/append_arr_in_place" ? std::string(kGrowingArray)
                             : std::format("impure operator '{}' cannot be exported", uri);
                     throw ExportError(
                         isSourceName(g->name()) ? std::format("in '{}': {}", g->name(), what)
@@ -2731,7 +2757,9 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
                 continue;
             }
             const core::OperId id = operIdOf(g, user);
-            if (core::oper::isVariableRead(id)) {
+            if (core::oper::isVariableRead(id) || id == core::oper::VarTake) {
+                // A read, or the handover of the variable's own value to an in-place form,
+                // which changes only what the variable is then assigned.
                 continue;
             }
             if (!core::OperatorTable::instance().isAssignment(id) ||
@@ -2763,13 +2791,32 @@ Value Evaluator::variableValueAt(Activation &act, gc_node_ref_t cell, gc_node_re
         if (!isLast) {
             continue;
         }
-        if (operUriOf(g, last) == ":op/assn_append") {
-            // `acc = acc->append<v>` (design principles 11.3): an array grown in a variable,
-            // which a model has no form for.
-            unsupported(
-                act,
-                "an array variable is appended to (`acc = acc->append<v>`); an ONNX model holds "
-                "no growing arrays: compute the values as a tensor instead");
+        // What a gate forwards (GATE(x), or the last with-input of a with-gate): after inlining,
+        // the value an assignment stores can be behind one.
+        const auto forwards = [g](gc_node_ref_t ref) {
+            for (;;) {
+                const GCNodeKind kind = g->node(ref)->kind;
+                if (kind != GCNodeKind::Gate && kind != GCNodeKind::Copy) {
+                    return ref;
+                }
+                const auto norm = g->normInputsOf(ref);
+                const auto with = g->withInputsOf(ref);
+                ref             = norm.empty() ? with.back() : norm.back();
+            }
+        };
+        const auto assigned = g->normInputsOf(last);
+        if (assigned.size() == 2) {
+            const gc_node_ref_t stored = forwards(assigned[1]);
+            if (g->node(stored)->kind == GCNodeKind::Oper &&
+                operUriOf(g, stored) == ":struct/append_arr_in_place") {
+                // `acc = acc->append<v>` (design principles 11.3): an array grown in a
+                // variable, which a model has no form for. The compiler writes the in-place
+                // form of `append` over what :var/take handed it.
+                unsupported(
+                    act,
+                    "an array variable is appended to (`acc = acc->append<v>`); an ONNX model "
+                    "holds no growing arrays: compute the values as a tensor instead");
+            }
         }
         const Value operand       = eval(act, g->normInputsOf(last)[1]);
         const AssignmentKind kind = assignmentKindOf(operUriOf(g, last));
@@ -2803,6 +2850,11 @@ Value Evaluator::applyOper(
     Activation &act, const std::string &uri, std::vector<Value> norm, type::Type *resultType,
     std::vector<Value> with) {
     const auto *def = tensor::ops::OpRegistry::instance().find(uri);
+
+    // A growing array has no ONNX counterpart; say why rather than that it is impure.
+    if (uri == ":struct/append_arr_in_place") {
+        unsupported(act, kGrowingArray);
+    }
 
     // Simplification has evaluated every pure operator whose arguments are constants; what is
     // left is translated. Side effects have no ONNX counterpart.

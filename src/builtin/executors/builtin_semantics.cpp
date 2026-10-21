@@ -350,8 +350,7 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         ":var/take",
         ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)});
     // The assignments: `=` stores its second operand (and returns it); a compound assignment
-    // reads the cell, combines and stores (and returns the new value, a number or a string);
-    // `acc = acc->append<v>` may append to the cell's own array and returns it.
+    // reads the cell, combines and stores (and returns the new value, a number or a string).
     for (std::string_view name : names) {
         if (!storesIntoCell(name)) {
             continue;
@@ -361,9 +360,6 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         ResourceSpec spec;
         if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
             spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = alias(1)};
-        } else if (rest == "_append") {
-            spec =
-                ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}, .result = alias(0)};
         } else {
             spec = ResourceSpec{.accesses = {cell(AccessMode::ReadModifyWrite)}};
         }
@@ -373,6 +369,13 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
     // `:var/take` of the variable's own array) and returns it, whole.
     table.declareResources(
         ":op/set_index_in_place",
+        ResourceSpec{
+            .accesses = {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
+            .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0}});
+    // The in-place form of `append` (Builder::inPlaceRebindingOf): it changes the array
+    // `:var/take` gave it and returns it, whole.
+    table.declareResources(
+        ":struct/append_arr_in_place",
         ResourceSpec{
             .accesses = {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
             .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0}});

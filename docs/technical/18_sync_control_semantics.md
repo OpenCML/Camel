@@ -334,9 +334,10 @@ func main(): int {
 函数类型仍记录源码签名（参数类型 `T` 与 `var` 标记）；重载决议按值类型进行（`valueTypeOf`）。
 
 - 赋值之外不再有带 `var` 形参的内建或标准库算子：`append`、`extend`、`apply`、`algo::sort` 等返回新值，
-  不修改实参（设计原则 11.3）。写成语句的 `acc = acc->append<v>` 由图构建器写成 `:op/assn_append`
-  （`__assn_append__`，与 `:op/assn` 同族：`acc` 的单元作为 `var` 实参，记为对它的一次写入）；单元记录
-  它持有的数组是否只被它引用，是时原地追加，否则复制（`src/builtin/operators/ops.cpp`）。模块的算子仍可以
+  不修改实参（设计原则 11.3）。写成语句的 `acc = acc->append<v>` 由图构建器按算子声明的原地形式
+  （`OperatorTable::setInPlaceForm`）写成 `:op/assn_owned(acc, :struct/append_arr_in_place(v, :var/take(acc)))`：
+  `acc` 的单元作为 `var` 实参，记为对它的一次写入；`:var/take` 在单元只持有该数组时把原数组交给原地形式，
+  否则给一份复制，原地形式改完返回它（`src/builtin/operators/ops.cpp`、`struct.cpp`）。模块的算子仍可以
   声明 `var` 形参：它们收到的是对象本身（`:var/get` 的结果），该调用记为对这个变量的一次写入。
 - `:var/new`、`:var/get`、`:op/assn*` 都不是纯算子：折叠、CSE、特化不会越过它们；CSE 也不合并以
   `:var/get` 的结果为输入的相同表达式（两次求值之间对象可能被原地修改）。`isWrittenInPlace`

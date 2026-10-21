@@ -593,10 +593,10 @@ void Builder::markNonRetainingReads() {
     //     of an array of numbers, `format`). A call, a branch, a closure, a literal holding
     //     the value, a `let` used later by such a node: any of them keeps `r` a `:var/get`.
     //  4. No node made between `r` and its last user may write the variable: no operator
-    //     that is neither pure nor state-only (assignments, `:op/assn_append`, effects), no
-    //     call and no branch (their bodies may write it through a capture). The chain runs
-    //     the nodes in the order they were made, so the users of `r` run before any later
-    //     writer.
+    //     that is neither pure nor state-only (the assignments, `:op/assn_owned` among them,
+    //     effects), no call and no branch (their bodies may write it through a capture). The
+    //     chain runs the nodes in the order they were made, so the users of `r` run before any
+    //     later writer.
     //  5. The graph has no writer outside the chain (made in a nested block that is not a
     //     sync block), which could run between `r` and its users.
     //

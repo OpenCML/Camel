@@ -218,12 +218,12 @@ timeout_ms = 3000
 
 [[tests]]
 name = "new_values.peek_loop.graph"
-desc = "The graph of the loop reads `out` with `:var/peek`."
+desc = "The graph of the loop reads `out` with `:var/peek`, and the rebinding appends through the in-place form of `append`."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/peek_loop.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = [":var/peek", ":op/assn_append"]
+expect_stdout_contains = [":var/peek", ":struct/append_arr_in_place", ":op/assn_owned"]
 
 [[tests]]
 name = "new_values.macro_append"

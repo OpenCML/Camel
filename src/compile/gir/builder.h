@@ -1451,14 +1451,10 @@ class Builder {
 
     /// The statement of the block being built whose value nothing takes: every statement but
     /// the last (which is the block's value), while it is visited. A call that is this
-    /// statement may be the rebinding `acc = acc->append<v>` (rebindingAppendOf) or a pure
-    /// operation whose result is lost (rejectUnusedPureResult).
+    /// statement may be the rebinding `acc = acc->append<v>` (inPlaceRebindingOf, with the
+    /// in-place form `append` declares) or a pure operation whose result is lost
+    /// (rejectUnusedPureResult).
     const GCT::Node *unusedStatement_ = nullptr;
-    /// `acc = acc->append<v>` as the statement `gct`, `acc` a variable and `append` the
-    /// built-in one: the same rebinding, written with the operator __assn_append__, which
-    /// grows the array in place while only the variable refers to it. Returns nullptr when
-    /// `gct` is not that form; the call is then built as written.
-    node_handle_t rebindingAppendOf(const GCT::node_ptr_t &gct);
     /// `xs = xs->op<w...>` (or `xs = op<w...>(xs)`) as the statement `gct` of a sync block,
     /// `xs` a variable holding an array and `op` an operator of a module that declares an
     /// in-place form for the overload the call resolves to (OperatorTable::setInPlaceForm;
