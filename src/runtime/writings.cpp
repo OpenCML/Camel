@@ -25,6 +25,7 @@
 #include "camel/runtime/draft_writes.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -237,6 +238,8 @@ struct DraftWritings::Index {
     std::vector<std::optional<NodeKey>> keyOf;
     // 0 unknown, 1 takes part, 2 does not.
     std::vector<uint8_t> takes;
+    // 0 unknown, 1 not written in place, 2 written.
+    std::vector<uint8_t> written;
 };
 
 DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy policy)
@@ -250,12 +253,14 @@ uint8_t DraftWritings::contextOf(gc_node_ref_t node) const {
 
 namespace {
 
-bool readsVariable(const GraphDraft &draft, std::span<const gc_node_ref_t> norm,
-                   std::span<const gc_node_ref_t> with) {
+template <typename Written>
+bool readsVariable(
+    const GraphDraft &draft, std::span<const gc_node_ref_t> norm,
+    std::span<const gc_node_ref_t> with, Written &&written) {
     for (auto inputs : {norm, with}) {
         for (gc_node_ref_t in : inputs) {
             const auto *h = draft.header(in);
-            if (isWrittenInPlace(draft, in) ||
+            if (written(in) ||
                 (h != nullptr && h->kind == GCNodeKind::Oper &&
                  camel::core::OperatorTable::instance().touchesClass(
                      reinterpret_cast<const GCOperBody *>(draft.payloadOf(in).data())->oper,
@@ -301,7 +306,20 @@ bool shapeTakesPart(
 
 } // namespace
 
-bool DraftWritings::takesPart(gc_node_ref_t node) {
+bool DraftWritings::writtenInPlace(gc_node_ref_t node) {
+    auto &written = index_->written;
+    if (node >= written.size()) {
+        written.resize(draft_.nodeSlotCount(), 0);
+    }
+    // Asked once per node: walking the users of a value read by thousands of nodes each time
+    // would make a saturation quadratic. The writings a saturation adds write nothing.
+    if (written[node] == 0) {
+        written[node] = isWrittenInPlace(draft_, node) ? 2 : 1;
+    }
+    return written[node] == 2;
+}
+
+uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
     auto &takes = index_->takes;
     if (node >= takes.size()) {
         takes.resize(draft_.nodeSlotCount(), 0);
@@ -315,14 +333,27 @@ bool DraftWritings::takesPart(gc_node_ref_t node) {
                        h->dataIndex,
                        h->dataType,
                        draft_.payloadOf(node),
-                       draft_.ctrlInputsOf(node).size()) &&
-                   !isWrittenInPlace(draft_, node);
+                       0) &&
+                   !writtenInPlace(node);
         if (yes && h->kind == GCNodeKind::Oper) {
-            yes = !readsVariable(draft_, draft_.normInputsOf(node), draft_.withInputsOf(node));
+            yes = !readsVariable(
+                draft_,
+                draft_.normInputsOf(node),
+                draft_.withInputsOf(node),
+                [&](gc_node_ref_t in) { return writtenInPlace(in); });
         }
-        takes[node] = yes ? 1 : 2;
+        // 1: takes part; 3: would, but has control inputs (it can be the root of a rule only);
+        // 2: does not.
+        takes[node] = !yes ? 2 : draft_.ctrlInputsOf(node).empty() ? 1 : 3;
     }
-    return takes[node] == 1;
+    return takes[node];
+}
+
+bool DraftWritings::takesPart(gc_node_ref_t node) { return shapeOf(node) == 1; }
+
+bool DraftWritings::canBeRoot(gc_node_ref_t node) {
+    const uint8_t shape = shapeOf(node);
+    return shape == 1 || shape == 3;
 }
 
 namespace {
@@ -452,6 +483,13 @@ void DraftWritings::rebuild() {
 }
 
 bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule) {
+    const bool changed = assertEqualDeferred(a, b, perms, rule);
+    rebuild();
+    return changed;
+}
+
+bool DraftWritings::assertEqualDeferred(
+    gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule) {
     const auto *ha = draft_.header(a);
     const auto *hb = draft_.header(b);
     if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
@@ -461,9 +499,7 @@ bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms,
             "Two writings of a value have the same type, region and permissions, and the "
             "permissions the equivalence needs.");
     }
-    const bool changed = store_.merge(a, b, perms, rule, 0, this);
-    rebuild();
-    return changed;
+    return store_.merge(a, b, perms, rule, 0, this);
 }
 
 gc_node_ref_t DraftWritings::lookupOrAdd(
@@ -472,7 +508,9 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
     auto &ix = *index_;
     std::optional<NodeKey> key;
     if (shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload, 0) &&
-        !(init.kind == GCNodeKind::Oper && readsVariable(draft_, norm, with))) {
+        !(init.kind == GCNodeKind::Oper &&
+          readsVariable(
+              draft_, norm, with, [&](gc_node_ref_t in) { return writtenInPlace(in); }))) {
         key = makeKey(
             draft_,
             init.kind,
@@ -694,6 +732,20 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         select(regionResults.back());
     }
     for (size_t at = 0; at < work.size(); ++at) {
+        // The other writings of this value that waited for something (control inputs): the
+        // writing that stays waits for it too.
+        if (multi[work[at]]) {
+            for (gc_node_ref_t member : store_.members(contextOf(work[at]), work[at])) {
+                for (gc_node_ref_t wait : draft_.ctrlInputsOf(member)) {
+                    const gc_node_ref_t pick = chosen[classOf[wait]];
+                    if (pick == kInvalidNodeRef) {
+                        throw std::logic_error(
+                            "A control input has no writing that does not read itself.");
+                    }
+                    select(pick);
+                }
+            }
+        }
         for (gc_node_ref_t input : inputsOf(work[at])) {
             const gc_node_ref_t pick = chosen[classOf[input]];
             if (pick == kInvalidNodeRef) {
@@ -727,7 +779,21 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
         };
         const auto norm = pick(draft_.normInputsOf(node));
         const auto with = pick(draft_.withInputsOf(node));
-        const auto ctrl = pick(draft_.ctrlInputsOf(node));
+        auto ctrl = pick(draft_.ctrlInputsOf(node));
+        if (multi[node] && chosen[classOf[node]] == node) {
+            for (gc_node_ref_t member : store_.members(contextOf(node), node)) {
+                if (member == node) {
+                    continue;
+                }
+                for (gc_node_ref_t wait : draft_.ctrlInputsOf(member)) {
+                    const gc_node_ref_t to = chosen[classOf[wait]];
+                    if (to != node && std::find(ctrl.begin(), ctrl.end(), to) == ctrl.end()) {
+                        ctrl.push_back(to);
+                        rewired = true;
+                    }
+                }
+            }
+        }
         if (rewired) {
             draft_.setNormInputs(node, norm);
             draft_.setWithInputs(node, with);
@@ -948,7 +1014,8 @@ void DraftWritings::matchFrom(
         for (gc_node_ref_t candidate : candidates) {
             const auto *h = draft_.header(candidate);
             if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
-                h->permissions != matchPerms_ || !takesPart(candidate) ||
+                h->permissions != matchPerms_ ||
+                !(at == 0 ? canBeRoot(candidate) : takesPart(candidate)) ||
                 reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
                     p.oper) {
                 continue;
@@ -1044,16 +1111,27 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
     for (; stats.rounds < budget.rounds; ++stats.rounds) {
         // All the matches of the round are found before any is applied.
         std::vector<Found> found;
-        const size_t slots = draft_.nodeSlotCount();
+        const auto findBegan = std::chrono::steady_clock::now();
+        const size_t slots   = draft_.nodeSlotCount();
+        // The nodes a rule may be rooted at, by operator, ascending.
+        std::unordered_map<camel::core::OperId, std::vector<gc_node_ref_t>> byOper;
+        for (gc_node_ref_t node = 0; node < slots; ++node) {
+            if (draft_.alive(node) && draft_.header(node)->kind == GCNodeKind::Oper &&
+                canBeRoot(node)) {
+                byOper[reinterpret_cast<const GCOperBody *>(draft_.payloadOf(node).data())->oper]
+                    .push_back(node);
+            }
+        }
         for (size_t r = 0; r < rules.size(); ++r) {
             const Rule &rule = rules[r];
             if (rule.lhs.kind != Pattern::Kind::Op) {
                 continue;
             }
-            for (gc_node_ref_t node = 0; node < slots; ++node) {
-                if (!draft_.alive(node) || !takesPart(node)) {
-                    continue;
-                }
+            const auto candidates = byOper.find(rule.lhs.oper);
+            if (candidates == byOper.end()) {
+                continue;
+            }
+            for (gc_node_ref_t node : candidates->second) {
                 const uint8_t context = contextOf(node);
                 if ((rule.needs & ~context) != 0) {
                     continue;
@@ -1070,6 +1148,8 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             }
         }
         stats.matches += found.size();
+        const auto applyBegan = std::chrono::steady_clock::now();
+        stats.findSeconds += std::chrono::duration<double>(applyBegan - findBegan).count();
         bool progress = false;
         for (const Found &match : found) {
             const Rule &rule = rules[match.rule];
@@ -1091,12 +1171,15 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 progress = true;
             }
             if (made != match.root && !store_.same(contextOf(match.root), made, match.root)) {
-                if (assertEqual(match.root, made, rule.needs, rule.id)) {
+                if (assertEqualDeferred(match.root, made, rule.needs, rule.id)) {
                     ++stats.unions;
                     progress = true;
                 }
             }
         }
+        rebuild();
+        stats.applySeconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - applyBegan).count();
         if (!progress) {
             stats.saturated = true;
             ++stats.rounds;
