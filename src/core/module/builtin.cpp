@@ -32,7 +32,7 @@ namespace camel::core::module {
 std::unordered_map<std::string, std::function<std::shared_ptr<Module>(context_ptr_t ctx)>>
     builtinModuleFactories = {
         {"", [](context_ptr_t ctx) { return GlobalsBuiltinModule::create(ctx); }},
-        // Exports its decorators only under CAMEL_ENABLE_TEST_PASSES (test_attrs.h).
+        // Exports its decorators always; no environment variable gates them (test_attrs.h).
         {"test_attrs", [](context_ptr_t ctx) { return TestAttrsBuiltinModule::create(ctx); }},
 
 #ifndef NDEBUG

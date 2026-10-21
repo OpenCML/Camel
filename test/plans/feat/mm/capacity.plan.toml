@@ -150,8 +150,8 @@ desc = "The three spaces grow by segments while the program is compiled and run:
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}", "run", "mixed", "500"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_STATS=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile(gc_stats=1,report=false,hints=false)"]
+envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -173,8 +173,8 @@ desc = "The three spaces grow by segments while the program is compiled and run:
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}", "run", "mixed", "500", "std::fvm"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_STATS=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile(gc_stats=1,report=false,hints=false)","std::fvm"]
+envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -196,8 +196,8 @@ desc = "The three spaces grow by segments while the program is compiled and run:
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}", "run", "mixed", "500", "std::jit"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_STATS=1"]
+args = ["${case}","run","mixed","500","std::profile(gc_stats=1,report=false,hints=false)","std::jit"]
+envs = ["CAMEL_SPACE_SEGMENT_KB=32"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -219,8 +219,8 @@ desc = "The three spaces grow by segments while the program is compiled and run:
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}", "run", "mixed", "500", "std::tf"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_STATS=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile(gc_stats=1,report=false,hints=false)","std::tf"]
+envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -242,8 +242,8 @@ desc = "The three spaces grow by segments while the program is compiled and run:
 kind = "behavior"
 tool = "python"
 case = "../../../tools/scale/scale.py"
-args = ["${case}", "run", "mixed", "500", "std::opt", "std::nvm"]
-envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_STATS=1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
+args = ["${case}","run","mixed","500","std::profile(gc_stats=1,report=false,hints=false)","std::opt","std::nvm"]
+envs = ["CAMEL_SPACE_SEGMENT_KB=32", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["OK mixed n=500"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -264,8 +264,8 @@ name = "capacity.perm_query_types"
 desc = "Queries must not fill the permanent space. A program of 120 lines under std::opt::specialize std::opt: the rewrites ask for every user of every value whether it is passed to a var parameter, and every question used to leave a new function type in the permanent space (1.4 million of them, past 256 MB; 'Permanent space exhausted' at the old 32 MB). The answers are memoized per operator and argument types, and an unchanged graph keeps the type of its static area across a commit. The program prints what the run without passes prints, inside a permanent space limited to 32 MB, and the statistics line shows less than 4 MB in use (measured: 673 KB; 77 KB without passes)."
 kind = "behavior"
 case = "../../../cases/feat/mm/capacity/perm_query_types.cml"
-args = ["${case}", "std::opt::specialize", "std::opt"]
-envs = ["PROGEN_I0=4", "PROGEN_I1=5", "CAMEL_PERM_SPACE_LIMIT_MB=32", "CAMEL_GC_STATS=1"]
+args = ["${case}","std::opt::specialize","std::opt","std::profile(gc_stats=1,report=false,hints=false)"]
+envs = ["PROGEN_I0=4", "PROGEN_I1=5", "CAMEL_PERM_SPACE_LIMIT_MB=32"]
 expect_exit = 0
 expect_stdout_contains = ["L3 (0, -21) (0, -21)", "L5 (6, -21) 4", "L6 [-2, -2, -2, -2, -2, -2] 4", "L7 5", "L8 (a, -21)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

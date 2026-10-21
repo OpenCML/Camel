@@ -57,7 +57,7 @@ Invariants:
 This does not stand in the way of a moving collector for small objects: nothing here hands out
 pointers to collectable objects, and the spaces hold only what is never moved.
 
-What a function costs (measured, release build, `CAMEL_GC_STATS=1`): about 0.8 KB of the graph
+What a function costs (measured, release build, `std::profile(gc_stats=1)`): about 0.8 KB of the graph
 space for a function of one expression, 1.9 KB with an `if` (three graphs), 1.5 KB with a
 lambda; 0.6 to 1.8 KB of the permanent space before the type table (5 to 17 type objects:
 composite types were created anew at every use; see below for what is shared now); about 1.2 KB of the meta space when its graph owns a constant
@@ -104,7 +104,7 @@ caller:
 
 Not interned: open signatures, unions and type variables. An interned type is immutable by
 construction: no type class has a mutator except `OpenFunctionType::setExitType` and the completion
-of a named struct instance before the table holds it. `CAMEL_TYPE_STATS=1` prints what a program
+of a named struct instance before the table holds it. `std::profile(type_stats=true)` prints what a program
 allocated per kind of type and how many constructions the table answered.
 
 A graph's frame layout is not a type in the table at all: it is built at the end of the
@@ -154,7 +154,7 @@ version lives as long as a live `Program` holds it, a `Program` as long as somet
 - **Two collections.** While a program runs, a major collection of run-time values marks through
   the heap and `GCGraphManager::sweepMarked()` (installed with `setGraphSweeper`, called after
   `markPhase`) frees the unmarked `Program`s and graph versions; the graph space also asks for a
-  major collection when it holds a megabyte (`CAMEL_GRAPH_GC_MB`, default 64) and as much again
+  major collection when it holds a megabyte (`--graph-gc-mb`, default 64) and as much again
   as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs)
   `collect()` has the heap marked the same way, without sweeping or moving anything
   (`collectGraphSpace`), so a function value of the heap keeps its `Program` there too; it runs
@@ -191,7 +191,7 @@ global `autoSpace` singleton can retain a dangling vector pointer.
 
 ## Collectors
 
-Two collectors run the auto space; `--gc` / `CAMEL_GC` chooses (`docs/cli.md`, "The
+Two collectors run the auto space; `--gc` chooses (`docs/cli.md`, "The
 collector"). The default is the non-moving one.
 
 - **mark-sweep.** Small objects are allocated from the free lists of the elder space, objects
@@ -394,17 +394,17 @@ do not need source changes:
 - `CAMEL_GC_STRESS_SAFEPOINT=N` requests a collection every `N` explicit runtime safepoints.
 - `CAMEL_GC_STRESS_MODE=minor|major|both` selects which collection kind stress requests use.
 - `CAMEL_GC_LOG_MOVES=1` emits movement records when the copying path relocates an object.
-- `CAMEL_GC=generational` (older spelling `CAMEL_GC_ENABLE_YOUNG_COPYING=1`) selects the generational collector for GC
-  tests. It is off by default.
+- `--gc generational` selects the generational collector (the default);
+  `CAMEL_GC_ENABLE_YOUNG_COPYING=1` is the older spelling and changes nothing.
 - `CAMEL_GC_PRINT_CONFIG=1` prints the effective GC diagnostic configuration to stderr when the
   process-level allocator is initialized.
-- `CAMEL_GC_STATS=1` also prints the occupancy of the graph, permanent and meta spaces at exit
+- `std::profile(gc_stats=1)` also prints the occupancy of the graph, permanent and meta spaces at exit
   (`[camel] spaces: ...`): for each, kilobytes in use and at the high-water mark, megabytes
   reserved, segments, allocations and the limit.
-- `CAMEL_GC_STATS=1` prints one line of pacing statistics to stderr at exit (`[camel] gc: ...`):
+- `std::profile(gc_stats=1)` prints one line of pacing statistics to stderr at exit (`[camel] gc: ...`):
   collections performed, requests by cause (large-object budget, elder space exhausted, other),
   megabytes allocated per space, the large-object volume the last sweep left, the high-water mark
-  of the large-object space, and the budget and growth setting in force. `CAMEL_GC_STATS=2` also
+  of the large-object space, and the budget and growth setting in force. `std::profile(gc_stats=2)` also
   prints one line per major collection (`[camel] gc collection: ...`) with the budget that was in
   force, the bytes allocated since the previous sweep, the volume before and after the sweep, and
   the next budget. The numbers depend only on the allocation order, not on time.

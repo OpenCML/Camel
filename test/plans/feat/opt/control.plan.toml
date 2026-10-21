@@ -9,7 +9,7 @@ desc = "Bounded mandatory data/control proofs, zero/exhausted budgets, predecess
 kind = "behavior"
 case = "../../../cases/opt/generic/control_chain.cml"
 args = ["${case}", "test::control", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_contains = ["CONTROL topology, budgets, branches, dense chain: PASS"]
 timeout_ms = 8000

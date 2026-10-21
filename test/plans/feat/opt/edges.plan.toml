@@ -12,7 +12,6 @@ kind = "behavior"
 case = "../../../cases/opt/generic/generic_passes.cml"
 timeout_ms = 20000
 expect_exit = 0
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
 [[tests]]

@@ -271,46 +271,46 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
 } // namespace
 void registerRegionTestPasses(
     operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred) {
-    if (std::getenv("CAMEL_ENABLE_TEST_PASSES")) {
-        core::OperatorTable::instance().set(
-            "tiles:test_compiled_call",
-            {.pure = false, .callsGraphs = true, .readsGraphs = true});
-        registerModulePass(
-            "tiles::test_outline_compiled",
-            [](const core::context::context_ptr_t &ctx) {
-                return std::make_unique<RegionOutlineTestPass>(ctx, &testCompiledCall);
-            });
-        registerModulePass(
-            "tiles::test_outline_preferred",
-            [preferred](const core::context::context_ptr_t &ctx) {
-                return std::make_unique<RegionOutlineTestPass>(ctx, preferred.execute, preferred);
-            });
-        registerModulePass(
-            "tiles::test_outline_host_resident",
-            [host](const core::context::context_ptr_t &ctx) {
-                return std::make_unique<RegionOutlineTestPass>(ctx, host.execute, host);
-            });
-        registerModulePass(
-            "tiles::test_outline_resident",
-            [device](const core::context::context_ptr_t &ctx) {
-                return std::make_unique<RegionOutlineTestPass>(ctx, device.execute, device);
-            });
-        core::OperatorTable::instance().set(
-            "tiles:test_call",
-            {.pure = false, .callsGraphs = true});
-        registerModulePass(
-            "tiles::test_outline_native",
-            [](const core::context::context_ptr_t &ctx) {
-                return std::make_unique<RegionOutlineTestPass>(ctx, &testNativeCall);
-            });
-        registerModulePass("tiles::test_outline", [](const core::context::context_ptr_t &ctx) {
-            return std::make_unique<RegionOutlineTestPass>(ctx);
+    // Test-only passes: named by a test's pipeline and by nothing else. No environment variable
+    // gates them (H81).
+    core::OperatorTable::instance().set(
+        "tiles:test_compiled_call",
+        {.pure = false, .callsGraphs = true, .readsGraphs = true});
+    registerModulePass(
+        "tiles::test_outline_compiled",
+        [](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<RegionOutlineTestPass>(ctx, &testCompiledCall);
         });
-        registerModulePass(
-            "tiles::test_outline_gpu",
-            [run](const core::context::context_ptr_t &ctx) {
-                return std::make_unique<RegionOutlineTestPass>(ctx, run);
-            });
-    }
+    registerModulePass(
+        "tiles::test_outline_preferred",
+        [preferred](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<RegionOutlineTestPass>(ctx, preferred.execute, preferred);
+        });
+    registerModulePass(
+        "tiles::test_outline_host_resident",
+        [host](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<RegionOutlineTestPass>(ctx, host.execute, host);
+        });
+    registerModulePass(
+        "tiles::test_outline_resident",
+        [device](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<RegionOutlineTestPass>(ctx, device.execute, device);
+        });
+    core::OperatorTable::instance().set(
+        "tiles:test_call",
+        {.pure = false, .callsGraphs = true});
+    registerModulePass(
+        "tiles::test_outline_native",
+        [](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<RegionOutlineTestPass>(ctx, &testNativeCall);
+        });
+    registerModulePass("tiles::test_outline", [](const core::context::context_ptr_t &ctx) {
+        return std::make_unique<RegionOutlineTestPass>(ctx);
+    });
+    registerModulePass(
+        "tiles::test_outline_gpu",
+        [run](const core::context::context_ptr_t &ctx) {
+            return std::make_unique<RegionOutlineTestPass>(ctx, run);
+        });
 }
 } // namespace camel::tiles

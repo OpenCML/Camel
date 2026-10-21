@@ -91,6 +91,14 @@ extern int maxThreads;
 extern size_t maxRecursionDepth;
 extern size_t maxMacroDepth;
 extern size_t maxMacroRounds; // --max-macro-rounds
+/// --block-limit <megabytes>: the limit of the data-block space, "" when absent.
+extern std::string blockLimitOpt;
+/// --graph-gc-mb <megabytes>: the floor of the graph-space collection, "" when absent.
+extern std::string graphGcMbOpt;
+/// --native-stack-guard <on|off>: the checks of the native stack; "" (on) when absent.
+extern std::string nativeStackGuardOpt;
+/// --profile-mode <normal|full>: the mode of the advanced profiler of --profile.
+extern std::string profileModeOpt;
 } // namespace Run
 
 namespace Check {

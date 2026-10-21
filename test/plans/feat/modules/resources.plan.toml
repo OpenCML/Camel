@@ -10,11 +10,11 @@ timeout_ms = 10000
 
 [[tests]]
 name = "core"
-desc = "test::resources (CAMEL_ENABLE_TEST_PASSES): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a capture and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is an object read and written, the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged."
+desc = "test::resources (test-only): one rejected declaration per rule of check 5 (an access of unknown class, an ambient resource without a name, a named variable, an ambient resource bound to an operand and a variable bound to none, an operator bound to a capture, a same result without its operand, a pure operator that touches something, an effectful one that touches nothing, an external effect for a state-only operator, an ambient allocation), the refinement of an operator its traits count as external, the minor version a declaration of resources adds to an existing record; the bounds of mapped regions and which overlap. In the program: assignments write their cell, reads read it, a var parameter, a capture and a recursion (a fixpoint) carry the access to the caller's cell, an array sorted in place is an object read and written, the generator, the console and the file system are ambient and external; pairs that conflict are ordered by data or by control edges, the arms of a branch are not a pair, and the program's output is unchanged."
 kind = "behavior"
 case = "../../../cases/resources/effects.cml"
 args = ["${case}", "test::resources"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -79,12 +79,12 @@ assert(!out.includes(' unordered'), 'the program orders every conflicting pair')
 """
 
 [[tests]]
-name = "core_test_pass_needs_the_environment"
-desc = "test::resources is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
-kind = "negative"
+name = "core_test_pass_is_not_in_a_pipeline"
+desc = "test::resources is a test-only pass: no pipeline adds it, so a run that names no pass prints no check."
+kind = "behavior"
 case = "../../../cases/resources/effects.cml"
-args = ["${case}", "test::resources"]
-expect_exit = 1
+args = ["${case}"]
+expect_exit = 0
 expect_output_not_contains = ["RESOURCES "]
 
 [[tests]]

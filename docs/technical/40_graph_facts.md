@@ -120,7 +120,8 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
   (`test/cases/facts/tensors_and_loops.cml`.)
 - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
   (`test::facts`), facts across `std::opt::inline` and `std::opt` (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
-  and `inspect --facts`. The test passes need `CAMEL_ENABLE_TEST_PASSES`.
+  and `inspect --facts`. The test passes are named in the pipeline; no environment variable gates
+  them.
 
 ## 7. Operators that read graphs
 

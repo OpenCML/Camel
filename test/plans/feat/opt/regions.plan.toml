@@ -16,7 +16,7 @@ desc = "Two nested Block regions with a result and a port survive a commit and a
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "test::regions", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_output_contains = ["REGIONS count=5 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -28,7 +28,7 @@ desc = "The regions are kept by the rewrites that follow: std::opt after test::r
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "test::regions", "std::opt", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_output_contains = ["REGIONS count=5", "tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -84,7 +84,7 @@ desc = "test::exec_plan prints the order the back ends run a graph in, with the 
 kind = "behavior"
 case = "../../../cases/opt/generic/arm_tail_gate.cml"
 args = ["${case}", "test::exec_plan"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_output_contains = ["PLAN run ", " arm0=", " arm1="]
 timeout_ms = 20000

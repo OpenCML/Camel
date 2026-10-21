@@ -14,7 +14,7 @@ desc = "test::facts: each registration rule rejects one kind (owner prefix, core
 kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
 args = ["${case}", "test::facts"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -55,12 +55,12 @@ for (const l of [
 """
 
 [[tests]]
-name = "test_passes_need_the_environment"
-desc = "test::facts is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
-kind = "negative"
+name = "test_pass_is_not_in_a_pipeline"
+desc = "test::facts is a test-only pass: no pipeline adds it, so a run that names no pass prints no facts."
+kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
-args = ["${case}", "test::facts"]
-expect_exit = 1
+args = ["${case}"]
+expect_exit = 0
 expect_output_not_contains = ["FACTS"]
 
 [[tests]]
@@ -102,7 +102,7 @@ desc = "Facts computed before std::opt::inline: the graphs it changed (main, whi
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::opt::inline", "test::facts_check"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -129,7 +129,7 @@ desc = "The same across std::opt: its passes ask to edit every graph, but only t
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::opt", "test::facts_check"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -150,7 +150,7 @@ desc = "The same across std::macro and std::opt."
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_seed", "std::macro", "std::opt", "test::facts_check"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -168,7 +168,7 @@ desc = "test::facts_persist: every encodable fact (shapes, reorder freedom, effe
 kind = "behavior"
 case = "../../../cases/facts/tensors_and_loops.cml"
 args = ["${case}", "test::facts_persist"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -194,7 +194,7 @@ desc = "test::facts_node: a fact of a kind about a node's own version (Dependenc
 kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
 args = ["${case}", "test::facts_node"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {

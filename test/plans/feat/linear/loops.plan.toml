@@ -10,8 +10,8 @@ name = "loops.native_callback"
 desc = "A native graph-reading callback invokes original For/While closures with fresh captures, including concurrent calls to the same graph under moving GC."
 kind = "behavior"
 case = "../../../cases/loops/native_callback.cml"
-args = ["${case}", "test::native_callback", "std::prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "30 42 30\n24\n3744\n"
 timeout_ms = 20000
@@ -20,8 +20,8 @@ timeout_ms = 20000
 name = "loops.native_callback.scheduler"
 kind = "behavior"
 case = "../../../cases/loops/native_callback.cml"
-args = ["${case}", "test::native_callback", "std::prl(bytecode=false)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl(bytecode=false)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "30 42 30\n24\n3744\n"
 timeout_ms = 20000
@@ -30,8 +30,8 @@ timeout_ms = 20000
 name = "loops.native_callback.fault"
 kind = "negative"
 case = "../../../cases/loops/native_callback_fault.cml"
-args = ["${case}", "test::native_callback", "std::prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
 expect_diagnostic_line = 3
 expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
@@ -42,8 +42,8 @@ timeout_ms = 20000
 name = "loops.native_callback.fault.scheduler"
 kind = "negative"
 case = "../../../cases/loops/native_callback_fault.cml"
-args = ["${case}", "test::native_callback", "std::prl(bytecode=false)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "test::native_callback", "std::prl(bytecode=false)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 1
 expect_diagnostic_line = 3
 expect_output_contains = ["native before fault once", "RuntimeDiag::DivisionByZero", "native_callback_fault.cml:3:61"]
@@ -670,10 +670,10 @@ name = "loops.compiled.moving"
 desc = "The same loop rounds with the generational collector and safepoint poisoning: every safepoint moves every young object and poisons where it was, so a reference the compiled loop kept outside its frame across a round boundary would fault or go stale. The body allocates a string in each of N rounds."
 kind = "behavior"
 case = "../../../cases/loops/compiled_churn.cml"
-args = ["${case}", "${backend}"]
+args = ["--gc", "generational", "${case}", "${backend}"]
 backends = ["fvm", "jit_hot_threshold0"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["N=20000", "CAMEL_GC=generational", "CAMEL_GC_POISON=1"]
+envs = ["N=20000", "CAMEL_GC_POISON=1"]
 sweep = false
 expect_exit = 0
 expect_stdout_exact = "20000\ndone\n"
@@ -682,13 +682,13 @@ timeout_ms = 120000
 
 [[tests]]
 name = "loops.compiled.round_safepoint"
-desc = "A collection at every safepoint (CAMEL_GC_STRESS_SAFEPOINT=1, poisoning on) during 500 rounds of a compiled loop that allocates in the body: the compiled rounds reach the same safepoints as the interpreter's rounds (the same number of collections and the same objects moved, checked by hand with CAMEL_GC_STATS=1), so the state a round carries is always in the frame when the collector runs."
+desc = "A collection at every safepoint (CAMEL_GC_STRESS_SAFEPOINT=1, poisoning on) during 500 rounds of a compiled loop that allocates in the body: the compiled rounds reach the same safepoints as the interpreter's rounds (the same number of collections and the same objects moved, checked by hand with std::profile(gc_stats=1)), so the state a round carries is always in the frame when the collector runs."
 kind = "behavior"
 case = "../../../cases/loops/compiled_churn.cml"
-args = ["${case}", "${backend}"]
+args = ["--gc", "generational", "${case}", "${backend}"]
 backends = ["fvm", "jit_hot_threshold0"]
 backends_agree = ["exit_code", "stdout_normalized"]
-envs = ["N=500", "CAMEL_GC=generational", "CAMEL_GC_POISON=1", "CAMEL_GC_STRESS_SAFEPOINT=1"]
+envs = ["N=500", "CAMEL_GC_POISON=1", "CAMEL_GC_STRESS_SAFEPOINT=1"]
 sweep = false
 expect_exit = 0
 expect_stdout_exact = "500\ndone\n"

@@ -136,6 +136,9 @@ struct ReportOptions {
     size_t top = 24;
     /// Report the element-wise loops that ran on the host.
     bool hints = true;
+    /// Print the text report when the run ends. False for a pass that only turns on a diagnostic
+    /// (an effect trace, the allocator's statistics) and wants no report on the program's output.
+    bool report = true;
 };
 
 /// What the pass was written with (`std::profile(top=..., hints=..., json="...")`): the driver

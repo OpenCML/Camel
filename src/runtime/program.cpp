@@ -43,6 +43,7 @@
 #include "camel/core/rtdata/func.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <unordered_set>
 
@@ -175,12 +176,19 @@ Program *GCGraphManager::reserve() {
     return program;
 }
 
+namespace {
+// --graph-gc-mb: read by every manager made after the option is applied (default 64 MB).
+std::atomic<size_t> graphCollectionFloorBytes{size_t{64} << 20};
+} // namespace
+
+void setGraphCollectionFloorBytes(size_t bytes) {
+    graphCollectionFloorBytes.store(bytes, std::memory_order_release);
+}
+
 GCGraphManager::GCGraphManager() {
-    // CAMEL_GRAPH_GC_MB: how much the graph space may hold before the first collection asks
-    // for itself (afterwards: as much again as it held after the last one).
-    if (const char *text = std::getenv("CAMEL_GRAPH_GC_MB"); text != nullptr && *text != 0) {
-        collectionFloor_ = static_cast<size_t>(std::strtoull(text, nullptr, 10)) << 20;
-    }
+    // How much the graph space may hold before the first collection asks for itself
+    // (afterwards: as much again as it held after the last one).
+    collectionFloor_ = graphCollectionFloorBytes.load(std::memory_order_acquire);
 }
 
 void GCGraphManager::collectIfGrown() {

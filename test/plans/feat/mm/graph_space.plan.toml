@@ -15,8 +15,8 @@ name = "graph_space.grad_in_a_loop"
 desc = "4000 gradients built at run time: the output is right, the collector ran, and the graph space never held more than 6 MB (it held all of them, 12.9 MB, when nothing was freed). Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
-args = ["${case}", "std::nvm"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GRAPH_GC_MB=1"]
+args = ["--graph-gc-mb", "1", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "std::nvm"]
+
 expect_exit = 0
 expect_stdout_contains = ["40000.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -37,8 +37,8 @@ name = "graph_space.grad_in_a_loop_fvm"
 desc = "The same 4000 gradients under FastVM: the bytecode of a graph version the collector frees is given back and the next gradient is compiled into it, so the bytecode vector stays at about 11000 entries (all 4000 gradients kept would take more than 140000)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
-args = ["${case}", "std::fvm"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GRAPH_GC_MB=1"]
+args = ["--graph-gc-mb", "1", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "std::fvm"]
+
 expect_exit = 0
 expect_stdout_contains = ["40000.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -58,7 +58,7 @@ desc = "A function value of the heap keeps the Program it is of: a test pass mak
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
 args = ["${case}", "test::keepfn", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_contains = ["KEEPFN alive=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -70,7 +70,7 @@ desc = "test::graph_release: a pass that encodes a graph version (what a special
 kind = "behavior"
 case = "../../../cases/facts/two_functions.cml"
 args = ["${case}", "test::graph_release", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 expect_stdout_contains = ["41"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
@@ -93,8 +93,8 @@ name = "graph_space.jit_entries_of_freed_versions"
 desc = "The JIT compiles the graph of a run-time specialization the first time it is called and keeps the version it compiled for, by entry, so that the interpreter can find the graph of an entry. A version the collector frees has its entry erased (its address can be given to another graph, and the map would otherwise grow with every specialization). 4000 gradients are 12000 graph versions; with their entries kept it names 4000 versions (the JIT compiles lazily, once per version), with them erased only the versions alive at the end remain: 306. A build without the JIT prints no such line, and the check is skipped (the JIT is compiled on x86-64 only)."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
-args = ["${case}", "std::jit"]
-envs = ["CAMEL_GC_STATS=1", "CAMEL_GRAPH_GC_MB=1"]
+args = ["--graph-gc-mb", "1", "${case}", "std::profile(gc_stats=1,report=false,hints=false)", "std::jit"]
+
 expect_exit = 0
 expect_stdout_contains = ["40000.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

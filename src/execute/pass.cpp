@@ -587,13 +587,42 @@ PassDescriptor profileDescriptor() {
             PassParamType::String,
             std::string(),
             "also write the report as one JSON object to this file"},
+        PassParam{
+            "report",
+            PassParamType::Bool,
+            true,
+            "print the text report when the run ends; false turns on only the diagnostics the "
+            "other parameters ask for"},
+        PassParam{
+            "gc_stats",
+            PassParamType::Int,
+            int64_t{0},
+            "the allocator's statistics at exit: 1 one line, 2 also one line per collection"},
+        PassParam{
+            "type_stats",
+            PassParamType::Bool,
+            false,
+            "the type storage's statistics at exit (one line per kind, and the type table)"},
+        PassParam{
+            "effect_trace",
+            PassParamType::String,
+            std::string(),
+            "append one JSON line per executed effectful operator to this file"},
     };
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         camel::profile::ReportOptions options;
         const int64_t top = args.getInt("top");
         options.top       = top < 0 ? 0 : static_cast<size_t>(top);
         options.hints     = args.getBool("hints");
-        return std::make_unique<ProfilePass>(ctx, options, args.getString("json"));
+        options.report    = args.getBool("report");
+        const int64_t gcStats = args.getInt("gc_stats");
+        return std::make_unique<ProfilePass>(
+            ctx,
+            options,
+            args.getString("json"),
+            gcStats < 0 ? 0 : static_cast<int>(gcStats),
+            args.getBool("type_stats"),
+            args.getString("effect_trace"));
     };
     return d;
 }
@@ -1063,8 +1092,9 @@ std::string resolveAlias(const std::string &name) {
     return it == registry.aliases.end() ? name : it->second;
 }
 
-/// Test-only passes, off unless the environment enables them (CAMEL_ENABLE_TEST_PASSES is a
-/// gate on what exists, not a setting of a pass).
+/// Test-only passes: they exist only to be named by a test's pipeline and are in no default
+/// pipeline, so naming one is the whole switch (H81 removed the variable that used to gate
+/// them).
 const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
 #define TEST_PASS(K, T)                                                                            \
     {                                                                                              \
@@ -1140,12 +1170,10 @@ std::optional<PassDescriptor> findDescriptor(const std::string &name) {
         return found;
     }
 
-    // 5. Test-only passes.
-    if (std::getenv(kTestPassesEnvVar) != nullptr) {
-        for (const auto &[testName, factory] : testPasses()) {
-            if (resolved == testName) {
-                return passWithoutParameters(factory);
-            }
+    // 5. Test-only passes. They are reachable by name and by nothing else; no pipeline adds them.
+    for (const auto &[testName, factory] : testPasses()) {
+        if (resolved == testName) {
+            return passWithoutParameters(factory);
         }
     }
     return std::nullopt;

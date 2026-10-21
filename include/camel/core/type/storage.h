@@ -25,10 +25,10 @@
  * held by graphs, drafts, frames and the collector without bookkeeping.
  *
  * allocTypeStorage() is the one place those allocations are made. It also counts them by kind,
- * which is what `CAMEL_TYPE_STATS=1` prints at exit: the permanent space is otherwise a single
- * number, and telling which kind of type a program keeps allocating (per-graph frame layouts,
- * operator signatures, function types) is what the interning work of the graph data model
- * (docs/design/graph-model, section 3.8) is measured by.
+ * which is what `std::profile(type_stats=true)` prints at exit: the permanent space is otherwise
+ * a single number, and telling which kind of type a program keeps allocating (per-graph frame
+ * layouts, operator signatures, function types) is what the interning work of the graph data
+ * model (docs/design/graph-model, section 3.8) is measured by.
  *
  * Thread-safety: allocTypeStorage() may be called from any thread (the permanent space
  * synchronizes itself; the counters are atomic).
@@ -41,7 +41,8 @@
 
 namespace camel::core::type {
 
-/// What a block of type storage holds. One counter each in the `CAMEL_TYPE_STATS` report.
+/// What a block of type storage holds. One counter each in the `std::profile(type_stats)`
+/// report.
 enum class TypeStorageKind : unsigned {
     Primitive,  // Type objects of the built-in scalar and auxiliary types
     Array,      // ArrayType
@@ -66,7 +67,12 @@ template <typename T> void *allocTypeStorage(TypeStorageKind kind, size_t size =
 
 /// One line (`[camel] types: ...`) with, per kind, the number of objects allocated so far and
 /// their bytes, then the size of the type table and the constructions it answered without
-/// allocating (`interned=`, `intern_hits=`). Printed at exit when CAMEL_TYPE_STATS is set.
+/// allocating (`interned=`, `intern_hits=`). Printed at exit when `std::profile(type_stats=true)`
+/// asks for it.
 void reportTypeStorage(std::ostream &os);
+
+/// Arranges for reportTypeStorage to print on stderr at exit
+/// (`std::profile(type_stats=true)`). Idempotent.
+void enableTypeStatsReport();
 
 } // namespace camel::core::type

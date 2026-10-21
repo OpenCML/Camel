@@ -10,11 +10,11 @@ timeout_ms = 30000
 
 [[tests]]
 name = "declared_and_refused"
-desc = "test::definitions (CAMEL_ENABLE_TEST_PASSES): softmax, log_softmax (key 1.0: only the definition is declared), mean and relu (1.1 + the definition = 1.2) and sigmoid are built from tensor_definitions, each with its parameters and a portable content hash; a definition is built once; matmul has none; a definition without a function is rejected when declared. Refused when built, each with its reason: a cycle of two definitions (exp defined with softmax, which uses exp) and, since, softmax on that cycle too; a definition that reaches its own operator; a function of another arity; a function that reads a module-level value (a capture, whether the value is a literal or the result of a call, and the refusal names the captured values: a definition library is encoded as the function graph alone, task H37); an effect in the definition of a pure operator; a generic function; a missing function; a library that does not compile; a library that does not exist."
+desc = "test::definitions (test-only): softmax, log_softmax (key 1.0: only the definition is declared), mean and relu (1.1 + the definition = 1.2) and sigmoid are built from tensor_definitions, each with its parameters and a portable content hash; a definition is built once; matmul has none; a definition without a function is rejected when declared. Refused when built, each with its reason: a cycle of two definitions (exp defined with softmax, which uses exp) and, since, softmax on that cycle too; a definition that reaches its own operator; a function of another arity; a function that reads a module-level value (a capture, whether the value is a literal or the result of a call, and the refusal names the captured values: a definition library is encoded as the function graph alone, task H37); an effect in the definition of a pure operator; a generic function; a missing function; a library that does not compile; a library that does not exist."
 kind = "behavior"
 case = "../../../cases/definitions/check.cml"
 args = ["${case}", "test::definitions"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -52,12 +52,12 @@ for (const l of [
 """
 
 [[tests]]
-name = "test_pass_needs_the_environment"
-desc = "test::definitions is a test-only pass: without CAMEL_ENABLE_TEST_PASSES it does not exist."
-kind = "negative"
+name = "test_pass_is_not_in_a_pipeline"
+desc = "test::definitions is a test-only pass: no pipeline adds it, so a run that names no pass prints no definition."
+kind = "behavior"
 case = "../../../cases/definitions/check.cml"
-args = ["${case}", "test::definitions"]
-expect_exit = 1
+args = ["${case}"]
+expect_exit = 0
 expect_output_not_contains = ["DEFINITION "]
 
 [[tests]]
@@ -81,7 +81,7 @@ snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 case = "../../../cases/definitions/kernels.cml"
 args = ["${case}", "test::expand_definitions", "${backend}"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 golden = "golden/definitions/kernels.txt"
@@ -93,7 +93,7 @@ desc = "test::expand_definitions reports on stderr what it expanded: 10 softmax,
 kind = "behavior"
 case = "../../../cases/definitions/kernels.cml"
 args = ["${case}", "test::expand_definitions", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -126,7 +126,7 @@ desc = "The same after test::expand_definitions (before std::macro): the operato
 kind = "behavior"
 case = "../../../cases/definitions/grad.cml"
 args = ["${case}", "test::expand_definitions", "std::macro"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
@@ -183,7 +183,7 @@ desc = "The same program after test::expand_definitions: the definition's divisi
 kind = "behavior"
 case = "../../../cases/definitions/mean_empty.cml"
 args = ["${case}", "test::expand_definitions", "${backend}"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1

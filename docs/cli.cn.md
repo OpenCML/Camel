@@ -50,7 +50,11 @@
 - `--max-recursion-depth <n>`：可同时处于打开状态且不是尾调用的调用数上限（1 到 1000000；见“资源上限”）。也可用 `CAMEL_MAX_RECURSION_DEPTH=<n>`；选项优先  
 - `--max-macro-depth <n>`：`std::macro` 提前求值一次调用时嵌套调用的上限（默认 64；取值范围相同）。也可用 `CAMEL_MAX_MACRO_DEPTH=<n>`  
 - `--max-macro-rounds <n>`：`std::macro` 提前求值时一个循环至多运行的轮数（默认 1000000，取值 1 到 2^40）；超过则这次求值失败。也可用 `CAMEL_MAX_MACRO_ROUNDS=<n>`，选项优先  
-- `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。也可用 `CAMEL_GC=<collector>`；命令行选项优先。详见英文版 `docs/cli.md` 的 "The collector" 一节  
+- `--gc <collector>`：运行时值的回收器：`generational`（默认；分代，年轻对象会被复制）或 `mark-sweep`（对象地址不变）。详见英文版 `docs/cli.md` 的 "The collector" 一节  
+- `--block-limit <megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
+- `--graph-gc-mb <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
+- `--native-stack-guard <on|off>`：嵌套调用前是否检查原生栈（默认 `on`）；`off` 只用于测量栈真正到哪里结束，不供正常使用  
+- `--profile-mode <normal|full>`：`--profile` 启动的剖析器模式；`full` 在写出报告时同时打开 Perfetto 界面（需要 `--profile`）  
 - `-n`, `--no-cache`：不使用缓存模块  
 - `-I`, `--include <dir>`：添加模块搜索路径（可多次使用）  
 - `-L`, `--stdlib <path>`：指定标准库路径，加入模块搜索路径。省略时用环境变量 `CAMEL_STD_LIB`；两者都没有时，标准库在可执行文件旁和安装根目录（`CAMEL_HOME`）下的 `stdlib` 目录里查找  
@@ -153,7 +157,7 @@
 | `std::tf`、`std::prl` | `linear: bool = false`（逐节点求值），`fanout_all: bool = false`（把每个无序的高阶调用都展开成并行任务），`diag: bool = false`（打印对每张图的决定），`bytecode: bool = true`（把串行的图交给字节码解释器），`gc_stats: int = 0`（1：运行结束时打印统计；2：另外每次回收一行） |
 | `onnx::export` | `out: string = ""`（模型文件；见下） |
 
-仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限与回收器（`CAMEL_GC*`、`CAMEL_*_SPACE_*`、`CAMEL_MAX_RECURSION_DEPTH`），诊断用的追踪与统计（`CAMEL_EFFECT_TRACE`、`CAMEL_TYPE_STATS`、`CAMEL_STARTUP_PROFILE`），以及 `CAMEL_ENABLE_TEST_PASSES`（决定测试遍是否存在，供测试用）。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。
+仍留在环境变量里的是进程的环境，不是某个遍的设置：`CAMEL_HOME`、`CAMEL_STD_LIB`、`CAMEL_PACKAGES`，日志与诊断格式变量，资源上限（`CAMEL_*_SPACE_*`，以及 `--max-recursion-depth`、`--max-macro-depth`、`--max-macro-rounds` 的环境变量写法），回收器的诊断与节奏变量（`CAMEL_GC_HEAP_LIMIT_MB`、`CAMEL_GC_GROWTH_PERCENT`、`CAMEL_GC_PROMOTION_AGE`、`CAMEL_GC_POISON`、`CAMEL_GC_VERIFY`、`CAMEL_GC_STRESS_*`），以及 `CAMEL_STARTUP_PROFILE`。重写引擎的增长预算是上面那些遍的 `growth_budget` 参数，不从环境变量读取。曾经是环境变量的开关现在是选项和遍参数，旧名字会被拒绝，并给出指出替代物的诊断：`CAMEL_GC`（--gc）、`CAMEL_BLOCK_LIMIT_MB`（--block-limit）、`CAMEL_GRAPH_GC_MB`（--graph-gc-mb）、`CAMEL_GC_STATS`（std::profile(gc_stats=...)）、`CAMEL_TYPE_STATS`（std::profile(type_stats=true)）、`CAMEL_EFFECT_TRACE`（std::profile(effect_trace="...")）、`CAMEL_NATIVE_STACK_GUARD`（--native-stack-guard）、`CAMEL_PROFILE_MODE`（--profile-mode）和 `CAMEL_ENABLE_TEST_PASSES`（测试遍在流水线里写出名字即可）。
 
 ### 模块的遍
 
@@ -264,9 +268,13 @@
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。
 - `data.stage` 说明诊断在流水线的哪里产生：`parse`、`typecheck`、`compile`（见“资源上限”）、重写遍或翻译遍的 `pass:<name>`（包括未知的遍名）、调度遍（`std::nvm`、`std::fvm`、`std::jit`、`std::tf`）的 `run`，或 `internal`。
 
-### 效应追踪（`CAMEL_EFFECT_TRACE`）
+### 效应追踪（`std::profile(effect_trace="...")`）
 
-设置环境变量 `CAMEL_EFFECT_TRACE=<file>` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。创建和读取 `var` 变量（`:var/new`、`:var/get`）是仅状态的，不产生事件；向变量存入值（`:op/assn*`）则产生事件：
+在流水线里给出 `std::profile(effect_trace="<file>")` 后，进程为每个被执行的有效应算子追加一行 JSON，按调用顺序排列（有效应算子指任何没有在算子特性注册表里登记为纯的或仅状态的算子：`println`、文件 I/O、`py_*`、赋值 `:op/assn*`，包括写成语句的 `acc = acc->append<v>` 所用的 `:op/assn_append`……）。`report=false` 使 `std::profile` 的文本报告不进入程序的输出：
+
+    camel m.cml 'std::profile(effect_trace="trace.jsonl",report=false)' std::nvm
+
+创建和读取 `var` 变量（`:var/new`、`:var/get`）是仅状态的，不产生事件；向变量存入值（`:op/assn*`）则产生事件：
 
 ```json
 {"seq":0,"uri":":io/println","stage":"run","origin":{"file":"a.cml","line":12,"col":5},"payload_sha1":"...","payload":"string=hello|||"}
@@ -315,9 +323,9 @@
 
 **默认上限的余量**（Linux x86-64、发布构建实测）：把栈上限逐步调小，默认上限允许的最深递归（直接递归 `depth(999)`、经函数值 `step(499)`、`map` 元素内 `depth(998)`）仍能跑完所需的最小 `ulimit -s`：`std::nvm` 与 `std::tf` 三种情形都是 768 KiB；`std::fvm` 与 `std::jit`（含 `std::opt::inline std::jit`）直接递归和 `map` 内是 192 KiB，经函数值是 1024 KiB。默认的 8 MiB 栈因此有 8 倍以上的余量；栈更小时得到的是上面那条“原生栈已满”的诊断，不是崩溃。Windows 上线程的默认栈是 1 MiB，测试集在那里第一次运行时，默认上限下 `std::nvm`（以及经函数值的 `std::fvm`）遇到的就是这条诊断，`std::tf` 则是栈溢出；因此各工具以 32 MiB 的栈链接（`/STACK`，见 `tools/libcamel_tool.cmake`），在 Windows 上这也是进程创建的每个线程的栈。`std::tf` 的工作线程在所有平台上都以指定的栈大小创建，至少 8 MiB：不指定大小创建的线程在 macOS 上只有 512 KiB，在 Windows 上由宿主加载 `libcamel` 时（`python.exe`）只有宿主的 1 MiB（`include/camel/utils/big_stack_thread.h`、`cmake/TaskflowWorkerStack.cmake`）。macOS 这一侧尚未运行过。自行加载 `libcamel` 的宿主（Python 包）用的是宿主自己的栈。
 
-`std::nvm` 和 `std::fvm` 的帧池按上限确定大小：每个可能打开的调用 4 KiB（默认值下约 4 MiB），最多 256 MiB；它一次性保留，只有用到的部分才被触及。帧非常大的函数的递归可能在计数到达之前就把它填满；那是同一条带位置的诊断，说明帧池已满。运行时间不受上限影响。`CAMEL_NATIVE_STACK_GUARD=0` 关闭原生栈检查；它用于测量栈实际在哪里结束（上面的崩溃点），不供正常使用。
+`std::nvm` 和 `std::fvm` 的帧池按上限确定大小：每个可能打开的调用 4 KiB（默认值下约 4 MiB），最多 256 MiB；它一次性保留，只有用到的部分才被触及。帧非常大的函数的递归可能在计数到达之前就把它填满；那是同一条带位置的诊断，说明帧池已满。运行时间不受上限影响。`--native-stack-guard off` 关闭原生栈检查；它用于测量栈实际在哪里结束（上面的崩溃点），不供正常使用。
 
-三个空间上限限制的是编译后程序的大小，不是单张图的大小：它们是总量，只用来防范不停分配的编译器（展开或内联永不结束的遍，会因图空间或永久空间被填满而停下；这所需的时间增长得比上限更快，这就是默认值没有定得更大的原因）。`CAMEL_GC_STATS=1` 在退出时打印三个空间的占用情况（`[camel] spaces: ...`：使用中的字节数、最高水位、保留的字节数、段数、分配次数、上限）。
+三个空间上限限制的是编译后程序的大小，不是单张图的大小：它们是总量，只用来防范不停分配的编译器（展开或内联永不结束的遍，会因图空间或永久空间被填满而停下；这所需的时间增长得比上限更快，这就是默认值没有定得更大的原因）。`std::profile(gc_stats=1)` 在退出时打印三个空间的占用情况，连同分配器自己的一行（`[camel] spaces: ...`：使用中的字节数、最高水位、保留的字节数、段数、分配次数、上限）。
 
 其他标为“否”的上限是编译期常量（`generic.h`、内联器的配置）；它们没有命令行选项，也没有 `.opencmlrc` 键（`.opencmlrc` 只配置遍列表）。
 

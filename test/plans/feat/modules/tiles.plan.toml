@@ -7,9 +7,9 @@ tags = ["feat", "modules", "tiles"]
 name = "compiled_region_fresh_inputs"
 kind = "behavior"
 case = "../../../cases/modules/tiles/compiled_region.cml"
-args = ["${case}", "tiles::test_outline_compiled", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_TILES_DEVICE=invalid", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
 timeout_ms = 60000
@@ -19,7 +19,7 @@ name = "compiled_region_invalidation_and_ownership"
 kind = "behavior"
 case = "../../../cases/modules/tiles/compiled_region.cml"
 args = ["${case}", "tiles::test_outline_compiled", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_TILES_TEST_INVALIDATION=1", "CAMEL_TILES_DEVICE=invalid"]
+envs = ["CAMEL_TILES_TEST_INVALIDATION=1", "CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\ntensor([      4.,      16.,      36.], dtype=float32)\ntensor([      2.,       4.,       6.], dtype=float32)\ntensor([      8.,      10.,      12.], dtype=float32)\ntensor([     64.,     100.,     144.], dtype=float32)\ntensor([      4.,      16.,      36.], dtype=float32)\n"
 timeout_ms = 60000
@@ -28,9 +28,9 @@ timeout_ms = 60000
 name = "compiled_region_tuple_and_embedded_axis"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_compiled", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_compiled", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_TILES_DEVICE=invalid", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -39,8 +39,8 @@ timeout_ms = 60000
 name = "compiled_region_parallel"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["${case}", "tiles::test_outline_compiled", "std::prl(bytecode=false)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_TILES_DEVICE=invalid", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_compiled", "std::prl(bytecode=false)"]
+envs = ["CAMEL_TILES_DEVICE=invalid", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 60000
@@ -335,9 +335,9 @@ timeout_ms = 10000
 name = "host_resident_region_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_host_resident", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_host_resident", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -346,21 +346,20 @@ timeout_ms = 60000
 name = "outlined_region_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 10000
-
 
 [[tests]]
 name = "native_region_invocation"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_native", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_native", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 10000
@@ -369,8 +368,8 @@ timeout_ms = 10000
 name = "native_region_invocation.jit_hot"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_native", "std::jit(hot_threshold=0)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_native", "std::jit(hot_threshold=0)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 10000
@@ -379,8 +378,8 @@ timeout_ms = 10000
 name = "host_resident_parallel"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["${case}", "tiles::test_outline_host_resident", "std::prl(bytecode=false)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_host_resident", "std::prl(bytecode=false)"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
@@ -389,8 +388,8 @@ timeout_ms = 10000
 name = "native_parallel"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["${case}", "tiles::test_outline_native", "std::prl"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_native", "std::prl"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
@@ -399,8 +398,8 @@ timeout_ms = 10000
 name = "native_parallel.scheduler"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["${case}", "tiles::test_outline_native", "std::prl(bytecode=false)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_native", "std::prl(bytecode=false)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
@@ -409,8 +408,8 @@ timeout_ms = 10000
 name = "native_parallel.linear"
 kind = "behavior"
 case = "../../../cases/modules/tiles/native_parallel.cml"
-args = ["${case}", "tiles::test_outline_native", "std::prl(linear=true)"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_native", "std::prl(linear=true)"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 2\n23296.0\n"
 timeout_ms = 10000
@@ -419,9 +418,9 @@ timeout_ms = 10000
 name = "gpu_preference.no_device"
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
-args = ["${case}", "${backend}"]
+args = ["--gc", "generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit_hot_threshold0", "prl"]
-envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
 timeout_ms = 30000
@@ -440,9 +439,9 @@ timeout_ms = 10000
 name = "preferred_resident_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
-args = ["${case}", "tiles::test_outline_preferred", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::test_outline_preferred", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "TILES_OUTLINED 10\n364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000
@@ -451,9 +450,9 @@ timeout_ms = 60000
 name = "public_region_pass"
 kind = "behavior"
 case = "../../../cases/modules/tiles/public_pass.cml"
-args = ["${case}", "tiles::compile", "${backend}"]
+args = ["--gc", "generational", "${case}", "tiles::compile", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
-envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC=generational", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
+envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_TILES_DEVICE=0", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
 expect_stdout_exact = "364.0\n84.0\n42.0 364.0\n21.0\n84.0\n"
 timeout_ms = 60000

@@ -122,7 +122,8 @@ input through an effectful CPU fallback and back into a supported GPU region,
 checking both the retained host result and the original device input. A separate
 division-fault case checks that CPU effects occur once and the original fault
 location is preserved across all four schedulers. The resident invocation is
-exported only with `CAMEL_ENABLE_TEST_PASSES` for these checks. Complete dispatch
+exported as a test-only pass, named in the pipeline (`tiles::test_outline_resident`), for these
+checks. Complete dispatch
 inspection remains pending; graph exports expose the inserted transfer/call nodes.
 
 The single-target transfer planner computes deduplicated uploads, host-visible

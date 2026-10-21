@@ -145,13 +145,11 @@ std::string jsonEscape(std::string_view s) {
 // ---------------------------------------------------------------------------------------------
 // Process state
 // ---------------------------------------------------------------------------------------------
-const char *tracePath() {
-    static const char *path = [] {
-        const char *p = std::getenv("CAMEL_EFFECT_TRACE");
-        return (p && *p) ? p : nullptr;
-    }();
-    return path;
-}
+// The file the trace is appended to, set by std::profile(effect_trace="..."). Replaced before
+// the run starts, so every reader sees one immutable string; the previous one is kept alive.
+std::atomic<const std::string *> traceFile{nullptr};
+
+const std::string *tracePath() { return traceFile.load(std::memory_order_acquire); }
 
 thread_local uint64_t tlsSiteOrigin = 0;
 thread_local int tlsMacroDepth      = 0;
@@ -265,13 +263,14 @@ slot_t invoke(size_t index, ArgsView &with, ArgsView &norm, context::Context &ct
         Sink &s = sink();
         std::lock_guard lock(s.mutex);
         if (!s.file && !s.failed) {
-            s.file   = std::fopen(tracePath(), "wb");
-            s.failed = (s.file == nullptr);
+            const std::string *path = tracePath();
+            s.file                  = path != nullptr ? std::fopen(path->c_str(), "wb") : nullptr;
+            s.failed                = (s.file == nullptr);
             if (s.failed) {
                 std::fprintf(
                     stderr,
-                    "[camel] CAMEL_EFFECT_TRACE: cannot open '%s' for writing\n",
-                    tracePath());
+                    "[camel] std::profile(effect_trace): cannot open '%s' for writing\n",
+                    path != nullptr ? path->c_str() : "(no file)");
             }
         }
         if (s.file) {
@@ -307,6 +306,11 @@ constexpr std::array<operator_t, kMaxWrapped> kTrampolines =
 
 } // namespace
 
+void setTraceFile(std::string path) {
+    const std::string *fresh = path.empty() ? nullptr : new std::string(std::move(path));
+    traceFile.store(fresh, std::memory_order_release);
+}
+
 bool enabled() { return tracePath() != nullptr; }
 
 operator_t wrap(std::string_view uri, operator_t op) {
@@ -325,7 +329,7 @@ operator_t wrap(std::string_view uri, operator_t op) {
             warned = true;
             std::fprintf(
                 stderr,
-                "[camel] CAMEL_EFFECT_TRACE: more than %zu effectful operators; '%s' and later "
+                "[camel] std::profile(effect_trace): more than %zu effectful operators; '%s' and later "
                 "ones are not traced\n",
                 kMaxWrapped,
                 key.c_str());

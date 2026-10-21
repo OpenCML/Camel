@@ -125,7 +125,7 @@ desc = "An exception that escapes a pass (here the test-only pass test::drop_cal
 kind = "behavior"
 case = "../../../cases/opt/generic/broken_graph.cml"
 args = ["--output-format", "json", "${case}", "test::drop_call_argument", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 1
 verify_script = """
 const text = input.normalized.stdout
@@ -148,7 +148,7 @@ desc = "The same failure in text mode is a diagnostic line with the name and cod
 kind = "behavior"
 case = "../../../cases/opt/generic/broken_graph.cml"
 args = ["${case}", "test::drop_call_argument", "std::fvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+
 expect_exit = 1
 expect_output_contains = ["Pass 'test::drop_call_argument' failed with an internal error", "name=RuntimeDiag::PassInternalError, code=0x0400000C"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]

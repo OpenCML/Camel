@@ -16,20 +16,20 @@ N=${N:-200000}
 NSTRESS=${NSTRESS:-300}
 T=${T:-60}
 ulimit -c 0
-run() { # label n env...
-    local label=$1 n=$2; shift 2
+run() { # label n gc env...
+    local label=$1 n=$2 gc=$3; shift 3
     local out rc
-    out=$(env "$@" timeout "$T" "$CAMEL" "$FILE" --arg n="$n" $PASSES $BACKEND 2>&1); rc=$?
+    out=$(env "$@" timeout "$T" "$CAMEL" ${gc:+--gc "$gc"} "$FILE" --arg n="$n" $PASSES $BACKEND 2>&1); rc=$?
     printf '  %-28s n=%-7s exit=%-3s %s\n' "$label" "$n" "$rc" \
         "$(printf '%s' "$out" | sed 's/\x1b\[[0-9;]*m//g' | grep -v '^$' | head -1 | cut -c1-100)"
 }
 for FILE in "$@"; do
     for BACKEND in $BACKENDS; do
         echo "== $(basename "$FILE") $PASSES $BACKEND"
-        run "mark-sweep (default)"       "$N"       X=1
-        run "generational"               "$N"       CAMEL_GC=generational
-        run "mark-sweep, forced major"   "$NSTRESS" CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=major
-        run "generational, forced minor" "$NSTRESS" CAMEL_GC=generational CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=minor
-        run "poison"                     "$NSTRESS" CAMEL_GC_POISON=1
+        run "mark-sweep (default)"       "$N"       mark-sweep  X=1
+        run "generational"               "$N"       generational
+        run "mark-sweep, forced major"   "$NSTRESS" mark-sweep  CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=major
+        run "generational, forced minor" "$NSTRESS" generational CAMEL_GC_STRESS_SAFEPOINT=1 CAMEL_GC_STRESS_MODE=minor
+        run "poison"                     "$NSTRESS" generational CAMEL_GC_POISON=1
     done
 done

@@ -25,7 +25,7 @@
  * protocol `semtest` declared here, the text form, splitting dims for tiles and the strided
  * view of a row-major operand. It prints one line per check, `INDEX <check> <result>`, and
  * returns the program's graph unchanged. It can only be named when the environment variable
- * CAMEL_ENABLE_TEST_PASSES is set (fault.h).
+ * they are named by a test pipeline (fault.h).
  */
 
 #pragma once

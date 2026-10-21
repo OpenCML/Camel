@@ -437,7 +437,7 @@ void GenerationalAllocatorWithGC::majorGC() {
 bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
     if (!enableYoungGenCopying_) {
         throw std::runtime_error(
-            "GC remembered-set self-test requires CAMEL_GC_ENABLE_YOUNG_COPYING=1");
+            "GC remembered-set self-test requires the generational collector (--gc generational)");
     }
 
     auto *stringType = type::Type::String();

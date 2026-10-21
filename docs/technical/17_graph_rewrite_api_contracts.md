@@ -149,7 +149,7 @@
 旧的 `src/compile/gir/validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
 已于 2026-10-13 删除（图数据模型迁移第 1 步）；上面的检查取代了它。
 
-测试用的故障注入遍（`src/passes/test/fault.cpp`）只在设置环境变量 `CAMEL_ENABLE_TEST_PASSES` 时可用，
+测试用的故障注入遍（`src/passes/test/fault.cpp`）是只供测试的遍：在流水线里写出名字即可用，没有任何环境变量门控，
 用来验证破坏结构的图会在提交时被拒绝：`test::drop_call_argument`（条款 7）、`test::leak_branch_arm`
 （条款 6）与 `test::arm_loop_regions`（4.1 里循环区域的规则）。
 

@@ -19,6 +19,7 @@
 
 #include "fastvm.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/core/mm.h"
 #include "camel/core/module/module.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/loop_driver.h"
@@ -554,7 +555,7 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
         FastVMSchedPass *vm;
         ~StatsAtExit() {
             vm->statsWrite();
-            if (std::getenv("CAMEL_GC_STATS") != nullptr) {
+            if (camel::core::mm::statsReportEnabled()) {
                 std::cerr << "fvm_code_bytecodes=" << vm->bytecodes_.size() << '\n';
 #if ENABLE_FASTVM_JIT
                 // The entries name the graph versions that were compiled on the way; one whose

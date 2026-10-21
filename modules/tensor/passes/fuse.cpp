@@ -307,14 +307,12 @@ void registerTensorPasses() {
     });
     // Fuse reads the permissions and attributes of the nodes it merges.
     core::tag::declareReader("tensor::fuse");
-    // The declaration evaluator is a test (index_eval.h): it exists only when test passes are
-    // enabled, as the core's test passes do (CAMEL_ENABLE_TEST_PASSES).
-    if (std::getenv("CAMEL_ENABLE_TEST_PASSES") != nullptr) {
-        registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
-            return std::make_unique<IndexEvalTestPass>(ctx);
-        });
-        registerParamEchoTestPass();
-    }
+    // The declaration evaluator is a test (index_eval.h): it is reachable by name and in no default
+    // pipeline, which is the whole switch (H81 removed the environment variable that gated it).
+    registerModulePass("tensor::test_index_eval", [](const core::context::context_ptr_t &ctx) {
+        return std::make_unique<IndexEvalTestPass>(ctx);
+    });
+    registerParamEchoTestPass();
 }
 
 } // namespace camel::tensor::passes

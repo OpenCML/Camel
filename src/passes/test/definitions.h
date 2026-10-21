@@ -19,7 +19,7 @@
 
 /*
  * TEST-ONLY passes over the definition graphs of operators (camel/runtime/definitions.h). They
- * can only be named when the environment variable CAMEL_ENABLE_TEST_PASSES is set (fault.h).
+ * are named by a test pipeline; no environment variable gates them (fault.h).
  *
  * `test::definitions` prints one line per check, `DEFINITION <check> <result>`: the definitions
  * the tensor module declares (key, the function's graph, its parameters and content hash);

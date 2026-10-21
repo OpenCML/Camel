@@ -52,25 +52,38 @@ GrowableBumpAllocator &permSpace();
 
 /// The data block space (core/mm/block.h). A non-moving free-list space, like the meta space:
 /// a data pointer handed to a kernel, DLPack or Python stays valid until the last reference
-/// drops. Its limit is CAMEL_BLOCK_LIMIT_MB, default 256 MB, and can be raised like the other
-/// spaces.
-constexpr const char *kBlockSpaceLimitEnv = "CAMEL_BLOCK_LIMIT_MB";
+/// drops. Its limit is `--block-limit <megabytes>` (default 2048 MB), chosen before the space
+/// exists; like the other space limits it only catches a runaway allocation, and a program that
+/// builds several large models in one process legitimately needs it higher.
+constexpr size_t kDefaultBlockSpaceLimitBytes = 2048 * MB;
 GrowableFreeListAllocator &blockSpace();
+
+/// Selects the limit of the block space for this process (`--block-limit`). It has to be called
+/// before the block space is first used; it returns false, and changes nothing, when that has
+/// already happened (the space is laid out once).
+bool selectBlockSpaceLimit(size_t bytes);
 
 /// One line with the occupancy of the graph, permanent and meta spaces (`[camel] spaces: ...`):
 /// bytes in use now and at the high-water mark, bytes reserved, segments, allocations, limit.
-/// Printed at exit after the collector's line when CAMEL_GC_STATS is set.
+/// Printed at exit after the collector's line when the statistics were turned on with
+/// `std::profile(gc_stats=...)`.
 void reportSpaceUsage(std::ostream &os);
 
 /// Which collector the auto space runs.
 enum class CollectorMode {
-    MarkSweep,    // Non-moving mark-sweep: every object keeps its address. The default.
-    Generational, // Young objects are copied (they move); old ones are marked and swept.
+    MarkSweep,    // Non-moving mark-sweep: every object keeps its address (--gc mark-sweep).
+    Generational, // Young objects are copied (they move); old ones are marked and swept. Default.
 };
 
-/// The environment variable that selects the collector: `generational` (or 1) or `mark-sweep`
-/// (or 0). `--gc <mode>` on the command line wins over it.
-constexpr const char *kCollectorModeEnv = "CAMEL_GC";
+/// Asks for the allocator's statistics at exit, the way `std::profile(gc_stats=<level>)` does:
+/// 1 prints one line of pacing statistics and the occupancy of the spaces, 2 also prints one
+/// line per major collection. May be called before the auto space exists (the request is kept)
+/// or after it (it is applied at once).
+void enableStatsReport(int level);
+
+/// True once enableStatsReport asked for the statistics; other diagnostics (the FastVM's code
+/// counters) print their line under the same switch.
+bool statsReportEnabled();
 
 /// Selects the collector for this process. It has to be called before the auto space is first
 /// used (the spaces are laid out once); it returns false, and changes nothing, when that has

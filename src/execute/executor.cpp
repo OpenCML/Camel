@@ -77,8 +77,9 @@ std::optional<operator_t> ExecutorManager::find(const std::string &uri) const {
         return std::nullopt;
     }
     const std::string protocol = uri.substr(0, pos);
-    // With CAMEL_EFFECT_TRACE set, effectful operators are handed out behind a logging
-    // trampoline (camel/core/effect_trace.h); otherwise wrap() returns the operator unchanged.
+    // With a trace file set by std::profile(effect_trace="..."), effectful operators are handed
+    // out behind a logging trampoline (camel/core/effect_trace.h); otherwise wrap() returns the
+    // operator unchanged.
     auto traced = [&uri](std::optional<operator_t> op) -> std::optional<operator_t> {
         if (op && camel::core::effect_trace::enabled()) {
             return camel::core::effect_trace::wrap(uri, *op);

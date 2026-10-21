@@ -23,8 +23,11 @@
 
 #include "profile.h"
 
+#include "camel/core/effect_trace.h"
+#include "camel/core/mm.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/source/manager.h"
+#include "camel/core/type/storage.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/reachable.h"
 
@@ -110,15 +113,35 @@ std::string joined(const std::vector<std::string> &texts, size_t limit = 6) {
 
 ProfilePass::ProfilePass(
     const camel::core::context::context_ptr_t &ctx, camel::profile::ReportOptions options,
-    std::string jsonPath)
-    : RuntimeGraphRewritePass(ctx), options_(options), jsonPath_(std::move(jsonPath)) {}
+    std::string jsonPath, int gcStats, bool typeStats, std::string effectTracePath)
+    : RuntimeGraphRewritePass(ctx), options_(options), jsonPath_(std::move(jsonPath)),
+      gcStats_(gcStats), typeStats_(typeStats),
+      effectTracePath_(std::move(effectTracePath)) {}
 
 const Program *ProfilePass::apply(const Program *program, std::ostream &os) {
     (void)os;
-    camel::profile::enable();
-    camel::profile::setReportOptions(options_);
-    camel::profile::setJsonPath(jsonPath_);
+    // A pass that only turns on a diagnostic (gc_stats, type_stats, effect_trace, with report=false
+    // and hints=false) must not start the profiler: its instrumentation would slow the run down
+    // and change what a benchmark measures.
+    if (options_.report || !jsonPath_.empty()) {
+        camel::profile::enable();
+        camel::profile::setReportOptions(options_);
+        camel::profile::setJsonPath(jsonPath_);
+    }
+    // The diagnostics the pass can also turn on. They are set before any pass can execute the
+    // program.
+    if (gcStats_ > 0) {
+        camel::core::mm::enableStatsReport(gcStats_);
+    }
+    if (typeStats_) {
+        camel::core::type::enableTypeStatsReport();
+    }
+    if (!effectTracePath_.empty()) {
+        camel::core::effect_trace::setTraceFile(effectTracePath_);
+    }
     if (options_.hints) {
+        camel::profile::enable();
+        camel::profile::setReportOptions(options_);
         noteLoopsOf(*program);
     }
     return program;
