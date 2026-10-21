@@ -164,6 +164,9 @@ void Builder::buildEntryCall() {
 }
 
 compile_graph_ptr_t Builder::enterScope(FunctionType *funcType, const std::string &name) {
+    // A new graph is a new set of draft nodes: an access remembered for an earlier graph can
+    // never be reused here (staticAccessCache_).
+    staticAccessCache_.clear();
     std::string scopeName = name;
     if (name.empty()) {
         const bool atRoot = currGraph_ == rootGraph_;
@@ -439,6 +442,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitTypeMatchNode(node);
     case GCT::NodeKind::SFOR:
         return visitStaticForNode(node);
+    case GCT::NodeKind::SCOMP:
+        return visitStaticComprehensionNode(node);
     case GCT::NodeKind::SACC:
         return visitStaticAccessNode(node);
     default:

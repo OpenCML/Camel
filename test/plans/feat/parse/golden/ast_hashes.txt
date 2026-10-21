@@ -815,6 +815,10 @@ cb91792c07cb9264 no test/cases/compile/semantic/try_not_in_language.cml
 e8928bd66be13ec1 ok test/cases/compile/semantic/type_contains_itself.cml
 c763c15acc84ef96 ok test/cases/compile/semantic/type_recursion_through_map.cml
 d7b768e95cb9dfd1 ok test/cases/compile/semantic/unresolved_reference.cml
+e2351af2c964f64e ok test/cases/compile/static_expansion/comprehension_void_element.cml
+a98de8fd0f232f13 ok test/cases/compile/static_expansion/comprehensions.cml
+8501ff837910619c ok test/cases/compile/static_expansion/comprehensions_graph.cml
+449ef22714447961 ok test/cases/compile/static_expansion/comprehensions_rebuild.cml
 cdce26077d5ae48e ok test/cases/compile/static_expansion/fields_and_access.cml
 ca9fa691761f00f6 ok test/cases/compile/static_expansion/match_type_exhaustive.cml
 6d011d3422c19172 ok test/cases/compile/static_expansion/match_type_shapes.cml
@@ -1781,6 +1785,8 @@ d5350cbd17ad4ab0 ok test/cases/modules/tiles/batch_matmul.cml
 86113175d9f9f4c4 ok test/cases/modules/tiles/boundaries.cml
 d7f09150b2048d4a ok test/cases/modules/tiles/branch_effect.cml
 8deb1282283424ad ok test/cases/modules/tiles/branches.cml
+56d563603d97ff10 ok test/cases/modules/tiles/cast_dtype.cml
+d39356dc4df797d4 ok test/cases/modules/tiles/cast_like.cml
 fa8efa1b9430518e ok test/cases/modules/tiles/compiled_region.cml
 0f969d23938d7bac ok test/cases/modules/tiles/consistency.cml
 3f924524b970918f ok test/cases/modules/tiles/core_views.cml

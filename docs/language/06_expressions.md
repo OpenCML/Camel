@@ -407,7 +407,7 @@ func duplicate(t: typeas T) {
 - `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
 - `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`、`typeas F`），不能当值用。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
-- `static for` 是语句：块的值总是被丢弃，整个构造的值是 `void`。它不能出现在需要值的位置。
+- `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
 - `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量，或外层 `static for` 的 `n`。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
 - 结构体没有这个字段报 `SemanticDiag::StaticAccessUnknownField`；元组的下标越界（或键不是下标）报 `SemanticDiag::StaticAccessIndexOutOfRange`；目标不是结构体或普通元组报 `SemanticDiag::StaticAccessNotInternal`。`t.["0"]` 与 `t.[0]` 对元组是同一个元素。
 - 字段的值被丢弃时（`t.[n];` 单独成句），只检查字段，不建 `ACCS`；目标表达式仍然求值，以保留它的副作用。
@@ -424,7 +424,26 @@ func first(t: (int, float)) {
 }
 ```
 
-`static for` 与 C++ 版 `tree_map` 对同一棵树建出的图相同：字段访问是同样的 `ACCS`，按声明顺序，叶子上的调用直接建进当前图。不同之处只在展开的另一半（把结果装回同形状的树）需要 comprehension（H51 的后续步骤）。
+**Comprehension：把各轮的值装回同一形状。** `static for` 也可以写在需要值的位置：`{ static for (n, F) in fields T => e }` 得到一个结构体，`( static for (n, F) in fields T => e )` 得到一个元组，字段或元素与 `T` 同名、同序，每个来自一轮的值。
+
+- 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
+- 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
+- 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，最后每个结构体/元组一个 `FILL` 把各轮的值装回同形状，comprehension 本身没有节点。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
+- `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for (n, F) in fields T => 块`。
+
+```cml
+func doubled(t: {a: int, b: int}): {a: int, b: int} {
+    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+}
+
+func rebuild(t: typeas T) {
+    return match type T {
+        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
+        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case _ => t
+    }
+}
+```
 
 ### 6.8.5 `loop`
 

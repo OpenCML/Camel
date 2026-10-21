@@ -1151,7 +1151,20 @@ class Builder {
     /// case's body, in the current graph (no branch node).
     node_handle_t visitTypeMatchNode(const GCT::node_ptr_t &gct);
     /// `static for (n, F) in fields T`: the body is built once per field, in the current graph.
-    node_handle_t visitStaticForNode(const GCT::node_ptr_t &gct);
+    /// With `values`, each round's value is collected instead of dropped (a comprehension); with
+    /// `shape`, the type the fields were taken from is handed back for the caller to pack.
+    node_handle_t visitStaticForNode(
+        const GCT::node_ptr_t &gct, std::vector<node_handle_t> *values = nullptr,
+        Type **shape = nullptr);
+    /// `{ static for ... }` / `( static for ... )`: the rounds' values are packed into a struct or
+    /// tuple of the same fields with one FILL; the comprehension leaves no node of its own.
+    node_handle_t visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
+    /// The pack the C++ `tree_map` expansion makes: a static value of `values.size()` slots and a
+    /// FILL whose type has the fields of `shape` (a tuple of the values' types when `shape` is not
+    /// a struct). The origins are recorded against `origin` under `originKind`.
+    node_handle_t packStaticValues(
+        bool isStruct, Type *shape, const std::vector<node_handle_t> &values,
+        const GCT::node_ptr_t &origin, const char *originKind);
     /// `t.[key]`: the field or tuple element is chosen at compile time.
     node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
     bool typeCaseMatches(Type *subject, uint16_t patterns) const;
@@ -1457,6 +1470,19 @@ class Builder {
     /// statement may be the rebinding `acc = acc->append<v>` (rebindingAppendOf) or a pure
     /// operation whose result is lost (rejectUnusedPureResult).
     const GCT::Node *unusedStatement_ = nullptr;
+
+    // ---- Comprehensions and static access (H51 steps 3 and 4) ------------------------------
+    //
+    // `t.[n].[m]` inside a `static for` names the same parent once per inner round. The parent's
+    // value does not change between the rounds of one expansion (the target is the same node:
+    // a parameter or a `let`), so the second `t.[n]` would be a second ACCS on the same parent.
+    // The access is remembered for the duration of the expansion and reused: a bound name and
+    // the access written out build the same graph. Only an expansion reuses it; outside one the
+    // cache is not consulted. Keyed by the target's draft node and the resolved field, both
+    // already compared by identity; a target that makes a fresh node (a `var` read, a call)
+    // therefore never matches an earlier round.
+    std::map<std::pair<node_handle_t, std::string>, node_handle_t> staticAccessCache_;
+    size_t staticExpansionDepth_ = 0;
     /// `acc = acc->append<v>` as the statement `gct`, `acc` a variable and `append` the
     /// built-in one: the same rebinding, written with the operator __assn_append__, which
     /// grows the array in place while only the variable refers to it. Returns nullptr when

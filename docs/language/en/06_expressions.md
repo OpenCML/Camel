@@ -407,7 +407,7 @@ func duplicate(t: typeas T) {
 - `T` must be concrete and an [R3 inner node](../../design/generic-structure/README.cn.md): a struct or an **ordinary** tuple. `T?`, `T!`, a mutable cell, a scalar, an array and a function are leaves and report `SemanticDiag::StaticForNotComposite`; handle them with `match type` first.
 - `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type. Both are visible in the block only; `F` may be written in a type position (`let x: F`, `typeas F`) but is not a value.
 - Fields are expanded in declaration order, each with its own block scope. An empty struct or tuple expands zero times and the block is not built at all.
-- `static for` is a statement: the value of the block is always dropped, and the construct has type `void`. It cannot stand where a value is needed.
+- As a statement, `static for` always drops the value of the block, and the construct has type `void`; where a value is needed, write the comprehension form (below).
 - `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, or the `n` of an enclosing `static for`. Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
 - A struct without that field reports `SemanticDiag::StaticAccessUnknownField`; a tuple index past the end (or a key that is not an index) reports `SemanticDiag::StaticAccessIndexOutOfRange`; a target that is not a struct or an ordinary tuple reports `SemanticDiag::StaticAccessNotInternal`. For a tuple, `t.["0"]` and `t.[0]` are the same element.
 - When the field's value is dropped (a `t.[n];` statement on its own), the field is checked but no `ACCS` is built; the target expression is still evaluated, so its effects remain.
@@ -424,7 +424,26 @@ func first(t: (int, float)) {
 }
 ```
 
-For the same tree, `static for` builds the same graph as the C++ `tree_map`: the same `ACCS` nodes in declaration order, and the calls on the leaves built directly into the current graph. The other half of the expansion (packing the results into a tree of the same shape) needs comprehensions, a later step of H51.
+**Comprehensions: packing the rounds back into the same shape.** A `static for` may also be written where a value is needed: `{ static for (n, F) in fields T => e }` gives a struct and `( static for (n, F) in fields T => e )` gives a tuple, with the fields or elements of `T`, in the same names and order, each from one round's value.
+
+- The **value of the block is the round's value**: unlike the statement form, it is not dropped. The block may use `let`, and its last statement's value is the field's value; a block that gives none (an empty block, or one ending in a statement without a value) reports `SemanticDiag::StaticComprehensionVoidElement`.
+- An empty struct or tuple has no round; the value is `{}` / `()` (a `FILL` with no slot).
+- The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and one `FILL` per struct or tuple packs the rounds' values into the same shape; the comprehension leaves no node of its own. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
+- `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for (n, F) in fields T => block`.
+
+```cml
+func doubled(t: {a: int, b: int}): {a: int, b: int} {
+    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+}
+
+func rebuild(t: typeas T) {
+    return match type T {
+        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
+        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case _ => t
+    }
+}
+```
 
 ### 6.8.5 `loop`
 

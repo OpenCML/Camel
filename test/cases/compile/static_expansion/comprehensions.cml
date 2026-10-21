@@ -1,0 +1,57 @@
+/**
+ * A comprehension (H51 step 4) is a `static for` written where a value is needed: `{ ... }`
+ * builds a struct with the fields of the type it walks, `( ... )` a tuple with its elements,
+ * both in declaration order, each from one round's value. A block in a comprehension keeps its
+ * value (unlike the statement form) and the empty struct gives an empty value.
+ */
+module comprehensions
+
+/** `()` in a type position after `fields` would read as a function type, so name it. */
+type EmptyTuple = ()
+
+func doubled(t: {a: int, b: int}): {a: int, b: int} {
+    return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
+}
+
+func shifted(t: (int, int)): (int, int) {
+    return ( static for (n, F) in fields (int, int) => t.[n] + 1 )
+}
+
+/** The block of a round is an ordinary block: `F` is usable as a type and the last statement
+ * is the field's value. */
+func incremented(t: {a: int, b: int}): {a: int, b: int} {
+    return { static for (n, F) in fields {a: int, b: int} => {
+        let v: F = t.[n]
+        v + 1
+    } }
+}
+
+/** An empty shape has no round: the value is the empty struct. */
+func noFields(): {} {
+    return { static for (n, F) in fields {} => 0 }
+}
+
+/** An empty tuple has no round either: the value is the empty tuple. */
+func noElements(): EmptyTuple {
+    return ( static for (n, F) in fields EmptyTuple => 0 )
+}
+
+func describeEmpty(e: {}): string {
+    return 'empty struct'
+}
+
+func describeEmptyTuple(e: EmptyTuple): string {
+    return 'empty tuple'
+}
+
+func main(): int sync {
+    let d = doubled({a: 1, b: 2})
+    println(d.a, d.b)
+    let s = shifted((3, 4))
+    println(s.0, s.1)
+    let i = incremented({a: 10, b: 20})
+    println(i.a, i.b)
+    println(describeEmpty(noFields()))
+    println(describeEmptyTuple(noElements()))
+    return 0
+}

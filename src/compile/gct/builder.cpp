@@ -1867,6 +1867,12 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::Tuple:
         dataNode = visitTupleData(ast);
         break;
+    case AST::DataType::StructComp:
+        dataNode = visitStaticComprehension(ast, true);
+        break;
+    case AST::DataType::TupleComp:
+        dataNode = visitStaticComprehension(ast, false);
+        break;
     case AST::DataType::Func:
         dataNode = visitFuncData(ast);
         break;
@@ -2894,6 +2900,23 @@ node_ptr_t Builder::visitStaticAccess(const AST::node_ptr_t &ast) {
     *accessNode << targetNode << keyNode;
     LEAVE("StaticAccess");
     return accessNode;
+}
+
+/*
+structData : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
+tupleData  : '(' dataList? ','? ')' | '(' staticForExpr ')'
+The comprehension alternatives are their own AST nodes (StructComp / TupleComp): a generator and
+nothing else. The GCT node holds the shape and the generator; the rounds are packed in GIR.
+*/
+node_ptr_t Builder::visitStaticComprehension(const AST::node_ptr_t &ast, bool isStruct) {
+    ENTER("StaticComprehension");
+    node_ptr_t compNode = tree_->makeComprehension(isStruct);
+    setOriginFromAst(
+        context_, compNode, ast, camel::source::OriginKind::GctNode, "gct.static.comprehension");
+    ASSERT(ast->size() == 1, "A static comprehension has its generator as its only child.");
+    *compNode << visitStaticFor(ast->at(0));
+    LEAVE("StaticComprehension");
+    return compNode;
 }
 
 /*

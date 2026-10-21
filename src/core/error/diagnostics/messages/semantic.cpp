@@ -1295,6 +1295,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StaticComprehensionVoidElement,
+            {
+                "StaticComprehensionVoidElement",
+                "The block for the field '{0}' of '{1}' gives no value, so the comprehension "
+                "has no element for it.",
+                "The block is the value of one field: its last statement must have a value. A "
+                "call that returns nothing, or a block that ends in a declaration, gives no "
+                "element; the statement form 'static for' is the one that drops values.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",

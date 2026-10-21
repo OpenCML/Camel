@@ -1295,9 +1295,14 @@ any Formatter::visitMemberAccess(cst::MemberAccess context) {
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
+    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
     ;
 */
 any Formatter::visitStructData(cst::StructData context) {
+    // A comprehension holds its generator and nothing else.
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        return "{" + any_cast<string>(visitStaticForExpr(generator)) + "}";
+    }
     const auto &pairedValues = context->get<cst::PairedValues>();
     if (pairedValues) {
         return "{" +
@@ -1342,9 +1347,13 @@ any Formatter::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
+    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
     ;
 */
 any Formatter::visitTupleData(cst::TupleData context) {
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        return "(" + any_cast<string>(visitStaticForExpr(generator)) + ")";
+    }
     if (context->get<cst::DataList>()) {
         return "(" + any_cast<string>(visitDataList(context->get<cst::DataList>())) +
                (hasTrailingComma(context) ? "," : "") + ")";
