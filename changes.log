@@ -1,3 +1,5 @@
+[0.2.22]
+
 [0.2.21]
 Changes:
 - 规则引擎：rule 声明（解析、格式化、编译成函数）、RuleSource 与 compileRule、rewrite/saturate/extract/check，以及 rules 模块的标准整数与浮点规则库（26 条精确规则）和 rules::simplify/rules::saturate_all。
