@@ -228,12 +228,15 @@ bool isRuleSide(const camel::runtime::GCGraph &graph) {
     return name.ends_with("__lhs") || name.ends_with("__rhs") || name.ends_with("__when");
 }
 
-/// `rewrite(p, rules)`: the program with the rules applied one way, in place, to a fixpoint
-/// (rewrite design 3). An error value when a rule cannot be a rule, holds both ways, or the
-/// result is not a program.
+/// `rewrite(p, rules)` and `rewrite(p, rules, strict)`: the program with the rules applied one way,
+/// in place, to a fixpoint (rewrite design 3). The third parameter chooses the numeric policy of
+/// the pass itself (design principles 7.4, 7.5): `strict` grants no permission, as
+/// `std::opt(safe_fp=true)` does, so only the laws that need none fire.
+/// An error value when a rule cannot be a rule, holds both ways, or the result is not a program.
 slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
     const auto *base            = norm.get<const camel::runtime::Program *>(0);
+    const bool strict           = norm.size() > 2 && norm.get<Bool>(2);
     try {
         const auto compiled = engineRules(ctx, norm, 1);
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
@@ -248,7 +251,8 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             camel::runtime::GraphDraft &draft = session.edit(graph);
             camel::runtime::DraftWritings writings(
                 draft,
-                camel::core::sem::NumericPolicy::relaxed());
+                strict ? camel::core::sem::NumericPolicy::strict()
+                       : camel::core::sem::NumericPolicy::relaxed());
             writings.rewrite(compiled);
         }
         const camel::runtime::Program *committed = session.commitChecked();
@@ -264,14 +268,16 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
-/// `saturate(p, rules, rounds)`: the program with the rules applied both ways to the writings of
-/// every value, adding writings until nothing new is found or `rounds` rounds were made
-/// (rewrite design 3, graph store 3.5). The result has values with several writings: `extract`
-/// (or the pipeline, before a pass that runs or translates it) chooses one.
+/// `saturate(p, rules, rounds)` and `saturate(p, rules, rounds, strict)`: the program with the
+/// rules applied both ways to the writings of every value, adding writings until nothing new is
+/// found or `rounds` rounds were made (rewrite design 3, graph store 3.5). The last parameter is
+/// the pass's numeric policy, as for `rewrite`. The result has values with several writings:
+/// `extract` (or the pipeline, before a pass that runs or translates it) chooses one.
 slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
     const auto *base            = norm.get<const camel::runtime::Program *>(0);
     const int64_t rounds        = norm.get<Int64>(2);
+    const bool strict           = norm.size() > 3 && norm.get<Bool>(3);
     try {
         const auto compiled = engineRules(ctx, norm, 1);
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
@@ -289,7 +295,8 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             camel::runtime::GraphDraft &draft = session.edit(graph);
             camel::runtime::DraftWritings writings(
                 draft,
-                camel::core::sem::NumericPolicy::relaxed());
+                strict ? camel::core::sem::NumericPolicy::strict()
+                       : camel::core::sem::NumericPolicy::relaxed());
             writings.build();
             writings.saturate(compiled, budget);
             writings.save();
@@ -845,13 +852,22 @@ class RewriteModule final : public BuiltinModule {
                 "rewrite",
                 {{"rewrite:rewrite",
                   DynamicFuncTypeResolver::create(
-                      {{0, {}}, {2, {false, false}}},
-                      "(p: Program, rules: (() => Rule)[]) => Program!",
+                      {{0, {}}, {-1, {}}},
+                      "(p: Program, rules: (() => Rule)[], strict: bool) => Program!",
                       [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
                           // The Program type belongs to the module graph; it is told by its name.
-                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1]))
+                          // The policy parameter is optional: 2 arguments grant the default
+                          // permissions, 3 choose the policy of the pass.
+                          if (norm.size() != 2 && norm.size() != 3) {
                               return std::nullopt;
+                          }
+                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1])) {
+                              return std::nullopt;
+                          }
+                          if (norm.size() == 3 && norm[2]->code() != TypeCode::Bool) {
+                              return std::nullopt;
+                          }
                           return TupleType::fallible(norm[0]);
                       })}}));
         exportEntity(
@@ -860,13 +876,20 @@ class RewriteModule final : public BuiltinModule {
                 "saturate",
                 {{"rewrite:saturate",
                   DynamicFuncTypeResolver::create(
-                      {{0, {}}, {3, {false, false, false}}},
-                      "(p: Program, rules: (() => Rule)[], rounds: int) => Program!",
+                      {{0, {}}, {-1, {}}},
+                      "(p: Program, rules: (() => Rule)[], rounds: int, strict: bool) => Program!",
                       [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
-                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1]) ||
-                              norm[2]->code() != TypeCode::Int64)
+                          if (norm.size() != 3 && norm.size() != 4) {
                               return std::nullopt;
+                          }
+                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1]) ||
+                              norm[2]->code() != TypeCode::Int64) {
+                              return std::nullopt;
+                          }
+                          if (norm.size() == 4 && norm[3]->code() != TypeCode::Bool) {
+                              return std::nullopt;
+                          }
                           return TupleType::fallible(norm[0]);
                       })}}));
         exportEntity(
