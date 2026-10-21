@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "camel-lang"
-version = "0.2.23"
+version = "0.2.24"
 description = "Camel: A Next-Generation Language for AI and High-Performance Computing"
 license = "MIT"
 license-files = ["LICENSE"]
