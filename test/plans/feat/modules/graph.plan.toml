@@ -397,20 +397,20 @@ timeout_ms = 30000
 
 [[tests]]
 name = "regions_of_a_program_without_regions"
-desc = "region_of is null for every node of a graph that has the body only; region_parent is never called for one."
+desc = "Every node of a graph with the body only is in region 0, whose kind is Root."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "regionprobe::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "2\n0\n0\n2\n4\n0\n0\n4\n42\n"
+expect_stdout_exact = "2\n2\n0\n2\n4\n4\n0\n4\n42\n"
 timeout_ms = 10000
 
 [[tests]]
 name = "regions_after_inlining"
-desc = "After std::opt::inline, the inlined nodes are in Inline regions whose parent region exists."
+desc = "After std::opt::inline, body nodes are Root, inlined nodes are in Inline regions with a parent, and an Arm region is kept."
 kind = "behavior"
 case = "../../../cases/modules/graph_pass/region_target.cml"
 args = ["${case}", "std::opt::inline", "regionprobe::report", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "2\n0\n0\n2\n9\n9\n2\n9\n12\n12\n6\n12\n1\n0\n0\n1\n3\n0\n0\n3\n3\n"
+expect_stdout_exact = "2\n2\n0\n2\n7\n6\n0\n7\n10\n4\n5\n10\n3\n"
 timeout_ms = 20000
