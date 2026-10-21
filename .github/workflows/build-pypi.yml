@@ -54,6 +54,9 @@ env:
 
 jobs:
   build-wheel:
+    # Named explicitly: the default name would include every cfg field, so adding one to the matrix
+    # (msvc_runtime_version) would silently rename all eight checks.
+    name: build-wheel (${{ matrix.cfg.runner }}, ${{ matrix.cfg.slug }}, ${{ matrix.python-version }})
     strategy:
       fail-fast: false
       matrix:
