@@ -1053,6 +1053,28 @@ any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
 }
 
 /*
+staticLoopExpr
+    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    ;
+*/
+any Formatter::visitStaticLoopExpr(cst::StaticLoopExpr context) {
+    string text = "static loop ";
+    bool first  = true;
+    for (const auto state : context->all<cst::LoopState>()) {
+        text += (first ? "" : ", ") +
+                any_cast<string>(visitIdentDef(state.get<cst::IdentDef>())) + " = " +
+                any_cast<string>(visit(state.expr()));
+        first = false;
+    }
+    text += " for (" +
+            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(0))) + ", " +
+            any_cast<string>(visitIdentDef(context->get<cst::IdentDef>(1))) + ") in fields " +
+            any_cast<string>(visitType(context->type())) + " do " +
+            any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    return text;
+}
+
+/*
 catchClause
     : CATCH identDef ':' typeExpr stmtBlock
     ;
@@ -1721,6 +1743,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(MatchCase)
         CAMEL_FORMAT(MatchTypeExpr)
         CAMEL_FORMAT(StaticForExpr)
+        CAMEL_FORMAT(StaticLoopExpr)
         CAMEL_FORMAT(TypeCase)
         CAMEL_FORMAT(TypeCasePattern)
         CAMEL_FORMAT(CatchClause)

@@ -332,6 +332,22 @@ node_ptr_t Tree::makeStaticFor(const std::string &valueName, const std::string &
     return node;
 }
 
+node_ptr_t Tree::makeStaticLoop(
+    const std::vector<std::string> &state, const std::string &valueName,
+    const std::string &typeName) {
+    Node *node = makeNode(NodeKind::SLOOP);
+    const size_t count = state.size() + 2;
+    auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
+    list->count = count;
+    for (size_t i = 0; i < state.size(); ++i) {
+        list->items[i] = intern(state[i]);
+    }
+    list->items[count - 2] = intern(valueName);
+    list->items[count - 1] = intern(typeName);
+    node->payload_.names = list;
+    return node;
+}
+
 node_ptr_t Tree::makeStaticAccess() { return makeNode(NodeKind::SACC); }
 
 node_ptr_t Tree::makeComprehension(bool isStruct) {
@@ -475,7 +491,8 @@ node_ptr_t Tree::clone(const Node *node) {
         break;
     case NodeKind::EXPT:
     case NodeKind::LOOP:
-    case NodeKind::SFOR: {
+    case NodeKind::SFOR:
+    case NodeKind::SLOOP: {
         const Node::NameList *names = node->payload_.names;
         auto *list =
             static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(names->count)));
@@ -585,6 +602,13 @@ std::string Node::toString() const {
         return "SACC";
     case NodeKind::SCOMP:
         return std::string("SCOMP: ") + (comprehensionIsStruct() ? "struct" : "tuple");
+    case NodeKind::SLOOP: {
+        std::string text = "SLOOP: ";
+        for (size_t j = 0; j < staticLoopStateCount(); ++j) {
+            text += (j == 0 ? "" : ", ") + staticLoopStateName(j);
+        }
+        return text + " for (" + staticLoopValueName() + ", " + staticLoopTypeName() + ")";
+    }
     case NodeKind::TCASE: {
         std::string text = "TCASE: (";
         bool first       = true;

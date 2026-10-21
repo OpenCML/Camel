@@ -112,6 +112,13 @@ void ParserImpl::parseExpr() {
         return parseTry();
     case TK::KwLoop:
         return parseLoop();
+    case TK::KwStatic:
+        // `static for` is a statement (H51 step 3): only `static loop` is an expression, so a
+        // `static for` here keeps its old reading (the token is unexpected below).
+        if (peek(1) == TK::KwLoop) {
+            return parseStaticLoop();
+        }
+        return parseAssign();
     case TK::KwWait: {
         const size_t m = mark();
         bump();
@@ -963,36 +970,76 @@ void ParserImpl::parseTypeCase() {
     close(m, NK::TypeCase);
 }
 
-/// staticForExpr : 'static' 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr '=>'
-/// blockExpr
+/// staticForExpr : 'static' staticForHeader '=>' blockExpr
 /// `static for (n, F) in fields T => 块`（H51 步骤 3）：把结构体或元组的字段表在实例化时展开，
 /// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
 /// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
+/// The header is shared with `static loop`: the same `for (n, F) in fields T` says what is
+/// walked, and only what follows it differs (`=> 块` or `do 表达式`).
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
     bump(); // static
-    bump(); // for
-    if (!panic_ && expect(TK::LParen)) {
-        parseIdentDef();
-        if (!panic_ && expect(TK::Comma)) {
-            parseIdentDef();
-        }
-        if (!panic_) {
-            expect(TK::RParen);
-        }
-    }
-    if (!panic_ && expect(TK::KwIn)) {
-        if (atWord(0, "fields")) {
-            bump();
-        } else if (!panic_) {
-            unexpected({e(TK::Identifier)});
-        }
-        parseType();
-    }
+    parseStaticForHeader();
     if (!panic_ && expect(TK::FatArrow)) {
         parseBlockExpr();
     }
     close(m, NK::StaticForExpr);
+}
+
+/// staticForHeader : 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr
+/// The two names, then the type, become children of the node being built (no node of their own,
+/// as the parser of `loop` reads its `loopState` nodes directly).
+void ParserImpl::parseStaticForHeader() {
+    if (!panic_ && expect(TK::KwFor)) {
+        if (!panic_ && expect(TK::LParen)) {
+            parseIdentDef();
+            if (!panic_ && expect(TK::Comma)) {
+                parseIdentDef();
+            }
+            if (!panic_) {
+                expect(TK::RParen);
+            }
+        }
+        if (!panic_ && expect(TK::KwIn)) {
+            if (atWord(0, "fields")) {
+                bump();
+            } else if (!panic_) {
+                unexpected({e(TK::Identifier)});
+            }
+            parseType();
+        }
+    }
+}
+
+/// staticLoopExpr : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
+/// `static loop acc = 0 for (n, F) in fields T do 表达式`（H51 步骤 5）：在实例化时按字段顺序
+/// 展开的折叠。状态头与普通的 `loop` 相同（一个名字时结果就是这个值，多个名字时是元组）；
+/// 遍历**只能是** `for (n, F) in fields T`——没有 `while`，也没有普通序列的 `for`，因为轮数
+/// 必须由类型在实例化时确定。`do` 后面是循环体，它的值是下一轮的状态；展开后没有 LOOP 节点。
+void ParserImpl::parseStaticLoop() {
+    const size_t m = mark();
+    bump(); // static
+    bump(); // loop
+    for (;;) {
+        const size_t sm = mark();
+        parseIdentDef();
+        if (panic_ || !expect(TK::Assign)) {
+            close(sm, NK::LoopState);
+            return close(m, NK::StaticLoopExpr);
+        }
+        parseLogicalOr();
+        close(sm, NK::LoopState);
+        if (cur_ == TK::Comma && peek(1) == TK::Identifier && peek(2) == TK::Assign && !panic_) {
+            bump();
+            continue;
+        }
+        break;
+    }
+    parseStaticForHeader();
+    if (!panic_ && expect(TK::KwDo)) {
+        parseBlockExpr();
+    }
+    close(m, NK::StaticLoopExpr);
 }
 
 /// typeCasePattern : 'struct' | 'tuple' | '#' 'leaf' | '_'

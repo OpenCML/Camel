@@ -498,7 +498,9 @@ void ParserImpl::parseStmt() {
         return parseExpr();
     }
     case TK::KwStatic:
-        return parseStaticFor();
+        // `static for` is a statement; `static loop` is an expression with a value, and is
+        // read by parseExpr (`static` never starts anything else).
+        return peek(1) == TK::KwLoop ? parseStaticLoop() : parseStaticFor();
     case TK::KwWait: {
         // blockStmt : 'wait' stmtBlock, or the expression `wait {struct}`.
         const uint32_t brace = peek(1) == TK::KwSync ? 2 : 1;

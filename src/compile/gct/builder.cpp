@@ -1856,6 +1856,9 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::StaticFor:
         dataNode = visitStaticFor(ast);
         break;
+    case AST::DataType::StaticLoop:
+        dataNode = visitStaticLoop(ast);
+        break;
     case AST::DataType::StaticAccess:
         dataNode = visitStaticAccess(ast);
         break;
@@ -2897,6 +2900,55 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
 
     LEAVE("StaticFor");
     return forNode;
+}
+
+/*
+staticLoopExpr
+    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+The AST node holds the first values of the state (a Repeated Data), the type, and the body
+(StaticLoopLoad). The GCT node holds the TYPE first, then the first values, then the EXEC
+body. `F` is an ordinary type variable of the enclosing function's instance, bound per field
+by the graph builder; `n` and the state names are bound per round.
+*/
+node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
+    ENTER("StaticLoop");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticLoop");
+    const auto &load = ast->loadAs<AST::StaticLoopLoad>();
+
+    std::vector<std::string> state;
+    state.reserve(load->state().size());
+    for (const Reference &name : load->state()) {
+        state.push_back(name.toString());
+    }
+    node_ptr_t loopNode = tree_->makeStaticLoop(state, load->valueName(), load->typeName());
+    setOriginFromAst(context_, loopNode, ast, camel::source::OriginKind::GctNode, "gct.static.loop");
+
+    const ValueUseScope valueUseScope(*this);
+    valueUse_ = {};
+
+    const auto &typeAst = ast->atAs<AST::TypeLoad>(1);
+    Type *subject       = visitType(typeAst);
+    node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
+    setOriginFromAst(
+        context_, typeNode, typeAst, camel::source::OriginKind::GctNode, "gct.static.loop.type");
+    *loopNode << typeNode;
+
+    // The first values, evaluated once where the loop is, before the names of the head exist.
+    for (const auto &init : *ast->atAs<AST::RepeatedLoad>(0)) {
+        *loopNode << visitData(init);
+    }
+
+    // `F` names the type of one field in the body only (as in `static for`).
+    pushScope();
+    typeScope_->insert(
+        Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+    node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(2));
+    popScope();
+    *loopNode << bodyNode;
+
+    registerGctSemantic(context_, loopNode, ast);
+    LEAVE("StaticLoop");
+    return loopNode;
 }
 
 node_ptr_t Builder::visitStaticAccess(const AST::node_ptr_t &ast) {

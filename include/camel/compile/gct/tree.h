@@ -140,6 +140,12 @@ class Tree {
     /// `static for (n, F) in fields T` (children: TYPE, body). `valueName` is `n`, `typeName`
     /// is `F`; both are bound only while the body is built.
     node_ptr_t makeStaticFor(const std::string &valueName, const std::string &typeName);
+    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (children: TYPE, the k
+    /// first values, body). `state` are the names of the state; `valueName` is `n` and
+    /// `typeName` is `F`, both bound only while the body is built.
+    node_ptr_t makeStaticLoop(
+        const std::vector<std::string> &state, const std::string &valueName,
+        const std::string &typeName);
     /// `t.[key]` (children: the target, the key expression).
     node_ptr_t makeStaticAccess();
     /// A comprehension (child: the `static for` that generates it): `isStruct` for
