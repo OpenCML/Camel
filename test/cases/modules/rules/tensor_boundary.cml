@@ -18,11 +18,11 @@ func overflow(x: Vec): Vec { return x * 3.0e38 + x * 3.0e38 }
 
 /// The product of the coefficients underflows to zero in f32, while the program's own chain does
 /// not: at x = 1e30 the original is 1e-30 per element, the rewritten coefficient is 0.
-@numeric(no_infs)
+#[no_infs]
 func underflow(x: Vec): Vec { return (x * 1.0e-30) * 1.0e-30 }
 
 /// Coefficients that cancel: the rewrite would multiply by a zero of the other sign.
-@numeric(finite_math)
+#[finite_math]
 func mixed_zero(x: Vec): Vec { return x * 3.0 + x * -3.0 }
 
 // ---- The unguarded laws: the same patterns without the conditions ----

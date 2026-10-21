@@ -16,7 +16,7 @@ func f32_one_combine(x: f32): f32 { return x + x * 3.0 }
 func f32_combine_one_zero(x: f32): f32 { return x * -1.0 + x }
 func f32_combine_one_mixed(x: f32): f32 { return x * -3.0 + x }
 
-@numeric(finite_math)
+#[finite_math]
 func f32_combine_one_mixed_ok(x: f32): f32 { return x * -3.0 + x }
 
 func f64_combine_one(x: float): float { return x * 3.0 + x }

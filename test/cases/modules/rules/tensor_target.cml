@@ -12,12 +12,12 @@ type Vec = Tensor<f32, const [3]>
 func combine(x: Vec): Vec { return x * 3.0 + x * 5.0 }
 func combine_mixed(x: Vec): Vec { return x * 3.0 + x * -5.0 }
 
-@numeric(finite_math)
+#[finite_math]
 func combine_mixed_granted(x: Vec): Vec { return x * 3.0 + x * -5.0 }
 
 func fold(x: Vec): Vec { return (x * 3.0) * 2.0 }
 
-@numeric(no_infs)
+#[no_infs]
 func fold_granted(x: Vec): Vec { return (x * 3.0) * 5.0 }
 
 func double(x: Vec): Vec { return x * 3.0 + x * 3.0 }
@@ -26,7 +26,7 @@ func one(x: Vec): Vec { return x * 2.0 + x }
 func one_other(x: Vec): Vec { return x + x * 2.0 }
 func one_mixed(x: Vec): Vec { return x * -2.0 + x }
 
-@numeric(finite_math)
+#[finite_math]
 func one_mixed_granted(x: Vec): Vec { return x * -2.0 + x }
 
 func neutral(x: Vec): Vec { return (x * 1.0 + -0.0) - 0.0 }
