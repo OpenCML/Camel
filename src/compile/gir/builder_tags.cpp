@@ -152,7 +152,7 @@ std::optional<camel::core::tag::TagId> Builder::tagNamed(const std::string &writ
     // A tag is a name of the entity namespace: an imported one resolves exactly as an imported
     // function does, by name or through the module that exports it.
     const Reference ref(written);
-    if (auto entity = module_->getImportedEntity(ref);
+    if (auto entity = importedEntity(ref);
         entity.has_value() && entity->isTag()) {
         return entity->tagId();
     }

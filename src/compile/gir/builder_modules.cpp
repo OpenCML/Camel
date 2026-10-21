@@ -101,8 +101,10 @@ void Builder::reportImportNameConflicts() {
         for (size_t later = 1; later < imports.size(); ++later) {
             bool reported = false;
             for (size_t earlier = 0; earlier < later && !reported; ++earlier) {
-                const auto first = imports[earlier].mod->getExportedEntity(imports[earlier].remote);
-                const auto second = imports[later].mod->getExportedEntity(imports[later].remote);
+                const auto first =
+                    exports_->exportedEntity(*imports[earlier].mod, imports[earlier].remote);
+                const auto second =
+                    exports_->exportedEntity(*imports[later].mod, imports[later].remote);
                 if (!first || !second) {
                     continue;
                 }
@@ -212,7 +214,8 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
                 failed = true;
                 continue;
             }
-            module_->exportEntity(
+            exports_->exportEntity(
+                *module_,
                 ref,
                 camel::core::module::detail::EntityAccess::makeDecoratedGraph(
                     eraseCompileGraph(optDecorated.value())));
@@ -221,12 +224,16 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         if (auto declared = module_->declaredTag(name); declared.has_value()) {
             // A tag is a name the module exports like any other (design principles 6.2): a module
             // that imports it gets the tag itself, so a `#` use of it resolves there.
-            module_->exportEntity(
-                ref, camel::core::module::detail::EntityAccess::makeTag(*declared));
+            exports_->exportEntity(
+                *module_,
+                ref,
+                camel::core::module::detail::EntityAccess::makeTag(*declared));
             continue;
         }
         if (auto optType = unit_->typeDecls.find(ref); optType != unit_->typeDecls.end()) {
-            module_->exportType(ref, optType->second);
+            // A type declaration is the module's own and was exported when its construction tree
+            // was built (GCT, Module::exportType); it means the same in every program, so the
+            // program's table does not name it again.
             continue;
         }
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {
@@ -253,14 +260,16 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
             auto exported         = std::make_unique<ExportedValue>();
             exported->name        = name;
             exported->declaration = &declaration;
-            module_->exportEntity(
+            exports_->exportEntity(
+                *module_,
                 ref,
                 camel::core::module::detail::EntityAccess::makeNode(exported.get()));
             unit_->exportedValues.push_back(std::move(exported));
             continue;
         }
         if (auto optGraph = graphsAt(name); optGraph.has_value()) {
-            module_->exportEntity(
+            exports_->exportEntity(
+                *module_,
                 ref,
                 camel::core::module::detail::EntityAccess::makeGraphSet(
                     eraseCompileGraphSet(optGraph.value())));
@@ -269,7 +278,8 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
         if (auto optTemplate = templateScope_->get(name); optTemplate.has_value()) {
             // A generic function has no graph to export: the template is exported, and there
             // is one instance per set of types in the program (instantiateGeneric).
-            module_->exportEntity(
+            exports_->exportEntity(
+                *module_,
                 ref,
                 camel::core::module::detail::EntityAccess::makeGenericTemplate(
                     std::static_pointer_cast<void>(optTemplate.value())));

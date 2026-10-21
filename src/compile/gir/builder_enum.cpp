@@ -79,7 +79,7 @@ EnumType *Builder::enumTypeOfName(const Reference &name) {
     Type *resolved = nullptr;
     if (const auto declared = unit_->typeDecls.find(name); declared != unit_->typeDecls.end()) {
         resolved = declared->second;
-    } else if (const auto imported = module_->getImportedType(name); imported.has_value()) {
+    } else if (const auto imported = importedType(name); imported.has_value()) {
         resolved = imported.value();
     }
     if (resolved == nullptr) {

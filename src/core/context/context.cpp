@@ -113,6 +113,15 @@ Context::~Context() {
     runtimeGraphMgr_.reset();
 }
 
+camel::core::module::ProgramExports &Context::programExports() {
+    // Created on first use, like the facts and the definition store. Compilation of a context
+    // is single-threaded (the graph builder of the program is), so no lock is taken here.
+    if (!programExports_) {
+        programExports_ = std::make_unique<camel::core::module::ProgramExports>();
+    }
+    return *programExports_;
+}
+
 camel::runtime::DefinitionStore &Context::definitions() {
     // As facts(): created once, on the thread that first asks.
     static std::mutex creation;

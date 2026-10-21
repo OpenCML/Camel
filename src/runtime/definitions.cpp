@@ -297,7 +297,9 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     if (!module) {
         return refuse(problem);
     }
-    const auto entity = module->getExportedEntity(Reference(d.function));
+    // The library is declared into the context's program (compileAsLibrary); its exported names
+    // are that program's table (one table per program, task H42).
+    const auto entity = context_.programExports().exportedEntity(*module, Reference(d.function));
     using Access      = core::module::detail::EntityAccess;
     if (!entity) {
         return refuse(std::format("'{}' exports no '{}'", d.module, d.function));

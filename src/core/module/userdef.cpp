@@ -249,15 +249,12 @@ void UserDefinedModule::setProgramGraph(
         // compileAsProgram() builds a program of its own from this module: its root graph is
         // kept with that program's builder, and the graph this module was loaded as part of
         // (the program that uses it, or the library of compileAsLibrary) stays as it was.
-        // The exception is the entry module of the program being compiled when that program has
-        // not been built yet: a pass written in the same file as the program is compiled from
-        // that module first, and its own program graph is set by compile() afterwards. Marking
-        // it done here makes that compile a no-op, and the program is then materialized from a
-        // module with no graph (an empty root graph, or a null graph the encoder dereferences).
-        if (!isTheProgramBeingCompiled()) {
-            stage_  = CompileStage::Done;
-            loaded_ = true;
-        }
+        //
+        // The module is not marked built here. What it exports in this program is this
+        // program's, and a module is declared once per program: the program being compiled
+        // (or another tool program) that loads the module later must declare it into its own
+        // export table (task H42). Marking it Done would skip that declaration and leave the
+        // names of this program as the module's only ones.
         return;
     }
     compileGraph_ = root;
@@ -336,10 +333,10 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
             }
         });
     for (const auto &mod : imported) {
-        // Its names were exported by the builder of the program it was loaded as part of; the
-        // declarations below are this program's own (their graphs are the ones the pass calls),
-        // so they must replace those names, not be refused as duplicates.
-        mod->clearExportedNamespaces();
+        // The module object may already export names for the program that loaded it. Those
+        // names are that program's, and they stay there: this builder has its own export table
+        // (Builder::exports), so declaring the module again records this program's graphs
+        // (task H42).
         builder->declareModule(mod, *mod->gct_, mod->diagnostics_);
         if (mod->diagnostics_->hasErrors()) {
             return ProgramStatus::Failed;
@@ -354,7 +351,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     }
     // The export table is filled by the declaration: the function the program runs must be one
     // non-generic function of this module, exactly as registerCamelPass demands of a pass.
-    const auto entity = getExportedEntity(Reference(entryFunction));
+    const auto entity = builder->exports().exportedEntity(*this, Reference(entryFunction));
     if (!entity) {
         problem = std::format("'{}' exports no '{}'", name_, entryFunction);
         return ProgramStatus::NoSuchFunction;
@@ -375,17 +372,11 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     }
     // The builder owns what the graphs of the program refer to and lives as long as the module.
     programBuilders_.push_back(builder);
-    // A module that is also the program being compiled is marked done by that program's own
-    // build, which has not run yet: marking it done here would stop it from running at all.
-    if (!isTheProgramBeingCompiled()) {
-        stage_  = CompileStage::Done;
-        loaded_ = true;
-    }
+    // The module is not marked built: this program's exports are this program's, and another
+    // program that loads the module (the one being transformed, another pass) declares it into
+    // its own export table (task H42). The front end (parse, GCT) is done, which is what the
+    // module object shares with every program.
     return ProgramStatus::Built;
-}
-
-bool UserDefinedModule::isTheProgramBeingCompiled() const {
-    return context_ != nullptr && context_->mainModule().get() == this;
 }
 
 void UserDefinedModule::declareTypes() { (void)compile(CompileStage::GCT); }

@@ -359,6 +359,20 @@ expect_exit = 0
 expect_stdout_exact = "42\n10\n2\n4\n"
 timeout_ms = 10000
 
+# Two passes of one pipeline, each importing (one under names of its own) the module the program
+# being transformed imports: every program declares the module into its own export table, so there
+# are three programs using the graphs their own builder made (task H42).
+
+[[tests]]
+name = "two_camel_passes_share_a_module"
+desc = "firstuser::run and seconduser::run import sharedvals under different names; the program imports it too."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/shared_target.cml"
+args = ["${case}", "firstuser::run", "seconduser::run", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "10\n6\n20\n8\n2\n4\n"
+timeout_ms = 10000
+
 # A Camel library the pass module imports may import another one: the whole closure is declared
 # and built, in import order.
 

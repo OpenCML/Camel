@@ -870,8 +870,12 @@ class ModelBuilder {
         for (const Reference &ref : module.importedRefs()) {
             const std::string name = ref.toString();
             std::optional<ExternalName> ext;
-            if (auto entity = module.getImportedEntity(ref)) {
-                ext = describe(name, *entity);
+            if (context != nullptr) {
+                // What the name means is the program's: its exported entities are the graphs
+                // this compilation made (one table per program, task H42).
+                if (auto entity = context->programExports().importedEntity(module, ref)) {
+                    ext = describe(name, *entity);
+                }
             }
             bool isType = false;
             if (auto type = module.getImportedType(ref); type.has_value() && *type != nullptr) {
@@ -939,27 +943,32 @@ class ModelBuilder {
                 continue;
             }
             model_->namespaces_[prefix];
-            if (auto ns = mod->exportedEntityNS()) {
-                std::as_const(*ns).forEach([&](const Reference &ref,
-                                               const camel::core::module::entity &entity) {
-                    std::string space = prefix;
-                    for (const std::string &part : ref.paths()) {
-                        // A nested namespace is a member of the one around it.
-                        auto &outer = model_->namespaces_[space];
-                        if (std::none_of(outer.begin(), outer.end(), [&](const ExternalName &e) {
-                                return e.name == part && e.kind == ExternalName::Kind::Namespace;
-                            })) {
-                            ExternalName inner;
-                            inner.name = part;
-                            inner.kind = ExternalName::Kind::Namespace;
-                            outer.push_back(std::move(inner));
-                        }
-                        space += "::" + part;
+            const auto visitEntity = [&](const Reference &ref,
+                                         const camel::core::module::entity &entity) {
+                std::string space = prefix;
+                for (const std::string &part : ref.paths()) {
+                    // A nested namespace is a member of the one around it.
+                    auto &outer = model_->namespaces_[space];
+                    if (std::none_of(outer.begin(), outer.end(), [&](const ExternalName &e) {
+                            return e.name == part && e.kind == ExternalName::Kind::Namespace;
+                        })) {
+                        ExternalName inner;
+                        inner.name = part;
+                        inner.kind = ExternalName::Kind::Namespace;
+                        outer.push_back(std::move(inner));
                     }
-                    ExternalName ext = describe(ref.ident(), entity);
-                    ext.module       = mod->name();
-                    model_->namespaces_[space].push_back(std::move(ext));
-                });
+                    space += "::" + part;
+                }
+                ExternalName ext = describe(ref.ident(), entity);
+                ext.module       = mod->name();
+                model_->namespaces_[space].push_back(std::move(ext));
+            };
+            if (context != nullptr) {
+                // The program's entities for the module, then the module's own (native) names:
+                // what a name means is the program's (task H42).
+                context->programExports().forEachExportedEntity(*mod, visitEntity);
+            } else {
+                mod->nativeEntityNS()->forEach(visitEntity);
             }
             if (auto ns = mod->exportedTypeNS()) {
                 std::as_const(*ns).forEach([&](const Reference &ref, Type *const &type) {
