@@ -55,7 +55,7 @@ assert(!out.includes('marked :'), `marked carries no declaration tag:\\n${out}`)
 name = "graph.attrs"
 desc = "std::gir shows the facts of `on nodes` as `attrs` (spans are 0-based lines): a tag written before a function holds for the nodes of its body, a tag of `nodes` on a function that also allows it, a tag before a block for the nodes written in it, accumulating with the enclosing ones; an inner same-name tag with a parameter wins over the outer value."
 kind = "behavior"
-case = "../../../cases/compile/tags/tags_nodes.cml"
+case = "../../../cases/compile/tags/graph.cml"
 args = ["${case}", "std::gir"]
 expect_exit = 0
 verify_script = """
@@ -81,7 +81,7 @@ assert(at(27).every((l) => !attrs(l).includes('main::plain')), 'the inner block 
 name = "graph.run"
 desc = "The tagged program runs to the same result through `std::nvm`, `std::fvm` and `std::opt::inline std::nvm`."
 kind = "behavior"
-case = "../../../cases/compile/tags/tags_nodes.cml"
+case = "../../../cases/compile/tags/graph.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]

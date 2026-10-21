@@ -929,7 +929,7 @@ ea95d3ed9a96616e ok test/cases/compile/tags/err_tag_shadows_permission.cml
 8a8a6731caef4850 ok test/cases/compile/tags/err_type.cml
 8a46ed23b5a19733 ok test/cases/compile/tags/err_undeclared.cml
 0805b6064bbc79f8 ok test/cases/compile/tags/float.cml
-f4c1ab05bea62ebf ok test/cases/compile/tags/tags_nodes.cml
+f4c1ab05bea62ebf ok test/cases/compile/tags/graph.cml
 696c35c979c070dd ok test/cases/compile/tags/independent.cml
 ef2a2f385af2db1a ok test/cases/compile/tags/permissions.cml
 d336d09053a3b840 ok test/cases/compile/tags/reads.cml

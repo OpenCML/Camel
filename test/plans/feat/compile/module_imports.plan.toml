@@ -230,6 +230,29 @@ args = ["${case}", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["return static_cast<int>(main_(0, 10));"]
 
+# ---- H112/H124: whose directory an import resolves in ----
+# H112 put the importing module's own directory ahead of the global search roots, so that
+# stdlib/rules.cml's `import graph` finds stdlib/graph.cmo and not a same-named program of the
+# entry directory. H124 pins both sides of that rule in one directory holding a graph.cml.
+
+[[tests]]
+name = "imports.entry_dir_wins"
+desc = "A program's own `import graph` takes the graph.cml next to it, not stdlib/graph.cmo: the entry directory still wins for the entry's own imports."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/importer_scope/main.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
+
+[[tests]]
+name = "imports.library_dir_wins"
+desc = "In the same directory, std::opt compiles stdlib/rules.cml on demand; its `import graph` resolves next to rules (stdlib/graph.cmo), not the program's graph.cml, so the pass runs and the program prints its result."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/importer_scope/opt.cml"
+args = ["-E", "short", "${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+
 # ---- D6: port names of a function that captures, in std::rgir ----
 
 [[tests]]
