@@ -162,7 +162,17 @@ y) => range(x) + range(y) }` declares a lattice and its transfer clauses; it com
 `user.<module>.<analysis>` fact kind (Derived, scope Node, Anchors dependency). The facts are
 propagated in post-order, joined at JOIN nodes and across the writings of a value, cached per
 graph revision and per draft revision. Which of a clause's variables are values and which are
-facts is the open question the design's example leaves ambiguous; the plan recommends Nodes.
+facts was the open question the design's example left ambiguous; they are `Node`s, as the review
+of H38 decided.
+
+**`analysis` with parameters (H61).** `analysis pair(a: Node, b: Node): bool { … }` is the same
+declaration with a parameter list: the parameters are pattern variables, so a rule's condition
+writes `pair(x, y)` and hands it the parts of the compound it is rewriting. The query compiles to
+`func pair(a: Node, b: Node): bool => __analysis('pair', …)` with one node argument per parameter;
+the engine answers the fact of the value those parts belong to — the value a user of the first
+part reads with exactly these parts as its operands and one of the `on` clauses matches, clauses
+in written order and values in node order. A declaration without parameters keeps the one-value
+form `range(n)`. There is no syntax that names the whole match.
 
 **`#requires` (implemented, H2b).** `#requires<reassociate, finite_math>` before a rule resolves the
 names to `sem::PermissionMask` -- `finite_math` expands to its four bits -- and fills the `needs`
@@ -180,7 +190,11 @@ native pass); it waits for `where` and the first stage of generics.
 native walk applies today (float coefficient folding needs the permissions). The bar: identical
 output and `std::jgir` structure on the algebra corpus and on generated 10k/40k/80k programs, on
 all four backends, and every test of `opt.algebra` passing with the rules pass substituted; then
-the pass is deleted and its name becomes the Camel pass.
+the pass is deleted and its name becomes the Camel pass. The order the author set (H61): first
+the laws that differ by element type (int32/float32 overflow and rounding), then the tensor laws;
+`safe_fp` is **not** a separate mode to reproduce — it is the strict numeric policy, which holds
+no permission at all (`#strict`, design principles 7.4), so the laws that require a permission
+are exactly the ones that do not apply under it, and no separate semantics is added for it.
 
 **The export list.** It is generated from the modules' undefined symbols (H36/H40), so a new
 libcamel function the module calls is exported without a hand edit; `rewrite` links the sibling
@@ -199,5 +213,7 @@ libcamel function the module calls is exported without a hand edit; `rewrite` li
   declared numeric contract of each operator.
 - The condition is a function of the rule's parameters, not of the whole matched pattern: in
   `x + (a * b)` the parameter `a` is the multiplication's operand, not the multiplication node.
-- `analysis`: are a clause's variables values or nodes? The plan recommends nodes; the document
-  needs the author's decision before the clause typing is final.
+  A fact about a compound is read by declaring an analysis over its parts (H61): `pair(x, y)`
+  answers the fact of the value those parts belong to.
+- `analysis`: are a clause's variables values or nodes? They are `Node`s (the review of H38;
+  implemented in H38b).

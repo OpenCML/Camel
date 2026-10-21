@@ -562,7 +562,8 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
 }
 
 /*
-analysisDecl : frontMatter? 'export'? IDENTIFIER identDef ':' typeExpr '{' analysisClause* '}'
+analysisDecl : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
+               '{' analysisClause* '}'
 */
 any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
     string result;
@@ -571,6 +572,9 @@ any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
     }
     result += context->tok(TK::KwExport) ? "export analysis " : "analysis ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto params = context->get<cst::ParentParams>()) {
+        result += any_cast<string>(visitParentParams(params));
+    }
     result += ": " + any_cast<string>(visitType(context->type()));
     result += " {";
     pushIndent();

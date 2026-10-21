@@ -1,0 +1,69 @@
+/**
+ * `analysis` over pattern variables (rewrite design 4): a declaration with parameters is queried
+ * with the parts of a value. That is how a rule's condition reads the fact of the compound it is
+ * rewriting — the language does not name the whole match.
+ *
+ * `mul_by_one(a, b)` is the fact of a product: the clause for `x * y` says it is "by one" when
+ * `sign(y) == 1` (the same one-value analysis the other test uses). The rule
+ * `mul_one_by_parts(x, const c)` passes the two parts of the multiplication to it, so `one`
+ * (`x * 1`) is rewritten and `two` (`x * 2`) is not: the false case must leave the product alone.
+ * `report` prints the number of products before and after `apply`, and `main` the values, which
+ * are the same before and after the rewrite.
+ */
+module analysis_parts
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+import { max } from math
+import { rewrite } from rewrite
+
+analysis sign: int {
+    initial => 0
+    join(a, b) => max(a, b)
+    on (const c: int) => c
+}
+
+analysis mul_by_one(a: Node, b: Node): bool {
+    initial => false
+    join(a, b) => a || b
+    on (x * y) => sign(y) == 1
+}
+
+rule mul_one_by_parts(x: int, const c: int) { x * c => x } when mul_by_one(x, c)
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func mulsOf(p: Program, function: string): int {
+    let muls = nodesOf(p, function)->filter<(n: Node): bool => opText(n) == ':op/mul_l'>
+    return loop total = 0 for n in muls do total + 1
+}
+
+func one(x: int): int {
+    return x * 1
+}
+
+func two(x: int): int {
+    return x * 2
+}
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [mul_one_by_parts])
+}
+
+export func report(p: Program): Program! sync {
+    println('one', mulsOf(p, 'one'), 'two', mulsOf(p, 'two'))
+    return p
+}
+
+func main(): int sync {
+    println(one(7), two(7))
+    return 0
+}

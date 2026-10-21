@@ -1175,6 +1175,8 @@ eb74f3b204df0390 no test/cases/format/pattern_empty.cml
 6e2b9f9a38158b5e no test/cases/format/syntax_error.cml
 e39a9bd8bac6e3d2 ok test/cases/format/tuple_singleton.cml
 e08b2bd788c596de ok test/cases/format/type_params.cml
+9aba46c87332d020 ok test/cases/gpu/profile/device_region.cml
+33fc743541534364 ok test/cases/gpu/profile/host_loop.cml
 d48c91bf563f22ce ok test/cases/linear/byref/captured_write_graph.cml
 fa6c726d5cc0f9d3 ok test/cases/linear/byref/captured_write_order.cml
 cbef50f67ba3723e ok test/cases/linear/byref/element_assigned.cml
@@ -1283,6 +1285,7 @@ a12697fd5ca6ce5f ok test/cases/loops/collection_oom.cml
 2c37f729452a430f ok test/cases/loops/compiled.cml
 8ee3b22037ffd43b ok test/cases/loops/compiled_churn.cml
 255673e8bc714173 ok test/cases/loops/compiled_fault.cml
+62b550c7d0417e87 ok test/cases/loops/compiled_native.cml
 0113133f73e7a008 ok test/cases/loops/discrete_effectful_value.cml
 87c8a7daf81143df ok test/cases/loops/discrete_loop_iterable.cml
 45d9005cca79a3ec ok test/cases/loops/discrete_loop_state.cml
@@ -1365,6 +1368,7 @@ d2130fa6bb799f72 ok test/cases/modules/autodiff/grad_through_as.cml
 2d2ee5cf4170794e ok test/cases/modules/autodiff/grad_unexpanded_specialize.cml
 f6f132edf5434991 ok test/cases/modules/autodiff/loop_grad_affine.cml
 8a60a5ff5050a3dc ok test/cases/modules/autodiff/loop_grad_capture_table.cml
+ed6df62d74e5272d ok test/cases/modules/autodiff/loop_grad_composite_read.cml
 429fb3953cb48530 ok test/cases/modules/autodiff/loop_grad_in_place.cml
 573a6bc4c5028716 ok test/cases/modules/autodiff/loop_grad_nested.cml
 aa9aa9806bb83360 ok test/cases/modules/autodiff/loop_grad_product.cml
@@ -1546,6 +1550,7 @@ d02bf5329e412d30 ok test/cases/modules/onnx/refusals/var_param.cml
 9ef2758057679ea9 ok test/cases/modules/random/permutation_negative.cml
 a4167c31852a3565 ok test/cases/modules/random/random_independence.cml
 5848ceb70884974f ok test/cases/modules/rules/analysis_lib.cml
+502a08d03e1d1c89 ok test/cases/modules/rules/analysis_parts.cml
 ba6c69862cc7f282 ok test/cases/modules/rules/analysis_target.cml
 1f6d0b3ce21e8f81 ok test/cases/modules/rules/check_bound.cml
 d2f93128bac41249 ok test/cases/modules/rules/check_library.cml
@@ -1965,7 +1970,10 @@ cc32392fed36cd2f ok test/cases/parse/rulings/reserved_and.cml
 a24945bb64fb63aa no test/cases/parse/syntax/missing_then.cml
 2b17772c82721c98 ok test/cases/parse/syntax/postfix_access.cml
 41c46559f542a83c ok test/cases/parse/syntax/tuple_and_parenthesis.cml
+143c065877f2fe57 ok test/cases/perf/dependency_chain.cml
 5f96692ce95b7e92 ok test/cases/perf/fib_recursive.cml
+f645a401bbf2b408 ok test/cases/perf/mlp_step.cml
+bb9859c04dad6289 ok test/cases/perf/transformer_step.cml
 0c3d3b5c8c244c4d ok test/cases/perf/gc/alloc_small.cml
 f300e470487fa1bc ok test/cases/perf/gc/build_tree.cml
 f7282e239e9b6bc9 ok test/cases/perf/gc/fib.cml
