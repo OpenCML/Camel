@@ -332,8 +332,8 @@ static void reportLiteralCastFailure(
         return;
     }
     std::string reason;
-    if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
-        reason = "out of range (" + limits + ")";
+    if (const std::string notFit = literalNotFitReason(data, type); !notFit.empty()) {
+        reason = notFit;
     } else if (data->type()->isPrimitive() && isIntegerPrimitive(type)) {
         // A numeric type that is not an integer keeps its fraction (`1.9` -> `int`).
         reason = "the value would be truncated";
@@ -2855,6 +2855,13 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         switch (camel::utils::parseNumberToken<double>(str, value)) {
         case camel::utils::NumberTextStatus::Ok:
             break;
+        case camel::utils::NumberTextStatus::Underflow:
+            // A nonzero number too small to tell from zero is a value the type cannot hold, not
+            // zero (H15i; design principles 5.1): the literal is refused with that reason.
+            diags_->of(SemanticDiag::LiteralNotRepresentable)
+                .at(ast->load()->tokenRange())
+                .commit(str, "float", "too small to be represented (the nearest value is zero)");
+            throw BuildAbortException();
         case camel::utils::NumberTextStatus::OutOfRange:
         case camel::utils::NumberTextStatus::OutOfRangeInteger:
             diags_->of(SemanticDiag::LiteralNotRepresentable)
@@ -3278,7 +3285,9 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 .commit(
                     written,
                     type->toString(),
-                    "out of range (" + literal::rangeText(type) + ")");
+                    exact->underflows(type)
+                        ? "too small to be represented (the nearest value is zero)"
+                        : "out of range (" + literal::rangeText(type) + ")");
             throw BuildAbortException();
         }
         // An unresolved literal (`[n, m]`, `{ a: x, b: 2.0 }`: some elements are values) takes

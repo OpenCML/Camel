@@ -118,3 +118,21 @@ error InvalidNumberText: Cannot convert the string '1e-9999' to i32.
 error ConversionOutOfRange: Cannot convert '1e-9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude).
 error ParseError: '1e-9999' is not an integer
 error ParseError: '1e-9999' is out of the range of a number
+[077]
+77
+77
+77.0
+77
+77.0
+[09]
+9
+9
+9.0
+9
+9.0
+[0o77]
+error InvalidNumberText: Cannot convert the string '0o77' to int.
+error InvalidNumberText: Cannot convert the string '0o77' to i32.
+error InvalidNumberText: Cannot convert the string '0o77' to float.
+error ParseError: '0o77' is not an integer
+error ParseError: '0o77' is not a number

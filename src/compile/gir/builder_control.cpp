@@ -26,6 +26,7 @@
 #include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
+#include "camel/core/data/composite/tuple.h"
 #include "camel/core/numeric_convert.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/rtdata/string.h"
@@ -238,6 +239,26 @@ bool compositeEntersIn(const data_ptr_t &data, Type *type, const GCT::node_ptr_t
                     structType->typeAt(*fieldIndex),
                     origin,
                     writtenValueOf(element))) {
+                return false;
+            }
+        }
+        return true;
+    }
+    if (type->code() == TypeCode::Tuple && data->type()->code() == TypeCode::Tuple) {
+        auto *tupleType   = tt::as_ptr<TupleType>(type);
+        const auto object = std::dynamic_pointer_cast<TupleData>(data);
+        if (tupleType == nullptr || object == nullptr ||
+            object->raw().size() != tupleType->size()) {
+            return false;
+        }
+        const auto *written =
+            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
+        for (size_t index = 0; index < object->raw().size(); ++index) {
+            if (!elementEntersIn(
+                    object->raw()[index],
+                    tupleType->typeAt(index),
+                    origin,
+                    writtenValueOf(literalElementAt(written, index)))) {
                 return false;
             }
         }
@@ -520,6 +541,35 @@ data_ptr_t Builder::compositeDataInType(
         // named, and its fields are in the declaration's order however they were written
         // (design principles 5.2).
         return factory.buildAs(structType);
+    }
+    if (type->code() == TypeCode::Tuple && data->type()->code() == TypeCode::Tuple) {
+        // The missing branch of H15h's element walk: a tuple literal used as an argument had no
+        // way into a tuple parameter, so a text element made the whole call a NoMatchingFunction
+        // instead of naming the element (H15i). Elements are converted in written order, which
+        // is a tuple's order.
+        auto *tupleType   = tt::as_ptr<TupleType>(type);
+        const auto object = std::dynamic_pointer_cast<TupleData>(data);
+        if (tupleType == nullptr || object == nullptr ||
+            object->raw().size() != tupleType->size()) {
+            return nullptr;
+        }
+        const auto *written =
+            origin != nullptr ? GCT::Tree::of(origin)->literalElementsOf(data) : nullptr;
+        TupleDataFactory factory;
+        size_t index = 0;
+        for (const auto &element : object->raw()) {
+            data_ptr_t converted = literalElementInType(
+                element,
+                tupleType->typeAt(index),
+                origin,
+                literalElementAt(written, index));
+            ++index;
+            if (converted == nullptr) {
+                return nullptr;
+            }
+            factory.add(converted);
+        }
+        return factory.build();
     }
     return nullptr;
 }

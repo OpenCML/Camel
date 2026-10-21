@@ -17,7 +17,7 @@ func main(): int sync {
     println(a - -1, a--1, a-(-1), a+-1, a*-2, 2*-3)
     println(fib(10), fib(a+2), fib(a-1))
     // A sign directly before a number is the sign of the literal.
-    println(-1, +1, - 1, -a, -1.5, +2.5, -0x10, -0b11, -010)
+    println(-1, +1, - 1, -a, -1.5, +2.5, -0x10, -0b11, -0o10)
     println([-1, +2, a-1], (a, -1), { k: -1 })
     println(-9223372036854775808, 9223372036854775807, -9223372036854775807-1)
     println(1.5e-2, 2.5e+3, 1e3, 1.0e-2-1.0e-2)

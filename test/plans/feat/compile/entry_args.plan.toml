@@ -241,25 +241,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.integer_octal_value"
-desc = "A leading `0` makes an octal token: `--arg n=077` is 63, not the decimal 77 the old reader gave it, and a float parameter reads the same 63.0 (H15h)."
+name = "entry_args.integer_leading_zero_is_decimal"
+desc = "A leading-zero decimal is data text: `--arg n=077` is 77, not the octal 63 a source literal would spell `0o77`, and a float parameter reads the same 77.0 (H15i; reference 2.5.2)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=077", "--arg", "rate=077", "--arg", "name=hi", "--arg", "loud=true"]
-expect_exit = 64
-expect_stdout_contains = ["hi 63 63.0 true"]
-expect_output_not_contains = ["77"]
+expect_exit = 78
+expect_stdout_contains = ["hi 77 77.0 true"]
+expect_output_not_contains = ["63"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.integer_binary_and_underflow"
-desc = "A binary token is read as the language reads it (`0b1010` is 10), and a real token too small to tell from zero is zero, as a source literal is (`1e-9999` prints 0.0) (H15h)."
+name = "entry_args.integer_binary_value"
+desc = "A binary token is read as the language reads it (`0b1010` is 10), and a real token that fits prints as itself (`0.5`)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
-args = ["${case}", "--arg", "n=0b1010", "--arg", "rate=1e-9999", "--arg", "name=hi", "--arg", "loud=true"]
+args = ["${case}", "--arg", "n=0b1010", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
 expect_exit = 11
-expect_stdout_contains = ["hi 10 0.0 true"]
+expect_stdout_contains = ["hi 10 0.5 true"]
 expect_output_not_contains = ["Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -277,16 +277,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.leading_zero_digit_refused"
-desc = "`09` is not one token of the language: the lexer cuts it into `0` and `9`, so the whole text is not a number (H15h)."
+name = "entry_args.leading_zero_decimal_is_data_text"
+desc = "`09` is data text, not a source literal: the entry reader reads it as the decimal 9, while the source lexer refuses `09` as one run (H15i; the two readers differ only in the two supplements of reference 2.5.2)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=09", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
-expect_exit = 1
-expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert the string '09' to int"]
-expect_output_not_contains = ["hi "]
+expect_exit = 10
+expect_stdout_contains = ["hi 9 0.5 true"]
+expect_output_not_contains = ["Error"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
@@ -375,14 +373,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.float_underflow_is_zero"
-desc = "A real token too small to tell from zero is zero, as a source literal is (`let x: float = 1e-9999` prints 0.0): the entry argument prints 0.0 too and is not refused (H15h). The conversion function `float('1e-9999')` still refuses it as out of range (H15f); the two are different rules."
+name = "entry_args.float_underflow_refused"
+desc = "A nonzero real token too small to tell from zero is refused, not read as 0.0: the same rule a source literal and a conversion function apply (H15i, which supersedes H15h's zero for this case)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/scalars.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-9999", "--arg", "name=hi", "--arg", "loud=true"]
-expect_exit = 4
-expect_stdout_contains = ["hi 3 0.0 true"]
-expect_output_not_contains = ["Error", "range"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e-9999' to float: the value is too small for float (the nearest value is zero)"]
+expect_output_not_contains = ["hi 3 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -481,14 +481,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.f32_underflow_is_zero"
-desc = "1e-50 is a number too small to tell from zero, and a source literal in an `f32` position is zero: the entry argument is zero too (H15h), not refused as out of range (the conversion function `float('1e-50')` still refuses it, H15f)."
+name = "entry_args.f32_underflow_refused"
+desc = "1e-50 is a number too small to tell from zero in an `f32`, and a source literal in an `f32` position is refused (H15i): the entry argument is refused with the same reason, not read as 0.0."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/widths.cml"
 args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-50"]
-expect_exit = 0
-expect_stdout_contains = ["3 0.0"]
-expect_output_not_contains = ["Error", "range"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 8
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e-50' to f32: the value is too small for f32 (the nearest value is zero)"]
+expect_output_not_contains = ["3 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -513,6 +515,42 @@ args = ["${case}", "--arg", "n=3", "--arg", "rate=+0.5", "--arg", "name=hi", "--
 expect_exit = 4
 expect_stdout_contains = ["hi 3 0.5 true"]
 expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_inf"
+desc = "`inf` is the text a float is printed as, so an entry argument reads it (reference 2.5.2, H15i); there is no source literal for it."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=inf", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 inf true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_negative_inf"
+desc = "`-inf` is the printed negative infinity and is read back as one (H15i)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=-inf", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 -inf true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_nan"
+desc = "`nan` is the printed NaN and is read back as one (H15i); it carries no sign."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=nan", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 nan true"]
+expect_output_not_contains = ["Error", "-nan"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -923,23 +961,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.complex_imaginary_underflow_is_zero"
-desc = "Each part of a complex text is a number token of the language (H15h): an imaginary part too small to tell from zero is zero, as it is for a real parameter and for a source literal (`1+1e-9999i` is `1+0i`), not refused."
+name = "entry_args.complex_imaginary_underflow_refused"
+desc = "Each part of a complex text is a number token of the language: an imaginary part too small to tell from zero is refused with the part named, not read as `0i` (H15i, superseding H15h's zero here)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2i", "--arg", "w=1+1e-9999i"]
-expect_exit = 0
-expect_stdout_contains = ["1+2i 1+0i", "1.0 2.0", "1.0 0.0", "2+2i"]
-expect_output_not_contains = ["Error", "range"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'w' of 'main': Cannot convert '1+1e-9999i' to c64: the imaginary part is too small for c64 (the nearest value is zero)"]
+expect_output_not_contains = ["1+0i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
 name = "entry_args.complex_integer_bases"
-desc = "Each part of a complex text is one number token, so the integer tokens work in it too: `1+0x10i` is `1+16i`, and `0x10-077i` is `16-63i` (octal 63), as the same literals in the language are (H15h)."
+desc = "Each part of a complex text is one number token, so the integer tokens work in it too: `1+0x10i` is `1+16i`, and `0x10-0o77i` is `16-63i` (octal 63), as the same literals in the language are (H15i writes octal `0o77`)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
-args = ["${case}", "--arg", "z=1+0x10i", "--arg", "w=0x10-077i"]
+args = ["${case}", "--arg", "z=1+0x10i", "--arg", "w=0x10-0o77i"]
 expect_exit = 0
 expect_stdout_contains = ["1+16i 16-63i", "1.0 16.0", "16.0 -63.0", "17-47i"]
 expect_output_not_contains = ["Error"]

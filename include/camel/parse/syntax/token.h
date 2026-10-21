@@ -98,6 +98,7 @@ struct Token {
 
 enum class LexErrorKind : uint8_t {
     IllegalCharacter,    // a run of characters that start no token
+    InvalidNumber,       // a digit run that is not a number token (`09`, `077`)
     UnclosedString,      // a quote without its closing quote
     UnterminatedComment, // `/*` without `*/`
 };
