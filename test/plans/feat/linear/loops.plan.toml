@@ -414,12 +414,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "loops.onnx_refused"
-desc = "onnx.export_model of a function with a loop is refused at the loop (line 8): the LOOP to ONNX Loop translation is the next step."
+desc = "The program runs onnx.export_model on a function with a loop: the exporter refuses the loop where it is written (line 8), before the export's own simplification rewrites the function's graphs, and no model is written. No pass is needed: the exporter reads the program's own graph when the program calls it, so the default pipeline reaches the refusal. (The entry used to name std::macro, which does nothing here: the program declares no macro.)"
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
-args = ["-E", "short", "${case}", "std::macro"]
+args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
@@ -506,12 +508,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.onnx_refused_prl"
-desc = "export_model run by std::prl: the export reads the program's own graph and refuses the loop at line 8."
+desc = "The same refusal by export_model run by std::prl: the back end lowers the loop in its own copy, so the export still reads the program's own graph and refuses the loop at line 8."
 kind = "negative"
 case = "../../../cases/loops/onnx_refused.cml"
 args = ["-E", "short", "${case}", "std::prl"]
 expect_exit = 1
-expect_output_contains = ["a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_output_contains = ["onnx.export_model:", "a 'loop' expression is not exported to ONNX yet", "onnx_refused.cml:8:13"]
+expect_output_not_contains = ["RewriteInvalid", "rules::simplify"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
