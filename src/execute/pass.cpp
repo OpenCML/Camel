@@ -1410,6 +1410,8 @@ PassRunResult applyRegisteredPass(
     if (produced == nullptr) {
         return {nullptr, true};
     }
+    // Read the old program's graph versions before settleRuntimeGraphs can release it.
+    const bool changed = programContentChanged(program, produced);
     if (ctx) {
         deliverPassWarnings(*ctx, spec);
         // A pass that ran on the installed program publishes a new one; its old program is no
@@ -1422,7 +1424,7 @@ PassRunResult applyRegisteredPass(
             return {nullptr, true};
         }
     }
-    return {produced, programContentChanged(program, produced)};
+    return {produced, changed};
 }
 
 namespace {
