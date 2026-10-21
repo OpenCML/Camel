@@ -1438,7 +1438,7 @@ e99fcea43d4b5e69 ok test/cases/modules/std/pyplot/main.cml
 606e5c8d28967099 ok test/cases/modules/std/python/basic.cml
 7c35eaa8ac9c05f3 ok test/cases/modules/std/python/main.cml
 8dad7d36224bae1c ok test/cases/modules/std/python/phot.cml
-9b8ff2c2867422fa ok test/cases/modules/std/python/pyphot.cml
+3f2c3475169000fb ok test/cases/modules/std/python/pyphot.cml
 5c4e1424173cf687 ok test/cases/modules/std/random/basic.cml
 0d587d4670523b43 ok test/cases/modules/std/re/basic.cml
 a9c1c348ea212a48 ok test/cases/modules/std/sim/basic.cml
