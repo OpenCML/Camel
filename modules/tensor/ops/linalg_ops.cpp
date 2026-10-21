@@ -22,6 +22,7 @@
  * `linear` (x @ weight + bias with weight laid out [in, out]).
  */
 
+#include "../attrs.h"
 #include "../kernels/gemm.h"
 #include "catalog.h"
 #include "support.h"
@@ -33,17 +34,16 @@ namespace k = camel::tensor::kernels;
 
 namespace {
 
+/// `matmul` runs the canonical algorithm unless the node's `tensor.kernel` attribute (written by
+/// tensor::fuse, design principles 9.6/7.3) says it runs on the library GEMM. The operator is
+/// the same either way: the attribute is the implementation choice.
 slot_t matmulKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("matmul", [&] {
-        return wrap(k::matmul(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator()));
-    });
-}
-
-/// tensor:matmul_blas: matmul by the library GEMM (kernels::sgemmLibrary). Only tensor::fuse
-/// creates it, for a matmul whose node may be reassociated and computed at another precision.
-slot_t matmulBlasKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel("matmul", [&] {
-        return wrap(k::matmul(tensorArg(norm, 0), tensorArg(norm, 1), resultAllocator(), true));
+        return wrap(k::matmul(
+            tensorArg(norm, 0),
+            tensorArg(norm, 1),
+            resultAllocator(),
+            usesLibraryGemm(norm.attrs())));
     });
 }
 
@@ -123,24 +123,6 @@ std::optional<Type *> linearInfer(const InferContext &ctx) {
     return tensorOf(dtype, out);
 }
 
-/// Kernel of matmul_add / matmul_add_relu (created by the tensor::fuse pass, not exported).
-template <bool Relu> slot_t matmulAddKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    return runKernel(Relu ? "matmul_add_relu" : "matmul_add", [&] {
-        k::ScalarOperand scalar{};
-        const k::Operand bias = operandArg(norm, 2, scalar);
-        return wrap(
-            k::matmulAdd(tensorArg(norm, 0), tensorArg(norm, 1), bias, Relu, resultAllocator()));
-    });
-}
-
-/// Result of matmul(x, weight) broadcast-added with bias (relu preserves it).
-std::optional<Type *> matmulAddInfer(const InferContext &ctx) {
-    const TensorFacts x = ctx.facts(0), w = ctx.facts(1), b = ctx.facts(2);
-    return tensorOf(
-        promote(promote(x.dtype, w.dtype), b.dtype),
-        broadcast(matmulStaticShape(x.shape, w.shape), b.shape));
-}
-
 void matmulVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
     if (auto dy = b.gradientOf(call.output)) {
@@ -159,17 +141,10 @@ void linearVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-/// matmul_add / matmul_add_relu: the composition of the matmul, add (and relu) rules.
-template <bool Relu> void matmulAddVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 3, 3);
-    auto dy = b.gradientOf(call.output);
-    if (!dy) {
-        return;
-    }
-    const vjp_node_t g = Relu ? reluGradient(b, call.output, *dy) : *dy;
-    accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], g);
-    accumulateOperand(b, call.inputs[2], g);
-}
+/// matmul_add / matmul_add_relu are gone with the fused operators they served: tensor::fuse
+/// keeps the program's operators and records the group on their nodes (design principles 9.6),
+/// so the composition's derivative rules are the matmul, add and relu rules the graph already
+/// has (see autodiff's fused_grad_check case).
 
 } // namespace
 
@@ -194,45 +169,8 @@ std::vector<OpDef> linalgOps() {
         .infer     = linearInfer,
         .kernel    = &linearKernel,
         .traits    = {}});
-    // Fused forms of `x @ w + b` and `relu(x @ w + b)`. They have no source-level name: only the
-    // tensor::fuse pass creates them, and they compute what the pattern computes (up to float
-    // rounding, see kernels::matmulAdd).
-    const std::vector<ParamSpec> matmulAddParams = {
-        {"x", ParamKind::Tensor},
-        {"weight", ParamKind::Tensor},
-        {"bias", ParamKind::TensorOrScalar}};
-    defs.push_back(OpDef{
-        .name      = "matmul_add",
-        .exports   = {},
-        .params    = matmulAddParams,
-        .resultDoc = "Tensor",
-        .infer     = matmulAddInfer,
-        .kernel    = &matmulAddKernel<false>,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "matmul_add_relu",
-        .exports   = {},
-        .params    = matmulAddParams,
-        .resultDoc = "Tensor",
-        .infer     = matmulAddInfer,
-        .kernel    = &matmulAddKernel<true>,
-        .traits    = {}});
-    // matmul by a system BLAS (CAMEL_TENSOR_BLAS), whose order of accumulation is its own: no
-    // source-level name; tensor::fuse substitutes it for a matmul granted reassociate and
-    // change_precision (design principles 7.5). Without a BLAS it is the canonical matmul.
-    defs.push_back(OpDef{
-        .name      = "matmul_blas",
-        .exports   = {},
-        .params    = {{"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
-        .resultDoc = "Tensor",
-        .infer     = matmulInfer,
-        .kernel    = &matmulBlasKernel,
-        .traits    = {}});
     setVjp(defs, "matmul", &matmulVjp);
-    setVjp(defs, "matmul_blas", &matmulVjp);
     setVjp(defs, "linear", &linearVjp);
-    setVjp(defs, "matmul_add", &matmulAddVjp<false>);
-    setVjp(defs, "matmul_add_relu", &matmulAddVjp<true>);
     return defs;
 }
 

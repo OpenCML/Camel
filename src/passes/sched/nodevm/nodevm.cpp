@@ -951,6 +951,11 @@ slot_t NodeVMSchedPass::evalNativeOperator(
     FrameArgsView normView(*currFrame, nargs);
     withView.setResultType(en.node->dataType());
     normView.setResultType(withView.resultType());
+    // What a pass recorded about this node (design principles 9.6); the operator's module reads
+    // its own keys, the scheduler knows none.
+    const camel::core::attr::AttrSetId attrs = currRuntimeGraph->nodeAttrs(en.ref);
+    withView.setAttrs(attrs);
+    normView.setAttrs(attrs);
 
     if (camel::core::effect_trace::enabled()) [[unlikely]] {
         camel::core::effect_trace::setSite(currRuntimeGraph->nodeOrigin(en.ref));

@@ -258,7 +258,8 @@
 | H7 | 资源与副作用 | H2 | **未开始** |
 | H5 | 命名类型 | H1 | **已完成**（`afe8ab45` 检查通过；H5b `6e54035c`、H5c `ebb57244`、H5d `2e6dcb22`；报告 reports/H5.md） |
 | H13 | 官方示例第一批 | 无 | **部分完成**（C1、C2、C6、D5 已入 `40f46bda`、`707d8a12`；D4 未做；报告 reports/H13.md） |
-| H3 | 依赖节点属性的后续 | 图存储第二版第 5 步 | **未开始** |
+| H3 | 依赖节点属性的后续 | 图存储第二版第 5 步 | **部分完成**（H3a 完成，见 H102 行与 reports/H102.md；H3b 未做） |
+| H102 | H3a：融合与库实现的选择只记节点属性，图上保留原算子 | H3 | **已完成**（`tensor::fuse` 写 `tensor.kernel`/`tensor.fusion`，删除 `matmul_blas`/`matmul_add`/`matmul_add_relu` 三个算子及其内核、VJP、ONNX lowering；库 GEMM 按 7.3 默认可用、安全模式由 `safe_fp` 给出；报告 reports/H102.md） |
 | H80 | 慢层全套扫描（原按 H71 记，作者把 H71 分给结构体循环状态后改号） | H6 第 5 项 | **已完成**（Linux 主机 fast/slow/perf/gpu/GC/poison 全层：fast 4788 项 0 失败、基线 19 项全转绿；新增 GC/poison/tiles 三簇转交 H73/H74/H75；报告 reports/H80.md，tiles 逐条清单 reports/H80-gpu-tiles-failures.txt） |
 | H88 | H6 第 1 项的前端四条：移除 `TypeCode::Byte`、期望类型合并为一条通道（frontend 第 6 条）、`append` 就地改写走通用 `setInPlaceForm`（第 7 条）、语言服务器的类型解析取自编译器（第 15 条） | H6 第 1 项 | **已完成**（四个提交，一件一个；报告 reports/H88.md；`from_bytes::<T>` 与 `load_tree` 仍等泛型） |
 
@@ -348,6 +349,14 @@ let area = match b {
 - 选择规则读核心的统一判定：7.3（CPU 上按库实现的 f32 矩阵乘默认可用，条件是结果可复现；安全模式下用规范算法；安全模式由遍参数给出——遍参数是地基工作的一部分，用它的接口）。现在 `matmul_blas` 要求 `reassociate` 与 `change_precision` 两项许可，按 7.3 改为默认可用。
 - 删除 `matmul_blas`、`matmul_add` 等作为图上算子的注册。ONNX 导出与 Tiles 看到的是原算子。
 - 测试：融合前后结果在安全模式下逐位相同；默认模式下两次运行逐位相同。
+
+**H3a 已完成**（分支 `handover/H102-fusion-keeps-operator`，报告 reports/H102.md）：图上的算子保持
+`matmul`/`add`/`relu`，`tensor::fuse` 只写 `tensor.kernel`（"library"/"canonical"，按 7.3 的有效许可
+判定，`#strict` 与 `tensor::fuse(safe_fp=true)` 得到 canonical）与 `tensor.fusion`（"linear"/
+"linear_relu"，组内每个节点都写）；`matmul_blas`、`matmul_add`、`matmul_add_relu` 的注册、内核、
+VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到的就是程序写的算子。逐位证据在
+`fuse_bits`（四种运行逐字节相同）与 `gemm_canonical.fused`；安全模式下融合与不融合相同是构造性的，
+因为遍不改算子、CPU 上也不换内核。
 
 **H3b 内联来源**（图存储第二版 3.3）：内联把被调函数体放进一个标注区域，记录被内联函数与调用处，嵌套内联即嵌套区域，被内联函数的声明标签挂在区域上（设计原则 9.4 的警告据此给出）。**调试器不为内联函数虚构帧**（裁定记录 2.14 该条已撤回）：内联进来的代码显示在调用者的帧里，标注来自哪个函数、哪次调用；GIR 可视化把区域画成可展开的框。同时核实 12.1 的"从分支的臂回到汇合处时不在同一行停第二次"，写测试确认，不符合就修。区域机制本身属于图存储第二版第 5 步；若该步尚未完成，本项先不做。
 

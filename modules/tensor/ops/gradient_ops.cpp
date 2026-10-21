@@ -24,7 +24,7 @@
  * ones_like, numel, dim).
  *
  * The internal operators have no source-level name; rules refer to them by
- * URI, like the fused operators of tensor::fuse.
+ * URI.
  */
 
 #include "../kernels/elementwise.h"

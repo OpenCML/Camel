@@ -1,7 +1,7 @@
 /**
- * Derivative rules of the fused operators tensor::fuse creates (matmul_add, matmul_add_relu),
- * checked against finite differences. Run after tensor::fuse and without std::macro, grad
- * transforms the fused graphs at run time, so it differentiates the fused operators themselves.
+ * Derivative rules of the patterns tensor::fuse marks as one group. The graph keeps matmul, add
+ * and relu (design principles 9.6), so grad differentiates the program's own operators; run it
+ * after tensor::fuse and without std::macro: the group attribute changes no operator to differentiate.
  * For each function f and direction v, sum(grad(f)(x) * v) must match
  * (f(x + h v) - f(x - h v)) / 2h; the weights and bias receive gradients through w_of and b_of.
  */
@@ -27,14 +27,14 @@ func w34(): Tensor { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [
 func b4(): Tensor { return new([0.7, -0.3, 1.5, 0.2]) }
 func out24(): Tensor { return new([[1.0, -2.0, 0.5, 0.3], [0.4, 1.2, -0.6, 0.9]]) }
 
-// matmul + bias (fused to matmul_add), in each operand
+// matmul + bias (one fused group), in each operand
 with <x: Tensor>
 func lin_x(): float { return sum((x @ w34() + b4()) * out24()) }
 with <w: Tensor>
 func lin_w(): float { return sum((x23() @ w + b4()) * out24()) }
 with <b: Tensor>
 func lin_b(): float { return sum((x23() @ w34() + b) * out24()) }
-// matmul + bias + relu (fused to matmul_add_relu)
+// matmul + bias + relu (one fused group)
 with <x: Tensor>
 func mlp_x(): float { return sum(relu(x @ w34() + b4()) * out24()) }
 with <w: Tensor>
@@ -46,11 +46,11 @@ func main(): int sync {
     let vx = new([[0.2, -0.4, 0.9], [-0.3, 0.8, 0.1]])
     let vw = new([[0.5, 0.1, -0.2, 0.3], [-0.6, 0.4, 0.2, -0.1], [0.3, -0.5, 0.7, 0.2]])
     let vb = new([0.3, -0.7, 0.2, 0.5])
-    check('matmul_add.x', lin_x, grad(lin_x), x23(), vx)
-    check('matmul_add.w', lin_w, grad(lin_w), w34(), vw)
-    check('matmul_add.b', lin_b, grad(lin_b), b4(), vb)
-    check('matmul_add_relu.x', mlp_x, grad(mlp_x), x23(), vx)
-    check('matmul_add_relu.w', mlp_w, grad(mlp_w), w34(), vw)
-    check('matmul_add_relu.b', mlp_b, grad(mlp_b), b4(), vb)
+    check('linear.x', lin_x, grad(lin_x), x23(), vx)
+    check('linear.w', lin_w, grad(lin_w), w34(), vw)
+    check('linear.b', lin_b, grad(lin_b), b4(), vb)
+    check('linear_relu.x', mlp_x, grad(mlp_x), x23(), vx)
+    check('linear_relu.w', mlp_w, grad(mlp_w), w34(), vw)
+    check('linear_relu.b', mlp_b, grad(mlp_b), b4(), vb)
     return 0
 }

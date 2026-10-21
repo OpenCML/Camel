@@ -254,20 +254,6 @@ Value lowerLinear(const LowerContext &ctx) {
     return ctx.emit("Add", {product, ctx.input(2, dtype)});
 }
 
-/// matmul_add / matmul_add_relu (produced by tensor::fuse): MatMul, Add (, Relu). ONNX Runtime
-/// re-fuses these into Gemm / FusedMatMul itself.
-LowerFn matmulAddOp(bool relu) {
-    return [relu](const LowerContext &ctx) {
-        const auto dtype          = ctx.result().dtype;
-        Emitter &e                = ctx.emitter();
-        const std::string product = e.node("MatMul", {ctx.input(0, dtype), ctx.input(1, dtype)});
-        if (!relu) {
-            return ctx.emit("Add", {product, ctx.input(2, dtype)});
-        }
-        return ctx.emit("Relu", {e.node("Add", {product, ctx.input(2, dtype)})});
-    };
-}
-
 Value lowerTranspose(const LowerContext &ctx) {
     const size_t rank = ctx.rank(0);
     if (rank < 2) {
@@ -1102,8 +1088,6 @@ LoweringRegistry::LoweringRegistry() {
     // Linear algebra and layout.
     add("tensor:matmul", sameTypeOp("MatMul", 2));
     add("tensor:linear", lowerLinear);
-    add("tensor:matmul_add", matmulAddOp(false));
-    add("tensor:matmul_add_relu", matmulAddOp(true));
     add("tensor:transpose", lowerTranspose);
     add("tensor:permute", lowerPermute);
     add("tensor:reshape", lowerReshape, 5);

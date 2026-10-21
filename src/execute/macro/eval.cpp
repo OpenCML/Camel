@@ -643,6 +643,10 @@ MacroEvaluator::tryExecuteStaticOper(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
         data_arr_t wargs{indices.data() + normCount, indices.size() - normCount};
         FrameArgsView withView(*frame, wargs);
         FrameArgsView normView(*frame, nargs);
+        // What a pass recorded about this node (design principles 9.6).
+        const auto attrs = ownerGraph->nodeAttrs(nodeRef);
+        withView.setAttrs(attrs);
+        normView.setAttrs(attrs);
         (void)os;
         CAMEL_LOG_INFO_S("Macro", "Execute static operator '{}'.", std::string(body->uri()));
         mm::safepoint("macro static operator");

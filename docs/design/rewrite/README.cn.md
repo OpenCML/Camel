@@ -35,7 +35,9 @@ rule map_map<f, g>(xs: int[])          { xs->map<f>->map<g> => xs->map<(v) => g(
     when is_pure(f) && is_pure(g)
 
 rule mm_add(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>) {
-    a @ b + c => #fused { matmul_add(a, b, c) }
+    // 融合是实现选择，记在节点属性上，右边仍是程序的原算子（设计原则 9.6）；`@fused` 是一个
+    // 声明了授予 `tensor.fusion` 的算子，与 `@numeric` 同一机制。
+    a @ b + c => @fused { a @ b + c }
 }
 ```
 

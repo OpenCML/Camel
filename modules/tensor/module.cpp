@@ -25,6 +25,7 @@
 
 #include "module.h"
 
+#include "attrs.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator_traits.h"
@@ -55,6 +56,7 @@ class TensorExecutor : public Executor {
 } // namespace
 
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
+    camel::tensor::registerTensorAttrKeys();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
     exportType(Reference("Tensor"), camel::tensor::TensorType::Default());

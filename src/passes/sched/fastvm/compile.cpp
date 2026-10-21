@@ -570,9 +570,12 @@ static bytecode_vec_t compileRuntimeGraph(
                 {
                     .func = camel::profile::profiledOperator(uri, *opFunc),
                 },
-                2);
+                3);
             *native->extra2() =
                 graph->nodeBodyAs<camel::runtime::GCOperBody>(runtimeNodeIndex)->oper;
+            // What a pass recorded about this node (design principles 9.6); native_call hands it
+            // to the operator through its ArgsView.
+            *native->operAttrs() = graph->nodeAttrs(runtimeNodeIndex);
             break;
         }
 
