@@ -236,6 +236,14 @@ std::vector<Rule> compileRule(camel::core::context::Context &context, const Rule
         throw RuleCompileError(
             std::format("Rule '{}': the two sides do not have the same parameters.", source.name));
     }
+    if (source.when && source.whenArity != left->normPorts().size()) {
+        throw RuleCompileError(
+            std::format(
+                "Rule '{}': its condition takes {} parameters, its sides {}.",
+                source.name,
+                source.whenArity,
+                left->normPorts().size()));
+    }
     std::vector<Rule> rules;
     rules.push_back(compileDirection(context, source, *left, *right, false));
     if (source.bidirectional) {

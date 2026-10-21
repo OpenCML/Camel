@@ -1,0 +1,29 @@
+/**
+ * The program the rules with conditions are applied to. Every function has a sibling whose
+ * condition is false, so the tests can see both that the rule fires and that it refuses.
+ */
+module when_target
+
+/// x + 0: the fact read of the condition holds.
+func byConst(x: int): int { return x + 0 }
+
+/// x + y with y not a constant: the fact read refuses.
+func notConst(x: int, y: int): int { return x + y }
+
+/// x * (y + 1): the shape test holds, and the product is replaced by the addition.
+func mulSum(x: int, y: int): int { return x * (y + 1) }
+
+/// x * y: the shape test refuses, the product stays.
+func mulPlain(x: int, y: int): int { return x * y }
+
+/// x + x on int: the type test picks the int rule, the addition becomes x * 2.
+func intDouble(x: int): int { return x + x }
+
+/// x + x on float: the int rule refuses, the float rule replaces the addition by x * 2.0.
+func floatDouble(x: float): float { return x + x }
+
+func main(): int sync {
+    println(byConst(7), notConst(7, 3), mulSum(2, 4), mulPlain(3, 4))
+    println(intDouble(5), floatDouble(1.25))
+    return 0
+}

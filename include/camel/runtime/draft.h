@@ -345,13 +345,17 @@ class GraphDraft {
 
     std::span<const slot_t> staticSlots() const { return staticSlots_; }
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
-    /// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
+/// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
     /// value a draft holds; the graph's content does not change, so this is not an edit (it does
     /// not count a mutation or change what the draft refers to).
     void relocateStaticSlot(size_t index, slot_t value) {
         ASSERT(index < staticSlots_.size(), "Draft static slot index is out of range.");
         staticSlots_[index] = value;
     }
+    /// Relocates every value the static slots hold: what a rule condition (a safepoint) needs,
+    /// since the draft itself is not traced by the collector. Each slot is written back with
+    /// relocateStaticSlot, so a collection during the engine is not an edit.
+    void relocateStaticValues(const camel::core::rtdata::Object::RefRelocator &relocate);
     const std::vector<GraphId> &dependencies() const { return dependencies_; }
     const std::vector<GraphId> &subGraphs() const { return subGraphs_; }
     /// Forgets the graphs in `graphs` that no node calls any more (the graphs that held code now

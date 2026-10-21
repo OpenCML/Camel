@@ -804,12 +804,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const auto sides  = body->exprs();
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
-    if (context->expr()) {
-        diags_->of(SemanticDiag::ConstructNotSupported)
-            .at(rangeOf(context->expr().firstToken()))
-            .commit("when", "the condition of a rule is not implemented");
-    }
-    int64_t consts = 0;
+    const auto when   = context->expr();
+    int64_t consts    = 0;
     if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
         int bit = 0;
         for (const auto pair : paired->all<cst::KeyParamPair>()) {
@@ -857,6 +853,58 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     node_ptr_t lhsFunc = side("__lhs", sides[0]);
     node_ptr_t rhsFunc = side("__rhs", sides[1]);
 
+    // A condition is a fourth function of the same parameters, as nodes of the draft being
+    // rewritten: `func name__when(params as graph::Node) => expr`.
+    node_ptr_t whenFunc;
+    if (when) {
+        if (!whenImportAdded_) {
+            whenImportAdded_   = true;
+            auto rewriteImport = std::make_shared<ImportLoad>();
+            rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
+            rewriteImport->setPath("rewrite");
+            rewriteImport->setRefs({Reference("__rule_when")});
+            imports_.push_back(rewriteImport);
+            auto graphImport = std::make_shared<ImportLoad>();
+            graphImport->setTokenRange(extractTokenRangeFromContext(context));
+            graphImport->setPath("graph");
+            graphImport->setRefs({Reference("Node")});
+            imports_.push_back(graphImport);
+        }
+        const Reference whenRef = qualifyRef(Reference(name + "__when"));
+        node_ptr_t whenParams   = createNodeAs<RepeatedLoad>("NamedPair");
+        setNodeTokenRangeByContext(whenParams, context);
+        if (params) {
+            if (const auto paired = params->get<cst::PairedParams>()) {
+                for (const auto pair : paired->all<cst::KeyParamPair>()) {
+                    node_ptr_t named = createNodeAs<NamedPairLoad>(
+                        Reference(std::string(pair->get<cst::IdentDef>()->text())),
+                        false,
+                        false);
+                    setNodeTokenRangeByContext(named, pair);
+                    node_ptr_t nodeType = createNodeAs<RefTypeLoad>(Reference("Node"));
+                    setNodeTokenRangeByContext(nodeType, pair);
+                    *named << nodeType << createNodeAs<OptionalLoad>("DataExpr");
+                    *whenParams << named;
+                }
+            }
+        }
+        node_ptr_t whenType = createNodeAs<FuncTypeLoad>();
+        setNodeTokenRangeByContext(whenType, when);
+        *whenType << createNodeAs<RepeatedLoad>("NamedPair");
+        *whenType << whenParams;
+        node_ptr_t whenResult = createNodeAs<OptionalLoad>("Type");
+        node_ptr_t boolType   = createNodeAs<RefTypeLoad>(Reference("bool"));
+        setNodeTokenRangeByContext(boolType, when);
+        *whenResult << boolType;
+        *whenType << whenResult;
+        node_ptr_t whenData = createNodeAs<FuncDataLoad>(whenRef);
+        setNodeTokenRangeByContext(whenData, when);
+        *whenData << whenType << any2node(visitBlockExpr(when));
+        whenFunc = createNodeAs<FuncDeclLoad>(whenRef);
+        setNodeTokenRangeByContext(whenFunc, when);
+        *whenFunc << whenData;
+    }
+
     // func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
     const auto literal = [&](LiteralType type, const std::string &text) {
         node_ptr_t literalNode = createNodeAs<LiteralLoad>(Literal(type, text));
@@ -876,9 +924,14 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     *args << literal(LiteralType::Integer, std::to_string(consts));
     *args << reference(name + "__lhs");
     *args << reference(name + "__rhs");
+    std::string makerName = "__rule";
+    if (whenFunc) {
+        *args << reference(name + "__when");
+        makerName = "__rule_when";
+    }
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);
-    *call << reference("__rule") << args << createNodeAs<RepeatedLoad>("NamedData");
+    *call << reference(makerName) << args << createNodeAs<RepeatedLoad>("NamedData");
 
     node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
     setNodeTokenRangeByContext(exprStmt, context);
@@ -892,7 +945,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
 
     node_ptr_t makerType = createNodeAs<FuncTypeLoad>();
     setNodeTokenRangeByContext(makerType, context);
-    *makerType << createNodeAs<RepeatedLoad>("NamedPair") << createNodeAs<RepeatedLoad>("NamedPair");
+    *makerType << createNodeAs<RepeatedLoad>("NamedPair")
+               << createNodeAs<RepeatedLoad>("NamedPair");
     node_ptr_t makerTypeOpt = createNodeAs<OptionalLoad>("Type");
     setNodeTokenRangeByContext(makerTypeOpt, context);
     *makerType << makerTypeOpt;
@@ -905,7 +959,12 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(makerDecl, context);
 
     LEAVE("RuleDecl");
-    return std::vector<node_ptr_t>{lhsFunc, rhsFunc, makerDecl};
+    std::vector<node_ptr_t> declarations{lhsFunc, rhsFunc};
+    if (whenFunc) {
+        declarations.push_back(whenFunc);
+    }
+    declarations.push_back(makerDecl);
+    return declarations;
 }
 
 /*
@@ -2451,8 +2510,8 @@ Value Builder::visitUnaryExpr(syn::Node context) {
             // smallest integer -9223372036854775808 (whose digits alone do not fit), a typed
             // `let b: i32 = -2147483648`. Only the minus right before the literal: `-2 ^ 2`
             // negates the power and `-(2)` the parenthesis.
-            const auto literal = cst::Literal(context->expr());
-            const bool integer = static_cast<bool>(literal->tok(TK::Integer));
+            const auto literal   = cst::Literal(context->expr());
+            const bool integer   = static_cast<bool>(literal->tok(TK::Integer));
             const bool imaginary = static_cast<bool>(literal->tok(TK::Imaginary));
             if ((integer || literal->tok(TK::Real) || imaginary) && literal->childCount() == 1) {
                 res = createNodeAs<LiteralLoad>(Literal(

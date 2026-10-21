@@ -96,6 +96,8 @@ class Builder {
     Value visitRuleDecl(syntax::cst::RuleDecl context);
     /// The import of the module `rewrite` that rule declarations need was made.
     bool ruleImportAdded_ = false;
+    /// The imports a rule condition needs (`__rule_when`, `graph.Node`) were made.
+    bool whenImportAdded_ = false;
     Value visitBlockStmt(syntax::cst::BlockStmt context);
     Value visitStmtBlock(syntax::cst::StmtBlock context);
     Value visitFuncData(syntax::cst::FuncData context);
