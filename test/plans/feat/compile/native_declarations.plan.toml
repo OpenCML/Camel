@@ -375,3 +375,34 @@ case = "../../../cases/compile/native/re_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:17", "argument types: <> (int, string)", "<re:test>: (pattern: string, text: string) => bool"]
+
+# ---- Retired names are unknown names, not aliases (handover H122; design principles 1) ----
+#
+# `str::bytes` and `str::from_bytes` were deleted, not renamed: `bytes::encode`/`bytes::decode` are
+# the one conversion. An old form is deleted outright, with no alias and no diagnostic pointing at
+# the new form, so a program that still imports the old name is diagnosed where it uses it: the
+# import layer knows which module the name was asked of and that the module does not export it.
+
+[[tests]]
+name = "native.retired_str_bytes"
+desc = "`str::bytes` is retired: the name is not exported by `str`, and the use is a located ImportNameNotExported — an ordinary name the module does not export, not an alias of `bytes::encode` and not a diagnostic pointing at it."
+kind = "negative"
+case = "../../../cases/compile/native/retired_str_bytes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_code = "0x03000015"
+expect_diagnostic_line = 10
+expect_output_contains = ["retired_str_bytes.cml:10:13", "Reference 'bytes'", "not exported by its module"]
+
+[[tests]]
+name = "native.retired_str_from_bytes"
+desc = "`str::from_bytes` is retired the same way: `bytes::decode` is where UTF-8 bytes become a string, and the old name is an ordinary unexported name diagnosed at its use."
+kind = "negative"
+case = "../../../cases/compile/native/retired_str_from_bytes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_code = "0x03000015"
+expect_diagnostic_line = 10
+expect_output_contains = ["retired_str_from_bytes.cml:10:13", "Reference 'from_bytes'", "not exported by its module"]
