@@ -25,7 +25,8 @@
 #include <unordered_map>
 #include <vector>
 
-/// The operator groups and implementations of numeric.cpp, merged into the module by module.cpp
-/// and operators.cpp.
+/// The operator groups whose signature C++ computes (the shifts) and the implementations of
+/// numeric.cpp, merged into the module by module.cpp and operators.cpp. The fixed signatures
+/// are the declarations of `stdlib/math.cml`, not a second table here.
 const std::vector<oper_group_ptr_t> &getMathNumericGroups();
 std::unordered_map<std::string, operator_t> getMathNumericOpsMap();

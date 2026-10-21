@@ -315,6 +315,7 @@ e161ae730c757b4e ok showcase/c2-mlp-mnist/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 f8a426c8e96936da ok stdlib/bytes.cml
+f234da727937674c ok stdlib/math.cml
 173076cd43673a6b ok stdlib/perf.cml
 dc425a313698f684 ok stdlib/rules.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
@@ -324,7 +325,6 @@ e46e8d8f1dd87a8f ok stdlib/signatures/fs.cml
 3364937d4942b0ed no stdlib/signatures/globals.cml
 7b8935da68ae2c54 ok stdlib/signatures/graph.cml
 6a3e6cc94c265b2e ok stdlib/signatures/json.cml
-16c0cffa4e13a3af ok stdlib/signatures/math.cml
 8cf439ddb166aed6 ok stdlib/signatures/os.cml
 288f3bfd8801992a ok stdlib/signatures/para.cml
 e83d9c672ad03ec3 ok stdlib/signatures/random.cml
@@ -929,7 +929,7 @@ ea95d3ed9a96616e ok test/cases/compile/tags/err_tag_shadows_permission.cml
 8a8a6731caef4850 ok test/cases/compile/tags/err_type.cml
 8a46ed23b5a19733 ok test/cases/compile/tags/err_undeclared.cml
 0805b6064bbc79f8 ok test/cases/compile/tags/float.cml
-f4c1ab05bea62ebf ok test/cases/compile/tags/graph.cml
+f4c1ab05bea62ebf ok test/cases/compile/tags/tags_nodes.cml
 696c35c979c070dd ok test/cases/compile/tags/independent.cml
 ef2a2f385af2db1a ok test/cases/compile/tags/permissions.cml
 d336d09053a3b840 ok test/cases/compile/tags/reads.cml
