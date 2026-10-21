@@ -1,0 +1,82 @@
+id = "linear.loops_in_arms"
+order = 357
+tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
+tags = ["feat", "linear", "loops"]
+desc = "A loop written as the value of a branch arm (H45): the first round starts where the region of the arm starts, so a loop in an arm gives the value of the same loop in the function body. The matrix of shapes on every back end (nvm, fvm, jit, prl, prl without bytecode) and in every mode (interpreted, compiled, compiled without inlining, the macro evaluator)."
+
+[[tests]]
+name = "loops_in_arms"
+desc = "The matrix of H45, every value computed by hand: the whole `then` arm (6) and the whole `else` arm (6), a `while` in an arm (3), a loop of two states ((5, 10)), a loop followed by more statements in the same arm (61), an `if` inside the loop's body (2 + 4 = 6), a loop in a `match` arm (6, -1), a loop in each arm (6, 100 + 6 = 106), a collecting loop ([0, 7, 7, 7], [9]), the same function called twice (6 6), and a loop in an arm of the root graph (4 + 5 = 9). The other arm (-1) does not disturb the loop, and the four back ends agree."
+kind = "behavior"
+case = "../../../cases/loops/arm_loops.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "then 6\nthen.false -1\nelse 6\nelse.false -1\nwhile 3\ntwo (5, 10)\nmore 61\nbody-if 6\nmatch 6 -1\ntwo-arms 6 106\ncollect [0, 7, 7, 7] [9]\ntwice 6 6\nroot 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops_in_arms.compiled"
+desc = "The same matrix with the loops in arms compiled by the JIT: `std::jit(hot_threshold=0)` compiles the callees at their first call (framed code, the loop events are native), and `std::opt::inline std::jit(hot_threshold=0)` compiles main with the arms and their loops in it. The compiled values are the interpreters' (`backends_agree` with nvm)."
+kind = "behavior"
+case = "../../../cases/loops/arm_loops.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "then 6\nthen.false -1\nelse 6\nelse.false -1\nwhile 3\ntwo (5, 10)\nmore 61\nbody-if 6\nmatch 6 -1\ntwo-arms 6 106\ncollect [0, 7, 7, 7] [9]\ntwice 6 6\nroot 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "loops_in_arms.inline"
+desc = "The matrix after `std::opt::inline`, and with `std::prl(bytecode=false)` (the scheduler evaluates every graph itself instead of handing it to the bytecode interpreter): the arms and their loops are inlined into their callers, and the values are still the matrix's."
+kind = "behavior"
+case = "../../../cases/loops/arm_loops.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "inline_nvm", "inline_fvm", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "then 6\nthen.false -1\nelse 6\nelse.false -1\nwhile 3\ntwo (5, 10)\nmore 61\nbody-if 6\nmatch 6 -1\ntwo-arms 6 106\ncollect [0, 7, 7, 7] [9]\ntwice 6 6\nroot 9\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "loops_in_arms.edges"
+desc = "The edges of a loop in an arm, every value computed by hand: a loop that runs no round (0), `for ... while` stopping at 3 and finding nothing (-1), a loop in an arm inside a loop's body (0 + 60 + 90 = 150), a macro function's arm (6, -1), four calls in one expression (24), an effect after the loop in a `sync` arm (`sum 6`, then 7), a body that ignores its state (5), two loops in one arm (6 + 12 = 18), an initial value computed in the arm (20 + 6 = 26), and the loop's value feeding a condition (12, 1, 0)."
+kind = "behavior"
+case = "../../../cases/loops/arm_loops_edges.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "empty 0\nfor-while 3 -1\nnested 150\nmacro 6 -1\nfour 24\nsum 6\nsync 7\nconst-body 5 -1\ntwo-loops 18\ninitial 26 -1\nfeeds 12 1 0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops_in_arms.edges.compiled"
+desc = "The edge shapes with the loops in arms compiled (`std::jit(hot_threshold=0)`), inlined into main (`std::opt::inline std::jit(hot_threshold=0)`), and on `std::prl(bytecode=false)`: the same values as the interpreters."
+kind = "behavior"
+case = "../../../cases/loops/arm_loops_edges.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "empty 0\nfor-while 3 -1\nnested 150\nmacro 6 -1\nfour 24\nsum 6\nsync 7\nconst-body 5 -1\ntwo-loops 18\ninitial 26 -1\nfeeds 12 1 0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "loops_in_arms.edges.macro"
+desc = "The macro evaluator runs the loop in the macro function's arm (`std::macro`): `macro_arm(true)` folds to 6 and `macro_arm(false)` to -1 before the graph runs, and the rest of the program gives the same values."
+kind = "behavior"
+case = "../../../cases/loops/arm_loops_edges.cml"
+args = ["${case}", "std::macro", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "empty 0\nfor-while 3 -1\nnested 150\nmacro 6 -1\nfour 24\nsum 6\nsync 7\nconst-body 5 -1\ntwo-loops 18\ninitial 26 -1\nfeeds 12 1 0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

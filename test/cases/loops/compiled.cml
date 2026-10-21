@@ -2,9 +2,10 @@
 // these functions through the interpreter's direct call, which compiles each of them at its
 // first call under `std::jit(hot_threshold=0)`. Their rounds then run in the frame as framed
 // code, and the values are the interpreter's: one state over an array, two states under a
-// condition, `for ... while`, an empty array, a nested loop, a loop that collects, a loop in
-// the arm of a branch, a body that calls a function, and a body that calls a function whose own
-// loop runs while the outer loop is on the machine stack.
+// condition, `for ... while`, an empty array, a nested loop, a loop that collects, a body that
+// calls a function, and a body that calls a function whose own loop runs while the outer loop is
+// on the machine stack. A loop in a branch arm is `arm_loops.cml`'s matrix
+// (`linear.loops_in_arms`).
 func sum_squares(xs: int[]): int {
     let total = loop acc = 0 for x in xs do acc + x * x
     return total

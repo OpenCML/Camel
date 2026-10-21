@@ -163,8 +163,9 @@
 （`computeExecutionOrder`，`src/execute/graph_runtime_support.cpp`）：从出口沿三种输入边（norm / with / ctrl）
 做后序遍历。遇到 `JOIN` 时，先排好各臂从分支外面读的一切，再排 `BRCH`，然后**按臂的顺序**把各臂区域的节点
 各排成一段连续的区间，最后是 `JOIN`。执行计划（`ExecPlan::branchArmEntries`、`branchArmTails`）给出每条臂的
-入口（区间里第一个真正执行的节点）与末尾：`BRCH` 跳到被选中那条臂的入口，末尾之后跳到 `JOIN`；其余区间整段
-跳过。
+入口（区间里**第一个**节点，哪怕它只是臂里的一个常量或端口；`BRCH` 跳到入口后，执行器先跑这个位置上的循环
+事件，再跑节点，所以入口必须是区间开头而不是"第一个真正干事的节点"）与末尾：`BRCH` 跳到被选中那条臂的入口，
+末尾之后跳到 `JOIN`；其余区间整段跳过。
 
 **不变量**（`validateRuntimeBranchArms`，`src/runtime/branch_arms.cpp`，每次提交都检查；只看活节点，即出口沿
 输入边可达的节点）。对每个活的 `BRCH` `B`，`J` 是它负载里的 `JOIN`：
