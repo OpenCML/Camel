@@ -30,6 +30,7 @@
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/keepfn.h"
@@ -1167,7 +1168,18 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
         // No such module: the name stays unknown and is reported by the caller.
     } catch (const std::exception &) {
     }
-    return resolvePass(spec);
+    resolved = resolvePass(spec);
+    if (resolved.problem || resolved.factory) {
+        return resolved;
+    }
+    // A function written in Camel: the module is a library of its own, compiled now.
+    std::string problem;
+    camel::execute::registerCamelPass(ctx, name.substr(0, sep), name.substr(sep + 2), problem);
+    resolved = resolvePass(spec);
+    if (!resolved.factory && !problem.empty()) {
+        resolved.problem = problem;
+    }
+    return resolved;
 }
 
 void requireKnownPasses(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
