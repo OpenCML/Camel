@@ -212,6 +212,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     }
     const GraphId id = graph->id();
     RuntimeGraphDraftSession first(ctx, &program);
+    first.setGraphState(GraphState::Tabled);
     GraphDraft &draft = first.edit(const_cast<GCGraph *>(graph));
     {
         DraftWritings writings(draft);
@@ -261,6 +262,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
         again->writings().size() == after->writings().size() && !again->writings().empty());
     // Nothing added: the same version.
     RuntimeGraphDraftSession second(ctx, tabled);
+    second.setGraphState(GraphState::Tabled);
     GraphDraft &redraft = second.edit(const_cast<GCGraph *>(after));
     {
         DraftWritings writings(redraft);
@@ -271,6 +273,7 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     r.check("unchanged_is_same_version", same->graph(id) == after);
     // The table is content: one more equivalence is a new version.
     RuntimeGraphDraftSession third(ctx, tabled);
+    third.setGraphState(GraphState::Tabled);
     GraphDraft &more = third.edit(const_cast<GCGraph *>(after));
     {
         DraftWritings writings(more);
@@ -483,6 +486,7 @@ TabledTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);
+    session.setGraphState(GraphState::Tabled);
     GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
     DraftWritings writings(draft);
     writings.build();

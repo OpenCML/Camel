@@ -250,46 +250,6 @@ bool shouldTraverseStaticSlotType(Type *type) {
 /// The regions of a graph are a tree rooted at the body, every node is in one of them, and the
 /// nodes a region names are nodes of the graph. (Which nodes may read which is checked once
 /// control regions exist.)
-/// The equivalences between nodes of a graph (the state with several writings): each names two
-/// nodes of the graph that compute a value of the same type, in the same region, and no node
-/// with an effect or a control input is one of them. The graph says so by its flag.
-void validateRuntimeWritings(const GCGraph *graph) {
-    const auto log = graph->writings();
-    if (log.empty() != graph->executable()) {
-        throw std::runtime_error(
-            std::format(
-                "Runtime graph '{}' {} equivalences between nodes but {} the flag that says so.",
-                graph->name(),
-                log.empty() ? "has no" : "has",
-                log.empty() ? "has" : "lacks"));
-    }
-    const auto bad = [&](std::string_view what, size_t index) {
-        throw std::runtime_error(
-            std::format(
-                "Runtime graph '{}' has equivalence {} {}.", graph->name(), index, what));
-    };
-    for (size_t i = 0; i < log.size(); ++i) {
-        const WritingUnion &entry = log[i];
-        if (!graph->containsNodeRef(entry.a) || !graph->containsNodeRef(entry.b)) {
-            bad("that names a node the graph does not have", i);
-        }
-        const GCNode *a = graph->node(entry.a);
-        const GCNode *b = graph->node(entry.b);
-        if (a->kind == GCNodeKind::Dead || b->kind == GCNodeKind::Dead) {
-            bad("that names a node a rewrite removed", i);
-        }
-        if (a->typeId != b->typeId) {
-            bad("between nodes of different types", i);
-        }
-        if (graph->nodeRegion(entry.a) != graph->nodeRegion(entry.b)) {
-            bad("between nodes of different regions", i);
-        }
-        if (!graph->ctrlInputsOf(entry.a).empty() || !graph->ctrlInputsOf(entry.b).empty()) {
-            bad("that names a node with a control input", i);
-        }
-    }
-}
-
 void validateRuntimeRegions(const GCGraph *graph) {
     const gc_cnt_t count = graph->regionCount();
     const auto bad       = [&](std::string_view what, uint32_t region) {
@@ -353,7 +313,6 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
             std::format("Runtime graph '{}' has no native node payload.", graph->name()));
     }
     validateRuntimeRegions(graph);
-    validateRuntimeWritings(graph);
 
     const auto validateRef = [&](gc_node_ref_t ref, std::string_view what) {
         if (ref == kInvalidNodeRef) {

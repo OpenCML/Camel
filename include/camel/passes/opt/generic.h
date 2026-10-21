@@ -80,6 +80,19 @@ class AlgebraPass : public RuntimeGraphRewritePass {
     bool safeFp_;
 };
 
+/// std::opt::extract: one writing for every value that has several (runtime/writings.h).
+class ExtractPass : public RuntimeGraphRewritePass {
+  public:
+    ExtractPass(const camel::core::context::context_ptr_t &ctx, std::string cost)
+        : RuntimeGraphRewritePass(ctx), cost_(std::move(cost)) {}
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+    bool acceptsWritings() const override { return true; }
+
+  private:
+    std::string cost_;
+};
+
 class DeadCodePass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;

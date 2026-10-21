@@ -113,13 +113,25 @@ timeout_ms = 30000
 
 [[tests]]
 name = "writings.driver_refuses_rewrite"
-desc = "A rewrite pass that does not know the state with several writings does not get the program: the driver stops with a diagnostic that names the pass."
+desc = "A rewrite pass that does not know the state with several writings does not get the program: the driver stops with PassNeedsExtraction, naming the pass and the extraction to put before it."
 kind = "behavior"
 case = "../../../cases/feat/mm/writings/congruence.cml"
 args = ["${case}", "test::tabled", "std::opt::fold", "std::nvm"]
 envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 1
-expect_output_contains = ["several writings", "std::opt::fold"]
+expect_output_contains = ["PassNeedsExtraction", "std::opt::fold", "std::opt::extract"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.extract_pass"
+desc = "std::opt::extract chooses one writing for every value, so the rewrite pass after it gets a program it knows; its cost parameter names the model, and an unknown model is an error."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::tabled", "std::opt::extract(cost=\"nodes\")", "std::opt::fold", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["15"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

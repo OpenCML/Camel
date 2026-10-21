@@ -1214,7 +1214,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     // program is left as it is.
     // A shape no back end runs (GraphState::NonExecutable: the export-only sessions) is never
     // installed: it stays in a private program, whatever the caller asked for.
-    if (!detached && graphState_ == GraphState::Executable &&
+    if (!detached && graphState_ != GraphState::NonExecutable &&
         context_->currentRuntimeProgram() == program_ && program_->root() == oldRuntimeRoot) {
         program_ = context_->installRuntimeProgram(committed);
     } else {

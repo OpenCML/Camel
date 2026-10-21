@@ -492,6 +492,21 @@ PassDescriptor devirtualizeDescriptor() {
     return d;
 }
 
+PassDescriptor extractDescriptor() {
+    PassDescriptor d;
+    d.doc    = "one writing for every value that has several, chosen by a cost model";
+    d.params = {PassParam{
+        "cost",
+        PassParamType::String,
+        std::string("weighted"),
+        "the cost model: 'nodes' (every node costs one), 'weighted' (a division costs more than a "
+        "product, a product more than a sum), or one a module registered"}};
+    d.make   = [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<ExtractPass>(ctx, args.getString("cost"));
+    };
+    return d;
+}
+
 PassDescriptor algebraDescriptor() {
     PassDescriptor d;
     d.doc    = "algebraic simplification";
@@ -681,6 +696,7 @@ PassScopePtr initPassScope() {
                              {"specialize", def(specializeDescriptor())},
                              {"fold", def(PASS(ConstantFoldPass))},
                              {"algebra", def(algebraDescriptor())},
+                             {"extract", def(extractDescriptor())},
                              {"cse", def(PASS(CommonSubexpressionPass))},
                              {"dce", def(PASS(DeadCodePass))},
                              {"ctrl", def(PASS(ControlReductionPass))},
@@ -1300,11 +1316,7 @@ PassApplyResult applyPassesDetailed(
                     ctx->settleRuntimeGraphs(program);
                 } else if (!pass->acceptsWritings()) {
                     setPipelineStage("pass:" + specName(p));
-                    ctx->rtmDiags()->of(RuntimeDiag::PassInternalError)
-                        .commit(
-                            p,
-                            "the program has values with several writings; put an extraction "
-                            "before this pass");
+                    ctx->rtmDiags()->of(RuntimeDiag::PassNeedsExtraction).commit(p);
                     return {nullptr, PassApplyStatus::Failed};
                 }
             }
