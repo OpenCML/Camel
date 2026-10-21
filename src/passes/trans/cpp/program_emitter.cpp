@@ -148,7 +148,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
     // in place.
     std::unordered_set<const GCGraph *> scanning;
     std::function<void(GCGraph *)> scan = [&](GCGraph *graph) {
-        for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+        for (gc_node_ref_t ref : graph->execPlan().topo) {
             const auto *node = graph->node(ref);
             if (node->kind == GCNodeKind::Data) {
                 if (GCGraph *function = functionConstant(graph, ref);
@@ -470,7 +470,7 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
 
 std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
     std::string out = std::format("// graph '{}':\n", graph->name());
-    for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+    for (gc_node_ref_t ref : graph->execPlan().topo) {
         const auto *node = graph->node(ref);
         out += std::format(
             "//   [{}] {} : {}\n",

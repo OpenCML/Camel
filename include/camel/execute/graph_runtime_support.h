@@ -32,6 +32,7 @@
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
@@ -102,8 +103,10 @@ struct RuntimeBranchArmRegion {
     std::vector<camel::runtime::gc_node_ref_t> topoIndices;
 };
 
+/// Computes the order the live nodes of `graph` run in. Back ends do not call it: they read the
+/// execution plan (camel/runtime/exec_plan.h), which calls it once per graph version.
 std::vector<camel::runtime::gc_node_ref_t>
-buildReachableExecutionTopoIndices(camel::runtime::GCGraph *graph);
+computeExecutionOrder(const camel::runtime::GCGraph *graph);
 camel::runtime::gc_node_ref_t
 resolveRuntimeForwardedValueRef(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t ref);
 camel::runtime::gc_node_ref_t resolveRuntimeTailValueRef(camel::runtime::GCGraph *graph);
@@ -133,6 +136,10 @@ camel::runtime::gc_node_ref_t resolveRuntimeBranchArmEntry(
     std::span<const camel::runtime::gc_node_ref_t> topoOrder);
 size_t selectRuntimeBranchArm(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef,
+    camel::core::context::Frame *frame);
+/// The same for a BRCH of the execution plan, without looking anything up in the graph.
+size_t selectRuntimeBranchArm(
+    const camel::runtime::ExecPlan &plan, const camel::runtime::ExecNode &brch,
     camel::core::context::Frame *frame);
 slot_t readRuntimeGraphReturn(camel::runtime::GCGraph *graph, camel::core::context::Frame *frame);
 
