@@ -63,6 +63,22 @@ class EngineRootScope {
     std::span<const Rule> rules_;
 };
 
+/// The type a replacement writing gets. A pattern's type is what the rule was written with, and it
+/// can be less informed than the node the rule replaces: a law for `Tensor<f32>` replaces a
+/// `Tensor<f32, [3]>` node. When the pattern accepts the node's own type, the writing keeps it, so
+/// a rewritten value has the type of the place it is written to (and a saturation, which merges
+/// writings by type, can merge them).
+camel::core::type::Type *writingType(
+    const camel::core::type::Type *patternType, const camel::core::type::Type *nodeType) {
+    if (patternType == nullptr) {
+        return const_cast<camel::core::type::Type *>(nodeType);
+    }
+    if (nodeType != nullptr &&
+        patternType->assignableFrom(const_cast<camel::core::type::Type *>(nodeType))) {
+        return const_cast<camel::core::type::Type *>(nodeType);
+    }
+    return const_cast<camel::core::type::Type *>(patternType);
+}
 
 } // namespace
 
@@ -1173,7 +1189,7 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
         return match.vars[pattern.var];
     case Pattern::Kind::Constant:
         return constantNode(
-            pattern.value, pattern.type != nullptr ? pattern.type : base.dataType, base.permissions, base.region);
+            pattern.value, writingType(pattern.type, base.dataType), base.permissions, base.region);
     case Pattern::Kind::Compute: {
         std::vector<slot_t> values;
         for (const Pattern &arg : pattern.args) {
@@ -1186,7 +1202,7 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
             values.push_back(value->first);
         }
         return constantNode(
-            pattern.compute(values), pattern.type != nullptr ? pattern.type : base.dataType, base.permissions,
+            pattern.compute(values), writingType(pattern.type, base.dataType), base.permissions,
             base.region);
     }
     case Pattern::Kind::Op: {
@@ -1201,7 +1217,7 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
         DraftNodeInit init = base;
         init.kind          = GCNodeKind::Oper;
         init.dataIndex     = 0;
-        init.dataType      = pattern.type != nullptr ? pattern.type : base.dataType;
+        init.dataType      = writingType(pattern.type, base.dataType);
         init.payload       = bytes;
         return lookupOrAdd(init, inputs);
     }
