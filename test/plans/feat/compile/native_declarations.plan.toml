@@ -88,6 +88,35 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
 
+# ---- A declaration cannot be parametric ----
+
+# `from_bytes::<T>` and a per-leaf `ckpt_get::<L>` ask for one name whose result type the call
+# names; the declaration mechanism has no such form (handover H103). The two cases below state
+# what is missing, not how the module happens to be written today.
+
+[[tests]]
+name = "native.declaration_type_argument"
+desc = "A declaration whose result type is a return-only type variable — the shape `from_bytes::<T>` and a per-leaf `load_tree` decoder need — is read (the message prints `typeas L`) but no call can bind the variable: the explicit type argument and the expected type never reach a declaration's resolver."
+kind = "negative"
+case = "../../../cases/compile/native/declaration_type_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+# The message spans two lines (it lists the declaration as the available overload), so the
+# short format the runner parses as one diagnostic line does not apply; check the text.
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:17:45", "<tensor:from_bytes_f32>: (encoded: Bytes, shape: int[]) => typeas L"]
+
+[[tests]]
+name = "native.declaration_per_result_type"
+desc = "Two rules of one name that differ only in the result type — the per-dtype rules `tensor:from_bytes` registers in C++ — are a redeclaration at the second: one name has one signature, and a declaration names one operator URI."
+kind = "negative"
+case = "../../../cases/compile/native/declaration_per_result_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::Redeclaration"
+expect_diagnostic_code = "0x03000001"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 1
+
 # ---- Names in a `case` that is not selected ----
 
 [[tests]]

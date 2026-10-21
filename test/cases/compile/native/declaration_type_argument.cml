@@ -1,0 +1,20 @@
+/**
+ * The shape a `.cml` would need for an operator whose type the call names: the declaration of
+ * `from_bytes::<T>`, or of the per-leaf `ckpt_get::<L>` a `load_tree` rewrite needs. The
+ * declaration is read — the signature in the message below prints `typeas L` — but no call can
+ * bind the variable: `::<T>` and the expected type never reach a declaration's resolver
+ * (handover H103).
+ */
+module tensor
+
+import { Tensor } from tensor
+import { from_array } from bytes
+
+#op<'tensor:from_bytes_f32'>
+export func leaf_decode(encoded: Bytes, shape: int[]): typeas L
+
+func main(): int sync {
+    let decoded = leaf_decode::<Tensor<f32>>(from_array([0, 0, 128, 63]), [1])
+    println(decoded)
+    return 0
+}
