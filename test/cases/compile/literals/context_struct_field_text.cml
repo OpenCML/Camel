@@ -1,0 +1,16 @@
+/**
+ * A text written as a field of a struct literal is a type mismatch at that field, not a value
+ * the whole literal cannot become (design principles 5.1): the position the field is written in
+ * expects a float, and nothing converts a text to a number. The fields are written out of name
+ * order, so the position also proves that a field's origin follows the field, not its slot in
+ * the data (a StructData holds them by name).
+ */
+module literal_context_struct_field_text
+
+type Point = { x: float, y: float }
+
+func main(): int sync {
+    let p: Point = { y: 2.0, x: '1.5' }
+    println(p.x)
+    return 0
+}

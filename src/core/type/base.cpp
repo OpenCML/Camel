@@ -202,6 +202,12 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
     if (!sourceType)
         return CastSafety::Forbidden;
 
+    // Converting a value to its own type is legal and does nothing (design principles 5.1).
+    // The composite types decide this themselves; this covers the ones that live in a slot
+    // (the primitives, a text, the complex numbers) and any other type without fields.
+    if (equals(sourceType))
+        return CastSafety::Safe;
+
     // Exclude auxiliary types first.
     if (camel::core::type::isAuxiliary(code_) ||
         camel::core::type::isAuxiliary(sourceType->code())) {

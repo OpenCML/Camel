@@ -215,6 +215,12 @@ bool elementEntersIn(
     if (isComposite(data->type()->code())) {
         return compositeEntersIn(data, type, origin);
     }
+    if (data->type()->code() == TypeCode::String) {
+        // A text never becomes the type of its position (design principles 5.1), but it is the
+        // element's own type mismatch: the conversion reports it at the element
+        // (literalElementInType), instead of the whole literal being a value of another type.
+        return true;
+    }
     const std::optional<literal::Value> fallback =
         written == nullptr ? exactValueOfData(data) : std::nullopt;
     const literal::Value *value = written != nullptr ? written : fallback ? &*fallback : nullptr;
@@ -492,11 +498,6 @@ data_ptr_t Builder::literalElementInType(
     const std::optional<literal::Value> fallback =
         exact == nullptr ? exactValueOfData(data) : std::nullopt;
     const literal::Value *value = exact != nullptr ? exact : fallback ? &*fallback : nullptr;
-    if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
-        // Not a numeric literal (a string, a bool): the type is not one it can be given by
-        // taking the position's type, so the value is left as it is.
-        return nullptr;
-    }
     // The element's own position and its source text, as in a declared position (design
     // principles 5.1); the whole literal's position only when the GCT kept no element.
     const bool ownPosition =
@@ -504,6 +505,16 @@ data_ptr_t Builder::literalElementInType(
     const camel::source::origin_id_t where = ownPosition ? written->origin : origin->origin();
     const camel::source::origin_id_t writtenAt =
         ownPosition ? written->origin : camel::source::kInvalidOriginId;
+    if (data->type()->code() == TypeCode::String) {
+        // A text where another type is expected is the element's own type mismatch, reported at
+        // the element (design principles 5.1; H15h). There is no text-to-number conversion.
+        rejectLiteralData(data, type, where, nullptr, writtenAt);
+    }
+    if (value == nullptr || !isNumericType(type) || !isNumericType(data->type())) {
+        // Not a numeric literal (a bool, for one): the type is not one it can be given by
+        // taking the position's type, so the value is left as it is.
+        return nullptr;
+    }
     if (!literal::kindEnters(*value, type)) {
         rejectLiteralData(data, type, where, nullptr, writtenAt);
     }

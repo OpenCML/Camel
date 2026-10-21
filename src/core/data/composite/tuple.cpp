@@ -146,16 +146,24 @@ data_ptr_t TupleData::convertTo(Type *type) {
     if (type->code() == TypeCode::Tuple) {
         auto tupleType = tt::as_ptr<TupleType>(type);
         ASSERT(tupleType != nullptr, "Failed to cast to TupleType");
+        if (data_.size() != tupleType->size()) {
+            return nullptr;
+        }
         data_vec_t data;
         data.reserve(data_.size());
         for (size_t i = 0; i < data_.size(); i++) {
             const auto &e  = data_[i];
             Type *elemType = tupleType->typeAt(i);
-            if (elemType) {
-                data.push_back(e->convertTo(elemType));
-            } else {
-                data.push_back(nullptr);
+            if (e == nullptr || elemType == nullptr) {
+                return nullptr;
             }
+            data_ptr_t converted = e->convertTo(elemType);
+            if (converted == nullptr) {
+                // A tuple with a hole is not a value: the conversion of the whole literal fails,
+                // and the caller reports the element that could not be converted.
+                return nullptr;
+            }
+            data.push_back(std::move(converted));
         }
         return TupleData::create(type, std::move(data));
     }

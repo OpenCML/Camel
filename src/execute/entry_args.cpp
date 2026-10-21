@@ -188,7 +188,7 @@ std::pair<T, T> complexFromText(
     const camel::utils::ComplexTextParts &parts) {
     const std::string range = camel::utils::complexRangeText<T>();
     const auto check       = [&](std::string_view partText, const char *part, T &out) {
-        switch (camel::utils::parseWholeFloat<T>(partText, out)) {
+        switch (camel::utils::parseNumberToken<T>(partText, out)) {
         case camel::utils::NumberTextStatus::Ok:
             return;
         case camel::utils::NumberTextStatus::OutOfRange:
@@ -196,6 +196,15 @@ std::pair<T, T> complexFromText(
                 text,
                 target,
                 std::format("the {} part is outside the range of {} ({})", part, target, range));
+        case camel::utils::NumberTextStatus::OutOfRangeInteger:
+            // The sentence the translated program has for the same text (EntryNumberText's
+            // outOfRangeInteger): it names the integer's range, not this part's.
+            refuseOutOfRange(
+                text,
+                target,
+                std::format(
+                    "the value is outside the range of an integer ({})",
+                    camel::utils::integerRangeText<int64_t>()));
         default:
             refuseNotANumber(
                 text,
@@ -219,14 +228,15 @@ std::pair<T, T> complexFromText(
 
 Loaded loadValue(const std::string &text, Type *declared, const std::string &what);
 
-/// One integer parameter, read at the width it is declared with: `i32` is an int32 all the way,
-/// so a text outside that range is refused with the range of `i32` rather than read as an int64
-/// and narrowed (design principles 5.1: a value is never cut to fit a type). `target` is the
-/// declared type's name in the message.
+/// One integer parameter, read at the width it is declared with, as one whole number token of
+/// the language (parseNumberToken: decimal, `0x`, `0b` or octal with a leading `0`): `i32` is
+/// an int32 all the way, so a text outside that range is refused with the range of `i32` rather
+/// than read as an int64 and narrowed (design principles 5.1: a value is never cut to fit a
+/// type). `target` is the declared type's name in the message.
 template <std::signed_integral T>
 Loaded loadInteger(const std::string &text, Type *declared, const char *target) {
     T value{};
-    switch (camel::utils::parseWholeInteger<T>(text, value)) {
+    switch (camel::utils::parseNumberToken<T>(text, value)) {
     case camel::utils::NumberTextStatus::Ok:
         break;
     case camel::utils::NumberTextStatus::OutOfRange:
@@ -237,18 +247,27 @@ Loaded loadInteger(const std::string &text, Type *declared, const char *target) 
     return rooted(rtdata::toSlot<T>(value), declared);
 }
 
-/// One floating-point parameter, read at the width it is declared with: `f32` is a float all
-/// the way, so a text outside its range is refused with the range of `f32` rather than read as
-/// a double and narrowed (an underflow has no infinity to become). `target` is the declared
-/// type's name in the message.
+/// One floating-point parameter, read at the width it is declared with, as one whole number
+/// token of the language: a real token or an integer token (`0xFF`, `077`; a source literal
+/// takes that type too), a real token too small to tell from zero is zero, as a source literal
+/// is. `f32` is a float all the way, so a text outside its range is refused with the range of
+/// `f32` rather than read as a double and narrowed. `target` is the declared type's name in the
+/// message.
 template <std::floating_point T>
 Loaded loadFloat(const std::string &text, Type *declared, const char *target) {
     T value{};
-    switch (camel::utils::parseWholeFloat<T>(text, value)) {
+    switch (camel::utils::parseNumberToken<T>(text, value)) {
     case camel::utils::NumberTextStatus::Ok:
         break;
     case camel::utils::NumberTextStatus::OutOfRange:
         refuseOutOfRange(text, target, camel::core::floatRangeReason<T>(target));
+    case camel::utils::NumberTextStatus::OutOfRangeInteger:
+        refuseOutOfRange(
+            text,
+            target,
+            std::format(
+                "the value is outside the range of an integer ({})",
+                camel::utils::integerRangeText<int64_t>()));
     default:
         refuseNotANumber(text, target, "a number");
     }
