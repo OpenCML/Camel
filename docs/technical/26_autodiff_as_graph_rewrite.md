@@ -433,11 +433,11 @@ What differs from the design above:
   a constant condition, where folding left them (inside branch arms).
 - **Both export entries run the same export simplification** on the bound
   function (`exportRewriteConfig`, `modules/onnx/exporter.cpp`), with settings
-  `std::opt` does not have: inlining regardless of size, up to 4096
-  rounds (deeper static recursion), and the branched-call split that turns the
-  pullback of a data-dependent branch into per-arm calls
-  (`enableBranchedCallSplit`, valid only for a consumer that builds no
-  execution order, which is why it cannot be a pass before a scheduler).
+  `std::opt` does not have: inlining regardless of size and up to 4096
+  rounds (deeper static recursion). A branch pullback needs no split across the
+  branch: the arms are regions of the branch's own graph, so the closure an arm
+  yields and the call of it are in one graph, and the lowering keeps the branch
+  with one `If` per value it yields.
   `onnx.export_model` also expands macros; the pass leaves that to `std::macro`.
   For twenty-six programs of `test/cases/modules/onnx` the two entries write
   models with bit-identical ONNX Runtime outputs (`pass_export.py equiv`),

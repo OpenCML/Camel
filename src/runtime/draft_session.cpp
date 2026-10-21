@@ -1077,11 +1077,8 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     const bool contextProgram = mayPublish_ || current == program_;
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
-    // program is left as it is. A shape no back end runs (GraphState::NonExecutable: the
-    // export-only sessions) is never installed: it stays in a private program, whatever the
-    // caller asked for.
-    const bool installing = !detached && graphState_ != GraphState::NonExecutable &&
-                            contextProgram && program_->root() == oldRuntimeRoot;
+    // program is left as it is.
+    const bool installing = !detached && contextProgram && program_->root() == oldRuntimeRoot;
     // A session that is stale and found no conflict merges into the program the context has now
     // instead of forking the history (design 4.3.1): the graph versions it read and wrote are
     // unchanged there, so the commit is made on top of that program.

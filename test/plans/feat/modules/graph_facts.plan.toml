@@ -115,8 +115,8 @@ for (const l of [
   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=7 revalidated=0 stale=0',
   'FACTS graph main valid=2 revalidated=0 stale=9', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   'FACTS gone 0',
-
   '60.0',
+
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')
 assert(!out.includes('shared id'), 'one graph per GraphId')

@@ -149,8 +149,8 @@ class RuntimeGraphDraftSession {
     const GraphDraft *tryDraft(const GCGraph *graph) const;
 
     /// The state of the graphs the commit encodes (graph.h, GraphState); the validator applies
-    /// the rules of that state. A session that builds a shape no back end runs (the ONNX
-    /// export's split of branched calls) says NonExecutable. Executable by default.
+    /// the rules of that state. Executable by default; a pass that proves equivalences between
+    /// nodes says Tabled.
     void setGraphState(GraphState state) { graphState_ = state; }
 
     GraphDraft &edit(GCGraph *graph);

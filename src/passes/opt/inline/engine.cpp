@@ -691,9 +691,6 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
     std::vector<InlineDeclined> &declinedOut) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
-    session.setGraphState(
-        config.enableBranchedCallSplit ? camel::runtime::GraphState::NonExecutable
-                                       : camel::runtime::GraphState::Executable);
     bool changed              = false;
     size_t appliedInlineCount = 0;
     std::vector<DeclinedCall> declined;
@@ -848,20 +845,14 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     if (!draft.alive(callNodeId)) {
                         continue;
                     }
-                    // A callee projected out of a branch JOIN needs the branch split first;
-                    // the plain static devirtualization handles the rest. The split shape is
-                    // export-only (see config), so it is attempted before, not instead of, the
-                    // VM-safe static path only when explicitly enabled.
-                    if ((config.enableBranchedCallSplit &&
-                         camel::runtime::devirtualizeBranchedCallInDraft(
-                             session,
-                             draft,
-                             callNodeId)) ||
-                        camel::runtime::devirtualizeStaticCallInDraft(
+                    // A callee projected out of a branch JOIN stays in the branch's own graph: the arms
+                    // are regions of this graph, so the exporter evaluates the branch and calls an
+                    // arm's closure inside its If. No rewrite across the branch is needed, and the
+                    // sibling JOINs such a rewrite would add are not executable.
+                    if (camel::runtime::devirtualizeStaticCallInDraft(
                             session,
                             draft,
-                            callNodeId,
-                            config.enableBranchedCallSplit)) {
+                            callNodeId)) {
                         changed        = true;
                         roundChanged   = true;
                         graphRewritten = true;
