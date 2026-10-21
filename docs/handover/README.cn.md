@@ -651,7 +651,7 @@ nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examp
 
 协调者一方已完成：分支臂成为区域（前端直接建、各后端与调试器读区域、锚点删除、嵌套排布线性）；循环成为区域并在所有后端于函数的帧内原生执行（fvm 新指令 `LBEG`/`LTST`/`LEND`，`std::cpp` 写 `for (;;)`）。交接说明：[regions-and-loops.md](../design/graph-store/handover/regions-and-loops.md)；方案：[regions-plan.md](../design/graph-store/handover/regions-plan.md)。
 
-1. **前端直接建循环区域**：协调者一方已做好的三个提交（与 H22 的 `collectLoopAppends`/`inferLoopStateFromAppend` 冲突，未合入）以补丁形式放在 [loop-builder-patches/](../design/graph-store/handover/loop-builder-patches/)，基于 `8956e91a`。应用后把 `collectLoopAppends` 与 `inferLoopStateFromAppend` 移植到区域形式（追加的下一值是 `LoopBody` 区域的结果；收集个数仍记在 `LOOP` 节点上），并完成补丁中对 `loop_lowering`、`:graph/original`、`native_loop` 等的删除。
+1. ~~前端直接建循环区域~~：已由协调者一方完成并合入（含 H22 的 `collectLoopAppends`/`inferLoopStateFromAppend` 移植到区域形式；`loop_lowering`、`:graph/original`、`native_loop` 已删除）。另：`failed_no_rule.error` 的宏诊断位置从 `grad` 调用处（15:13）移到 `f` 内部（10:12），疑与 develop 的求导活跃起点改动有关，请丁车道核对。
 2. **JIT 编译含循环的图**：x64 后端实现 `LBEG`/`LTST`/`LEND`（现在含循环的图解释执行，被调函数照常编译）。
 3. **自动微分读区域**：删除 `outlineLoopRegions`/`regionizeLoops`/`raiseBranchArms`/`lowerBranchArms` 这些过渡层与 `LoopView` 的子图模式。
 4. **ONNX 导出循环**（读区域，映射到 `Loop`）。
