@@ -135,6 +135,18 @@ enum class GCNodeKind : uint8_t {
     Dead = 255,
 };
 
+/// What a validator may assume of a graph and what it must check (docs/design/graph-store 3.7,
+/// 5.4). The checks that every state shares (references, branch arms, the types of the slots, the
+/// types along the edges, no cycle of inputs) are not listed; this is what differs:
+///  - Executable: every value has one writing and the graph has no cycle of inputs. The state a
+///    back end runs.
+///  - NonExecutable: a shape no back end runs (the ONNX export's split of branched calls, whose
+///    sibling JOINs merge and close a cycle of inputs). The cycle check is left to the back ends,
+///    which refuse a cyclic graph when they build the execution plan.
+///  - Tabled: some value has several writings (an equivalence table on the graph). Not
+///    executable until an extraction picks one writing per value; acyclic at the level of nodes.
+enum class GraphState : uint8_t { Executable, NonExecutable, Tabled };
+
 enum class GCReturnKind : uint8_t {
     None,
     Self,

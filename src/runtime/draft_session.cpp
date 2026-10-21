@@ -1177,7 +1177,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     }
     for (GCGraph *graph : order) {
         if (auto it = fresh.find(graph); it != fresh.end()) {
-            validateRuntimeGraphCalls(*committed, it->second, !nonExecutableAllowed_);
+            validateRuntimeGraphCalls(*committed, it->second, graphState_);
         }
     }
     // The copy is the same graph to the fact store; a new revision only for a graph that was

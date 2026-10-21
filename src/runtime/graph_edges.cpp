@@ -55,11 +55,11 @@ namespace {
 
 class EdgeChecker {
   public:
-    EdgeChecker(const Program &program, const GCGraph &graph, bool requireAcyclic)
-        : program_(program), graph_(graph), requireAcyclic_(requireAcyclic) {}
+    EdgeChecker(const Program &program, const GCGraph &graph, GraphState state)
+        : program_(program), graph_(graph), state_(state) {}
 
     std::vector<std::string> run() {
-        if (requireAcyclic_) {
+        if (state_ != GraphState::NonExecutable) {
             findCycle();
         }
         for (auto it = graph_.nodes().begin(); it != graph_.nodes().end(); ++it) {
@@ -289,7 +289,7 @@ class EdgeChecker {
 
     const Program &program_;
     const GCGraph &graph_;
-    const bool requireAcyclic_;
+    const GraphState state_;
     std::vector<std::string> violations_;
 };
 
@@ -302,11 +302,11 @@ const char *mode() {
 
 } // namespace
 
-void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, bool requireAcyclic) {
+void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, GraphState state) {
     if (graph == nullptr || !graph->hasNodePayload() || std::strcmp(mode(), "off") == 0) {
         return;
     }
-    const std::vector<std::string> violations = EdgeChecker(program, *graph, requireAcyclic).run();
+    const std::vector<std::string> violations = EdgeChecker(program, *graph, state).run();
     if (violations.empty()) {
         return;
     }

@@ -174,15 +174,17 @@ void validateRuntimeGraphTypes(const GCGraph *graph);
 /// callee has ports, and every graph a function constant of the static area points to is in
 /// the reference table (graphs refer to graphs only through it; the FUNC payload is an index
 /// into it by construction, checked by validateRuntimeGraphPayload). Run on each graph once the
-/// whole set of a commit is encoded.
+/// whole set of a commit is encoded. `state` is the graph's (GraphState): the state-dependent
+/// rules are applied here, with the edge invariants, so that every state is checked by this one
+/// validator.
 void validateRuntimeGraphCalls(
-    const Program &program, const GCGraph *graph, bool requireAcyclic = true);
+    const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 /// The edge invariants (graph_edges.cpp): no cycle of inputs, and the types agree along the
 /// edges. Run with validateRuntimeGraphCalls, because the types of a call's callee are read.
 /// Throws std::runtime_error naming the graph, the nodes and what disagrees.
-/// An acyclic graph is the executable state (design 3.7): with `requireAcyclic` false the check
-/// for cycles is left to the back ends, which build an execution order and refuse a cycle.
+/// `state` (graph.h, GraphState) says what to expect of the graph: only a NonExecutable graph may
+/// hold a cycle of inputs (the back ends refuse it when they build the execution plan).
 void validateRuntimeGraphEdges(
-    const Program &program, const GCGraph *graph, bool requireAcyclic = true);
+    const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
 } // namespace camel::runtime

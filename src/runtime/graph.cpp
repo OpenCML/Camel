@@ -1422,11 +1422,11 @@ void validateRuntimeGraphPayload(const Program &program, const GCGraph *graph) {
     validateRuntimeGraphTypes(graph);
 }
 
-void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, bool requireAcyclic) {
+void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, GraphState state) {
     if (!graph || !graph->hasNodePayload()) {
         return;
     }
-    validateRuntimeGraphEdges(program, graph, requireAcyclic);
+    validateRuntimeGraphEdges(program, graph, state);
     for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
         const GCNode *node = *it;
         if (node && node->kind == GCNodeKind::Loop) {

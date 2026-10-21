@@ -309,7 +309,9 @@ const camel::runtime::Program *rewriteReachableGraphs(
     size_t *rewrites, RewriteMemo *memo, bool (*mayRewrite)(const GCGraph &),
     bool checkScreens, bool allowNonExecutable) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
-    session.allowNonExecutable(allowNonExecutable);
+    session.setGraphState(
+        allowNonExecutable ? camel::runtime::GraphState::NonExecutable
+                           : camel::runtime::GraphState::Executable);
     size_t total = 0;
     for (GCGraph *g : session.collectReachableRuntimeGraphs()) {
         if ((mayRewrite && !mayRewrite(*g)) || (memo && memo->leftAlone(passName, g))) {

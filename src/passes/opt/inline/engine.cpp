@@ -691,7 +691,9 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
     std::vector<InlineDeclined> &declinedOut) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
-    session.allowNonExecutable(config.enableBranchedCallSplit);
+    session.setGraphState(
+        config.enableBranchedCallSplit ? camel::runtime::GraphState::NonExecutable
+                                       : camel::runtime::GraphState::Executable);
     bool changed              = false;
     size_t appliedInlineCount = 0;
     std::vector<DeclinedCall> declined;
