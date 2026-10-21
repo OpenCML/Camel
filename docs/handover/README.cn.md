@@ -165,6 +165,7 @@
 
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
+| H62 | 无 JIT 构建（CI 的 `linux-x64-nojit` 腿）在 `fastvm.cpp` 读 `jitConfig_` 而该成员只在 `#if ENABLE_FASTVM_JIT` 内声明——构建红，发布 CI 会跟着红 | 无 | **已完成**（各处按构建分开，无 JIT 时剖析后端名就是 `std::fvm`；无 JIT 全量重建后 fast 层 4769 / 4757 pass / 0 fail / 12 skip；报告 reports/H62.md） |
 | H58 | **过期测试**：DAP 尾递归步进的 6 个断言仍按 `fda0d21f` 之前的“臂是独立影子帧”写；按 12.1 的区域模型更正断言，并补尾调用点的 `next`/`stepOut` | 无 | **已完成**（报告 reports/H58.md；无源码改动，不是缺陷修复） |
 | H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **已完成**（运行器已严格、`expect_stdout_exact`/`expect_stdout_not_contains` 真正比较；暴露的 9 条真实失败全部已修，见 H59；报告 reports/H52.md） |
 | H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **进行中**（`handover/H54-cpu-op-cost`） |

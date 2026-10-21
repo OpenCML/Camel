@@ -534,8 +534,13 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     ASSERT(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
 
     if (camel::profile::enabled()) {
-        camel::profile::setBackend(
-            jitConfig_.policy == jit::JitPolicy::Disabled ? "std::fvm" : "std::jit");
+#if ENABLE_FASTVM_JIT
+        camel::profile::setBackend(jitConfig_.policy == jit::JitPolicy::Disabled ? "std::fvm"
+                                                                                : "std::jit");
+#else
+        // A build without the JIT runs this pass as `std::fvm`, whichever name it was given.
+        camel::profile::setBackend("std::fvm");
+#endif
     }
 
     camel::runtime::GCGraph *runtimeRoot = program->root();
