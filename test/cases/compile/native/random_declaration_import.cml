@@ -1,0 +1,28 @@
+/**
+ * The declarations of `random` are what an importer sees: the generator functions take and give
+ * their declared types, `randint` an `int`, `key` the module's `Key`, `split` a pair of keys,
+ * `permutation` an `int[]`; `choice`, `sample` and `shuffle` are the computed signatures that
+ * stayed in the C++ resolver. Every call reaches the C++ operator (handover H19, step 10; H128).
+ */
+module random_declaration_import
+
+import { Key, seed, rand, randn, randint, choice, sample, shuffle, key, split, permutation } from random
+
+func main(): int sync {
+    seed(42)
+    let r = rand()
+    let n = randn()
+    let i = randint(3, 3)
+    println(r >= 0.0 && r < 1.0)
+    println(n > -10.0 && n < 10.0)
+    println(i)
+    println(choice(['solo']))
+    println(len(sample([1, 2, 3], 2)))
+    println(shuffle([7]))
+    let k: Key = key(42)
+    let (a, b) = split(k)
+    'key={} a={} b={}'->format<k, a, b>->println
+    let p: int[] = permutation(k, 4)
+    println(p)
+    return 0
+}

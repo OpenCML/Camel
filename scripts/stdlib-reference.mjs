@@ -87,7 +87,17 @@ const MODULES = [
     },
     { name: 'statistics', title: '`statistics`', kind: 'cpp' },
     { name: 'algo', title: '`algo`: sorting and array primitives', kind: 'cpp' },
-    { name: 'random', title: '`random`', kind: 'cpp' },
+    {
+        name: 'random',
+        title: '`random`',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19). The
+        // three operators whose result type comes from their array argument stay in the C++
+        // resolver; the signature file keeps only their reference entries (handover H115, H128).
+        source: 'random.cml',
+        declaration: true,
+        computed: 'signatures/random.cml',
+    },
     { name: 'time', title: '`time`', kind: 'cpp' },
     { name: 'fs', title: '`fs`: files', kind: 'cpp' },
     {

@@ -318,6 +318,7 @@ f8a426c8e96936da ok stdlib/bytes.cml
 81d50d711442ef6b ok stdlib/io.cml
 6020479adef220b0 ok stdlib/json.cml
 173076cd43673a6b ok stdlib/perf.cml
+e02c37ac47d43974 ok stdlib/random.cml
 dc425a313698f684 ok stdlib/rules.cml
 a9d764727c60f619 ok stdlib/str.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
@@ -332,7 +333,7 @@ df6e9b39c870578c ok stdlib/signatures/json.cml
 16c0cffa4e13a3af ok stdlib/signatures/math.cml
 288f3bfd8801992a ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
-e83d9c672ad03ec3 ok stdlib/signatures/random.cml
+82c91a732389ed7e ok stdlib/signatures/random.cml
 1791edfeb9ce67b9 ok stdlib/signatures/re.cml
 4b1e6e35d1c406b9 ok stdlib/signatures/statistics.cml
 a54b7af54487e60a ok stdlib/signatures/tensor.cml
@@ -795,6 +796,9 @@ c7fe2aa20c0b534e ok test/cases/compile/native/missing.cml
 9609b6bef7b8b772 ok test/cases/compile/native/private.cml
 a82e21d2c35eadf1 ok test/cases/compile/native/private_import.cml
 62b93c05ad87f26e ok test/cases/compile/native/private_module.cml
+6af60677dfbb389d ok test/cases/compile/native/random_arity.cml
+8dc1d757bf1f2b9d ok test/cases/compile/native/random_declaration_import.cml
+ee2521e209cfbc45 ok test/cases/compile/native/random_type.cml
 17dafaa791a6d02c ok test/cases/compile/native/str_arity.cml
 6b93edd476faf370 ok test/cases/compile/native/str_declaration_import.cml
 18c99cf48eb6a338 ok test/cases/compile/native/str_type.cml

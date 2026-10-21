@@ -212,6 +212,35 @@ verify_script = """
 }
 """
 
+# ---- The declarations of `random`: the generator and the keyed functions (handover H128) ----
+
+[[tests]]
+name = "native.random_declaration_import"
+desc = "`random`'s declarations are the module's signature: an importer calls the generator functions with their declared types, passes `key(42)`'s `Key` to `split` and `permutation` with their declared results, and the three operators whose result type is computed (`choice`, `sample`, `shuffle`) still answer from the C++ resolver; every call reaches the C++ operator."
+kind = "behavior"
+case = "../../../cases/compile/native/random_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\n3\nsolo\n2\n[7]\nkey={ hi: 1350887118657991639, lo: -7139630017956984517 } a={ hi: -343134353990486859, lo: -1032652826686562345 } b={ hi: 7902514079619341531, lo: -7704411369378599526 }\n[1, 0, 2, 3]\n"
+
+[[tests]]
+name = "native.random_wrong_arity"
+desc = "`rand:randint` is declared with two ordinary arguments: a missing one is refused at the call, and the overload the message lists is the declaration's, parameter names included."
+kind = "negative"
+case = "../../../cases/compile/native/random_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_arity.cml:10:20", "(int)", "<rand:randint>: (low: int, high: int) => int"]
+
+[[tests]]
+name = "native.random_wrong_type"
+desc = "An `int` where the declaration says `Key`: refused at the declaration's type, and the signature in the message has the declaration's own parameter names (`key`, `n`; the type printer shows the exported `Key` as its struct) — `stdlib/random.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/random_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:11:24", "argument types: <> (int, int)", "<rand:permutation>: (key: { hi: int, lo: int }, n: int) => int[]"]
+
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
 [[tests]]
