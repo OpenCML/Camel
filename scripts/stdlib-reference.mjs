@@ -16,6 +16,10 @@
 //   with <a: A>                                     `*` stands for any text, for a group of
 //   export func name(x: X): R                       overloads that differ by type)
 //
+// A declaration never carries a body. The old form wrote the URI in one — `func name(...): R {
+// return '<uri>' }` — and it is gone (handover H107): a `func` with a body is an ordinary function,
+// and --verify-ops refuses a signature file whose entry still has one.
+//
 // A value a module exports (`math::pi`; design principles 10.1) needs neither @pure nor a URI
 // (it is not an operator). A declaration module cannot write it — a `let` needs an initializer —
 // so the value's entry is recorded in a comment, and the C++ module remains the one source of
@@ -185,6 +189,105 @@ function bracketed(text, open) {
         if (depth === 0) return { inner: text.slice(open + 1, i), end: i }
     }
     throw new Error(`unbalanced brackets in: ${text}`)
+}
+
+// The index of the bracket that closes the one at `open`, or -1 when the line ends first.
+function closingBracket(text, open) {
+    const pairs = { '(': ')', '[': ']', '{': '}', '<': '>' }
+    const close = pairs[text[open]]
+    let depth = 0
+    for (let i = open; i < text.length; i++) {
+        if (text[i] === '=' && text[i + 1] === '>') {
+            i++
+            continue
+        }
+        if (text[i] === text[open]) depth++
+        else if (text[i] === close) depth--
+        if (depth === 0) return i
+    }
+    return -1
+}
+
+// `{ a: int, b: string }` is a struct type; the brace group an old-form declaration wrote after
+// its result type (`{ return '<uri>' }`) is not.
+function isFieldList(text) {
+    const trimmed = text.trim()
+    if (trimmed === '') return true
+    const parts = []
+    let depth = 0
+    let current = ''
+    for (let i = 0; i < trimmed.length; i++) {
+        const c = trimmed[i]
+        if ('([{<'.includes(c)) depth++
+        if (')]}>'.includes(c)) depth--
+        if (c === ',' && depth === 0) {
+            parts.push(current.trim())
+            current = ''
+        } else {
+            current += c
+        }
+    }
+    if (current.trim()) parts.push(current.trim())
+    return parts.every((part) => /^[A-Za-z_]\w*\s*:\s*\S/.test(part))
+}
+
+// Whether the text after a declaration's `)` carries a body. The old form is
+// `: R { return '<uri>' }`; a body may also open with `sync {` or on the following line.
+function declarationBody(rest, lines, lineIndex) {
+    // A type has no statement keyword; a `sync` body marker is unambiguous.
+    if (/\b(sync|return)\b/.test(rest)) return true
+    const colon = rest.indexOf(':')
+    if (colon < 0) return rest.trim() !== ''
+    for (let i = colon + 1; i < rest.length; ) {
+        const c = rest[i]
+        if (c === '=' && rest[i + 1] === '>') {
+            i += 2
+            continue
+        }
+        if ('([{<'.includes(c)) {
+            const end = closingBracket(rest, i)
+            // An unclosed group is a body opening, and a brace group that does not read as a
+            // field list is a body.
+            if (end < 0 || (c === '{' && !isFieldList(rest.slice(i + 1, end)))) return true
+            i = end + 1
+            continue
+        }
+        if (')]}>'.includes(c)) return true
+        i++
+    }
+    for (let j = lineIndex + 1; j < lines.length; j++) {
+        const next = lines[j].trim()
+        if (next === '' || next.startsWith('//')) continue
+        return /^(sync\s*)?\{/.test(next)
+    }
+    return false
+}
+
+// The guard: a signature file is reference material for declarations, so none of its entries may
+// carry a body. Without this check the parser would silently ignore the body and the reference
+// page would still agree with the registered operators (handover H127).
+function signatureBodyProblems() {
+    const problems = []
+    for (const name of fs.readdirSync(SIGNATURE_DIR).sort()) {
+        if (!name.endsWith('.cml')) continue
+        const file = path.join(SIGNATURE_DIR, name)
+        const relative = path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+        const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim()
+            const decl = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_][\w:]*)\s*\(/)
+            if (!decl) continue
+            const close = closingBracket(trimmed, decl[0].length - 1)
+            if (close < 0) continue
+            if (declarationBody(trimmed.slice(close + 1), lines, i)) {
+                problems.push(
+                    `${relative}:${i + 1}: the declaration '${decl[1]}' has a body; a signature ` +
+                        `file declares operators without one (the old \`return '<uri>'\` form is gone)`
+                )
+            }
+        }
+    }
+    return problems
 }
 
 function readDeclarations(file, module) {
@@ -652,6 +755,12 @@ function verifyOps() {
 // ---- main -----------------------------------------------------------------------------------
 
 const mode = process.argv[2] || '--verify-doc'
+const bodyProblems = signatureBodyProblems()
+if (bodyProblems.length > 0) {
+    for (const problem of bodyProblems) console.log(problem)
+    console.log(`${bodyProblems.length} declaration(s) in the signature files carry a body; a declaration has no body`)
+    process.exit(1)
+}
 if (mode === '--write' || mode === '--verify-doc') {
     const text = renderDoc()
     if (mode === '--write') {
