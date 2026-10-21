@@ -17,6 +17,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--runs', type=int, default=3)
 parser.add_argument('--suite', choices=['default', 'rows'], default='default')
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--devices', default='',
+                    help='value of camel --devices (cpu, or CUDA ordinals such as 7)')
 parser.add_argument('--source-revision', help='Full commit ID for an exported source archive without .git')
 options = parser.parse_args()
 if not 1 <= options.runs <= 30:
@@ -39,7 +41,11 @@ for path in files + [case]:
     fingerprint.update(path.read_bytes().replace(b'\r\n', b'\n'))
 records = []
 for run in range(options.runs):
-    result = subprocess.run([str(binary), str(case)], cwd=root, env=env,
+    command = [str(binary)]
+    if options.devices:
+        command += ['--devices', options.devices]
+    command += [str(case)]
+    result = subprocess.run(command, cwd=root, env=env,
                             capture_output=True, text=True, check=True, timeout=120)
     reports = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
     if len(reports) != 4:

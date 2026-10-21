@@ -30,27 +30,23 @@ expect_stdout_contains = ["binary size=8 whole=[0, 65, 0, 255, 13, 10, 128, 0] m
 [[tests]]
 name = "tiles.mean_grad.source"
 case = "../../../cases/modules/tiles/mean_grad.cml"
-args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
 expect_stdout_contains = ["mean_grad shape specialization PASS"]
 
 [[tests]]
 name = "tiles.layout_grad.source"
 case = "../../../cases/modules/tiles/layout_grad.cml"
-args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
 expect_stdout_contains = ["layout_grad shape specialization PASS"]
 
 [[tests]]
 name = "tiles.batch_matmul.source"
 case = "../../../cases/modules/tiles/batch_matmul.cml"
-args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
 expect_stdout_contains = ["BATCH MATMUL CHECKS PASS"]
 
 [[tests]]
 name = "tiles.mixed_matmul.source"
 case = "../../../cases/modules/tiles/mixed_matmul.cml"
-args = ["--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
-envs = ["CAMEL_TILES_DEVICE=invalid"]
+args = ["--devices", "cpu", "--arg", "run_gpu=false", "${case}", "std::macro", "${backend}"]
 expect_stdout_contains = ["cublas_bf16", "MIXED CHECKS PASS"]

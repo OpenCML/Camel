@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-201 diagnostics: 184 errors, 17 warnings.
+202 diagnostics: 185 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -216,6 +216,7 @@ prints one entry.
 | `0x04000060` | [RuntimeDiag::InvalidPassParameter](#invalidpassparameter) | Error |
 | `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
+| `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -5701,6 +5702,52 @@ func f(a: int, b: int): int {
 
 func main(): int sync {
     println(f(2, 3))
+    return 0
+}
+```
+
+### DeviceUnavailable
+
+`0x04000070` · Error · `RuntimeDiag::DeviceUnavailable`
+
+**Message**
+
+```text
+CUDA device {0} was named by --devices but is not available: {1}.
+```
+
+**Help**
+
+```text
+Name a device this machine has (--devices <ordinal>), or run on the host with --devices cpu. Without --devices a missing device is not an error: the program runs on the host.
+```
+
+**Example** (`test/cases/modules/tiles/gpu_fallback.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel --devices 63 test/cases/modules/tiles/gpu_fallback.cml std::nvm`)
+
+```camel
+module tiles_gpu_fallback
+import { gpu, available } from tiles
+@gpu
+func add(a: float, b: float): float { return a + b }
+@gpu
+func effect(x: float): float sync {
+    println("cpu effect")
+    return x + x
+}
+@gpu
+func nested(a: float, b: float): float { return add(a, b) * 2.0 }
+@gpu
+func pair(a: float, b: float): (float, float) { return (a + b, a * b) }
+func main(): int sync {
+    println(available())
+    println(add(2.0, 3.0))
+    println(effect(4.0))
+    let offset = 7.0
+    let captured = gpu((x: float): float => x + offset)
+    println(captured(3.0))
+    println(nested(2.0, 3.0))
+    let p = pair(2.0, 3.0)
+    println(p.0, p.1)
     return 0
 }
 ```

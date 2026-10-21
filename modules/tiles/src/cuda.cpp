@@ -12,9 +12,9 @@
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/mixed_gemm.h"
+#include "tiles/internal/profile_hooks.h"
 #include "tiles/internal/submission.h"
 #include "tiles/program.h"
-#include "tiles/internal/profile_hooks.h"
 #include <algorithm>
 #include <chrono>
 #include <climits>
@@ -516,7 +516,10 @@ std::vector<std::shared_ptr<DeviceValue>> uploadValues(std::span<const HostLeaf>
             std::memcpy(pinned + offset, leaf.bytes.data(), leaf.bytes.size());
             b->api.check(
                 b->api.cuMemcpyHtoDAsync(
-                    pointers[i], pinned + offset, leaf.bytes.size(), staging.stream),
+                    pointers[i],
+                    pinned + offset,
+                    leaf.bytes.size(),
+                    staging.stream),
                 "upload resident tensor");
             if (profile_hooks::toDevice)
                 profile_hooks::toDevice(leaf.bytes.size());
@@ -534,8 +537,7 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
     auto values = uploadValues(std::span<const HostLeaf>(&leaf, 1));
     return std::move(values.front());
 }
-std::vector<std::vector<std::byte>>
-downloadValues(std::span<const DeviceValue *const> values) {
+std::vector<std::vector<std::byte>> downloadValues(std::span<const DeviceValue *const> values) {
     std::vector<std::vector<std::byte>> result(values.size());
     struct Copy {
         size_t index;
@@ -556,7 +558,7 @@ downloadValues(std::span<const DeviceValue *const> values) {
         }
         if (!value.owner || !value.address)
             throw std::runtime_error("invalid resident tensor");
-        const size_t count = bytes(Node{.shape = value.shape, .dtype = value.dtype});
+        const size_t count    = bytes(Node{.shape = value.shape, .dtype = value.dtype});
         const auto allocation = std::dynamic_pointer_cast<OwnedAllocation>(value.owner);
         if (!allocation || !allocation->lease || !allocation->lease->valid() ||
             allocation->pointer() != value.address || count > allocation->logicalBytes ||
@@ -614,6 +616,10 @@ bool available() {
     try {
         (void)backend();
         return true;
+    } catch (const DeviceUnavailable &) {
+        // A device the run named is missing: that is the run's configuration, not a capability
+        // of this machine, so the caller reports it instead of treating the host as the answer.
+        throw;
     } catch (const std::exception &) {
         return false;
     }
@@ -906,8 +912,7 @@ std::vector<std::shared_ptr<DeviceValue>> uploadValues(std::span<const HostLeaf>
     (void)deviceInfo();
     return {};
 }
-std::vector<std::vector<std::byte>>
-downloadValues(std::span<const DeviceValue *const> values) {
+std::vector<std::vector<std::byte>> downloadValues(std::span<const DeviceValue *const> values) {
     std::vector<std::vector<std::byte>> result;
     result.reserve(values.size());
     for (const auto *value : values)

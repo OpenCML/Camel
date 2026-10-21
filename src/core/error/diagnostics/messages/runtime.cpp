@@ -242,6 +242,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::DeviceUnavailable,
+            {
+                "DeviceUnavailable",
+                "CUDA device {0} was named by --devices but is not available: {1}.",
+                "Name a device this machine has (--devices <ordinal>), or run on the host with "
+                "--devices cpu. Without --devices a missing device is not an error: the program "
+                "runs on the host.",
+            },
+        },
+        {
             RuntimeDiag::PassNeedsExtraction,
             {
                 "PassNeedsExtraction",

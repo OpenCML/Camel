@@ -42,6 +42,7 @@ struct Api {
     decltype(&::cuInit) cuInit;
     decltype(&::cuDriverGetVersion) cuDriverGetVersion;
     decltype(&::cuDeviceGet) cuDeviceGet;
+    decltype(&::cuDeviceGetCount) cuDeviceGetCount;
     decltype(&::cuDeviceGetName) cuDeviceGetName;
     decltype(&::cuDeviceGetAttribute) cuDeviceGetAttribute;
     decltype(&::cuDevicePrimaryCtxRetain) cuDevicePrimaryCtxRetain;

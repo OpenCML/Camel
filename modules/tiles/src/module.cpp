@@ -52,6 +52,13 @@ namespace td = core::rtdata;
 template <class F> slot_t checked(F &&body) {
     try {
         return body();
+    } catch (const DeviceUnavailable &e) {
+        // The run named this device (`--devices`); it is missing, so the report names it rather
+        // than moving the work to the host.
+        core::error::throwRuntimeFault(
+            core::error::RuntimeDiag::DeviceUnavailable,
+            std::to_string(e.ordinal()),
+            e.what());
     } catch (const std::exception &e) {
         core::error::throwRuntimeFault(
             core::error::RuntimeDiag::RuntimeError,
@@ -122,8 +129,7 @@ slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
         if (tensor::asTensorType(type)) {
             const auto &shape  = program->nodes[program->outputs.at(leaf++)].shape;
             const size_t count = elements(shape);
-            auto *out =
-                tensor::createTensor(TypeCode::Float32, shape, core::mm::autoSpace());
+            auto *out = tensor::createTensor(TypeCode::Float32, shape, core::mm::autoSpace());
             if (count)
                 std::memcpy(out->rawData(), data.data() + offset, count * sizeof(float));
             offset += count * sizeof(float);
@@ -157,7 +163,9 @@ slot_t runCompiledKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
     const bool supported = checked([&] {
-        (void)configuredCudaOrdinal();
+        // `--devices cpu`: the host path, exactly as when no device is available.
+        if (!configuredCudaOrdinal())
+            return false;
         try {
             (void)deviceInfo();
             program = std::make_shared<const Program>(prepare(with, norm, ctx));
@@ -183,7 +191,11 @@ slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     return execute::invokeFunction(ctx, function, {}, arguments);
 }
-slot_t availableKernel(ArgsView &, ArgsView &, Context &) { return td::toSlot(available()); }
+slot_t availableKernel(ArgsView &, ArgsView &, Context &) {
+    // checked, so that a device the run named and that is missing is a diagnostic rather than
+    // "no device here": `available()` answers a capability question, not a configuration one.
+    return checked([] { return td::toSlot(available()); });
+}
 slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx);
 slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
@@ -299,8 +311,7 @@ slot_t hostResidentValue(Type *hostType, slot_t value, bool retain) {
     }
     if (resident->dtype != DType::F32)
         throw std::runtime_error("resident tensor type mismatch");
-    auto *tensor =
-        tensor::createTensor(TypeCode::Float32, resident->shape, core::mm::autoSpace());
+    auto *tensor = tensor::createTensor(TypeCode::Float32, resident->shape, core::mm::autoSpace());
     if (!data.empty())
         std::memcpy(tensor->rawData(), data.data(), data.size());
     return td::toSlot(tensor);
@@ -342,7 +353,8 @@ slot_t runHostResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 slot_t retainPreferredKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const bool gpu = checked([&] {
-        (void)configuredCudaOrdinal();
+        if (!configuredCudaOrdinal())
+            return false;
         try {
             (void)deviceInfo();
             return true;
@@ -355,7 +367,8 @@ slot_t retainPreferredKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<Program> program;
     const bool gpu = checked([&] {
-        (void)configuredCudaOrdinal();
+        if (!configuredCudaOrdinal())
+            return false;
         try {
             (void)deviceInfo();
             program = std::make_shared<Program>(prepare(with, norm, ctx, true));
@@ -530,9 +543,13 @@ class TilesModule final : public BuiltinModule {
                               return result ? std::optional<Type *>(result) : std::nullopt;
                           })}}));
         }
-        std::vector<std::string>
-            executionNames{"run", "run_device", "source", "inspect", "benchmark",
-                           "run_preferred_resident"};
+        std::vector<std::string> executionNames{
+            "run",
+            "run_device",
+            "source",
+            "inspect",
+            "benchmark",
+            "run_preferred_resident"};
         for (const std::string &name : executionNames) {
             const bool residentResult = name == "run_device" || name == "run_preferred_resident";
             const bool textResult     = name != "run" && !residentResult;
