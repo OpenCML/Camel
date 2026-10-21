@@ -117,6 +117,13 @@ inner func is_anchor(n: Node): bool {
     return 'graph:is_anchor'
 }
 
+/// Whether the value of the node may be written in place: it is passed to a `var` parameter or to an operator that changes its operand, directly or through gates. A rewrite must not treat such a node as one value.
+/// @pure
+/// @example is_written_slot(n)
+inner func is_written_slot(n: Node): bool {
+    return 'graph:is_written_slot'
+}
+
 /// Whether the node is a constant of the graph.
 /// @pure
 /// @example is_constant(n)

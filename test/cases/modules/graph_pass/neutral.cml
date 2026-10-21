@@ -1,6 +1,6 @@
 module neutral
 import { flatten } from algo
-import { Program, Node, Graph, graphs, nodes, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, open, replace, commit } from graph
+import { Program, Node, Graph, graphs, nodes, inputs, with_inputs, op, op_name, constant, type_of, type_name, is_anchor, is_written_slot, open, replace, commit } from graph
 
 func opText(n: Node): string {
     return match op(n) {
@@ -57,7 +57,7 @@ func keptOf(n: Node, ins: Node[]): Node {
 
 func kept(n: Node): Node {
     let ins = inputs(n)
-    return if len(ins) == 2 && len(with_inputs(n)) == 0 && !is_anchor(n) then keptOf(n, ins) else n
+    return if len(ins) == 2 && len(with_inputs(n)) == 0 && !is_anchor(n) && !is_written_slot(n) && !is_written_slot(ins[0]) && !is_written_slot(ins[1]) then keptOf(n, ins) else n
 }
 
 func isHit(n: Node): bool {
