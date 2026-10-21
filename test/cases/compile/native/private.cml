@@ -1,0 +1,10 @@
+/**
+ * `second` is the module's export; the operator it wraps is the module's own, private to it
+ * (handover H94, ruling 3).
+ */
+import { second } from private_module
+
+func main(): int sync {
+    println(second([4, 5, 6]))
+    return 0
+}

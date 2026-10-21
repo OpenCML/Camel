@@ -93,6 +93,31 @@ class Namespace : public std::enable_shared_from_this<Namespace<Key, Val>> {
         return current->insert(ref.ident(), v);
     };
 
+    /// Inserts `v` under the reference, replacing a value already there: the later write wins
+    /// (a `.cml` beside a `.cmo` writes the signature of an operator the C++ module exported
+    /// too; design principles 6.4, handover H94).
+    bool assign(const Reference &ref, const Val &v)
+        requires std::is_same_v<Key, std::string>
+    {
+        if (ref.empty())
+            return false;
+
+        auto current = this->shared_from_this();
+        for (const auto &ns_name : ref.paths()) {
+            auto it = current->innerNamespaces_.find(ns_name);
+            if (it == current->innerNamespaces_.end()) {
+                auto new_ns                        = std::make_shared<Namespace<Key, Val>>();
+                current->innerNamespaces_[ns_name] = new_ns;
+                current                            = new_ns;
+            } else {
+                current = it->second;
+            }
+        }
+
+        current->map_[ref.ident()] = v;
+        return true;
+    };
+
     void insertAllFrom(const Namespace<Key, Val> &other, bool deepCopy = true) {
         for (const auto &[key, val] : other.map_) {
             map_[key] = val;

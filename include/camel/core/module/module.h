@@ -287,6 +287,16 @@ class Module : public std::enable_shared_from_this<Module> {
     /// tag; design principles 10.1). A module written in Camel does not call this: what it
     /// exports is the program's, and is recorded by that program's ProgramExports.
     bool exportEntity(const Reference &ref, const entity &ent);
+    /// The same, for a name that already has an entity: the later write wins. A `.cml` beside a
+    /// `.cmo` is the same module as that C++ module (design principles 6.4; handover H94,
+    /// ruling 1), so a declaration of an operator the C++ module exported too writes the
+    /// module's signature, not a second entity beside it.
+    bool replaceEntity(const Reference &ref, const entity &ent);
+    /// Adds every name `other` exports to this module's own tables: its types, its entities
+    /// (operator groups, constants, tags) and the names it brings along. The two objects are one
+    /// module (design principles 6.4; handover H94, ruling 1): the C++ module implements, the
+    /// `.cml` declares, and both are read under the one name the import found.
+    void inheritExportsFrom(const Module &other);
     /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles
     /// 10.1). A use of the name is that constant in the graph where it is used: no node of the
     /// root graph, no capture, nothing evaluated when the module is imported. Only data that

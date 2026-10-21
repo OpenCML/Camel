@@ -88,25 +88,60 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
 
-# ---- The exception tag ----
+# ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
 [[tests]]
-name = "native.tag_exception"
-desc = "`#op<'bytes:size'>` binds a name of another module to an operator of `bytes`: the name imported from the declaration and the operator's own name both reach it."
+name = "native.private_declaration"
+desc = "A body-less declaration without `export` is a private operator of the module: the module's own wrapper calls it and the program runs; an importer cannot see the name."
 kind = "behavior"
-case = "../../../cases/compile/native/bytes_tag_use.cml"
+case = "../../../cases/compile/native/private.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "3\n3\n"
+expect_stdout_exact = "5\n"
 
 [[tests]]
-name = "native.tag_exception_qualified"
-desc = "The group a declaration makes is the module's own entity, so naming the module reaches it as `bytes::size` reaches a C++ module's operator."
+name = "native.private_declaration_not_imported"
+desc = "The private operator is no entity of the module: importing it by name is a diagnostic at the importer, not a way into a rule only the module's own code may mean."
+kind = "negative"
+case = "../../../cases/compile/native/private_import.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_code = "0x03000015"
+expect_output_contains = ["private_import.cml:8", "Reference 'at'"]
+
+# ---- The entry module's declarations answer under its declared name (handover H94, ruling 4) ----
+
+[[tests]]
+name = "native.entry_uri_prefix"
+desc = "A declaration in the entry module uses the `module` declaration's name as its URI prefix (`bytes:size`), not the runtime name `main`: the declaration is loaded, the call reaches the operator."
 kind = "behavior"
-case = "../../../cases/compile/native/bytes_tag_qualified.cml"
+case = "../../../cases/compile/native/entry_uri.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "4\n"
+expect_stdout_exact = "3\n"
+
+# ---- A declaration may name only its own module's operator (handover H94, ruling 5) ----
+
+[[tests]]
+name = "native.foreign_operator_refused"
+desc = "`#op<'bytes:size'>` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
+kind = "negative"
+case = "../../../cases/compile/native/foreign_operator.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationForeignOperator"
+expect_diagnostic_code = "0x0300017F"
+expect_output_contains = ["bytes_tag.cml:11", "'size'", "bytes:size"]
+
+[[tests]]
+name = "native.declaration_qualified"
+desc = "A declaration is the module's own entity still: `generic_module::at` reaches the group the declaration made, as a C++ module's operator is reached."
+kind = "behavior"
+case = "../../../cases/compile/native/generic_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "9\n"
 
 # ---- A `.cml` beside a `.cmo` is that module's declarations, and has no bodies ----
 
@@ -120,3 +155,29 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["PASS"]
 timeout_ms = 120000
+
+# ---- The `.cml` and the `.cmo` are one module (handover H94, ruling 1) ----
+
+[[tests]]
+name = "native.one_module"
+desc = "The declaration module of a C++ module is that module, not a second one: the C++ module's types (`Json`) and constants (`pi`) are written in the `.cml` without an import, a type the `.cml` exports is read by an importer beside the C++ ones, and every C++ name still answers through the one module."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/compile/native/one_module.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+timeout_ms = 120000
+
+# ---- Two generic declarations of a name: one call, one rule (handover H94, ruling 2) ----
+
+[[tests]]
+name = "native.generic_declaration_overlap"
+desc = "Two generic declarations of one name that a single call could enter are a diagnostic at the second declaration, with the catalog code and both rules in the message: a call never means the declaration written first."
+kind = "negative"
+case = "../../../cases/compile/native/overlap.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationOverlap"
+expect_diagnostic_code = "0x0300017E"
+expect_output_contains = ["overlap.cml:14", "Two declarations of 'pick'", "typeas T", "typeas U"]

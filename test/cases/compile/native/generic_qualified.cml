@@ -1,0 +1,11 @@
+/**
+ * The group a declaration makes is the module's own entity: naming the module reaches it, as it
+ * reaches a C++ module's operator (design principles 10.2; handover H94, ruling 5 keeps this
+ * property while refusing a declaration of another module's operator).
+ */
+import generic_module
+
+func main(): int sync {
+    println(generic_module::at([7, 8, 9], 2))
+    return 0
+}

@@ -594,17 +594,38 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     }
     if (module_ != nullptr) {
         // A body-less declaration of this module: the name stands for the operator group the
-        // declaration made, which is no graph (handover H19, step 1). It is the module's own
-        // entity, so it is looked up here, before what an import brings under the same name.
+        // declaration made, which is no graph (handover H19, step 1). A name the C++ module it
+        // declares brings (its constants among them) is this module's own too, and is looked up
+        // here, before what an import brings under the same name (design principles 10.1;
+        // handover H94, ruling 1: the `.cml` and the `.cmo` are one module).
         for (const std::string &candidate : {name, written}) {
-            auto native = module_->getNativeEntity(Reference(candidate));
-            if (native.has_value() && native->isOperGroup()) {
+            auto native = ownNativeEntity(Reference(candidate));
+            if (!native.has_value()) {
+                continue;
+            }
+            if (native->isOperGroup()) {
                 node_handle_t drefNode{graph->addDrefNode(
                     std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                         native->operGroup()})};
                 registerNodeOrigin(context_, drefNode, gct, "gir.dref.native");
                 LEAVE("DREF");
                 return drefNode;
+            }
+            if (native->isValue()) {
+                // A constant: the constant itself, as if it were written here as a literal
+                // (`math::pi` is where it is declared; design principles 10.1).
+                const GCT::node_ptr_t literal = tree_->makeData(native->value());
+                literal->setOrigin(gct->origin());
+                node_handle_t node = visitDataNode(literal);
+                if (recorder_) {
+                    recorder_->valueReferenced(
+                        gct->origin(),
+                        name,
+                        camel::source::kInvalidOriginId,
+                        valueTypeOf(nodeTypeOf(node)));
+                }
+                LEAVE("DREF");
+                return node;
             }
         }
     }

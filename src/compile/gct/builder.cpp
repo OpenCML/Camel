@@ -5159,6 +5159,14 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
         }
         return report(found.value(), module_->typeDeclarationOrigin(*foundRef));
     }
+    // The types the module itself exports without a type declaration in this file: a `.cml`
+    // beside a `.cmo` is that C++ module's declaration module, so what the C++ module exports
+    // is directly visible here, as if it were written at the top of this file (design
+    // principles 6.4; handover H94, ruling 1).
+    if (const auto exported = module_->getExportedType(Reference(own));
+        exported.has_value()) {
+        return exported.value();
+    }
     // Layer 3: imported by name, or through a module or namespace prefix.
     if (const auto imported = module_->getImportedType(ref, ImportLayer::Named)) {
         return report(imported.value(), importedOrigin(ref));

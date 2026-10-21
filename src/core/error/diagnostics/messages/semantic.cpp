@@ -1351,6 +1351,28 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NativeDeclarationOverlap,
+            {
+                "NativeDeclarationOverlap",
+                "Two declarations of '{0}' can take the same call: '{1}' and '{2}'.",
+                "An operator has one meaning for one call: which rule applies must be decided by "
+                "the types of the arguments, never by the order the declarations are written in. "
+                "Give the declarations parameter types that cannot both accept one argument "
+                "list, or keep one of them.",
+            },
+        },
+        {
+            SemanticDiag::NativeDeclarationForeignOperator,
+            {
+                "NativeDeclarationForeignOperator",
+                "The declaration '{0}' names the operator '{1}', which another module declares.",
+                "A module declares only the operators it implements: a body-less declaration "
+                "stands for an operator of the module it is written in, and declares no other "
+                "module's operator. Write the declaration beside the implementation, or call "
+                "the operator through the module that declares it.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",
