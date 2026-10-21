@@ -1,0 +1,12 @@
+/**
+ * `let x: string = 42`: a number does not become a text by itself (design principles 5.1), so
+ * the declaration is a type mismatch, not a literal the type cannot represent; the help names
+ * `string(n)`.
+ */
+module literal_context_declared_string_int
+
+func main(): int sync {
+    let x: string = 42
+    println(x)
+    return 0
+}

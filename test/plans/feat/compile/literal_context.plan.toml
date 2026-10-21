@@ -507,3 +507,131 @@ expect_exit = 1
 expect_output_contains = ["context_struct_argument_shape.cml:13:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "({ x: float })", "norm: (p: Point) => f32"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# A text where a field expects a number (H15h). The field is the position that cannot take the
+# value, so the mismatch is reported there in each shape a composite literal has: a struct field
+# by name, a positional tuple element, a field of a nested literal, a field of an argument, and a
+# field of a returned value.
+
+[[tests]]
+name = "context.struct_field_text"
+desc = "A text written as a field of a struct literal is DeclaredTypeMismatch at that field: the field's position expects a float and nothing converts a text to a number (design principles 5.1); the message names `string` and `float`, not a literal the whole struct cannot become. The fields are written out of name order, so the position proves an element's origin follows the field, not its slot in the data (H15h)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_struct_field_text.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 33
+expect_output_contains = ["This value has type 'string', which is not the declared type 'float'", "'string(n)' for a number written as text"]
+expect_output_not_contains = ["LiteralNotRepresentable", "the text is not a number"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.tuple_field_text"
+desc = "A tuple literal is positional: the text is the mismatch of the element it is written as, at that element (H15h)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_tuple_field_text.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 30
+expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
+expect_output_not_contains = ["LiteralNotRepresentable", "the text is not a number"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.nested_field_text"
+desc = "The search enters a nested composite literal: the text in the inner struct is reported at the inner field, not at the outer literal (H15h)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_nested_field_text.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 33
+expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
+expect_output_not_contains = ["LiteralNotRepresentable", "the text is not a number"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.argument_field_text"
+desc = "A struct literal argument takes the parameter's type field by field: the text field is reported at the field in the call (H15h), not as a call that matches no overload. The fields are written out of name order, so the position follows the field."
+kind = "negative"
+case = "../../../cases/compile/literals/context_argument_field_text.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 29
+expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
+expect_output_not_contains = ["NoMatchingFunction", "LiteralNotRepresentable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.return_field_text"
+desc = "A returned struct literal takes the declared return type field by field: the text field is reported at the field (H15h), not as a return type mismatch for the whole literal."
+kind = "negative"
+case = "../../../cases/compile/literals/context_return_field_text.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 34
+expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
+expect_output_not_contains = ["ReturnTypeMismatch", "LiteralNotRepresentable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# The other direction (H15h): a number where a text is declared is a type mismatch too, and the
+# help names `string(n)`, the conversion that writes a number as text.
+
+[[tests]]
+name = "context.declared_string_int"
+desc = "`let x: string = 42` is DeclaredTypeMismatch saying an `int` is not a `string` (design principles 5.1: no implicit conversion either way), not a literal that cannot be represented; the help names `string(n)` (H15h)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_declared_string_int.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'int', which is not the declared type 'string'", "'string(n)' for a number written as text"]
+expect_output_not_contains = ["LiteralNotRepresentable", "cannot be represented"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.declared_string_array"
+desc = "The neighbour: an array literal where a text is declared is the same mismatch, naming the array type and `string` (H15h)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_declared_string_array.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'int[]', which is not the declared type 'string'"]
+expect_output_not_contains = ["LiteralNotRepresentable", "cannot be represented"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.declared_string_complex"
+desc = "The neighbour: a complex literal where a text is declared is the same mismatch, naming `c128` and `string` (H15h)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_declared_string_complex.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'c128', which is not the declared type 'string'"]
+expect_output_not_contains = ["LiteralNotRepresentable", "cannot be represented"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

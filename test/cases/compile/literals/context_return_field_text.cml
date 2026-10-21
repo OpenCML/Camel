@@ -1,0 +1,14 @@
+/**
+ * A struct literal returned from a function takes the declared return type field by field
+ * (design principles 5.1): a text field is the type mismatch of that field.
+ */
+module literal_context_return_field_text
+
+type Point = { x: float, y: float }
+
+func make(): Point { return { x: '1.5', y: 2.0 } }
+
+func main(): int sync {
+    println(make().x)
+    return 0
+}

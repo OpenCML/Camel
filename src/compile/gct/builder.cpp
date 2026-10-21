@@ -33,6 +33,7 @@
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
+#include "camel/utils/number_text.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/token.h"
 #include "camel/utils/type.h"
@@ -315,15 +316,17 @@ template <typename Diags, typename Range>
 static void reportLiteralCastFailure(
     Diags &diags, const Range &range, const data_ptr_t &data, Type *type,
     const std::string &written = {}, bool explicitCast = false) {
-    if (data->type()->code() == TypeCode::String) {
+    if (data->type()->code() == TypeCode::String || type->code() == TypeCode::String) {
+        // Either way round (`'1.5'` where a float is expected, `42` where a text is expected):
+        // a value and a text are not converted implicitly (design principles 5.1).
         if (explicitCast) {
             diags->of(SemanticDiag::DynamicCastForbidden)
                 .at(range)
-                .commit("string", type->toString());
+                .commit(data->type()->toString(), type->toString());
         } else {
             diags->of(SemanticDiag::DeclaredTypeMismatch)
                 .at(range)
-                .commit("string", type->toString());
+                .commit(data->type()->toString(), type->toString());
         }
         return;
     }
@@ -2699,51 +2702,50 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     } break;
     case LiteralType::Integer: {
         // Exact arithmetic. A literal that an int cannot hold used to wrap around
-        // (`9223372036854775808` was the smallest int, as was `1e400`).
-        const IntegerLiteral parsed = parseIntegerLiteral(str);
-        if (parsed.status == IntegerLiteralStatus::OutOfRange) {
+        // (`9223372036854775808` was the smallest int, as was `1e400`). The value is read by
+        // the same whole-number-token rule an entry argument is (camel/utils/number_text.h):
+        // one grammar, one parser for the two places a number is written as text.
+        int64_t value = 0;
+        switch (camel::utils::parseNumberToken<int64_t>(str, value)) {
+        case camel::utils::NumberTextStatus::Ok:
+            break;
+        case camel::utils::NumberTextStatus::OutOfRange:
+        case camel::utils::NumberTextStatus::OutOfRangeInteger:
             diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
                 .commit(
                     str, "int", "out of range (-9223372036854775808 to 9223372036854775807)");
             throw BuildAbortException();
-        }
-        if (parsed.status == IntegerLiteralStatus::Invalid) {
+        default:
             diags_->of(SemanticDiag::InvalidLiteral)
                 .at(ast->load()->tokenRange())
                 .commit("integer", str);
             throw BuildAbortException();
         }
-        if (parsed.inexact) {
-            // `1e-2` is the int 0. Whether such a literal should be a float or an error is
-            // not decided; until then the dropped fraction is at least said.
-            std::string asReal = str;
-            if (const size_t e = asReal.find_first_of("eE"); e != std::string::npos) {
-                asReal.insert(e, ".0");
-            }
-            diags_->of(SemanticDiag::IntegerLiteralTruncated)
-                .at(ast->load()->tokenRange())
-                .commit(str, std::to_string(parsed.value), asReal);
-        }
-        data       = makeDataFromLiteral(parsed.value);
+        data       = makeDataFromLiteral(value);
         exactValue = literal::Value::fromIntegerText(str);
     } break;
     case LiteralType::Real: {
-        // The double nearest to the number written. One too large for a double was an
+        // The double nearest to the number written, read by the same whole-number-token rule an
+        // entry argument is (camel/utils/number_text.h). One too large for a double was an
         // exception that reached the user as bare text.
-        try {
-            data = makeDataFromLiteral(parseNumber<double>(str));
-        } catch (const std::overflow_error &) {
+        double value = 0.0;
+        switch (camel::utils::parseNumberToken<double>(str, value)) {
+        case camel::utils::NumberTextStatus::Ok:
+            break;
+        case camel::utils::NumberTextStatus::OutOfRange:
+        case camel::utils::NumberTextStatus::OutOfRangeInteger:
             diags_->of(SemanticDiag::LiteralNotRepresentable)
                 .at(ast->load()->tokenRange())
                 .commit(str, "float", "out of range (at most about 1.8e308 in magnitude)");
             throw BuildAbortException();
-        } catch (const std::invalid_argument &) {
+        default:
             diags_->of(SemanticDiag::InvalidLiteral)
                 .at(ast->load()->tokenRange())
                 .commit("real", str);
             throw BuildAbortException();
         }
+        data       = makeDataFromLiteral(value);
         exactValue = literal::Value::fromRealText(str);
     } break;
     case LiteralType::Imaginary: {
@@ -3024,6 +3026,84 @@ std::string sourceTextAt(
 
 } // namespace
 
+bool Builder::rejectTextInLiteral(const data_ptr_t &data, Type *type, camel::source::origin_id_t where) {
+    if (data == nullptr || type == nullptr || type->assignableFrom(data->type())) {
+        return false;
+    }
+    // A text where the position expects another type is a type mismatch, not a literal that
+    // does not fit: there is no implicit text-to-number (or text-to-anything) conversion
+    // (design principles 5.1). The element's own position is where it is written, as H27c
+    // reports an element whose value does not fit (see the GIR builder's literalElementInType).
+    if (data->type()->code() == TypeCode::String) {
+        diags_->of(SemanticDiag::DeclaredTypeMismatch)
+            .atOrigin(where)
+            .commit("string", type->toString());
+        return true;
+    }
+    if (!isComposite(data->type()->code())) {
+        return false;
+    }
+    const auto *written = tree_->literalElementsOf(data);
+    const auto elementAt = [&](size_t index, camel::source::origin_id_t fallback) {
+        const Tree::LiteralElement *element =
+            written != nullptr && index < written->size() ? &(*written)[index] : nullptr;
+        return element != nullptr && element->origin != camel::source::kInvalidOriginId
+                   ? element->origin
+                   : fallback;
+    };
+    if (type->code() == TypeCode::Struct && data->type()->code() == TypeCode::Struct) {
+        auto *structType = tt::as_ptr<StructType>(type);
+        const auto object = std::dynamic_pointer_cast<StructData>(data);
+        if (structType == nullptr || object == nullptr ||
+            object->raw().size() != structType->size()) {
+            return false;
+        }
+        size_t index = 0;
+        for (const auto &[name, fieldValue] : object->raw()) {
+            const std::optional<size_t> fieldIndex = structType->findField(name);
+            if (!fieldIndex.has_value()) {
+                return false;
+            }
+            const camel::source::origin_id_t fieldWhere = elementAt(index, where);
+            ++index;
+            if (rejectTextInLiteral(fieldValue, structType->typeAt(*fieldIndex), fieldWhere)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Tuple && data->type()->code() == TypeCode::Tuple) {
+        auto *tupleType    = tt::as_ptr<TupleType>(type);
+        const auto object  = std::dynamic_pointer_cast<TupleData>(data);
+        if (tupleType == nullptr || object == nullptr ||
+            object->raw().size() != tupleType->size()) {
+            return false;
+        }
+        for (size_t index = 0; index < object->raw().size(); ++index) {
+            if (rejectTextInLiteral(
+                    object->raw()[index], tupleType->typeAt(index), elementAt(index, where))) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->code() == TypeCode::Array && data->type()->code() == TypeCode::Array) {
+        auto *arrayType      = tt::as_ptr<ArrayType>(type);
+        const auto object    = std::dynamic_pointer_cast<ArrayData>(data);
+        Type *elementType    = arrayType != nullptr ? arrayType->elemType() : nullptr;
+        if (elementType == nullptr || object == nullptr) {
+            return false;
+        }
+        for (size_t index = 0; index < object->raw().size(); ++index) {
+            if (rejectTextInLiteral(
+                    object->raw()[index], elementType, elementAt(index, where))) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast) {
     // A literal of the declared type, converted now (`let x: float = 1`). A declared `T?` /
     // `T!` and a type written with a type variable (decided when the generic function is
@@ -3084,6 +3164,14 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
         // element (field) type — they are positions with an expected type too (design
         // principles 5.1). Converting its data now would keep the type its values give it.
         if (!isUnresolvedLiteral(value->data())) {
+            // A text field of a composite literal is reported at the field itself, as a type
+            // mismatch; a lone text value keeps the declaration's position, as H15g reports it
+            // (`let x: int = '42'` is a mismatch at the declaration), and anything else the
+            // conversion cannot take is reported for the literal as a whole below.
+            if (isComposite(value->data()->type()->code()) &&
+                rejectTextInLiteral(value->data(), type, value->origin())) {
+                throw BuildAbortException();
+            }
             if (data_ptr_t converted = value->data()->convertTo(type)) {
                 return tree_->makeData(converted);
             }
@@ -3223,12 +3311,15 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
     factory.setElemType(elemType);
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
+    // Each element's position, as the ordinary build keeps it (H27c/H15h).
+    std::vector<Tree::LiteralElement> literalElements;
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         bool nested         = false;
         node_ptr_t dataNode = visitDataInto(item, elemType, nested);
         if (!nested) {
             dataNode = literalNodeInType(dataNode, elemType, item);
         }
+        literalElements.push_back(writtenElement(dataNode));
         auto [data, _] = extractData(dataNode, execNode, dangling);
         try {
             factory.add(data);
@@ -3241,6 +3332,9 @@ node_ptr_t Builder::visitArrayInto(const AST::node_ptr_t &ast, Type *arrayType, 
         }
     }
     const data_ptr_t built = factory.build();
+    if (!dangling) {
+        tree_->setLiteralElements(built, std::move(literalElements));
+    }
     node_ptr_t res         = tree_->makeData(built);
     // The literal is the value of the type asked for when the two types are the same. When
     // they are not (a named struct type, say), the caller still applies the declared value or
@@ -3278,7 +3372,10 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
     // The fields are built in the type's order (the declaration's order for a named type),
     // not the order they are written in: a literal at a position of a struct type is a value
     // of that type (design principles 5.2), so `{ y: 1, x: 2 }` at `Point` is a `Point` whose
-    // fields are `x, y`.
+    // fields are `x, y`. Each field keeps the position it was written at, for diagnostics
+    // (H27c/H15h): a field the field type cannot take is reported at the field, not at the
+    // literal.
+    std::unordered_map<std::string, Tree::LiteralElement> literalElementsByName;
     for (size_t i = 0; i < sType->size(); ++i) {
         const std::string name(sType->fieldName(i));
         const AST::node_ptr_t *written = nullptr;
@@ -3308,12 +3405,14 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         } else if (!nested) {
             fieldNode = literalNodeInType(fieldNode, fieldType, valueAst);
         }
-        auto [data, fieldDangling] = extractData(fieldNode, execNode);
+        literalElementsByName.emplace(name, writtenElement(fieldNode));
+        auto [data, fieldDangling] = extractData(fieldNode, execNode, dangling);
         if (fieldDangling) {
             dangling = true;
         }
-        if (!fieldDangling && (data == nullptr || data->type() == nullptr ||
-                               !fieldType->assignableFrom(data->type()))) {
+        if (!fieldDangling &&
+            (data == nullptr || data->type() == nullptr ||
+             !fieldType->assignableFrom(data->type()))) {
             // A field written as a variable keeps its own type (design principles 5.1): the
             // literal is of an unnamed struct type whose field is of another type, and the
             // conversion at the position it is written in reports it, as it would without
@@ -3329,6 +3428,20 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         // another type reports it.
         LEAVE("StructData");
         return visitData(ast);
+    }
+    if (!dangling) {
+        // A StructData holds its fields in the type's order, so the elements are recorded in
+        // that order whatever order they were written in; a diagnostic then points at the
+        // element that failed, not at the literal.
+        const auto object = std::dynamic_pointer_cast<StructData>(built);
+        std::vector<Tree::LiteralElement> literalElements;
+        if (object != nullptr) {
+            literalElements.reserve(object->raw().size());
+            for (const auto &[name, _] : object->raw()) {
+                literalElements.push_back(literalElementsByName.at(name));
+            }
+        }
+        tree_->setLiteralElements(built, std::move(literalElements));
     }
     node_ptr_t res = tree_->makeData(built);
     // The literal is a value of the type the position gives it: its fields are that type's
@@ -3354,9 +3467,10 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
     std::unordered_set<string> fieldNames;
-    // The value each field was written as and its position, in the order the data holds them
-    // (design principles 5.1; see visitArrayData).
-    std::vector<Tree::LiteralElement> literalElements;
+    // The value each field was written as and its position, keyed by name: a StructData holds its
+    // fields in name order, and the conversion walks the elements by index (design principles
+    // 5.1; see visitArrayData).
+    std::unordered_map<std::string, Tree::LiteralElement> literalElementsByName;
 
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedPair = child->loadAs<AST::NamedDataLoad>();
@@ -3367,13 +3481,21 @@ node_ptr_t Builder::visitStructData(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         node_ptr_t dataNode = visitData(child->atAs<AST::DataLoad>(0));
-        literalElements.push_back(writtenElement(dataNode));
+        literalElementsByName.emplace(name, writtenElement(dataNode));
         auto [data, _] = extractData(dataNode, execNode, dangling);
         factory.add(name, data);
     }
 
     auto structData = factory.build();
     if (!dangling) {
+        const auto object = std::dynamic_pointer_cast<StructData>(structData);
+        std::vector<Tree::LiteralElement> literalElements;
+        if (object != nullptr) {
+            literalElements.reserve(object->raw().size());
+            for (const auto &[name, _] : object->raw()) {
+                literalElements.push_back(literalElementsByName.at(name));
+            }
+        }
         tree_->setLiteralElements(structData, std::move(literalElements));
     }
     node_ptr_t res = tree_->makeData(structData);
@@ -3398,14 +3520,22 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
     TupleDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
+    // Each element's position and exact value, as for an array or struct literal (H27c/H15h):
+    // a tuple is positional, and an element the element type cannot take is reported at the
+    // element.
+    std::vector<Tree::LiteralElement> literalElements;
 
     for (const auto &item : *ast->atAs<AST::RepeatedLoad>(0)) {
         node_ptr_t dataNode = visitData(item);
+        literalElements.push_back(writtenElement(dataNode));
         auto [data, _]      = extractData(dataNode, execNode, dangling);
         factory.add(data);
     }
 
     auto tupleData = factory.build();
+    if (!dangling) {
+        tree_->setLiteralElements(tupleData, std::move(literalElements));
+    }
     node_ptr_t res = tree_->makeData(tupleData);
 
     // If there are dangling nodes, attach them to the execution node
