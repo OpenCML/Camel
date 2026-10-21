@@ -190,6 +190,7 @@
 | H15h | 结构体字段的文本诊断定位、转换为自身类型通过、`string = 42` 的类型不符诊断、入口与源码同一数字文法 | 无 | 甲车道 |
 | H5b | 在声明类型的模块里找算子（设计原则 5.7，按 H5 报告第 5 节的计划） | 无 | 甲车道 |
 | H15i | 下溢一致、`inf`/`nan` 数据文本、`09` 与 `077` 的词法、元组字面量分支、删除不可达诊断 | 无 | 甲车道 |
+| H42 | 模块导出表改为每个程序一份，不再修改进程级的共享表（`clearExportedNamespaces`） | 无 | 丙车道 |
 | H41 | **缺陷**：`ort_loop_values`、`ort_grad_loop_values`、`lsp.editing`、`examples.ml.export_onnx_translate` 在 fsh-dev 上失败（H5 名义结构体之后） | 无 | 丁车道，优先 |
 | H40 | C2 峰值内存因每步 `take` 升高 150 MB：查清数据块回收是否及时触发并修复 | 无 | 乙车道 |
 | H38 | 规则引擎的其余部分（`when`、`#requires`、分析、替换 `algebra.cpp`；先交计划） | H2（`#requires` 部分） | 丙车道交给施工方 |
