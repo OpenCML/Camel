@@ -535,6 +535,7 @@ jg  .recurse
 | 同图内函数互调 | ✅ | `isSameGraph == true` |
 | 跨图函数调用 | ❌ 有帧代码 | 调用交给驱动循环（17.3） |
 | 包含 OPER 调用的函数 | ❌ 有帧代码 | 算子经辅助函数执行（17.2） |
+| 包含循环的图 | ❌ 有帧代码 | 三个循环事件经辅助函数执行，轮次边界是安全点（17.9） |
 
 ---
 
@@ -547,7 +548,7 @@ jg  .recurse
 | 无帧代码的 BRCH 只有 `withCnt()==0` | `collectRuntimeConstructs` | 带 case 值的 BRCH（match）使图成为有帧代码 |
 | 调用的参数个数不限 | `NativeJitCallParams::args` | 不超过 4 个走寄存器，更多的经 r11 / 机器栈逐个移动 |
 | 无帧代码自调用的帧不超过 2 KB | `kMaxNativeFrameBytes` | 更大的帧配合上限那么深的递归会占用过多机器栈，该图编译成有帧代码 |
-| 需要运行时的构造使图成为有帧代码 | `collectRuntimeConstructs` | OPER, CAST, COPY, ACCS, FILL, CALL, SCHD, match，以及目标不是本图的 FUNC/TAIL |
+| 需要运行时的构造使图成为有帧代码 | `collectRuntimeConstructs` | OPER, CAST, COPY, ACCS, FILL, CALL, SCHD, match, LBEG/LTST/LEND，以及目标不是本图的 FUNC/TAIL |
 | 寄存器分配失败时重新下降 | `X64Backend::compileBytecode` | 见 2.3 阶段 3 |
 | peephole 不跨控制流做传播 | `mir_optimize.cpp` | jump target、jump/call/native-call/push-pop rdi 都视为 barrier |
 | 只读 slot cache 只缓存“从不写入”的槽位 | `x64_backend.cpp` | 避免在无 CFG/别名分析下把可变 slot 的旧值错误传播过跳转或写回 |
