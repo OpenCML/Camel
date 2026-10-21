@@ -248,6 +248,17 @@ func main(): int {
 从现有代码可见，`wait` 的核心语义落实在 `waitExpr -> WaitLoad` 路径。  
 `WAIT stmtBlock` 的 AST 标记目前未在 GCT builder 中形成对称的专门 lower 逻辑（即 block 级 waited 标志未被同等消费）；这不影响 `wait expr` 主路径，但属于后续可增强点。
 
+### 3.5 控制边约简现在在哪（H85 调查结论）
+
+控制边的传递约简目前仍有两个入口：
+
+1. 编码前的 `src/compile/gir/graph_encode.cpp` 调 `reduceControlDependencies(*prepared.draft, 8192)`；
+2. `std::opt::ctrl`（`ControlReductionPass::apply`）对已有图再做一次，预算 `250000`。
+
+建图器 `shouldAddSyncCtrlLink` 在加同步控制边之前还会做一次 64 步的路径检查，跳过已经被值/控制路径蕴含的边。`include/camel/runtime/control.h` 是三者共用的约简实现，规则是删除 Port/Data 控制输入和值已蕴含的边，保留 BRCH/JOIN 边界与 GATE 的第一条 CTRL。
+
+审查 runtime 第 10 条建议把前两处都收到 `std::opt::ctrl`，只让建图器做“直接值输入”的局部去重。H85 按此实现并对比了 6 个程序的 `std::jgir`：带 `std::opt::ctrl` 时全部逐字节相同，不带这个遍时 `test/cases/linear/byref/element_assigned.cml` 会多一条 CTRL，而 `test/cases/linear/byref/path_assigned_allocs.cml` 的分配计数从 `1 0 0` 变成 `2 0 0`——多出的控制边让 `:var/take` 的结果在 `:op/assn_owned` 那里多了一个使用者，原地改写因此复制了一次。也就是说，“多余的控制边只增加顺序”这个前提在当前的持有/共享判定下不成立。由于 H85 要求第 1–3 项不改变行为且 `feat/linear` 必须全绿，这次没有把这两处删掉；调查与待决问题见 `docs/handover/reports/H85.md`。
+
 ## 4. 核心 GIR 节点职责
 
 ### 4.1 `BRCH`
