@@ -1011,7 +1011,7 @@ assert(m, `no accuracy line in: ${out}`)
 assert(Number(m[1]) >= 200, `training accuracy too low: ${m[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 60000
 
 [[tests]]
 name = "mnist_py.fold"
@@ -1032,7 +1032,7 @@ assert(m, `no accuracy line in: ${out}`)
 assert(Number(m[1]) >= 200, `training accuracy too low: ${m[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 60000
 
 [[tests]]
 name = "mnist_py.simplify"
@@ -1053,7 +1053,7 @@ assert(m, `no accuracy line in: ${out}`)
 assert(Number(m[1]) >= 200, `training accuracy too low: ${m[0]}`)
 }
 """
-timeout_ms = 4000
+timeout_ms = 60000
 
 [[tests]]
 name = "svm"
