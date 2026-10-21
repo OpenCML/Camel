@@ -814,6 +814,12 @@ cb91792c07cb9264 no test/cases/compile/semantic/try_not_in_language.cml
 e8928bd66be13ec1 ok test/cases/compile/semantic/type_contains_itself.cml
 c763c15acc84ef96 ok test/cases/compile/semantic/type_recursion_through_map.cml
 d7b768e95cb9dfd1 ok test/cases/compile/semantic/unresolved_reference.cml
+ca9fa691761f00f6 ok test/cases/compile/static_expansion/match_type_exhaustive.cml
+6d011d3422c19172 ok test/cases/compile/static_expansion/match_type_shapes.cml
+79078d0336adfffe ok test/cases/compile/static_expansion/match_type_unreachable.cml
+26fdf60ac2ab3679 ok test/cases/compile/static_expansion/match_type_unresolved.cml
+a330de5c391f7d9c ok test/cases/compile/static_expansion/return_inference.cml
+7631bc5a9c09cda9 ok test/cases/compile/static_expansion/return_inference_cycle.cml
 77fbc50ce9497a10 ok test/cases/compile/surface/angle_then_name_line.cml
 23b4227b58ad2534 ok test/cases/compile/surface/angle_then_semicolon.cml
 2cddb4818955c832 ok test/cases/compile/surface/angle_then_string_line.cml
@@ -1175,6 +1181,8 @@ eb74f3b204df0390 no test/cases/format/pattern_empty.cml
 6e2b9f9a38158b5e no test/cases/format/syntax_error.cml
 e39a9bd8bac6e3d2 ok test/cases/format/tuple_singleton.cml
 e08b2bd788c596de ok test/cases/format/type_params.cml
+9aba46c87332d020 ok test/cases/gpu/profile/device_region.cml
+33fc743541534364 ok test/cases/gpu/profile/host_loop.cml
 d48c91bf563f22ce ok test/cases/linear/byref/captured_write_graph.cml
 fa6c726d5cc0f9d3 ok test/cases/linear/byref/captured_write_order.cml
 cbef50f67ba3723e ok test/cases/linear/byref/element_assigned.cml
@@ -1365,6 +1373,7 @@ d2130fa6bb799f72 ok test/cases/modules/autodiff/grad_through_as.cml
 2d2ee5cf4170794e ok test/cases/modules/autodiff/grad_unexpanded_specialize.cml
 f6f132edf5434991 ok test/cases/modules/autodiff/loop_grad_affine.cml
 8a60a5ff5050a3dc ok test/cases/modules/autodiff/loop_grad_capture_table.cml
+ed6df62d74e5272d ok test/cases/modules/autodiff/loop_grad_composite_read.cml
 429fb3953cb48530 ok test/cases/modules/autodiff/loop_grad_in_place.cml
 573a6bc4c5028716 ok test/cases/modules/autodiff/loop_grad_nested.cml
 aa9aa9806bb83360 ok test/cases/modules/autodiff/loop_grad_product.cml
@@ -1965,7 +1974,10 @@ cc32392fed36cd2f ok test/cases/parse/rulings/reserved_and.cml
 a24945bb64fb63aa no test/cases/parse/syntax/missing_then.cml
 2b17772c82721c98 ok test/cases/parse/syntax/postfix_access.cml
 41c46559f542a83c ok test/cases/parse/syntax/tuple_and_parenthesis.cml
+143c065877f2fe57 ok test/cases/perf/dependency_chain.cml
 5f96692ce95b7e92 ok test/cases/perf/fib_recursive.cml
+f645a401bbf2b408 ok test/cases/perf/mlp_step.cml
+bb9859c04dad6289 ok test/cases/perf/transformer_step.cml
 0c3d3b5c8c244c4d ok test/cases/perf/gc/alloc_small.cml
 f300e470487fa1bc ok test/cases/perf/gc/build_tree.cml
 f7282e239e9b6bc9 ok test/cases/perf/gc/fib.cml

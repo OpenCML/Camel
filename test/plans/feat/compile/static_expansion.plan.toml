@@ -1,0 +1,105 @@
+id = "compile.static_expansion"
+order = 339
+tier = "fast"
+tags = ["feat", "compile", "generics", "static"]
+desc = "`match type` selects a case by the shape of an instantiated type (design principles 5.5, R3), and generic return-type inference gives every instance a concrete result type."
+
+[[tests]]
+name = "match_type_shapes"
+desc = "struct, tuple and #leaf select the R3 shapes; `struct | tuple` and `_` work; only the selected case is type-checked (the tuple case calls `len(1)` and must not be reported)."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/match_type_shapes.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "struct",
+  "tuple",
+  "leaf",
+  "leaf",
+  "leaf",
+  "true",
+  "true",
+  "false",
+  "1",
+  "0",
+  "1",
+  "3",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `shape selection changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_has_no_branch_node"
+desc = "The selected case is straight-line code: the graph of a function whose body is only a `match type` contains no BRCH or CASE node."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/match_type_shapes.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_output_not_contains = ["BRCH", "CASE"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_not_exhaustive"
+desc = "No case selects an int when the function writes only struct and tuple."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/match_type_exhaustive.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchNotExhaustive"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_unreachable_case"
+desc = "A case after `#leaf` can never be selected."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/match_type_unreachable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticMatchUnreachableCase"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "match_type_unselected_names_are_resolved"
+desc = "Names in an unselected case are still resolved (H51 step 1 limitation)."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/match_type_unresolved.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedReference"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "return_type_inferred_from_selected_case"
+desc = "A generic function without a return annotation gets a different concrete result type per instance; a `return` in the selected case gives the match's value, not the function's."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/return_inference.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ["1", "two", "true", "8"].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `return inference changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "return_inference_same_instance_cycle"
+desc = "A recursive call of the instance whose return type is still being inferred is a cycle, not a half type."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/return_inference_cycle.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericInstantiationCycle"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

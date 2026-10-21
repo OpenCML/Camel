@@ -1,0 +1,19 @@
+/**
+ * Names in every case are resolved, selected or not (H51 step 1 limitation): the `tuple`
+ * case is not selected when the function is instantiated with an `int`, but `nope` is still
+ * reported.
+ */
+module match_type_unresolved
+
+func shape(t: typeas T): int {
+    return match type T {
+        case struct => 1
+        case tuple => nope
+        case #leaf => 3
+    }
+}
+
+func main(): int sync {
+    println(shape(1))
+    return 0
+}

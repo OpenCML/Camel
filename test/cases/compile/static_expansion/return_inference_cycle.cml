@@ -1,0 +1,14 @@
+/**
+ * The same instance is called while its return type is still unknown: inference cannot
+ * terminate on a type it has not got yet, so this is a diagnostic, not a half type.
+ */
+module return_inference_cycle
+
+func bad(t: typeas T) {
+    return bad(t)
+}
+
+func main(): int sync {
+    println(bad(1))
+    return 0
+}
