@@ -807,10 +807,12 @@ f2285f5bb9e100f0 ok test/cases/compile/semantic/branch_return_mismatch.cml
 900958212778cb41 ok test/cases/compile/semantic/decorator_nonfunc_return.cml
 af09ee1145bfda3f ok test/cases/compile/semantic/duplicate_struct_field.cml
 ec140ae65e4532aa ok test/cases/compile/semantic/raise_is_a_name.cml
+724ff224558fc75c ok test/cases/compile/semantic/recursive_struct_array.cml
+6c5007415e866b83 ok test/cases/compile/semantic/recursive_struct_array_gc.cml
 0f0c50c9e9399c85 ok test/cases/compile/semantic/throw_outside_fallible.cml
 cb91792c07cb9264 no test/cases/compile/semantic/try_not_in_language.cml
 e8928bd66be13ec1 ok test/cases/compile/semantic/type_contains_itself.cml
-331adacf8c28fa31 ok test/cases/compile/semantic/type_recursion_through_array.cml
+c763c15acc84ef96 ok test/cases/compile/semantic/type_recursion_through_map.cml
 d7b768e95cb9dfd1 ok test/cases/compile/semantic/unresolved_reference.cml
 77fbc50ce9497a10 ok test/cases/compile/surface/angle_then_name_line.cml
 23b4227b58ad2534 ok test/cases/compile/surface/angle_then_semicolon.cml

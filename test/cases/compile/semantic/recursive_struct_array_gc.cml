@@ -1,0 +1,59 @@
+/**
+ * A recursive struct through an array under collection stress (H23b): a live `Node` tree must
+ * survive a collection that moves it. The tree is built, then many temporary trees are made
+ * while it is still read afterwards; the collector has to trace `children` (Array) with the
+ * element type `Node`, and each moved Node's own `children` slot, to keep the subtree alive.
+ */
+module recursive_struct_array_gc
+
+type Node = { value: int, children: Node[] }
+
+func total(node: Node): int sync {
+    var acc = node.value
+    let _ = loop i = 0 while i < len(node.children) do sync {
+        wait acc += total(node.children[i])
+        i + 1
+    }
+    return acc
+}
+
+func main(): void sync {
+    let kept: Node = {
+        value: 1,
+        children: [
+            { value: 2, children: [] },
+            { value: 3, children: [{ value: 4, children: [] }] },
+        ],
+    }
+    // More than the ten inline slots: the children live in a FixedArray, which the collector
+    // relocates and traces the same way.
+    let wide: Node = {
+        value: 100,
+        children: [
+            { value: 1, children: [] },
+            { value: 2, children: [] },
+            { value: 3, children: [] },
+            { value: 4, children: [] },
+            { value: 5, children: [] },
+            { value: 6, children: [] },
+            { value: 7, children: [] },
+            { value: 8, children: [] },
+            { value: 9, children: [] },
+            { value: 10, children: [] },
+            { value: 11, children: [] },
+            { value: 12, children: [] },
+        ],
+    }
+    var sink = 0
+    let _ = loop i = 0 while i < 32 do sync {
+        // A child built as a Node first, so the empty `children` takes Node[] from the field
+        // type; the temporary tree is then a Node too.
+        let child: Node = { value: i + 1, children: [] }
+        let temp: Node = { value: i, children: [child] }
+        wait sink += total(temp)
+        i + 1
+    }
+    // `kept` and `wide` were live across the collections and are still the same trees.
+    println(total(kept), total(wide), sink)
+    println(kept.children[1].children[0].value)
+}

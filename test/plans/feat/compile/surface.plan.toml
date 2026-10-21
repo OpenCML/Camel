@@ -196,14 +196,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "semantic.type_recursion_through_array"
-desc = "A struct that mentions itself through an array is legal by design principles 5.2, but the representation cannot hold it yet: the declaration says so (FeatureNotSupported) instead of leaving the name unresolved."
+name = "semantic.type_recursion_through_map"
+desc = "A struct that mentions itself through a map is legal by design principles 5.2, but only the array case has a representation: the declaration says so (FeatureNotSupported) instead of leaving the name unresolved. The array form is a positive case in recursive_struct.plan.toml."
 kind = "negative"
-case = "../../../cases/compile/semantic/type_recursion_through_array.cml"
+case = "../../../cases/compile/semantic/type_recursion_through_map.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::FeatureNotSupported"
-expect_diagnostic_line = 9
-expect_output_contains = ["mentions itself through an array", "'Node'"]
+expect_diagnostic_line = 8
+expect_output_contains = ["mentions itself through a map, a set or an enum", "'Node'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000

@@ -96,12 +96,16 @@ caller:
   program defines), whose result type the body decides after values of the function exist.
   Capture names are no longer part of a function type; they are held by the graph
   (`GCGraph::captureNames`).
-- Struct types are interned by field names and field type objects.
+- Struct types are interned by their declaration and type arguments when they are named (design
+  principles 5.2: a named type is its declaration), and by field names and field type objects when
+  they are anonymous. A named declaration's instance is filled in after its fields have been read
+  and only then enters the table, so a recursive type through an array (`type Node = { children:
+  Node[] }`) has one instance whose `children` field denotes that same object.
 
 Not interned: open signatures, unions and type variables. An interned type is immutable by
-construction: no type class has a mutator except `OpenFunctionType::setExitType`, and the table
-never holds an open signature. `CAMEL_TYPE_STATS=1` prints what a program allocated per kind
-of type and how many constructions the table answered.
+construction: no type class has a mutator except `OpenFunctionType::setExitType` and the completion
+of a named struct instance before the table holds it. `CAMEL_TYPE_STATS=1` prints what a program
+allocated per kind of type and how many constructions the table answered.
 
 A graph's frame layout is not a type in the table at all: it is built at the end of the
 graph's own block in the graph space (`TupleType::constructFrameLayout`) and freed with the
@@ -123,6 +127,10 @@ metadata.
 The important consequences are:
 
 - `Tuple`, `Struct`, `FixedArray`, and `Array` trace only fields whose `TypeCode` is GC-traced.
+- A recursive type through an array is traced by the element type: a `Node` traces its `children`
+  slot as an `Array`, the array relocates each element as a `Node`, and each moved `Node` repeats
+  the same walk. The walk ends because the object graph is finite, not the type: the type object
+  has two fields whatever the depth of the value.
 - Inline small-array storage is traced the same way as fixed backing storage.
 - `Function` and compile-time `StaticFunction` relocate the closure tuple itself, then the tuple scan
   traces closure members with their tuple layout.

@@ -1,0 +1,48 @@
+/**
+ * A struct that mentions itself through an array (design principles 5.2, H23b). `Node` is one
+ * nominal type whose `children` field is a `Node[]`: the name is in scope while the fields are
+ * read, so the field denotes the same type object the declaration denotes. The recurrence is
+ * bounded by a pointer — the array holds Nodes by reference — and a value is a finite tree.
+ *
+ * The node value is a GC object of two slots; the children are a slot array (a Node holds a
+ * reference, so it is not pure data and its array is not a data block). The collector traces
+ * the array's elements with the element type `Node`, so a live tree keeps its whole subtree.
+ */
+module recursive_struct_array
+
+type Node = { value: int, children: Node[] }
+
+// Reading the tree: recursion through an element of the array.
+func total(node: Node): int sync {
+    var acc = node.value
+    let _ = loop i = 0 while i < len(node.children) do sync {
+        wait acc += total(node.children[i])
+        i + 1
+    }
+    return acc
+}
+
+func main(): void sync {
+    // A leaf and a tree with two levels, built with the empty array taken from the field type.
+    let leaf: Node = { value: 4, children: [] }
+    let tree: Node = {
+        value: 1,
+        children: [
+            { value: 2, children: [] },
+            { value: 3, children: [leaf] },
+        ],
+    }
+    println(total(tree))
+    println(tree)
+
+    // Path assignment into the tree: `children[i]` and `.value` combined. The struct and its
+    // array are copied on the way (value semantics), so `tree` is unchanged.
+    var grown = tree
+    grown.children[0].value = 20
+    grown.children[1].children[0].value = 40
+    println(total(grown), total(tree))
+    println(grown.children[1].children[0].value)
+    // Content equality walks the same recurrence: a recursive type is comparable once its
+    // parts are, and the walk must stop at the type already being compared.
+    println(tree == tree, tree == grown)
+}
