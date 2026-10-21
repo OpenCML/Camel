@@ -239,12 +239,14 @@ struct DraftWritings::Index {
     std::vector<uint8_t> takes;
 };
 
-DraftWritings::DraftWritings(GraphDraft &draft)
-    : draft_(draft), store_(draft.writings()), index_(std::make_unique<Index>()) {}
+DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy policy)
+    : draft_(draft), policy_(policy), store_(draft.writings()), index_(std::make_unique<Index>()) {}
 
 DraftWritings::~DraftWritings() = default;
 
-uint8_t DraftWritings::contextOf(gc_node_ref_t node) const { return draft_.nodePermissions(node); }
+uint8_t DraftWritings::contextOf(gc_node_ref_t node) const {
+    return policy_.effective(draft_.nodePermissions(node));
+}
 
 namespace {
 
@@ -401,7 +403,7 @@ void DraftWritings::index(gc_node_ref_t node) {
     NodeKey key           = makeKey(
         draft_,
         h->kind,
-        context,
+        h->permissions,
         draft_.nodeRegion(node),
         h->dataType,
         h->dataIndex,
@@ -422,7 +424,7 @@ void DraftWritings::index(gc_node_ref_t node) {
     ix.keyOf[node]      = std::move(key);
     if (!inserted && it->second != node && !store_.same(context, it->second, node)) {
         ++congruentMerges_;
-        store_.merge(it->second, node, context, 0, kWritingDerived, this);
+        store_.merge(it->second, node, 0, 0, kWritingDerived, this);
     }
 }
 
@@ -454,7 +456,7 @@ bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms,
     const auto *hb = draft_.header(b);
     if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
         draft_.nodeRegion(a) != draft_.nodeRegion(b) || ha->permissions != hb->permissions ||
-        (perms & ~ha->permissions) != 0) {
+        (perms & ~contextOf(a)) != 0) {
         throw std::logic_error(
             "Two writings of a value have the same type, region and permissions, and the "
             "permissions the equivalence needs.");
@@ -481,7 +483,9 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
             init.payload,
             norm,
             with,
-            [&](gc_node_ref_t in) { return store_.canon(init.permissions, in); });
+            [&](gc_node_ref_t in) {
+                return store_.canon(policy_.effective(init.permissions), in);
+            });
         if (auto found = ix.byKey.find(*key); found != ix.byKey.end()) {
             return found->second;
         }
@@ -671,9 +675,23 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
             select(node);
         }
     }
-    for (gc_node_ref_t node :
-         {draft_.entryNode(), draft_.exitNode(), draft_.outputNode(), draft_.returnNode()}) {
+    // The nodes the graph names as its entry, exit and result stand for values: the writing
+    // chosen for the value takes their place.
+    const auto valueOf = [&](gc_node_ref_t node) {
+        return node != kInvalidNodeRef && draft_.alive(node) && multi[node] ? chosen[classOf[node]]
+                                                                             : node;
+    };
+    const gc_node_ref_t entry  = valueOf(draft_.entryNode());
+    const gc_node_ref_t exit   = valueOf(draft_.exitNode());
+    const gc_node_ref_t output = valueOf(draft_.outputNode());
+    const gc_node_ref_t result = valueOf(draft_.returnNode());
+    for (gc_node_ref_t node : {entry, exit, output, result}) {
         select(node);
+    }
+    std::vector<gc_node_ref_t> regionResults;
+    for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
+        regionResults.push_back(valueOf(draft_.region(r).result));
+        select(regionResults.back());
     }
     for (size_t at = 0; at < work.size(); ++at) {
         for (gc_node_ref_t input : inputsOf(work[at])) {
@@ -715,6 +733,23 @@ ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context
             draft_.setWithInputs(node, with);
             draft_.setCtrlInputs(node, ctrl);
             ++stats.rewired;
+        }
+    }
+    if (entry != draft_.entryNode()) {
+        draft_.setEntryNode(entry);
+    }
+    if (exit != draft_.exitNode()) {
+        draft_.setExitNode(exit);
+    }
+    if (output != draft_.outputNode()) {
+        draft_.setOutputNode(output);
+    }
+    if (result != draft_.returnNode()) {
+        draft_.setReturnNode(result, draft_.returnKind());
+    }
+    for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
+        if (regionResults[r] != draft_.region(r).result) {
+            draft_.setRegionResult(r, regionResults[r]);
         }
     }
     for (gc_node_ref_t node = 0; node < slots; ++node) {
@@ -764,6 +799,311 @@ gc_node_ref_t DraftWritings::find(gc_node_ref_t node) {
 
 std::span<const gc_node_ref_t> DraftWritings::writingsOf(gc_node_ref_t node) {
     return store_.members(contextOf(node), node);
+}
+
+// ---------------------------------------------------------------- rules
+
+Pattern patVar(uint32_t var) {
+    Pattern p;
+    p.kind = Pattern::Kind::Var;
+    p.var  = var;
+    return p;
+}
+
+Pattern patConst(uint32_t var) {
+    Pattern p = patVar(var);
+    p.constOnly = true;
+    return p;
+}
+
+Pattern patLiteral(slot_t value, camel::core::type::Type *type) {
+    Pattern p;
+    p.kind  = Pattern::Kind::Constant;
+    p.value = value;
+    p.type  = type;
+    return p;
+}
+
+Pattern patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type) {
+    Pattern p;
+    p.kind = Pattern::Kind::Op;
+    p.oper = oper;
+    p.type = type;
+    p.args = std::move(args);
+    return p;
+}
+
+Pattern patCompute(
+    camel::core::type::Type *type, std::function<slot_t(std::span<const slot_t>)> compute,
+    std::vector<Pattern> args) {
+    Pattern p;
+    p.kind    = Pattern::Kind::Compute;
+    p.type    = type;
+    p.compute = std::move(compute);
+    p.args    = std::move(args);
+    return p;
+}
+
+std::optional<std::pair<slot_t, camel::core::type::Type *>> Match::constant(uint32_t var) const {
+    return writings.constantOf(vars[var]);
+}
+
+std::optional<std::pair<slot_t, camel::core::type::Type *>>
+DraftWritings::constantOf(gc_node_ref_t node) {
+    const uint8_t context = contextOf(node);
+    const auto members    = store_.members(context, node);
+    const auto look = [&](gc_node_ref_t candidate)
+        -> std::optional<std::pair<slot_t, camel::core::type::Type *>> {
+        const auto *h = draft_.header(candidate);
+        if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Data ||
+            h->dataIndex >= 0) {
+            return std::nullopt;
+        }
+        const auto index = static_cast<size_t>(-h->dataIndex);
+        if (index >= draft_.staticSlots().size() || !takesPart(candidate)) {
+            return std::nullopt;
+        }
+        camel::core::type::Type *ty = draft_.staticSlotTypes()[index];
+        return std::pair{draft_.staticSlots()[index], ty != nullptr ? ty : h->dataType};
+    };
+    if (members.empty()) {
+        return look(node);
+    }
+    for (gc_node_ref_t member : members) {
+        if (auto found = look(member)) {
+            return found;
+        }
+    }
+    return std::nullopt;
+}
+
+gc_node_ref_t DraftWritings::constantNode(
+    slot_t value, camel::core::type::Type *type, uint8_t perms, uint32_t region) {
+    NodeKey key;
+    key.kind   = static_cast<uint8_t>(GCNodeKind::Data);
+    key.perms  = perms;
+    key.region = region;
+    key.type   = type;
+    key.payload.assign(reinterpret_cast<const char *>(&value), sizeof(value));
+    auto &ix = *index_;
+    if (auto found = ix.byKey.find(key); found != ix.byKey.end()) {
+        return found->second;
+    }
+    GraphDraft::WritingScope scope(draft_);
+    const gc_node_ref_t node = draft_.materializeStaticValue(value, type);
+    if (perms != 0) {
+        draft_.setNodePermissions(node, perms);
+    }
+    if (region != 0) {
+        draft_.setNodeRegion(node, region);
+    }
+    index(node);
+    return node;
+}
+
+void DraftWritings::matchFrom(
+    uint8_t context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
+    std::vector<uint8_t> &bound, const std::function<void()> &emit) {
+    if (at == work.size()) {
+        emit();
+        return;
+    }
+    const Item item  = work[at];
+    const Pattern &p = *item.pattern;
+    switch (p.kind) {
+    case Pattern::Kind::Var:
+        if (p.constOnly && !constantOf(item.node).has_value()) {
+            return;
+        }
+        if (bound[p.var]) {
+            if (store_.same(context, bind[p.var], item.node)) {
+                matchFrom(context, work, at + 1, bind, bound, emit);
+            }
+            return;
+        }
+        bound[p.var] = 1;
+        bind[p.var]  = item.node;
+        matchFrom(context, work, at + 1, bind, bound, emit);
+        bound[p.var] = 0;
+        return;
+    case Pattern::Kind::Constant: {
+        const auto found = constantOf(item.node);
+        if (found && found->first == p.value && found->second == p.type) {
+            matchFrom(context, work, at + 1, bind, bound, emit);
+        }
+        return;
+    }
+    case Pattern::Kind::Op: {
+        // The root of a rule is the node itself; below it, any writing of the value read.
+        std::vector<gc_node_ref_t> candidates;
+        if (at == 0) {
+            candidates.push_back(item.node);
+        } else {
+            const auto members = store_.members(context, item.node);
+            candidates.assign(members.begin(), members.end());
+            if (candidates.empty()) {
+                candidates.push_back(item.node);
+            }
+        }
+        for (gc_node_ref_t candidate : candidates) {
+            const auto *h = draft_.header(candidate);
+            if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
+                h->permissions != matchPerms_ || !takesPart(candidate) ||
+                reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
+                    p.oper) {
+                continue;
+            }
+            const auto inputs = draft_.normInputsOf(candidate);
+            if (inputs.size() != p.args.size() || !draft_.withInputsOf(candidate).empty()) {
+                continue;
+            }
+            const size_t saved = work.size();
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                work.push_back({&p.args[i], inputs[i]});
+            }
+            matchFrom(context, work, at + 1, bind, bound, emit);
+            work.resize(saved);
+        }
+        return;
+    }
+    case Pattern::Kind::Compute:
+        return; // right side only
+    }
+}
+
+gc_node_ref_t DraftWritings::build(
+    const Pattern &pattern, const Match &match, const DraftNodeInit &base) {
+    switch (pattern.kind) {
+    case Pattern::Kind::Var:
+        return match.vars[pattern.var];
+    case Pattern::Kind::Constant:
+        return constantNode(
+            pattern.value,
+            pattern.type != nullptr ? pattern.type : base.dataType,
+            base.permissions,
+            base.region);
+    case Pattern::Kind::Compute: {
+        std::vector<slot_t> values;
+        for (const Pattern &arg : pattern.args) {
+            const gc_node_ref_t node = build(arg, match, base);
+            const auto value         = constantOf(node);
+            if (!value) {
+                throw std::logic_error(
+                    "A computed term of a rule reads a value that is not a constant.");
+            }
+            values.push_back(value->first);
+        }
+        return constantNode(
+            pattern.compute(values),
+            pattern.type != nullptr ? pattern.type : base.dataType,
+            base.permissions,
+            base.region);
+    }
+    case Pattern::Kind::Op: {
+        std::vector<gc_node_ref_t> inputs;
+        for (const Pattern &arg : pattern.args) {
+            inputs.push_back(build(arg, match, base));
+        }
+        GCOperBody body;
+        body.oper = pattern.oper;
+        std::vector<std::byte> bytes(sizeof(GCOperBody));
+        std::memcpy(bytes.data(), &body, sizeof(body));
+        DraftNodeInit init = base;
+        init.kind          = GCNodeKind::Oper;
+        init.dataIndex     = 0;
+        init.dataType      = pattern.type != nullptr ? pattern.type : base.dataType;
+        init.payload       = bytes;
+        return lookupOrAdd(init, inputs);
+    }
+    }
+    return kInvalidNodeRef;
+}
+
+SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget &budget) {
+    SaturateStats stats;
+    GraphDraft::WritingScope scope(draft_);
+    rebuild();
+    struct Found {
+        size_t rule;
+        gc_node_ref_t root;
+        std::vector<gc_node_ref_t> vars;
+    };
+    size_t varCount = 0;
+    std::function<void(const Pattern &)> countVars = [&](const Pattern &p) {
+        if (p.kind == Pattern::Kind::Var) {
+            varCount = std::max<size_t>(varCount, p.var + 1);
+        }
+        for (const Pattern &arg : p.args) {
+            countVars(arg);
+        }
+    };
+    for (const Rule &rule : rules) {
+        countVars(rule.lhs);
+        countVars(rule.rhs);
+    }
+    for (; stats.rounds < budget.rounds; ++stats.rounds) {
+        // All the matches of the round are found before any is applied.
+        std::vector<Found> found;
+        const size_t slots = draft_.nodeSlotCount();
+        for (size_t r = 0; r < rules.size(); ++r) {
+            const Rule &rule = rules[r];
+            if (rule.lhs.kind != Pattern::Kind::Op) {
+                continue;
+            }
+            for (gc_node_ref_t node = 0; node < slots; ++node) {
+                if (!draft_.alive(node) || !takesPart(node)) {
+                    continue;
+                }
+                const uint8_t context = contextOf(node);
+                if ((rule.needs & ~context) != 0) {
+                    continue;
+                }
+                matchPerms_ = draft_.header(node)->permissions;
+                std::vector<Item> work{{&rule.lhs, node}};
+                std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
+                std::vector<uint8_t> bound(varCount, 0);
+                matchFrom(context, work, 0, bind, bound, [&] {
+                    if (!rule.when || rule.when(Match{*this, node, bind})) {
+                        found.push_back(Found{r, node, bind});
+                    }
+                });
+            }
+        }
+        stats.matches += found.size();
+        bool progress = false;
+        for (const Found &match : found) {
+            const Rule &rule = rules[match.rule];
+            if (stats.newWritings >= budget.newWritings || stats.unions >= budget.unions) {
+                return stats;
+            }
+            const auto *h = draft_.header(match.root);
+            DraftNodeInit base;
+            base.dataType       = h->dataType;
+            base.permissions    = h->permissions;
+            base.region         = draft_.nodeRegion(match.root);
+            base.origin         = draft_.nodeOrigin(match.root);
+            base.attrs          = draft_.nodeAttrs(match.root);
+            const size_t before = draft_.nodeSlotCount();
+            const gc_node_ref_t made =
+                build(rule.rhs, Match{*this, match.root, match.vars}, base);
+            stats.newWritings += draft_.nodeSlotCount() - before;
+            if (draft_.nodeSlotCount() != before) {
+                progress = true;
+            }
+            if (made != match.root && !store_.same(contextOf(match.root), made, match.root)) {
+                if (assertEqual(match.root, made, rule.needs, rule.id)) {
+                    ++stats.unions;
+                    progress = true;
+                }
+            }
+        }
+        if (!progress) {
+            stats.saturated = true;
+            ++stats.rounds;
+            break;
+        }
+    }
+    return stats;
 }
 
 } // namespace camel::runtime

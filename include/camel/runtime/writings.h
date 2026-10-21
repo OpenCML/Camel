@@ -39,12 +39,15 @@
 
 #pragma once
 
+#include "camel/core/operator_semantics.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -144,6 +147,70 @@ class CostModel {
 void registerCostModel(std::string name, std::shared_ptr<const CostModel> model);
 std::shared_ptr<const CostModel> findCostModel(const std::string &name);
 
+/// A term of a rule (rewrite design 2.2, 2.3). On the left it is matched against the writings
+/// of the values; on the right it is built. A variable stands for a value (the same variable
+/// twice: the same value); `constOnly` ones only match a value that has a constant writing.
+struct Pattern {
+    enum class Kind : uint8_t { Var, Constant, Op, Compute };
+    Kind kind        = Kind::Var;
+    uint32_t var     = 0;
+    bool constOnly   = false;
+    camel::core::OperId oper = camel::core::kNoOper;
+    // Constant: the bits and the type; Op, Compute: the type of the result (null: the type of the
+    // value the rule matched).
+    slot_t value                       = 0;
+    camel::core::type::Type *type      = nullptr;
+    std::vector<Pattern> args;
+    // Compute (right side only): the constant it is, from the constants of its arguments.
+    std::function<slot_t(std::span<const slot_t>)> compute;
+};
+Pattern patVar(uint32_t var);
+Pattern patConst(uint32_t var);
+Pattern patLiteral(slot_t value, camel::core::type::Type *type);
+Pattern patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type = nullptr);
+Pattern patCompute(
+    camel::core::type::Type *type, std::function<slot_t(std::span<const slot_t>)> compute,
+    std::vector<Pattern> args);
+
+class DraftWritings;
+
+/// What a match of a rule's left side found: the value each variable stands for.
+struct Match {
+    DraftWritings &writings;
+    gc_node_ref_t root;
+    std::span<const gc_node_ref_t> vars;
+    /// The constant a variable's value has, if it has one.
+    std::optional<std::pair<slot_t, camel::core::type::Type *>> constant(uint32_t var) const;
+};
+
+/// `lhs => rhs`: whenever the left side matches, the right side is another writing of the value
+/// of the node it matched. `needs` is the numeric permissions the value must have (the
+/// policy's and the node's). A rule that holds both ways is two rules.
+struct Rule {
+    std::string name;
+    uint16_t id                            = 0;
+    camel::core::sem::PermissionMask needs = camel::core::sem::kNoPermissions;
+    Pattern lhs;
+    Pattern rhs;
+    std::function<bool(const Match &)> when;
+};
+
+/// What a saturation may spend; the result does not depend on time. Rounds are passes over all
+/// the rules. The run stops, without an error, when a budget is used up.
+struct Budget {
+    size_t rounds       = 8;
+    size_t newWritings  = 1u << 20;
+    size_t unions       = 1u << 22;
+};
+
+struct SaturateStats {
+    size_t rounds       = 0;
+    size_t matches      = 0;
+    size_t newWritings  = 0;
+    size_t unions       = 0;
+    bool saturated      = false; // a round found nothing new
+};
+
 struct ExtractStats {
     size_t classes  = 0; // values with more than one writing
     size_t rewired  = 0; // nodes whose inputs were changed to other writings
@@ -170,7 +237,9 @@ const Program *extractWritings(
 /// region and with the same numeric permissions (design principles 7.5, op-semantics 6.4).
 class DraftWritings : private WritingObserver {
   public:
-    explicit DraftWritings(GraphDraft &draft);
+    explicit DraftWritings(
+        GraphDraft &draft,
+        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::explicitOnly());
     ~DraftWritings();
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
@@ -192,6 +261,15 @@ class DraftWritings : private WritingObserver {
     gc_node_ref_t
     lookupOrAdd(const DraftNodeInit &init, std::span<const gc_node_ref_t> norm,
                 std::span<const gc_node_ref_t> with = {});
+    /// Applies the rules to the writings, adding writings, until nothing new is found or the
+    /// budget is used up. The same rules, graph and budget give the same writings.
+    // (a saturation matches the nodes whose permissions are the root's own)
+    SaturateStats saturate(std::span<const Rule> rules, const Budget &budget = {});
+    /// The constant node `value` of `type` in this region with these permissions: the one there
+    /// is, or a new one.
+    gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, uint8_t perms, uint32_t region);
+    /// The constant (bits and type) a writing of the value of `node` is, if any is.
+    std::optional<std::pair<slot_t, camel::core::type::Type *>> constantOf(gc_node_ref_t node);
     /// Closes the classes over congruence: nodes whose inputs changed class are looked up again.
     void rebuild();
 
@@ -212,11 +290,22 @@ class DraftWritings : private WritingObserver {
     struct Index;
     bool takesPart(gc_node_ref_t node);
     uint8_t contextOf(gc_node_ref_t node) const;
+    struct Item {
+        const Pattern *pattern;
+        gc_node_ref_t node;
+    };
+    void matchFrom(
+        uint8_t context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
+        std::vector<uint8_t> &bound, const std::function<void()> &emit);
+    gc_node_ref_t build(
+        const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);
     void joined(uint8_t context, std::span<const gc_node_ref_t> moved) override;
     void index(gc_node_ref_t node);
 
     GraphDraft &draft_;
+    uint8_t matchPerms_ = 0;
+    camel::core::sem::NumericPolicy policy_;
     WritingStore store_;
     std::unique_ptr<Index> index_;
     std::vector<gc_node_ref_t> pending_;
