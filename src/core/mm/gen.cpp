@@ -51,10 +51,11 @@ namespace camel::core::mm {
 
 namespace {
 
-constexpr std::string_view kCauseLargeBudget    = "large object budget";
-constexpr std::string_view kCauseElderExhausted = "elder space budget";
-constexpr std::string_view kCauseHeapLimit      = "heap limit";
-constexpr const char *kHeapLimitEnv             = "CAMEL_GC_HEAP_LIMIT_MB";
+constexpr std::string_view kCauseLargeBudget      = "large object budget";
+constexpr std::string_view kCauseElderExhausted   = "elder space budget";
+constexpr std::string_view kCauseElderBlockBudget = "promoted block budget";
+constexpr std::string_view kCauseHeapLimit        = "heap limit";
+constexpr const char *kHeapLimitEnv               = "CAMEL_GC_HEAP_LIMIT_MB";
 
 double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
 
@@ -81,6 +82,7 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
       largeObjGrowthPercent_(config.largeObjGrowthPercent),
       largeObjBudget_(config.largeObjCollectionBudget), elderMinBudget_(config.elderGenSize),
       elderBudget_(config.elderGenSize),
+      elderBlockBudget_(config.largeObjCollectionBudget),
       minorTriggerBytes_(
           static_cast<size_t>(
               static_cast<double>(config.birthSize) *
@@ -723,6 +725,8 @@ void GenerationalAllocatorWithGC::requestCollectionAtSafepointUnlocked(
             ++stats_.largeBudgetRequests;
         } else if (reason == kCauseElderExhausted) {
             ++stats_.elderExhaustedRequests;
+        } else if (reason == kCauseElderBlockBudget) {
+            ++stats_.elderBlockBudgetRequests;
         } else {
             ++stats_.otherRequests;
         }
@@ -1159,6 +1163,21 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
             pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
         }
+        // A block this value holds moves with it into the elder space, and only a major
+        // collection sweeps the elder space, so these bytes can no longer be reclaimed by the
+        // minor collections the blocks pace. Count them and ask for the major when enough have
+        // accumulated since the last sweep.
+        const size_t heldBlockBytes = obj->blockBytesHeld();
+        if (heldBlockBytes != 0) {
+            elderBlockBytesSinceSweep_ += heldBlockBytes;
+            if (UNLIKELY(elderBlockBytesSinceSweep_ >= elderBlockBudget_) &&
+                pendingSafepointCollection_ != CollectionKind::Major &&
+                pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
+                requestCollectionAtSafepointUnlocked(
+                    CollectionKind::Major,
+                    kCauseElderBlockBudget);
+            }
+        }
         newHeader = headerOf(newObj);
         newHeader->setAge(age);
         newHeader->setRegion(AllocRegion::ElderGen);
@@ -1399,10 +1418,15 @@ void GenerationalAllocatorWithGC::markObject(rtdata::Object *obj, const type::Ty
 
 void GenerationalAllocatorWithGC::sweepOldGen() {
     std::vector<ObjectHeader *> unreachable;
+    size_t liveBlockBytes = 0;
 
-    elderGenSpace_.iterateAllocated([&unreachable](ObjectHeader *header) {
+    elderGenSpace_.iterateAllocated([&unreachable, &liveBlockBytes](ObjectHeader *header) {
         if (!header->marked_) {
             unreachable.push_back(header);
+        } else {
+            // The blocks the survivors still hold: only a major collection can release them,
+            // so they are the base of the next promoted-block budget.
+            liveBlockBytes += payloadOf<rtdata::Object>(header)->blockBytesHeld();
         }
     });
 
@@ -1420,6 +1444,14 @@ void GenerationalAllocatorWithGC::sweepOldGen() {
     const size_t growth   = elderLiveBytes_ / 100 * largeObjGrowthPercent_ +
                             elderLiveBytes_ % 100 * largeObjGrowthPercent_ / 100;
     elderBudget_          = std::max(elderMinBudget_, growth);
+    // The same rule for the blocks held by promoted values: the floor, or the growth
+    // percentage of the block bytes this sweep left in the elder space. The bytes promoted
+    // since the sweep are what can have turned into garbage that only the next major can free.
+    elderBlockBytesSinceSweep_ = 0;
+    elderBlockLiveBytes_       = liveBlockBytes;
+    const size_t blockGrowth = liveBlockBytes / 100 * largeObjGrowthPercent_ +
+                               liveBlockBytes % 100 * largeObjGrowthPercent_ / 100;
+    elderBlockBudget_ = std::max(largeObjMinBudget_, blockGrowth);
 }
 
 void GenerationalAllocatorWithGC::sweepLargeObjects() {
@@ -1484,10 +1516,12 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
     const RuntimeStats s = stats();
     os << std::format(
         "[camel] gc: major={} requested={} deferred={} by_large_budget={} by_elder_exhausted={} "
+        "by_elder_block_budget={} "
         "by_other={} alloc_young_mb={:.1f} alloc_elder_mb={:.1f} alloc_large_mb={:.1f} "
         "elder_overflow_objects={} elder_overflow_mb={:.1f} large_live_mb={:.1f} "
         "large_high_water_mb={:.1f} budget_mb={:.1f} growth_percent={} minor={} moved={} "
         "promoted={} elder_live_mb={:.1f} elder_reserved_mb={:.1f} elder_segments={} "
+        "elder_block_live_mb={:.1f} elder_block_budget_mb={:.1f} "
         "minor_pause_ms={:.2f} minor_pause_max_ms={:.3f} major_pause_ms={:.2f} "
         "major_pause_max_ms={:.3f}\n",
         s.majorCollections,
@@ -1495,6 +1529,7 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
         s.deferredCollections,
         s.largeBudgetRequests,
         s.elderExhaustedRequests,
+        s.elderBlockBudgetRequests,
         s.otherRequests,
         megabytes(s.youngBytesAllocated),
         megabytes(s.elderBytesAllocated),
@@ -1511,6 +1546,8 @@ void GenerationalAllocatorWithGC::reportStats(std::ostream &os) const {
         megabytes(s.elderLiveBytes),
         megabytes(s.elderReservedBytes),
         s.elderSegments,
+        megabytes(s.elderBlockLiveBytes),
+        megabytes(s.elderBlockBudgetBytes),
         static_cast<double>(s.minorPauseNs) / 1e6,
         static_cast<double>(s.minorPauseMaxNs) / 1e6,
         static_cast<double>(s.majorPauseNs) / 1e6,

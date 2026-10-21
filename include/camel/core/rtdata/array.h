@@ -632,6 +632,7 @@ class Array : public rtdata::Object {
     void onMoved() override;
     void updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) override;
     void finalize() noexcept override;
+    size_t blockBytesHeld() const noexcept override;
 
   private:
     static constexpr size_t kInlineSlots = 10;

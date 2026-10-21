@@ -39,6 +39,7 @@ class BytesObject final : public Object {
     void onMoved() override;
     void updateRefs(const RefRelocator &, const type::Type *) override;
     void finalize() noexcept override;
+    size_t blockBytesHeld() const noexcept override;
 
   private:
     explicit BytesObject(size_t length, mm::Block *block);

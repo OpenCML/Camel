@@ -1026,6 +1026,8 @@ void Array::finalize() noexcept {
     }
 }
 
+size_t Array::blockBytesHeld() const noexcept { return block_ != nullptr ? block_->bytes() : 0; }
+
 bool Array::compactEqualsElements(const Array *other, bool deep) const {
     (void)deep;
     if (elemTypeCode_ != other->elemTypeCode_ || numel_ != other->numel_ ||
