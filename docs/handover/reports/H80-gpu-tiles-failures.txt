@@ -1,0 +1,94 @@
+H80 — exact failures of the GPU / tiles sweep (for H75)
+
+Run: test/plans/gpu, --tier all, --jobs 8, Release build at 819a22ef (Linux host 88zjwei).
+Summary: 135 tests, 119 pass, 16 fail, wall 238.6 s. Load average ~26 on 32 cores.
+
+Each entry: plan file, test name, exit code, the first meaningful output line(s).
+
+================================================================================================
+1) test/plans/gpu/tiles.plan.toml :: aggregate_outputs.nvm / .fvm / .jit   (3 tests)
+   exit code 1 (expected 0)
+   verification output: Error: aggregate results differ from CPU
+     at assert (file:///tmp/camel-test-verify-*/verify-inline.mjs:6:27)
+   (verify script compares the device aggregate output against the CPU reference; no Camel
+    diagnostic is printed, the verify script itself rejects the result)
+
+================================================================================================
+2) test/plans/gpu/tiles.plan.toml :: resident_outputs.nvm / .fvm / .jit   (3 tests)
+   exit code 1 (expected 0), wall ~7-8 s
+   verification output: Error: resident result ownership, chaining, alias or empty-domain mismatch
+     at assert (file:///tmp/camel-test-verify-*/verify-inline.mjs:6:27)
+
+================================================================================================
+3) test/plans/gpu/tiles_regions.plan.toml :: resident_fallback_fault.nvm / .fvm / .jit / .prl
+   (4 tests)
+   exit code 1 (expected 0), wall 3.7-4.8 s
+   expect_stdout_exact differs: first difference at offset 15 (expected 15 chars, got 283 chars):
+   expected "cpu fault once\n", got:
+     "cpu fault once\n
+      (resident_fallback_fault)/home/zjwei/camel-work/h71-slow/test/cases/modules/tiles/
+      resident_fallback_fault.cml:5:16: [Error]: Attempted division by zero. Ensure the
+      denominator is not zero before performing division.
+      (name=RuntimeDiag::DivisionByZero, code=0x04000001)\n"
+   i.e. the "cpu fault once" line is printed, then the CPU-side DivisionByZero escapes instead of
+   being contained by the fallback (the process ends 1).
+
+================================================================================================
+4) test/plans/gpu/tiles_regions.plan.toml :: extrema_canonical_bits   (1 test)
+   exit code null (killed), wall 60.01 s = the test's timeout, expected 0
+   stdout does not contain 'std::nvm: canonical extrema'
+   stdout does not contain 'std::fvm: canonical extrema'
+   stdout does not contain 'std::jit: canonical extrema'
+   (60 s timeout under 8 jobs; not re-run alone — possible hang or too small a timeout)
+
+================================================================================================
+5) test/plans/gpu/tiles_regions.plan.toml :: multi_state_loop_device   (1 test)
+   exit code 1 (expected 0), wall 128 ms
+   stdout does not contain 'std::nvm: multi-state LOOP'
+   stdout does not contain 'std::fvm: multi-state LOOP'
+   stdout does not contain 'std::jit: multi-state LOOP'
+   stdout does not contain 'std::prl: multi-state LOOP'
+
+================================================================================================
+6) test/plans/gpu/tiles_regions.plan.toml :: multi_state_loop_boundaries   (1 test)
+   exit code 1 (expected 0), wall 92.26 s
+   stdout does not contain 'std::fvm: multi-state LOOP'
+   stdout does not contain 'std::jit: multi-state LOOP'
+   stdout does not contain 'std::prl: multi-state LOOP'
+   stdout does not contain 'Multi-state LOOP graph: one region, selected downloads and CPU
+   neighbor regions PASS'
+
+================================================================================================
+7) test/plans/gpu/tiles_regions.plan.toml :: core_view_maps   (1 test)
+   exit code 1 (expected 0), wall 9.67 s
+   stdout does not contain 'std::nvm: core views exact bits'
+   stdout does not contain 'std::fvm: core views exact bits'
+   stdout does not contain 'std::jit: core views exact bits'
+   stdout does not contain 'std::prl: core views exact bits'
+
+================================================================================================
+8) test/plans/gpu/tiles_transfer.plan.toml :: device_parameter_tree_training   (1 test)
+   exit code 1 (expected 0), wall 10.57 s
+   expect_stdout_exact differs: first difference at offset 16 (expected 24 chars, got 334 chars):
+   expected "0.0\n0.0\n0.0\n0.0\n0.0\n0.0\n", got
+     "0.0\n0.0\n0.0\n0.0\n
+      (device_tree)/home/zjwei/camel-work/h71-slow/test/cases/modules/tiles/device_tree.cml:28:44:
+      [Error]: An error has occurred: tiles: descend node 20: unsupported cast or tensor shape
+      assertion failed. Check the runtime environment and input data for unexpected issues.
+      (name=RuntimeDiag::RuntimeError, code=0x04000000)\n"
+   i.e. four of the six expected 0.0 lines are printed, then node 20 fails to descend.
+
+================================================================================================
+9) test/plans/gpu/tiles_decorator.plan.toml :: static_regions   (1 test)
+   exit code 1 (expected 0), wall 33.12 s
+   stdout does not contain 'GPU decorator regions: mixed execution, captures, macro and CPU
+   fallback PASS'
+
+================================================================================================
+Handed to H75. The rest of test/plans/gpu passed, including gpu.profile, tiles_rows, tiles
+regions value_gradient / index_maps / resident_scalars / scalar_* and the four-backend
+direct_and_nested, fusion, boundaries, consistency and matmul families.
+
+Likely common cause: the H43 "loop is a region / multi-state LOOP" rework (commits 60ab7619,
+c912ea15 on 2026-10-21) and the tiles region/fallback code it feeds. All 16 failures are in the
+region / LOOP / fallback / descend paths; the scalar and element-wise tiles paths pass.
