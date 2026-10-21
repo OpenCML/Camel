@@ -77,3 +77,27 @@ expect_exit = 0
 expect_output_not_contains = ["inlined forward"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "regions.arm_derivation"
+desc = "test::arm_regions derives an Arm region for every arm of every branch and checks, for each graph of the new version, that the region holds the nodes the arm reckoning of the back ends finds (nested branches, arms that call functions, tail gates); the program still runs."
+kind = "behavior"
+case = "../../../cases/consistency/narrowing/narrow.cml"
+args = ["${case}", "std::opt", "test::arm_regions", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_output_contains = ["ARM_REGIONS graphs=", "3 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.arm_derivation_tail"
+desc = "The same check on a graph whose branch arm ends in a tail call."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::arm_regions", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_output_contains = ["ARM_REGIONS graphs=", "tensor("]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

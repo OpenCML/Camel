@@ -23,7 +23,6 @@
 #include "camel/runtime/exec_plan.h"
 
 #include "camel/execute/graph_runtime_support.h"
-#include "camel/runtime/draft.h"
 
 #include <algorithm>
 
@@ -157,9 +156,6 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         plan->directCallFeedsTailJoin[idx] =
             std::find(tailJoinArmValues.begin(), tailJoinArmValues.end(), ref) !=
             tailJoinArmValues.end();
-    }
-    if (GraphDraft::armRegionsDerived()) {
-        camel::execute::verifyBranchArmRegions(mutableGraph, plan->topo);
     }
     plan->tailAnchorOk = anchorOk;
     if (anchorOk) {

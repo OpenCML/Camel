@@ -1474,8 +1474,6 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
     if (!staticSlotTypes_.empty()) {
         staticDataType = camel::core::type::TupleType::layout(staticSlotTypes_);
     }
-    // The arms of the branches are regions of the graph that is made (a normalization, not a change).
-    const_cast<GraphDraft *>(this)->refreshArmRegions();
     const auto payloadShape = describeDraftNativePayload(*this);
 
     ASSERT(isValid(id_), "Encoding a graph draft requires its GraphId.");
