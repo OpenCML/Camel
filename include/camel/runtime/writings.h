@@ -51,20 +51,6 @@
 
 namespace camel::runtime {
 
-/// kWritingDerived: congruence closure found the equivalence, it need not be stored.
-inline constexpr uint8_t kWritingDerived = 1 << 0;
-
-/// One equivalence between two nodes of a graph, as the log of the graph keeps it.
-struct WritingUnion {
-    gc_node_ref_t a = kInvalidNodeRef;
-    gc_node_ref_t b = kInvalidNodeRef;
-    /// The numeric permissions the equivalence needs (0: it holds bit for bit).
-    uint8_t perms = 0;
-    uint8_t flags = 0;
-    /// The rule that asserted it (0: none, congruence).
-    uint16_t rule = 0;
-};
-
 /// Told which nodes change class when two classes join (the nodes of the smaller class).
 class WritingObserver {
   public:
@@ -146,6 +132,9 @@ class DraftWritings : private WritingObserver {
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
 
+    /// Writes the equivalences back to the draft (GraphDraft::setWritings), which keeps them
+    /// until it is encoded.
+    void save() { draft_.setWritings(std::vector<WritingUnion>(store_.log().begin(), store_.log().end())); }
     GraphDraft &draft() { return draft_; }
     WritingStore &store() { return store_; }
 

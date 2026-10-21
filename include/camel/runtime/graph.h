@@ -190,6 +190,23 @@ enum GCGraphFlag : uint8_t {
     kGraphFlagHasWritings = 1 << 2,
 };
 
+/// kWritingDerived: congruence closure found the equivalence, it need not be stored.
+inline constexpr uint8_t kWritingDerived = 1 << 0;
+
+/// One equivalence between two nodes of a graph (docs/design/graph-store 3.1): they are writings
+/// of one value. A graph keeps the log of them (writings.h derives the classes from it).
+struct WritingUnion {
+    gc_node_ref_t a = kInvalidNodeRef;
+    gc_node_ref_t b = kInvalidNodeRef;
+    /// The numeric permissions the equivalence needs (0: it holds bit for bit).
+    uint8_t perms = 0;
+    uint8_t flags = 0;
+    /// The rule that asserted it (0: none, congruence).
+    uint16_t rule = 0;
+    bool operator==(const WritingUnion &) const = default;
+};
+static_assert(std::is_trivially_copyable_v<WritingUnion>);
+
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
 
@@ -432,6 +449,8 @@ struct GCGraphNativePayload {
     gc_cnt_t regionCount       = 0;       // 0 when the graph has no region but the body
     gc_node_ref_t *regionPorts = nullptr;
     gc_cnt_t regionPortCount   = 0;
+    WritingUnion *writings     = nullptr; // writingCount equivalences; none: executable state
+    gc_cnt_t writingCount      = 0;
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
@@ -547,6 +566,10 @@ class GCGraph : public camel::core::rtdata::Object {
     uint8_t flags() const { return flags_; }
     /// The executable state (graph store design 3.7): every value has exactly one writing.
     bool executable() const { return (flags_ & kGraphFlagHasWritings) == 0; }
+    /// The equivalences between the nodes of the graph: empty in the executable state.
+    std::span<const WritingUnion> writings() const {
+        return {nativePayload_.writings, nativePayload_.writingCount};
+    }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
 

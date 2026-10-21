@@ -234,7 +234,8 @@ struct DraftWritings::Index {
     std::vector<uint8_t> takes;
 };
 
-DraftWritings::DraftWritings(GraphDraft &draft) : draft_(draft), index_(std::make_unique<Index>()) {}
+DraftWritings::DraftWritings(GraphDraft &draft)
+    : draft_(draft), store_(draft.writings()), index_(std::make_unique<Index>()) {}
 
 DraftWritings::~DraftWritings() = default;
 
@@ -478,6 +479,7 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
             return found->second;
         }
     }
+    GraphDraft::WritingScope scope(draft_);
     const gc_node_ref_t node = draft_.addNode(init);
     draft_.setNormInputs(node, norm);
     draft_.setWithInputs(node, with);

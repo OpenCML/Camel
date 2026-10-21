@@ -669,6 +669,10 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
             return false;
         }
     }
+    // The equivalences between nodes are content: a saturated graph is not the graph it was.
+    if (a->writingCount != b->writingCount || !sameArray(a->writings, b->writings, a->writingCount)) {
+        return false;
+    }
     if (a->regionCount != b->regionCount || a->regionPortCount != b->regionPortCount ||
         !sameArray(a->regionTable, b->regionTable, a->regionCount) ||
         !sameArray(a->regionPorts, b->regionPorts, a->regionPortCount)) {

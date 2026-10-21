@@ -30,6 +30,7 @@ uint32_t GraphDraft::nodeRegion(gc_node_ref_t id) const {
 }
 
 void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {
+    requireOneWriting("setNodeRegion");
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot put a missing draft node in a region.");

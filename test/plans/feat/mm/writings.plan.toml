@@ -59,3 +59,29 @@ expect_stdout_contains = ["WRITINGS two_zeros_found ok", "WRITINGS zero_signs_ap
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "writings.commit_roundtrip"
+desc = "The equivalences are content of the graph version: a commit that adds some gives a new version that is not in the executable state (no execution plan, the flag set), shares every node chunk but the last, decodes back into the same equivalences, and a commit that adds none leaves the version as it is; a draft with equivalences refuses to change or remove a node."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS draft_refuses_changes ok", "WRITINGS commit_makes_new_version ok", "WRITINGS flag_set ok", "WRITINGS other_graphs_executable ok", "WRITINGS no_plan ok", "WRITINGS chunks_shared ok", "WRITINGS decode_gives_them_back ok", "WRITINGS unchanged_is_same_version ok", "WRITINGS another_equivalence_exists ok", "WRITINGS table_is_content ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.commit_chunks"
+desc = "The same commit on a graph of about 1200 nodes (five node chunks): the equivalences, 300 of them found by congruence, and the node added make a new version that shares the first four chunks with the old one."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/chains.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS chunks_shared ok", "WRITINGS info chunks_shared=4 of 5", "WRITINGS table_is_content ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

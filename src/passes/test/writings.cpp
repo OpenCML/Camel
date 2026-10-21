@@ -26,12 +26,14 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/writings.h"
 
 #include <array>
 #include <bit>
 #include <format>
+#include <stdexcept>
 #include <string>
 
 using namespace camel::runtime;
@@ -198,6 +200,99 @@ void apart(Report &r, const Program &program) {
     r.check("effects_apart", apart);
 }
 
+/// The equivalences go through a commit and come back from a decode; a commit that adds none
+/// changes nothing; a draft with equivalences refuses to change nodes.
+void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const Program &program) {
+    const GCGraph *graph = graphNamed(program, "f");
+    if (graph == nullptr) {
+        graph = graphNamed(program, "chains");
+    }
+    if (graph == nullptr) {
+        return;
+    }
+    const GraphId id = graph->id();
+    RuntimeGraphDraftSession first(ctx, &program);
+    GraphDraft &draft = first.edit(const_cast<GCGraph *>(graph));
+    {
+        DraftWritings writings(draft);
+        writings.build();
+        const auto ports = portsOf(draft);
+        writings.assertEqual(ports[0], ports[1]);
+        DraftNodeInit init;
+        init.kind     = GCNodeKind::Cast;
+        init.dataType = draft.header(ports[0])->dataType;
+        GraphDraft::WritingScope scope(draft);
+        writings.lookupOrAdd(init, std::array{ports[0]});
+        writings.save();
+    }
+    bool refused = false;
+    try {
+        draft.eraseNode(portsOf(draft)[0]);
+    } catch (const std::logic_error &) {
+        refused = true;
+    }
+    r.check("draft_refuses_changes", refused);
+    const Program *tabled = first.commit();
+    const GCGraph *after  = tabled->graph(id);
+    r.check("commit_makes_new_version", after != nullptr && after != graph);
+    r.check("flag_set", after != nullptr && !after->executable() && !after->writings().empty());
+    r.check("other_graphs_executable", graph->executable() && program.root()->executable());
+    r.check("no_plan", [&] {
+        try {
+            (void)after->execPlan();
+        } catch (const std::logic_error &) {
+            return true;
+        }
+        return false;
+    }());
+    // Chunks: the new node is at the end, the others are shared.
+    const auto *old = graph->nodePayload();
+    const auto *now = after->nodePayload();
+    size_t shared   = 0;
+    for (gc_cnt_t c = 0; c < old->chunkCount && c < now->chunkCount; ++c) {
+        shared += old->chunks[c] == now->chunks[c];
+    }
+    r.os << "WRITINGS info chunks_shared=" << shared << " of " << old->chunkCount << "\n";
+    r.check("chunks_shared", shared + 1 >= old->chunkCount);
+    // Back into a draft: the same equivalences.
+    auto again = GraphDraft::decode(*tabled, after);
+    r.check(
+        "decode_gives_them_back",
+        again->writings().size() == after->writings().size() && !again->writings().empty());
+    // Nothing added: the same version.
+    RuntimeGraphDraftSession second(ctx, tabled);
+    GraphDraft &redraft = second.edit(const_cast<GCGraph *>(after));
+    {
+        DraftWritings writings(redraft);
+        writings.build();
+        writings.save();
+    }
+    const Program *same = second.commit();
+    r.check("unchanged_is_same_version", same->graph(id) == after);
+    // The table is content: one more equivalence is a new version.
+    RuntimeGraphDraftSession third(ctx, tabled);
+    GraphDraft &more = third.edit(const_cast<GCGraph *>(after));
+    {
+        DraftWritings writings(more);
+        const auto ports = portsOf(more);
+        std::vector<gc_node_ref_t> others;
+        for (gc_node_ref_t node = 0; node < more.nodeSlotCount(); ++node) {
+            if (more.alive(node) && more.header(node)->dataType == more.header(ports[0])->dataType &&
+                more.nodeRegion(node) == more.nodeRegion(ports[0]) && node != ports[0] &&
+                !writings.store().same(0, node, ports[0])) {
+                others.push_back(node);
+            }
+        }
+        r.check("another_equivalence_exists", !others.empty());
+        if (!others.empty()) {
+            writings.assertEqual(ports[0], others.front());
+            writings.save();
+        }
+    }
+    const Program *grown = third.commit();
+    r.check("table_is_content", grown->graph(id) != after);
+}
+
 /// Two chains of 300 steps: merging their parameters merges every step.
 void chains(Report &r, const Program &program) {
     const GCGraph *graph = graphNamed(program, "chains");
@@ -223,6 +318,7 @@ WritingsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     layers(report);
     deep(report);
     congruence(report, *program);
+    roundtrip(report, context_, *program);
     chains(report, *program);
     apart(report, *program);
     return program;

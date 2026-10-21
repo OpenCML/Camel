@@ -63,6 +63,9 @@ struct GCGraphPayloadShape {
     bool regions = false;
     gc_cnt_t regionCount     = 0;
     gc_cnt_t regionPortCount = 0;
+    // The equivalences between the nodes (GCGraph::writings); only then the graph is not in the
+    // executable state.
+    gc_cnt_t writingCount = 0;
     // The graph the draft was decoded from: a chunk of the new graph that has all the content of
     // the same chunk of this one is that chunk (GCNodeChunk::shares). nullptr: none.
     const GCGraph *base = nullptr;
@@ -83,6 +86,8 @@ struct GCGraphPayloadArena {
     gc_node_ref_t *regionPorts = nullptr; // regionPortCount form ports
     gc_cnt_t regionCount       = 0;
     gc_cnt_t regionPortCount   = 0;
+    WritingUnion *writings     = nullptr; // writingCount equivalences
+    gc_cnt_t writingCount      = 0;
     gc_node_ref_t *inputs      = nullptr;
     gc_payload_word_t *payload = nullptr;
     gc_node_ref_t *normPorts   = nullptr;
