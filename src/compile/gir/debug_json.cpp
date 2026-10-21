@@ -145,11 +145,11 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
         j["operName"] = graph->operTarget(node)->name();
     }
     if (header && header->kind == GCNodeKind::Loop) {
-        const auto &target = graph->loopTarget(node);
-        if (target.cond) {
-            j["loopCondGraphId"] = camel::runtime::toText(target.cond->graphId());
+        const auto &draft = graph->draft();
+        if (const uint32_t cond = draft.loopRegionOf(nodeId, camel::runtime::GCRegionKind::LoopCond); cond != 0) {
+            j["loopCondRegion"] = cond;
         }
-        j["loopBodyGraphId"] = camel::runtime::toText(target.body->graphId());
+        j["loopBodyRegion"] = draft.loopRegionOf(nodeId, camel::runtime::GCRegionKind::LoopBody);
     }
     if (auto *sourceContext = sourceContextForGraph(graph)) {
         auto origin = sourceContext->resolveGirNodeOrigin(draftDebugKey(nodeId));

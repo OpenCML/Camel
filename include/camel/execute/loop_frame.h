@@ -188,7 +188,14 @@ inline size_t stepLoops(
     for (const uint32_t code : plan.loopEventsAt(at)) {
         const uint32_t index                 = code / 3;
         const camel::runtime::ExecLoop &loop = plan.loops[index];
-        switch (static_cast<ExecLoopEvent>(code % 3)) {
+        const auto event                     = static_cast<ExecLoopEvent>(code % 3);
+        // Going back to the start of a round of a loop is not starting or testing the loops
+        // around it, which are in the middle of a round; those inside it start again.
+        if (resumedHere != kNoLoop && event != ExecLoopEvent::End &&
+            loop.position > plan.loops[resumedHere].position) {
+            continue;
+        }
+        switch (event) {
         case ExecLoopEvent::Begin:
             if (index != resumedHere) {
                 loopBegin(frame, loop);

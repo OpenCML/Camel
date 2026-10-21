@@ -84,7 +84,7 @@ assert(value('core.reorder', 'layer', 2) === 'contract', 'matmul freedom')
 assert(value('core.reorder', 'total', 1) === 'regroup, permute', 'sum freedom under reassociate')
 assert(value('core.effects', 'count') === 'may fault, may not terminate', 'loop effects')
 const loopFor = find('core.loopDomain', 'twice')
-assert(loopFor && loopFor.anchors[1].graph === 'twice' && loopFor.value.includes('= 2; element port 3 reads xs(t)'), 'for domain')
+assert(loopFor && loopFor.anchors[1].graph === 'twice' && loopFor.value.includes('= 2; element port 2 reads xs(t)'), 'for domain')
 assert(value('core.loopDomain', 'count') === 'while: rounds unbounded (no sequence)', 'while domain')
 const p = find('core.permissions', 'total', 1)
 assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === null, 'permissions')
@@ -115,8 +115,8 @@ for (const l of [
   'FACTS graph count valid=2 revalidated=0 stale=0', 'FACTS graph twice valid=7 revalidated=0 stale=0',
   'FACTS graph main valid=0 revalidated=3 stale=8', 'FACTS graph __root__ valid=0 revalidated=0 stale=2',
   'FACTS gone 0',
-  'FACTS lowered count valid=0 revalidated=0 stale=2', 'FACTS lowered twice valid=0 revalidated=2 stale=5',
-  'FACTS lowered layer valid=6 revalidated=0 stale=0',
+  'FACTS outlined count valid=0 revalidated=0 stale=2', 'FACTS outlined twice valid=0 revalidated=2 stale=5',
+  'FACTS outlined layer valid=6 revalidated=0 stale=0',
   '60.0',
 ]) line(l)
 assert(/FACTS verify equal=\d+ differ=0\n/.test(out), 'every stored fact equals a fresh computation')

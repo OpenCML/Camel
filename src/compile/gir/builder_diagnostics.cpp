@@ -254,10 +254,21 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
         return !callee.empty() && declaresEffects(nodeTypeOf(nodeDraftOf(node)->ref(callee[0])));
     }
     case runtime::GCNodeKind::Loop: {
-        // Each round calls the condition and the body graph.
-        const auto &target = graph->loopTarget(node);
-        return (target.cond && effectfulGraphs_.contains(target.cond.get())) ||
-               effectfulGraphs_.contains(target.body.get());
+        // Each round runs the condition and the body, regions of the graph.
+        const runtime::GraphDraft &draft = graph->draft();
+        for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
+            const uint32_t region = draft.loopRegionOf(nodeIdOf(node), part);
+            if (region == 0) {
+                continue;
+            }
+            for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                if (draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), region) &&
+                    isEffectNode(graph, draft.ref(id))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
     case runtime::GCNodeKind::Join: {
         // The branch is an effect when what an arm gives depends on one inside the arm.

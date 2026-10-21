@@ -90,6 +90,11 @@ struct EntryNumberText {
     /// A number written as an integer token whose value does not fit an int64: the sentence
     /// names the integer's range, not the float's, which would be false about the text.
     const char *outOfRangeInteger = nullptr;
+    /// A nonzero number too small to tell from zero: it is refused as out of range, and the
+    /// sentence says which way it is out (H15i). A complex parameter has the second one for its
+    /// imaginary part.
+    const char *underflow          = nullptr;
+    const char *underflowImaginary = nullptr;
 };
 
 /// The values the command line gives the parameters of `main` (see the file comment).
@@ -166,8 +171,17 @@ class EntryArguments {
     };
 
     /// What reading a number text gave: the value, or which refusal it is. A complex text has
-    /// one more cause than a real one: its imaginary part.
-    enum class ReadStatus { Ok, NotANumber, OutOfRange, OutOfRangeImaginary, OutOfRangeInteger };
+    /// one more cause than a real one: its imaginary part. An underflow is out of range, and
+    /// separate from an overflow because the sentence says which way the value missed (H15i).
+    enum class ReadStatus {
+        Ok,
+        NotANumber,
+        OutOfRange,
+        OutOfRangeImaginary,
+        OutOfRangeInteger,
+        Underflow,
+        UnderflowImaginary
+    };
 
     /// One integer as `camel` reads one: the language's whole-token integer parser, at the width
     /// the parameter is declared with (`i32` reads an int32, so its range is the range checked).
@@ -195,6 +209,7 @@ class EntryArguments {
         case camel::utils::NumberTextStatus::Ok:
             return ReadStatus::Ok;
         case camel::utils::NumberTextStatus::Underflow:
+            return ReadStatus::Underflow;
         case camel::utils::NumberTextStatus::OutOfRange:
             return ReadStatus::OutOfRange;
         case camel::utils::NumberTextStatus::OutOfRangeInteger:
@@ -224,7 +239,14 @@ class EntryArguments {
             }
         }
         const ReadStatus status = readNumber(parts.imaginary, imaginary);
-        return status == ReadStatus::OutOfRange ? ReadStatus::OutOfRangeImaginary : status;
+        switch (status) {
+        case ReadStatus::OutOfRange:
+            return ReadStatus::OutOfRangeImaginary;
+        case ReadStatus::Underflow:
+            return ReadStatus::UnderflowImaginary;
+        default:
+            return status;
+        }
     }
 
     /// The reason clause for a number text refused with `status`: the catalogued sentence the
@@ -246,6 +268,12 @@ class EntryArguments {
             break;
         case ReadStatus::OutOfRangeInteger:
             message = texts.outOfRangeInteger;
+            break;
+        case ReadStatus::Underflow:
+            message = texts.underflow;
+            break;
+        case ReadStatus::UnderflowImaginary:
+            message = texts.underflowImaginary;
             break;
         case ReadStatus::Ok:
             break;
