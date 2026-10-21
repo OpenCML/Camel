@@ -33,7 +33,9 @@
 #pragma once
 
 #include "camel/core/context/context.h"
+#include "camel/core/error/diagnostics/range.h"
 
+#include <optional>
 #include <string>
 
 namespace camel::execute {
@@ -41,9 +43,11 @@ namespace camel::execute {
 /// Registers the pass `<module>::<function>` when the module `module` exports a function of that
 /// name with the signature of a pass. Nothing is registered when the module is not there or
 /// exports no such function (`problem` is empty: the pass is unknown), or when it is there and
-/// refused (it does not compile, it is not a pass), and then `problem` says why.
+/// refused (it does not compile, it is not a pass), and then `problem` says why; `errorLocation`,
+/// when given, is the library's first error as a secondary location when it has one.
 void registerCamelPass(
     const camel::core::context::context_ptr_t &ctx, const std::string &module,
-    const std::string &function, std::string &problem);
+    const std::string &function, std::string &problem,
+    std::optional<camel::core::error::DiagLabel> *errorLocation = nullptr);
 
 } // namespace camel::execute

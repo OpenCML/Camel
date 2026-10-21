@@ -1,0 +1,7 @@
+error[RuntimeDiag::InvalidPassParameter]: Invalid pass specification 'unparsable_pass::run': its library 'unparsable_pass' does not compile.
+note: SyntaxDiag::MissingClosingDelimiter: Expected ')' before 'return', to close the '('.
+  --> <ROOT>/test/cases/modules/graph_pass/unparsable_pass.cml:8:5
+   |
+ 8 |     return p
+   |     ------
+help: A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
