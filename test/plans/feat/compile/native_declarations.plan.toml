@@ -165,7 +165,7 @@ case = "../../../cases/compile/native/json_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:11:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
->>>>>>> handover/H115-json-declarations
+
 
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
