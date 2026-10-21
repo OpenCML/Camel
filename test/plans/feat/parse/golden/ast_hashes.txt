@@ -1480,6 +1480,7 @@ f4bcadbb2ce22346 ok test/cases/modules/onnx/export_var_compound.cml
 21b25d4315bbabb7 ok test/cases/modules/onnx/export_var_parameter.cml
 3241b107bdb613d1 ok test/cases/modules/onnx/ort_argmax.cml
 f581feaaaeedf097 ok test/cases/modules/onnx/ort_const_under_as.cml
+d71f4675135b8177 ok test/cases/modules/onnx/ort_duplicate_outputs.cml
 1671628875fbdd84 ok test/cases/modules/onnx/ort_dynamic_params.cml
 2ca820787e4aa4ab ok test/cases/modules/onnx/ort_gated_gru_step.cml
 0ab2355f24bdbb86 ok test/cases/modules/onnx/ort_grad_loop.cml

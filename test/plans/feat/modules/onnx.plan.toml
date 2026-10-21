@@ -2214,6 +2214,20 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 240000
 
 [[tests]]
+name = "ort_duplicate_outputs"
+desc = "One result used as more than one output of a model: a tensor returned twice, a struct value returned twice (both fields of both outputs), the same constant twice, and one computed scalar twice, exported by the operator and by the pass. A graph may not name one value as two outputs; structural CSE used to make the second output reuse the first output's Identity node and its name. Every model passes onnx.checker's full check, names every output differently (graph and ONNX Runtime), loads with as many outputs as the function returns, and matches the values the function computes."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/onnx/ort_duplicate_outputs.py"
+args = ["${case}"]
+skip_unless = ["${python}", "-c", "import numpy, onnx, onnxruntime"]
+expect_exit = 0
+expect_stdout_contains = ["operator twice: worst", "operator repeated: worst", "pass constants: worst", "pass computed: worst", "duplicate outputs: PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 240000
+
+[[tests]]
 name = "ort_struct_casts"
 desc = "A named struct type is nominal, so an anonymous struct value reaches it by an identity CAST (a literal in the declaration's order) or by a copy into that order (a literal written another way). Five models export the conversion in a different position -- a returned literal, a reordered literal, a `let r: Run = ...`, a value passed to a parameter declared `Run`, and a reordered literal on the path where a recursion whose depth depends on the model input returns -- by the operator and by the pass. Each passes onnx.checker's full check, holds no Cast node (an identity conversion exports as nothing; only the loop's own condition comparison casts), names its outputs after the declaration's fields with the counter an int64, and matches NumPy on ONNX Runtime for walks of 0, 1 and the maximum 3 steps. The exporter used to refuse the identity cast with 'cast of a model-dependent value to Run', and the arms of the loop's returning branch with 'the arms of a branch on a model-dependent condition yield different types'."
 kind = "behavior"
