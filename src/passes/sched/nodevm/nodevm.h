@@ -58,12 +58,6 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // not at the callee's definition. The activation of the entry graph is not a call of the
     // program and is not counted.
     void requireRecursionRoom(const camel::runtime::GCGraph *caller) const;
-    // Runs the LOOP node `nodeRef` natively, for a loop the builder left as two graphs: one call of
-    // the condition graph and one of the body graph per round, the state kept in the node's own
-    // slot of `currFrame` (so the collector traces it). A loop that is a region of its graph runs
-    // its rounds at the events of the plan instead (camel/execute/loop_frame.h).
-    __attribute__((noinline)) void evalLoop(
-        camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t nodeRef, ctx::Frame &currFrame);
     // Tail-call frame management (see the comment above call() in nodevm.cpp).
     ctx::Frame *tailCallFrame(
         camel::runtime::GCGraph *target, ctx::Frame *rootFrame, ctx::Frame *source,
