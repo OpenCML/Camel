@@ -601,7 +601,8 @@ inline void registerGraphOrigin(
     const std::string &label                             = "gir.graph",
     std::vector<camel::source::SemanticPart> extraParts  = {},
     std::vector<camel::source::origin_id_t> mergedInputs = {}, bool synthetic = false,
-    const std::string &syntheticReason = "") {
+    const std::string &syntheticReason                   = "",
+    camel::source::span_id_t primarySpan = camel::source::kInvalidSpanId) {
     if (!context || !graph) {
         return;
     }
@@ -609,8 +610,8 @@ inline void registerGraphOrigin(
     if (!sourceContext) {
         return;
     }
-    auto origin =
-        deriveGirOrigin(context, gct, camel::source::OriginKind::Graph, label, mergedInputs);
+    auto origin = deriveGirOrigin(
+        context, gct, camel::source::OriginKind::Graph, label, mergedInputs, primarySpan);
     if (origin != camel::source::kInvalidOriginId) {
         sourceContext->debugMap().registerGraphOrigin(graph->graphId(), origin);
         sourceContext->registerGirGraphSemantic(

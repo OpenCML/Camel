@@ -476,6 +476,9 @@ class Builder {
     // The callee expression of such a binding, for the binding used as a value
     // (partialApplicationOf builds the call from it).
     std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithCallee_;
+    // The `f<w>` expression that made the binding. Everything the partial application makes is
+    // located there: the expression itself, not the statement it is written in (H9 1.6).
+    std::unordered_map<node_handle_t, GCT::node_ptr_t> boundWithOrigin_;
     // The candidates of such a binding when the pass being used has several and the position
     // has not chosen one (H27e). The ambiguity is reported when the binding is refused for
     // good (rejectUnappliedBinding): visiting a value first must not preempt the position
@@ -923,6 +926,11 @@ class Builder {
     void rejectAmbiguousCall(
         const std::string &name, const std::string &argumentTypes,
         const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin);
+    /// The same, located at an origin that is already the whole expression (a partial
+    /// application's `f<w>` rather than the `<w>` its node spans).
+    void rejectAmbiguousCallAt(
+        const std::string &name, const std::string &argumentTypes,
+        const std::vector<std::string> &candidates, camel::source::origin_id_t origin);
     /// The same for candidates that are function types: their signatures are listed in the
     /// order they were written, which is all an ordinary call and a partial application
     /// have to show.

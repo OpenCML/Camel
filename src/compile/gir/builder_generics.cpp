@@ -771,10 +771,16 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
     if (invalid == nullptr) {
         return;
     }
-    Type *keyType = invalid->params()[0];
-    diags_->of(SemanticDiag::CollectionKeyNotAllowed)
-        .atOrigin(at->origin())
-        .commit(keyType->toString(), invalid->toString(), collectionKeyProblem(keyType));
+    Type *keyType                          = invalid->params()[0];
+    camel::source::origin_id_t fieldOrigin = camel::source::kInvalidOriginId;
+    std::string fieldLabel;
+    std::string problem = collectionKeyProblem(keyType, &fieldOrigin, &fieldLabel);
+    auto diag = diags_->of(SemanticDiag::CollectionKeyNotAllowed).atOrigin(at->origin());
+    if (fieldOrigin != camel::source::kInvalidOriginId) {
+        // A field of an enum is what keeps the enum from being a key: point at its declaration.
+        diag.relatedOrigin(fieldOrigin, fieldLabel + " is declared here");
+    }
+    diag.commit(keyType->toString(), invalid->toString(), problem);
     throw BuildAbortException();
 }
 
