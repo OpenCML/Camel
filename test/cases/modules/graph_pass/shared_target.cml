@@ -1,0 +1,8 @@
+// Imports the module whose pass (`sharedvals::run`) transforms it: one module, two programs.
+import { bump, twice } from sharedvals
+
+func main(): int sync {
+    println(bump(1))
+    println(twice(2))
+    return 0
+}

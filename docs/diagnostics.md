@@ -5016,7 +5016,15 @@ Invalid pass specification '{0}': {1}.
 A pass is written on the pipeline as `name` or as `name(key=value, ...)`; the values are constant expressions (bool, int, float or string). The message names the parameter, the type it has and the parameters the pass declares.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml unparsable_pass::run std::nvm`)
+
+```camel
+module tiny
+func main(): int sync {
+    println(21 * 2)
+    return 0
+}
+```
 
 ### GraphPassFailed
 

@@ -50,7 +50,7 @@
 3. 模块可以导入 C++ 模块，也可以导入 Camel 写的库（例如 `array`）：`compileAsProgram` 把传递导入闭包里的 Camel 模块声明进这个程序自己的 builder 并一起构建。声明前先清空这些模块的导出表（`Module::clearExportedNamespaces`），否则 `Namespace::insert` 会拒绝第二次声明，遍绑定到的仍是第一次构建留下的、没有函数体的图；清空后单态函数（例如 `libvals::nine`）和泛型函数（`array::flat_map`）都返回真值；
 4. 函数的 `with` 参数就是遍参数（设计原则 4.4、9.3）：流水线写 `mymod::p(label='x', n=21, scale=2.5, flag=true)`，布尔、整数、浮点与字符串按类型转换后绑定；源码里没有默认值，所以每个都是必填，缺一个就是 `InvalidPassParameter`，消息列出声明；
 5. `NodeVMSchedPass::callGraph` 在 NodeVM 上以被处理的程序为实参、以遍参数为 with 实参运行它；返回的 `Program` 与输入不同就 `installRuntimeProgram`；
-6. 返回错误值是诊断 `GraphPassFailed`；模块编译不过、函数不是遍，是 `InvalidPassParameter` 带原因；模块不存在或没有这个函数，遍保持未知。
+6. 返回错误值是诊断 `GraphPassFailed`；模块编译不过、函数不是遍，是 `InvalidPassParameter` 带原因；模块不存在或没有这个函数，遍保持未知。模块自己解析不过（还在编辑的文件）也走这里：`compileAsProgram` 把 `compile()` 抛出的诊断留在模块的诊断表里并返回失败，调用方把它作为遍规格的问题报告，异常不会穿出流水线。
 
 ## 对照与测试
 
@@ -58,4 +58,4 @@
 
 `node_kinds_match_the_graph` 把一个带分支、闭包与折叠的程序的每张图的节点种类序列与 `std::jgir` 的转储逐一对过。
 
-其余覆盖面：`imports::count`（导入 Camel 库的泛型函数 `array::flat_map`）与 `monomorphic::show`（直接调用单态导入函数 `libvals::nine` / `addOne`，返回真值）；`params::report` 的 `with` 参数与缺参诊断；`fold_constants::fold` 用 `add_constant` 造常量并提交，加强版在 `CAMEL_GC_STRESS_SAFEPOINT` 下跑一次 safepoint；`regionprobe` 读出没有区域表的图的体（`region_of` 为区域 0，`region_kind` 为 `Root`）与内联后的 `Inline` 区域及父区域。
+其余覆盖面：`imports::count`（导入 Camel 库的泛型函数 `array::flat_map`）与 `monomorphic::show`（直接调用单态导入函数 `libvals::nine` / `addOne`，返回真值）；`sharedvals::run`（同一个模块既是被运行的遍，又是被处理的程序导入的库，两边各用各的建图器，泛型 `twice` 在两边各有一个实例）与 `chain::show`（导入闭包传递：`chainlib` 再导入 `innerlib`）；`unparsable_pass::run`（遍模块解析不过，报 `InvalidPassParameter` 带解析诊断，不是异常结束）；`params::report` 的 `with` 参数，缺参、未知参数（带列号并列出声明）与类型不符的 `with` 参数诊断；`fold_constants::fold` 与 `typed_constants::make` 用 `add_constant` 造常量并提交（后者造 int、f64、bool、字符串四种，提交后逐一数回），两者的加强版都在 `CAMEL_GC_STRESS_SAFEPOINT` 下跑 safepoint；`regionprobe` 读出没有区域表的图的体（`region_of` 为区域 0，`region_kind` 为 `Root`）与内联后的 `Inline` 区域及父区域。

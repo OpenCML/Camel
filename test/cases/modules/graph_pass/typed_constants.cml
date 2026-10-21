@@ -1,0 +1,52 @@
+// Creates a value of each type `add_constant` accepts (int, f64, bool, string), lets the
+// transaction live across a safepoint (`churn` makes the collector run), commits, and counts
+// each value in the committed program. The draft's static slots are the roots that keep these
+// values alive while the transaction is open (task H36, item 3).
+module typed_constants
+import { flat_map } from array
+import {
+    Program, Graph, Node, Txn, graphs, nodes, constant,
+    add_constant, open, commit
+} from graph
+
+func allNodes(p: Program): Node[] {
+    return graphs(p)->flat_map<(g: Graph): Node[] => nodes(g)>
+}
+
+func churn(rounds: int): string {
+    let (i, acc) = loop i = 0, acc = '' while i < rounds do (i + 1, acc + 'h36b-churn-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+    return acc
+}
+
+func countInt(ns: Node[], v: int): int {
+    return ns->filter<(n: Node): bool => (constant(n, 0) ?? -1) == v>->len()
+}
+
+func countFloat(ns: Node[], v: f64): int {
+    return ns->filter<(n: Node): bool => (constant(n, 0.0) ?? -1.0) == v>->len()
+}
+
+func countBool(ns: Node[], v: bool): int {
+    return ns->filter<(n: Node): bool => (constant(n, false) ?? false) == v>->len()
+}
+
+func countString(ns: Node[], v: string): int {
+    return ns->filter<(n: Node): bool => (constant(n, '') ?? '') == v>->len()
+}
+
+export func make(p: Program): Program! sync {
+    let t = open(p)
+    let g = graphs(p)[0]
+    let i = add_constant(t, g, 12345)
+    let f = add_constant(t, g, 2.5)
+    let b = add_constant(t, g, true)
+    let s = add_constant(t, g, 'h36b-typed')
+    let junk = churn(100)
+    let next = commit(t) !! p
+    let ns = allNodes(next)
+    println(countInt(ns, 12345))
+    println(countFloat(ns, 2.5))
+    println(countBool(ns, true))
+    println(countString(ns, 'h36b-typed'))
+    return next
+}
