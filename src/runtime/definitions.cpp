@@ -64,6 +64,30 @@ std::string firstError(const UserDefinedModule &module) {
     return "it does not compile";
 }
 
+/// The first error of a module's diagnostics as a secondary location: its range (resolved with
+/// the module's tokens when the builder left it as one) and its own text. Nothing when the module
+/// has no error or the error has no position.
+std::optional<core::error::DiagLabel> firstErrorLocation(const UserDefinedModule &module) {
+    const auto diags = module.diagnostics();
+    if (!diags) {
+        return std::nullopt;
+    }
+    const auto errors = diags->errors();
+    if (errors.empty()) {
+        return std::nullopt;
+    }
+    core::error::Diagnostic first = *errors.front();
+    if (module.parser()) {
+        first.fetchRange(core::error::RangeConverter(module.parser()->tokenPositions()));
+    }
+    const auto *range = std::get_if<core::error::CharRange>(&first.range);
+    if (range == nullptr) {
+        return std::nullopt;
+    }
+    return core::error::DiagLabel{
+        *range, first.name + ": " + first.message, core::error::diagnosticPath(first)};
+}
+
 /// The operators whose OPER nodes appear in `graph` and every graph reachable from it.
 std::vector<core::OperId> operatorsUsedBy(const Program &program, GCGraph *graph) {
     std::vector<core::OperId> used;
@@ -216,17 +240,24 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
 
 std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
     const std::string &moduleName, const std::string &functionName, std::string &problem,
-    bool &absent) {
+    bool &absent, std::optional<core::error::DiagLabel> *errorLocation) {
     std::lock_guard lock(mutex_);
     const std::string key = moduleName + "::" + functionName;
     if (auto it = functions_.find(key); it != functions_.end()) {
         problem = it->second.problem;
         absent  = it->second.absent;
+        if (errorLocation != nullptr) {
+            *errorLocation = it->second.errorLocation;
+        }
         return it->second.found;
     }
-    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent) {
-        absent          = isAbsent;
-        functions_[key] = {found, problem, isAbsent};
+    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent,
+                              std::optional<core::error::DiagLabel> location = std::nullopt) {
+        absent  = isAbsent;
+        if (errorLocation != nullptr) {
+            *errorLocation = location;
+        }
+        functions_[key] = {found, problem, isAbsent, location};
         return found;
     };
     const auto module = importLibrary(moduleName, problem);
@@ -246,9 +277,18 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
         return remember(std::nullopt, false);
     }
     if (status != UserDefinedModule::ProgramStatus::Built) {
-        problem =
-            std::format("its library '{}' does not compile: {}", moduleName, firstError(*module));
-        return remember(std::nullopt, false);
+        // The library's own first error becomes a secondary location, so the pipeline's
+        // InvalidPassParameter carries the file, line, column and source line of what really
+        // failed instead of stitching that text into its message (H36c). A failure with no
+        // position (an imported module that does not compile) keeps its reason in the message.
+        auto location = firstErrorLocation(*module);
+        if (location) {
+            problem = std::format("its library '{}' does not compile", moduleName);
+        } else {
+            problem = std::format(
+                "its library '{}' does not compile: {}", moduleName, firstError(*module));
+        }
+        return remember(std::nullopt, false, std::move(location));
     }
     Program *program = context_.reserveProgram();
     camel::compile::gir::encodeToRuntimeProgram(rootGraph, *program, &context_.graphIds());

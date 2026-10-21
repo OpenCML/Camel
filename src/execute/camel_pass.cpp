@@ -222,9 +222,10 @@ class CamelPass final : public GraphIRPass {
 
 void registerCamelPass(
     const context_ptr_t &ctx, const std::string &module, const std::string &function,
-    std::string &problem) {
+    std::string &problem, std::optional<camel::core::error::DiagLabel> *errorLocation) {
     bool absent     = false;
-    const auto tool = ctx->definitions().libraryFunction(module, function, problem, absent);
+    const auto tool = ctx->definitions().libraryFunction(
+        module, function, problem, absent, errorLocation);
     if (absent) {
         problem.clear();
         return;
