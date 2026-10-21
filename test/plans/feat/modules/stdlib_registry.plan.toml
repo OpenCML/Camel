@@ -69,7 +69,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "registry.signatures_match"
-desc = "The declaration files (stdlib/*.cml and stdlib/signatures/*.cml) list exactly the operators the modules register: every registered operator is declared, every declaration names a registered operator, the parameter counts agree and @pure / @effect is the declared purity."
+desc = "The declaration files (stdlib/*.cml and stdlib/signatures/*.cml) list exactly the operators the modules register: every registered operator is declared, every declaration names a registered operator, the parameter counts agree, @pure / @effect is the declared purity, and no signature-file declaration carries a body."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
