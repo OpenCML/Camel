@@ -1,6 +1,7 @@
 id = "smoke.core"
 order = 100
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["smoke", "fib", "inspect", "gir", "prl"]
 
 [[tests]]

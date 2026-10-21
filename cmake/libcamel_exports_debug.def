@@ -1,0 +1,6 @@
+; Exports of a Debug libcamel only: the profiling entry points are defined in a Debug build
+; (src/service/profiler/advanced/advanced_tracer.cpp) and imported by camel.exe -P and camel-pr.
+; make_libcamel_def.cmake appends this list for -DCFG=Debug.
+    ?start_advanced_tracing@profiler@@YAXAEBUConfig@AdvancedTracer@1@@Z
+    ?stop_advanced_tracing@profiler@@YAXXZ
+    ?generate_advanced_report@profiler@@YAXAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z

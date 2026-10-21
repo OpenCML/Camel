@@ -34,6 +34,7 @@
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
+#include "camel/passes/test/regions.h"
 #include "camel/passes/trans/json/gir.h"
 #include "macro/macro.h"
 #include "pass_spec.h"
@@ -289,6 +290,18 @@ class GcViewsPass final : public GraphIRPass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
         os << camel::core::rtdata::debugRunViewSelfTest() << '\n';
+        return program;
+    }
+};
+
+class GcViewsEscapePass final : public GraphIRPass {
+  public:
+    explicit GcViewsEscapePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        // A debug build aborts inside the store; a release build prints why it did not.
+        os << camel::core::rtdata::debugRunViewEscapeSelfTest() << '\n';
         return program;
     }
 };
@@ -591,6 +604,10 @@ PassScopePtr initPassScope() {
                     // GIR formats: compact DOT by default, rich DOT for Graphviz, JSON for tools.
                     {"gir", def(PASS(GraphVizDumpPass))},
                     {"rgir", def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.rich = true}))},
+                    {"gir_regions", def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.regions = true}))},
+                    {"rgir_regions",
+                     def(PASS1(
+                         GraphVizDumpPass, (GraphVizDumpConfig{.rich = true, .regions = true})))},
                     {"jgir", def(PASS(JsonGirDumpPass))},
                     {"agir",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
@@ -616,6 +633,7 @@ PassScopePtr initPassScope() {
                          {"summary", def(PASS(GcSummaryPass))},
                           {"blocks", def(PASS(GcBlocksPass))},
                          {"views", def(PASS(GcViewsPass))},
+                         {"views_escape", def(PASS(GcViewsEscapePass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
                          {"poison", def(PASS(GcPoisonPass))},
@@ -708,6 +726,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcsummary", "std::gc::summary"},
         {"std::gcblocks", "std::gc::blocks"},
     {"std::gcviews", "std::gc::views"},
+    {"std::gcviews_escape", "std::gc::views_escape"},
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::gcpoison", "std::gc::poison"},
@@ -947,6 +966,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kControlTestPass, ControlTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),

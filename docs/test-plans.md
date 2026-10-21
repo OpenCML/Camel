@@ -17,11 +17,16 @@ When adding a new feature or test case, manually run the case from the command l
 ## Running The Tests
 
 - `npm run test` runs the **fast** layer: what a developer runs after a change.
-- `npm run test:all` runs everything, fast and slow (`--tier all`).
+- `npm run test:all` runs everything, fast and slow (`--tier all`). It does **not** run the debug
+  layer, which needs a Debug build.
 - `node scripts/test.js <plan file>` runs that plan in full: naming the file is the intent, so
   its slow tests run whatever `--tier` says. A **directory** target selects test by test and
   follows `--tier`; add `--tier all` to include the slow tests of a directory or of the whole
   tree.
+- `node scripts/test.js --tier debug` runs the debug layer (see "The Debug Build And The Debug
+  Layer"); it builds nothing and refuses to run without a Debug binary.
+- `--build release|debug` picks the build a run addresses: `release` is `out/latest` (the
+  default), `debug` is `out/debug`. `CAMEL_TEST_BUILD` sets the same thing for a shell session.
 - `--jobs N` sets how many tests run at once (default: the processor count). `--jobs 1` is the
   serial execution, useful to reproduce a failure or to compare output.
 - `node scripts/test.js --changed` selects the plans a change touches (see "Selecting plans from
@@ -35,10 +40,10 @@ scratch directories and the run root, parallel versus serial output, the tier fi
 named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule,
 file rules, `CAMEL_TEST_BASE`).
 
-## Layers: fast And slow
+## Layers: fast, slow And debug
 
-`tier` puts a test in one of two layers. It may be set on the plan (the default for all its
-tests) or on one `[[tests]]` entry (an override), with the values `fast` and `slow`:
+`tier` puts a test in one of three layers. It may be set on the plan (the default for all its
+tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow` and `debug`:
 
 - `fast` is the default layer and the one `npm run test` runs. It must stay useful for a
   developer loop: on an 8-core machine a parallel fast run is expected to finish in about two
@@ -48,6 +53,9 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast` and `sl
   the loop: the comparisons against PyTorch, the collector stress and poison scans, the random
   program checks (progen and fuzzing), the performance benchmarks, and any other single test
   that takes about five seconds or more.
+- `debug` is a test that is only meaningful with assertions compiled in: it aborts on purpose,
+  or it checks something a Release build removes. It runs only under `--tier debug`, never under
+  `fast`, `slow` or `all`, because those three run the Release binary.
 
 Rules for a new test:
 
@@ -58,10 +66,52 @@ Rules for a new test:
 - A test that needs another test's result (`compare_to`, `backends_agree`) is kept in the same
   layer as that test. When a layer filter would separate them, the runner keeps the reference
   too, so a selected test never fails only because its baseline was filtered out.
-- A plan written before the split still works: any `tier` other than `slow` is the fast layer.
+- A plan written before the split still works: any `tier` other than `slow`/`debug` is the fast
+  layer.
 - Naming a plan **file** as the target runs all its tests, whatever `--tier` says; the layer
   still filters a directory target and the whole tree. This keeps a named slow test reachable
   without `--tier all` and keeps `--tier` meaningful for a broad run.
+- A debug test that expects an abort states `expect_exit` with the abort's code and asserts the
+  message, and also asserts that the "not caught" line is **absent**: the positive form is what
+  makes a missing guard a failure instead of a pass.
+
+## The Debug Build And The Debug Layer
+
+A Release build compiles the debug assertions out (`NDEBUG`), so a test that relies on one can
+only run against a Debug build. The two builds are kept in separate trees:
+
+| Build | `--build` | Artifacts | Binary marker |
+|-------|-----------|-----------|---------------|
+| Release | `release` (default) | `out/latest` | `(Build <footprint>)` |
+| Debug | `debug` | `out/debug` | `(Debug <footprint>)` |
+
+`npm run debug` builds Debug and `scripts/collect-out.js debug` collects it to `out/debug`; the
+runner never reads `out/latest` for a debug run and never silently falls back. Before a run it
+checks that the binary exists and that `camel --version` says `(Debug ...)`, and exits 2 with
+both the path it wanted and the build command when either check fails.
+
+`--tier debug` selects:
+
+- the plans marked `debug_tier = true`: the plans that exercise views, data blocks and the
+  executor hot paths, where a view or a store bug would surface, and
+- the tests whose own `tier` is `debug` (the deliberate abort).
+
+The plans marked `debug_tier` keep their ordinary layer: they run fast in Release and are
+re-run against the Debug binary by the debug layer. Each test's timeout is multiplied by four on
+the Debug build, because unoptimised code runs the same loops tens of times slower; a test that
+exceeds that is still a failure, not a slow machine. With no target on the command line the
+debug layer scans the whole plan tree, because its abort case lives in `test/plans/debug`, which
+the ordinary `smoke` + `feat` default does not reach. Naming a plan file still narrows it:
+
+```powershell
+npm run debug
+node scripts/test.js --tier debug                       # every marked plan + test/plans/debug
+node scripts/test.js --tier debug test\plans\feat\linear # only what is marked under that directory
+node scripts/test.js --build debug test\plans\feat\mm\complex.plan.toml  # one plan, in full
+```
+
+The debug layer is opt-in: `npm run test`, `npm run test:all` and `--changed` never run it, so an
+ordinary run pays nothing for it.
 
 ## Parallel Execution
 
@@ -122,7 +172,11 @@ Each plan file may define:
 - `order`
   Numeric ordering key used when the runner sorts plans.
 - `tier`
-  The plan's default layer, `fast` or `slow` (see "Layers"). A test may override it.
+  The plan's default layer, `fast`, `slow` or `debug` (see "Layers"). A test may override it.
+- `debug_tier`
+  `true` selects the plan under `--tier debug` while leaving its ordinary layer alone: the plan
+  runs fast in Release and is re-run on the Debug binary by the debug layer. Use it on a plan
+  that exercises views, data blocks or the executor hot paths.
 - `parallel`
   `false` runs every test of the plan alone; a per-test `parallel` is narrower and preferred.
 - `tags`
@@ -166,7 +220,7 @@ Every `[[tests]]` entry may use these common fields:
 - `skip_unless_timeout_ms`
   Optional timeout for the precondition command. Default is `120000`.
 - `tier`
-  `fast` or `slow`, overriding the plan's layer for this test only.
+  `fast`, `slow` or `debug`, overriding the plan's layer for this test only.
 - `parallel`
   `false` runs the test alone (no other test of the run starts while it runs); `true` opts a
   `kind = "benchmark"` test into the parallel pool. See "Parallel Execution".

@@ -368,12 +368,43 @@ static_assert(std::is_trivially_copyable_v<GCOperBody>);
 inline constexpr uint32_t kNodeChunkShift = 8;
 inline constexpr uint32_t kNodeChunkNodes = 1u << kNodeChunkShift;
 
+/// What a region is (docs/design/graph-store 3.3). A control region is executed, or not, as a
+/// whole, with the node that owns it; an annotation region only records where nodes came from.
+/// Region 0 is the function body; the table of a graph that has no other region is empty.
+enum class GCRegionKind : uint8_t {
+    Root     = 0,
+    Arm      = 1, // an arm of a BRCH node (owner), `index` the arm
+    LoopCond = 2, // the condition of a LOOP node (owner)
+    LoopBody = 3, // the body of a LOOP node (owner)
+    Inline   = 4, // the body of a function inlined here: inlineOf, called at callSite
+    Block    = 5, // a block that carries tags or a decorator
+    Dead     = 255, // the place of a region a rewrite removed (ids are not reused)
+};
+
+struct GCRegion {
+    GCRegionKind kind    = GCRegionKind::Root;
+    uint8_t reserved0    = 0;
+    uint16_t reserved1   = 0;
+    uint32_t parent      = 0;                // the region it is in; 0 for the body
+    gc_node_ref_t owner  = kInvalidNodeRef;  // control regions: the BRCH or LOOP node
+    uint32_t index       = 0;                // Arm: which arm
+    gc_node_ref_t result = kInvalidNodeRef;  // the node whose value the region yields, if any
+    uint32_t portBegin   = 0;                // its form ports: regionPorts[portBegin ..< +portCount]
+    uint32_t portCount   = 0;
+    uint32_t origin      = 0;                // source origin (0: none)
+    uint32_t attrs       = 0;                // the tag set of the region (camel/core/node_attrs.h)
+    GraphId inlineOf     = kInvalidGraphId;  // Inline: the function whose body this is
+    gc_node_ref_t callSite = kInvalidNodeRef; // Inline: the call it replaced
+};
+static_assert(std::is_trivially_copyable_v<GCRegion>);
+
 struct GCNodeChunk {
     std::atomic<uint32_t> shares{1};
     uint32_t nodeCount        = 0;
     uint32_t edgeCount        = 0;
     uint32_t payloadWordCount = 0;
     uint32_t *origins         = nullptr; // nodeCount source origins (0: none)
+    uint32_t *regions         = nullptr; // nodeCount regions of the nodes; null when all are 0
     uint8_t *permissions      = nullptr; // nodeCount numeric permissions; null when all are 0
     uint32_t *attrs           = nullptr; // nodeCount attribute sets; null when all are 0
     gc_node_ref_t *edges      = nullptr; // edgeCount entries: the input runs of the nodes in order
@@ -392,6 +423,11 @@ struct GCGraphNativePayload {
     gc_cnt_t chunkCount        = 0;
     bool hasPermissions        = false; // some node has numeric permissions
     bool hasAttrs              = false; // some node has attributes
+    bool hasRegions            = false; // some node is in a region other than the body
+    GCRegion *regionTable      = nullptr; // regionCount regions; region 0 is the body
+    gc_cnt_t regionCount       = 0;       // 0 when the graph has no region but the body
+    gc_node_ref_t *regionPorts = nullptr;
+    gc_cnt_t regionPortCount   = 0;
     gc_node_ref_t *normPorts   = nullptr;
     gc_node_ref_t *withPorts   = nullptr;
     gc_node_ref_t *closure     = nullptr;
@@ -456,6 +492,28 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
     /// graph has no attribute column when no node has any.
     uint32_t nodeAttrs(gc_node_ref_t ref) const;
+    /// The number of regions; 0 for a graph with the body only. Region ids are 0 .. count - 1.
+    gc_cnt_t regionCount() const { return nativePayload_.regionCount; }
+    /// Region `id` (0 is the body); nullptr when the graph has no such region.
+    const GCRegion *region(uint32_t id) const {
+        return id < nativePayload_.regionCount ? nativePayload_.regionTable + id : nullptr;
+    }
+    /// The region node `ref` is in: the innermost; 0 for the body.
+    uint32_t nodeRegion(gc_node_ref_t ref) const {
+        if (!containsNodeRef(ref)) {
+            return 0;
+        }
+        const GCNodeChunk &c = chunkOf(ref);
+        return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
+    }
+    /// The form ports of region `id`, in order.
+    std::span<const gc_node_ref_t> regionPorts(uint32_t id) const {
+        const GCRegion *r = region(id);
+        return r ? std::span<const gc_node_ref_t>(
+                       nativePayload_.regionPorts + r->portBegin,
+                       r->portCount)
+                 : std::span<const gc_node_ref_t>();
+    }
     /// True when some node of the graph has attributes.
     bool hasNodeAttrs() const { return nativePayload_.hasAttrs; }
     /// The names of the values the function captures from where it was written, in the order
