@@ -776,13 +776,32 @@ class Compiler {
             throw UnsupportedComputation(
                 "operator '" + uri() + "' needs a statically known f32 tensor result");
         Node n{.op = std::string(def->name), .shape = *result->shape()};
-        if (n.op == "sum_to" || n.op == "cast_like") {
+        if (n.op == "sum_to") {
             n.inputs = {tensorValue(args.at(0))};
             if (program.nodes[n.inputs[0]].shape == n.shape)
                 return {.type = *inferred, .tensor = n.inputs[0]};
-            if (n.op == "cast_like")
-                throw std::runtime_error("cast_like shape mismatch");
             return {.type = *inferred, .tensor = append(std::move(n))};
+        }
+        if (n.op == "cast" || n.op == "cast_like") {
+            // `cast_like` keeps the source's shape but takes `like`'s element type; `cast`
+            // names its target type in the second argument. The check above leaves only f32
+            // results, and `tensorValue` has already converted an f64 scalar source, so the
+            // source is f32 whenever the target is: returning it is then the documented
+            // "converting a value to its own type does nothing". A different element type
+            // would have to convert, which this backend cannot represent yet, so the region
+            // stays on the CPU, where the tensor kernel converts
+            // (notes/core-semantics-map.md, "cast_like"). A scalar source is not the same
+            // value as the 0-d tensor this result has: keep that on the CPU as well.
+            if (!tensor::asTensorType(args.at(0).type))
+                throw UnsupportedComputation("'" + n.op + "' needs a tensor operand here");
+            n.inputs           = {tensorValue(args.at(0))};
+            const Node &source = program.nodes[n.inputs[0]];
+            if (source.shape != n.shape)
+                throw std::runtime_error(n.op + " shape mismatch");
+            if (source.dtype == n.dtype)
+                return {.type = *inferred, .tensor = n.inputs[0]};
+            throw UnsupportedComputation(
+                "element type conversion in '" + n.op + "' is not supported");
         }
         if (n.op == "broadcast_like" || n.op == "expand_axis") {
             n.inputs   = {tensorValue(args.at(0))};
