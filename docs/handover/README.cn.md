@@ -165,8 +165,9 @@
 
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
+| H63 | **抽取的保留边界与作者裁定不符**：`DraftWritings::extract` 按"不参与同余"预选，连带保留纯节点（shape 3、GC 追踪常量等），饱和造出的死写法留在抽取结果里；按裁定改为"有副作用／承载顺序／被写入的变量"保留，纯节点只按可达性 | 无 | **已完成**（报告 reports/H63.md；回归 `rules.extract_keeps_no_unreachable_pure_node`：4 轮饱和后 33 节点、15 个死字符串常量，修复后抽取回 3 节点、0 个；`mm/writings`、`opt/algebra`、`rules`、`loops`、`autodiff`（去 PyTorch 对照）、`smoke`、`feat/opt` 共 1020/1020） |
 | H62 | 无 JIT 构建（CI 的 `linux-x64-nojit` 腿）在 `fastvm.cpp` 读 `jitConfig_` 而该成员只在 `#if ENABLE_FASTVM_JIT` 内声明——构建红，发布 CI 会跟着红 | 无 | **已完成**（各处按构建分开，无 JIT 时剖析后端名就是 `std::fvm`；无 JIT 全量重建后 fast 层 4769 / 4757 pass / 0 fail / 12 skip；报告 reports/H62.md） |
-| H61 | 规则引擎按作者裁定的三项：`analysis` 接收多个模式变量；抽取的保留边界写进设计稿；`algebra.cpp` 对等的次序（先元素类型定律、再张量定律；`safe_fp` 就是 `#strict`） | 无 | **部分完成**（第 1、2 项完成；第 3 项只记后果、未实施；报告 reports/H61.md） |
+| H61 | 规则引擎按作者裁定的三项：`analysis` 接收多个模式变量；抽取的保留边界写进设计稿；`algebra.cpp` 对等的次序（先元素类型定律、再张量定律；`safe_fp` 就是 `#strict`） | 无 | **部分完成**（第 1、2 项完成；第 3 项只记后果、未实施；报告 reports/H61.md。§3.2 记下的抽取缺陷由 H63 修复；措辞张力按作者更正解决——裁定括注"按依赖求值只适用于纯计算"是协调者的误写、已删除，设计原则 3.1 不变，见 reports/H63.md） |
 | H58 | **过期测试**：DAP 尾递归步进的 6 个断言仍按 `fda0d21f` 之前的“臂是独立影子帧”写；按 12.1 的区域模型更正断言，并补尾调用点的 `next`/`stepOut` | 无 | **已完成**（报告 reports/H58.md；无源码改动，不是缺陷修复） |
 | H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **已完成**（运行器已严格、`expect_stdout_exact`/`expect_stdout_not_contains` 真正比较；暴露的 9 条真实失败全部已修，8 条循环梯度与第 9 条 `extract` 死写法都由 H59 定位并修好；报告 reports/H52.md） |
 | H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **已完成**（报告 reports/H54.md：首次 6 ms = 池构造 31 条线程，小算子首调 1.58 ms → 21 µs；惊群唤醒改为只点醒所需 worker，3 块区域 950 → 82 µs；阈值统一为 `kMinWorkPerWorkerNs = 40 µs` 一个常数；mlp_step 93.95 → 48.14 ms、transformer_step 6.63 → 5.83 ms、链 9.31 → 8.84 ms，链已贴地板） |

@@ -302,6 +302,37 @@ bool readsVariable(
     return false;
 }
 
+/// Whether a node carries the program's order instead of being a pure value: a call runs a
+/// graph, a branch, join, sync or loop runs (or orders) what it holds, a gate waits for its
+/// control inputs, and an operator that is not pure has an effect (design principles 3.3).
+/// This is the rule the generic rewrite pass uses to decide what it may not reorder
+/// (`carriesOrdering` in src/passes/opt/generic/rewrite.cpp).
+bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
+    const auto *h = draft.header(node);
+    if (h == nullptr) {
+        return false;
+    }
+    switch (h->kind) {
+    case GCNodeKind::Func:
+    case GCNodeKind::Call:
+    case GCNodeKind::Join:
+    case GCNodeKind::Brch:
+    case GCNodeKind::Sync:
+    case GCNodeKind::Loop:
+        return true;
+    case GCNodeKind::Gate:
+        return !draft.ctrlInputsOf(node).empty();
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(node);
+        return payload.size() < sizeof(GCOperBody) ||
+               !camel::core::OperatorTable::instance().isPure(
+                   reinterpret_cast<const GCOperBody *>(payload.data())->oper);
+    }
+    default:
+        return false;
+    }
+}
+
 /// Whether a node of this shape takes part in congruence, apart from the nodes it reads.
 bool shapeTakesPart(
     const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
@@ -720,12 +751,16 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         }
     }
 
-    // What stays: what the graph names (its ports, entry, exit, result), every node that takes
-    // no part in the classes (an effect, a control node, a written variable: it has no other
-    // writing and is not reached through a value), and the writing chosen for every value that
-    // is read. A pure node that was never merged is a writing of its own value like any other:
-    // it stays only if something that stays reads it, so a saturation that added thousands of
-    // candidate writings does not leave them in the extracted program as dead nodes.
+    // What stays: what the graph names (its ports, entry, exit, result), the nodes extraction
+    // does not trim, and the writing chosen for every value that is read.
+    //
+    // The retention boundary (design principles 3.1; graph store 3.5 and 3.6): extraction does
+    // not decide which side effects happen, so it does not trim a node with an effect, a node
+    // that carries the program's order, or a value written in place. Everything else is a pure
+    // computation — a writing of its own value like any other — and stays only if something that
+    // stays reads it. That includes a pure node with control inputs (shape 3): the control input
+    // orders it, it does not make it an effect. A saturation that added thousands of candidate
+    // writings therefore does not leave them in the extracted program as dead nodes.
     std::vector<uint8_t> selected(slots, 0);
     std::vector<gc_node_ref_t> work;
     const auto select = [&](gc_node_ref_t node) {
@@ -735,7 +770,7 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         }
     };
     for (gc_node_ref_t node = 0; node < slots; ++node) {
-        if (draft_.alive(node) && !multi[node] && !takesPart(node)) {
+        if (draft_.alive(node) && (writtenInPlace(node) || carriesOrdering(draft_, node))) {
             select(node);
         }
     }
