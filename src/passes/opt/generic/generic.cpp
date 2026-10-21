@@ -160,8 +160,45 @@ staticValueOf(const GraphDraft &draft, gc_node_ref_t id) {
 /// graph, and nothing writes it in place. A written node is not one value: it is a variable's
 /// cell or an object an operator changes in place (a constant's object is shared by every run
 /// of the graph), and readers ordered after the writer see what it wrote.
+///
+/// The value the graph returns is not one of the anchors that pin a node: it is the value of the
+/// function's last expression, and when that expression is the one being folded, the function
+/// returns what the fold computed. In a function graph the returned value is also the graph's
+/// exit and output value (the EXIT marker is drawn from it when the graph is encoded), so those
+/// anchors follow it as well (`replaceFoldResult`). Leaving it pinned is what kept a conversion
+/// written in return position (the CAST a named result type adds) in the graph forever: every
+/// folding round skipped it, and every inlining of that function copied the unfolded conversion.
+/// A returned value that waits on something (`sync` bodies end in a gate that carries that
+/// ordering) is not folded: it is the tail of the graph's effect order, and a constant replacing
+/// it would carry none of it.
 bool isFoldable(const GraphDraft &draft, gc_node_ref_t id) {
-    return isReplaceable(draft, id) && !isWrittenInPlace(draft, id);
+    const bool valueAnchor =
+        isReplaceable(draft, id) || (id == draft.returnNode() && draft.ctrlInputsOf(id).empty());
+    return valueAnchor && !isWrittenInPlace(draft, id);
+}
+
+/// Replaces `id` by `replacement` (see replaceNode) and makes the replacement the graph's exit,
+/// output and returned value wherever `id` was one of them. `replaceNode` re-points the value
+/// anchors it knows (output, return), but erasing the node clears the exit anchor, so all three
+/// are set again on the replacement.
+void replaceFoldResult(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement) {
+    const bool wasExit   = draft.exitNode() == id;
+    const bool wasOutput = draft.outputNode() == id;
+    const bool wasReturn = draft.returnNode() == id;
+    const auto kind      = draft.returnKind();
+    replaceNode(draft, id, replacement);
+    if (replacement == kInvalidNodeRef) {
+        return;
+    }
+    if (wasExit) {
+        draft.setExitNode(replacement);
+    }
+    if (wasOutput) {
+        draft.setOutputNode(replacement);
+    }
+    if (wasReturn) {
+        draft.setReturnNode(replacement, kind);
+    }
 }
 
 std::optional<StaticArgsView>
@@ -409,7 +446,7 @@ bool foldStaticAccess(GraphDraft &draft, gc_node_ref_t id) {
         return false;
     }
     // The element is reachable from the constant it was read from, which the graph keeps.
-    replaceNode(draft, id, draft.materializeStaticValue(value, result));
+    replaceFoldResult(draft, id, draft.materializeStaticValue(value, result));
     return true;
 }
 
@@ -443,7 +480,7 @@ bool foldStaticFill(
     // Keep the object alive until commit moves it into the graph's static area.
     roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
     camel::execute::writeRuntimeFillSlots(object, result, body, slots);
-    replaceNode(
+    replaceFoldResult(
         draft,
         id,
         draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
@@ -477,7 +514,12 @@ bool foldStaticCast(
     const bool safePrimitive   = safety == type::CastSafety::Safe &&
                                  type::isPrimitive(target->code()) &&
                                  type::isPrimitive(source->second->code());
-    if (!checkedByTarget && !safePrimitive) {
+    // An unnamed struct literal entering the named type it is written at: the conversion names the
+    // type the value is used as, and moves nothing (design principles 5.1, 5.2).
+    const bool safeStruct = safety == type::CastSafety::Safe &&
+                            target->code() == type::TypeCode::Struct &&
+                            source->second->code() == type::TypeCode::Struct;
+    if (!checkedByTarget && !safePrimitive && !safeStruct) {
         return false;
     }
     slot_t result = NullSlot;
@@ -494,7 +536,8 @@ bool foldStaticCast(
             target,
             "std::opt::fold");
     }
-    replaceNode(draft, id, draft.materializeStaticValue(result, target));
+    const gc_node_ref_t data = draft.materializeStaticValue(result, target);
+    replaceFoldResult(draft, id, data);
     return true;
 }
 
@@ -530,7 +573,7 @@ bool foldFromTypes(
             resultType,
             "std::opt::fold");
     }
-    replaceNode(draft, id, draft.materializeStaticValue(*result, resultType));
+    replaceFoldResult(draft, id, draft.materializeStaticValue(*result, resultType));
     return true;
 }
 
@@ -555,7 +598,7 @@ size_t foldDraft(
                 h && h->kind == GCNodeKind::Accs && isFoldable(draft, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
-                    replaceNode(draft, id, value);
+                    replaceFoldResult(draft, id, value);
                     ++folded;
                     changed = true;
                 } else if (foldStaticAccess(draft, id)) {
@@ -643,7 +686,7 @@ size_t foldDraft(
                     "std::opt::fold");
             }
             const gc_node_ref_t value = draft.materializeStaticValue(result, resultType);
-            replaceNode(draft, id, value);
+            replaceFoldResult(draft, id, value);
             ++folded;
             changed = true;
         }
