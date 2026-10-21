@@ -41,16 +41,20 @@ jobs:
             slug: linux-x64-nojit
             arch: x86-64-v3
             nojit: true
-          # Pinned: Conan maps this Clang to Visual Studio 17, which newer images no longer carry.
+          # Pinned: the leg needs Visual Studio 17, and the newer images carry only VS 2026 (VS 18).
+          # windows-2022 has VS 17 with the 14.4x toolset, so its Conan runtime version is v144;
+          # ci-leg.yml pins whatever value the cell declares.
           - runner: windows-2022
             slug: win-x64
             arch: x86-64-v3
+            msvc_runtime_version: v144
     uses: ./.github/workflows/ci-leg.yml
     with:
       runner: ${{ matrix.cfg.runner }}
       slug: ${{ matrix.cfg.slug }}
       arch: ${{ matrix.cfg.arch }}
       nojit: ${{ matrix.cfg.nojit || false }}
+      msvc_runtime_version: ${{ matrix.cfg.msvc_runtime_version || '' }}
 
   # Opt-in: `experimental` means it never decides the run, and it is the most expensive runner.
   # build-pypi.yml already builds and smoke-installs wheels on macOS, so this leg is for the case
@@ -125,8 +129,6 @@ jobs:
           path = sys.argv[1]
           text = open(path, encoding="utf-8").read()
           text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
-          # The image has the 14.4x toolset; v143 makes Conan ask vcvars for 14.3, which is absent.
-          text = re.sub(r"(?m)^compiler\.runtime_version=v143$", "compiler.runtime_version=v144", text)
           text += "\n[conf]\ntools.cmake.cmaketoolchain:generator=Ninja Multi-Config\n"
           open(path, "w", encoding="utf-8", newline="\n").write(text)
           EOF
