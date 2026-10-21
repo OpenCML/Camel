@@ -1,0 +1,19 @@
+/**
+ * A module that offers its type and the operators of that type together: `Box`, `+` and `==`
+ * are declared here (design principles 5.7).
+ */
+module models
+
+export type Box = { v: int }
+
+export func operator +(a: Box, b: Box): Box {
+    return { v: a.v + b.v }
+}
+
+export func operator ==(a: Box, b: Box): bool {
+    return a.v == b.v
+}
+
+export func mk(n: int): Box {
+    return { v: n }
+}

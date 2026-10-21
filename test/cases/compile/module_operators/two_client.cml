@@ -1,0 +1,15 @@
+/**
+ * Two modules offer `+` for `Box`, and neither declares `Box`: they are not the declaring
+ * module, so the declaration lookup does not bring them, and this module imports neither, so
+ * they are not in its lexical scope either. What the caller imports is not looked at (5.7).
+ */
+import { mk } from two_models
+import { twice } from two_gen
+import two_left
+import two_right
+
+func main(): int sync {
+    let b = twice(mk(1))
+    println(b.v)
+    return 0
+}

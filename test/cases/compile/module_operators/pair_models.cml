@@ -1,0 +1,15 @@
+/**
+ * A generic operator declared beside a generic type: the module that declares `Pair` offers the
+ * `+` of any `Pair<T>` with it (design principles 5.7, 4.3).
+ */
+module pair_models
+
+export type Pair<T> = { a: T, b: T }
+
+export func operator +(p: Pair<(typeas T)>, q: Pair<T>): Pair<T> {
+    return { a: p.a + q.a, b: p.b + q.b }
+}
+
+export func pair(a: int, b: int): Pair<int> {
+    return { a: a, b: b }
+}

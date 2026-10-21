@@ -1,0 +1,12 @@
+/**
+ * `bump` uses `+=` on a value of its type parameter: the plain operator `+` is the one of the
+ * module that declares `Box`, so the rebinding works across the module boundary (5.7, 4.3).
+ */
+import { mk } from models
+import { bump } from gen
+
+func main(): int sync {
+    let b = bump(mk(1), mk(2))
+    println(b.v)
+    return 0
+}

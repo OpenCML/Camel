@@ -1,0 +1,12 @@
+/**
+ * A named type that is an alias of a builtin type: `Count` declares no type of its own (an
+ * alias is the same type as `int`), so there is no declaring module to search and `+` stays the
+ * builtin one (design principles 5.7).
+ */
+module alias_models
+
+export type Count = int
+
+export func count(n: int): Count {
+    return n
+}

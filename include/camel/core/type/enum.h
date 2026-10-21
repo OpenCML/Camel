@@ -94,10 +94,17 @@ class EnumDecl {
   public:
     /// A declaration whose variants are not known yet: the name is in scope from here on, so
     /// that the variants (and other declarations of the module) can refer to it. `name` is
-    /// the name as written with its namespace path (`Shape`, `geo::Shape`).
-    static EnumDecl *create(const std::string &name, std::vector<std::string> params);
+    /// the name as written with its namespace path (`Shape`, `geo::Shape`); `module` is the
+    /// module that declares the type (an operator on a value of it is looked for there as well,
+    /// design principles 5.7).
+    static EnumDecl *create(
+        const std::string &name, std::vector<std::string> params,
+        std::string module = std::string());
 
     const std::string &name() const { return name_; }
+    /// The name the declaring module is loaded under (`models`), empty when the declaration was
+    /// made outside a module. Not part of the type's identity: the declaration is.
+    const std::string &moduleName() const { return module_; }
     /// The name without its namespace path: what a value prints (`Shape::Circle`).
     const std::string &shortName() const { return shortName_; }
     /// A number no other declaration of the process has: part of the mangled name.
@@ -118,10 +125,11 @@ class EnumDecl {
     EnumType *prototype() const;
 
   private:
-    EnumDecl(const std::string &name, std::vector<std::string> params);
+    EnumDecl(const std::string &name, std::vector<std::string> params, std::string module);
 
     std::string name_;
     std::string shortName_;
+    std::string module_;
     uint32_t id_;
     std::vector<std::string> params_;
     std::vector<EnumVariant> variants_;
