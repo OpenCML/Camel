@@ -39,6 +39,7 @@ test/cases/consistency/cleanup/unflushed_print_fault.cml
 test/cases/consistency/entry/undeclared_int.cml
 test/cases/consistency/entry/declared_string.cml
 test/cases/linear/runtime/recursion_depth_limit.cml
+test/cases/trans/cpp/exec/site_message.cml
 test/cases/compile/diag_render/runtime_format.cml
 
 # Tail calls.

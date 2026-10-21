@@ -61,6 +61,7 @@
 
 #pragma once
 
+#include "camel/core/error/diagnostics/range.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/operator_table.h"
 #include "camel/runtime/graph.h"
@@ -129,9 +130,13 @@ class DefinitionStore {
     /// when it cannot be had, and then `problem` says why; the answer is remembered. `absent`
     /// tells a library that is not there (no such module written in Camel, or it exports no
     /// such function) from one that is there and refused.
+    /// `errorLocation`, when given, receives the library's first error as a secondary location:
+    /// its file, range and text (the same sentence the diagnostic table gives it). It is empty
+    /// when the library could not be loaded, or when its first error has no position; the
+    /// reason then stays in `problem`.
     std::optional<LibraryFunction> libraryFunction(
         const std::string &module, const std::string &function, std::string &problem,
-        bool &absent);
+        bool &absent, std::optional<camel::core::error::DiagLabel> *errorLocation = nullptr);
 
   private:
     struct Entry {
@@ -174,6 +179,8 @@ class DefinitionStore {
         std::optional<LibraryFunction> found;
         std::string problem;
         bool absent = false;
+        /// The library's first error, when it has one with a position (see libraryFunction).
+        std::optional<camel::core::error::DiagLabel> errorLocation;
     };
     std::map<std::string, FunctionEntry> functions_;
 };

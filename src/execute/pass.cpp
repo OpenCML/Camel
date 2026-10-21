@@ -1115,6 +1115,9 @@ struct ResolvedPass {
     PassFactory factory;                // the pass with its parameters bound; null if not usable
     bool known = false;                 // the name is a pass
     std::optional<std::string> problem; // the parameters are wrong
+    /// When the problem is a pass module that does not compile: its first error, as a secondary
+    /// location (H36c).
+    std::optional<DiagLabel> errorLocation;
 };
 
 /// Resolves `name` or `name(key=value, ...)`. Prints nothing.
@@ -1142,9 +1145,14 @@ ResolvedPass resolvePass(const std::string &spec) {
     return result;
 }
 
-Diagnostic invalidParameterDiagnostic(const std::string &spec, const std::string &problem) {
+Diagnostic invalidParameterDiagnostic(
+    const std::string &spec, const std::string &problem,
+    const std::optional<DiagLabel> &errorLocation = std::nullopt) {
     setPipelineStage("pass:" + specName(spec));
-    auto diag  = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
+    auto diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
+    if (errorLocation) {
+        diag.related.push_back(*errorLocation);
+    }
     diag.stage = "pass:" + specName(spec);
     setPipelineStage("");
     return diag;
@@ -1242,10 +1250,13 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     }
     // A function written in Camel: the module is a library of its own, compiled now.
     std::string problem;
-    camel::execute::registerCamelPass(ctx, name.substr(0, sep), name.substr(sep + 2), problem);
+    std::optional<DiagLabel> errorLocation;
+    camel::execute::registerCamelPass(
+        ctx, name.substr(0, sep), name.substr(sep + 2), problem, &errorLocation);
     resolved = resolvePass(spec);
     if (!resolved.factory && !problem.empty()) {
-        resolved.problem = problem;
+        resolved.problem       = problem;
+        resolved.errorLocation = errorLocation;
     }
     return resolved;
 }
@@ -1254,7 +1265,7 @@ void requireKnownPasses(const std::vector<std::string> &passes, const context_pt
     for (const auto &name : passes) {
         auto resolved = resolvePassWithModule(name, ctx);
         if (resolved.problem) {
-            throw invalidParameterDiagnostic(name, *resolved.problem);
+            throw invalidParameterDiagnostic(name, *resolved.problem, resolved.errorLocation);
         }
         if (resolved.factory) {
             continue;

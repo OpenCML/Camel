@@ -47,6 +47,7 @@
 #include "fault_sites.h"
 #include "operator_rules.h"
 
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -91,6 +92,9 @@ struct ProgramParts {
     /// located there.
     const GCGraph *firstBridgedGraph = nullptr;
     gc_node_ref_t firstBridgedNode   = camel::runtime::kInvalidNodeRef;
+    /// The limit on open calls the program is translated with (camel/execute/limits.h): the
+    /// reports of the calls that meet it name it, and the generated program's `run` gets it.
+    size_t recursionLimit = 1000;
 
     explicit ProgramParts(camel::core::context::context_ptr_t context)
         : sites(std::move(context)) {}
