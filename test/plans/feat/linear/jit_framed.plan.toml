@@ -190,6 +190,30 @@ expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'churn' as framed code", "compiled & cached graph 'ping' as framed code", "compiled & cached graph 'pong' as framed code", "compiled & cached graph 'build' as framed code", "compiled & cached graph 'total' as framed code", "compiled & cached graph 'digit_sum' as framed code", "done"]
 
 [[tests]]
+name = "framed.loops.regions.compiled"
+desc = "A loop of regions (LBEG/LTST/LEND) runs as framed code now instead of leaving the graph to the interpreter: the functions of this program (one state over an array, two states under a condition, `for ... while`, an empty array, a nested loop, a collecting loop, a loop in a called function, a body that calls a function, a `sync` body whose effects run every round, a block whose `return` ends it) are compiled, and each of them executes no bytecode in the interpreter; `std::jit(stats=...)` reports them `compiled`/`framed` with `executed` 0 and the LOOP runtime construct."
+case = "../../../cases/loops/compiled.cml"
+backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
+args = ["-vv", "${case}", "std::jit(hot_threshold=0)"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'main' as framed code", "compiled & cached graph 'sum_squares' as framed code", "compiled & cached graph 'countdown' as framed code", "compiled & cached graph 'until_above' as framed code", "compiled & cached graph 'over_empty' as framed code", "compiled & cached graph 'nested' as framed code", "compiled & cached graph 'collects' as framed code", "compiled & cached graph 'rows_total' as framed code", "compiled & cached graph 'row_sum' as framed code", "compiled & cached graph 'through_call' as framed code", "compiled & cached graph 'square' as framed code", "compiled & cached graph 'ticks' as framed code", "compiled & cached graph 'sum_to' as framed code", "30", "21", "29"]
+expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
+
+[[tests]]
+name = "framed.loops.regions.compiled.inline"
+desc = "The same program after std::opt::inline: every function is inlined into main, so the graph compiled as framed code is main, with all the loops of the program in it."
+case = "../../../cases/loops/compiled.cml"
+backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
+args = ["-vv", "${case}", "std::opt::inline", "std::jit(hot_threshold=0)"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'main' as framed code", "30", "21", "29"]
+expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
+
+[[tests]]
 name = "framed.loops.moving"
 desc = "The loops with safepoint poisoning: the allocating loop and the loop that builds an array run across thousands of collections that move what they hold."
 case = "../../../cases/linear/jit/framed_loops.cml"
