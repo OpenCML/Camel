@@ -23,17 +23,17 @@ const CASES = {
     env: {
         old: 'sys',
         now: 'env',
-        expected: '31e343f49b0e3b1a985bd49d034d2b53e609bfe822c08bd13792ffaf92b807d4',
+        expected: 'e25ec979452a20c9cc3eaaa82733755c84c855ae93edf92908e5999050807eab',
     },
     process: {
         old: 'os',
         now: 'process',
-        expected: 'ef0d12bcfa08cb37d4586b9783068818724ed2857faf4a71386929571bb7049f',
+        expected: '01e668a034a724c249cdbf147322958c7a425cd8dbb38a73583d50e436b0d758',
     },
     hash: {
         old: 'crypto',
         now: 'hash',
-        expected: 'e24d1896575924d33fec0d21de336dda49114dc1cadc8f05575e8a94bef57bd8',
+        expected: '29ae6c2ed66a698bcaeeb3113261c57b556b58cdaafa9b2968f05ce615c453a2',
     },
 }
 
@@ -60,7 +60,14 @@ const rewrite = (value) => {
     }
     if (Array.isArray(value)) return value.map(rewrite)
     if (value && typeof value === 'object') {
-        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, rewrite(v)]))
+        // origin is an opaque per-build identifier for a source position, not part of the graph:
+        // it is renumbered whenever any other source file changes, which would make this digest a
+        // snapshot of the whole tree instead of a check on the rename.
+        return Object.fromEntries(
+            Object.entries(value)
+                .filter(([k]) => k !== 'origin')
+                .map(([k, v]) => [k, rewrite(v)]),
+        )
     }
     return value
 }
