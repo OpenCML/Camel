@@ -1265,12 +1265,14 @@ de83013195ae27f6 ok test/cases/linear/runtime/divide_by_zero.cml
 3b1e069e7563b109 ok test/cases/linear/runtime/recursion_depth_limit.cml
 32bfa7d9b6cf5f4d ok test/cases/linear/runtime/sync_block_order.cml
 1606512358f47df6 ok test/cases/linear/runtime/sync_literal_operands.cml
+fe49614e1062aab1 ok test/cases/loops/arm_loops.cml
+bda8c00c8f66180f ok test/cases/loops/arm_loops_edges.cml
 092b61923ca3ef5e ok test/cases/loops/captures.cml
 86e1cd983fa4c0f2 ok test/cases/loops/collection.cml
 701a7d8e245c7f8d ok test/cases/loops/collection_in_place.cml
 fbf6da4c49894b32 ok test/cases/loops/collection_large.cml
 a12697fd5ca6ce5f ok test/cases/loops/collection_oom.cml
-b3d427cda62c65c7 ok test/cases/loops/compiled.cml
+2c37f729452a430f ok test/cases/loops/compiled.cml
 8ee3b22037ffd43b ok test/cases/loops/compiled_churn.cml
 255673e8bc714173 ok test/cases/loops/compiled_fault.cml
 0113133f73e7a008 ok test/cases/loops/discrete_effectful_value.cml
