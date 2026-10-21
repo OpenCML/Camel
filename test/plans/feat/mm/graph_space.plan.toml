@@ -87,3 +87,26 @@ assert(grown < Number(m[3]) / 2, `the space grew by ${grown} bytes of the ${m[3]
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "graph_space.jit_entries_of_freed_versions"
+desc = "The JIT compiles the graph of a run-time specialization the first time it is called and keeps the version it compiled for, by entry, so that the interpreter can find the graph of an entry. A version the collector frees has its entry erased (its address can be given to another graph, and the map would otherwise grow with every specialization). 4000 gradients are 12000 graph versions; with their entries kept it names 4000 versions (the JIT compiles lazily, once per version), with them erased only the versions alive at the end remain: 306. A build without the JIT prints no such line, and the check is skipped (the JIT is compiled on x86-64 only)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
+args = ["${case}", "std::jit"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GRAPH_GC_MB=1"]
+expect_exit = 0
+expect_stdout_contains = ["40000.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+const entries = /fvm_jit_entries=([0-9]+)/.exec(err)
+if (entries !== null) {
+  const named = Number(entries[1])
+  assert(named > 0, 'the JIT compiled nothing: no entry to keep or erase')
+  assert(named < 1000, `the JIT cache named ${named} graph versions, not only the live ones`)
+}
+}
+"""
+timeout_ms = 30000
