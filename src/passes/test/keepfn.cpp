@@ -67,7 +67,10 @@ KeepFnTestPass::apply(const camel::runtime::Program *program, std::ostream &os) 
 
     const auto *kept = held.getAs<::Function>();
     const GCGraph *graph = kept->graph();
-    os << "KEEPFN alive=" << (graph != nullptr && kept->program()->contains(graph) ? 1 : 0)
+    const bool alive = camel::core::mm::graphSpace().isAllocated(
+                           const_cast<Program *>(kept->program())) &&
+                       graph != nullptr && kept->program()->contains(graph);
+    os << "KEEPFN alive=" << (alive ? 1 : 0)
        << " graph=" << (graph != nullptr ? graph->name() : "?") << "\n";
     return next;
 }
