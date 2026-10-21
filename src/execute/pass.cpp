@@ -572,8 +572,7 @@ PassDescriptor algebraDescriptor() {
     };
     d.make = [](const context_ptr_t &ctx, const PassArgs &args) {
         if (args.getBool("neutral_only")) {
-            return std::unique_ptr<GraphIRPass>(
-                std::make_unique<AlgebraPass>(ctx, false, true));
+            return std::unique_ptr<GraphIRPass>(std::make_unique<AlgebraPass>(ctx, true));
         }
         return std::unique_ptr<GraphIRPass>(
             std::make_unique<RulesAlgebraPass>(ctx, args.getBool("safe_fp")));
