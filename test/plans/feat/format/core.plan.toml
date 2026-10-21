@@ -162,3 +162,17 @@ snapshot_compare = "text_exact"
 golden = "./golden/static_for_and_access.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "format.static_loop_snapshot"
+desc = "Formats `static loop acc = 0, best = 0 for (n, F) in fields T do 块`: the state list, the shared `for (n, F) in fields T` header, and the body, in both a block body and a one-line body."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/static_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/static_loop.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

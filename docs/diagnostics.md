@@ -2957,13 +2957,17 @@ The body of this loop gives a value of type '{0}'; the state of the loop has typ
 The initial state fixes the state type. Return that type after 'do', or change the initial value (for example, '0.0' instead of '0' for a float state). With multiple state names, return a tuple in the same order.
 ```
 
-**Example** (`test/cases/loops/err_body_type.cml`, run as `camel -E short test/cases/loops/err_body_type.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_body_type.cml`, run as `camel test/cases/compile/static_expansion/static_loop_body_type.cml`)
 
 ```camel
-func main(): int sync {
-    let x = loop s = 0 for v in [1.5, 2.5] do v
-    println(x)
-    return 0
+module static_loop_body_type
+
+func bad(t: {a: int}): int {
+    return static loop acc = 0 for (n, F) in fields {a: int} do "not an int"
+}
+
+func main(): int {
+    return bad({a: 1})
 }
 ```
 
@@ -3035,13 +3039,17 @@ The name '{0}' is declared twice in this loop head.
 The names of a loop's state and the name 'for' binds to the element are declared together, for the condition and the body; each is given once.
 ```
 
-**Example** (`test/cases/loops/err_repeated_name.cml`, run as `camel -E short test/cases/loops/err_repeated_name.cml`)
+**Example** (`test/cases/compile/static_expansion/static_loop_name_repeated.cml`, run as `camel test/cases/compile/static_expansion/static_loop_name_repeated.cml`)
 
 ```camel
-func main(): int sync {
-    let r = loop x = 0 for x in [1, 2] do x
-    println(r)
-    return 0
+module static_loop_name_repeated
+
+func bad(t: {a: int}): int {
+    return static loop n = 0 for (n, F) in fields {a: int} do n + 1
+}
+
+func main(): int {
+    return bad({a: 1})
 }
 ```
 

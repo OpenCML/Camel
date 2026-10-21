@@ -844,6 +844,11 @@ ebb3d62600aa9e9a ok test/cases/compile/static_expansion/static_access_not_consta
 d1a293bc446a2986 ok test/cases/compile/static_expansion/static_access_shadowed_key.cml
 43524b0e9d87233e ok test/cases/compile/static_expansion/static_access_unknown_field.cml
 38a822bb892446dd ok test/cases/compile/static_expansion/static_for_not_composite.cml
+0672be2759f0d169 ok test/cases/compile/static_expansion/static_loop.cml
+fb437291c20113b7 ok test/cases/compile/static_expansion/static_loop_body_type.cml
+2b33001cfdf2c58c ok test/cases/compile/static_expansion/static_loop_graph.cml
+6b878e647580a173 ok test/cases/compile/static_expansion/static_loop_name_repeated.cml
+cd98d8ee83fb64e4 ok test/cases/compile/static_expansion/static_loop_not_composite.cml
 77fbc50ce9497a10 ok test/cases/compile/surface/angle_then_name_line.cml
 23b4227b58ad2534 ok test/cases/compile/surface/angle_then_semicolon.cml
 2cddb4818955c832 ok test/cases/compile/surface/angle_then_string_line.cml
@@ -1189,6 +1194,7 @@ a23ef073b2e65d89 ok test/cases/feat/mm/gc/gc_prl_scheduler.cml
 9f9eebad0e6023a8 ok test/cases/feat/mm/gc/gc_promoted_blocks.cml
 92d9356278f9e266 ok test/cases/feat/mm/gc/gc_soak.cml
 23839b704a65e865 ok test/cases/feat/mm/gc/gc_training_peak.cml
+7936704ae4d4e0ed ok test/cases/feat/mm/gc/gc_view_frame_store.cml
 a2c0dbfba95821fa ok test/cases/feat/mm/gc/graph_space_grad.cml
 9b26cef2a1aded97 ok test/cases/feat/mm/writings/apart.cml
 f282cfc489e0fc8f ok test/cases/feat/mm/writings/chains.cml
@@ -1203,6 +1209,7 @@ ad80ceb4d3c7a1fb ok test/cases/format/mixed_arguments.cml
 5b09db9d5fb90816 ok test/cases/format/options.cml
 eb74f3b204df0390 no test/cases/format/pattern_empty.cml
 34864c94814e96bd ok test/cases/format/static_for_and_access.cml
+65060b9066b305b7 ok test/cases/format/static_loop.cml
 6e2b9f9a38158b5e no test/cases/format/syntax_error.cml
 e39a9bd8bac6e3d2 ok test/cases/format/tuple_singleton.cml
 e08b2bd788c596de ok test/cases/format/type_params.cml
@@ -2109,6 +2116,7 @@ a5db29965a226f05 ok test/plans/feat/format/golden/namespace.cml
 84451c2364b8eb0c ok test/plans/feat/format/golden/options.cml
 0207c9a93bb1c8b3 no test/plans/feat/format/golden/pattern_empty.cml
 da9c89554298b9b2 ok test/plans/feat/format/golden/static_for_and_access.cml
+db5844fca249b9cb ok test/plans/feat/format/golden/static_loop.cml
 69ecdfed21290bb7 ok test/plans/feat/format/golden/tuple_singleton.cml
 d0ff0c1893586f15 ok test/plans/feat/format/golden/type_params.cml
 2315461a1f5065f7 ok test/plans/feat/parse/golden/numbers_format.cml
