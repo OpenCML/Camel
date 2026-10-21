@@ -522,6 +522,9 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     if (init.attrs == 0) {
         node(id)->header.attrs = attrs;
     }
+    if (init.region != 0) {
+        node(id)->header.region = init.region;
+    }
 
     // The input lists are read back from the rebuilt node, not from `init`: a caller that
     // snapshots the node and changes some lists (snapshotNodeInit) passes spans that view the

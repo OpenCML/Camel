@@ -32,6 +32,10 @@ struct GraphVizDumpConfig {
     /// Marks nodes with their boundary roles (camel/runtime/node_roles.h): a `role` attribute,
     /// and in the styled dump a fill color per role and a legend.
     bool annotateRoles = false;
+    /// Draws the regions of a graph (camel/runtime/graph.h, GCRegion) as clusters inside the
+    /// cluster of the function; off by default, so the dumps of graphs with regions look as
+    /// they did.
+    bool regions = false;
 };
 
 class GraphVizDumpPass : public RuntimeGraphTranslatePass {
