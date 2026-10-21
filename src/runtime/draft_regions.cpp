@@ -76,6 +76,13 @@ void GraphDraft::setRegionPorts(uint32_t id, std::span<const gc_node_ref_t> port
     regionPorts_.insert(regionPorts_.end(), ports.begin(), ports.end());
 }
 
+void GraphDraft::setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t callSite) {
+    ++mutations_;
+    ASSERT(id > 0 && id < regions_.size(), "No such region.");
+    regions_[id].inlineOf = callee;
+    regions_[id].callSite = callSite;
+}
+
 void GraphDraft::setRegionOrigin(uint32_t id, uint32_t origin) {
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");

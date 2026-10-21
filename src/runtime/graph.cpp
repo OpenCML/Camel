@@ -280,7 +280,8 @@ void validateRuntimeRegions(const GCGraph *graph) {
             bad("with ports outside the table", r);
         }
         for (gc_node_ref_t port : graph->regionPorts(r)) {
-            if (!inGraph(port) || port == kInvalidNodeRef) {
+            // An annotation region keeps no port a rewrite removed; a control region needs all.
+            if (!inGraph(port) || (control && port == kInvalidNodeRef)) {
                 bad("with a port the graph does not have", r);
             }
         }
@@ -949,19 +950,21 @@ void emitDraftPayload(
         payload.closure[i] = plan.runtimeRefsByDraftId[draft.closureNodes()[i]];
     }
 
-    // The regions: the node references in them follow the numbering of the nodes.
+    // The regions: the node references in them follow the numbering of the nodes; one to a node
+    // a rewrite erased becomes "none".
+    const auto mapRegionNode = [&](gc_node_ref_t ref) {
+        return ref < plan.runtimeRefsByDraftId.size() ? plan.runtimeRefsByDraftId[ref]
+                                                       : kInvalidNodeRef;
+    };
     for (uint32_t r = 0; r < draft.regionCount(); ++r) {
-        GCRegion region = draft.region(r);
-        const auto map = [&](gc_node_ref_t ref) {
-            return ref == kInvalidNodeRef ? kInvalidNodeRef : plan.runtimeRefsByDraftId[ref];
-        };
-        region.owner    = map(region.owner);
-        region.result   = map(region.result);
-        region.callSite = map(region.callSite);
+        GCRegion region        = draft.region(r);
+        region.owner           = mapRegionNode(region.owner);
+        region.result          = mapRegionNode(region.result);
+        region.callSite        = mapRegionNode(region.callSite);
         payload.regionTable[r] = region;
     }
     for (uint32_t i = 0; i < draft.regionPortCount(); ++i) {
-        payload.regionPorts[i] = plan.runtimeRefsByDraftId[draft.regionPort(i)];
+        payload.regionPorts[i] = mapRegionNode(draft.regionPort(i));
     }
 
     // A graph without an entry starts at its first node.

@@ -100,7 +100,7 @@ index, result node, form ports, origin, tags, and for an inlined body the functi
 call); `GCGraph::nodeRegion(ref)` is the innermost region of a node, from a column of the node
 chunks that is absent while every node is in the body. Region 0 is the body of the function;
 a graph with no other region has an empty table. Region ids are not reused, as node ids are
-not. Today only annotation regions (`Inline`, `Block`) are made, and no back end reads them;
+not. Today only annotation regions are made: `std::opt::inline` puts the body of each function it inlines in an `Inline` region inside the region of the call (the regions show in `std::jgir`), and no back end reads them;
 the control kinds (`Arm`, `LoopCond`, `LoopBody`) are for the branch and loop rewrite.
 `validateRuntimeGraphPayload` checks the table (a tree rooted at the body, nodes named exist,
 every node in a region that is there).

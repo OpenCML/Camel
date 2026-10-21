@@ -33,3 +33,25 @@ expect_exit = 0
 expect_output_contains = ["REGIONS count=3", "tensor("]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "regions.inline_origin"
+desc = "std::opt::inline puts the body of each function it inlines in a region of kind inline, inside the region of the call, which names the function it came from (std::jgir shows them); the program still runs."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "std::jgir"]
+expect_exit = 0
+expect_output_contains = ["\"regions\"", "\"kind\": \"inline\"", "\"inlined\": \"forward\"", "\"region\": \"g1r1\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.inline_runs"
+desc = "A program inlined by std::opt::inline, with its inline regions, runs on every back end as before."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["tensor("]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

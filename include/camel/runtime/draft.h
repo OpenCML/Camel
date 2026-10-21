@@ -499,6 +499,7 @@ class GraphDraft {
     void setRegionResult(uint32_t id, gc_node_ref_t result);
     void setRegionPorts(uint32_t id, std::span<const gc_node_ref_t> ports);
     void setRegionOrigin(uint32_t id, uint32_t origin);
+    void setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t callSite);
     void setRegionAttrs(uint32_t id, uint32_t attrs);
     /// True when `inner` is `outer` or lies in it.
     bool regionWithin(uint32_t inner, uint32_t outer) const;
