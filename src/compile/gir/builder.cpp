@@ -84,8 +84,15 @@ void Builder::buildEntryCall() {
             if (mainOrigin != camel::source::kInvalidOriginId) {
                 sourceContext->debugMap().registerGraphOrigin(rootGraph_->graphId(), mainOrigin);
                 // Also as the origin of the entry function: the entry graph is rewritten (and
-                // renamed) by passes, the question "where is main" outlives that.
-                sourceContext->debugMap().registerEntryOrigin(mainOrigin);
+                // renamed) by passes, the question "where is main" outlives that. That question
+                // is about the program the context runs, so only building that program records
+                // it: a library built as a program of its own (`buildLibraryEntry`: a Camel pass
+                // compiled on demand, such as stdlib/rules.cml) has its own entry function, and
+                // recording it would move every later diagnostic about the running program to
+                // that library's source (H112).
+                if (libraryEntryFunction_.empty()) {
+                    sourceContext->debugMap().registerEntryOrigin(mainOrigin);
+                }
             }
         }
         // `main` is a function like any other: its parameters are the inputs of the

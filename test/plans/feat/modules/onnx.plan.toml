@@ -4,6 +4,30 @@ tier = "fast"
 tags = ["feat", "modules", "onnx"]
 
 [[tests]]
+name = "export_model_minimal"
+desc = "The smallest model: one input-dependent product, exported by the runtime operator. The export simplifies a private copy of the bound function; its algebraic stage (`rules::simplify`) must not compare that copy with the program that is still running (H112)."
+kind = "behavior"
+case = "../../../cases/modules/onnx/export_minimal.cml"
+args = ["${case}"]
+envs = ["ONNX_OUT=${test_tmp}/export_minimal.onnx"]
+expect_exit = 0
+expect_stdout_contains = ["exported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+async ({ input, assert }) => {
+const path = await import('path')
+const url = await import('url')
+const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
+const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
+const model = readOnnxModel(path.join(input.test_tmp, 'export_minimal.onnx'))
+const count = (op) => model.ops.filter((o) => o === op).length
+assert(count('Mul') === 1 && model.ops.length === 2, `a single product and its output are the whole model, got ${model.ops}`)
+assert(model.inputs.join() === 'input' && model.outputs.join() === 'output', `unexpected graph io ${model.inputs} -> ${model.outputs}`)
+}
+"""
+timeout_ms = 4000
+
+[[tests]]
 name = "export_fold"
 desc = "Export folds weights, shape arithmetic, and constant-driven recursion; only input-dependent tensor ops are emitted."
 kind = "behavior"
