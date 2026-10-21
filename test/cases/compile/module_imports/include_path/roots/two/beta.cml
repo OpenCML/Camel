@@ -1,0 +1,5 @@
+module beta
+
+export func value(): int {
+    return 20
+}

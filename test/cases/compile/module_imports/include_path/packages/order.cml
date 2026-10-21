@@ -1,0 +1,6 @@
+/// H129: reached through `CAMEL_PACKAGES`; `-I` wins when both roots hold this name.
+module order
+
+export func value(): int {
+    return 200
+}

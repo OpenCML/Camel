@@ -1,0 +1,11 @@
+/// H129 case 4: the given `-I` root (`../roots/missing`) does not exist and no other root has
+/// `nowhere_module`. The import must fail with a located `ModuleNotFound` that names the
+/// missing root and says the path does not exist, not pass silently.
+module include_missing
+
+import nowhere_module
+
+func main(): int sync {
+    println(nowhere_module::value())
+    return 0
+}
