@@ -1,0 +1,9 @@
+/**
+ * The private operator is no entity of its module: naming it through the import is refused, rather
+ * than reaching a rule only the module's own code may mean (handover H94, ruling 3).
+ */
+import { at } from private_module
+
+func main(): int sync {
+    return at([1, 2, 3], 0)
+}

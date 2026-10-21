@@ -47,6 +47,7 @@
 
 #include <atomic>
 #include <cctype>
+#include <unordered_set>
 #define DEBUG_LEVEL -1
 
 using namespace std;
@@ -354,8 +355,8 @@ std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct
 }
 
 void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
-    const std::string name   = gct->name();
-    FunctionType *funcType   = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+    const std::string name = gct->name();
+    FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
     const std::string where  = unit_->module->name();
     std::string uri          = where + ":" + name;
     if (auto tagged = nativeOperatorUri(gct); tagged.has_value()) {
@@ -450,18 +451,33 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     found->rules.emplace_back(uri, std::move(resolver));
 }
 
-void Builder::exportNativeOperators() {
+void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
+    std::unordered_set<std::string> exported;
+    if (exportList != nullptr) {
+        for (size_t i = 0; i < exportList->exportCount(); ++i) {
+            exported.insert(Reference(exportList->exportName(i)).toString());
+        }
+    }
     for (auto &group : unit_->nativeOperators) {
         if (group.rules.empty()) {
             continue;
         }
         const Reference ref(group.name);
-        const auto existing = unit_->module->getNativeEntity(ref);
-        if (existing.has_value() && !existing->isOperGroup()) {
-            // The C++ module exports something else under this name (a constant, a tag): the
-            // declaration cannot also be that name.
-            diags_->of(SemanticDiag::Redeclaration).atOrigin(group.origin).commit(group.name);
-            throw BuildAbortException();
+        // A declaration the module does not export is a private operator of the module: its own
+        // bodies call it, an importer cannot (handover H94, ruling 3). Either way it is the
+        // module's own group, kept here and not in the program's export table.
+        const bool isExported = exported.contains(group.name);
+        std::optional<camel::core::module::entity> existing;
+        if (isExported) {
+            existing = unit_->module->getNativeEntity(ref);
+            if (existing.has_value() && !existing->isOperGroup()) {
+                // The C++ module exports something else under this name (a constant, a tag):
+                // the declaration cannot also be that name.
+                diags_->of(SemanticDiag::Redeclaration)
+                    .atOrigin(group.origin)
+                    .commit(group.name);
+                throw BuildAbortException();
+            }
         }
         // A fixed declaration is the more specific rule: a call that both it and a generic
         // declaration accept is its own (design principles 4.3; handover H94, ruling 2). The
@@ -473,6 +489,11 @@ void Builder::exportNativeOperators() {
             });
         const oper_group_ptr_t ops =
             OperatorGroup::create(group.name, std::move(group.rules));
+        unit_->nativeOperatorGroups[group.name] = ops;
+        if (!isExported) {
+            group.rules.clear();
+            continue;
+        }
         if (existing.has_value()) {
             // The C++ module exports an operator group of this name too: the declaration is the
             // module's signature for it, so it replaces the group instead of being a second
@@ -483,6 +504,22 @@ void Builder::exportNativeOperators() {
         }
         group.rules.clear();
     }
+}
+
+std::optional<camel::core::module::entity> Builder::ownNativeEntity(const Reference &ref) {
+    // The module whose code is being built, which is not always the unit a caller is in: an
+    // instance of a generic function is built in the module that declares it, and reaches that
+    // module's private operators from there (instantiateGeneric; handover H94, ruling 3).
+    if (module_ == nullptr) {
+        return std::nullopt;
+    }
+    if (const auto unit = units_.find(module_.get()); unit != units_.end()) {
+        if (const auto group = unit->second->nativeOperatorGroups.find(ref.toString());
+            group != unit->second->nativeOperatorGroups.end()) {
+            return camel::core::module::entity(group->second);
+        }
+    }
+    return module_->getNativeEntity(ref);
 }
 
 void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {

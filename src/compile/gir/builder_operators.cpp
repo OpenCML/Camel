@@ -116,7 +116,7 @@ Builder::OperatorOverloads Builder::operatorOverloadsOf(const std::string &group
     // the comparison of the candidates counts them. They come before what an import brings, and
     // a fixed rule before a generic one (a call both accept is the more specific rule's).
     if (module_ != nullptr) {
-        if (const auto own = module_->getNativeEntity(Reference(group));
+        if (const auto own = ownNativeEntity(Reference(group));
             own.has_value() && own->isOperGroup() && own->operGroup() != nullptr) {
             std::vector<std::pair<std::string, resolver_ptr_t>> resolvers;
             for (const auto &overload : own->operGroup()->resolvers()) {

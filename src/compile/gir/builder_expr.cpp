@@ -592,7 +592,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         // here, before what an import brings under the same name (design principles 10.1;
         // handover H94, ruling 1: the `.cml` and the `.cmo` are one module).
         for (const std::string &candidate : {name, written}) {
-            auto native = module_->getNativeEntity(Reference(candidate));
+            auto native = ownNativeEntity(Reference(candidate));
             if (!native.has_value()) {
                 continue;
             }

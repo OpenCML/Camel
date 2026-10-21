@@ -183,6 +183,10 @@ class Builder {
             std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>> rules;
         };
         std::vector<NativeOperators> nativeOperators;
+        // The groups those declarations make, by name: the ones the module exports and the
+        // private ones, which only its own bodies call (handover H94, ruling 3). A module's
+        // private operator is not an entity of the module.
+        std::unordered_map<std::string, oper_group_ptr_t> nativeOperatorGroups;
         // What the link step reports per module, collected while its bodies are built.
         std::vector<BuiltFunction> builtFunctions;
         std::vector<compile_graph_ptr_t> builtBodies;
@@ -296,8 +300,13 @@ class Builder {
     // the operator group of its name.
     void declareNativeOperator(const GCT::node_ptr_t &gct);
     // Exports the operator groups of the body-less declarations of the current module, one group
-    // per declared name, after its declarations were read.
-    void exportNativeOperators();
+    // per declared name, after its declarations were read. A name the module's export list
+    // `exportList` does not have stays private to the module (handover H94, ruling 3).
+    void exportNativeOperators(const GCT::node_ptr_t &exportList);
+    // The entity `ref` names in the module whose code is being built: one of its body-less
+    // declarations (exported or private) or a name the C++ module it declares brings, before
+    // what an import brings under the same name (design principles 10.1, 10.2; handover H94).
+    std::optional<camel::core::module::entity> ownNativeEntity(const Reference &ref);
     // The operator URI a body-less declaration names, from its `#op<'...'>` tag when it has one.
     std::optional<std::string> nativeOperatorUri(const GCT::node_ptr_t &gct);
     // Notes the nodes of the root graph added since `firstNode` as nodes of the current module.

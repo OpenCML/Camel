@@ -108,6 +108,28 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "4\n"
 
+# ---- A declaration the module does not export is private (handover H94, ruling 3) ----
+
+[[tests]]
+name = "native.private_declaration"
+desc = "A body-less declaration without `export` is a private operator of the module: the module's own wrapper calls it and the program runs; an importer cannot see the name."
+kind = "behavior"
+case = "../../../cases/compile/native/private.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "5\n"
+
+[[tests]]
+name = "native.private_declaration_not_imported"
+desc = "The private operator is no entity of the module: importing it by name is a diagnostic at the importer, not a way into a rule only the module's own code may mean."
+kind = "negative"
+case = "../../../cases/compile/native/private_import.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ImportNameNotExported"
+expect_diagnostic_code = "0x03000015"
+expect_output_contains = ["private_import.cml:8", "Reference 'at'"]
+
 # ---- A `.cml` beside a `.cmo` is that module's declarations, and has no bodies ----
 
 [[tests]]
