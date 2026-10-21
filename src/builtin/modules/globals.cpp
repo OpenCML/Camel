@@ -1825,9 +1825,10 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // A private copy of an array: the first state of a loop whose body only appends to it
-        // (Builder::markLoopStateInPlace), so the literal the program wrote stays a constant and
-        // the loop appends to its own array. Not a name a program can reach for on its own.
+        // A private copy of an array: one of the states of a loop whose body only appends to it
+        // (Builder::markLoopStateInPlace, which decides per state), so the literal the program
+        // wrote stays a constant and the loop appends to its own array. Not a name a program can
+        // reach for on its own.
         OperatorGroup::create(
             "__copy_arr__",
             {
@@ -1844,11 +1845,12 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // `xs->append<v>` where the compiler proved the old array invisible: the loop body of a
-        // loop whose state is the array, with the state bound only to this call and the first
-        // value a fresh literal (Builder::markLoopStateInPlace). The append may then write into
-        // the state's own Block (Array::canWriteInPlace) instead of copying the array; when it
-        // cannot, it behaves exactly as `append`. Not a name a program can reach for on its own.
+        // `xs->append<v>` where the compiler proved the old array invisible: one state of a
+        // loop body, with that state bound only to this call and its first value a fresh
+        // literal (Builder::markLoopStateInPlace, per state). The append may then write into
+        // the state's own Block (Array::canWriteInPlace) instead of copying the array; when
+        // the array is not compact (an element that holds references) or the block is shared,
+        // it behaves exactly as `append`. Not a name a program can reach for on its own.
         OperatorGroup::create(
             "__append_owned__",
             {
