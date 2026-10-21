@@ -97,6 +97,8 @@ extern std::string blockLimitOpt;
 extern std::string graphGcMbOpt;
 /// --native-stack-guard <on|off>: the checks of the native stack; "" (on) when absent.
 extern std::string nativeStackGuardOpt;
+/// --devices <cpu|ordinal[,ordinal...]>: the devices a pipeline may use; "" when absent.
+extern std::string devicesOpt;
 /// --profile-mode <normal|full>: the mode of the advanced profiler of --profile.
 extern std::string profileModeOpt;
 } // namespace Run
@@ -119,9 +121,10 @@ extern bool dumpTNS;       // Whether to dump Topological Node Sequence
 extern bool dumpOps;       // Whether to dump the operators of the imported modules
 extern bool dumpInstances; // Whether to dump the index semantics of every operator node
 extern bool dumpFacts;     // Whether to compute and dump the graph facts of the program
-extern bool dumpTags;      // Whether to dump the tags the program declares and the facts on its declarations
-extern bool geneCode;      // Whether to dump generate code from GIR
-extern int passUntil;      // Pass until the given pass
+extern bool
+    dumpTags; // Whether to dump the tags the program declares and the facts on its declarations
+extern bool geneCode; // Whether to dump generate code from GIR
+extern int passUntil; // Pass until the given pass
 } // namespace Inspect
 
 } // namespace CmdLineArgs

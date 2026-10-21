@@ -92,7 +92,7 @@ driver 580.95.05 (CUDA driver API 13000), NVRTC 12.3, target compute_86, device 
 Reproduce after the standard build with the toolchain environment above:
 
 ```sh
-CAMEL_TILES_DEVICE=7 python test/tools/benchmark-tiles.py --runs 3 \
+python test/tools/benchmark-tiles.py --runs 3 --devices 7 \
   --source-revision 8e7be37400c6e67707f7f3d07a217126d0896486 \
   --output tiles-rtx3090.jsonl
 ```
