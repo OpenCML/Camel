@@ -1,0 +1,100 @@
+id = "perf.training_steps"
+order = 420
+tier = "slow"
+tags = ["perf", "training", "gpu"]
+
+# The benchmarks of the GPU work (task H48, design docs/design/gpu/README.cn.md 5.6 and 7): what a
+# step costs today on the host, so that the device path has a baseline to be measured against.
+#
+#   dependency_chain  the external report's chain: a round is two 64x64 matmuls with a broadcast
+#                     add and a relu between them, each waiting for the one before.
+#   mlp_step          the C2 training step (784 -> 128 -> 10 MLP, relu, softmax cross entropy,
+#                     Adam) on generated data, so no dataset is needed.
+#   transformer_step  a small Transformer training step: attention (q/k/v, scaled scores,
+#                     softmax, values), two RMSNorm layers, an MLP, softmax cross entropy, Adam
+#                     and an EMA of one weight matrix.
+#
+# The budgets are the mean of ten runs on the reference host (32 cores, Release), with room for
+# the variance of a shared machine; they are a regression guard, not a goal. The per-step numbers
+# these programs print are in docs/handover/reports/H48.md.
+
+[[tests]]
+name = "dependency_chain.nvm"
+desc = "500 rounds of a two-matmul dependency chain on std::nvm: the per-round cost of the external report's microbenchmark."
+kind = "benchmark"
+case = "../../cases/perf/dependency_chain.cml"
+args = ["${timeit_nvm_10}", "${case}", "--arg", "rounds=500", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 180000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 22
+perf_budget_tolerance_pct = 50
+
+[[tests]]
+name = "dependency_chain.fvm"
+desc = "The same chain on std::fvm."
+kind = "benchmark"
+case = "../../cases/perf/dependency_chain.cml"
+args = ["${timeit_fvm_10}", "${case}", "--arg", "rounds=500", "${run_fvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 180000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 22
+perf_budget_tolerance_pct = 50
+
+[[tests]]
+name = "mlp_step.nvm"
+desc = "The C2 training step, 50 steps of batch 32 on std::nvm: the per-step cost of a step whose optimizer is a third of it."
+kind = "benchmark"
+case = "../../cases/perf/mlp_step.cml"
+args = ["${timeit_nvm_10}", "${case}", "--arg", "steps=50", "--arg", "batch=32", "--arg", "lr=0.001", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 500
+perf_budget_tolerance_pct = 40
+
+[[tests]]
+name = "mlp_step.fvm"
+desc = "The same steps on std::fvm."
+kind = "benchmark"
+case = "../../cases/perf/mlp_step.cml"
+args = ["${timeit_fvm_10}", "${case}", "--arg", "steps=50", "--arg", "batch=32", "--arg", "lr=0.001", "${run_fvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 500
+perf_budget_tolerance_pct = 40
+
+[[tests]]
+name = "transformer_step.nvm"
+desc = "The small Transformer training step, 50 steps on std::nvm, with attention, RMSNorm, Adam and EMA."
+kind = "benchmark"
+case = "../../cases/perf/transformer_step.cml"
+args = ["${timeit_nvm_10}", "${case}", "--arg", "steps=50", "--arg", "lr=0.01", "${run_nvm}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 300000
+perf_budget_platform = "local.sample"
+perf_budget_mean_ms = 16
+perf_budget_tolerance_pct = 40
+
+# The numbers of a step, from the profiler rather than from the clock of the program.
+[[tests]]
+name = "transformer_step.profile"
+desc = "std::profile of the Transformer step: it finds the step loop, counts the operators of a round and names the operators by cost."
+kind = "behavior"
+case = "../../cases/perf/transformer_step.cml"
+args = ["${case}", "--arg", "steps=10", "--arg", "lr=0.01", "std::profile", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "operators per step", "tensor:matmul", "nn:adam", "wall per step"]
+timeout_ms = 180000

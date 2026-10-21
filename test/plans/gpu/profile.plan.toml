@@ -1,0 +1,83 @@
+id = "gpu.profile"
+order = 906
+tier = "fast"
+tags = ["gpu", "profile", "tiles"]
+desc = "std::profile reports the device and time of operators, the numbers of a step, host/device traffic, synchronisations, the phase split of the compilation and the host element-wise loops, on every back end"
+
+# The profiler is a pass of the core (`std::profile`), placed before the scheduler: these tests
+# run the same program on the three back ends and look for the sections of the report, not for
+# its numbers (they differ per machine). The numbers of a run are what a person reads; the shape
+# is what a test can hold still.
+
+[[tests]]
+name = "host_loop.nvm"
+kind = "behavior"
+case = "../../cases/gpu/profile/host_loop.cml"
+args = ["${case}", "std::profile", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "backend              std::nvm", "operators per step", "compilation - self time by phase", "parse", "hints - loops that run on the host element by element"]
+timeout_ms = 60000
+
+[[tests]]
+name = "host_loop.fvm"
+kind = "behavior"
+case = "../../cases/gpu/profile/host_loop.cml"
+args = ["${case}", "std::profile", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "backend              std::fvm", "operators per step"]
+timeout_ms = 60000
+
+[[tests]]
+name = "host_loop.jit"
+kind = "behavior"
+case = "../../cases/gpu/profile/host_loop.cml"
+args = ["${case}", "std::profile", "std::jit"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "backend              std::jit"]
+timeout_ms = 120000
+
+# The report as JSON, into the test's own directory: the pass writes it when the run ends.
+[[tests]]
+name = "json.nvm"
+kind = "behavior"
+case = "../../cases/gpu/profile/host_loop.cml"
+args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel"]
+verify_script = """
+async ({ input, assert }) => {
+    const fs = await import('node:fs')
+    const file = input.test_tmp + '/profile.json'
+    const report = JSON.parse(fs.readFileSync(file, 'utf8'))
+    assert(report.schema === 1, 'the JSON report has a schema')
+    assert(report.backend === 'std::nvm', 'the JSON report names the back end')
+    assert(report.operators.calls > 0, 'the JSON report counts operator calls')
+    assert(report.step.rounds >= 3, 'the JSON report finds the step loop')
+    assert(Array.isArray(report.operator_rows) && report.operator_rows.length > 0, 'the JSON report has operator rows')
+    assert(Array.isArray(report.loops) && report.loops.length >= 2, 'the JSON report lists every loop that ran')
+    assert(Array.isArray(report.hints) && report.hints.length >= 1, 'the JSON report has the host loop hints')
+}
+"""
+timeout_ms = 60000
+
+# The device side: a region run through `tiles`, whose kernels, bytes and waits the report counts.
+# On a machine without a CUDA device the same program runs on the host and the counters stay 0, so
+# the test asserts the shape of the report, not the numbers.
+[[tests]]
+name = "device_region.nvm"
+kind = "behavior"
+case = "../../cases/gpu/profile/device_region.cml"
+args = ["${case}", "std::profile", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["PROFILE camel", "tiles:run_device", "device kernels"]
+timeout_ms = 120000
+
+# The whole-program profile is not printed twice: without the pass, nothing changes.
+[[tests]]
+name = "off.nvm"
+kind = "behavior"
+case = "../../cases/gpu/profile/host_loop.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_not_contains = ["PROFILE camel", "hints - loops"]
+timeout_ms = 60000

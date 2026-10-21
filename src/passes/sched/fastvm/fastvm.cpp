@@ -23,6 +23,7 @@
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
+#include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/view.h"
@@ -531,6 +532,11 @@ const camel::runtime::Program *
 FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     (void)os;
     ASSERT(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
+
+    if (camel::profile::enabled()) {
+        camel::profile::setBackend(
+            jitConfig_.policy == jit::JitPolicy::Disabled ? "std::fvm" : "std::jit");
+    }
 
     camel::runtime::GCGraph *runtimeRoot = program->root();
     camel::execute::RunScope runScope(programs_, *context_, program);

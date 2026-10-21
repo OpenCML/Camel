@@ -1,0 +1,66 @@
+/**
+ * The C2 training step, self-contained: the MLP of showcase/c2-mlp-mnist (784 -> 128 -> 10,
+ * relu, softmax cross entropy, Adam) on generated inputs, so a step can be measured without a
+ * dataset. `steps` rounds of the loop are one `std::profile` step each; the program prints the
+ * mean wall time of a step and the operators of it.
+ *
+ * Usage:
+ *   camel mlp_step.cml --arg steps=50 --arg batch=32 --arg lr=0.001 std::profile std::nvm
+ */
+
+module perf_mlp_step
+
+import { Tensor, cast, numel, relu, sum, zeros } from tensor
+import { with_grad } from autodiff
+import { adam, adam_state, softmax_cross_entropy } from nn
+import { now } from time
+
+type Mlp = {
+    w1: Tensor,
+    b1: Tensor,
+    w2: Tensor,
+    b2: Tensor
+}
+
+with <m: Mlp>
+func logits(x: Tensor): Tensor {
+    let hidden = relu(x @ m.w1 + m.b1)
+    return hidden @ m.w2 + m.b2
+}
+
+with <m: Mlp>
+func loss(x: Tensor, labels: Tensor): float {
+    return softmax_cross_entropy(logits<m>(x), cast(labels, 'int64'))
+}
+
+func main(steps: int, batch: int, lr: float): int sync {
+    // Deterministic inputs: a constant field, so every step sees the same data and two runs are
+    // comparable. The point is the cost of a step, not what it learns.
+    let x = zeros([batch, 784]) + 0.001
+    let labels = zeros([batch])
+    let model = {
+        w1: zeros([784, 128]) + 0.01,
+        b1: zeros([128]) + 0.001,
+        w2: zeros([128, 10]) + 0.01,
+        b2: zeros([10]) + 0.001
+    }
+    let params = numel(model.w1) + numel(model.b1) + numel(model.w2) + numel(model.b2)
+    'perf mlp params={} steps={} batch={}'->format<params, steps, batch>->println
+
+    let grad = with_grad(loss)
+    let started = now()
+    let (trained, state, done) = loop m = model, opt = adam_state(model), step = 0
+        while step < steps
+        do {
+            let (value, gradient) = grad<m>(x, labels)
+            let next = adam(m, gradient, opt, lr)
+            return (next.0, next.1, step + 1)
+        }
+    let elapsed = now() - started
+    // `sum` reads one weight so the loop cannot be optimized away by a future pass.
+    
+        'perf mlp seconds={} ms_per_step={:.3f} w1={}'
+        ->format<elapsed, elapsed * 1000.0 / float(done), sum(trained.w1)>
+        ->println
+    return 0
+}

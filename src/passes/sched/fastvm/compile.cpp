@@ -26,6 +26,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/profile/operators.h"
 #include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
 
@@ -567,7 +568,7 @@ static bytecode_vec_t compileRuntimeGraph(
                 withOps,
                 true,
                 {
-                    .func = *opFunc,
+                    .func = camel::profile::profiledOperator(uri, *opFunc),
                 },
                 2);
             *native->extra2() =

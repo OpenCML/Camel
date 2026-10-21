@@ -11,12 +11,14 @@
 // Load the NVIDIA APIs, select the device and cache compiled kernel modules.
 #include "tiles/internal/cuda_backend.h"
 #include "tiles/internal/capability.h"
+#include "tiles/internal/profile_hooks.h"
 
 #include <memory>
 #include <mutex>
 #include <vector>
 #ifdef CAMEL_TILES_CUDA
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
@@ -211,6 +213,10 @@ Backend::Backend(MemoryPolicy policy)
         api.cuDeviceGetAttribute(&minor, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR, device),
         "query compute capability");
     description = std::string(name) + " (sm_" + std::to_string(major * 10 + minor) + ")";
+    // What `std::profile` reports as the device: the ordinal this backend chose.
+    if (profile_hooks::device) {
+        profile_hooks::device(("cuda:" + std::to_string(ordinal)).c_str());
+    }
     int count   = 0;
     api.check(api.nvrtcGetNumSupportedArchs(&count), "query NVRTC architectures");
     std::vector<int> archs(count);
@@ -308,8 +314,18 @@ ModuleLease Backend::module(const std::string &source) {
     std::vector<const char *> arguments;
     for (const auto &option : options)
         arguments.push_back(option.c_str());
+    // The NVRTC compile of one region: `std::profile` reports it as device compilation, whose
+    // cost is the region's first use and is cached afterwards.
+    const auto compileStart = std::chrono::steady_clock::now();
     auto status =
         api.nvrtcCompileProgram(program, static_cast<int>(arguments.size()), arguments.data());
+    if (profile_hooks::deviceCompile) {
+        profile_hooks::deviceCompile(
+            "nvrtc",
+            static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      std::chrono::steady_clock::now() - compileStart)
+                                      .count()));
+    }
     if (status != NVRTC_SUCCESS) {
         size_t size = 0;
         api.check(api.nvrtcGetProgramLogSize(program, &size), "read NVRTC log");

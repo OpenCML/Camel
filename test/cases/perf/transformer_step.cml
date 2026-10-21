@@ -1,0 +1,101 @@
+/**
+ * A small Transformer training step, self-contained: one block with multi-head-free attention
+ * (q/k/v, scaled scores, softmax, values), two RMSNorm layers, an MLP, softmax cross entropy,
+ * Adam and an EMA of one weight matrix. Shapes: batch 1, sequence 4, model 8 (one head).
+ *
+ * The loop is the step loop: `std::profile` reports the operators and the wall time of one round.
+ *
+ * Usage:
+ *   camel transformer_step.cml --arg steps=20 --arg lr=0.01 std::profile std::nvm
+ */
+
+module perf_transformer_step
+
+import { Tensor, cast, mean, relu, softmax, sqrt, sum, transpose, zeros } from tensor
+import { with_grad } from autodiff
+import { adam, adam_state, softmax_cross_entropy } from nn
+import { now } from time
+
+// d = 8, s = 4, batch = 1: small enough to run a hundred steps in a second, large enough that
+// every operator of a real step is there.
+type Block = {
+    g1: Tensor,
+    g2: Tensor,
+    wq: Tensor,
+    wk: Tensor,
+    wv: Tensor,
+    wo: Tensor,
+    w1: Tensor,
+    b1: Tensor,
+    w2: Tensor,
+    b2: Tensor
+}
+
+// RMSNorm over the last axis, the gain applied after the normalization.
+func rmsnorm(x: Tensor, g: Tensor): Tensor {
+    let scale = mean(x * x, -1, true)
+    return x / sqrt(scale + 1e-6) * g
+}
+
+with <block: Block>
+func attention(x: Tensor): Tensor {
+    let h = rmsnorm(x, block.g1)
+    let q = h @ block.wq
+    let k = h @ block.wk
+    let v = h @ block.wv
+    // The scores of every position against every position, scaled by the square root of d.
+    let scores = (q @ transpose(k)) / 2.8284271247461903
+    let weights = softmax(scores, -1)
+    return (weights @ v) @ block.wo + x
+}
+
+with <block: Block>
+func feed_forward(x: Tensor): Tensor {
+    let h = rmsnorm(x, block.g2)
+    return relu(h @ block.w1 + block.b1) @ block.w2 + block.b2 + x
+}
+
+with <block: Block>
+func logits(x: Tensor): Tensor { return feed_forward<block>(attention<block>(x)) }
+
+with <block: Block>
+func loss(x: Tensor, labels: Tensor): float {
+    return softmax_cross_entropy(logits<block>(x), cast(labels, 'int64'))
+}
+
+func main(steps: int, lr: float): int sync {
+    // Deterministic inputs and starting weights.
+    let x = zeros([4, 8]) + 0.01
+    let labels = zeros([4])
+    let block = {
+        g1: zeros([8]) + 1.0,
+        g2: zeros([8]) + 1.0,
+        wq: zeros([8, 8]) + 0.01,
+        wk: zeros([8, 8]) + 0.01,
+        wv: zeros([8, 8]) + 0.01,
+        wo: zeros([8, 8]) + 0.01,
+        w1: zeros([8, 16]) + 0.01,
+        b1: zeros([16]) + 0.001,
+        w2: zeros([16, 8]) + 0.01,
+        b2: zeros([8]) + 0.001
+    }
+    'perf transformer steps={} lr={}'->format<steps, lr>->println
+
+    let grad = with_grad(loss)
+    let started = now()
+    // The EMA of `w1`, updated after every step: one more tensor op on a tensor of the model.
+    let (trained, state, ema, done) = loop b = block, opt = adam_state(block), e = block.w1, step = 0
+        while step < steps
+        do {
+            let (value, gradient) = grad<b>(x, labels)
+            let next = adam(b, gradient, opt, lr)
+            let moved = e * 0.9 + next.0.w1 * 0.1
+            return (next.0, next.1, moved, step + 1)
+        }
+    let elapsed = now() - started
+    
+        'perf transformer seconds={:.6f} ms_per_step={:.3f} ema={} logits={}'
+        ->format<elapsed, elapsed * 1000.0 / float(done), sum(ema), sum(trained.w1)>
+        ->println
+    return 0
+}

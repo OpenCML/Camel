@@ -14,6 +14,7 @@
 #include "tiles/internal/mixed_gemm.h"
 #include "tiles/internal/submission.h"
 #include "tiles/program.h"
+#include "tiles/internal/profile_hooks.h"
 #include <algorithm>
 #include <chrono>
 #include <climits>
@@ -160,10 +161,14 @@ struct OwnedAllocation final : DeviceStorage {
         const auto &owner = lease->backend();
         Current current(owner->api, owner->context);
         std::vector<std::byte> result(bytes);
-        if (!result.empty())
+        if (!result.empty()) {
             owner->api.check(
                 owner->api.cuMemcpyDtoH(result.data(), pointer(), result.size()),
                 "download resident tensor");
+            if (profile_hooks::toHost) {
+                profile_hooks::toHost(result.size());
+            }
+        }
         return result;
     }
     // Ownership is shared: the lease returns its block exactly when the last
@@ -272,10 +277,15 @@ class DeviceRun {
                 "clear scalar fault");
         for (size_t id = 0; id < program.nodes.size(); ++id) {
             const auto &n = program.nodes[id];
-            if (hostInputs[id])
+            if (hostInputs[id]) {
                 api.check(
                     api.cuMemcpyHtoDAsync(pointers[id], hostInputs[id], bytes(n), resources.stream),
                     "upload input");
+                // `std::profile`: host->device traffic and the kernel count of this region.
+                if (profile_hooks::toDevice) {
+                    profile_hooks::toDevice(bytes(n));
+                }
+            }
         }
         // Benchmark upload timing includes DMA completion. Native submissions keep
         // the same pinned staging alive and record completion after their kernels.
@@ -306,10 +316,16 @@ class DeviceRun {
                     args,
                     nullptr),
                 "launch kernel");
+            if (profile_hooks::kernel) {
+                profile_hooks::kernel(s.name.c_str());
+            }
         }
     }
     void synchronize() {
         api.check(api.cuStreamSynchronize(resources.stream), "complete GPU computation");
+        if (profile_hooks::synchronise) {
+            profile_hooks::synchronise("tiles stream");
+        }
         if (fault) {
             unsigned node;
             api.check(api.cuMemcpyDtoH(&node, fault, sizeof(node)), "read scalar fault");
@@ -326,10 +342,14 @@ class DeviceRun {
         size_t offset = 0;
         for (auto output : program.outputs) {
             const size_t count = bytes(program.nodes[output]);
-            if (count)
+            if (count) {
                 api.check(
                     api.cuMemcpyDtoH(result.data() + offset, pointers[output], count),
                     "download result");
+                if (profile_hooks::toHost) {
+                    profile_hooks::toHost(count);
+                }
+            }
             offset += count;
         }
         return result;
@@ -439,6 +459,10 @@ uploadValue(const Shape &shape, DType dtype, std::span<const std::byte> data) {
             b->api.cuMemcpyHtoDAsync(pointer, pinned, size, staging.stream),
             "upload resident tensor");
         b->api.check(b->api.cuStreamSynchronize(staging.stream), "complete resident upload");
+        if (profile_hooks::toDevice) {
+            profile_hooks::toDevice(size);
+            profile_hooks::synchronise("resident upload");
+        }
     }
     auto result     = std::make_shared<DeviceValue>();
     result->shape   = shape;
