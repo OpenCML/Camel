@@ -1,0 +1,15 @@
+id = "modules.graph"
+order = 376
+tier = "fast"
+tags = ["feat", "modules", "graph"]
+
+# The graph module: a program as a value.
+
+[[tests]]
+name = "types_and_node_kind"
+kind = "behavior"
+case = "../../../cases/modules/graph_types.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "true\nNodeKind::Oper\n"
+timeout_ms = 10000

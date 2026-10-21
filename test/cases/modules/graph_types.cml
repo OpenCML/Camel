@@ -1,0 +1,10 @@
+module graph_types
+import { current, same } from graph
+import { Program, NodeKind } from graph
+func main(): int sync {
+    let p: Program = current()
+    println(same(p, current()))
+    let k: NodeKind = NodeKind::Oper
+    println(k)
+    return 0
+}
