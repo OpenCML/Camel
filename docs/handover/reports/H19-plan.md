@@ -51,7 +51,7 @@
 - 缓冲区对象、数据块、`std::mem::buffers()` 已落地（H17 第 1 项、H28）；H19 的 Camel 代码不需要为“数组会不会被复制”另做假设。
 - 键式随机数 `random::key`/`split`/`permutation` 已落地（H20-3），是纯函数，`random.plan.toml` 钉了逐位结果。
 - `fs::remove`/`fs::remove_dir` 已经返回 `T!`；`fs::read_text` 仍返回 `string` 并在失败时故障，`try_read_text` 是它的 `T!` 版本。
-- JSON 访问器已接受 `Json!`/`Json?!`，`JsonTooDeep` 已有（H16 报告）。
+- JSON 访问器已接受 `Json!`/`Json!?`，`JsonTooDeep` 已有（H16 报告）。
 - `match type`、返回类型推断已落地（H51a），但 H19 不依赖它们。
 - `stdlib/array.cml` 已经是 Camel；`stdlib/rules.cml` 由 H38 新建、H65 继续扩展。
 - H51 只落了第 1–2 步（`70db0548`、`e94e6860`、`cb76ff24`）；`tree_*` 的 Camel 改写、`tree`→`ckpt`、删 `src/compile/gir/tree.cpp` 都还没做。

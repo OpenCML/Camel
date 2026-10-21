@@ -141,7 +141,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.json_declaration_import"
-desc = "`json`'s declarations are the module's signature: an importer reads `decode`'s `Json!`, calls `get<key>` and `get<index>` with their with-parameters and chains the nullable and two-layer `Json?`/`Json?!` results of the accessors, and every call reaches the C++ operator."
+desc = "`json`'s declarations are the module's signature: an importer reads `decode`'s `Json!`, calls `get<key>` and `get<index>` with their with-parameters and chains the nullable and two-layer `Json?`/`Json!?` results of the accessors, and every call reaches the C++ operator."
 kind = "behavior"
 case = "../../../cases/compile/native/json_declaration_import.cml"
 args = ["${case}"]

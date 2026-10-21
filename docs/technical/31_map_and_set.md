@@ -491,8 +491,8 @@ and JSON that does not have the shape of `T` one of kind `JsonTypeError` whose m
 path (`at $.b: expected an integer, found a string`). None of them is a fault.
 
 The accessors of the same module (`get`, `as_int`, ...) take a `Json`, a `Json?`, a `Json!` or a
-`Json?!`: of a document that failed they pass the error on unchanged, as a result with both
-layers (`Json?!`, `int?!`, ...) that `??` and `!!` take apart (design principles 11.2).
+`Json!?`: of a document that failed they pass the error on unchanged, as a result with both
+layers (`Json!?`, `int!?`, ...) that `??` and `!!` take apart (design principles 11.2).
 
 | Target | JSON |
 |---|---|
