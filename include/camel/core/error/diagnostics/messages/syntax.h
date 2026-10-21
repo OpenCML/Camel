@@ -42,6 +42,7 @@ enum class SyntaxDiag : uint32_t {
     ComparisonNeedsSpace      = 0x00000C,
     AngleCloseAfterSpace      = 0x00000D,
     LineStartsWithOperator    = 0x00000E,
+    EmptyInterpolation        = 0x00000F,
 
     // Warnings (severity bits = Warn).
     ComparisonAcrossLines = 0x100001,

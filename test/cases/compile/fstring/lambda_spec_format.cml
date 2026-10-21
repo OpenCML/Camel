@@ -1,0 +1,6 @@
+module fstring_lambda_spec_format
+func main(): int sync {
+    let x = 1
+    print(`A ${x: int => x}`)
+    return 0
+}

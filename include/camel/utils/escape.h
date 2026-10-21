@@ -78,6 +78,10 @@ inline std::string encodeEscapes(const std::string &input) {
     return oss.str();
 }
 
+/// The one escape table of every string literal: an ordinary string, a triple-quoted string and
+/// the pattern text of a formatted string are all decoded here. A formatted string has one more
+/// escape of its own, `\${`, which the interpolation lexer and the AST builder decode before this
+/// point; it is what keeps `${` from starting an interpolation, not a character escape.
 inline std::string decodeEscapes(const std::string &input) {
     std::ostringstream oss;
     size_t i   = 0;
@@ -126,6 +130,13 @@ inline std::string decodeEscapes(const std::string &input) {
                 break;
             case '\'':
                 oss << '\'';
+                i += 2;
+                break;
+            case '`':
+                // A backtick is a character like any other: in an ordinary string it is the
+                // character itself, and in a formatted string the lexer has already used it to
+                // find the end of the string. Every string decodes it here (H20 item 1).
+                oss << '`';
                 i += 2;
                 break;
             case '0': { // \0 or \nnn octal
