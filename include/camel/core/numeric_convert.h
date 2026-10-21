@@ -63,6 +63,16 @@ template <std::floating_point To> std::string floatRangeReason(const char *targe
         "the value is outside the range of {} ({})", target, camel::utils::floatRangeText<To>());
 }
 
+/// Why a nonzero number is too small for the floating-point type To (`target` is its name in a
+/// message): it rounds to zero, and a value that is not zero is never read as one (H15i). The
+/// same sentence names a part of a complex number ("the imaginary part is too small for c64").
+inline std::string floatUnderflowReason(const char *target, std::string_view part = {}) {
+    return part.empty()
+               ? std::format("the value is too small for {} (the nearest value is zero)", target)
+               : std::format(
+                     "the {} part is too small for {} (the nearest value is zero)", part, target);
+}
+
 /// `value` truncated toward zero as the integer type To (`target` is its name in a message).
 template <std::signed_integral To, std::floating_point From>
 To checkedTruncate(From value, const char *target) {

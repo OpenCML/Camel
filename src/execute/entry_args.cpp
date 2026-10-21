@@ -194,13 +194,7 @@ std::pair<T, T> complexFromText(
         case camel::utils::NumberTextStatus::Underflow:
             // A nonzero part too small to tell from zero is not zero: the same refusal as a real
             // parameter's (H15i), with the part named.
-            refuseOutOfRange(
-                text,
-                target,
-                std::format(
-                    "the {} part is too small for {} (the nearest value is zero)",
-                    part,
-                    target));
+            refuseOutOfRange(text, target, camel::core::floatUnderflowReason(target, part));
         case camel::utils::NumberTextStatus::OutOfRange:
             refuseOutOfRange(
                 text,
@@ -270,10 +264,7 @@ Loaded loadFloat(const std::string &text, Type *declared, const char *target) {
     case camel::utils::NumberTextStatus::Ok:
         break;
     case camel::utils::NumberTextStatus::Underflow:
-        refuseOutOfRange(
-            text,
-            target,
-            std::format("the value is too small for {} (the nearest value is zero)", target));
+        refuseOutOfRange(text, target, camel::core::floatUnderflowReason(target));
     case camel::utils::NumberTextStatus::OutOfRange:
         refuseOutOfRange(text, target, camel::core::floatRangeReason<T>(target));
     case camel::utils::NumberTextStatus::OutOfRangeInteger:
