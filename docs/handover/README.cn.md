@@ -195,7 +195,8 @@
 | H44 | ONNX 重名输出、折叠常量的 Safe 结构体 CAST（不依赖它展开）、结构体循环状态 | 无 | **部分完成**（第 1 项已入 `ce16c788`；第 2、3 项未做；报告 reports/H44.md） |
 | H40b | 块压力请求全量收集、重写 `gc_pacing`、回归用例、更正 C2 叙述 | 无 | **已完成**（`d1a3f40d`；报告 reports/H40b.md） |
 | H40c | 块压力按块身份只计一次；晋升后接管块时登记（H40b 评审第 1、2 项） | 无 | **已完成**（`3c1a1802`；报告 reports/H40c.md） |
-| H43 | 区域与循环的收尾（前端直接建循环区域、删除降低机制、JIT 的循环指令、自动微分读区域、ONNX 导出循环） | 无 | **部分完成**（第 1–3、5、6 项已完成 `48345984` 等；第 7 项 2.9×、`std::jit` 0.342 s，未到 0.245 s；第 4 项未做；报告 reports/H43a.md、reports/H43b.md、reports/H43-perf.md、reports/H43-jit-loops.md） |
+| H43 | 区域与循环的收尾（前端直接建循环区域、删除降低机制、JIT 的循环指令、自动微分读区域、ONNX 导出循环） | 无 | **部分完成**（第 1–3、5、6 项已完成 `48345984` 等；第 7 项 2.9×、`std::jit` 0.342 s，未到 0.245 s，其循环事件部分由 H55 补齐：一轮 7.0 ns，与尾递归持平；第 4 项未做；报告 reports/H43a.md、reports/H43b.md、reports/H43-perf.md、reports/H43-jit-loops.md、reports/H55.md） |
+| H55 | 循环事件在能原生降低的形状上降为原生代码（测试是比较加分支、回边是直接跳转、不保留轮计数），其余形状明确说明为什么仍走 helper | 无 | **已完成**（`d66e3238`；报告 reports/H55.md） |
 | H42 | 模块导出表改为每个程序一份，不再修改进程级的共享表（`clearExportedNamespaces`） | 无 | **已完成**（`a7d621ee`；报告 reports/H42.md） |
 | H41 | **缺陷**：`ort_loop_values`、`ort_grad_loop_values`、`lsp.editing`、`examples.ml.export_onnx_translate` 在 fsh-dev 上失败（H5 名义结构体之后） | 无 | **已完成**（`1f53d368`；报告 reports/H41.md） |
 | H40 | C2 峰值内存因每步 `take` 升高 150 MB：查清数据块回收是否及时触发并修复 | 无 | **已完成**（`90163c82`；报告 reports/H40-memory.md；后续 H40b、H40c） |
@@ -684,7 +685,7 @@ nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examp
 4. **ONNX 导出循环**（读区域，映射到 `Loop`）。
 5. 删除 NodeVM 的 `evalLoop` 回退（`0e88d09d`）：前端已直接建循环区域，确认不再有子图形式的 `LOOP` 后删除。
 6. 改掉仍带"降低"字样的名字（`loops.*_lowered`、`OperatorTraits::inspectsGraphs`）。
-7. **性能目标**（`docs/technical/39_loops.md`，1000 万轮两个状态的 `while`）：原为 nvm 1.96 s、fvm 1.02 s、jit 0.99 s，目标 nvm ≤ 0.7 s、fvm/jit ≤ 手写尾递归 0.49 s 的一半。已做两处：多值状态保留分量（不再每轮造元组）、`%` 成为指令 `IMOD`/`LMOD`；本机实测 nvm 1.571 s、fvm 0.436 s、jit 0.435 s（尾递归 0.310 s），**未达标**：fvm/jit 的差距是一轮六条字节码的派发价格，nvm 的差距是每节点 23 ns 的执行器本身，jit 缺的是第 2 项。详见 [H43-perf.md](reports/H43-perf.md)。
+7. **性能目标**（`docs/technical/39_loops.md`，1000 万轮两个状态的 `while`）：原为 nvm 1.96 s、fvm 1.02 s、jit 0.99 s，目标 nvm ≤ 0.7 s、fvm/jit ≤ 手写尾递归 0.49 s 的一半。已做两处：多值状态保留分量（不再每轮造元组）、`%` 成为指令 `IMOD`/`LMOD`；本机实测 nvm 1.571 s、fvm 0.436 s、jit 0.435 s（尾递归 0.310 s），**未达标**：fvm/jit 的差距是一轮六条字节码的派发价格，nvm 的差距是每节点 23 ns 的执行器本身，jit 缺的是第 2 项。详见 [H43-perf.md](reports/H43-perf.md)。**循环事件那一半由 H55 补齐**：一轮从 35.6 ns 降到 7.0 ns（1000 万轮 0.070 s），与同一份工作的编译尾递归（7.3 ns）持平，见 [H55.md](reports/H55.md)。
 8. `feat/trans/cpp.agree_with_fvm`（slow 层）在里程碑时运行。
 
 **剩下什么**：第 4 项 ONNX 导出循环（`modules/onnx/exporter.cpp` 仍拒绝 `LOOP`）与第 7 项性能目标（H43a 实测 1000 万轮 nvm 0.76 s、fvm 0.81 s，目标 fvm/jit ≤ 0.245 s）未做；第 8 项在里程碑跑 slow 层时核对；第 1–3、5、6 项已完成。
