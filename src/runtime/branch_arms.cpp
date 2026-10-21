@@ -258,9 +258,19 @@ void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
                 if (there == 0 || within(here, there)) {
                     continue;
                 }
-                // The JOIN reads the results of its arms (and what waits inside them).
+                // The JOIN reads the results of its arms (and what waits inside them), the LOOP
+                // those of its parts.
                 if (isJoin && inArmOf(there, joinOf)) {
                     continue;
+                }
+                if (graph->node(ref)->kind == GCNodeKind::Loop) {
+                    const auto parts = regions.loopPartsOf(ref);
+                    if (regions.within(there, parts[0]) && parts[0] != 0) {
+                        continue;
+                    }
+                    if (regions.within(there, parts[1]) && parts[1] != 0) {
+                        continue;
+                    }
                 }
                 const GCRegion &region = *graph->region(there);
                 const int64_t theirArm = region.kind == GCRegionKind::Arm

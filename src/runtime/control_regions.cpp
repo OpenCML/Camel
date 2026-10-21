@@ -67,6 +67,10 @@ ControlRegions::ControlRegions(const GCGraph &graph) : graph_(graph) {
                 arms.resize(region.index + 1, 0);
             }
             arms[region.index] = r;
+        } else {
+            auto &parts = loopsOf_.try_emplace(region.owner, std::array<uint32_t, 2>{0, 0})
+                              .first->second;
+            parts[region.kind == GCRegionKind::LoopCond ? 0 : 1] = r;
         }
     }
     std::vector<std::pair<uint32_t, size_t>> stack{{0, 0}};

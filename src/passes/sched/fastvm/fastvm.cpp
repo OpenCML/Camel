@@ -25,6 +25,7 @@
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop_lowering.h"
+#include "camel/runtime/loop_outline.h"
 #include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/view.h"
 #include "camel/utils/log.h"
@@ -536,8 +537,12 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
         observed ? "an observer shows loop frames"
         : native ? "native_loop=true"
                  : "the default");
+    loopsNative_ = native;
+    loopFreeGraphs_.clear();
     if (!native) {
         program = camel::runtime::lowerLoopsToTailRecursion(context_, program);
+    } else {
+        program = camel::runtime::outlineLoopRegions(context_, program, program->root());
     }
     camel::runtime::GCGraph *runtimeRoot = program->root();
     camel::execute::RunScope runScope(programs_, *context_, program);
@@ -1163,7 +1168,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                         fastVmCallBoundarySafepoint();
                         auto *function = cur->get<Function *>(wargs[0]);
                         ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
-                        auto *target = programs_.graphOf(function);
+                        auto *target = functionGraph(function);
                         ASSERT(target != nullptr, "JIT CALL target has no runtime graph.");
                         const uint32_t callCount = noteIndirectCall(target);
                         requireNestedCallRoom(cur);
@@ -1432,9 +1437,36 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
     return result.result;
 }
 
+camel::runtime::GCGraph *FastVMSchedPass::functionGraph(Function *function) {
+    camel::runtime::GCGraph *graph = programs_.graphOf(function);
+    if (graph == nullptr) {
+        return graph;
+    }
+    if (const auto found = loopFreeGraphs_.find(graph); found != loopFreeGraphs_.end()) {
+        return found->second;
+    }
+    bool hasLoop = false;
+    for (camel::runtime::gc_node_ref_t ref = 0; !hasLoop && ref < graph->nodeCount(); ++ref) {
+        hasLoop = graph->node(ref)->kind == camel::runtime::GCNodeKind::Loop;
+    }
+    camel::runtime::GCGraph *target = graph;
+    if (hasLoop) {
+        const camel::runtime::Program *program = &programs_.of(graph);
+        const camel::runtime::Program *run =
+            loopsNative_ ? camel::runtime::outlineLoopRegions(context_, program, graph)
+                         : camel::runtime::lowerLoopsToTailRecursion(context_, program, graph);
+        if (run != program) {
+            programs_.note(run);
+            target = run->root();
+        }
+    }
+    loopFreeGraphs_.emplace(graph, target);
+    return target;
+}
+
 HigherOrderCallSite FastVMSchedPass::higherOrderCallSite(Function *func) {
     ASSERT(func != nullptr, "Higher-order call target function is null.");
-    camel::runtime::GCGraph *runtimeGraph = programs_.graphOf(func);
+    camel::runtime::GCGraph *runtimeGraph = functionGraph(func);
     ASSERT(
         runtimeGraph != nullptr,
         "FastVM higher-order runtime call requires a materialized runtime graph.");

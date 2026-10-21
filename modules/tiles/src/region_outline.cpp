@@ -92,20 +92,10 @@ const runtime::Program *outlineRegions(
     count             = 0;
     const auto graphs = session.collectReachableRuntimeGraphs();
     std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
-    std::unordered_set<rt::GCGraph *> claimedBodies;
     for (auto *graph : graphs) {
-        auto analysis = analyzeRegions(*program, *graph, context.facts());
-        for (const auto &region : analysis.regions)
-            for (auto id : region.members)
-                if (graph->node(id)->kind == rt::GCNodeKind::Loop)
-                    claimedBodies.insert(rt::LoopView(*program, *graph, id).bodyGraph());
-        analyses.emplace(graph, std::move(analysis));
+        analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts()));
     }
     for (auto *graph : graphs) {
-        // The outer region owns this body's recurrence and compiles it once. Outlining
-        // it separately would replace body nodes with per-iteration GPU launches.
-        if (claimedBodies.contains(graph))
-            continue;
         const auto &analysis = analyses.at(graph);
         if (analysis.regions.empty())
             continue;
@@ -223,6 +213,12 @@ const runtime::Program *outlineRegions(
             if (draft.returnNode() == old)
                 draft.setReturnNode(replacement, draft.returnKind());
         }
+        // The nodes of the condition and of the body of a loop went with the LOOP node.
+        for (const auto &region : analysis.regions)
+            for (auto id : region.members)
+                if (graph->node(id)->kind == rt::GCNodeKind::Loop)
+                    for (auto inner : rt::LoopView(*program, *graph, id).regionNodes())
+                        draft.eraseNode(inner);
         for (const auto &region : analysis.regions)
             for (auto it = region.members.rbegin(); it != region.members.rend(); ++it)
                 draft.eraseNode(static_cast<rt::gc_node_ref_t>(*it));

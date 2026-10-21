@@ -53,4 +53,11 @@ const camel::runtime::Program *lowerBranchArms(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     camel::runtime::GCGraph *root = nullptr, bool detached = false);
 
+/// Copies the condition and the body graph of every LOOP node of `program` into the graph that
+/// holds the node, as its LoopCond and LoopBody regions (the front end builds a loop as graphs).
+/// The program itself when there is none. With `detached`, as lowerBranchArms.
+const camel::runtime::Program *regionizeLoops(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
+    camel::runtime::GCGraph *root = nullptr, bool detached = false);
+
 } // namespace camel::passes::opt

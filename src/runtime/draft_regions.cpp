@@ -98,7 +98,9 @@ void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
     }
     DraftNode *reader = node(user);
     const DraftNode *read = node(input);
-    if (reader == nullptr || read == nullptr || reader->header.kind == GCNodeKind::Join) {
+    // A JOIN reads the results of its arms, and a LOOP those of its parts.
+    if (reader == nullptr || read == nullptr || reader->header.kind == GCNodeKind::Join ||
+        reader->header.kind == GCNodeKind::Loop) {
         return;
     }
     // Inline and Block regions only say where code came from: their values are read from outside.
@@ -174,6 +176,15 @@ bool GraphDraft::isArmCall(gc_node_ref_t id) const {
            regions_[r].callSite == id;
 }
 
+uint32_t GraphDraft::loopRegionOf(gc_node_ref_t loop, GCRegionKind part) const {
+    for (uint32_t r = 1; r < regions_.size(); ++r) {
+        if (regions_[r].kind == part && regions_[r].owner == loop) {
+            return r;
+        }
+    }
+    return 0;
+}
+
 uint32_t GraphDraft::armRegionOf(gc_node_ref_t brch, size_t index) const {
     for (uint32_t r = 1; r < regions_.size(); ++r) {
         if (regions_[r].kind == GCRegionKind::Arm && regions_[r].owner == brch &&
@@ -182,6 +193,33 @@ uint32_t GraphDraft::armRegionOf(gc_node_ref_t brch, size_t index) const {
         }
     }
     return 0;
+}
+
+void GraphDraft::flattenRegion(uint32_t id) {
+    ++mutations_;
+    ASSERT(id > 0 && id < regions_.size(), "No such region.");
+    // The regions in `id` stay, as regions of the body; every other region ends, its nodes go to
+    // the body.
+    std::vector<uint8_t> kept(regions_.size(), 0);
+    for (uint32_t r = 1; r < regions_.size(); ++r) {
+        kept[r] = r != id && regions_[r].kind != GCRegionKind::Dead && regionWithin(r, id);
+    }
+    for (DraftNode *held : nodesById_) {
+        if (held && !kept[held->header.region]) {
+            held->header.region = 0;
+        }
+    }
+    for (uint32_t r = 1; r < regions_.size(); ++r) {
+        if (kept[r]) {
+            if (regions_[r].parent == id) {
+                regions_[r].parent = 0;
+            }
+            continue;
+        }
+        regions_[r].kind   = GCRegionKind::Dead;
+        regions_[r].owner  = kInvalidNodeRef;
+        regions_[r].result = kInvalidNodeRef;
+    }
 }
 
 void GraphDraft::clearRegions() {
@@ -199,6 +237,12 @@ void GraphDraft::setRegionOrigin(uint32_t id, uint32_t origin) {
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     regions_[id].origin = origin;
+}
+
+void GraphDraft::setRegionParams(uint32_t id, const camel::core::type::FunctionType *params) {
+    ++mutations_;
+    ASSERT(id > 0 && id < regions_.size(), "No such region.");
+    regions_[id].params = params;
 }
 
 void GraphDraft::setRegionAttrs(uint32_t id, uint32_t attrs) {

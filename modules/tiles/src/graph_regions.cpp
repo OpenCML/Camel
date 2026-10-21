@@ -13,6 +13,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/loop.h"
 #include "modules/tensor/type.h"
 #include "tiles/internal/kernel_ir.h"
 #include "tiles/internal/regions.h"
@@ -178,13 +179,41 @@ RegionAnalysis
 analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
     std::vector<RegionNode> nodes(graph.nodeCount());
     std::vector<std::string> reasons(nodes.size());
+    // The nodes of the condition and of the body of a loop are the loop's: a region that holds
+    // the LOOP node holds them, and what they read from outside is read by the LOOP node.
+    std::vector<bool> insideLoop(nodes.size(), false);
+    std::vector<std::vector<rt::gc_node_ref_t>> loopReads(nodes.size());
     for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
+        if (graph.node(id)->kind != rt::GCNodeKind::Loop) {
+            continue;
+        }
+        const rt::LoopView view(graphs, graph, id);
+        for (auto inner : view.regionNodes()) {
+            insideLoop[inner] = true;
+        }
+        loopReads[id] = view.externalInputs(true);
+    }
+    for (rt::gc_node_ref_t id = 0; id < graph.nodeCount(); ++id) {
+        if (insideLoop[id]) {
+            reasons[id] = "inside_loop";
+            continue;
+        }
         reasons[id]        = eligibility(graphs, graph, id, facts);
         nodes[id].eligible = reasons[id].empty();
         nodes[id].embedded =
             graph.node(id)->kind == rt::GCNodeKind::Data && graph.node(id)->dataIndex < 0;
-        for (auto edges : {graph.normInputsOf(id), graph.withInputsOf(id), graph.ctrlInputsOf(id)})
-            nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
+        if (graph.node(id)->kind == rt::GCNodeKind::Loop) {
+            for (auto edges : {graph.normInputsOf(id), graph.ctrlInputsOf(id)})
+                nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
+            nodes[id].inputs.insert(
+                nodes[id].inputs.end(),
+                loopReads[id].begin(),
+                loopReads[id].end());
+        } else {
+            for (auto edges :
+                 {graph.normInputsOf(id), graph.withInputsOf(id), graph.ctrlInputsOf(id)})
+                nodes[id].inputs.insert(nodes[id].inputs.end(), edges.begin(), edges.end());
+        }
         nodes[id].output = id == graph.outputNodeRef() || id == graph.exitNodeRef();
     }
     // Fixed tuple projections are structural edges of an eligible aggregate

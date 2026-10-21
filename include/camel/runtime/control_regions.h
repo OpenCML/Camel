@@ -27,6 +27,7 @@
 
 #include "camel/runtime/graph.h"
 
+#include <array>
 #include <cstdint>
 #include <span>
 #include <unordered_map>
@@ -71,6 +72,12 @@ class ControlRegions {
         return it == armsOf_.end() ? std::span<const uint32_t>{}
                                    : std::span<const uint32_t>(it->second);
     }
+    /// The LoopCond (index 0) and LoopBody (index 1) regions of the LOOP node `loop`; 0 where it has
+    /// none.
+    std::array<uint32_t, 2> loopPartsOf(gc_node_ref_t loop) const {
+        const auto it = loopsOf_.find(loop);
+        return it == loopsOf_.end() ? std::array<uint32_t, 2>{0, 0} : it->second;
+    }
     /// The arm of `brch` that the control region `control` lies in, -1 for none.
     int64_t armOf(uint32_t control, gc_node_ref_t brch) const {
         if (control == 0) {
@@ -101,6 +108,7 @@ class ControlRegions {
     std::vector<uint32_t> tin_, tout_; // by control region id; the body is 0
     std::vector<uint32_t> order_;      // control regions by walk position; the body first
     std::unordered_map<gc_node_ref_t, std::vector<uint32_t>> armsOf_;
+    std::unordered_map<gc_node_ref_t, std::array<uint32_t, 2>> loopsOf_;
 };
 
 } // namespace camel::runtime
