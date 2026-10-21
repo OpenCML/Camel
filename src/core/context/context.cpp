@@ -705,6 +705,30 @@ module_ptr_t Context::tryLoadModule(const std::string &moduleName) {
         module_ptr_t mod = loadCmoModule(moduleName, path, shared_from_this(), &err);
         if (!mod && !err.empty())
             lastCmoLoadError_ = std::move(err);
+        if (!mod)
+            return mod;
+        // A `.cml` beside the `.cmo` is the declaration module of that module (design
+        // principles 6.4; handover H19, step 1): the C++ module implements its operators, and
+        // the `.cml` is the single source of their signatures. It is not a shadow of the
+        // `.cmo` — the `.cmo` is still what the lookup found and what the name stands for —
+        // and it is not dead code.
+        const fs::path declarations = camel::utils::pathFromUtf8(path).replace_extension(".cml");
+        std::error_code ec;
+        if (fs::is_regular_file(declarations, ec) && !ec) {
+            // The declarations are checked against the executors and the operator traits of the
+            // module they declare, which its own load registers. It loads once: this is the
+            // only place the module is loaded before it is asked for an operator.
+            if (!mod->load()) {
+                return mod;
+            }
+            camel::core::module::warnUndeclaredOperatorTraits(*mod);
+            auto declared = std::static_pointer_cast<UserDefinedModule>(
+                UserDefinedModule::fromFile(
+                    moduleName, camel::utils::pathToUtf8(declarations), shared_from_this()));
+            declared->setDeclarationModule(true);
+            declared->setImplementation(mod);
+            return declared;
+        }
         return mod;
     }
     // The file of the entry module (which is registered under no module name): the entry
