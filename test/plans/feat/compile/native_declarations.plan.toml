@@ -117,7 +117,6 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:17", "argument types: <> (int)", "<str:trim>: (s: string) => string"]
 
-<<<<<<< HEAD
 # ---- The declarations of `io`: the terminal's signatures (handover H19, steps 4 and 10) ----
 
 [[tests]]
@@ -137,6 +136,7 @@ case = "../../../cases/compile/native/io_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "io_type.cml:11:22", "argument types: <> (string)", "<io:get_chars>: (max: int) => string"]
+
 # ---- The declarations of `json`: the accessors as one rule per tagged form (handover H115) ----
 
 [[tests]]
@@ -165,7 +165,6 @@ case = "../../../cases/compile/native/json_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:11:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
-
 
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
