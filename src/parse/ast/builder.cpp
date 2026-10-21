@@ -3676,10 +3676,20 @@ node_ptr_t Builder::makeStaticAccess(
 /*
 structData
     : '{' (pairedValues ','?)? '}' // no list comprehension because the struct is immutable
+    | '{' staticForExpr '}'        // a struct comprehension (H51 step 4)
     ;
 */
 Value Builder::visitStructData(cst::StructData context) {
     ENTER("StructData");
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        // `{ static for (n, F) in fields T => e }`: the value has the fields of `T`, each from one
+        // round; the generator is built once and the rounds are packed in the graph builder.
+        node_ptr_t compNode = createNodeAs<StructCompLoad>();
+        setNodeTokenRangeByContext(compNode, context);
+        *compNode << any2node(visitStaticForExpr(generator));
+        LEAVE("StructData");
+        return compNode;
+    }
     node_ptr_t dataNode = createNodeAs<StructDataLoad>();
     setNodeTokenRangeByContext(dataNode, context);
     if (context->get<cst::PairedValues>()) {
@@ -3741,10 +3751,18 @@ Value Builder::visitArrayData(cst::ArrayData context) {
 /*
 tupleData
     : '(' dataList? ','? ')'
+    | '(' staticForExpr ')'        // a tuple comprehension (H51 step 4)
     ;
 */
 Value Builder::visitTupleData(cst::TupleData context) {
     ENTER("TupleData");
+    if (const auto generator = context->get<cst::StaticForExpr>()) {
+        node_ptr_t compNode = createNodeAs<TupleCompLoad>();
+        setNodeTokenRangeByContext(compNode, context);
+        *compNode << any2node(visitStaticForExpr(generator));
+        LEAVE("TupleData");
+        return compNode;
+    }
     // `(e)`: a parenthesized expression, not a tuple (three children: the brackets and the
     // list; a trailing comma would be a fourth).
     if (context->get<cst::DataList>() && context->get<cst::DataList>()->exprs().size() == 1 &&

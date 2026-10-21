@@ -189,8 +189,8 @@ typeArguments      : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgume
 namedTypeArgument  : IDENTIFIER '=' typeExpr
 arrayData          : '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)?
                      ']'
-structData         : '{' (pairedValues ','?)? '}'
-tupleData          : '(' dataList? ','? ')'
+structData         : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
+tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
 funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr

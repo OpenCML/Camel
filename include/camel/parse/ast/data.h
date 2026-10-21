@@ -41,6 +41,10 @@ enum class DataType {
     Array,
     Tuple,
     Struct,
+    // Comprehensions (H51 step 4): a `static for` in a value position whose rounds are packed
+    // back into a struct (`StructComp`) or a tuple (`TupleComp`) of the same shape.
+    TupleComp,
+    StructComp,
     Func,
     Ref,
     ConstAs,
@@ -355,6 +359,26 @@ class TupleDataLoad : public DataLoad {
     TupleDataLoad() : DataLoad(DataType::Tuple) {}
 
     const std::string toString() const override { return "TupleData" + this->status(); }
+    const std::string geneCode() const override;
+};
+
+/// `( static for (n, F) in fields T => e )`: the generator is child 0. The elements come from
+/// the rounds in declaration order; the type is `TupleType` of the rounds' value types.
+class TupleCompLoad : public DataLoad {
+  public:
+    TupleCompLoad() : DataLoad(DataType::TupleComp) {}
+
+    const std::string toString() const override { return "TupleComp" + this->status(); }
+    const std::string geneCode() const override;
+};
+
+/// `{ static for (n, F) in fields T => e }`: the generator is child 0. The fields keep the names
+/// and order of `T`; the type is a `StructType` of the rounds' value types.
+class StructCompLoad : public DataLoad {
+  public:
+    StructCompLoad() : DataLoad(DataType::StructComp) {}
+
+    const std::string toString() const override { return "StructComp" + this->status(); }
     const std::string geneCode() const override;
 };
 

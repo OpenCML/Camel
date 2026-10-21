@@ -115,6 +115,84 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "comprehensions"
+desc = "`{ static for ... }` builds a struct and `( static for ... )` a tuple from the rounds' values, in declaration order; a round's block keeps its value, and an empty shape gives an empty struct or tuple."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehensions.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "2 4",
+  "4 5",
+  "11 21",
+  "empty struct",
+  "empty tuple",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `comprehension changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehensions_rebuild"
+desc = "A generic `match type` over struct/tuple/leaf rebuilds a heterogeneous tree with comprehensions: the result is the same shape and the same values as the input."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehensions_rebuild.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = "5 6 7 8"
+assert(input.normalized.stdout.trim() === want, `rebuild changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_graph"
+desc = "The graph of a comprehension is straight-line: `t.[n].[m]` reads its parent once (one `.p` ACCS, then `.0` and `.1`), one FILL per struct or tuple, and no SFOR, SACC, LOOP, BRCH or CASE node."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/comprehensions_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const at = lines.findIndex((line) => line.includes('label="pairUp"'))
+assert(at > 0, "the graph of pairUp is missing")
+const indent = lines[at - 1].match(/^\s*/)[0]
+const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+assert(end > at, "the graph of pairUp has no end")
+const nodes = lines.slice(at, end).filter((line) => /\[label=".*", type=/.test(line))
+const labels = nodes
+  .filter((line) => line.includes('type="ACCS"'))
+  .map((line) => line.match(/\[label="([^"]*)"/)[1])
+assert(labels.join(",") === ".p,.0,.1", `field accesses changed: ${labels.join(",")}`)
+const fills = nodes.filter((line) => line.includes('type="FILL"')).length
+assert(fills === 2, `expected one FILL per struct/tuple, got ${fills}`)
+const left = nodes.filter((line) => /type="(SFOR|SACC|LOOP|BRCH|CASE)"/.test(line))
+assert(left.length === 0, `a static node was left in the graph: ${left[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "comprehension_void_element"
+desc = "A round whose block gives no value has no element to pack, and is reported instead of building a struct of the wrong shape."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/comprehension_void_element.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticComprehensionVoidElement"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "static_access_unknown_field"
 desc = "A struct field that does not exist is a compile-time error."
 kind = "negative"

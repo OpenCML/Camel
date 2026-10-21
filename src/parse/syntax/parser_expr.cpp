@@ -794,10 +794,22 @@ void ParserImpl::parseArrayData() {
     close(m, NK::ArrayData);
 }
 
-/// structData : '{' (pairedValues ','?)? '}'
+/// structData : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
+/// The second form is a struct comprehension (H51 step 4): `{ static for (n, F) in fields T => e }`
+/// builds a struct with the fields of `T`, in declaration order, each holding one round's value.
+/// It is written where a value is needed; the `static for` node itself is the one a statement
+/// uses, only here its value is taken.
 void ParserImpl::parseStructData() {
     const size_t m = mark();
     bump();
+    if (cur_ == TK::KwStatic && peek(1) == TK::KwFor) {
+        parseStaticFor();
+        if (!panic_) {
+            expectListEnd(TK::RBrace);
+        }
+        close(m, NK::StructData);
+        return;
+    }
     {
         Scope scope(*this, false);
         if (cur_ != TK::RBrace) {
@@ -811,11 +823,21 @@ void ParserImpl::parseStructData() {
     close(m, NK::StructData);
 }
 
-/// tupleData : '(' dataList? ','? ')'
-/// Also the parenthesized expression: one element and no comma.
+/// tupleData : '(' dataList? ','? ')' | '(' staticForExpr ')'
+/// Also the parenthesized expression: one element and no comma. The second form is a tuple
+/// comprehension (H51 step 4): `( static for (n, F) in fields T => e )` has the elements of `T`
+/// in declaration order, each one round's value.
 void ParserImpl::parseTupleData() {
     const size_t m = mark();
     bump();
+    if (cur_ == TK::KwStatic && peek(1) == TK::KwFor) {
+        parseStaticFor();
+        if (!panic_) {
+            expectListEnd(TK::RParen);
+        }
+        close(m, NK::TupleData);
+        return;
+    }
     {
         Scope scope(*this, false);
         if (cur_ != TK::RParen && cur_ != TK::Comma) {

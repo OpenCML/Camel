@@ -190,6 +190,7 @@ enum class SemanticDiag : uint32_t {
     StaticAccessUnknownField    = 0x000177,
     StaticAccessIndexOutOfRange = 0x000178,
     StaticAccessNotConstant     = 0x000179,
+    StaticComprehensionVoidElement = 0x00017A,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

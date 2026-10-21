@@ -581,8 +581,8 @@ void ParserImpl::parseStmtBlock() {
 }
 
 /// blockExpr : stmtBlock | dataExpr
-/// The block is the first alternative: `{}` is the empty block here. `{ name: ...` and `{ ...`
-/// are a struct literal, that is an expression.
+/// The block is the first alternative: `{}` is the empty block here. `{ name: ...`, `{ ...` and
+/// `{ static for ...` are expressions: a struct literal or a struct comprehension (H51 step 4).
 void ParserImpl::parseBlockExpr() {
     if ((cur_ == TK::KwSync && peek(1) == TK::LBrace) ||
         (cur_ == TK::LBrace && !braceIsStruct(0))) {

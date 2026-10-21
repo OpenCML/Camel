@@ -29,10 +29,15 @@
 #include "builder_support.h"
 
 #include "camel/core/data/base.h"
+#include "camel/core/rtdata/struct.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/tree.h"
 #include "camel/utils/scope.h"
 
 #include <charconv>
+#include <numeric>
 
 #define DEBUG_LEVEL -1
 
@@ -243,10 +248,23 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
     }
 }
 
-node_handle_t Builder::visitStaticForNode(const GCT::node_ptr_t &gct) {
+namespace {
+
+/// Inside the rounds of a `static for` a `t.[n]` may reuse the access an earlier round made
+/// (staticAccessCache_). Outside one the cache is not consulted.
+struct StaticExpansionScope {
+    size_t &depth;
+    explicit StaticExpansionScope(size_t &d) : depth(d) { ++depth; }
+    ~StaticExpansionScope() { --depth; }
+};
+
+} // namespace
+
+node_handle_t Builder::visitStaticForNode(
+    const GCT::node_ptr_t &gct, std::vector<node_handle_t> *values, Type **shape) {
     ENTER("SFOR");
-    // The parser accepts a `static for` only as a statement, so its value is never taken: the
-    // body is built into the current graph and the node itself stands for no value.
+    // A `static for` written as a statement drops every round's value; written as the generator
+    // of a comprehension (`values`), each round's value is one field of the result.
     Type *subject = boundType(gct->staticForType()->dataType());
     if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
         diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -266,6 +284,9 @@ node_handle_t Builder::visitStaticForNode(const GCT::node_ptr_t &gct) {
     const GCT::node_ptr_t body  = gct->staticForBody();
     const size_t count          = tree::arity(subject);
     node_handle_t lastEffect{};
+    if (shape != nullptr) {
+        *shape = subject;
+    }
     for (size_t i = 0; i < count; ++i) {
         // `F` is looked up from the front of the bindings (findTypeBinding scans from there),
         // and the fields are walked in declaration order.
@@ -276,32 +297,110 @@ node_handle_t Builder::visitStaticForNode(const GCT::node_ptr_t &gct) {
         const GCT::Node *outerUnused = std::exchange(unusedStatement_, body);
         const GCT::Node *outerSyncedBlock =
             std::exchange(syncedBlockOverride_, synced_ ? body : nullptr);
+        if (values != nullptr) {
+            // The value of each round is the field's value: the body's last statement is not a
+            // dropped statement, so it keeps its value (and is not rejected as unused).
+            unusedStatement_ = nullptr;
+        }
         const node_handle_t before = lastSyncedNode_;
-        try {
-            // The body's value is always dropped: `static for` is a statement.
-            (void)visitExecNode(body);
-        } catch (...) {
-            syncedBlockOverride_ = outerSyncedBlock;
-            unusedStatement_     = outerUnused;
-            leaveBlockScope();
-            staticValueScopes_.pop_back();
-            typeBindings_.erase(typeBindings_.begin());
-            throw;
+        node_handle_t value{};
+        bool voidElement = false;
+        {
+            StaticExpansionScope expansion(staticExpansionDepth_);
+            try {
+                value = visitExecNode(body);
+            } catch (...) {
+                syncedBlockOverride_ = outerSyncedBlock;
+                unusedStatement_     = outerUnused;
+                leaveBlockScope();
+                staticValueScopes_.pop_back();
+                typeBindings_.erase(typeBindings_.begin());
+                throw;
+            }
         }
         syncedBlockOverride_ = outerSyncedBlock;
         unusedStatement_     = outerUnused;
-        // In a sync block the body's statements are part of the chain around the `static for`.
-        // Hand the last effect back to the enclosing block, so that the chain is reachable from
-        // the block's value even though the `static for` itself has none.
-        if (synced_ && lastSyncedNode_ != nullptr && lastSyncedNode_ != before) {
+        if (values != nullptr) {
+            if (value == nullptr || valueTypeOf(nodeTypeOf(value))->code() == TypeCode::Void) {
+                // A field with no value is no element: the result would be one field short.
+                voidElement = true;
+            } else {
+                values->push_back(value);
+            }
+        } else if (synced_ && lastSyncedNode_ != nullptr && lastSyncedNode_ != before) {
+            // In a sync block the body's statements are part of the chain around the `static for`.
+            // Hand the last effect back to the enclosing block, so that the chain is reachable from
+            // the block's value even though the `static for` itself has none.
             lastEffect = lastSyncedNode_;
         }
         leaveBlockScope();
         staticValueScopes_.pop_back();
         typeBindings_.erase(typeBindings_.begin());
+        if (voidElement) {
+            diags_->of(SemanticDiag::StaticComprehensionVoidElement)
+                .atOrigin(body->origin())
+                .commit(tree::childName(subject, i), subject->toString());
+            throw BuildAbortException();
+        }
     }
     LEAVE("SFOR");
     return lastEffect;
+}
+
+node_handle_t Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
+    ENTER("SCOMP");
+    // The comprehension is its generator plus the pack: the rounds' values are the fields of a
+    // struct (or the elements of a tuple) of the same shape. Nothing of it is left in the graph
+    // but the straight-line code of the rounds and one FILL.
+    std::vector<node_handle_t> values;
+    Type *shape = nullptr;
+    (void)visitStaticForNode(gct->comprehensionGenerator(), &values, &shape);
+    node_handle_t packed = packStaticValues(
+        gct->comprehensionIsStruct(), shape, values, gct, "gir.static.comprehension.fill");
+    LEAVE("SCOMP");
+    return packed;
+}
+
+node_handle_t Builder::packStaticValues(
+    bool isStruct, Type *shape, const std::vector<node_handle_t> &values,
+    const GCT::node_ptr_t &origin, const char *originKind) {
+    type_vec_t types;
+    types.reserve(values.size());
+    for (const node_handle_t &value : values) {
+        types.push_back(valueTypeOf(nodeTypeOf(value)));
+    }
+    Type *type = nullptr;
+    if (isStruct && shape != nullptr) {
+        StructTypeFactory fields;
+        for (size_t i = 0; i < values.size(); ++i) {
+            fields.add(std::string(tree::childName(shape, i)), types[i]);
+        }
+        type = fields.build();
+    } else {
+        type = TupleType::create(types);
+    }
+    // The same construction as the C++ expansion of `tree_map` (src/compile/gir/tree.cpp): a
+    // static value of the shape's size, and a FILL that reads one slot per value.
+    core::mm::NoCollectionScope guard;
+    const bool tuple = type->code() == TypeCode::Tuple;
+    const slot_t empty =
+        tuple
+            ? core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()))
+            : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
+    auto &draft = currGraph_->draft();
+    auto base   = draft.ref(draft.materializeStaticValue(empty, type));
+    std::vector<size_t> slots(values.size());
+    std::iota(slots.begin(), slots.end(), 0);
+    node_handle_t out = currGraph_->addFillNode(
+        type,
+        runtime::makeFillPayload(
+            tuple ? runtime::GCFillKind::Tuple : runtime::GCFillKind::Struct, slots));
+    linkNodes(LinkType::Norm, base, out);
+    for (const node_handle_t &value : values) {
+        linkNodes(LinkType::With, valueOf(value), out);
+    }
+    registerNodeOrigin(context_, out, origin, originKind);
+    return out;
 }
 
 node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
@@ -383,6 +482,18 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
 
+    // `t.[n].[m]` inside a `static for`: every inner round reads the same parent, which is the
+    // same node, so the access is made once and reused. The field was validated above; a target
+    // that makes a fresh node per visit (a `var` read, a call) never matches an earlier round.
+    const std::string cacheKey = byIndex ? ("#" + std::to_string(index)) : ("." + fieldId);
+    if (staticExpansionDepth_ > 0) {
+        const auto found = staticAccessCache_.find({target, cacheKey});
+        if (found != staticAccessCache_.end()) {
+            LEAVE("SACC");
+            return found->second;
+        }
+    }
+
     // The tuple key is the `uint32_t` index and the struct key its field name: the same nodes
     // the C++ expansion of `tree_map` builds for the same tree (src/compile/gir/tree.cpp).
     node_handle_t accsNode =
@@ -390,6 +501,9 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
                 : currGraph_->addAccsNode(fieldType, fieldId);
     linkNodes(LinkType::Norm, target, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs.static");
+    if (staticExpansionDepth_ > 0) {
+        staticAccessCache_[{target, cacheKey}] = accsNode;
+    }
     LEAVE("SACC");
     return accsNode;
 }

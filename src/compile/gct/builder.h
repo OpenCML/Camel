@@ -312,6 +312,9 @@ class Builder {
     node_ptr_t declaredValue(const node_ptr_t &value, Type *type, const AST::node_ptr_t &ast);
     node_ptr_t visitStructData(const AST::node_ptr_t &ast);
     node_ptr_t visitTupleData(const AST::node_ptr_t &ast);
+    /// `{ static for ... }` / `( static for ... )` (H51 step 4): an SCOMP holding the generator.
+    /// The rounds are packed into a shape of the same fields in the graph builder.
+    node_ptr_t visitStaticComprehension(const AST::node_ptr_t &ast, bool isStruct);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 

@@ -819,6 +819,10 @@ cb91792c07cb9264 no test/cases/compile/semantic/try_not_in_language.cml
 e8928bd66be13ec1 ok test/cases/compile/semantic/type_contains_itself.cml
 c763c15acc84ef96 ok test/cases/compile/semantic/type_recursion_through_map.cml
 d7b768e95cb9dfd1 ok test/cases/compile/semantic/unresolved_reference.cml
+e2351af2c964f64e ok test/cases/compile/static_expansion/comprehension_void_element.cml
+a98de8fd0f232f13 ok test/cases/compile/static_expansion/comprehensions.cml
+8501ff837910619c ok test/cases/compile/static_expansion/comprehensions_graph.cml
+449ef22714447961 ok test/cases/compile/static_expansion/comprehensions_rebuild.cml
 cdce26077d5ae48e ok test/cases/compile/static_expansion/fields_and_access.cml
 ca9fa691761f00f6 ok test/cases/compile/static_expansion/match_type_exhaustive.cml
 6d011d3422c19172 ok test/cases/compile/static_expansion/match_type_shapes.cml

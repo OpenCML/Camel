@@ -45,6 +45,7 @@
  *     LOOP              payload: the names of the state, then the name of the element with
  *                       `for`; tag: camel::core::LoopKind
  *     SFOR              payload: the name of the field, then the name of its type
+ *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`
  *     VARI, WAIT, ANNO, SACC  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
@@ -350,6 +351,17 @@ class Node {
     node_ptr_t staticAccessKey() const {
         check(NodeKind::SACC);
         return at(1);
+    }
+
+    /// SCOMP: a struct comprehension (`{ ... }`) rather than a tuple one (`( ... )`).
+    bool comprehensionIsStruct() const {
+        check(NodeKind::SCOMP);
+        return tag_ == 0;
+    }
+    /// SCOMP: the `static for` whose rounds fill the result (child 0).
+    node_ptr_t comprehensionGenerator() const {
+        check(NodeKind::SCOMP);
+        return at(0);
     }
 
     /// CAST: the target type.

@@ -161,6 +161,7 @@ prints one entry.
 | `0x03000177` | [SemanticDiag::StaticAccessUnknownField](#staticaccessunknownfield) | Error |
 | `0x03000178` | [SemanticDiag::StaticAccessIndexOutOfRange](#staticaccessindexoutofrange) | Error |
 | `0x03000179` | [SemanticDiag::StaticAccessNotConstant](#staticaccessnotconstant) | Error |
+| `0x0300017A` | [SemanticDiag::StaticComprehensionVoidElement](#staticcomprehensionvoidelement) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4123,6 +4124,37 @@ func field(t: {a: int, b: int}, k: string): int {
 
 func main(): int {
     return field({a: 1, b: 2}, "a")
+}
+```
+
+### StaticComprehensionVoidElement
+
+`0x0300017A` · Error · `SemanticDiag::StaticComprehensionVoidElement`
+
+**Message**
+
+```text
+The block for the field '{0}' of '{1}' gives no value, so the comprehension has no element for it.
+```
+
+**Help**
+
+```text
+The block is the value of one field: its last statement must have a value. A call that returns nothing, or a block that ends in a declaration, gives no element; the statement form 'static for' is the one that drops values.
+```
+
+**Example** (`test/cases/compile/static_expansion/comprehension_void_element.cml`, run as `camel test/cases/compile/static_expansion/comprehension_void_element.cml`)
+
+```camel
+module comprehension_void_element
+
+func broken(t: {a: int, b: int}) {
+    return { static for (n, F) in fields {a: int, b: int} => {} }
+}
+
+func main(): int sync {
+    let r = broken({a: 1, b: 2})
+    return 0
 }
 ```
 

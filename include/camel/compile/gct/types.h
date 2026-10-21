@@ -59,6 +59,7 @@ enum class NodeKind : uint8_t {
     TCASE, // a case of `match type`; one child, the body
     SFOR,  // `static for`: children: TYPE, EXEC; payload: the value and type names
     SACC,  // `t.[key]`: children: the target, the key expression
+    SCOMP, // a comprehension: child: the SFOR that generates it; tag: 0 struct, 1 tuple
 };
 
 std::string to_string(NodeKind kind);

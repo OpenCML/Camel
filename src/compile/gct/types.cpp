@@ -72,6 +72,8 @@ std::string to_string(NodeKind kind) {
         return "SFOR";
     case NodeKind::SACC:
         return "SACC";
+    case NodeKind::SCOMP:
+        return "SCOMP";
     default:
         ASSERT(false, "Unknown NodeKind");
     }

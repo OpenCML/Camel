@@ -334,6 +334,12 @@ node_ptr_t Tree::makeStaticFor(const std::string &valueName, const std::string &
 
 node_ptr_t Tree::makeStaticAccess() { return makeNode(NodeKind::SACC); }
 
+node_ptr_t Tree::makeComprehension(bool isStruct) {
+    Node *node = makeNode(NodeKind::SCOMP);
+    node->tag_ = static_cast<uint16_t>(isStruct ? 0 : 1);
+    return node;
+}
+
 node_ptr_t Tree::makeEnumCase(
     const std::string &label, const std::vector<std::string> &fields,
     const std::vector<std::string> &bindings, bool structShape) {
@@ -577,6 +583,8 @@ std::string Node::toString() const {
         return "SFOR: " + staticForValueName() + ", " + staticForTypeName();
     case NodeKind::SACC:
         return "SACC";
+    case NodeKind::SCOMP:
+        return std::string("SCOMP: ") + (comprehensionIsStruct() ? "struct" : "tuple");
     case NodeKind::TCASE: {
         std::string text = "TCASE: (";
         bool first       = true;

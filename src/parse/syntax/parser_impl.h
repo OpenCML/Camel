@@ -263,10 +263,12 @@ class ParserImpl {
         const uint32_t i = offsetOf(n);
         return toks_[i].kind == TK::Identifier && tree_.tokens_.text(i) == word;
     }
-    /// `{` at token offset `n` opens a struct literal: `{ name: ...` or `{ ...`.
+    /// `{` at token offset `n` opens a struct literal: `{ name: ...`, `{ ...`, or a struct
+    /// comprehension `{ static for ...` (H51 step 4). Anything else is a block.
     bool braceIsStruct(uint32_t n) const {
         const TK next = peek(n + 1);
-        return next == TK::Ellipsis || (next == TK::Identifier && peek(n + 2) == TK::Colon);
+        return next == TK::Ellipsis || (next == TK::Identifier && peek(n + 2) == TK::Colon) ||
+               (next == TK::KwStatic && peek(n + 2) == TK::KwFor);
     }
 
     // ---- Expressions (parser_expr.cpp) ----
