@@ -2362,7 +2362,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         }
         const std::string_view uri = reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
         return uri == "tensor:shape" || uri == ":op/len_arr" || uri == ":op/len_str" ||
-               uri == "tensor:rank";
+               uri == "tensor:rank" || uri == "tensor:numel";
     };
     for (gc_node_ref_t node : order) {
         Type *const type   = typeOf(forward_, node);
