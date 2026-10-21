@@ -49,6 +49,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -173,6 +174,13 @@ Pattern patCompute(
     std::vector<Pattern> args);
 
 class DraftWritings;
+
+/// Thrown by a computed constant of a rule that cannot be computed (the operator faults): the
+/// rule is not applied at that match.
+class RuleSkipped : public std::runtime_error {
+  public:
+    using std::runtime_error::runtime_error;
+};
 
 /// What a match of a rule's left side found: the value each variable stands for.
 struct Match {

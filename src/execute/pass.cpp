@@ -34,6 +34,7 @@
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/edges.h"
 #include "camel/passes/test/keepfn.h"
+#include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
 #include "camel/passes/test/writings.h"
 #include "camel/runtime/writings.h"
@@ -1021,6 +1022,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kWritingsTestPass, WritingsTestPass),
         TEST_PASS(kTabledTestPass, TabledTestPass),
         TEST_PASS(kSaturateTestPass, SaturateTestPass),
+        TEST_PASS(kRulesTestPass, RulesTestPass),
         TEST_PASS(kSaturateSafeTestPass, SaturateSafeTestPass),
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),

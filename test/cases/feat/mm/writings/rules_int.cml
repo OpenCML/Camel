@@ -1,0 +1,63 @@
+/**
+ * Rules written as pairs of functions (rewrite design 2.1): `<name>__lhs` is the pattern and
+ * `<name>__rhs` what it becomes; the parameters named `c...` are `const`. test::rules reads the
+ * pairs, saturates the three functions below with them and prints the operators left.
+ */
+module rules_int
+
+func add_comm__lhs(a: int, b: int): int { return a + b }
+func add_comm__rhs(a: int, b: int): int { return b + a }
+
+func mul_comm__lhs(a: int, b: int): int { return a * b }
+func mul_comm__rhs(a: int, b: int): int { return b * a }
+
+func add_zero__lhs(x: int): int { return x + 0 }
+func add_zero__rhs(x: int): int { return x }
+
+func mul_one__lhs(x: int): int { return x * 1 }
+func mul_one__rhs(x: int): int { return x }
+
+func combine__lhs(x: int, c1: int, c2: int): int { return x * c1 + x * c2 }
+func combine__rhs(x: int, c1: int, c2: int): int { return x * (c1 + c2) }
+
+func fold__lhs(x: int, c1: int, c2: int): int { return (x * c1) * c2 }
+func fold__rhs(x: int, c1: int, c2: int): int { return x * (c1 * c2) }
+
+func double_product__lhs(x: int, c: int): int { return x * c + x * c }
+func double_product__rhs(x: int, c: int): int { return x * (c * 2) }
+
+func helper(x: int): int { return x }
+
+func div_const__lhs(x: int, c: int): int { return x / c }
+func div_const__rhs(x: int, c: int): int { return x * (1 / c) }
+
+func bad_unbound__lhs(x: int, y: int): int { return x + 0 }
+func bad_unbound__rhs(x: int, y: int): int { return x + y }
+
+func bad_everything__lhs(x: int): int { return x }
+func bad_everything__rhs(x: int): int { return x + 0 }
+
+func bad_call__lhs(x: int): int { return helper(x) }
+func bad_call__rhs(x: int): int { return x }
+
+func integer_coefficients(x: int): int {
+    return x * 3 + x * 5
+}
+
+func integer_chain(x: int): int {
+    return ((x + 0) * 3) * 2
+}
+
+func doubled(x: int): int {
+    return x * 3 + x * 3
+}
+
+/// Never run: its quotient is by zero, and the rule div_const would have to compute 1 / 0.
+func fault_case(x: int): int {
+    return x / 0
+}
+
+func main(): int sync {
+    println(integer_coefficients(7), integer_chain(7), doubled(7))
+    return 0
+}

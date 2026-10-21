@@ -1164,8 +1164,12 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             base.origin         = draft_.nodeOrigin(match.root);
             base.attrs          = draft_.nodeAttrs(match.root);
             const size_t before = draft_.nodeSlotCount();
-            const gc_node_ref_t made =
-                build(rule.rhs, Match{*this, match.root, match.vars}, base);
+            gc_node_ref_t made = kInvalidNodeRef;
+            try {
+                made = build(rule.rhs, Match{*this, match.root, match.vars}, base);
+            } catch (const RuleSkipped &) {
+                continue;
+            }
             stats.newWritings += draft_.nodeSlotCount() - before;
             if (draft_.nodeSlotCount() != before) {
                 progress = true;
