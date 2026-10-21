@@ -1246,6 +1246,55 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StaticForNotComposite,
+            {
+                "StaticForNotComposite",
+                "The type '{0}' has no fields for a 'static for' to walk.",
+                "A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a "
+                "mutable cell are leaves (design principles 13.5), not tuples; handle them "
+                "with 'match type' first.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessNotInternal,
+            {
+                "StaticAccessNotInternal",
+                "A field cannot be taken from '{0}' by a compile-time key.",
+                "'t.[key]' names a field of a struct or an element of an ordinary tuple. A "
+                "'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or "
+                "an array has no fields.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessUnknownField,
+            {
+                "StaticAccessUnknownField",
+                "The struct '{1}' has no field '{0}'.",
+                "'t.[key]' takes the field named by the compile-time key; use one of the names "
+                "the struct declares.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessIndexOutOfRange,
+            {
+                "StaticAccessIndexOutOfRange",
+                "The key '{0}' is not an element of the tuple '{1}' ({2} elements).",
+                "A tuple element is named by its index from 0; a 'static for' gives the "
+                "decimal index as 'n'.",
+            },
+        },
+        {
+            SemanticDiag::StaticAccessNotConstant,
+            {
+                "StaticAccessNotConstant",
+                "The key '{0}' of a 't.[...]' access is not known when the function is "
+                "compiled.",
+                "The key is a string or integer literal, or the 'n' of an enclosing "
+                "'static for'. A runtime value cannot choose a field, because only the "
+                "selected field is built into the graph.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",

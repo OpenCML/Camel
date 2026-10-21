@@ -338,6 +338,7 @@ bool ParserImpl::startsStmt(TK kind) const {
     case TK::KwThrow:
     case TK::At:
     case TK::Hash:
+    case TK::KwStatic:
         return true;
     default:
         return startsExpr(kind);
@@ -444,13 +445,15 @@ void ParserImpl::parseDecl() {
 }
 
 /// stmt : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
-///      | blockStmt
+///      | blockStmt | staticForExpr
 /// blockStmt : 'wait'? stmtBlock | funcAnno+ stmtBlock
 /// Decided on the first token, except:
 ///   - modifiers (`sync`, `macro`, ...) are skipped to see what they modify: `func` (a
 ///     declaration), `{` after a lone `sync` (a block), anything else (a lambda expression);
 ///   - `{` is a struct literal when it is `{}`, `{ name: ...` or `{ ...`, a block otherwise;
 ///     the same after `wait`.
+/// `static for` is a statement, not a value (H51 step 3): it parses here only, so writing it
+/// where a value is needed is a syntax error rather than a silently dropped value.
 void ParserImpl::parseStmt() {
     Depth depth(*this);
     if (depth.tooDeep()) {
@@ -494,6 +497,8 @@ void ParserImpl::parseStmt() {
         }
         return parseExpr();
     }
+    case TK::KwStatic:
+        return parseStaticFor();
     case TK::KwWait: {
         // blockStmt : 'wait' stmtBlock, or the expression `wait {struct}`.
         const uint32_t brace = peek(1) == TK::KwSync ? 2 : 1;

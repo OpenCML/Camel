@@ -470,6 +470,17 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return drefNode;
     }
     ENTER("DREF");
+    // `n` of a `static for`: a compile-time string, not a name of the enclosing scope. A use
+    // of it as a value (not as the key of `t.[n]`) becomes a constant. A binding of the body
+    // with the same name shadows it, as an ordinary local shadows anything outside it.
+    if (auto staticValue = staticValueNamed(gct->name());
+        staticValue.has_value() && !nodeAt(gct->name()).has_value()) {
+        node_handle_t node = currGraph_->addStaticDataNode(
+            tt::as_shared<Data>(std::make_shared<StringData>(*staticValue)));
+        registerNodeOrigin(context_, node, gct, "gir.data.static.for");
+        LEAVE("DREF");
+        return node;
+    }
     // The name as written, and the name of the module it stands for when it is one (from the
     // innermost namespace out; design principles 10.2, layers 1 and 2).
     const string written = gct->name();

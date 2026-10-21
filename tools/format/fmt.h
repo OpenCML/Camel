@@ -527,6 +527,8 @@ class Formatter {
 
     std::any visitTypeCase(cst::TypeCase context);
 
+    std::any visitStaticForExpr(cst::StaticForExpr context);
+
     std::any visitTypeCasePattern(cst::TypeCasePattern context);
 
     std::any visitCatchClause(cst::CatchClause context);

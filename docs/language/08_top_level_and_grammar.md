@@ -99,7 +99,7 @@ program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
                      | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
-                     | blockStmt
+                     | blockStmt | staticForExpr
 blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
@@ -169,8 +169,8 @@ negExpr            : ('-' | '!' | '~') negPower | compExpr
 negPower           : ('-' | '!' | '~') negPower | compExpr ('^' negPower)?
 compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
-memberAccess       : '.' (IDENTIFIER | INTEGER | REAL)
-accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
+memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
+accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
 primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
                      | funcData
 constasData        : 'constas' identDef
@@ -194,6 +194,7 @@ tupleData          : '(' dataList? ','? ')'
 funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+staticForExpr      : 'static' 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr '=>'
 typeCasePattern    : 'struct' | 'tuple' | '#' 'leaf' | '_'
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal

@@ -148,3 +148,17 @@ snapshot_compare = "text_exact"
 golden = "./golden/match_and_type_arguments.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
+
+[[tests]]
+name = "format.static_for_and_access_snapshot"
+desc = "Formats `static for (n, F) in fields T => 块` and a compile-time field access `t.[key]`, in both an expression and a tuple access."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/static_for_and_access.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/static_for_and_access.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000

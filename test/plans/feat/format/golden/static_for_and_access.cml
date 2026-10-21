@@ -1,0 +1,12 @@
+module static_for_and_access
+
+func show(t: typeas T) {
+    static for (n, F) in fields T => {
+        let v: F = t.[n]
+        println(n, v)
+    }
+}
+
+func first(t: (int, int)): int {
+    return t.['0'] + t.[0]
+}

@@ -437,6 +437,10 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitLoopNode(node);
     case GCT::NodeKind::TMTCH:
         return visitTypeMatchNode(node);
+    case GCT::NodeKind::SFOR:
+        return visitStaticForNode(node);
+    case GCT::NodeKind::SACC:
+        return visitStaticAccessNode(node);
     default:
         ASSERT(false, "Unknown GCT NodeType");
     }
@@ -669,7 +673,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     // declaration) is not a block: in a sync block it continues the chain, in written order,
     // like the arguments of a call statement. So does a sync block written inside a sync
     // block: its expressions are expressions of the enclosing block, in the same order.
-    const bool operands = gct->operands() || (synced_ && gct->synced());
+    const bool operands = gct->operands() || (synced_ && gct->synced()) ||
+                          (synced_ && gct == syncedBlockOverride_);
     if (!operands) {
         synced_         = gct->synced();
         lastSyncedNode_ = {};

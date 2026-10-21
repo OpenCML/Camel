@@ -44,7 +44,8 @@
  *     EXPT              payload: the list of exported names
  *     LOOP              payload: the names of the state, then the name of the element with
  *                       `for`; tag: camel::core::LoopKind
- *     VARI, WAIT, ANNO  nothing
+ *     SFOR              payload: the name of the field, then the name of its type
+ *     VARI, WAIT, ANNO, SACC  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
  * one by one: a node, its child array, the names it points to and the constants it refers to
@@ -317,6 +318,38 @@ class Node {
     uint16_t typeCasePatterns() const {
         check(NodeKind::TCASE);
         return tag_;
+    }
+
+    /// SFOR: the name bound to the field in the body (`n`).
+    const std::string &staticForValueName() const {
+        check(NodeKind::SFOR);
+        return *payload_.names->items[0];
+    }
+    /// SFOR: the name bound to the field type in the body (`F`).
+    const std::string &staticForTypeName() const {
+        check(NodeKind::SFOR);
+        return *payload_.names->items[1];
+    }
+    /// SFOR: the type whose fields are walked (child 0).
+    node_ptr_t staticForType() const {
+        check(NodeKind::SFOR);
+        return at(0);
+    }
+    /// SFOR: the body, entered once per field (child 1).
+    node_ptr_t staticForBody() const {
+        check(NodeKind::SFOR);
+        return at(1);
+    }
+
+    /// SACC: the value whose field or element is taken (child 0).
+    node_ptr_t staticAccessTarget() const {
+        check(NodeKind::SACC);
+        return at(0);
+    }
+    /// SACC: the compile-time key (child 1).
+    node_ptr_t staticAccessKey() const {
+        check(NodeKind::SACC);
+        return at(1);
     }
 
     /// CAST: the target type.

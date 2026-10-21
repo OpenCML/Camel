@@ -33,6 +33,8 @@ enum class DataType {
     MatchCase,
     TypeMatch,
     TypeCase,
+    StaticFor,
+    StaticAccess,
     TryExpr,
     LoopExpr,
     Literal,
@@ -224,6 +226,35 @@ class TypeCaseLoad : public DataLoad {
 
   private:
     std::vector<TypeCaseKind> patterns_;
+};
+
+/// `static for (n, F) in fields T => body`: children [0] the type, [1] the body (a block).
+/// The load holds the two names: `n` is the field name (a tuple's index in decimal) and `F` the
+/// field type. Neither is a declaration of the enclosing scope: both live in the body only.
+class StaticForLoad : public DataLoad {
+  public:
+    StaticForLoad(std::string valueName, std::string typeName)
+        : DataLoad(DataType::StaticFor), valueName_(std::move(valueName)),
+          typeName_(std::move(typeName)) {}
+
+    const std::string &valueName() const { return valueName_; }
+    const std::string &typeName() const { return typeName_; }
+    const std::string toString() const override { return "StaticFor" + this->status(); }
+    const std::string geneCode() const override { return "static for"; }
+
+  private:
+    std::string valueName_;
+    std::string typeName_;
+};
+
+/// `t.[key]`: children [0] the target, [1] the key expression. The key must be a compile-time
+/// constant (a literal or the `n` of an enclosing `static for`); the graph builder decides.
+class StaticAccessLoad : public DataLoad {
+  public:
+    StaticAccessLoad() : DataLoad(DataType::StaticAccess) {}
+
+    const std::string toString() const override { return "StaticAccess" + this->status(); }
+    const std::string geneCode() const override { return ".[]"; }
 };
 
 class MatchCaseLoad : public DataLoad {

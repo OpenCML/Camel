@@ -32,6 +32,8 @@
 #include "camel/core/type/tree.h"
 #include "camel/utils/scope.h"
 
+#include <charconv>
+
 #define DEBUG_LEVEL -1
 
 namespace camel::compile::gir {
@@ -114,6 +116,17 @@ void Builder::walkStaticBodyNames(
                 .commit(node->name());
             throw BuildAbortException();
         }
+        return;
+    }
+    case GCT::NodeKind::SFOR: {
+        // `n` is bound in the body only. The type name `F` is not a value, so a use of it in
+        // a value position stays unresolved, as it should.
+        locals.emplace_back();
+        if (!node->staticForValueName().empty()) {
+            locals.back().insert(node->staticForValueName());
+        }
+        walkStaticBodyNames(node->staticForBody(), locals);
+        locals.pop_back();
         return;
     }
     default:
@@ -228,6 +241,157 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
         restoreDepth();
         throw;
     }
+}
+
+node_handle_t Builder::visitStaticForNode(const GCT::node_ptr_t &gct) {
+    ENTER("SFOR");
+    // The parser accepts a `static for` only as a statement, so its value is never taken: the
+    // body is built into the current graph and the node itself stands for no value.
+    Type *subject = boundType(gct->staticForType()->dataType());
+    if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
+        diags_->of(SemanticDiag::StaticTypeNotConcrete)
+            .atOrigin(gct->origin())
+            .commit(subject == nullptr ? std::string("unknown") : subject->toString());
+        throw BuildAbortException();
+    }
+    if (!tree::isInternal(subject)) {
+        diags_->of(SemanticDiag::StaticForNotComposite)
+            .atOrigin(gct->origin())
+            .commit(subject->toString());
+        throw BuildAbortException();
+    }
+
+    const std::string valueName = gct->staticForValueName();
+    const std::string typeName  = gct->staticForTypeName();
+    const GCT::node_ptr_t body  = gct->staticForBody();
+    const size_t count          = tree::arity(subject);
+    node_handle_t lastEffect{};
+    for (size_t i = 0; i < count; ++i) {
+        // `F` is looked up from the front of the bindings (findTypeBinding scans from there),
+        // and the fields are walked in declaration order.
+        typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
+        staticValueScopes_.emplace_back();
+        staticValueScopes_.back().push_back({valueName, tree::childName(subject, i)});
+        enterBlockScope();
+        const GCT::Node *outerUnused = std::exchange(unusedStatement_, body);
+        const GCT::Node *outerSyncedBlock =
+            std::exchange(syncedBlockOverride_, synced_ ? body : nullptr);
+        const node_handle_t before = lastSyncedNode_;
+        try {
+            // The body's value is always dropped: `static for` is a statement.
+            (void)visitExecNode(body);
+        } catch (...) {
+            syncedBlockOverride_ = outerSyncedBlock;
+            unusedStatement_     = outerUnused;
+            leaveBlockScope();
+            staticValueScopes_.pop_back();
+            typeBindings_.erase(typeBindings_.begin());
+            throw;
+        }
+        syncedBlockOverride_ = outerSyncedBlock;
+        unusedStatement_     = outerUnused;
+        // In a sync block the body's statements are part of the chain around the `static for`.
+        // Hand the last effect back to the enclosing block, so that the chain is reachable from
+        // the block's value even though the `static for` itself has none.
+        if (synced_ && lastSyncedNode_ != nullptr && lastSyncedNode_ != before) {
+            lastEffect = lastSyncedNode_;
+        }
+        leaveBlockScope();
+        staticValueScopes_.pop_back();
+        typeBindings_.erase(typeBindings_.begin());
+    }
+    LEAVE("SFOR");
+    return lastEffect;
+}
+
+node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
+    ENTER("SACC");
+    const GCT::node_ptr_t keyNode = gct->staticAccessKey();
+
+    // The key is a compile-time constant: a literal, or the `n` of an enclosing `static for`.
+    std::optional<std::string> key;
+    if (keyNode->type() == GCT::NodeKind::DATA) {
+        const data_ptr_t data = keyNode->data();
+        if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
+            key = text->data();
+        } else if (data->type() != nullptr && data->type()->code() == TypeCode::Int64) {
+            key = std::to_string(std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)->data());
+        } else if (data->type() != nullptr && data->type()->code() == TypeCode::Int32) {
+            key = std::to_string(std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)->data());
+        }
+    } else if (keyNode->type() == GCT::NodeKind::DREF && !nodeAt(keyNode->name()).has_value()) {
+        key = staticValueNamed(keyNode->name());
+    }
+    if (!key.has_value()) {
+        diags_->of(SemanticDiag::StaticAccessNotConstant)
+            .atOrigin(keyNode->origin())
+            .commit(
+                keyNode->type() == GCT::NodeKind::DREF ? keyNode->name()
+                                                       : std::string("expression"));
+        throw BuildAbortException();
+    }
+
+    const bool dropped = gct == unusedStatement_;
+    // The target is still built when the access is dropped, so that a call in it keeps its
+    // effects; only the ACCS node is left out.
+    node_handle_t target = valueNodeOf(visit(gct->staticAccessTarget()));
+    if (target == nullptr) {
+        diags_->of(SemanticDiag::StaticAccessNotInternal)
+            .atOrigin(gct->origin())
+            .commit(std::string("void"));
+        throw BuildAbortException();
+    }
+    Type *subject = nodeTypeOf(target);
+
+    Type *fieldType     = nullptr;
+    bool byIndex        = false;
+    uint32_t index      = 0;
+    std::string fieldId = *key;
+    if (subject->code() == TypeCode::Struct) {
+        auto *structType    = tt::as_ptr<StructType>(subject);
+        const auto found    = structType->findField(*key);
+        if (!found.has_value()) {
+            diags_->of(SemanticDiag::StaticAccessUnknownField)
+                .atOrigin(gct->origin())
+                .commit(*key, subject->toString());
+            throw BuildAbortException();
+        }
+        fieldType = structType->typeAt(found.value());
+        fieldId   = std::string(structType->fieldName(found.value()));
+    } else if (subject->code() == TypeCode::Tuple && tree::isInternal(subject)) {
+        auto *tupleType = tt::as_ptr<TupleType>(subject);
+        const char *begin = key->data();
+        const char *end   = begin + key->size();
+        const auto parsed = std::from_chars(begin, end, index);
+        if (parsed.ec != std::errc() || parsed.ptr != end || index >= tupleType->size()) {
+            diags_->of(SemanticDiag::StaticAccessIndexOutOfRange)
+                .atOrigin(gct->origin())
+                .commit(*key, subject->toString(), std::to_string(tupleType->size()));
+            throw BuildAbortException();
+        }
+        fieldType = tupleType->typeAt(index);
+        byIndex   = true;
+    } else {
+        diags_->of(SemanticDiag::StaticAccessNotInternal)
+            .atOrigin(gct->origin())
+            .commit(subject->toString());
+        throw BuildAbortException();
+    }
+
+    if (dropped) {
+        LEAVE("SACC");
+        return nullptr;
+    }
+
+    // The tuple key is the `uint32_t` index and the struct key its field name: the same nodes
+    // the C++ expansion of `tree_map` builds for the same tree (src/compile/gir/tree.cpp).
+    node_handle_t accsNode =
+        byIndex ? currGraph_->addAccsNode(fieldType, index)
+                : currGraph_->addAccsNode(fieldType, fieldId);
+    linkNodes(LinkType::Norm, target, accsNode);
+    registerNodeOrigin(context_, accsNode, gct, "gir.accs.static");
+    LEAVE("SACC");
+    return accsNode;
 }
 
 } // namespace camel::compile::gir

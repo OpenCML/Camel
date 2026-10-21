@@ -1843,6 +1843,12 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::TypeMatch:
         dataNode = visitMatchType(ast);
         break;
+    case AST::DataType::StaticFor:
+        dataNode = visitStaticFor(ast);
+        break;
+    case AST::DataType::StaticAccess:
+        dataNode = visitStaticAccess(ast);
+        break;
     case AST::DataType::TryExpr:
         dataNode = visitTryExpr(ast);
         break;
@@ -2841,6 +2847,53 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
     }
     LEAVE("MatchType");
     return matchNode;
+}
+
+/*
+staticForExpr
+    : STATIC FOR '(' identDef ',' identDef ')' IN 'fields' typeExpr '=>' blockExpr
+    ;
+*/
+node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
+    ENTER("StaticFor");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticFor");
+    const auto &load = ast->loadAs<AST::StaticForLoad>();
+
+    node_ptr_t forNode = tree_->makeStaticFor(load->valueName(), load->typeName());
+    setOriginFromAst(
+        context_, forNode, ast, camel::source::OriginKind::GctNode, "gct.static.for");
+
+    const auto &typeAst = ast->atAs<AST::TypeLoad>(0);
+    Type *subject       = visitType(typeAst);
+    node_ptr_t typeNode = tree_->makeType(subject, ImplMark::Graph);
+    setOriginFromAst(
+        context_, typeNode, typeAst, camel::source::OriginKind::GctNode, "gct.static.for.type");
+    *forNode << typeNode;
+
+    // `F` names the type of one field in the body only. It is an ordinary type variable of the
+    // enclosing function's instance: the graph builder binds it to the field type per round.
+    pushScope();
+    typeScope_->insert(
+        Reference(load->typeName()), TypeVarType::create(load->typeName(), false));
+    node_ptr_t bodyNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
+    popScope();
+    *forNode << bodyNode;
+
+    LEAVE("StaticFor");
+    return forNode;
+}
+
+node_ptr_t Builder::visitStaticAccess(const AST::node_ptr_t &ast) {
+    ENTER("StaticAccess");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticAccess");
+    node_ptr_t accessNode = tree_->makeStaticAccess();
+    setOriginFromAst(
+        context_, accessNode, ast, camel::source::OriginKind::GctNode, "gct.static.access");
+    node_ptr_t targetNode = visitData(ast->at(0));
+    node_ptr_t keyNode    = visitData(ast->at(1));
+    *accessNode << targetNode << keyNode;
+    LEAVE("StaticAccess");
+    return accessNode;
 }
 
 /*

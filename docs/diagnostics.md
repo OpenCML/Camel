@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-187 diagnostics: 170 errors, 17 warnings.
+192 diagnostics: 175 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -155,6 +155,11 @@ prints one entry.
 | `0x03000172` | [SemanticDiag::StaticTypeNotConcrete](#statictypenotconcrete) | Error |
 | `0x03000173` | [SemanticDiag::StaticMatchTooDeep](#staticmatchtoodeep) | Error |
 | `0x03000174` | [SemanticDiag::GenericInstantiationCycle](#genericinstantiationcycle) | Error |
+| `0x03000175` | [SemanticDiag::StaticForNotComposite](#staticfornotcomposite) | Error |
+| `0x03000176` | [SemanticDiag::StaticAccessNotInternal](#staticaccessnotinternal) | Error |
+| `0x03000177` | [SemanticDiag::StaticAccessUnknownField](#staticaccessunknownfield) | Error |
+| `0x03000178` | [SemanticDiag::StaticAccessIndexOutOfRange](#staticaccessindexoutofrange) | Error |
+| `0x03000179` | [SemanticDiag::StaticAccessNotConstant](#staticaccessnotconstant) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3942,6 +3947,147 @@ func count(xs: (typeas T)[], i: int) {
 func main(): int sync {
     println(count([1, 2], 0))
     return 0
+}
+```
+
+### StaticForNotComposite
+
+`0x03000175` · Error · `SemanticDiag::StaticForNotComposite`
+
+**Message**
+
+```text
+The type '{0}' has no fields for a 'static for' to walk.
+```
+
+**Help**
+
+```text
+A 'static for' walks a struct or an ordinary tuple. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5), not tuples; handle them with 'match type' first.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_for_not_composite.cml`, run as `camel test/cases/compile/static_expansion/static_for_not_composite.cml`)
+
+```camel
+module static_for_not_composite
+
+func walk(t: int) {
+    static for (n, F) in fields int => {
+        println(n, t)
+    }
+}
+
+func main(): int {
+    walk(1)
+    return 0
+}
+```
+
+### StaticAccessNotInternal
+
+`0x03000176` · Error · `SemanticDiag::StaticAccessNotInternal`
+
+**Message**
+
+```text
+A field cannot be taken from '{0}' by a compile-time key.
+```
+
+**Help**
+
+```text
+'t.[key]' names a field of a struct or an element of an ordinary tuple. A 'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or an array has no fields.
+```
+
+*No example: no test small enough to show raises it.*
+
+### StaticAccessUnknownField
+
+`0x03000177` · Error · `SemanticDiag::StaticAccessUnknownField`
+
+**Message**
+
+```text
+The struct '{1}' has no field '{0}'.
+```
+
+**Help**
+
+```text
+'t.[key]' takes the field named by the compile-time key; use one of the names the struct declares.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_access_unknown_field.cml`, run as `camel test/cases/compile/static_expansion/static_access_unknown_field.cml`)
+
+```camel
+module static_access_unknown_field
+
+func field(t: {a: int, b: int}): int {
+    return t.["c"]
+}
+
+func main(): int {
+    return field({a: 1, b: 2})
+}
+```
+
+### StaticAccessIndexOutOfRange
+
+`0x03000178` · Error · `SemanticDiag::StaticAccessIndexOutOfRange`
+
+**Message**
+
+```text
+The key '{0}' is not an element of the tuple '{1}' ({2} elements).
+```
+
+**Help**
+
+```text
+A tuple element is named by its index from 0; a 'static for' gives the decimal index as 'n'.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_access_out_of_range.cml`, run as `camel test/cases/compile/static_expansion/static_access_out_of_range.cml`)
+
+```camel
+module static_access_out_of_range
+
+func element(t: (int, int)): int {
+    return t.[2]
+}
+
+func main(): int {
+    return element((1, 2))
+}
+```
+
+### StaticAccessNotConstant
+
+`0x03000179` · Error · `SemanticDiag::StaticAccessNotConstant`
+
+**Message**
+
+```text
+The key '{0}' of a 't.[...]' access is not known when the function is compiled.
+```
+
+**Help**
+
+```text
+The key is a string or integer literal, or the 'n' of an enclosing 'static for'. A runtime value cannot choose a field, because only the selected field is built into the graph.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_access_not_constant.cml`, run as `camel test/cases/compile/static_expansion/static_access_not_constant.cml`)
+
+```camel
+module static_access_not_constant
+
+func field(t: {a: int, b: int}, k: string): int {
+    return t.[k]
+}
+
+func main(): int {
+    return field({a: 1, b: 2}, "a")
 }
 ```
 
