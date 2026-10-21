@@ -884,11 +884,16 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
     }
     // `return v` under a declared `T?` / `T!` puts `v` into that form: the counterpart of
     // `throw`, and one of the positions where a value enters by itself (design principles
-    // 3.8; coerceTo). A value that already has the declared type, and one that fits neither
-    // way (reported by checkDeclaredReturn), is left alone. In a branch arm the position is
-    // the arm's (a `return` there is not the function's return, handover H24).
+    // 3.8; coerceTo). The declared type is also the name the value is used as: an unnamed
+    // struct value in a declared named type is given that type here (a CAST that moves
+    // nothing, or a copy when the fields are written in another order; design principles
+    // 5.1, 5.2), so a named type is never erased to its shape. Applying the position's type
+    // unless the value already has it is the same rule checkValue applies everywhere else;
+    // a value that fits neither way is left alone for checkDeclaredReturn to report. In a
+    // branch arm the position is the arm's (a `return` there is not the function's return,
+    // handover H24).
     Type *position = expectedExitTypeHere();
-    if (position != nullptr && !position->assignableFrom(valueType)) {
+    if (position != nullptr && !position->equals(valueType)) {
         if (node_handle_t entered = coerceTo(value, position, gct->at(0))) {
             return entered;
         }
