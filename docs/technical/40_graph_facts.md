@@ -39,7 +39,7 @@ The core's kinds (`core_facts.h`):
 | `core.instance` | Node | ii | the index instance of an OPER node whose operator declares one (`instanceOf`), or "none" |
 | `core.reorder` | Node | ii | what its reduction may do (`reorderFreedomOf`) |
 | `core.effects` | Graph | ii | the effect summary through calls and loops (`effectSummaryOf`) |
-| `core.loopDomain` | CrossGraph | ii | a LOOP node and its body graph: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
+| `core.loopDomain` | CrossGraph | ii | a LOOP node and the graph that holds its body region: the form, `t < len(xs)` with the extent when the array is a constant, the element port (design 11.3) |
 | `core.permissions` | Node | i | the permissions granted to the node |
 | `core.resources` | Node | ii | what the node does to resources (`resourcesOf`, `docs/technical/41_resources_and_definitions.md`), at the nodes that touch any |
 
@@ -77,15 +77,15 @@ is keyed the same way.
 
 Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::opt::inline`,
 `std::opt` and its parts, `std::macro`, specialization, entry arguments, `tensor::fuse`, the ONNX
-export's session, the loop lowering), so the revisions are maintained in one place. A fact computed
+export's session), so the revisions are maintained in one place. A fact computed
 before a pass reads as stale afterwards when the pass changed what it read, and is computed again
 on the next `obtain`; it is never reused silently. A `Cone` kind (`core.shape`) rehashes what it
 read when a revision changed: when that is unchanged (the node's type) the fact stays valid with a
 new stamp (`revalidated`).
 
-The loop lowering of std::fvm/std::jit/std::prl/std::cpp commits a detached copy: graphs keep
-their GraphId, the graph that held a loop gets a new revision, so facts computed on the program
-are valid on the copy where nothing changed.
+A detached copy (the working copy of autodiff, `outlineLoopRegions`) keeps the GraphId of its
+graphs; the graph that held a loop gets a new revision, so facts computed on the program are valid
+on the copy where nothing changed.
 
 Facts do not follow a pass on their own (design 10.5: "derived facts are not stale notes that
 happened to survive a clone"); `tx.keep` (a pass re-establishing a fact it maintains) and the
@@ -115,13 +115,13 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
   ```
   FACT {"kind":"core.shape","version":1,"class":"derived","anchors":[{"graph":"layer","node":2}],"value":"f32 [2, 4]","stamp":{"revisions":[{"graph":"layer","revision":2}],"epoch":0,"target":0,"cone":"5ea9e00000000050"}}
   FACT {"kind":"core.reorder","version":1,"class":"derived","anchors":[{"graph":"total","node":1}],"value":"regroup, permute","stamp":{"revisions":[{"graph":"total","revision":3}],"epoch":68,"target":0}}
-  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":2},{"graph":"twice.loop1.body","node":0}],"value":"for: t sequential, t < len(node 1) = 2; element port 0 reads xs(t)","stamp":{"revisions":[{"graph":"twice","revision":4},{"graph":"twice.loop1.body","revision":5}],"epoch":0,"target":0}}
+  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":5},{"graph":"twice","node":2}],"value":"for: t sequential, t < len(node 1) = 2; element port 2 reads xs(t)","stamp":{"revisions":[{"graph":"twice","revision":4}],"epoch":0,"target":0}}
   FACT {"kind":"core.permissions","version":1,"class":"content","anchors":[{"graph":"total","node":1}],"value":"reassociate","stamp":null}
   ```
 
   (`test/cases/facts/tensors_and_loops.cml`.)
 - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
-  (`test::facts`), facts across `std::opt::inline` and `std::opt` and a private loop lowering
+  (`test::facts`), facts across `std::opt::inline` and `std::opt` and the outlined program
   (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
   and `inspect --facts`. The test passes need `CAMEL_ENABLE_TEST_PASSES`.
 

@@ -294,24 +294,20 @@ not listed.
 
 The core keeps one shadow frame per activation of a graph, as the schedulers run them, and
 groups them into *activations of functions*; a tail call that replaces the only frame of an
-activation replaces the activation (and is counted, 5.2). The parts of a loop, which are still
-graphs, are grouped with the function that holds the `LOOP` node:
+activation replaces the activation (and is counted, 5.2). A frame starts an activation: a call of
+a function or of a lambda, the tail call of one.
 
-- the frame of a loop part, called by a frame of its owner, is part of the caller's activation;
-- every other frame starts an activation: a call of a function or of a lambda, the tail call of
-  one.
-
-`frames` `subgraphs` shows every shadow frame, so the parts of a loop are frames of their own;
-lambdas are frames of their own in both settings: a function value is a function. The setting is
+`frames` `subgraphs` shows every shadow frame; lambdas are frames of their own in both settings: a function value is a function. The setting is
 the core command `configure {frames}`, the DAP launch attribute `frames` and custom request
 `camel/setFrames` (VS Code: *Camel: Toggle Subgraph Frames*), and the REPL command `frames`.
 It changes what the next question about the stack sees, also while the program is stopped; a
 step uses the setting it started with.
 
-A loop (design principles 3.10) will be a `LOOP` node with a condition subgraph and a body
-subgraph; they are code of the function the loop is written in and fold the same way. In the
-index they will be a role of graph that folds (`GraphRole`), with the graph that holds the
-`LOOP` node as their owner, so the activations, the names and the steps need no other change.
+A loop (design principles 3.10) is a `LOOP` node whose condition and body are regions of the
+graph that holds it, as the arms of a branch are: they have no frame of their own in either
+setting, the nodes in them are nodes of the function's frame, and the names of their ports (the
+state, the element) are visible while the code is in the region (`NodeInfo::controlRegion`,
+`GraphInfo::visibleAt`).
 
 ### 5.5 Full names
 
