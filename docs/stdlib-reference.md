@@ -52,8 +52,8 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [process](#process) | `import { ... } from process` | C++ | 3 |
 | [env](#env) | `import { ... } from env` | C++ | 2 |
 | [json](#json) | `import { ... } from json` | C++ | 12 |
-| [re](#re) | `import { ... } from re` | C++ | 1 |
 | [hash](#hash) | `import { ... } from hash` | C++ | 2 |
+| [re](#re) | `import { ... } from re` | C++ | 1 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
@@ -2910,22 +2910,6 @@ The members of a JSON object, by name; null for any other kind, and a `Json!` gi
 - Pure.
 - Example: `keys(j->as_object ?? ([] as Map<string, Json>))` gives `['a', 'b'], for j of '{"b": 1, "a": 2}'`
 
-<a id="re"></a>
-
-## `re`: regular expressions
-
-#### `test`
-
-```camel
-test: (pattern: string, text: string) => bool
-```
-
-Whether the regular expression (ECMAScript syntax) matches somewhere in text.
-
-- Pure.
-- Failure: fault `RegexInvalid` when pattern is not a regular expression.
-- Example: `test('[0-9]+', 'room 42')` gives `true`
-
 <a id="hash"></a>
 
 ## `hash`
@@ -2966,6 +2950,22 @@ SHA-256 applied rounds times, each round to the hexadecimal text of the one befo
 - Pure.
 - Failure: fault `InvalidArgument` when rounds is negative.
 - Example: `sha256_rounds('abc', 1) == sha256('abc')` gives `true`
+
+<a id="re"></a>
+
+## `re`: regular expressions
+
+#### `test`
+
+```camel
+test: (pattern: string, text: string) => bool
+```
+
+Whether the regular expression (ECMAScript syntax) matches somewhere in text.
+
+- Pure.
+- Failure: fault `RegexInvalid` when pattern is not a regular expression.
+- Example: `test('[0-9]+', 'room 42')` gives `true`
 
 <a id="para"></a>
 
