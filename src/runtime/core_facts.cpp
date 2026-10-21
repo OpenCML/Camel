@@ -149,11 +149,6 @@ std::optional<TensorShape> computeShape(std::span<const Anchor> anchors) {
     return shapeOfType(anchors[0].graph->node(anchors[0].node)->dataType());
 }
 
-uint64_t shapeCone(std::span<const Anchor> anchors) {
-    // compute reads the node's type and nothing else: the type is the whole cone.
-    return 0x5ea9e000'00000000ULL ^ anchors[0].graph->node(anchors[0].node)->typeId;
-}
-
 // ---- core.instance, core.reorder -------------------------------------------------------------
 
 /// The OPER node's operator declares index semantics.
@@ -302,11 +297,12 @@ CoreKinds registerCoreKinds() {
     k.shape = registerKind(KindSpec<TensorShape>{
         .key               = "core.shape",
         .owner             = "core",
-        .dependency        = Dependency::Cone,
+        // compute reads the node's record and nothing else (its type): the shape holds while the
+        // node does, though another node of its graph changed (facts.h, Dependency::Node).
+        .dependency        = Dependency::Node,
         .readsDeclarations = false,
         .compute           = computeShape,
         .print             = [](const TensorShape &s) { return toString(s); },
-        .cone              = shapeCone,
         .encode            = encodeShape,
         .decode            = decodeShape,
     });

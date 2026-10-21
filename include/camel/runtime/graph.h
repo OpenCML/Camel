@@ -667,6 +667,19 @@ class GCGraph : public camel::core::rtdata::Object {
     }
     /// The payload bytes of node `ref` (rounded up to whole words); empty when it has none.
     std::span<const std::byte> nodePayloadBytes(gc_node_ref_t ref) const;
+    /**
+     * The version of node `ref`, as a hash of what it is: its record (kind, flags, slot, type),
+     * the nodes it consumes (Norm, then With, then Ctrl, in order) and its payload. Two versions
+     * of a graph that carry the same node at the same place hash the same, whatever else of the
+     * graph changed, and a node whose record moved to another chunk hashes the same as well (the
+     * offsets it holds are read as counts). 0 for a ref that is not a node.
+     *
+     * This is what a node-level fact is stamped with (facts.h, Dependency::Node): a fact about a
+     * node holds while the node does not change, though the graph's revision did. It is the
+     * version a stored mark would say, without the 8 bytes per node of the whole graph space
+     * (design graph-store 4.4).
+     */
+    uint64_t nodeContentHash(gc_node_ref_t ref) const;
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         const GCNode *n = node(ref);
@@ -840,6 +853,11 @@ class GCGraphManager {
     /// the previous program held and nothing else holds is freed.
     void adoptRoot(const Program *program);
     void replaceRoot(const Program *program);
+    /// replaceRoot, but only while `expected` is still the installed program: a commit that
+    /// rewrote a program that is no longer the context's publishes only if nothing overtook it
+    /// (design 4.3.1, which asks for one compare-and-swap instead of a lock). Answers whether it
+    /// replaced it.
+    bool replaceRootIfCurrent(const Program *expected, const Program *program);
     /// The installed program, nullptr when there is none.
     const Program *root() const;
     // The collector reads this stable vector only when collections are allowed.
@@ -886,6 +904,12 @@ class GCGraphManager {
 
     /// Called by Program::bind for a program the manager owns.
     void noteGraph(GCGraph *graph);
+    /// Called for a graph a rewrite encoded but has not bound into a program: a graph version a
+    /// session makes on the way (a specialization) is used by the drafts of the session before a
+    /// commit binds it, or not at all. The collector knows it from here on, but does not free it
+    /// until the pass settles, so that the session's work table can still reach it; a graph no
+    /// program binds by then is freed like any other.
+    void noteUnbound(GCGraph *graph);
 
   private:
     friend class Program;
@@ -898,6 +922,9 @@ class GCGraphManager {
     mutable std::recursive_mutex mutex_;
     std::vector<Program *> programs_;
     std::unordered_set<GCGraph *> graphs_;
+    /// Graphs a rewrite encoded and did not bind yet (noteUnbound): the sweep leaves them alone
+    /// until the pass settles, then they are freed unless a program holds them.
+    std::unordered_set<GCGraph *> unbound_;
     const Program *current_ = nullptr;
     std::vector<const Program *> detached_;
     std::vector<const Program *> pinned_;

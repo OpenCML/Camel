@@ -769,7 +769,15 @@ void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
 }
 
 void RuntimeGraphDraftSession::adoptGraph(GCGraph *graph) const {
-    if (graph != nullptr && work_->graph(graph->id()) == nullptr) {
+    if (graph == nullptr) {
+        return;
+    }
+    // A graph the session encoded itself (a specialization) is a version of the program that no
+    // program binds yet: the drafts reach it through the work table, which the collector does not
+    // trace. Telling the manager about it lets the collector free it once the pass is over when
+    // the commit did not bind it (a commit that replaced it with a copy of its own).
+    context_->noteUnboundRuntimeGraph(graph);
+    if (work_->graph(graph->id()) == nullptr) {
         work_->bind(graph->id(), graph);
     }
 }
@@ -1002,12 +1010,18 @@ std::vector<GCGraph *> RuntimeGraphDraftSession::collectReachableRuntimeGraphs()
 }
 
 std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
+    return conflictsWithProgram(context_->currentRuntimeProgram());
+}
+
+std::vector<GraphId> RuntimeGraphDraftSession::conflictsWithProgram(const Program *current) const {
     std::vector<GraphId> differing;
-    const Program *current = context_->currentRuntimeProgram();
     if (current == nullptr || current == program_) {
         return differing;
     }
-    // The graphs the session decoded or edited are the ones it read or wrote.
+    // The graphs the session read or wrote: it reads a graph when it decodes it (a draft) and
+    // writes the ones it was handed for editing. A graph the drafts only name (the callee of a
+    // FUNC node) is not read: the commit validates the calls of what it encodes against the
+    // program it publishes, so a new version of such a graph cannot make the commit wrong.
     const auto compare = [&](GraphId id) {
         if (current->graph(id) != program_->graph(id) &&
             std::find(differing.begin(), differing.end(), id) == differing.end()) {
@@ -1046,6 +1060,63 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         return nullptr;
     }
 
+    GCGraph *oldRuntimeRoot = runtimeRoot_;
+
+    // A session over the program's root replaces it. A session over another root (a detached
+    // program, e.g. a function being exported) only returns the rewritten root: the running
+    // program is left as it is. A shape no back end runs (GraphState::NonExecutable: the
+    // export-only sessions) is never installed: it stays in a private program, whatever the
+    // caller asked for.
+    const bool installing = !detached && graphState_ != GraphState::NonExecutable &&
+                            program_->root() == oldRuntimeRoot;
+    // A session that is stale and found no conflict merges into the program the context has now
+    // instead of forking the history (design 4.3.1): the graph versions it read and wrote are
+    // unchanged there, so the commit is made on top of that program.
+    const Program *current = context_->currentRuntimeProgram();
+    const bool merging =
+        installing && current != nullptr && current != program_ && conflicts().empty();
+    const Program *base = merging ? current : program_;
+    if (merging) {
+        // The graphs of the session are the versions this session read; every version the
+        // program now holds of them is the same content (that is what no conflict means). The
+        // drafts are edits of this session, so they are kept as they are, and are re-keyed to
+        // the graphs of that program: the graphs this commit decodes from here on (to dissolve
+        // gates, to name a new version in a function value) must be decoded from it, not from
+        // the version the session started with, or the commit would write back the old content
+        // over another session's change.
+        std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts;
+        drafts.reserve(drafts_.size());
+        for (auto &[graph, entry] : drafts_) {
+            GCGraph *held = current->graph(graph->id());
+            drafts.emplace(held != nullptr ? held : graph, std::move(entry));
+        }
+        drafts_ = std::move(drafts);
+        std::unordered_set<GCGraph *> edited;
+        edited.reserve(edited_.size());
+        for (GCGraph *graph : edited_) {
+            GCGraph *held = current->graph(graph->id());
+            edited.insert(held != nullptr ? held : graph);
+        }
+        edited_ = std::move(edited);
+        draftRefs_.clear();
+        // The graphs the session holds may be versions the context's program does not have: the
+        // specializations the session made itself (they live in the work table only), and the
+        // graphs of a private program a pass made, which the graphs of this commit refer to.
+        // They come along; for every id the context holds, its version is the one this commit
+        // works on.
+        const std::vector<GCGraph *> own = work_->graphs();
+        *work_                           = *current;
+        for (GCGraph *graph : own) {
+            if (work_->graph(graph->id()) == nullptr) {
+                work_->bind(graph->id(), graph);
+            }
+        }
+        work_->setRoot(current->root());
+        runtimeRoot_        = work_->root();
+        program_            = current;
+        closureCache_.valid = false;
+    }
+
     const std::vector<GCGraph *> closure = collectCommitClosure();
     ASSERT(!closure.empty(), "Runtime draft commit received an empty closure.");
     for (GCGraph *graph : closure) {
@@ -1065,16 +1136,21 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         }
     }
 
-    GCGraph *oldRuntimeRoot = runtimeRoot_;
-
     // The program after the commit holds every graph of the closure: the version it has now, or
     // the one this commit makes of it. A graph names the others by id, so another graph's new
     // version needs none of its own. A graph gets one when it was edited, when the program did
     // not hold it, and when it holds a function value of a graph that got a new version (a
-    // function value names the program it resolves in, which must give that version).
+    // function value names the program it resolves in, which must give that version). A commit
+    // that merges starts from the newest program, so that its graph versions are the ones the
+    // context holds.
     Program *committed = context_->reserveProgram();
+    if (merging) {
+        *committed = *current;
+    }
     for (GCGraph *graph : closure) {
-        committed->bind(graph->id(), graph);
+        if (committed->graph(graph->id()) == nullptr) {
+            committed->bind(graph->id(), graph);
+        }
     }
     std::unordered_map<GCGraph *, GCGraph *> fresh; // a graph -> the commit's encoding of it
     std::unordered_map<GCGraph *, size_t> allocatedBytes;
@@ -1236,28 +1312,55 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
+
+    // Publishing is a compare-and-swap against the program the commit was made on top of: the
+    // graphs are encoded for that program, and the table replaces it only while it is still the
+    // context's (design 4.3.1). A merge that lost the race to another commit remakes its table
+    // over the program that is there now while the graphs it read and wrote keep their versions
+    // there, and otherwise the commit stays private (it still hands back the program it made).
+    bool published = false;
+    if (installing) {
+        constexpr int kMaxPublishAttempts = 4;
+        const Program *expected           = base;
+        for (int attempt = 0; attempt < kMaxPublishAttempts; ++attempt) {
+            if (context_->installRuntimeProgramIfCurrent(expected, committed)) {
+                published = true;
+                break;
+            }
+            const Program *now = context_->currentRuntimeProgram();
+            if (now == nullptr || now == program_ || !conflictsWithProgram(now).empty()) {
+                break;
+            }
+            Program *rebased = context_->reserveProgram();
+            *rebased         = *now;
+            // Only the versions this commit made are its own: every other graph of the program
+            // is the one that is there now, which another commit may have given a new version.
+            for (const auto &[graph, copy] : fresh) {
+                rebased->bind(graph->id(), copy);
+            }
+            rebased->setRoot(rebased->graph(committed->root()->id()));
+            committed = rebased;
+            expected  = now;
+        }
+    }
+    if (!published) {
+        // A private copy of a program: tracking it keeps it alive for the caller and out of the
+        // context's root until something installs it.
+        context_->trackDetachedRuntimeProgram(committed);
+    }
     // A graph left as it was names, in its function values, the program before: they name the
-    // new one, which holds the same versions of everything they reach.
+    // program this commit produced, which holds the same versions of everything they reach.
     for (GCGraph *graph : closure) {
         if (!fresh.contains(graph) && graph->hasStaticGraphRefs()) {
             retargetFunctions(graph, *committed);
         }
     }
-
-    // A session over the program's root replaces it. A session over another root (a detached
-    // program, e.g. a function being exported) only returns the rewritten root: the running
-    // program is left as it is.
-    // A shape no back end runs (GraphState::NonExecutable: the export-only sessions) is never
-    // installed: it stays in a private program, whatever the caller asked for.
-    if (!detached && graphState_ != GraphState::NonExecutable &&
-        context_->currentRuntimeProgram() == program_ && program_->root() == oldRuntimeRoot) {
-        program_ = context_->installRuntimeProgram(committed);
-    } else {
-        program_ = committed;
-        context_->trackDetachedRuntimeProgram(committed);
-    }
+// The commit decided above whether this session installs (a session over the program's root,
+    // a shape some back end runs, nothing detached) and published with a compare-and-swap; a
+    // commit that did not publish stays a private program that remembers what it was made from.
+    program_            = committed;
     runtimeRoot_        = program_->root();
-    work_        = std::make_unique<Program>(*program_);
+    work_               = std::make_unique<Program>(*program_);
     closureCache_.valid = false;
     drafts_.clear();
     draftedIds_.clear();
