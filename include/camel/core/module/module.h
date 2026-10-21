@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: May. 05, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -170,6 +170,10 @@ class Module : public std::enable_shared_from_this<Module> {
     /// filled when the module is loaded and never rewritten. A module written in Camel
     /// exports its entities into ProgramExports; this table stays empty for it.
     entity_ns_ptr_t nativeEntityNS_;
+    /// The same entities, by the operator URI they export: an operator group of several
+    /// overloads answers for each of its URIs. Filled by exportEntity, read by the compiler
+    /// for the operators it emits itself (nativeOperatorGroup).
+    std::unordered_map<OperId, oper_group_ptr_t> nativeOperatorGroups_;
     std::vector<Reference> defaultImportedRefs_;
     /// A ref may come from multiple modules (same-name function/operator overloads);
     /// group imported bindings by the local ref visible in this module.
@@ -311,6 +315,12 @@ class Module : public std::enable_shared_from_this<Module> {
     /// constant). A name a program exported for the module is not here: ask the program's
     /// ProgramExports (exportedEntity), which falls back to this table.
     std::optional<entity> getNativeEntity(const Reference &ref) const;
+    /// The operator group this module exports for `oper`: the URI of one of the group's
+    /// overloads, as interned when the module was loaded (exportEntity). This is how code
+    /// refers to an operator the compiler emits itself (`oper::EnumMake` and the like) without
+    /// naming its entity `__enum_make__` again on every compilation. nullptr when this module
+    /// exports no operator with that URI.
+    oper_group_ptr_t nativeOperatorGroup(OperId oper) const;
 
     const std::vector<Reference> &defaultImportedRefs() const;
     /// For tools that list what a module can name (camel/service/semantic): the local names

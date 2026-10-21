@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -325,7 +325,22 @@ bool Module::exportType(const Reference &ref, Type *type) {
 }
 
 bool Module::exportEntity(const Reference &ref, const entity &ent) {
-    return nativeEntityNS_->insert(ref, ent);
+    const bool inserted = nativeEntityNS_->insert(ref, ent);
+    // An operator the compiler emits itself is referred to by the URI it was interned under
+    // (oper::EnumMake and the like), not by this entity name: record the way from the id back
+    // to the group, once, here at registration.
+    if (ent.isOperGroup() && ent.operGroup() != nullptr) {
+        auto &table = camel::core::OperatorTable::instance();
+        for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
+            nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
+        }
+    }
+    return inserted;
+}
+
+oper_group_ptr_t Module::nativeOperatorGroup(OperId oper) const {
+    const auto it = nativeOperatorGroups_.find(oper);
+    return it == nativeOperatorGroups_.end() ? nullptr : it->second;
 }
 
 std::optional<Type *> Module::getImportedType(const Reference &ref, ImportLayer layer) const {

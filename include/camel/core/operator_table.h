@@ -13,7 +13,7 @@
  *
  * Author: Camel Contributors
  * Created: Oct. 13, 2026
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -104,11 +104,35 @@ inline constexpr OperId kNoOper = 0;
 /// The operators the core recognises by identity, with their ids fixed at compile time. The
 /// table interns their URIs (kWellKnownOperatorUris, same order) before anything else, so
 /// `body->oper == oper::VarGet` is the test that `body->uri() == ":var/get"` used to be.
+///
+/// Besides the variables, the list holds the operators the compiler emits itself, as the
+/// lowering of a construct (`__enum_make__`, `__throw__`, `__set_index__`): the builder refers
+/// to those by one of these ids, obtained from the table at start-up, not by the entity name
+/// a module registered them under. An id names one URI; a group of several URIs (`__assn__` and
+/// `__iter__`, whose overloads are chosen by the operand types) has no one id and is referred
+/// to by the name of its group.
 namespace oper {
 inline constexpr OperId VarNew          = 1; // ":var/new"  `var v = e`
 inline constexpr OperId VarGet          = 2; // ":var/get"  reading a variable
 inline constexpr OperId VarPeek         = 3; // ":var/peek" a read whose value cannot be kept
-inline constexpr OperId kWellKnownCount = 4; // kNoOper included
+inline constexpr OperId VarTake         = 4; // ":var/take" the value, moved out of the variable
+inline constexpr OperId AssnOwned       = 5; // ":op/assn_owned"
+inline constexpr OperId AssnAppend      = 6; // ":op/assn_append"
+inline constexpr OperId SetField        = 7; // ":op/set_field"
+inline constexpr OperId SetIndex        = 8; // ":op/set_index"
+inline constexpr OperId TagIsNull       = 9; // ":op/tag_is_null"
+inline constexpr OperId TagNullValue    = 10; // ":op/tag_null_value"
+inline constexpr OperId TagIsError      = 11; // ":op/tag_is_error"
+inline constexpr OperId TagErrorValue   = 12; // ":op/tag_error_value"
+inline constexpr OperId TagErrorInfo    = 13; // ":op/tag_error_info"
+inline constexpr OperId TagThrow        = 14; // ":op/tag_throw"
+inline constexpr OperId EnumMake        = 15; // ":enum/make"
+inline constexpr OperId EnumTag         = 16; // ":enum/tag"
+inline constexpr OperId EnumField       = 17; // ":enum/field"
+inline constexpr OperId CopyArray       = 18; // ":struct/copy_arr"
+inline constexpr OperId AppendOwned     = 19; // ":struct/append_arr_owned"
+inline constexpr OperId MacroCmp        = 20; // ":macro/cmp"
+inline constexpr OperId kWellKnownCount = 21; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -123,6 +147,23 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":var/new",
     ":var/get",
     ":var/peek",
+    ":var/take",
+    ":op/assn_owned",
+    ":op/assn_append",
+    ":op/set_field",
+    ":op/set_index",
+    ":op/tag_is_null",
+    ":op/tag_null_value",
+    ":op/tag_is_error",
+    ":op/tag_error_value",
+    ":op/tag_error_info",
+    ":op/tag_throw",
+    ":enum/make",
+    ":enum/tag",
+    ":enum/field",
+    ":struct/copy_arr",
+    ":struct/append_arr_owned",
+    ":macro/cmp",
 };
 
 struct OperatorTraits {
