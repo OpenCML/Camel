@@ -17,7 +17,7 @@ on:
         type: string
         required: true
       arch:
-        description: "CAMEL_TARGET_ARCH, e.g. x86-64-v2"
+        description: "CAMEL_TARGET_ARCH, e.g. x86-64-v3"
         type: string
         required: true
       nojit:

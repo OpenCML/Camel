@@ -46,10 +46,11 @@ permissions:
 env:
   # Instruction-set baseline of the published libcamel (cmake/Options.cmake, docs/build-options.en.md).
   # Never `native` here: the wheel must run on CPUs other than the runner's.
-  # PENDING OWNER DECISION: x86-64-v2 (SSE4.2/POPCNT, no AVX/FMA) is the conservative placeholder;
-  # the alternatives are `baseline` (SSE2 only) and `x86-64-v3` (AVX2+FMA, closest to local builds).
+  # The owner's decision (2026-10-21, docs/design-principles 9.10): x86-64-v3, i.e. AVX2 and FMA.
+  # A wheel built for v3 refuses to start on a machine without AVX2 -- that is the accepted cost of
+  # the performance, and ci.yml builds and tests at the same level so CI tests what is shipped.
   # The value is an x86-64 level: an arm64 matrix cell, once enabled, must override it (`baseline`).
-  CAMEL_TARGET_ARCH: x86-64-v2
+  CAMEL_TARGET_ARCH: x86-64-v3
 
 jobs:
   build-wheel:

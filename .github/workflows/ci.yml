@@ -36,15 +36,15 @@ jobs:
         cfg:
           - runner: ubuntu-24.04
             slug: linux-x64
-            arch: x86-64-v2
+            arch: x86-64-v3
           - runner: ubuntu-24.04
             slug: linux-x64-nojit
-            arch: x86-64-v2
+            arch: x86-64-v3
             nojit: true
           # Pinned: Conan maps this Clang to Visual Studio 17, which newer images no longer carry.
           - runner: windows-2022
             slug: win-x64
-            arch: x86-64-v2
+            arch: x86-64-v3
     uses: ./.github/workflows/ci-leg.yml
     with:
       runner: ${{ matrix.cfg.runner }}
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
-      CAMEL_TARGET_ARCH: x86-64-v2
+      CAMEL_TARGET_ARCH: x86-64-v3
       # This job builds Debug, so it asks for every configuration: Ninja Multi-Config wants one
       # conan_toolchain.cmake per tree that covers the configurations the tree is built with.
       CAMEL_CONAN_BUILD_TYPES: Release,Debug,RelWithDebInfo
