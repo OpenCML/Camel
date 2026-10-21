@@ -960,11 +960,16 @@ void ParserImpl::parseMatch() {
 }
 
 /// matchTypeExpr : 'match' 'type' typeExpr '{' typeCase* '}'
+/// The type after `match type` is a type position (H79 ruling 1): a `(` there always opens a
+/// type, so `match type () { ... }` is a match on the empty tuple type.
 void ParserImpl::parseMatchType() {
     const size_t m = mark();
     bump(); // match
     bump(); // type
-    parseType();
+    {
+        TypeHeadScope typeHead(*this);
+        parseType();
+    }
     if (panic_ || !expect(TK::LBrace)) {
         return close(m, NK::MatchTypeExpr);
     }
@@ -1001,6 +1006,7 @@ void ParserImpl::parseTypeCase() {
 /// `static for (n, F) in fields T => 块`（H51 步骤 3）：把结构体或元组的字段表在实例化时展开，
 /// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
 /// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
+/// `fields` 后面是类型位置（H79 裁定 1）：`(` 一律按类型读，`fields ()` 是空元组类型。
 void ParserImpl::parseStaticFor() {
     const size_t m = mark();
     bump(); // static
@@ -1020,7 +1026,10 @@ void ParserImpl::parseStaticFor() {
         } else if (!panic_) {
             unexpected({e(TK::Identifier)});
         }
-        parseType();
+        {
+            TypeHeadScope typeHead(*this);
+            parseType();
+        }
     }
     if (!panic_ && expect(TK::FatArrow)) {
         parseBlockExpr();

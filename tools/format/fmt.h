@@ -527,6 +527,11 @@ class Formatter {
 
     std::any visitMatchTypeExpr(cst::MatchTypeExpr context);
 
+    /// The type after `fields` / `match type`, where the parser reads a `(` as the start of a
+    /// type (H79 ruling 1): a function type, whose text starts with `(`, is written with one
+    /// more pair of parentheses so that the output parses back to the same tree.
+    std::string formatTypeInTypePosition(syn::Node type);
+
     std::any visitTypeCase(cst::TypeCase context);
 
     std::any visitStaticForExpr(cst::StaticForExpr context);

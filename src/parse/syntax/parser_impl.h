@@ -102,6 +102,19 @@ class ParserImpl {
         }
         ~ConstDataScope() { p.constData_ = old; }
     };
+    /// A type position named by the grammar: after `fields` and after `match type`
+    /// the head `(` opens a tuple or a parenthesised type, never a parameter list, so `fields ()`
+    /// is the empty tuple type (design principles 5.6, H79 ruling 1). The flag is read and
+    /// cleared at the head of the type; a nested type keeps the function-type reading.
+    bool typeHead_ = false;
+    struct TypeHeadScope {
+        ParserImpl &p;
+        bool old;
+        explicit TypeHeadScope(ParserImpl &parser) : p(parser), old(parser.typeHead_) {
+            p.typeHead_ = true;
+        }
+        ~TypeHeadScope() { p.typeHead_ = old; }
+    };
     struct Depth {
         ParserImpl &p;
         explicit Depth(ParserImpl &parser) : p(parser) { ++p.depth_; }

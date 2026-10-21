@@ -394,6 +394,7 @@ match type 类型 {
 
 - `struct` 匹配结构体；`tuple` 匹配**普通**元组；`#leaf` 匹配其余所有类型（标量、`string`、数组、函数、`T?`、`T!`、单元格等）。`struct` 和 `tuple` 是 [R3 内部节点](../design/generic-structure/README.cn.md)的两种形状：`T?`、`T!` 是带标记的元组，和可变单元格一样落在 `#leaf`，不算 `tuple`。
 - `_` 与 `#leaf` 一样匹配一切，只作为“兜底”写法；两者都必须是最后一个 case。`case struct | tuple` 用 `|` 合并几种形状。
+- `match type` 后面是类型位置：紧跟的 `(` 一律读作类型的开头，所以 `match type () { ... }` 匹配空元组类型；函数类型要再包一层括号，写成 `match type ((x: int) => int) { ... }`。
 - 没有 case 命中时是 `SemanticDiag::StaticMatchNotExhaustive`；`#leaf`/`_` 后面还有 case 是 `SemanticDiag::StaticMatchUnreachableCase`。`match type` 不比较具体类型名：`case int`、`case MyStruct` 不是这个构造的一部分，标量类型都走 `#leaf`。
 - 选中的分支直接成为当前位置的直线代码，运行时没有分支节点。分支的值就是整个 `match type` 的值；空分支的值为 `void`。
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
@@ -414,6 +415,7 @@ func duplicate(t: typeas T) {
 
 - `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
 - `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`、`typeas F`），不能当值用。
+- `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
 - `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
 - `t.[n]` 取结构体的字段或元组的元素，`n` 必须是编译期常量：字符串或整数字面量，或外层 `static for` 的 `n`。只有选中的那个字段建进图里（一个 `ACCS`），运行时不选择字段，所以运行期的值不能当键（`SemanticDiag::StaticAccessNotConstant`）。
@@ -435,6 +437,7 @@ func first(t: (int, float)) {
 **Comprehension：把各轮的值装回同一形状。** `static for` 也可以写在需要值的位置：`{ static for (n, F) in fields T => e }` 得到一个结构体，`( static for (n, F) in fields T => e )` 得到一个元组，字段或元素与 `T` 同名、同序，每个来自一轮的值。
 
 - 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
+- 每个字段/元素的**类型取自那一轮的值**，不强制等于 `F`：`F` 是 `int` 而值是 `float` 时结果字段就是 `float`。字段名与顺序仍来自 `T` 的声明顺序，所以 `tree_map` 这类改变叶子类型、保持形状的展开可以直接写。
 - 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
 - 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，最后每个结构体/元组一个 `FILL` 把各轮的值装回同形状，comprehension 本身没有节点。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
 - `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for (n, F) in fields T => 块`。
