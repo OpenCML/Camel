@@ -26,6 +26,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <map>
@@ -89,6 +90,35 @@ camel::core::type::Type *writingType(
         return const_cast<camel::core::type::Type *>(nodeType);
     }
     return const_cast<camel::core::type::Type *>(patternType);
+}
+
+/// The bits of a constant that are its value. A slot is 64 bits, but an f32 or an i32 occupies the
+/// low 32 and a bool the low 8; the other bytes are no part of the value. They must not decide
+/// whether two constants are the same: the memory a slot came from can differ between a Debug and a
+/// Release build, and then two equal f32 constants would compare unequal and a law would fire in one
+/// build only (H99).
+slot_t canonicalConstant(slot_t value, const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return value;
+    }
+    switch (type->code()) {
+    case camel::core::type::TypeCode::Int32:
+    case camel::core::type::TypeCode::Float32:
+        return static_cast<slot_t>(static_cast<std::uint32_t>(value));
+    case camel::core::type::TypeCode::Bool:
+        return static_cast<slot_t>(static_cast<std::uint8_t>(value));
+    default:
+        return value;
+    }
+}
+
+/// The bytes a constant is keyed and compared by: its value's bits, with the bits that are not the
+/// value zeroed (see canonicalConstant).
+std::string constantPayload(slot_t value, const camel::core::type::Type *type) {
+    const slot_t canonical = canonicalConstant(value, type);
+    std::string payload(sizeof(canonical), '\0');
+    std::memcpy(payload.data(), &canonical, sizeof(canonical));
+    return payload;
 }
 
 } // namespace
@@ -457,10 +487,10 @@ NodeKey makeKey(
     case GCNodeKind::Data: {
         const auto index = static_cast<size_t>(-dataIndex);
         const slot_t v   = draft.staticSlots()[index];
-        key.payload.assign(reinterpret_cast<const char *>(&v), sizeof(v));
         if (const Type *ty = draft.staticSlotTypes()[index]) {
             key.type = ty;
         }
+        key.payload = constantPayload(v, key.type);
         break;
     }
     case GCNodeKind::Oper: {
@@ -977,7 +1007,7 @@ Pattern patConst(uint32_t var) {
 Pattern patLiteral(slot_t value, camel::core::type::Type *type) {
     Pattern p;
     p.kind  = Pattern::Kind::Constant;
-    p.value = value;
+    p.value = canonicalConstant(value, type);
     p.type  = type;
     return p;
 }
@@ -1058,8 +1088,9 @@ DraftWritings::constantOf(gc_node_ref_t node) {
         if (index >= draft_.staticSlots().size() || !takesPart(candidate)) {
             return std::nullopt;
         }
-        camel::core::type::Type *ty = draft_.staticSlotTypes()[index];
-        return std::pair{draft_.staticSlots()[index], ty != nullptr ? ty : h->dataType};
+        camel::core::type::Type *slotType = draft_.staticSlotTypes()[index];
+        camel::core::type::Type *ty = slotType != nullptr ? slotType : h->dataType;
+        return std::pair{canonicalConstant(draft_.staticSlots()[index], ty), ty};
     };
     if (members.empty()) {
         return look(node);
@@ -1074,18 +1105,19 @@ DraftWritings::constantOf(gc_node_ref_t node) {
 
 gc_node_ref_t DraftWritings::constantNode(
     slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region) {
+    const slot_t stored = canonicalConstant(value, type);
     NodeKey key;
-    key.kind   = static_cast<uint8_t>(GCNodeKind::Data);
-    key.perms  = perms;
-    key.region = region;
-    key.type   = type;
-    key.payload.assign(reinterpret_cast<const char *>(&value), sizeof(value));
+    key.kind    = static_cast<uint8_t>(GCNodeKind::Data);
+    key.perms   = perms;
+    key.region  = region;
+    key.type    = type;
+    key.payload = constantPayload(stored, type);
     auto &ix = *index_;
     if (auto found = ix.byKey.find(key); found != ix.byKey.end()) {
         return found->second;
     }
     GraphDraft::WritingScope scope(draft_);
-    const gc_node_ref_t node = draft_.materializeStaticValue(value, type);
+    const gc_node_ref_t node = draft_.materializeStaticValue(stored, type);
     if (perms != 0) {
         draft_.setNodePermissions(node, perms);
     }
@@ -1135,7 +1167,9 @@ void DraftWritings::matchFrom(
                 // `x * 3.0 + x * 3.0` has two DATA nodes of the same value.
                 const auto a = constantOf(bind[p.var]);
                 const auto b = constantOf(item.node);
-                same         = a && b && a->first == b->first && a->second == b->second;
+                same = a && b && a->second == b->second &&
+                       canonicalConstant(a->first, a->second) ==
+                           canonicalConstant(b->first, b->second);
             }
             if (same) {
                 matchFrom(context, work, at + 1, bind, bound, emit);
@@ -1149,7 +1183,8 @@ void DraftWritings::matchFrom(
         return;
     case Pattern::Kind::Constant: {
         const auto found = constantOf(item.node);
-        if (found && found->first == p.value && found->second == p.type) {
+        if (found && found->second == p.type &&
+            canonicalConstant(found->first, p.type) == canonicalConstant(p.value, p.type)) {
             matchFrom(context, work, at + 1, bind, bound, emit);
         }
         return;
@@ -1267,7 +1302,7 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
             if (const Type *ty = draft_.staticSlotTypes()[slotIndex]) {
                 key.type = ty;
             }
-            key.payload.assign(reinterpret_cast<const char *>(&value), sizeof(value));
+            key.payload = constantPayload(value, key.type);
             ix.byKey.try_emplace(key, node);
             if (node >= ix.keyOf.size()) {
                 ix.keyOf.resize(draft_.nodeSlotCount());
