@@ -22,7 +22,7 @@
  * (docs/technical/17_graph_rewrite_api_contracts.md, section 4.1).
  *
  * Every back end runs a branch the same way: the execution order
- * (buildReachableExecutionTopoIndices) lays out, between a BRCH and its JOIN, one range per arm,
+ * (ExecPlan::topo) lays out, between a BRCH and its JOIN, one range per arm,
  * each ending at the arm's tail; the BRCH jumps to the range of the arm it selects and the tail
  * jumps to the JOIN. That is only an execution of the graph when the nodes that run because of
  * the BRCH split into arms: each of them feeds exactly one tail. A rewrite that breaks this

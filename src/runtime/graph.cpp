@@ -30,6 +30,7 @@
 
 #include "camel/runtime/graph.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/loop.h"
 #include "runtime/graph_build.h"
 
@@ -1535,22 +1536,6 @@ bool GCGraph::isMacro() const {
 
 bool GCGraph::isRoot() const { return !isValid(outerGraphId_); }
 
-uintptr_t GCGraph::extraSlot(size_t index) const {
-    ASSERT(index < kExtraSlotCount, "GCGraph extra slot index out of range.");
-    return extraSlots_[index];
-}
-
-void GCGraph::setExtraSlot(size_t index, uintptr_t value) {
-    ASSERT(index < kExtraSlotCount, "GCGraph extra slot index out of range.");
-    extraSlots_[index] = value;
-}
-
-void GCGraph::clearExtraSlots() {
-    for (uintptr_t &slot : extraSlots_) {
-        slot = 0;
-    }
-}
-
 std::vector<GraphId> GCGraph::refsWithRole(uint8_t role) const {
     std::vector<GraphId> graphs;
     for (gc_cnt_t i = 0; i < refCount_; ++i) {
@@ -1764,7 +1749,27 @@ const GCUseIndex &GCGraph::uses() const {
     return *built;
 }
 
-GCGraph::~GCGraph() { delete uses_.load(std::memory_order_acquire); }
+const ExecPlan &GCGraph::execPlan() const {
+    if (ExecPlan *known = execPlan_.load(std::memory_order_acquire)) {
+        return *known;
+    }
+    ExecPlan *built    = buildExecPlan(*this).release();
+    ExecPlan *expected = nullptr;
+    if (!execPlan_.compare_exchange_strong(
+            expected,
+            built,
+            std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        delete built; // another thread was first
+        return *expected;
+    }
+    return *built;
+}
+
+GCGraph::~GCGraph() {
+    delete uses_.load(std::memory_order_acquire);
+    delete execPlan_.load(std::memory_order_acquire);
+}
 
 void GCGraph::releaseNodeChunks() {
     for (gc_cnt_t c = 0; c < nativePayload_.chunkCount; ++c) {
@@ -1855,9 +1860,6 @@ camel::core::rtdata::Object *GCGraph::clone(
         nativePayload_,
         staticArea_);
     graph->revision_ = revision_; // the same content: the same revision
-    for (size_t i = 0; i < kExtraSlotCount; ++i) {
-        graph->extraSlots_[i] = extraSlots_[i];
-    }
     return graph;
 }
 
