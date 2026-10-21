@@ -316,9 +316,12 @@ bool isRowBias(const Operand &bias, size_t resultRank, int64_t out) {
 }
 
 void reluInPlace(Array *t) {
+    // One element of the in-place relu is a plain read-modify-write, the cost the elementwise
+    // grain counts in (parallel.h).
+    const int64_t grain = grainForWork(kNsPerFloat);
     dispatchDType(t->dtype(), [&]<typename T>() {
         T *data = t->dataAs<T>();
-        parallelFor(static_cast<int64_t>(t->numel()), 1 << 15, [&](int64_t begin, int64_t end) {
+        parallelFor(static_cast<int64_t>(t->numel()), grain, [&](int64_t begin, int64_t end) {
             for (int64_t i = begin; i < end; ++i) {
                 data[i] = relu(data[i]); // the relu operator's own rule (minmax.h)
             }

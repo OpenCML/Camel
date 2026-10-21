@@ -60,8 +60,9 @@ using type::TypeCode;
 
 namespace {
 
-// Elements per chunk below which a loop is not worth splitting across threads.
-constexpr int64_t kElementGrain = 1 << 15;
+// One element of a plain elementwise loop (f32 add or multiply over a contiguous buffer) costs
+// kNsPerFloat (parallel.h, measured); transcendental operators cost about eight times as much.
+constexpr int64_t kElementGrain = grainForWork(kNsPerFloat);
 
 // Up to three operands (lhs, rhs, cond) share one iteration plan.
 constexpr size_t kMaxOperands = 3;
@@ -412,7 +413,7 @@ UnaryF32Fn unaryF32Kernel() {
 }
 
 /// Transcendental operators cost roughly an order of magnitude more per element than a memory
-/// pass, so they are split across threads at proportionally smaller sizes.
+/// pass, so one chunk of their work is a proportionally smaller number of elements.
 int64_t unaryGrain(UnaryOp op) {
     switch (op) {
     case UnaryOp::Neg:
@@ -420,7 +421,7 @@ int64_t unaryGrain(UnaryOp op) {
     case UnaryOp::Relu:
         return kElementGrain;
     default:
-        return kElementGrain / 8;
+        return grainForWork(kNsPerFloat * 8.0);
     }
 }
 

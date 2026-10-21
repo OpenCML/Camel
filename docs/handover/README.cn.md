@@ -166,7 +166,7 @@
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
 | H52 | **测试基础设施缺陷**：运行器忽略 `expect_stdout_exact` 等未知字段，旧计划没有真正比较输出——未知字段报错，修复受影响的计划，列出暴露的真实失败 | 无 | **部分完成**（运行器已严格、`expect_stdout_exact` 真正比较：`handover/H52-runner-fields`；暴露 9 条真实失败，其中 8 条循环梯度回归在 H54、第 9 条交给 H38；报告 reports/H52.md） |
-| H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **进行中**（`handover/H54-cpu-op-cost`） |
+| H54 | CPU 每算子开销：小矩阵不进线程池、首次调用的 6 ms、分派成本（见 reviews/H24-H25-H26.md 末尾） | 无 | **完成**（`handover/H54-cpu-op-cost`；报告 reports/H54.md）。首次 6 ms = 池构造 31 条线程，池改为只由真正拆分的范围创建（小算子首调 1.58 ms → 21 µs）；惊群唤醒改为只点醒所需 worker（3 块区域 950 → 82 µs）；阈值统一为 `kMinWorkPerWorkerNs = 40 µs` 一个常数（按实测交叉点）；验收 mlp_step 93.95 → 48.14 ms、transformer_step 6.63 → 5.83 ms、链 9.31 → 8.84 ms，链已贴地板（两个 64³ GEMM 各 6.7 µs，约 72% FMA 峰值） |
 | H51 | 泛型第一期：按结构展开（`match type`、`static for`、`static loop`、`t.[n]`、可变元数），`tree_map` 等改用 Camel 写（先交计划） | 无 | **计划已批**（reviews/H51-plan.md），按 15 步实施 |
 | H50 | GPU G4–G5：支持面（bf16/Tensor Core 等）、使用已授予的许可、融合、优化器多张量融合（先交计划） | H49 计划获批 | **未开始** |
 | H49 | GPU G1–G3：放置标签、设备上的数组值、驻留与异步、整段编译与缓存（先交计划） | H48 的基准可用 | **未开始**（第 0 步按 H47 的证据先做：逐叶传输合批 `handover/H49a-tiles-transfer`） |
