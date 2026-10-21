@@ -78,9 +78,6 @@ std::string to_string(TypeOp op) {
 
 const std::string FuncTypeLoad::toString() const {
     std::string result = "FuncType:";
-    if (implMark_ != ImplMark::Graph) {
-        result += " " + to_string(implMark_);
-    }
     if (!modifiers_.empty()) {
         result += " " + std::string(modifiers_);
     }
@@ -121,9 +118,6 @@ const std::string TupleTypeLoad::geneCode() const { return "()"; }
 
 const std::string FuncTypeLoad::geneCode() const {
     std::string result = "";
-    if (implMark_ != ImplMark::Graph) {
-        result += to_string(implMark_) + " ";
-    }
     if (!modifiers_.empty()) {
         result += std::string(modifiers_) + " ";
     }

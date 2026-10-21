@@ -6,9 +6,7 @@
 /// The little-endian bytes of the elements of a tensor, in row-major order.
 /// @pure
 /// @example to_bytes(new([1.0, 2.0]))
-inner func to_bytes(t: Tensor): Bytes {
-    return 'tensor:to_bytes'
-}
+export func to_bytes(t: Tensor): Bytes
 
 /// A tensor of the given shape made of little-endian elements. The element type is the explicit
 /// type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result;
@@ -16,6 +14,5 @@ inner func to_bytes(t: Tensor): Bytes {
 /// @pure
 /// @fails fault `InvalidArgument` when the number of bytes does not fit the shape and the element type
 /// @example from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])
-inner func from_bytes(bytes: Bytes, shape: int[]): Tensor {
-    return 'tensor:from_bytes_*'
-}
+#op<'tensor:from_bytes_*'>
+export func from_bytes(bytes: Bytes, shape: int[]): Tensor

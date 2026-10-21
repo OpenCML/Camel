@@ -227,9 +227,6 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
         parts.push_back(fn->hasExitType() ? typeItem(fn->exitType()) : literal("v"));
         return parts;
     }
-    if (fn->implMark() != ImplMark::Graph) {
-        parts.push_back(literal(::to_string(fn->implMark()) + " "));
-    }
     const std::string modifiers = static_cast<std::string>(fn->modifiers());
     if (!modifiers.empty()) {
         parts.push_back(literal(modifiers + " "));

@@ -11,13 +11,9 @@
 /// The value of an environment variable, or the empty string when it is not set.
 /// @effect reads the environment
 /// @example get_env('HOME')    // '/home/alice'
-inner func get_env(name: string): string {
-    return 'sys:get_env'
-}
+export func get_env(name: string): string
 
 /// The current working directory.
 /// @effect reads the environment
 /// @example get_cwd()    // '/home/alice/project'
-inner func get_cwd(): string {
-    return 'sys:get_cwd'
-}
+export func get_cwd(): string

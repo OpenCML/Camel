@@ -683,12 +683,6 @@ Value Builder::visitFuncData(cst::FuncData context) {
     auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->tokCount(TK::KwAtomic) > 0) {
-            modSet.insert(Modifier::Atomic);
-        }
-        if (modifier->tokCount(TK::KwShared) > 0) {
-            modSet.insert(Modifier::Shared);
-        }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
         }
@@ -828,7 +822,7 @@ Value Builder::visitFuncAnno(cst::FuncAnno context) {
 funcDecl   :
         funcAnno*
         (WITH angledParams)?
-        EXPORT? implMark? modifiers?
+        EXPORT? modifiers?
         FUNC identRef parentParams (':' typeExpr)? stmtBlock ;
 */
 /*
@@ -1635,24 +1629,9 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
             blockContext ? blockContext->firstToken()->begin() : context->lastToken()->end()));
     auto funcType = unwrapNodeAs<FuncTypeLoad>(funcTypeNode);
 
-    auto implMark = context->get<cst::ImplMark>();
-    if (implMark) {
-        if (implMark->text() == "inner") {
-            funcType->setImplMark(ImplMark::Inner);
-        } else {
-            funcType->setImplMark(ImplMark::Outer);
-        }
-    }
-
     auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->tokCount(TK::KwAtomic) > 0) {
-            modSet.insert(Modifier::Atomic);
-        }
-        if (modifier->tokCount(TK::KwShared) > 0) {
-            modSet.insert(Modifier::Shared);
-        }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
         }
@@ -1895,29 +1874,21 @@ Value Builder::visitDataDecl(cst::DataDecl context, bool topLevel) {
 
 /*
 typeDecl
-    : implMark? TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
+    : TYPE identRef ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
       (typeExpr | STRING)
     ;
 */
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
-    ImplMark implMark = ImplMark::Graph;
     Reference ref = qualifyRef(value_cast<Reference>(visitIdentRef(context->get<cst::IdentRef>())));
-    if (context->get<cst::ImplMark>()) {
-        if (context->get<cst::ImplMark>()->tok(TK::KwInner)) {
-            implMark = ImplMark::Inner;
-        } else {
-            implMark = ImplMark::Outer;
-        }
-    }
     if (context->tok(TK::String)) {
         uri = context->tok(TK::String)->text();
         // Remove quotes from the string
         uri = uri.substr(1, uri.size() - 2);
     }
 
-    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, implMark, uri);
+    node_ptr_t typeDeclNode = createNodeAs<TypeDeclLoad>(ref, uri);
     setNodeTokenRangeByContext(typeDeclNode, context);
     unwrapNodeAs<TypeDeclLoad>(typeDeclNode)->setDoc(docOf(context));
     if (!context->all<cst::IdentDef>().empty()) {
@@ -4580,12 +4551,6 @@ Value Builder::visitFuncType(cst::FuncType context) {
     auto modifier = context->get<cst::Modifiers>();
     ModifierSet modSet;
     if (modifier) {
-        if (modifier->tokCount(TK::KwAtomic) > 0) {
-            modSet.insert(Modifier::Atomic);
-        }
-        if (modifier->tokCount(TK::KwShared) > 0) {
-            modSet.insert(Modifier::Shared);
-        }
         if (modifier->tokCount(TK::KwSync) > 0) {
             modSet.insert(Modifier::Sync);
         }

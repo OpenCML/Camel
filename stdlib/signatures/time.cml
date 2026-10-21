@@ -12,23 +12,17 @@
 /// The current time in seconds since 1970-01-01 00:00 UTC, with a fraction.
 /// @effect reads the clock
 /// @example now()    // 1791806400.25
-inner func now(): float {
-    return 'time:now'
-}
+export func now(): float
 
 /// The time `timestamp` (seconds since the epoch) written with a strftime format, in UTC.
 /// @effect declared with effects together with the rest of the module
 /// @fails fault `TimeFormatFailed` when the time or the format cannot be used
 /// @example strftime(0.0, '%Y-%m-%d')    // '1970-01-01'
-inner func strftime(timestamp: float, format: string): string {
-    return 'time:strftime'
-}
+export func strftime(timestamp: float, format: string): string
 
 /// The time, in seconds since the epoch, that text gives when read with a strptime format; the
 /// fields are taken as local time.
 /// @effect reads the time zone
 /// @fails fault `TimeFormatFailed` when text does not have the format
 /// @example strptime('1970-01-02', '%Y-%m-%d')    // 86400 in UTC
-inner func strptime(text: string, format: string): float {
-    return 'time:strptime'
-}
+export func strptime(text: string, format: string): float

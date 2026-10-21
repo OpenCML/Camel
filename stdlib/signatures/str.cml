@@ -18,128 +18,96 @@
 /// @fails fault `InvalidArgument` when sep is empty
 /// @example 'a,b,,c'->split<','>    // ['a', 'b', '', 'c']
 with <sep: string>
-inner func split(s: string): string[] {
-    return 'str:split'
-}
+export func split(s: string): string[]
 
 /// s without the ASCII white space (space, tab, line feed, carriage return, vertical tab, form
 /// feed) at both ends. Other white space, such as U+00A0, is kept.
 /// @pure
 /// @example trim('  hi \n')    // 'hi'
-inner func trim(s: string): string {
-    return 'str:trim'
-}
+export func trim(s: string): string
 
 /// s without the ASCII white space at its start.
 /// @pure
 /// @example trim_start('  hi  ')    // 'hi  '
-inner func trim_start(s: string): string {
-    return 'str:trim_start'
-}
+export func trim_start(s: string): string
 
 /// s without the ASCII white space at its end.
 /// @pure
 /// @example trim_end('  hi  ')    // '  hi'
-inner func trim_end(s: string): string {
-    return 'str:trim_end'
-}
+export func trim_end(s: string): string
 
 /// s with the ASCII letters a-z in upper case. Every other character is kept as it is, so letters
 /// outside ASCII do not change: to_upper('é') is 'é'.
 /// @pure
 /// @example to_upper('héllo')    // 'HéLLO'
-inner func to_upper(s: string): string {
-    return 'str:to_upper'
-}
+export func to_upper(s: string): string
 
 /// s with the ASCII letters A-Z in lower case. Every other character is kept as it is.
 /// @pure
 /// @example to_lower('HeLLo')    // 'hello'
-inner func to_lower(s: string): string {
-    return 'str:to_lower'
-}
+export func to_lower(s: string): string
 
 /// s with every occurrence of from replaced by to, found from left to right without overlap.
 /// @pure
 /// @fails fault `InvalidArgument` when from is empty
 /// @example 'a-b-c'->replace<'-', '+'>    // 'a+b+c'
 with <from: string, to: string>
-inner func replace(s: string): string {
-    return 'str:replace'
-}
+export func replace(s: string): string
 
 /// The index (in code points) of the first occurrence of sub in s, or null when there is none. An empty
 /// sub is found at 0.
 /// @pure
 /// @example 'hello'->find<'l'> ?? -1    // 2
 with <sub: string>
-inner func find(s: string): int? {
-    return 'str:find'
-}
+export func find(s: string): int?
 
 /// The length characters of s that start at character start.
 /// @pure
 /// @fails fault `IndexOutOfRange` when start or start + length lies outside the string; fault `InvalidArgument` when length is negative
 /// @example 'hello'->substr<1, 3>    // 'ell'
 with <start: int, length: int>
-inner func substr(s: string): string {
-    return 'str:substr'
-}
+export func substr(s: string): string
 
 /// Whether s begins with prefix. Every string begins with the empty string.
 /// @pure
 /// @example 'hello'->starts_with<'he'>    // true
 with <prefix: string>
-inner func starts_with(s: string): bool {
-    return 'str:starts_with'
-}
+export func starts_with(s: string): bool
 
 /// Whether s ends with suffix.
 /// @pure
 /// @example 'hello'->ends_with<'lo'>    // true
 with <suffix: string>
-inner func ends_with(s: string): bool {
-    return 'str:ends_with'
-}
+export func ends_with(s: string): bool
 
 /// s written count times in a row.
 /// @pure
 /// @fails fault `InvalidArgument` when count is negative or the result would be longer than a string can be (4 GiB of UTF-8)
 /// @example 'ab'->repeat<3>    // 'ababab'
 with <count: int>
-inner func repeat(s: string): string {
-    return 'str:repeat'
-}
+export func repeat(s: string): string
 
 /// The bytes of s as numbers 0 to 255.
 /// @pure
 /// @example bytes('hé')    // [104, 195, 169]
-inner func bytes(s: string): int[] {
-    return 'str:bytes'
-}
+export func bytes(s: string): int[]
 
 /// The string made of the given UTF-8 bytes.
 /// @pure
 /// @fails fault `InvalidArgument` when an element is not in 0 to 255 or the bytes are not valid UTF-8 (a string is always valid UTF-8; binary data is `Bytes`)
 /// @example from_bytes([104, 105])    // 'hi'
 /// @example from_bytes([255])         // fault: not valid UTF-8
-inner func from_bytes(xs: int[]): string {
-    return 'str:from_bytes'
-}
+export func from_bytes(xs: int[]): string
 
 // ---- code points as numbers ----
 
 /// The code points of s.
 /// @pure
 /// @example codepoints('h€')    // [104, 8364]
-inner func codepoints(s: string): int[] {
-    return 'str:codepoints'
-}
+export func codepoints(s: string): int[]
 
 /// The string made of the given code points.
 /// @pure
 /// @fails error `EncodingError` when an element is not a code point (negative, above 0x10FFFF, or a surrogate)
 /// @example from_codepoints([104, 8364]) !! ''    // 'h€'
-inner func from_codepoints(xs: int[]): string! {
-    return 'str:from_codepoints'
-}
+export func from_codepoints(xs: int[]): string!

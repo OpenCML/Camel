@@ -116,7 +116,7 @@ namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDec
                      | typeDecl | dataDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
-funcDecl           : frontMatter ('with' angledParams)? 'export'? implMark? modifiers?
+funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
                      'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
@@ -129,12 +129,11 @@ operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
 carrier            : identList | parentIdents | bracedIdents | bracketIdents
-typeDecl           : frontMatter? implMark? 'type' identRef
+typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
 retStmt            : ('return' | 'throw') dataList
-implMark           : 'inner' | 'outer'
-modifiers          : ('atomic' | 'shared' | 'sync')+
+modifiers          : 'sync'+
 identDef           : IDENTIFIER
 identRef           : (IDENTIFIER '::')* IDENTIFIER
 identList          : identDef (',' identDef)*
@@ -290,6 +289,5 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
 | `typeof e`、`名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof` | 语法错误 | 无 |
-| 修饰符 `atomic`、`shared`、`inner`、`outer` | 无诊断；没有语义 | 不写 |
 
 此外有一处“能写出来但目前用不了”：带函数类型的声明 `let f: (x: int) => int = g`。

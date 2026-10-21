@@ -9,6 +9,4 @@
 /// The Zen of Camel, the text of the file ZEN.
 /// @pure
 /// @example println(zen())
-inner func zen(): string {
-    return 'this:zen'
-}
+export func zen(): string

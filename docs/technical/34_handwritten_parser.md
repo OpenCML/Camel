@@ -183,8 +183,8 @@ read (`peek`), never a whole bracket:
 | `{`: struct literal or block | 3 tokens | struct iff `{ name :` or `{ ...`; `{}` is an empty block as a branch arm or a lambda body and an empty struct as a statement (the order of the alternatives in `blockExpr` and `stmt`) |
 | `{` in a braced pattern | 3 tokens | pairs iff `{ name :` or `{ ...` |
 | `<` where an operand starts | 1 token | the `with` parameters of a lambda |
-| modifiers (`sync`, …) at a statement | the modifiers + 1 | `func` after them: a declaration; `{` after a lone `sync`: a block; else a lambda |
-| `export`, `inner`, `outer` | ≤ 3 tokens | `export let/var/type/{`, `export inner type`: an export; else a function |
+| modifiers (`sync`) at a statement | the modifier + 1 | `func` after it: a declaration; `{` after a lone `sync`: a block; else a lambda |
+| `export` | ≤ 3 tokens | `export let/var/type/{`: an export; else a function |
 | `import x …` | 2 tokens | `x from`: the imported name; else a module path |
 | arguments: positional or named | 2 tokens | `name :` starts the named ones; a `...` before that is positional |
 | `[e for …]` | after the first element | `for` makes it a comprehension |

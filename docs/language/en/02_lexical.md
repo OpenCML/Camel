@@ -48,7 +48,7 @@ The following words are reserved and cannot be used as names (using one gives `S
 | Control | `if` `then` `else` `match` `case` `return` `throw` `wait` `sync` `loop` `while` `do` `for` `in` `static` |
 | Types and conversion | `as` `typeas` `const` `constas` `enum` |
 | Literals | `null` `true` `false` |
-| Reserved, not implemented | `is` `of` `try` `catch` `finally` `typeof` `keyof` `inner` `outer` `atomic` `shared` |
+| Reserved, not implemented | `is` `of` `try` `catch` `finally` `typeof` `keyof` |
 
 For the status of each word in the last row see [8.6](08_top_level_and_grammar.md#86-constructs-reserved-but-not-implemented).
 

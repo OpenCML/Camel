@@ -158,7 +158,8 @@ int 1 string a
 | Modifier | Meaning |
 |---|---|
 | `sync` | The function has side effects and needs to be synchronised ([4.3.3](04_execution_model.md#433-sync-func-function-modifier)) |
-| `atomic`, `shared`, `inner`, `outer` | Reserved: they are parsed and have no semantics at all |
+
+There are no other modifiers. A function implemented in C++ is a body-less `export func` declaration (design principles 6.4); a helper used only inside its module is a plain `func` without `export`, since `func` is module-private already.
 
 `#macro` is not a modifier but a standard tag written before a function declaration ([4.5](04_execution_model.md#45-macro-functions)).
 

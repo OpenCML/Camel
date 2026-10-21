@@ -101,9 +101,6 @@ const std::string DataDeclLoad::toString() const {
 
 const std::string TypeDeclLoad::toString() const {
     std::string result = "TypeDecl: ";
-    if (implMark_ != ImplMark::Graph) {
-        result += to_string(implMark_) + " ";
-    }
     result += ref_.toString();
     if (!params_.empty()) {
         result += "<";
@@ -164,9 +161,6 @@ const std::string FuncDeclLoad::geneCode() const {
 
 const std::string TypeDeclLoad::geneCode() const {
     std::string result = "type ";
-    if (implMark_ != ImplMark::Graph) {
-        result += to_string(implMark_) + " ";
-    }
     result += ref_.toString();
     if (!params_.empty()) {
         result += "<";

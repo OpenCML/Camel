@@ -485,8 +485,6 @@ class Formatter {
 
     std::any visitRetStmt(cst::RetStmt context);
 
-    std::any visitImplMark(cst::ImplMark context);
-
     std::any visitModifiers(cst::Modifiers context);
 
     std::any visitSpreadValue(cst::SpreadValue context);

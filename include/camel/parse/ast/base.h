@@ -27,7 +27,6 @@
 #include "camel/common/tree.h"
 #include "camel/core/error/diagnostics/range.h"
 #include "camel/core/func.h"
-#include "camel/core/impl.h"
 #include "camel/core/literal.h"
 #include "camel/core/source/ids.h"
 #include "camel/utils/assert.h"

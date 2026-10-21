@@ -158,7 +158,8 @@ int 1 string a
 | 修饰符 | 含义 |
 |---|---|
 | `sync` | 函数有副作用、需要被同步（[4.3.3](04_execution_model.md#433-sync-func函数修饰符)） |
-| `atomic`、`shared`、`inner`、`outer` | 保留：能被解析，没有任何语义 |
+
+没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
 
 `#macro` 不是修饰符，是写在函数声明前的标准标签（[4.5](04_execution_model.md#45-macro-函数)）。
 

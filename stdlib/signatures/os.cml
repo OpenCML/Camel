@@ -13,57 +13,41 @@
 /// @effect waits
 /// @fails fault `InvalidArgument` when the duration is negative
 /// @example sleep(100)
-inner func sleep(milliseconds: int): void {
-    return 'os:sleep'
-}
+export func sleep(milliseconds: int): void
 
 /// The name of the user the process runs as.
 /// @effect reads the environment
 /// @fails fault `RuntimeError` when the name cannot be found
 /// @example whoami()    // 'alice'
-inner func whoami(): string {
-    return 'os:whoami'
-}
+export func whoami(): string
 
 /// The number of hardware threads, at least 1.
 /// @effect reads the machine
 /// @example cpu_count()    // 8
-inner func cpu_count(): int {
-    return 'os:cpu_count'
-}
+export func cpu_count(): int
 
 /// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
 /// @effect changes the terminal
 /// @fails fault `RuntimeError` when the terminal refuses
 /// @example set_terminal_raw_mode(true)
-inner func set_terminal_raw_mode(enabled: bool): void {
-    return 'os:set_terminal_raw_mode'
-}
+export func set_terminal_raw_mode(enabled: bool): void
 
 /// Whether a key press is waiting to be read.
 /// @effect reads the terminal
 /// @example has_input()    // true or false
-inner func has_input(): bool {
-    return 'os:has_input'
-}
+export func has_input(): bool
 
 /// One character of pending terminal input.
 /// @effect reads the terminal
 /// @example get_char()    // 'w'
-inner func get_char(): string {
-    return 'os:get_char'
-}
+export func get_char(): string
 
 /// Up to max characters of pending terminal input.
 /// @effect reads the terminal
 /// @example get_chars(3)    // at most three characters
-inner func get_chars(max: int): string {
-    return 'os:get_chars'
-}
+export func get_chars(max: int): string
 
 /// Discards the terminal input that is waiting.
 /// @effect reads the terminal
 /// @example clear_input_buffer()
-inner func clear_input_buffer(): void {
-    return 'os:clear_input_buffer'
-}
+export func clear_input_buffer(): void

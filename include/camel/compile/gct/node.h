@@ -30,7 +30,7 @@
  * What a kind carries is spread over `payload`, `tag` and `flags`:
  *
  *     DATA              payload: the constant (a pointer to a shared_ptr the tree keeps)
- *     TYPE              payload: the type; tag: ImplMark
+ *     TYPE              payload: the type
  *     DECL              payload: the name; flag: a function is declared
  *     FUNC, NREF, DREF  payload: the name; FUNC flags: a decorated block, a body-less
  *                       declaration of a C++ operator
@@ -76,7 +76,6 @@
 #include "camel/compile/gct/types.h"
 #include "camel/core/data.h"
 #include "camel/core/func.h"
-#include "camel/core/impl.h"
 #include "camel/core/loop_kind.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/source/ids.h"
@@ -138,14 +137,10 @@ class Node {
         flags_ |= kFlagA;
     }
 
-    /// TYPE: the type, and how a function of that type is implemented.
+    /// TYPE: the type.
     Type *dataType() const {
         check(NodeKind::TYPE);
         return payload_.type;
-    }
-    ImplMark implMark() const {
-        check(NodeKind::TYPE);
-        return static_cast<ImplMark>(tag_);
     }
 
     /// DECL, FUNC, NREF, DREF: the name as written, qualified names with `::` between the

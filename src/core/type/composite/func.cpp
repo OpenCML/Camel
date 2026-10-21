@@ -48,11 +48,10 @@ namespace {
 /// The parts a factory collected, its names interned as symbols.
 template <typename Parts>
 Parts partsOf(
-    ImplMark implMark, ModifierSet modifiers, const std::vector<param_t> &withTypes,
+    ModifierSet modifiers, const std::vector<param_t> &withTypes,
     const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
     const std::vector<std::string> &argNames) {
     Parts parts;
-    parts.implMark  = implMark;
     parts.modifiers = modifiers;
     parts.params.reserve(withTypes.size() + normTypes.size());
     parts.params.insert(parts.params.end(), withTypes.begin(), withTypes.end());
@@ -76,7 +75,6 @@ Parts partsOf(
 // instantiated with it here.
 FunctionType *FunctionTypeFactory::build() {
     return FunctionType::intern(partsOf<FunctionType::Parts>(
-        implMark_,
         modifiers_,
         withTypes_,
         normTypes_,
@@ -87,7 +85,6 @@ FunctionType *FunctionTypeFactory::build() {
 
 OpenFunctionType *FunctionTypeFactory::buildOpen() {
     return FunctionType::allocate<OpenFunctionType>(partsOf<FunctionType::Parts>(
-        implMark_,
         modifiers_,
         withTypes_,
         normTypes_,
@@ -104,7 +101,7 @@ size_t FunctionType::trailingBytes(size_t params, bool hasNames) {
 }
 
 FunctionType::FunctionType(const Parts &parts, bool open)
-    : CompositeType(TypeCode::Function), exitType_(parts.exitType), implMark_(parts.implMark),
+    : CompositeType(TypeCode::Function), exitType_(parts.exitType),
       modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
       hasNames_(parts.hasNames), open_(open) {
@@ -144,12 +141,11 @@ template <> FunctionType *FunctionType::allocate<FunctionType>(const Parts &part
 
 FunctionType *FunctionType::intern(const Parts &parts) {
     // The key is everything a signature consists of (see intern.h; types by address): the
-    // counts, the marks, the result type, each parameter with its `var` mark, and the names.
+    // counts, the modifiers, the result type, each parameter with its `var` mark, and the names.
     std::vector<uintptr_t> key;
     key.reserve(6 + parts.params.size() * (parts.hasNames ? 3 : 2));
     key.push_back(parts.withCount);
     key.push_back(parts.params.size());
-    key.push_back(static_cast<uintptr_t>(parts.implMark));
     key.push_back(static_cast<uintptr_t>(parts.modifiers.mask));
     key.push_back(reinterpret_cast<uintptr_t>(parts.exitType));
     key.push_back(parts.hasNames ? 1 : 0);
@@ -168,7 +164,6 @@ FunctionType *FunctionType::intern(const Parts &parts) {
 
 FunctionType::Parts FunctionType::parts() const {
     Parts parts;
-    parts.implMark  = implMark_;
     parts.modifiers = modifiers_;
     parts.withCount = withCount_;
     parts.exitType  = exitType_;
