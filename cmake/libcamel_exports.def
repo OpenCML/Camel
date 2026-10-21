@@ -331,6 +331,7 @@ EXPORTS
     ?payloadOf@GraphDraft@runtime@camel@@QEBA?AV?$span@$$CBW4byte@std@@$0?0@std@@I@Z
     ?permSpace@mm@core@camel@@YAAEAVGrowableBumpAllocator@123@XZ
     ?print@Tree@gct@compile@camel@@QEBAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@@Z
+    ?printSlotCapped@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@1@Z
     ?printTaggedSlots@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@PEB_KPEBVTupleType@type@23@@Z
     ?printValue@rtdata@core@camel@@YAXAEAV?$basic_ostream@DU?$char_traits@D@std@@@std@@_KPEAVType@type@23@@Z
     ?programOfRuntimeGraph@Context@context@core@camel@@QEBAPEBVProgram@runtime@4@PEBVGCGraph@64@@Z
