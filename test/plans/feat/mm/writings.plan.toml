@@ -1,0 +1,22 @@
+id = "mm.writings"
+order = 374
+tier = "fast"
+tags = ["feat", "mm", "writings"]
+desc = """
+Values with several writings (docs/design/graph-store 3.1, 3.4): a node already is a value, and
+several writings are nodes declared equivalent. The classes are kept per numeric permission
+context; the root of a class is its smallest node, whatever the order of the merges.
+"""
+
+[[tests]]
+name = "writings.union_find"
+desc = "The equivalence classes of a graph: merges, smallest node as root, ascending members, the same classes in any order of merges, a log that gives the classes back, the permission contexts (a context sees the equivalences within its permissions), at most four contexts, and a chain of 100000 merges."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/empty.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS merge_new ok", "WRITINGS root_is_smallest ok", "WRITINGS members_ascending ok", "WRITINGS alone ok", "WRITINGS order_free ok", "WRITINGS from_log ok", "WRITINGS strict_context ok", "WRITINGS granted_context ok", "WRITINGS two_grants ok", "WRITINGS exact_reaches_layers ok", "WRITINGS new_flag ok", "WRITINGS layer_limit ok", "WRITINGS long_chain ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
