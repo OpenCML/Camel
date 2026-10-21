@@ -124,6 +124,11 @@ class Tree {
     /// `match type` (children: TYPE, TCASE...) and one of its cases (child: the body).
     node_ptr_t makeTypeMatch();
     node_ptr_t makeTypeCase(uint16_t patterns);
+    /// `static for (n, F) in fields T` (children: TYPE, body). `valueName` is `n`, `typeName`
+    /// is `F`; both are bound only while the body is built.
+    node_ptr_t makeStaticFor(const std::string &valueName, const std::string &typeName);
+    /// `t.[key]` (children: the target, the key expression).
+    node_ptr_t makeStaticAccess();
     /// A CASE of an enum variant: `label` the variant as written (`Shape::Rect`), `fields` and
     /// `bindings` the entries of the pattern in the order written (see Node::EnumCase).
     node_ptr_t makeEnumCase(

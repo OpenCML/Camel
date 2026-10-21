@@ -185,6 +185,11 @@ enum class SemanticDiag : uint32_t {
     StaticTypeNotConcrete     = 0x000172,
     StaticMatchTooDeep        = 0x000173,
     GenericInstantiationCycle = 0x000174,
+    StaticForNotComposite       = 0x000175,
+    StaticAccessNotInternal     = 0x000176,
+    StaticAccessUnknownField    = 0x000177,
+    StaticAccessIndexOutOfRange = 0x000178,
+    StaticAccessNotConstant     = 0x000179,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

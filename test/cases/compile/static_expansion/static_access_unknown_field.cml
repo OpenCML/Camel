@@ -1,0 +1,9 @@
+module static_access_unknown_field
+
+func field(t: {a: int, b: int}): int {
+    return t.["c"]
+}
+
+func main(): int {
+    return field({a: 1, b: 2})
+}

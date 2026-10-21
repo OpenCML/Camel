@@ -386,7 +386,7 @@ void ParserImpl::parseComp() {
 
 /// annoExpr : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 /// | memberAccess)*
-/// memberAccess : '.' (IDENTIFIER | INTEGER | REAL)
+/// memberAccess : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 /// Rule 1: an index, a call, an
 /// angle-bracket argument list and the postfix `!` touch the expression before them. For `<` the
 /// lexer has decided already (LAngle). `Shape::Rect { w: 2 }` is a struct variant construction:
@@ -432,6 +432,18 @@ void ParserImpl::parseAnno() {
         }
         if (cur_ == TK::Dot) {
             const TK member = peek(1);
+            if (member == TK::LBracket) {
+                const size_t mm = mark();
+                bump(); // .
+                bump(); // [
+                parseExpr();
+                if (!panic_) {
+                    expectListEnd(TK::RBracket);
+                }
+                close(mm, NK::MemberAccess);
+                any = true;
+                continue;
+            }
             if (member == TK::Identifier || member == TK::Integer || member == TK::Real) {
                 const size_t mm = mark();
                 bump();
@@ -448,14 +460,25 @@ void ParserImpl::parseAnno() {
     }
 }
 
-/// accessExpr : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
-/// `t.0.1` arrives as `t`, `.`, and the REAL `0.1`: the AST builder splits it.
+/// accessExpr : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+/// `t.0.1` arrives as `t`, `.`, and the REAL `0.1`: the AST builder splits it. `t.[n]` names a
+/// field or an element by a compile-time key instead of a literal name (H51 step 4).
 void ParserImpl::parseAccess() {
     const size_t m = mark();
     parsePrimary();
     bool any = false;
     while (cur_ == TK::Dot && !panic_) {
         const TK member = peek(1);
+        if (member == TK::LBracket) {
+            bump(); // .
+            bump(); // [
+            parseExpr();
+            if (!panic_) {
+                expectListEnd(TK::RBracket);
+            }
+            any = true;
+            continue;
+        }
         if (member != TK::Identifier && member != TK::Integer && member != TK::Real) {
             bump();
             if (isKeyword(cur_)) {
@@ -916,6 +939,38 @@ void ParserImpl::parseTypeCase() {
         parseBlockExpr();
     }
     close(m, NK::TypeCase);
+}
+
+/// staticForExpr : 'static' 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr '=>'
+/// blockExpr
+/// `static for (n, F) in fields T => 块`（H51 步骤 3）：把结构体或元组的字段表在实例化时展开，
+/// 每个字段一份块。`n` 是字段名（元组是十进制下标），`F` 是字段类型；两者都只在块内可见。
+/// 这是展开机制，不是运行期循环：块里没有 SFOR/LOOP 节点，展开出的代码直接在当前图里。
+void ParserImpl::parseStaticFor() {
+    const size_t m = mark();
+    bump(); // static
+    bump(); // for
+    if (!panic_ && expect(TK::LParen)) {
+        parseIdentDef();
+        if (!panic_ && expect(TK::Comma)) {
+            parseIdentDef();
+        }
+        if (!panic_) {
+            expect(TK::RParen);
+        }
+    }
+    if (!panic_ && expect(TK::KwIn)) {
+        if (atWord(0, "fields")) {
+            bump();
+        } else if (!panic_) {
+            unexpected({e(TK::Identifier)});
+        }
+        parseType();
+    }
+    if (!panic_ && expect(TK::FatArrow)) {
+        parseBlockExpr();
+    }
+    close(m, NK::StaticForExpr);
 }
 
 /// typeCasePattern : 'struct' | 'tuple' | '#' 'leaf' | '_'

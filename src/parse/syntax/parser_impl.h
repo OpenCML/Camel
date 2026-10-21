@@ -317,6 +317,7 @@ class ParserImpl {
     void parseIf();
     void parseMatch();
     void parseMatchType();
+    void parseStaticFor();
     void parseMatchCase();
     void parseTypeCase();
     void parseTypeCasePattern();

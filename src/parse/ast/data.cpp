@@ -40,6 +40,10 @@ std::string to_string(DataType type) {
         return "TypeMatch";
     case DataType::TypeCase:
         return "TypeCase";
+    case DataType::StaticFor:
+        return "StaticFor";
+    case DataType::StaticAccess:
+        return "StaticAccess";
     case DataType::TryExpr:
         return "TryExpr";
     case DataType::LoopExpr:

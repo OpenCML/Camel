@@ -615,8 +615,30 @@ class Builder {
         bool returned = false;
     };
     StaticBodyScope *activeStaticBody_ = nullptr;
+    /// The block a `static for` expands into. Its body is inline code at the `static for`
+    /// position, so in a sync block it continues the chain instead of starting a plain block.
+    const GCT::Node *syncedBlockOverride_ = nullptr;
     /// How many `match type` bodies are being built, to stop a pathological nesting early.
     size_t staticDepth_ = 0;
+    /// The `n` of the `static for` bodies being built, innermost scope last. `n` is a
+    /// compile-time string; it is not put in nodeScope_, so a body that only uses it as a key
+    /// builds no node for it.
+    struct StaticValueBinding {
+        std::string name;
+        std::string value;
+    };
+    std::vector<std::vector<StaticValueBinding>> staticValueScopes_;
+    std::optional<std::string> staticValueNamed(const std::string &name) const {
+        for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
+             ++scope) {
+            for (auto binding = scope->rbegin(); binding != scope->rend(); ++binding) {
+                if (binding->name == name) {
+                    return binding->value;
+                }
+            }
+        }
+        return std::nullopt;
+    }
     /// The arm whose code the builder is writing now, if it is in one: not a function or a
     /// lambda written inside it.
     ArmBuild *activeArm() const {
@@ -1120,6 +1142,10 @@ class Builder {
     /// `match type`: selects a case from the shape of the subject type and builds only that
     /// case's body, in the current graph (no branch node).
     node_handle_t visitTypeMatchNode(const GCT::node_ptr_t &gct);
+    /// `static for (n, F) in fields T`: the body is built once per field, in the current graph.
+    node_handle_t visitStaticForNode(const GCT::node_ptr_t &gct);
+    /// `t.[key]`: the field or tuple element is chosen at compile time.
+    node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
     bool typeCaseMatches(Type *subject, uint16_t patterns) const;
 
     /// Whether a name read in a case body that is not selected names something. It walks the

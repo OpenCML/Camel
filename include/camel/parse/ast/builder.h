@@ -157,6 +157,7 @@ class Builder {
     Value visitMatchCase(syntax::cst::MatchCase context);
     Value visitMatchTypeExpr(syntax::cst::MatchTypeExpr context);
     Value visitTypeCase(syntax::cst::TypeCase context);
+    Value visitStaticForExpr(syntax::cst::StaticForExpr context);
     TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
     /// IfExpr, MatchExpr, MatchTypeExpr, TryExpr.
     Value visitCtrlExpr(syntax::Node context);
@@ -181,6 +182,9 @@ class Builder {
     /// `lhs.member` (a field or tuple element), located by `range`.
     node_ptr_t
     makeMemberAccess(node_ptr_t lhs, syntax::Child dot, syntax::Child member, syntax::Node range);
+    /// `lhs.[key]`: a field or tuple element named by a compile-time key.
+    node_ptr_t
+    makeStaticAccess(node_ptr_t lhs, syntax::Child dot, syntax::Node key, syntax::Node range);
     Value visitStructData(syntax::cst::StructData context);
     Value visitArrayData(syntax::cst::ArrayData context);
     Value visitTupleData(syntax::cst::TupleData context);

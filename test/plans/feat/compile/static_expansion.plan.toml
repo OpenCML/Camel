@@ -78,6 +78,98 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "fields_and_access"
+desc = "`static for (n, F) in fields T` expands a struct and an ordinary tuple in declaration order, `F` is usable as a type, an empty struct/tuple expands zero times, nesting works, and `t.[\"0\"]` is `t.[0]`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/fields_and_access.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "a 1",
+  "b 2",
+  "0 3",
+  "1 4",
+  "p x 5",
+  "q 0 6",
+  "q 1 7",
+  "0",
+  "20",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `static for expansion changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_expansion_has_no_static_nodes"
+desc = "The expansion is straight-line code: the GIR contains ACCS nodes for the fields and no SFOR or SACC node, and the declaration order is kept."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/fields_and_access.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+expect_output_not_contains = ["SFOR", "SACC"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_unknown_field"
+desc = "A struct field that does not exist is a compile-time error."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_unknown_field.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessUnknownField"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_out_of_range"
+desc = "A tuple element past the end is a compile-time error."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_out_of_range.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessIndexOutOfRange"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_not_constant"
+desc = "The key of `t.[...]` must be a compile-time constant, not a parameter."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_shadowed_key"
+desc = "A local named like the field name shadows the static `n`; the key is then a runtime value, not a constant."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_shadowed_key.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_for_not_composite"
+desc = "`static for` walks a struct or an ordinary tuple only; an int has no fields."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_for_not_composite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticForNotComposite"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "return_type_inferred_from_selected_case"
 desc = "A generic function without a return annotation gets a different concrete result type per instance; a `return` in the selected case gives the match's value, not the function's."
 kind = "behavior"

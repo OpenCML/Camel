@@ -68,6 +68,10 @@ std::string to_string(NodeKind kind) {
         return "TMTCH";
     case NodeKind::TCASE:
         return "TCASE";
+    case NodeKind::SFOR:
+        return "SFOR";
+    case NodeKind::SACC:
+        return "SACC";
     default:
         ASSERT(false, "Unknown NodeKind");
     }

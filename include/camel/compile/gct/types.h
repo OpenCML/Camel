@@ -57,6 +57,8 @@ enum class NodeKind : uint8_t {
     LOOP, // a loop (design principles 3.10); children: see Node::loopKind
     TMTCH, // `match type` (design principles 5.5); children: TYPE, TCASE...
     TCASE, // a case of `match type`; one child, the body
+    SFOR,  // `static for`: children: TYPE, EXEC; payload: the value and type names
+    SACC,  // `t.[key]`: children: the target, the key expression
 };
 
 std::string to_string(NodeKind kind);

@@ -1034,6 +1034,20 @@ any Formatter::visitTypeCasePattern(cst::TypeCasePattern context) {
 }
 
 /*
+staticForExpr
+    : STATIC FOR '(' identDef ',' identDef ')' IN 'fields' typeExpr '=>' blockExpr
+    ;
+*/
+any Formatter::visitStaticForExpr(cst::StaticForExpr context) {
+    const auto valueName = context->get<cst::IdentDef>(0);
+    const auto typeName  = context->get<cst::IdentDef>(1);
+    return "static for (" + any_cast<string>(visitIdentDef(valueName)) + ", " +
+           any_cast<string>(visitIdentDef(typeName)) + ") in fields " +
+           any_cast<string>(visitType(context->type())) + " => " +
+           any_cast<string>(visitBlockExpr(context->lastChild().node()));
+}
+
+/*
 catchClause
     : CATCH identDef ':' typeExpr stmtBlock
     ;
@@ -1268,10 +1282,13 @@ any Formatter::visitAccessExpr(cst::AccessExpr context) {
 
 /*
 memberAccess
-    : '.' (IDENTIFIER | INTEGER | REAL)
+    : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
     ;
 */
 any Formatter::visitMemberAccess(cst::MemberAccess context) {
+    if (context->child(1).isToken() && context->child(1).text() == "[") {
+        return ".[" + any_cast<string>(visit(context->child(2).node())) + "]";
+    }
     return "." + context->child(1)->text();
 }
 
@@ -1689,6 +1706,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(Pattern)
         CAMEL_FORMAT(MatchCase)
         CAMEL_FORMAT(MatchTypeExpr)
+        CAMEL_FORMAT(StaticForExpr)
         CAMEL_FORMAT(TypeCase)
         CAMEL_FORMAT(TypeCasePattern)
         CAMEL_FORMAT(CatchClause)

@@ -2382,6 +2382,47 @@ Value Builder::visitMatchTypeExpr(cst::MatchTypeExpr context) {
     return matchNode;
 }
 
+/*
+staticForExpr
+    : STATIC FOR '(' identDef ',' identDef ')' IN 'fields' typeExpr '=>' blockExpr
+    ;
+*/
+Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
+    ENTER("StaticForExpr");
+    const auto bindings = context->all<cst::IdentDef>();
+    const std::string valueName =
+        bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
+    const std::string typeName =
+        bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
+    node_ptr_t forNode = createNodeAs<StaticForLoad>(valueName, typeName);
+    setNodeTokenRangeByContext(forNode, context);
+    node_ptr_t typeNode = any2node(visitType(context->type()));
+    *forNode << typeNode;
+    node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
+    *forNode << bodyNode;
+    registerAstSemanticBundle(
+        forNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(forNode, context->tok(TK::KwStatic), "ast.static.for.strong"),
+                -1,
+                "static"),
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(forNode, context->tok(TK::KwFor), "ast.static.for"),
+                -1,
+                "for"),
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                nodeOrigin(typeNode),
+                -1,
+                "type"),
+        });
+    LEAVE("StaticForExpr");
+    return forNode;
+}
+
 TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     const std::string text = pattern.text();
     if (text == "struct") {
@@ -2500,6 +2541,10 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     case NK::MatchTypeExpr: // MATCH TYPE typeExpr '{' typeCase* '}'
     {
         ctrlNode = any2node(visitMatchTypeExpr(cst::MatchTypeExpr(context)));
+    } break;
+    case NK::StaticForExpr:
+    {
+        ctrlNode = any2node(visitStaticForExpr(cst::StaticForExpr(context)));
     } break;
     case NK::MatchExpr: // MATCH logicalOrExpr '{' matchCase+ '}'
     {
@@ -3383,7 +3428,12 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                 registerAstSemanticBundle(exprNode, std::move(parts));
             } else if (child.node().is(NK::MemberAccess)) {
                 auto access = cst::MemberAccess(child.node());
-                exprNode    = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+                if (access->child(1).isToken() && access->child(1).text() == "[") {
+                    exprNode = makeStaticAccess(
+                        lhsNode, access->child(0), access->child(2).node(), access);
+                } else {
+                    exprNode = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+                }
             } else if (child.node().is(NK::StructData)) {
                 // `Shape::Rect { w: 2 }`: a struct-shape variant is built from a struct literal,
                 // which is one argument. The graph builder decides by the shape of the variant
@@ -3573,21 +3623,54 @@ Builder::makeMemberAccess(node_ptr_t lhs, syn::Child dot, syn::Child member, syn
 
 /*
 accessExpr
-    : primaryData ('.' (IDENTIFIER | INTEGER | REAL))*
+    : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
     ;
 */
 Value Builder::visitAccessExpr(cst::AccessExpr context) {
     ENTER("AccessExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr()));
-    for (size_t i = 1; i < context->childCount(); i += 2) {
-        string strOp = context->child(i)->text();
+    size_t i           = 1;
+    while (i < context->childCount()) {
+        std::string strOp = context->child(i)->text();
         if (strOp != ".") {
             throw std::runtime_error("Invalid access operator: " + strOp);
         }
+        if (context->child(i + 1).isToken() && context->child(i + 1).text() == "[") {
+            // `.` '[' dataExpr ']': a field or element named by a compile-time key.
+            const auto &keyChild = context->child(i + 2);
+            lhsNode = makeStaticAccess(lhsNode, context->child(i), keyChild.node(), context);
+            i += 4;
+            continue;
+        }
         lhsNode = makeMemberAccess(lhsNode, context->child(i), context->child(i + 1), context);
+        i += 2;
     }
     LEAVE("AccessExpr");
     return lhsNode;
+}
+
+node_ptr_t Builder::makeStaticAccess(
+    node_ptr_t lhs, syn::Child dot, syn::Node key, syn::Node range) {
+    node_ptr_t dataNode = createNodeAs<StaticAccessLoad>();
+    setNodeTokenRangeByContext(dataNode, range);
+    node_ptr_t keyNode = any2node(visitExpr(key));
+    *dataNode << lhs << keyNode;
+    registerAstSemanticBundle(
+        dataNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Operator,
+                deriveAstAnchorOrigin(dataNode, tokenOf(dot), "ast.access.static"),
+                -1,
+                ".[]"),
+            semanticPart(camel::source::SemanticRole::Receiver, nodeOrigin(lhs), -1, "target"),
+            semanticPart(
+                camel::source::SemanticRole::IndexExpr,
+                nodeOrigin(keyNode),
+                -1,
+                "key"),
+        });
+    return dataNode;
 }
 
 /*
@@ -4393,6 +4476,7 @@ Value Builder::visitExpr(syn::Node context) {
     case NK::IfExpr:
     case NK::MatchExpr:
     case NK::MatchTypeExpr:
+    case NK::StaticForExpr:
     case NK::TryExpr:
         return visitCtrlExpr(context);
     case NK::LoopExpr:

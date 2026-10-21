@@ -1,0 +1,9 @@
+module static_access_out_of_range
+
+func element(t: (int, int)): int {
+    return t.[2]
+}
+
+func main(): int {
+    return element((1, 2))
+}

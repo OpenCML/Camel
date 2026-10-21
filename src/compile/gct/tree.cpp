@@ -308,6 +308,18 @@ node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
     return node;
 }
 
+node_ptr_t Tree::makeStaticFor(const std::string &valueName, const std::string &typeName) {
+    Node *node = makeNode(NodeKind::SFOR);
+    auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(2)));
+    list->count    = 2;
+    list->items[0] = intern(valueName);
+    list->items[1] = intern(typeName);
+    node->payload_.names = list;
+    return node;
+}
+
+node_ptr_t Tree::makeStaticAccess() { return makeNode(NodeKind::SACC); }
+
 node_ptr_t Tree::makeEnumCase(
     const std::string &label, const std::vector<std::string> &fields,
     const std::vector<std::string> &bindings, bool structShape) {
@@ -435,7 +447,8 @@ node_ptr_t Tree::clone(const Node *node) {
         }
         break;
     case NodeKind::EXPT:
-    case NodeKind::LOOP: {
+    case NodeKind::LOOP:
+    case NodeKind::SFOR: {
         const Node::NameList *names = node->payload_.names;
         auto *list =
             static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(names->count)));
@@ -539,6 +552,10 @@ std::string Node::toString() const {
         }
     case NodeKind::TMTCH:
         return "TMTCH";
+    case NodeKind::SFOR:
+        return "SFOR: " + staticForValueName() + ", " + staticForTypeName();
+    case NodeKind::SACC:
+        return "SACC";
     case NodeKind::TCASE: {
         std::string text = "TCASE: (";
         bool first       = true;

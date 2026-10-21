@@ -265,6 +265,8 @@ class Builder {
     node_ptr_t visitLoopExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitMatchType(const AST::node_ptr_t &ast);
+    node_ptr_t visitStaticFor(const AST::node_ptr_t &ast);
+    node_ptr_t visitStaticAccess(const AST::node_ptr_t &ast);
     node_ptr_t visitTryExpr(const AST::node_ptr_t &ast);
     node_ptr_t visitLiteral(const AST::node_ptr_t &ast);
     node_ptr_t visitArrayData(const AST::node_ptr_t &ast);

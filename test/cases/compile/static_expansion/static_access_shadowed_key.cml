@@ -1,0 +1,13 @@
+module static_access_shadowed_key
+
+func field(t: {a: int}): int {
+    static for (n, F) in fields {a: int} => {
+        let n = 'a'
+        t.[n]
+    }
+    return 0
+}
+
+func main(): int {
+    return field({a: 1})
+}

@@ -400,7 +400,33 @@ func duplicate(t: typeas T) {
 }
 ```
 
-### 6.8.4 `loop`
+### 6.8.4 `static for` and `t.[n]`
+
+`static for (n, F) in fields T => block` expands the **field list** of `T` when the function is instantiated (design principles 5.5): the block runs once per field, and the expanded code becomes straight-line code at that position. The graph has no loop node.
+
+- `T` must be concrete and an [R3 inner node](../../design/generic-structure/README.cn.md): a struct or an **ordinary** tuple. `T?`, `T!`, a mutable cell, a scalar, an array and a function are leaves and report `SemanticDiag::StaticForNotComposite`; handle them with `match type` first.
+- `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type. Both are visible in the block only; `F` may be written in a type position (`let x: F`, `typeas F`) but is not a value.
+- Fields are expanded in declaration order, each with its own block scope. An empty struct or tuple expands zero times and the block is not built at all.
+- `static for` is a statement: the value of the block is always dropped, and the construct has type `void`. It cannot stand where a value is needed.
+- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, or the `n` of an enclosing `static for`. Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
+- A struct without that field reports `SemanticDiag::StaticAccessUnknownField`; a tuple index past the end (or a key that is not an index) reports `SemanticDiag::StaticAccessIndexOutOfRange`; a target that is not a struct or an ordinary tuple reports `SemanticDiag::StaticAccessNotInternal`. For a tuple, `t.["0"]` and `t.[0]` are the same element.
+- When the field's value is dropped (a `t.[n];` statement on its own), the field is checked but no `ACCS` is built; the target expression is still evaluated, so its effects remain.
+
+```cml
+func show(t: typeas T) {
+    static for (n, F) in fields T => {
+        print(n, t.[n])
+    }
+}
+
+func first(t: (int, float)) {
+    return t.[0]
+}
+```
+
+For the same tree, `static for` builds the same graph as the C++ `tree_map`: the same `ACCS` nodes in declaration order, and the calls on the leaves built directly into the current graph. The other half of the expansion (packing the results into a tree of the same shape) needs comprehensions, a later step of H51.
+
+### 6.8.5 `loop`
 
 A loop is an expression with a state (design principles 3.10). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 
