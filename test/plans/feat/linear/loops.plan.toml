@@ -64,6 +64,30 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "loops.struct_state"
+desc = "A struct is the loop's state (H44 item 3): both fields change every round (6 8), only one does (0 7), and a named state's body may write the fields in another order (3 106) or nest a named field in another order (3 16 3), because an unnamed struct value enters the named type by name with a field-by-field copy (design principles 5.2). Also a `sync` body whose last value is the next struct (round 1, round 2, then 2 3), an `if` body whose arms are structs (12 4), an `if` body with one named arm and one unnamed arm in another order (2 4), and a `sync` function returning a struct in another order (2 1). The four back ends agree on the values and on the (empty) diagnostics."
+kind = "behavior"
+case = "../../../cases/loops/struct_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "6 8\n0 7\n3 106\n3 16 3\nround 1\nround 2\n2 3\n12 4\n2 4\n2 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "loops.struct_state.opt_jit"
+desc = "The same struct loop states after `std::opt` and on the JIT: the optimizer keeps the struct the state and must give the same values as the interpreters."
+kind = "behavior"
+case = "../../../cases/loops/struct_state.cml"
+args = ["${case}", "std::opt", "std::jit"]
+expect_exit = 0
+expect_stdout_exact = "6 8\n0 7\n3 106\n3 16 3\nround 1\nround 2\n2 3\n12 4\n2 4\n2 1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "loops.effects"
 desc = "A body that is a sync block runs its effects every round, in order, and its last value is the next state; a loop in a sync function returns its last state (countdown 0)."
 kind = "behavior"

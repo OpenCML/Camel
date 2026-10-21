@@ -418,6 +418,15 @@ bool camel::core::type::entersImplicitly(Type *target, Type *source) {
     if (target->assignableFrom(source)) {
         return true;
     }
+    // An unnamed struct value whose fields are a named type's fields enters it, by name, even
+    // when the two write them in another order (design principles 5.2): the entrance is worth a
+    // field-by-field copy (camel/compile/gir, convertStructValue). Two named types, and two
+    // unnamed types in different written orders, are different types and nothing enters.
+    if (target->code() == TypeCode::Struct && source->code() == TypeCode::Struct &&
+        structFieldsMatchByName(
+            static_cast<const StructType *>(target), static_cast<const StructType *>(source))) {
+        return true;
+    }
     if (TupleType *tagged = asTagged(target)) {
         if (tagged->isNullable() && source->code() == TypeCode::Void) {
             return true; // null
