@@ -315,6 +315,7 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
 #ifndef NDEBUG
     AllocationDebugScope debugScope;
 #endif
+    CollectionKind requested = CollectionKind::None;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         SafepointScope atSafepoint(atSafepoint_);
@@ -341,7 +342,7 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "safepoint poisoning");
         }
 
-        CollectionKind requested        = pendingSafepointCollection_;
+        requested                      = pendingSafepointCollection_;
         pendingSafepointCollection_     = CollectionKind::None;
         const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
         collectAtSafepointUnlocked(requested, gcReason);
@@ -349,8 +350,12 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
         publishSafepointSlowPathUnlocked();
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
-    // found dead were holding (see ForeignResourceObject::finalize).
+    // found dead were holding (see ForeignResourceObject::finalize), then start the next
+    // pacing window from what remains.
     runDeferredReleases();
+    if (requested != CollectionKind::None) {
+        noteBlockBytesAfterDeferredReleases();
+    }
 }
 
 void GenerationalAllocatorWithGC::minorGC() {
@@ -369,8 +374,10 @@ void GenerationalAllocatorWithGC::minorGC() {
         publishSafepointSlowPathUnlocked();
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
-    // found dead were holding (see ForeignResourceObject::finalize).
+    // found dead were holding (see ForeignResourceObject::finalize), then start the next
+    // pacing window from what remains.
     runDeferredReleases();
+    noteBlockBytesAfterDeferredReleases();
 }
 
 void GenerationalAllocatorWithGC::majorGC() {
@@ -389,8 +396,10 @@ void GenerationalAllocatorWithGC::majorGC() {
         publishSafepointSlowPathUnlocked();
     }
     // The collection is over and the allocator unlocked: release what the wrappers it
-    // found dead were holding (see ForeignResourceObject::finalize).
+    // found dead were holding (see ForeignResourceObject::finalize), then start the next
+    // pacing window from what remains.
     runDeferredReleases();
+    noteBlockBytesAfterDeferredReleases();
 }
 
 bool GenerationalAllocatorWithGC::debugRunRememberedSetSelfTest() {
@@ -773,9 +782,13 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
             stats_.majorPauseMaxNs = std::max(stats_.majorPauseMaxNs, pause);
         }
     }
-    // The collection has finished: buffers that its finalizers dead-arrayed are now free, and
-    // this is the volume the next pacing window starts from.
-    blockBytesAtCollection_ = camel::core::mm::blockBytesLive();
+    // The pacing base is *not* taken here: the finalizers this collection ran only queued the
+    // blocks of the arrays they found dead (see Block::releaseFromFinalizer), and those bytes
+    // are still live right now. Taking the base before the queue runs would pace the next
+    // window against a volume that includes this collection's own garbage; with a workload that
+    // recycles the same working set the trigger then needs more and more growth to fire, and the
+    // high-water mark climbs as if nothing were ever released. The callers take the base after
+    // runDeferredReleases() (see noteBlockBytesAfterDeferredReleases).
 
     if (heapLimitBytes_ != 0 && kind == CollectionKind::Minor &&
         oldBytesHeldUnlocked() > heapLimitBytes_ && !heapLimitExceeded_) {
@@ -803,6 +816,14 @@ void GenerationalAllocatorWithGC::collectAtSafepointUnlocked(
     if (debugConfig_.verifyAfterGC) {
         throwIfVerificationFailed(verifyHeapUnlocked(), std::format("after {}", reason));
     }
+}
+
+void GenerationalAllocatorWithGC::noteBlockBytesAfterDeferredReleases() {
+    // Runs on the collecting thread after the deferred queue has been drained, so the blocks the
+    // collection found dead are already out of the live count. Re-read it rather than subtracting
+    // per-release amounts: the queue also runs releases queued by earlier work.
+    std::lock_guard<std::mutex> lock(mutex_);
+    blockBytesAtCollection_ = camel::core::mm::blockBytesLive();
 }
 
 void GenerationalAllocatorWithGC::minorGCUnlocked() {
