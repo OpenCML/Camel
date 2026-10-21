@@ -2258,7 +2258,7 @@ case = "../../../cases/modules/autodiff/grad_refuse_struct.cml"
 args = ["${case}", "std::macro"]
 expect_exit = 1
 expect_diagnostic_line = 13
-expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type { s: string, n: int }, which has no gradient"]
+expect_output_contains = ["SemanticDiag::NotDifferentiable", "has type Plain, which has no gradient"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

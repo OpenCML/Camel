@@ -144,6 +144,38 @@ std::vector<TextItem> tupleParts(const TupleType *tuple, bool mangle) {
 
 std::vector<TextItem> structParts(const StructType *record, bool mangle) {
     std::vector<TextItem> parts;
+    if (record->named()) {
+        // A named struct type is printed by its name, as an enum is: the declaration is the
+        // type (design principles 5.2). A generic instance prints its arguments.
+        const StructDecl *decl = record->decl();
+        if (mangle) {
+            parts.push_back(literal("S" + std::to_string(decl->id())));
+            if (record->typeArgCount() == 0) {
+                parts.push_back(literal("P"));
+                return parts;
+            }
+            for (size_t i = 0; i < record->typeArgCount(); ++i) {
+                parts.push_back(literal("_"));
+                Type *argument = record->typeArgAt(i);
+                parts.push_back(argument != nullptr ? typeItem(argument) : literal("H"));
+            }
+            return parts;
+        }
+        parts.push_back(literal(decl->name()));
+        if (record->typeArgCount() == 0) {
+            return parts;
+        }
+        parts.push_back(literal("<"));
+        for (size_t i = 0; i < record->typeArgCount(); ++i) {
+            if (i > 0) {
+                parts.push_back(literal(", "));
+            }
+            Type *argument = record->typeArgAt(i);
+            parts.push_back(argument != nullptr ? typeItem(argument) : literal("_"));
+        }
+        parts.push_back(literal(">"));
+        return parts;
+    }
     if (mangle) {
         parts.push_back(literal("S" + std::to_string(record->size())));
         for (size_t i = 0; i < record->size(); ++i) {
@@ -411,17 +443,33 @@ bool sameType(const Type *a, const Type *b) {
         case TypeCode::Struct: {
             const auto *lhs = static_cast<const StructType *>(left);
             const auto *rhs = static_cast<const StructType *>(right);
+            // A named struct type is its declaration (and type arguments): two declarations
+            // are different types even when their fields are alike, and a named type is never
+            // an anonymous one (design principles 5.2).
+            if (lhs->named() != rhs->named()) {
+                return false;
+            }
+            if (lhs->named()) {
+                if (lhs->decl() != rhs->decl() ||
+                    lhs->typeArgCount() != rhs->typeArgCount()) {
+                    return false;
+                }
+                for (size_t i = 0; i < lhs->typeArgCount(); ++i) {
+                    pending.emplace_back(lhs->typeArgAt(i), rhs->typeArgAt(i));
+                }
+                break;
+            }
             if (lhs->size() != rhs->size()) {
                 return false;
             }
+            // The order of the fields is part of an anonymous struct type: `{ x, y }` and
+            // `{ y, x }` are different types (design principles 5.2).
             for (size_t i = 0; i < lhs->size(); ++i) {
-                const std::string name(lhs->fieldName(i));
-                const std::optional<size_t> index = rhs->findField(name);
-                if (!index.has_value()) {
+                if (lhs->fieldName(i) != rhs->fieldName(i)) {
                     return false;
                 }
                 const Type *lhsMember = lhs->typeAt(i);
-                const Type *rhsMember = rhs->typeAt(*index);
+                const Type *rhsMember = rhs->typeAt(i);
                 if (lhsMember == nullptr || rhsMember == nullptr) {
                     return false;
                 }

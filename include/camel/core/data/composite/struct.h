@@ -74,6 +74,12 @@ class StructDataFactory {
 
     StructDataFactory &add(const std::string &key, const data_ptr_t &val);
     std::shared_ptr<StructData> build();
+    /// Builds the literal as the struct type `type`: every field of the type has a value, by
+    /// name, and no other field is present. The fields are in the type's order and the data's
+    /// type is `type` itself — a named struct type stays named, which is what a literal at a
+    /// position of that type is (design principles 5.2). Null when a field is missing or
+    /// extra.
+    std::shared_ptr<StructData> buildAs(type::StructType *type);
 
   private:
     struct Impl;
