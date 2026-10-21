@@ -19,13 +19,18 @@
 
 
 /*
- * Test-only check of WritingStore: prints "WRITINGS <name> ok" for each property that holds and
+ * Test-only check of WritingStore and DraftWritings: prints "WRITINGS <name> ok" for each property that holds and
  * "WRITINGS <name> FAIL <why>" for each that does not. The program itself is returned unchanged.
  */
 #include "camel/passes/test/writings.h"
 
+#include "camel/core/operator_table.h"
+#include "camel/runtime/draft.h"
+#include "camel/runtime/program.h"
 #include "camel/runtime/writings.h"
 
+#include <array>
+#include <bit>
 #include <format>
 #include <string>
 
@@ -101,6 +106,114 @@ void deep(Report &r) {
     r.check("long_chain", store.find(0, n) == 1 && store.members(0, 1).size() == n);
 }
 
+std::vector<gc_node_ref_t> portsOf(const GraphDraft &draft) {
+    std::vector<gc_node_ref_t> ports;
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (draft.alive(id) && draft.header(id)->kind == GCNodeKind::Port) {
+            ports.push_back(id);
+        }
+    }
+    return ports;
+}
+
+const GCGraph *graphNamed(const Program &program, const std::string &name) {
+    for (const GCGraph *graph : program.graphs()) {
+        if (graph->name() == name) {
+            return graph;
+        }
+    }
+    return nullptr;
+}
+
+/// The writings of `a + 1`, written twice, and what merging two parameters makes of the rest.
+void congruence(Report &r, const Program &program) {
+    const GCGraph *graph = graphNamed(program, "f");
+    if (graph == nullptr) {
+        return;
+    }
+    auto draft = GraphDraft::decode(program, graph);
+    DraftWritings writings(*draft);
+    writings.build();
+    const auto ports = portsOf(*draft);
+    r.check("params_are_two", ports.size() == 2);
+    const size_t before = writings.congruentMerges();
+    r.os << "WRITINGS info build_merges=" << before << "\n";
+    r.check("build_merged_repeats", before >= 1);
+    // p * q + r: after a = b, p and q are one value, so p * q is p * p.
+    size_t classesBefore = writings.store().classRoots(0).size();
+    writings.assertEqual(ports[0], ports[1]);
+    r.os << "WRITINGS info merges_after=" << writings.congruentMerges() << "\n";
+    r.check("parameters_joined", writings.find(ports[1]) == writings.find(ports[0]));
+    r.check("congruence_follows", writings.congruentMerges() > before);
+    r.check("classes_grew", writings.store().classRoots(0).size() > classesBefore);
+    // Asking for a writing that exists gives it; for one that does not, adds a node.
+    DraftNodeInit init;
+    init.kind = GCNodeKind::Cast;
+    init.dataType = draft->header(ports[0])->dataType;
+    const size_t slots = draft->nodeSlotCount();
+    const gc_node_ref_t made = writings.lookupOrAdd(init, std::array{ports[0]});
+    const gc_node_ref_t again = writings.lookupOrAdd(init, std::array{ports[1]});
+    r.check("lookup_adds_once", made == slots && again == made);
+}
+
+/// Nodes that look alike and are not one value.
+void apart(Report &r, const Program &program) {
+    const GCGraph *graph = graphNamed(program, "g");
+    if (graph == nullptr) {
+        return;
+    }
+    auto draft = GraphDraft::decode(program, graph);
+    DraftWritings writings(*draft);
+    writings.build();
+    std::vector<gc_node_ref_t> zeros, events;
+    for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+        const auto *h = draft->header(id);
+        if (!draft->alive(id) || h == nullptr) {
+            continue;
+        }
+        if (h->kind == GCNodeKind::Data && h->dataIndex < 0) {
+            const double v = std::bit_cast<double>(
+                draft->staticSlots()[static_cast<size_t>(-h->dataIndex)]);
+            if (v == 0.0) {
+                zeros.push_back(id);
+            }
+        }
+        if (h->kind == GCNodeKind::Oper &&
+            !camel::core::OperatorTable::instance().isPure(
+                reinterpret_cast<const GCOperBody *>(draft->payloadOf(id).data())->oper)) {
+            events.push_back(id);
+        }
+    }
+    r.check("two_zeros_found", zeros.size() == 2);
+    r.check(
+        "zero_signs_apart",
+        zeros.size() == 2 && writings.find(zeros[0]) != writings.find(zeros[1]));
+    r.check("two_events_found", events.size() >= 2);
+    bool apart = true;
+    for (size_t i = 0; i < events.size(); ++i) {
+        for (size_t j = i + 1; j < events.size(); ++j) {
+            apart = apart && writings.find(events[i]) != writings.find(events[j]);
+        }
+    }
+    r.check("effects_apart", apart);
+}
+
+/// Two chains of 300 steps: merging their parameters merges every step.
+void chains(Report &r, const Program &program) {
+    const GCGraph *graph = graphNamed(program, "chains");
+    if (graph == nullptr) {
+        return;
+    }
+    auto draft = GraphDraft::decode(program, graph);
+    DraftWritings writings(*draft);
+    writings.build();
+    const auto ports = portsOf(*draft);
+    const size_t before = writings.congruentMerges();
+    writings.assertEqual(ports[0], ports[1]);
+    r.os << "WRITINGS info chain_merges=" << writings.congruentMerges() - before << "\n";
+    r.check("chain_closes", writings.congruentMerges() - before >= 300);
+}
+
 } // namespace
 
 const camel::runtime::Program *
@@ -109,5 +222,8 @@ WritingsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     unionFind(report);
     layers(report);
     deep(report);
+    congruence(report, *program);
+    chains(report, *program);
+    apart(report, *program);
     return program;
 }

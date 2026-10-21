@@ -20,3 +20,42 @@ expect_stdout_contains = ["WRITINGS merge_new ok", "WRITINGS root_is_smallest ok
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "writings.congruence"
+desc = "Nodes that compute the same thing from the same values are one value: the two writings of `a + 1` are merged when the draft is indexed, merging the parameters `a` and `b` merges what is built from them, and asking for a node that exists gives it."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS params_are_two ok", "WRITINGS build_merged_repeats ok", "WRITINGS parameters_joined ok", "WRITINGS congruence_follows ok", "WRITINGS classes_grew ok", "WRITINGS lookup_adds_once ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.congruence_chain"
+desc = "Two chains of 300 additions from two parameters: merging the parameters merges every step of the chains (the repair of users runs to a fixed point without scanning the graph again)."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/chains.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS chain_closes ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "writings.congruence_apart"
+desc = "What is not one value stays two: `0.0` and `-0.0` (compared bit for bit) and two calls of an operator with an effect are not merged by congruence."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/apart.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS two_zeros_found ok", "WRITINGS zero_signs_apart ok", "WRITINGS two_events_found ok", "WRITINGS effects_apart ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
