@@ -1,0 +1,23 @@
+/**
+ * The check compares a rule's two sides with the error bound of the permissions it needs, not
+ * with one uniform rounding bound (design principles 7.2-7.4, review of H38).
+ *
+ * Both rules below state the same wrong equation: `x * 2.0` is `x * 2.000000001`, an error of
+ * about 5e-10 relative. That is far outside the reassociate bound (a few ulps of the result) and
+ * inside the bf16 bound of `change_precision` (2^-8 per step). The same error is therefore
+ * rejected under `reassociate` and accepted under `change_precision`: a looser bound would hide
+ * the first rule, and the tight one is what catches it.
+ */
+module check_bound
+import { check } from rewrite
+
+#requires<reassociate>
+rule wrong_reassociate(x: float) { x * 2.0 => x * 2.000000001 }
+
+#requires<change_precision>
+rule wrong_precision(x: float) { x * 2.0 => x * 2.000000001 }
+
+func main(): int sync {
+    println(check([wrong_reassociate, wrong_precision], 40, 5))
+    return 0
+}

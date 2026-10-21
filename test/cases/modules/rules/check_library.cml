@@ -1,9 +1,9 @@
 /** Every rule of the standard rules passes the check (rewrite design 5.2). */
 module check_library
 import { check } from rewrite
-import { int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm } from rules
+import { int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm, float_combine, float_combine_mixed, float_fold, float_double } from rules
 
 func main(): int sync {
-    print(check([int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm], 200, 7))
+    print(check([int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm, float_combine, float_combine_mixed, float_fold, float_double], 200, 7))
     return 0
 }

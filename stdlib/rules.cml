@@ -8,7 +8,8 @@
  * saturation and extracts the smallest writing of each value.
  */
 module rules
-import { Program } from graph
+import { Program, Node, constant } from graph
+import { abs, trunc } from math
 import { rewrite, saturate, extract } from rewrite
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
@@ -45,14 +46,95 @@ export rule float_neg_neg(x: float) { -(-x) => x }
 export rule float_add_comm(a: float, b: float) { a + b <=> b + a }
 export rule float_mul_comm(a: float, b: float) { a * b <=> b * a }
 
+// ---- Floats: the laws a numeric permission allows (design principles 7.2-7.4) ----
+//
+// A rule that changes the rounding path needs the permission for it, and the check compares its
+// two sides with the error bound of that permission (camel/core/operator_semantics.h,
+// rewriteErrorBound). The conditions read the matched constants from the draft: the coefficients
+// decide which permission the law really needs.
+
+/// Whether a value is finite: NaN and the infinities are the only values that are not equal to
+/// themselves after a subtraction.
+func finiteValue(x: float): bool {
+    return x - x == 0.0
+}
+
+/// `x*c1 + x*c2 => x*(c1+c2)` with two finite, nonzero coefficients of the same sign: the
+/// reassociation changes rounding only, so the default `reassociate` grant suffices.
+func combineSameSign(c1: Node, c2: Node): bool {
+    return match constant(c1, 0.0) {
+        case null => false
+        case a => match constant(c2, 0.0) {
+            case null => false
+            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
+                          (a > 0.0) == (b > 0.0)
+        }
+    }
+}
+
+/// The opposite-sign case: cancellation can turn an infinity into a finite value or lose the
+/// sign of a zero, so the rule also needs the assumptions that rule those out.
+func combineMixedSign(c1: Node, c2: Node): bool {
+    return match constant(c1, 0.0) {
+        case null => false
+        case a => match constant(c2, 0.0) {
+            case null => false
+            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0 &&
+                          (a > 0.0) != (b > 0.0)
+        }
+    }
+}
+
+/// `(x*c1)*c2 => x*(c1*c2)`: both coefficients finite and nonzero. Removing the intermediate
+/// product may remove an overflow, which `no_infs` allows.
+func foldCoefficients(c1: Node, c2: Node): bool {
+    return match constant(c1, 0.0) {
+        case null => false
+        case a => match constant(c2, 0.0) {
+            case null => false
+            case b => finiteValue(a) && finiteValue(b) && a != 0.0 && b != 0.0
+        }
+    }
+}
+
+/// `x*c + x*c => x*(2c)` is exact when `c` is a finite integer with `1 <= |c| <= 2^52`: doubling
+/// a rounded product commutes with rounding there, and `2c` is exactly representable. The rule
+/// therefore needs no permission at all; the condition is what makes that true.
+func exactDoubling(c: Node): bool {
+    return match constant(c, 0.0) {
+        case null => false
+        case v => finiteValue(v) && abs(v) >= 1.0 && trunc(v) == v &&
+                      abs(v) <= 4503599627370496.0
+    }
+}
+
+#requires<reassociate>
+export rule float_combine(x: float, const c1: float, const c2: float) {
+    x * c1 + x * c2 => x * (c1 + c2)
+} when combineSameSign(c1, c2)
+
+#requires<reassociate, no_infs, no_signed_zeros>
+export rule float_combine_mixed(x: float, const c1: float, const c2: float) {
+    x * c1 + x * c2 => x * (c1 + c2)
+} when combineMixedSign(c1, c2)
+
+#requires<reassociate, no_infs>
+export rule float_fold(x: float, const c1: float, const c2: float) {
+    (x * c1) * c2 => x * (c1 * c2)
+} when foldCoefficients(c1, c2)
+
+export rule float_double(x: float, const c: float) {
+    x * c + x * c => x * (c + c)
+} when exactDoubling(c)
+
 /// The rules that make an expression smaller, applied one way to a fixpoint.
 export func simplify(p: Program): Program! {
-    return rewrite(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg])
+    return rewrite(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_combine, float_combine_mixed, float_fold, float_double])
 }
 
 /// Every rule, both ways where it holds both ways; the smallest writing of each value.
 export func saturate_all(p: Program): Program! {
-    let tabled = saturate(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm], 6)
+    let tabled = saturate(p, [int_add_zero, int_zero_add, int_sub_zero, int_mul_one, int_one_mul, int_mul_zero, int_zero_mul, int_div_one, int_neg_neg, int_sub_self, int_combine, int_fold, int_fold_add, int_add_comm, int_mul_comm, int_add_assoc, int_mul_assoc, int_distribute, float_mul_one, float_one_mul, float_add_minus_zero, float_sub_zero, float_div_one, float_neg_neg, float_add_comm, float_mul_comm, float_combine, float_combine_mixed, float_fold, float_double], 6)
     return match tabled {
         case error e => tabled
         case q => extract(q, 'nodes')

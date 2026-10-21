@@ -98,8 +98,11 @@ class Builder {
     Value visitExportDecl(syntax::cst::ExportDecl context);
     Value visitUsingNamespaceDecl(syntax::cst::UsingNamespaceDecl context);
     Value visitRuleDecl(syntax::cst::RuleDecl context);
+    Value visitAnalysisDecl(syntax::cst::AnalysisDecl context);
     /// The import of the module `rewrite` that rule declarations need was made.
     bool ruleImportAdded_ = false;
+    /// The imports an analysis declaration needs (`__analysis`, `graph.Node`) were made.
+    bool analysisImportAdded_ = false;
     /// The imports a rule condition needs (`__rule_when`, `graph.Node`) were made.
     bool whenImportAdded_ = false;
     Value visitBlockStmt(syntax::cst::BlockStmt context);

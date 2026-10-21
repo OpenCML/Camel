@@ -267,7 +267,7 @@ void ParserImpl::recover(bool inBlock, bool topLevel) {
                 break;
             }
             if (pos_ != start && tok().newlineBefore() &&
-                (topLevel ? startsDecl(cur_) || atRuleDecl(0) : startsStmt(cur_))) {
+                (topLevel ? startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0) : startsStmt(cur_))) {
                 break;
             }
             // A declaration keyword starts a declaration wherever it stands.
@@ -353,7 +353,7 @@ void ParserImpl::parseProgram() {
         if (cur_ == TK::Semi) {
             // One separator between declarations was taken already.
             error(SyntaxError::Kind::ExtraSemicolon, {}, pos_);
-        } else if (startsDecl(cur_) || atRuleDecl(0)) {
+        } else if (startsDecl(cur_) || atRuleDecl(0) || atAnalysisDecl(0)) {
             parseDecl();
             if (!panic_) {
                 eat(TK::Semi);
@@ -411,6 +411,9 @@ void ParserImpl::parseDecl() {
         return parseAnnotatedStmt();
     case TK::KwExport: {
         const TK next = peek(1);
+        if (atAnalysisDecl(1)) {
+            return parseAnalysisDecl();
+        }
         if (atRuleDecl(1)) {
             return parseRuleDecl();
         }
@@ -429,6 +432,9 @@ void ParserImpl::parseDecl() {
     default:
         if (atTagDecl(0)) {
             return parseTagDecl();
+        }
+        if (atAnalysisDecl(0)) {
+            return parseAnalysisDecl();
         }
         if (atRuleDecl(0)) {
             return parseRuleDecl();

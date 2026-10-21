@@ -315,7 +315,7 @@ e161ae730c757b4e ok showcase/c2-mlp-mnist/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 173076cd43673a6b ok stdlib/perf.cml
-55703d586de68a52 ok stdlib/rules.cml
+ce2cb555eae500b7 ok stdlib/rules.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 0539c1402fbe163c ok stdlib/signatures/algo.cml
 63d195595160cec9 ok stdlib/signatures/bytes.cml
@@ -1543,7 +1543,10 @@ d02bf5329e412d30 ok test/cases/modules/onnx/refusals/var_param.cml
 22a9abfa3e4b9ffb ok test/cases/modules/random/keyed_random.cml
 9ef2758057679ea9 ok test/cases/modules/random/permutation_negative.cml
 a4167c31852a3565 ok test/cases/modules/random/random_independence.cml
-423dfd6d22a4670b ok test/cases/modules/rules/check_library.cml
+5848ceb70884974f ok test/cases/modules/rules/analysis_lib.cml
+ba6c69862cc7f282 ok test/cases/modules/rules/analysis_target.cml
+1f6d0b3ce21e8f81 ok test/cases/modules/rules/check_bound.cml
+d2f93128bac41249 ok test/cases/modules/rules/check_library.cml
 bfd5c4e36d823588 ok test/cases/modules/rules/check_rules.cml
 5666c69689d0db05 ok test/cases/modules/rules/check_when.cml
 a9449b97a132a283 ok test/cases/modules/rules/counts.cml
@@ -1552,6 +1555,8 @@ c3b8e6e0d305a69a no test/cases/modules/rules/err_requires_not_permission.cml
 4ec4f7cbe8b3ebd7 ok test/cases/modules/rules/err_requires_on_func.cml
 1835e64bed50a714 no test/cases/modules/rules/err_requires_unknown.cml
 224d79256405d3a2 no test/cases/modules/rules/err_rule_tag.cml
+99b44bf8953aa4dc ok test/cases/modules/rules/float_counts.cml
+86be32b2eca3f4ce ok test/cases/modules/rules/float_target.cml
 d6b6037274494d3e ok test/cases/modules/rules/reads_pass.cml
 95e2dc6cd3540a09 ok test/cases/modules/rules/reads_target.cml
 cd04aa59ff9e8059 ok test/cases/modules/rules/requires.cml

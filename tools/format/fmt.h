@@ -466,6 +466,8 @@ class Formatter {
 
     std::any visitFuncDecl(cst::FuncDecl context);
     std::any visitRuleDecl(cst::RuleDecl context);
+    std::any visitAnalysisDecl(cst::AnalysisDecl context);
+    std::any visitAnalysisClause(cst::AnalysisClause context);
     std::any visitRuleContext(cst::RuleContext context);
     std::any visitRuleBody(cst::RuleBody context);
 

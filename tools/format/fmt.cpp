@@ -562,6 +562,51 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
 }
 
 /*
+analysisDecl : frontMatter? 'export'? IDENTIFIER identDef ':' typeExpr '{' analysisClause* '}'
+*/
+any Formatter::visitAnalysisDecl(cst::AnalysisDecl context) {
+    string result;
+    for (const auto &tagUse : context->all<cst::TagUse>()) {
+        result += any_cast<string>(visitTagUse(tagUse)) + lineEnd();
+    }
+    result += context->tok(TK::KwExport) ? "export analysis " : "analysis ";
+    result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    result += ": " + any_cast<string>(visitType(context->type()));
+    result += " {";
+    pushIndent();
+    for (const auto clause : context->all<cst::AnalysisClause>()) {
+        result += lineEnd() + any_cast<string>(visitAnalysisClause(clause));
+    }
+    popIndent();
+    result += lineEnd() + "}";
+    return result;
+}
+
+/*
+analysisClause : IDENTIFIER '=>' dataExpr
+               | IDENTIFIER '(' identList? ')' '=>' dataExpr
+               | IDENTIFIER '(' ('const' identDef ':' typeExpr | dataExpr) ')' '=>' dataExpr
+*/
+any Formatter::visitAnalysisClause(cst::AnalysisClause context) {
+    const string keyword = context->tok(TK::Identifier).text();
+    const auto exprs     = context->exprs();
+    if (const auto name = context->get<cst::IdentDef>()) {
+        return "on (const " + any_cast<string>(visitIdentDef(name)) + ": " +
+               any_cast<string>(visitType(context->type())) + ") => " +
+               any_cast<string>(visitExpr(exprs[0]));
+    }
+    if (const auto params = context->get<cst::IdentList>()) {
+        return keyword + "(" + any_cast<string>(visitIdentList(params)) + ") => " +
+               any_cast<string>(visitExpr(exprs[0]));
+    }
+    if (keyword == "on") {
+        return "on (" + any_cast<string>(visitExpr(exprs[0])) + ") => " +
+               any_cast<string>(visitExpr(exprs[1]));
+    }
+    return keyword + " => " + any_cast<string>(visitExpr(exprs[0]));
+}
+
+/*
 ruleContext : '<' identDef (',' identDef)* ','? '>' ;
 */
 any Formatter::visitRuleContext(cst::RuleContext context) {
@@ -1572,6 +1617,8 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(TagRef)
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
+        CAMEL_FORMAT(AnalysisDecl)
+        CAMEL_FORMAT(AnalysisClause)
         CAMEL_FORMAT(RuleContext)
         CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)
