@@ -1867,6 +1867,11 @@ const ExecPlan &GCGraph::execPlan() const {
     if (ExecPlan *known = execPlan_.load(std::memory_order_acquire)) {
         return *known;
     }
+    if (!executable()) [[unlikely]] {
+        throw std::logic_error(
+            "Graph '" + name() + "' has values with several writings: it has no execution plan "
+            "until they are extracted.");
+    }
     ExecPlan *built    = buildExecPlan(*this).release();
     ExecPlan *expected = nullptr;
     if (!execPlan_.compare_exchange_strong(

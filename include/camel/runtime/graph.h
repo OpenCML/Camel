@@ -184,6 +184,10 @@ enum GCGraphFlag : uint8_t {
     /// dissolveUnorderedGates). A graph without it is looked at by the next commit that
     /// reaches it; a graph with it is left as it is unless it is edited.
     kGraphFlagGatesDissolved = 1 << 1,
+    /// Some values of the graph have several writings (an equivalence table, writings.h). Such
+    /// a graph is not in the executable state: it has no execution plan and no back end or
+    /// exporter takes it; extraction brings it back.
+    kGraphFlagHasWritings = 1 << 2,
 };
 
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
@@ -541,6 +545,8 @@ class GCGraph : public camel::core::rtdata::Object {
     GraphId typeSpecializationRoot() const { return typeSpecializationRoot_; }
     /// GCGraphFlag bits.
     uint8_t flags() const { return flags_; }
+    /// The executable state (graph store design 3.7): every value has exactly one writing.
+    bool executable() const { return (flags_ & kGraphFlagHasWritings) == 0; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
 
