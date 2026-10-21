@@ -1,4 +1,28 @@
+[0.2.24]
+
+[0.2.23]
+Changes:
+- enum 可以作键；诊断指向它所说的表达式。
+- grad 拒绝不存在的梯度；循环里的 append 构建一个数组。
+- 分支臂与循环在书写处构建：前端直接建区域，循环是 LOOP 节点所在的区域。
+- 每个后端在函数的帧里跑循环的轮次：NodeVM、FastVM 与 JIT（新指令 LBEG/LTST/LEND）、Taskflow、宏求值器，std::cpp 写成 for (;;)；轮次计数放在帧槽位里。
+- 设计原则补上离散值的导数（9.9）与 enum 作键的要求（11.3）。
+
+[0.2.22]
+Changes:
+- 源码与入口参数共用一套数字文法；文本值报出自己所在的位置；带符号的整数零保留符号。
+- 名义结构体的 C++ 翻译按其声明；结构体字面量的字段类型不符时回退到普通构造。
+- 声明可以带 tag，tag 指明可放置的位置与读取方；遍可以 import Camel 库，参数可以来自 with。
+- 官方示例 C2：在 MNIST 上训练 MLP，与 PyTorch 用同一批序对比并记录结果。
+- 原生多维数组与缓冲区的计划（H17，七个可独立构建的步骤）。
+
 [0.2.21]
+Changes:
+- 规则引擎：rule 声明（解析、格式化、编译成函数）、RuleSource 与 compileRule、rewrite/saturate/extract/check，以及 rules 模块的标准整数与浮点规则库（26 条精确规则）和 rules::simplify/rules::saturate_all。
+- 遍可以用 Camel 写：遍模块按程序编译（模块级值存在）、可 import Camel 库、参数可以来自 with；新增 PassNeedsExtraction 与 std::opt::extract。
+- 图 API 起步：句柄类型与 NodeKind、Program 的图遍历、is_written_slot、图的写作与等价类、按代价抽取。
+- 分支臂成为 Arm region：前端直接建、各后端与调试器读，锚点删除；导出表改为从 libcamel 的导入对象生成，不再手写。
+- 名义结构体：类型是它的声明而不是字段，C++ 翻译、ONNX 导出与 LSP 随之更新。
 
 [0.2.20]
 Changes:
