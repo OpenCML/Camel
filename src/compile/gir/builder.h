@@ -1046,6 +1046,22 @@ class Builder {
     void markLoopStateInPlaceOne(
         const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
         std::vector<node_handle_t> &initial, size_t index, node_handle_t next);
+    /// Recognises a state that starts as an empty array and whose only use is appending one
+    /// value per round, and gives the loop a collection slot for the appended values
+    /// (design principles 3.10). The state itself stays: it is the value the program sees and
+    /// the channel its gradient uses. The slot is an extra, internal output; a FILL (or an
+    /// access, for one state) projects the loop's value back to the states alone. Must run
+    /// before autodiff and before `std::opt`: both read the loop's shape.
+    std::vector<Type *> collectLoopAppends(
+        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        const std::vector<Type *> &stateTypes, const std::vector<bool> &emptyInitial);
+    /// Rewrites an empty-array state's `void[]` type once the body's append has told us the
+    /// element type it appends (design principles 5.1: `loop losses = [] for ...` infers from
+    /// the value appended). Returns false when the next value is not such an append.
+    bool inferLoopStateFromAppend(
+        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
+        node_handle_t next);
     /// The condition and the body graph of a loop capture the same values in the same order
     /// (design principles 3.10: one capture table): a capture made into one is made into the
     /// other (captureInto).

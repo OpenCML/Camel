@@ -1,0 +1,14 @@
+// A `loop` iterating over an `int[]` computed from the differentiated parameter. Each round's
+// element carries part of the parameter's contribution, but the reverse pass has no scatter for
+// an iterated array; before H22 the gradient was silently 0. It is refused at the loop.
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    return loop acc = 0.0 for x in [int(w), int(w * 2.0)] do acc + float(x)
+}
+
+func main(): int sync {
+    println(grad(f)<2.0>())
+    return 0
+}

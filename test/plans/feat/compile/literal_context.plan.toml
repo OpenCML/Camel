@@ -42,14 +42,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "context.empty_array"
-desc = "`[]` in a position of type `T[]` is that type: a cast (`[] as int[]`), a declaration, an array of arrays, and the value of a loop (`loop acc = []` whose loop gives an `int[]`, in a function and under an annotated `let`). Before H23 a cast of `[]` was refused."
+desc = "`[]` in a position of type `T[]` is that type: a cast (`[] as int[]`), a declaration, an array of arrays, a struct field, a parameter, and the value of a loop (`loop acc = []` whose loop gives an `int[]`, in a function and under an annotated `let`). When the loop's position is open too, the appended value gives the state its element type. Before H23 a cast of `[]` was refused."
 kind = "behavior"
 case = "../../../cases/compile/literals/empty_array_context.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "0\n[0, 1, 4, 9]\n[0.5, 1.0, 1.5]\n0\n[[]]\n"
+expect_stdout = "0\n[0, 1, 4, 9]\n[0.5, 1.0, 1.5]\n[0, 1, 4, 9]\n0\n[[]]\n0\n0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 

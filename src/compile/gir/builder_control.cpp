@@ -93,6 +93,49 @@ node_handle_t loopStateValueOf(node_handle_t node) {
     return node;
 }
 
+/// Gives `node` a new value type, moving it to a slot of that type. Used when the element type
+/// of an empty-array loop state is learned from the body's append after the graph was built.
+void retypeValueNode(DraftGraphBuilder *graph, node_handle_t node, Type *type) {
+    if (graph == nullptr || node == nullptr || type == nullptr) {
+        return;
+    }
+    runtime::GraphDraft &draft = graph->draft();
+    const auto id              = nodeIdOf(node);
+    draft.setNodeDataType(id, type);
+    if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
+        return; // a static slot, not a frame slot
+    }
+    draft.setNodeDataIndex(id, graph->addRuntimeSlot(type));
+}
+
+/// A state initialised by the empty array literal and nothing else: the only shape whose
+/// element type the loop may still have to learn from the body.
+bool isEmptyArrayLiteral(node_handle_t node) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Fill) &&
+        !nodeIsKind(node, runtime::GCNodeKind::Data)) {
+        return false;
+    }
+    const Type *type = valueTypeOf(nodeTypeOf(node));
+    if (type == nullptr || type->code() != TypeCode::Array) {
+        return false;
+    }
+    if (tt::as_ptr<const ArrayType>(type)->elemType()->code() == TypeCode::Void) {
+        return true; // the untyped `[]`: it has no elements by construction
+    }
+    if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
+        // A typed `[]` is a static array: its length says whether the literal was empty.
+        const runtime::GraphDraft &draft = *nodeDraftOf(node);
+        const int32_t dataIndex          = draft.node(nodeIdOf(node))->header.dataIndex;
+        if (dataIndex < 0 && static_cast<size_t>(-dataIndex) < draft.staticSlots().size()) {
+            const auto *array = camel::core::rtdata::fromSlot<::Array *>(
+                draft.staticSlots()[static_cast<size_t>(-dataIndex)]);
+            return array == nullptr || array->size() == 0;
+        }
+        return false;
+    }
+    return withInputsOf(node).empty();
+}
+
 /// The exact value of a literal primitive datum: an integer or a real. A literal element
 /// (field) of a composite is converted from it, so that an integer is one rounding from the
 /// value written rather than the same double rounded again.
@@ -1630,6 +1673,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
     std::vector<node_handle_t> initial;
     std::vector<Type *> stateTypes;
+    std::vector<bool> emptyInitial(k, false);
+    bool deferredEmpty = false;
     for (size_t j = 0; j < k; ++j) {
         const auto &expr = gct->loopInitial(j);
         node_handle_t node;
@@ -1649,11 +1694,21 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                              (type->code() == TypeCode::Array &&
                               tt::as_ptr<ArrayType>(type)->elemType()->code() == TypeCode::Void);
         if (untyped) {
-            diags_->of(SemanticDiag::LoopStateWithoutType)
-                .atOrigin(expr->origin())
-                .commit(gct->loopStateName(j), type ? type->toString() : std::string("void"));
-            throw BuildAbortException();
+            // `loop losses = [] for ... do losses->append<l>`: the element type is the value
+            // the body appends, and it is known once the body is built (design principles 5.1,
+            // 5.2). One state gives the loop's value directly; with several, the loop's value
+            // is a tuple and does not say what this state's element type is, so it must be
+            // written.
+            if (k == 1 && isEmptyArrayLiteral(node)) {
+                deferredEmpty = true;
+            } else {
+                diags_->of(SemanticDiag::LoopStateWithoutType)
+                    .atOrigin(expr->origin())
+                    .commit(gct->loopStateName(j), type ? type->toString() : std::string("void"));
+                throw BuildAbortException();
+            }
         }
+        emptyInitial[j] = isEmptyArrayLiteral(node);
         initial.push_back(node);
         stateTypes.push_back(type);
     }
@@ -1741,6 +1796,21 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
     }
     buildLoopGraph(bodyGraph, gct->loopBody());
+    if (deferredEmpty) {
+        node_handle_t next = nullptr;
+        if (bodyGraph->draft().returnNode() != runtime::kInvalidNodeRef) {
+            next = loopStateValueOf(bodyGraph->draft().ref(bodyGraph->draft().returnNode()));
+        }
+        if (!inferLoopStateFromAppend(bodyGraph, gct, initial, stateTypes, 0, next)) {
+            diags_->of(SemanticDiag::LoopStateWithoutType)
+                .atOrigin(gct->loopInitial(0)->origin())
+                .commit(
+                    gct->loopStateName(0),
+                    stateTypes.front() ? stateTypes.front()->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+        stateType = stateTypes.front();
+    }
     // The body gives the next state: of the state's type, or a value that enters it (an
     // `int` where the state is an `int?`, design principles 3.8).
     Type *bodyType = bodyGraph->funcType()->exitType();
@@ -1758,6 +1828,20 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     }
 
     markLoopStateInPlace(bodyGraph, gct, initial);
+    // An empty-array state whose only use is `append` also becomes a collection slot: the loop
+    // then hands out the appended values as one array, built by the driver in one pass, beside
+    // the state the program sees (design principles 3.10; the tape autodiff and the exporter
+    // read). The state stays the program's value and its gradient channel; the slot is
+    // internal, and the FILL below hides it from the loop's users.
+    const std::vector<Type *> collected = collectLoopAppends(bodyGraph, gct, stateTypes, emptyInitial);
+    Type *loopValueType                  = stateType;
+    if (!collected.empty()) {
+        std::vector<Type *> components = stateTypes;
+        for (Type *element : collected) {
+            components.push_back(ArrayType::create(element));
+        }
+        loopValueType = TupleType::create(components);
+    }
 
     // Called by the LOOP node: the captures are with-ports, in the order both graphs share.
     for (const compile_graph_ptr_t &graph : {condGraph, bodyGraph}) {
@@ -1778,7 +1862,11 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     node_handle_t loopNode = currGraph_->addLoopNode(
         kind,
         DraftGraphBuilder::LoopTarget{condGraph, bodyGraph},
-        stateType);
+        loopValueType);
+    if (!collected.empty()) {
+        currGraph_->draft().setLoopCollectionCount(
+            nodeIdOf(loopNode), static_cast<uint32_t>(collected.size()));
+    }
     registerNodeOrigin(context_, loopNode, gct, "gir.loop");
     stampPermissions(loopNode);
     if (sequence != nullptr) {
@@ -1837,8 +1925,34 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         lastSyncedNode_ = loopNode;
         chainedNodes_.insert(loopNode);
     }
+    // The program sees the states, not the collection slots beside them. One state is its own
+    // value; several are a tuple, whose FILL reads the state components and leaves the
+    // collections to autodiff and the exporter.
+    node_handle_t loopValue = loopNode;
+    if (!collected.empty()) {
+        if (k == 1) {
+            loopValue = currGraph_->addAccsNode(stateType, 0);
+            linkNodes(LinkType::Norm, loopNode, loopValue);
+            registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
+        } else {
+            std::vector<size_t> slots(k);
+            std::iota(slots.begin(), slots.end(), size_t{0});
+            loopValue = currGraph_->addFillNode(
+                stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+            const slot_t empty = camel::core::rtdata::toSlot(::Tuple::create(k, camel::core::mm::autoSpace()));
+            node_handle_t source = currGraph_->draft().ref(
+                currGraph_->draft().materializeStaticValue(empty, stateType));
+            linkNodes(LinkType::Norm, source, loopValue);
+            for (size_t j = 0; j < k; ++j) {
+                node_handle_t component = currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
+                linkNodes(LinkType::Norm, loopNode, component);
+                linkNodes(LinkType::With, component, loopValue);
+            }
+            registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
+        }
+    }
     LEAVE("LOOP");
-    return loopNode;
+    return loopValue;
 }
 
 node_handle_t Builder::visitAnnoNode(const GCT::node_ptr_t &gct) {
@@ -1948,6 +2062,177 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     return result;
 }
 
+bool Builder::inferLoopStateFromAppend(
+    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+    std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
+    node_handle_t next) {
+    if (next == nullptr || !nodeIsKind(next, runtime::GCNodeKind::Oper)) {
+        return false;
+    }
+    const oper_idx_ptr_t op = nodeGraphOf(next)->operTarget(next);
+    if (op == nullptr || op->uri() != ":struct/append_arr") {
+        return false;
+    }
+    const auto normIns = normInputsOf(next);
+    if (normIns.size() != 1) {
+        return false;
+    }
+    node_handle_t port = nodeDraftOf(next)->ref(normIns.front());
+    if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(index)) {
+        return false;
+    }
+    const auto withIns = withInputsOf(next);
+    if (withIns.size() != 1) {
+        return false;
+    }
+    Type *element = nodeTypeOf(nodeDraftOf(next)->ref(withIns.front()));
+    if (element == nullptr || element->code() == TypeCode::Void) {
+        return false;
+    }
+    Type *newType = ArrayType::create(element);
+    // The body was built with the placeholder `void[]`: the append's operand, the parameter
+    // it reads and the empty literal all have to become the element array's type, and the
+    // call is resolved again so its instance carries the element layout.
+    retypeValueNode(bodyGraph.get(), port, newType);
+    retypeValueNode(bodyGraph.get(), next, newType);
+    retypeValueNode(nodeGraphOf(initial[index]), initial[index], newType);
+    if (bodyGraph->draft().exitNode() != runtime::kInvalidNodeRef) {
+        retypeValueNode(
+            bodyGraph.get(), bodyGraph->draft().ref(bodyGraph->draft().exitNode()), newType);
+    }
+    bodyGraph->setExitType(newType);
+    const auto group = importedOperatorGroupNamed("append");
+    if (group != nullptr) {
+        const std::vector<StaticArg> statics(1);
+        const auto resolved = group->resolve({element}, {newType}, statics, Modifier::None);
+        if (resolved.has_value()) {
+            bodyGraph->retargetOperNode(next, *resolved);
+        }
+    }
+    stateTypes[index] = newType;
+    return true;
+}
+
+std::vector<Type *> Builder::collectLoopAppends(
+    const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+    const std::vector<Type *> &stateTypes, const std::vector<bool> &emptyInitial) {
+    const size_t stateCount = loop->loopStateCount();
+    if (stateCount == 0 || stateTypes.size() != stateCount) {
+        return {};
+    }
+    runtime::GraphDraft &draft = bodyGraph->draft();
+    if (draft.returnKind() != runtime::GCReturnKind::Self ||
+        draft.returnNode() == runtime::kInvalidNodeRef) {
+        return {};
+    }
+    node_handle_t returned = loopStateValueOf(draft.ref(draft.returnNode()));
+    if (returned == nullptr) {
+        return {};
+    }
+    std::vector<node_handle_t> next(stateCount, nullptr);
+    if (stateCount == 1) {
+        next[0] = returned;
+    } else {
+        if (!nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
+            return {};
+        }
+        const Type *returnType = valueTypeOf(nodeTypeOf(returned));
+        if (returnType == nullptr || returnType->code() != TypeCode::Tuple) {
+            return {};
+        }
+        const auto withIns = withInputsOf(returned);
+        const auto payload = nodeDraftOf(returned)->payloadOf(nodeIdOf(returned));
+        if (payload.size() < sizeof(runtime::GCFillBody)) {
+            return {};
+        }
+        const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
+        if (fill->fillKind != runtime::GCFillKind::Tuple) {
+            return {};
+        }
+        const auto slots = fill->slots();
+        if (slots.size() != withIns.size()) {
+            return {};
+        }
+        for (size_t i = 0; i < slots.size(); ++i) {
+            if (static_cast<size_t>(slots[i]) >= stateCount) {
+                return {};
+            }
+            next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
+        }
+    }
+    std::vector<Type *> collected;
+    std::vector<node_handle_t> values;
+    for (size_t j = 0; j < stateCount; ++j) {
+        if (!emptyInitial[j] || next[j] == nullptr ||
+            !nodeIsKind(next[j], runtime::GCNodeKind::Oper)) {
+            continue;
+        }
+        const oper_idx_ptr_t op = nodeGraphOf(next[j])->operTarget(next[j]);
+        if (op == nullptr ||
+            (op->uri() != ":struct/append_arr" && op->uri() != ":struct/append_arr_owned")) {
+            continue;
+        }
+        const auto normIns = normInputsOf(next[j]);
+        if (normIns.size() != 1) {
+            continue;
+        }
+        node_handle_t port = nodeDraftOf(next[j])->ref(normIns.front());
+        if (port == nullptr || bodyGraph->nodePortName(port) != loop->loopStateName(j)) {
+            continue;
+        }
+        if (normUsersOf(port).size() + withUsersOf(port).size() != 1) {
+            continue;
+        }
+        const auto withIns = withInputsOf(next[j]);
+        if (withIns.size() != 1) {
+            continue;
+        }
+        Type *element = nodeTypeOf(nodeDraftOf(next[j])->ref(withIns.front()));
+        if (element == nullptr) {
+            continue;
+        }
+        collected.push_back(element);
+        values.push_back(nodeDraftOf(next[j])->ref(withIns.front()));
+    }
+    if (collected.empty()) {
+        return {};
+    }
+    std::vector<node_handle_t> components;
+    if (stateCount == 1) {
+        components.push_back(returned);
+    } else {
+        for (size_t j = 0; j < stateCount; ++j) {
+            components.push_back(bodyGraph->addAccsNode(stateTypes[j], static_cast<uint32_t>(j)));
+        }
+    }
+    components.insert(components.end(), values.begin(), values.end());
+    std::vector<Type *> resultTypes = stateTypes;
+    for (Type *element : collected) {
+        resultTypes.push_back(element);
+    }
+    Type *resultType = TupleType::create(resultTypes);
+    std::vector<size_t> slots(resultTypes.size());
+    std::iota(slots.begin(), slots.end(), size_t{0});
+    node_handle_t result = bodyGraph->addFillNode(
+        resultType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+    const slot_t empty = camel::core::rtdata::toSlot(::Tuple::create(
+        resultTypes.size(), camel::core::mm::autoSpace()));
+    node_handle_t source = draft.ref(draft.materializeStaticValue(empty, resultType));
+    const std::array<runtime::gc_node_ref_t, 1> sourceInput{nodeIdOf(source)};
+    draft.setNormInputs(nodeIdOf(result), sourceInput);
+    std::vector<runtime::gc_node_ref_t> componentIds;
+    for (node_handle_t component : components) {
+        componentIds.push_back(nodeIdOf(component));
+    }
+    draft.setWithInputs(nodeIdOf(result), componentIds);
+    draft.setOutputNode(nodeIdOf(result));
+    draft.setExitNode(nodeIdOf(result));
+    draft.setReturnNode(nodeIdOf(result), runtime::GCReturnKind::Self);
+    bodyGraph->setExitType(resultType);
+    registerNodeOrigin(context_, result, loop->loopBody(), "gir.loop.collect");
+    return collected;
+}
+
 void Builder::markLoopStateInPlace(
     const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
     std::vector<node_handle_t> &initial) {
@@ -1994,7 +2279,7 @@ void Builder::markLoopStateInPlace(
     }
     std::vector<node_handle_t> next(stateCount, nullptr);
     for (size_t i = 0; i < slots.size(); ++i) {
-        if (slots[i] >= stateCount) {
+        if (static_cast<size_t>(slots[i]) >= stateCount) {
             return;
         }
         next[slots[i]] = nodeDraftOf(returned)->ref(withIns[i]);
