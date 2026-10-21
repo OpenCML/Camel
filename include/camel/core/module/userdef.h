@@ -73,6 +73,11 @@ class UserDefinedModule : public Module {
     // Set while compileAsProgram() builds: the graph of that program is not the graph the
     // module was loaded as part of, so setProgramGraph must not replace it.
     bool buildingProgramOfItsOwn_ = false;
+    // A `.cml` found beside a `.cmo` of its name declares that C++ module's operators
+    // (design principles 6.4; handover H19, step 1): its top-level functions have no body and
+    // `implementation_` is the C++ module, kept alive for its executors and operator traits.
+    bool declarationModule_ = false;
+    module_ptr_t implementation_;
 
   public:
     UserDefinedModule(
@@ -86,6 +91,16 @@ class UserDefinedModule : public Module {
     camel::parse::parser_ptr_t parser() const { return parser_; }
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }
     CompileStage stage() const { return stage_; }
+
+    /// Whether this module is the declaration module of a C++ module (a `.cml` beside the
+    /// `.cmo`): its top-level functions carry no body.
+    bool declarationModule() const { return declarationModule_; }
+    void setDeclarationModule(bool on) { declarationModule_ = on; }
+    /// The C++ module whose operators the declarations stand for, when it has one.
+    const module_ptr_t &implementation() const { return implementation_; }
+    void setImplementation(const module_ptr_t &implementation) {
+        implementation_ = implementation;
+    }
 
     bool compile(CompileStage till = CompileStage::Done);
     /// Whether compile() is running for this module.

@@ -112,22 +112,10 @@ class BytesExecutor final : public Executor {
 class BytesModule final : public BuiltinModule {
   public:
     explicit BytesModule(context_ptr_t ctx) : BuiltinModule("bytes", std::move(ctx)) {
-        auto *b        = BytesType::get();
-        auto *s        = Type::String();
-        auto *a        = ArrayType::create(Type::Int64());
-        const auto add = [&](const std::string &name, const param_init_list_t &args, Type *result) {
-            exportEntity(
-                name,
-                OperatorGroup::create(
-                    name,
-                    {{"bytes:" + name, StaticFuncTypeResolver::create({}, args, result)}}));
-        };
-        add("encode", {{s, false}}, b);
-        add("decode", {{b, false}}, TupleType::fallible(s));
-        add("from_array", {{a, false}}, b);
-        add("to_array", {{b, false}}, a);
-        add("size", {{b, false}}, Type::Int64());
-        add("concat", {{b, false}, {b, false}}, b);
+        // The signatures of the operators are written once, in the declaration module
+        // `stdlib/bytes.cml` (design principles 6.4; handover H19, step 1). What is left here is
+        // what only C++ knows: the kernels below, the executor that runs them, and the operator
+        // traits declared when the module loads.
     }
     bool load() override {
         if (loaded_)

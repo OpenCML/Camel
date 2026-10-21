@@ -192,6 +192,12 @@ enum class SemanticDiag : uint32_t {
     StaticAccessNotConstant     = 0x000179,
     StaticComprehensionVoidElement = 0x00017A,
 
+    // Body-less declarations, the declarations of a C++ module's operators (design principles
+    // 6.4; handover H19, step 1). 0x17B and up.
+    NativeDeclarationIncomplete = 0x00017B,
+    NativeDeclarationNotLoaded  = 0x00017C,
+    DeclarationModuleHasBody    = 0x00017D,
+
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
     IgnoredSideEffect            = 0x100002,

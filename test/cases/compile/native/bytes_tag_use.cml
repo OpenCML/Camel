@@ -1,0 +1,14 @@
+/**
+ * `size` here is `bytes:size` under a name of another module: the `#op` tag on the declaration
+ * says so. The name imported from the declaration and the operator's own name both answer
+ * (handover H19, step 1).
+ */
+import bytes
+import { size } from bytes_tag
+
+func main(): int sync {
+    let b = bytes::encode('abc')
+    println(size(b))
+    println(bytes::size(b))
+    return 0
+}

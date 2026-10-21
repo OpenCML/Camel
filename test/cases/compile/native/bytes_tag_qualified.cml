@@ -1,0 +1,13 @@
+/**
+ * The declaration is the module's own entity, as an operator group of a C++ module is: naming the
+ * module brings it (`bytes_tag::size`), so a declaration is reachable the way `bytes::size` is
+ * (handover H19, step 1).
+ */
+import bytes
+import bytes_tag
+
+func main(): int sync {
+    let b = bytes::encode('abcd')
+    println(bytes_tag::size(b))
+    return 0
+}

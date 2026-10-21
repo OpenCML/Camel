@@ -39,9 +39,11 @@
 #include "camel/utils/type.h"
 #include "core/module/entity_internal.h"
 
+#include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
+#include "camel/execute/executor.h"
 
 #include <atomic>
 #include <cctype>
@@ -172,6 +174,117 @@ void Builder::reportImportNameConflicts() {
     }
 }
 
+std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct) {
+    // `#op<'module:function'>` names the operator when the name of the declaration is not the
+    // name of the function: an operator of another module under a name of this one, or a
+    // function whose name is not a Camel identifier (design principles 6.2, 6.4).
+    const TagFacts tags = tagFactsOf(gct, camel::core::tag::Func);
+    if (tags.declaration == camel::core::attr::kNoAttrs) {
+        return std::nullopt;
+    }
+    const auto value =
+        camel::core::attr::valueOf(tags.declaration, camel::core::attr::key("op"));
+    if (value == camel::core::attr::kNoValue) {
+        return std::nullopt;
+    }
+    const camel::core::attr::Value uri = camel::core::attr::value(value);
+    if (uri.kind != camel::core::attr::ValueKind::Symbol) {
+        return std::nullopt;
+    }
+    return uri.text;
+}
+
+void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
+    const std::string name   = gct->name();
+    FunctionType *funcType   = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+    const std::string where  = unit_->module->name();
+    std::string uri          = where + ":" + name;
+    if (auto tagged = nativeOperatorUri(gct); tagged.has_value()) {
+        uri = std::move(*tagged);
+    }
+    if (uri.find(':') == std::string::npos) {
+        diags_->of(SemanticDiag::InvalidOperatorURI).atOrigin(gct->origin()).commit(uri);
+        throw BuildAbortException();
+    }
+    // The declaration is the signature of an operator of a loaded module: an operator no executor
+    // answers cannot be called, and a mistake of the declaration (a wrong module, a typo) must be
+    // reported where it is written rather than when the call runs (handover H19, step 1).
+    if (!context_->execMgr().findWithoutImport(uri).has_value()) {
+        diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
+            .atOrigin(gct->origin())
+            .commit(name, uri);
+        throw BuildAbortException();
+    }
+    // The operator's purity is the C++ module's, not the declaration's; a declaration of an
+    // operator that declares nothing would run with effects a pass cannot see.
+    if (!camel::core::OperatorTable::instance().find(uri).has_value()) {
+        diags_->of(SemanticDiag::NativeDeclarationNotLoaded)
+            .atOrigin(gct->origin())
+            .commit(name, uri);
+        throw BuildAbortException();
+    }
+    auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
+    const auto sameParameters = [](FunctionType *a, FunctionType *b) {
+        if (a == nullptr || b == nullptr || a->withTypesCount() != b->withTypesCount() ||
+            a->normTypesCount() != b->normTypesCount()) {
+            return false;
+        }
+        for (size_t i = 0; i < a->withTypesCount(); ++i) {
+            if (!a->withTypeAt(i)->equals(b->withTypeAt(i))) {
+                return false;
+            }
+        }
+        for (size_t i = 0; i < a->normTypesCount(); ++i) {
+            if (!a->normTypeAt(i)->equals(b->normTypeAt(i))) {
+                return false;
+            }
+        }
+        return true;
+    };
+    // Two rules of a name that accept the same parameters cannot both be meant (the operator
+    // group refuses them the same way); nor may a declaration repeat a function of the module.
+    for (auto &group : unit_->nativeOperators) {
+        if (group.name != name) {
+            continue;
+        }
+        for (const auto &[otherUri, other] : group.rules) {
+            if (sameParameters(other->fixedSignature(), resolver->fixedSignature())) {
+                diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+                throw BuildAbortException();
+            }
+        }
+    }
+    if (auto graphs = graphScope_->get(name, false); graphs.has_value()) {
+        for (const auto &graph : **graphs) {
+            if (sameParameters(graph->funcType(), resolver->fixedSignature())) {
+                diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(name);
+                throw BuildAbortException();
+            }
+        }
+    }
+    auto found = std::find_if(
+        unit_->nativeOperators.begin(),
+        unit_->nativeOperators.end(),
+        [&](const ModuleUnit::NativeOperators &group) { return group.name == name; });
+    if (found == unit_->nativeOperators.end()) {
+        unit_->nativeOperators.push_back({name, {}});
+        found = unit_->nativeOperators.end() - 1;
+    }
+    found->rules.emplace_back(uri, std::move(resolver));
+}
+
+void Builder::exportNativeOperators() {
+    for (auto &group : unit_->nativeOperators) {
+        if (group.rules.empty()) {
+            continue;
+        }
+        unit_->module->exportEntity(
+            Reference(group.name),
+            OperatorGroup::create(group.name, std::move(group.rules)));
+        group.rules.clear();
+    }
+}
+
 void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
     // Whether a top-level function of this name carries decorators: its exported form is the
     // decorated function, which exists once its body is built (the second call).
@@ -234,6 +347,11 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
             // A type declaration is the module's own and was exported when its construction tree
             // was built (GCT, Module::exportType); it means the same in every program, so the
             // program's table does not name it again.
+            continue;
+        }
+        if (module_->getNativeEntity(ref).has_value()) {
+            // A body-less declaration: its operator group is the module's own entity, exported
+            // when the declarations of the module were read (handover H19, step 1).
             continue;
         }
         if (auto value = unit_->values.find(name); value != unit_->values.end()) {

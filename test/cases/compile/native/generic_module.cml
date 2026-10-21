@@ -1,0 +1,15 @@
+/**
+ * A module that mixes a body-less declaration with an ordinary function: `at` is the array index
+ * operator of the built-in module (`:op/idx_arr`), declared here under a name of this module.
+ * The declaration is its signature; a call is instantiated by the element type (handover H19,
+ * step 1).
+ */
+module native_generic
+
+#op<':op/idx_arr'>
+export func at(xs: (typeas T)[], i: int): T
+
+/// The second element, through `at`: the call of a generic declaration inside a body.
+export func second(xs: (typeas T)[]): T {
+    return at(xs, 1)
+}

@@ -530,6 +530,16 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 node_ptr_t declNode = tree_->makeDecl(node->name(), true);
                 node_ptr_t typeNode = node->at(0);
                 *declNode << tree_->clone(typeNode);
+                if (node->nativeDeclaration()) {
+                    // The declaration keeps what makes it one: no body, so the graph builder
+                    // makes an operator rule of it instead of a graph (handover H19 step 1),
+                    // and its tag uses go with it (`#op<'module:function'>`; design principles
+                    // 6.2).
+                    declNode->setNativeDeclaration();
+                    if (const auto *uses = tree_->tagUsesOf(node); uses != nullptr) {
+                        tree_->addTagUses(declNode, *uses);
+                    }
+                }
                 setOriginFromAst(
                     context_,
                     declNode,
@@ -3910,6 +3920,55 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         }
     }
     node_ptr_t typeNode = tree_->makeType(funcType, funcType->implMark());
+    // A declaration without a body declares an operator of a C++ module (design principles 6.4):
+    // it has a signature and nothing to build, so the FUNC carries its type alone and is marked
+    // as a declaration. The graph builder turns it into an operator group instead of a graph
+    // (handover H19, step 1).
+    const bool nativeDeclaration = ast->size() < 2;
+    if (!nativeDeclaration) {
+        // A module found beside a `.cmo` is that C++ module's declaration module: the C++
+        // module implements the functions, so a body written there is in the wrong file
+        // (design principles 6.4; handover H19, step 1).
+        auto declaredModule = std::dynamic_pointer_cast<UserDefinedModule>(module_);
+        if (declaredModule && declaredModule->declarationModule()) {
+            diags_->of(SemanticDiag::DeclarationModuleHasBody)
+                .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                .commit(module_->name(), funcData->ref().toString());
+            throw BuildAbortException();
+        }
+    }
+    if (nativeDeclaration) {
+        if (!funcType->hasExitType()) {
+            diags_->of(SemanticDiag::NativeDeclarationIncomplete)
+                .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                .commit(funcData->ref().toString());
+            throw BuildAbortException();
+        }
+        node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
+        funcNode->setNativeDeclaration();
+        *funcNode << typeNode;
+        setOriginFromAst(
+            context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
+        setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
+        registerGctSemantic(
+            context_,
+            funcNode,
+            ast,
+            {
+                semanticPart(
+                    camel::source::SemanticRole::FuncName,
+                    findSemanticOrigin(
+                        astSemantic(context_, ast),
+                        camel::source::SemanticRole::FuncName),
+                    -1,
+                    funcData->ref().toString()),
+                semanticPart(
+                    camel::source::SemanticRole::ReturnType, nodeOrigin(typeNode), -1, "type"),
+            },
+            {nodeOrigin(typeNode)});
+        LEAVE("FuncData");
+        return funcNode;
+    }
     // The body of a function or lambda is a body of its own: its value is the function's
     // result, and its exits are the function's, wherever the function is written.
     const ValueUseScope valueUseScope(*this);

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-194 diagnostics: 177 errors, 17 warnings.
+197 diagnostics: 180 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -162,6 +162,9 @@ prints one entry.
 | `0x03000178` | [SemanticDiag::StaticAccessIndexOutOfRange](#staticaccessindexoutofrange) | Error |
 | `0x03000179` | [SemanticDiag::StaticAccessNotConstant](#staticaccessnotconstant) | Error |
 | `0x0300017A` | [SemanticDiag::StaticComprehensionVoidElement](#staticcomprehensionvoidelement) | Error |
+| `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
+| `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
+| `0x0300017D` | [SemanticDiag::DeclarationModuleHasBody](#declarationmodulehasbody) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4035,7 +4038,15 @@ A field cannot be taken from '{0}' by a compile-time key.
 't.[key]' names a field of a struct or an element of an ordinary tuple. A 'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or an array has no fields.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/native/missing.cml`, run as `camel test/cases/compile/native/missing.cml`)
+
+```camel
+import { absent } from missing_module
+
+func main(): int {
+    return absent(1)
+}
+```
 
 ### StaticAccessUnknownField
 
@@ -4157,6 +4168,68 @@ func main(): int sync {
     return 0
 }
 ```
+
+### NativeDeclarationIncomplete
+
+`0x0300017B` · Error · `SemanticDiag::NativeDeclarationIncomplete`
+
+**Message**
+
+```text
+The body-less declaration '{0}' is incomplete: it has no result type.
+```
+
+**Help**
+
+```text
+A body-less declaration is the whole signature of a C++ operator, result included; write the result type (`: T`).
+```
+
+*No example: no test small enough to show raises it.*
+
+### NativeDeclarationNotLoaded
+
+`0x0300017C` · Error · `SemanticDiag::NativeDeclarationNotLoaded`
+
+**Message**
+
+```text
+The declaration '{0}' names the operator '{1}', which no loaded module implements.
+```
+
+**Help**
+
+```text
+A body-less declaration stands for an operator of a loaded C++ module. Import the module that implements it, and check that the URI names its function; a declaration whose implementation is not loaded is not a function.
+```
+
+**Example** (`test/cases/compile/native/missing.cml`, run as `camel test/cases/compile/native/missing.cml`)
+
+```camel
+import { absent } from missing_module
+
+func main(): int {
+    return absent(1)
+}
+```
+
+### DeclarationModuleHasBody
+
+`0x0300017D` · Error · `SemanticDiag::DeclarationModuleHasBody`
+
+**Message**
+
+```text
+The declaration module '{0}' has a body in function '{1}'.
+```
+
+**Help**
+
+```text
+A Camel module found beside a C++ module of the same name declares that module's operators and has no bodies. Put the implementation in a module that has no `.cmo`, or remove the `.cmo`.
+```
+
+*No example: no test small enough to show raises it.*
 
 ### VarParamInAsyncFunction
 

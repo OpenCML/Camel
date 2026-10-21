@@ -19,10 +19,101 @@
 
 #include "camel/core/type/resolver.h"
 
+#include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 
 using namespace camel::core::type;
+
+namespace {
+
+/// The declared signature as an operator's type: closed, with its parameter names, var marks,
+/// modifiers and implementation mark kept.
+FunctionType *closedSignature(FunctionType *declared) {
+    ASSERT(declared->hasExitType(), "A declared operator has a result type");
+    FunctionTypeFactory factory;
+    factory.setImplMark(declared->implMark());
+    factory.setModifiers(declared->modifiers());
+    for (size_t i = 0; i < declared->withTypesCount(); ++i) {
+        factory.addWithArg(
+            std::string(declared->argNameAt(i)), declared->withTypeAt(i),
+            declared->withIsVarAt(i));
+    }
+    for (size_t i = 0; i < declared->normTypesCount(); ++i) {
+        factory.addNormArg(
+            std::string(declared->argNameAt(declared->withTypesCount() + i)),
+            declared->normTypeAt(i), declared->normIsVarAt(i));
+    }
+    factory.setExitType(declared->exitType());
+    return factory.build();
+}
+
+} // namespace
+
+DeclaredFuncTypeResolver::DeclaredFuncTypeResolver(FunctionType *declared)
+    : funcType_(closedSignature(declared)) {
+    for (Type *param : funcType_->withTypesSpan()) {
+        collectBindableTypeVars(param, bindable_);
+    }
+    for (Type *param : funcType_->normTypesSpan()) {
+        collectBindableTypeVars(param, bindable_);
+    }
+    collectBindableTypeVars(funcType_->exitType(), bindable_);
+    generic_ = !bindable_.empty();
+}
+
+std::optional<FunctionType *> DeclaredFuncTypeResolver::resolve(
+    const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {
+    if (with.size() != funcType_->withTypesCount() || norm.size() != funcType_->normTypesCount()) {
+        return std::nullopt; // reject
+    }
+    if (!generic_) {
+        for (size_t i = 0; i < with.size(); ++i) {
+            if (!funcType_->withTypeAt(i)->assignableFrom(valueTypeOf(with[i]))) {
+                return std::nullopt;
+            }
+        }
+        for (size_t i = 0; i < norm.size(); ++i) {
+            if (!funcType_->normTypeAt(i)->assignableFrom(valueTypeOf(norm[i]))) {
+                return std::nullopt;
+            }
+        }
+        return funcType_;
+    }
+    // The variables are what the arguments say they are; a call that leaves one open is not a
+    // use of the operator (nothing decides the code it runs on), so it is rejected here and
+    // reported at the call as the mismatch it is.
+    type_bindings_t bindings;
+    for (size_t i = 0; i < with.size(); ++i) {
+        if (!unifyTypeVars(funcType_->withTypeAt(i), valueTypeOf(with[i]), bindings)) {
+            return std::nullopt;
+        }
+    }
+    for (size_t i = 0; i < norm.size(); ++i) {
+        if (!unifyTypeVars(funcType_->normTypeAt(i), valueTypeOf(norm[i]), bindings)) {
+            return std::nullopt;
+        }
+    }
+    for (const std::string &name : bindable_) {
+        if (findTypeBinding(bindings, name) == nullptr) {
+            return std::nullopt;
+        }
+    }
+    auto *concrete = static_cast<FunctionType *>(substituteTypeVars(funcType_, bindings));
+    for (size_t i = 0; i < with.size(); ++i) {
+        if (!concrete->withTypeAt(i)->assignableFrom(valueTypeOf(with[i]))) {
+            return std::nullopt;
+        }
+    }
+    for (size_t i = 0; i < norm.size(); ++i) {
+        if (!concrete->normTypeAt(i)->assignableFrom(valueTypeOf(norm[i]))) {
+            return std::nullopt;
+        }
+    }
+    (void)modifiers;
+    return concrete;
+}
 
 std::optional<FunctionType *> StaticFuncTypeResolver::resolve(
     const type_vec_t &with, const type_vec_t &norm, const ModifierSet &modifiers) const {

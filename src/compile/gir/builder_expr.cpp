@@ -585,6 +585,22 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             return drefNode;
         }
     }
+    if (module_ != nullptr) {
+        // A body-less declaration of this module: the name stands for the operator group the
+        // declaration made, which is no graph (handover H19, step 1). It is the module's own
+        // entity, so it is looked up here, before what an import brings under the same name.
+        for (const std::string &candidate : {name, written}) {
+            auto native = module_->getNativeEntity(Reference(candidate));
+            if (native.has_value() && native->isOperGroup()) {
+                node_handle_t drefNode{graph->addDrefNode(
+                    std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
+                        native->operGroup()})};
+                registerNodeOrigin(context_, drefNode, gct, "gir.dref.native");
+                LEAVE("DREF");
+                return drefNode;
+            }
+        }
+    }
     // Layers 3 to 5 (design principles 10.2): imported by name (or through a module or
     // namespace prefix), then through a `using namespace`, then what comes along unasked.
     // Operators take their overloads from every layer.

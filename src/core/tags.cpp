@@ -141,6 +141,16 @@ void declareStandardTags() {
         reads.names    = true;
         reads.variadic = true;
         declare(std::move(reads));
+        // `op`, written before a body-less declaration: the URI of the operator the declaration
+        // is, when the operator's name is not the declaration's. A name that follows the
+        // convention (`bytes:size` for `size` of `bytes`) needs no tag (design principles 6.4;
+        // handover H19, step 1).
+        Decl op;
+        op.name   = "op";
+        op.ident  = "op";
+        op.on     = Func;
+        op.params = {{"uri", "string"}};
+        declare(std::move(op));
     });
 }
 

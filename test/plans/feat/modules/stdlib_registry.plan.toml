@@ -68,13 +68,13 @@ timeout_ms = 20000
 
 [[tests]]
 name = "registry.signatures_match"
-desc = "stdlib/signatures/*.cml list exactly the operators the modules register: every registered operator is declared, every declaration names a registered operator, the parameter counts agree and @pure / @effect is the declared purity."
+desc = "The declaration files (stdlib/bytes.cml and stdlib/signatures/*.cml) list exactly the operators the modules register: every registered operator is declared, every declaration names a registered operator, the parameter counts agree and @pure / @effect is the declared purity."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-reference.mjs"
 args = ["${case}", "--verify-ops"]
 expect_exit = 0
-expect_stdout_contains = ["the signature files agree with the"]
+expect_stdout_contains = ["the declarations agree with the"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 

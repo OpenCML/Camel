@@ -32,7 +32,8 @@
  *     DATA              payload: the constant (a pointer to a shared_ptr the tree keeps)
  *     TYPE              payload: the type; tag: ImplMark
  *     DECL              payload: the name; flag: a function is declared
- *     FUNC, NREF, DREF  payload: the name; FUNC flag: a decorated block
+ *     FUNC, NREF, DREF  payload: the name; FUNC flags: a decorated block, a body-less
+ *                       declaration of a C++ operator
  *     LINK, WITH        payload: the number of arguments written
  *     ACCS              payload: the index, or the key when the flag is clear
  *     BRCH              tag: BranchKind
@@ -164,6 +165,19 @@ class Node {
     void setDecoratedBlock() {
         check(NodeKind::FUNC);
         flags_ |= kFlagA;
+    }
+
+    /// FUNC, DECL: a body-less declaration (design principles 6.4; handover H19, step 1). The FUNC
+    /// the parser built has its type as its only child and no graph is built from it; the DECL the
+    /// module makes of it stands for an operator of a C++ module, and what it declares is its
+    /// signature.
+    bool nativeDeclaration() const {
+        ASSERT(kind_ == NodeKind::FUNC || kind_ == NodeKind::DECL, "The node is no declaration");
+        return (flags_ & kFlagB) != 0;
+    }
+    void setNativeDeclaration() {
+        ASSERT(kind_ == NodeKind::FUNC || kind_ == NodeKind::DECL, "The node is no declaration");
+        flags_ |= kFlagB;
     }
 
     /// DECL: whether a function is declared (else a type).

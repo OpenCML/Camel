@@ -454,6 +454,13 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
 
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
+    if (gct->nativeDeclaration()) {
+        // A body-less declaration declares an operator of a C++ module (design principles 6.4):
+        // it is checked and kept as an operator rule, not as a graph (handover H19, step 1).
+        declareNativeOperator(gct);
+        LEAVE("DECL");
+        return nullptr;
+    }
     GCT::node_ptr_t typeNode = gct->at(0);
     Type *type               = typeNode->dataType();
     if (!gct->isFunc()) {
@@ -491,6 +498,12 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     GCT::node_ptr_t typeLoad = gct->at(0);
     Type *type               = typeLoad->dataType();
     FunctionType *funcType   = tt::as_ptr<FunctionType>(type);
+    if (gct->nativeDeclaration()) {
+        // A body-less declaration declares an operator rule; there is no body to build
+        // (visitDeclNode; handover H19, step 1).
+        LEAVE("FUNC");
+        return nullptr;
+    }
     // The tags written before the declaration (design principles 6.2) are resolved here, before
     // the generic early return: they hold for the declaration (`on func`) or for the nodes of its
     // body (`on nodes`). The body's are handed to buildFuncBody below; a tag on a lambda has no
