@@ -69,6 +69,18 @@ using namespace camel::jit;
         currFrame->set(bc.result, res);                                                            \
     } break;
 
+// The remainder of the language: x % -1 is 0 (camel/utils/int_div.h), the quotient's rule.
+#define DEF_BIN_MOD_CASE(CODE, TYPE, ZERO_CHECK)                                                   \
+    case OpCode::CODE: {                                                                           \
+        TYPE lhs = currFrame->get<TYPE>(bc.fastop[0]);                                             \
+        TYPE rhs = currFrame->get<TYPE>(bc.fastop[1]);                                             \
+        if (rhs == ZERO_CHECK) {                                                                   \
+            throwRuntimeFault(RuntimeDiag::DivisionByZero);                                        \
+        }                                                                                          \
+        TYPE res = camel::utils::remainder(lhs, rhs);                                              \
+        currFrame->set(bc.result, res);                                                            \
+    } break;
+
 FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *rootFrame) {
     Frame *currFrame             = rootFrame;
     Frame *rootActiveFrame       = rootFrame;
@@ -472,6 +484,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 DEF_BIN_DIV_CASE(LDIV, Long, 0);
                 DEF_BIN_DIV_CASE(FDIV, Float, 0.0f);
                 DEF_BIN_DIV_CASE(DDIV, Double, 0.0);
+
+                DEF_BIN_MOD_CASE(IMOD, Int, 0);
+                DEF_BIN_MOD_CASE(LMOD, Long, 0);
 
                 DEF_CMP_OP_CASE(ILT, Int, <);
                 DEF_CMP_OP_CASE(LLT, Long, <);

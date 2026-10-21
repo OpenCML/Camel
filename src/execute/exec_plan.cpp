@@ -84,6 +84,128 @@ gc_node_ref_t valueBehindGates(const GCGraph &graph, gc_node_ref_t at) {
     return at;
 }
 
+/// Whether the value of `node` is read only by the node at `reader` (one reference, the reader's):
+/// a value nothing else reads can be left unmade.
+bool readOnlyBy(
+    const GCGraph &graph, std::span<const gc_node_ref_t> live, gc_node_ref_t node,
+    gc_node_ref_t reader) {
+    size_t seen = 0;
+    for (gc_node_ref_t at : live) {
+        for (gc_node_ref_t input : graph.normInputsOf(at)) {
+            if (input == node && ++seen > 1) {
+                return false;
+            }
+        }
+        for (gc_node_ref_t input : graph.withInputsOf(at)) {
+            if (input == node && ++seen > 1) {
+                return false;
+            }
+        }
+    }
+    // The one reference is the reader's own with input (the region's result).
+    for (gc_node_ref_t input : graph.withInputsOf(reader)) {
+        if (input == node) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// Plans a loop of several values of state as its k components (ExecLoop::stateComponents): the
+/// body ends in a tuple FILL whose only reader is the LOOP node, and every component is a value a
+/// node of the body writes. Then the FILL is not run (plan.elidedAt, whose index `elidedTopo`
+/// is) and the state lives in the body's own slots: the tuple that is the loop's value was made
+/// once, when the loop started.
+///
+/// The question this asks is about the *body*: is the tuple it returns an artefact of the state
+/// being several values (design principles 3.10) or a value in its own right? Only when nothing
+/// but the loop reads it, and every component is computed inside the body (not a port and not a
+/// captured value: the state is written into those slots every round), is it the former.
+bool planStateComponents(
+    const GCGraph &graph, const ControlRegions &regions, ExecPlan &plan, uint32_t bodyRegion,
+    gc_node_ref_t loopRef, ExecLoop &loop, size_t &elidedTopo) {
+    if (loop.collectionCount != 0 || loop.stateCount < 2 || loop.valueType == nullptr) {
+        return false;
+    }
+    const auto results = graph.withInputsOf(loopRef);
+    ASSERT(!results.empty(), "A LOOP node has the result of its body region.");
+    const gc_node_ref_t bodyValue = valueBehindGates(graph, results.front());
+    const GCNode *fill            = graph.node(bodyValue);
+    if (fill == nullptr || fill->kind != GCNodeKind::Fill) {
+        return false;
+    }
+    const camel::core::type::Type *fillType = fill->dataType();
+    if (fillType == nullptr || fillType->code() != camel::core::type::TypeCode::Tuple) {
+        return false;
+    }
+    const auto *fillTupleType = static_cast<const camel::core::type::TupleType *>(fillType);
+    if (fillTupleType->size() != loop.stateCount) {
+        return false;
+    }
+    for (size_t j = 0; j < loop.stateCount; ++j) {
+        const camel::core::type::Type *component = fillTupleType->typeAt(j);
+        if (component == nullptr || component != loop.valueType->typeAt(j)) {
+            return false;
+        }
+    }
+    // The template of the FILL is a constant: the tuple is made from it, so it holds no value of
+    // the body's.
+    const auto norm      = graph.normInputsOf(bodyValue);
+    const GCNode *source = norm.empty() ? nullptr : graph.node(norm.front());
+    if (source == nullptr || source->kind != GCNodeKind::Data) {
+        return false;
+    }
+    const auto *fillBody = graph.nodeBodyAs<camel::runtime::GCFillBody>(bodyValue);
+    if (fillBody == nullptr || fillBody->slots().size() != loop.stateCount) {
+        return false;
+    }
+    if (!readOnlyBy(graph, plan.topo, bodyValue, loopRef)) {
+        return false;
+    }
+    // Every component is a value the body computes in a slot of its own: not a port (the state is
+    // written into the ports every round) and not a constant of the static area.
+    std::vector<gc_data_idx_t> stateSlots(loop.stateCount, 0);
+    size_t seen = 0;
+    for (gc_node_ref_t input : graph.withInputsOf(bodyValue)) {
+        const GCNode *node = graph.node(input);
+        if (node == nullptr || node->kind == GCNodeKind::Port || node->dataIndex == 0 ||
+            !regions.within(regions.controlOf(input), bodyRegion)) {
+            return false;
+        }
+        const size_t component = fillBody->slots()[seen];
+        if (component >= loop.stateCount || stateSlots[component] != 0) {
+            return false;
+        }
+        stateSlots[component] = node->dataIndex;
+        ++seen;
+    }
+    if (seen != loop.stateCount) {
+        return false;
+    }
+    for (gc_data_idx_t slot : stateSlots) {
+        if (slot == 0) {
+            return false;
+        }
+    }
+    // Where the FILL is in the plan, so that a back end that walks the plan skips it.
+    elidedTopo = plan.topo.size();
+    for (size_t i = 0; i < plan.topo.size(); ++i) {
+        if (plan.topo[i] == bodyValue) {
+            elidedTopo = i;
+            break;
+        }
+    }
+    if (elidedTopo == plan.topo.size()) {
+        return false;
+    }
+    loop.stateComponents  = true;
+    loop.stateSlotsOffset = static_cast<uint32_t>(plan.loopSlots.size());
+    for (gc_data_idx_t slot : stateSlots) {
+        plan.loopSlots.push_back(slot);
+    }
+    return true;
+}
+
 /// The loops of `graph` that are regions of it: where their ranges are in the plan and which
 /// slots a round reads and writes.
 void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
@@ -164,6 +286,15 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
             (condEmpty || bodyEmpty || condLast == bodyFirst) && (bodyEmpty || bodyLast == li) &&
                 (!bodyEmpty || condEmpty || condLast == li),
             "The nodes of a loop are not one range in the execution order.");
+        // A loop whose body ends in a tuple nothing reads keeps the state as its components
+        // instead of making the tuple again every round (ExecLoop::stateComponents).
+        size_t elidedTopo = 0;
+        if (planStateComponents(graph, *regions, plan, bodyRegion, ref, loop, elidedTopo)) {
+            if (plan.elidedAt.empty()) {
+                plan.elidedAt.assign(plan.topo.size(), 0);
+            }
+            plan.elidedAt[elidedTopo] = 1;
+        }
         loop.begin   = !condEmpty ? condFirst : (!bodyEmpty ? bodyFirst : li);
         loop.condEnd = !bodyEmpty ? bodyFirst : li;
         const uint32_t index = static_cast<uint32_t>(plan.loops.size());
@@ -178,6 +309,9 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
     }
     for (ExecLoop &loop : plan.loops) {
         loop.slots = plan.loopSlots.data() + loop.slotsOffset;
+        if (loop.stateComponents) {
+            loop.stateSlots = plan.loopSlots.data() + loop.stateSlotsOffset;
+        }
     }
     std::stable_sort(events.begin(), events.end(), [](const Event &a, const Event &b) {
         if (a.position != b.position) {

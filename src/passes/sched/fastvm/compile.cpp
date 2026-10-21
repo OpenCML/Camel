@@ -103,6 +103,8 @@ const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperato
         {":op/div_i", OpCode::IDIV}, {":op/div_l", OpCode::LDIV},
         {":op/div_f", OpCode::FDIV}, {":op/div_d", OpCode::DDIV},
 
+        {":op/mod_i", OpCode::IMOD}, {":op/mod_l", OpCode::LMOD},
+
         {":op/lt_i", OpCode::ILT},   {":op/lt_l", OpCode::LLT},
         {":op/lt_f", OpCode::FLT},   {":op/lt_d", OpCode::DLT},
 
@@ -304,6 +306,13 @@ static bytecode_vec_t compileRuntimeGraph(
                     (*localPcOrigins)[eventPc] = loopOrigin;
                 }
             }
+        }
+
+        // The body's tuple FILL of a loop whose state is kept as its components is not run:
+        // the loop reads the components themselves and nothing else reads the tuple
+        // (ExecLoop::stateComponents, ExecPlan::elidedAt).
+        if (!plan.elidedAt.empty() && plan.elidedAt[i]) {
+            continue;
         }
 
         vector<data_idx_t> normOps, withOps;

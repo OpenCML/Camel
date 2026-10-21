@@ -94,6 +94,11 @@ enum class OpCode : uint8_t {
     FDIV,
     DDIV,
 
+    // The remainder of an integer division, as the operator `%` states it (camel/utils/int_div.h:
+    // x % -1 is 0, and a zero divisor is a fault).
+    IMOD,
+    LMOD,
+
     ILT,
     LLT,
     FLT,

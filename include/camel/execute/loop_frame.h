@@ -71,13 +71,21 @@ inline LoopShape loopShapeOf(const camel::runtime::ExecLoop &loop) {
     };
 }
 
+/// The j-th value of the running state: the loop's tuple, or — when the plan keeps the state as
+/// its components — the body slot the component is computed in (ExecLoop::stateComponents).
+inline slot_t loopStateComponent(
+    const camel::runtime::ExecLoop &loop, camel::core::context::Frame &frame, size_t j) {
+    if (loop.stateComponents) {
+        return frame.get<slot_t>(loop.stateSlots[j]);
+    }
+    return loopStateComponent(loopShapeOf(loop), frame.get<slot_t>(loop.stateSlot), j);
+}
+
 /// Gives the ports at loop.slots[first ..< first + k] the values of the state.
 inline void bindLoopState(
     camel::core::context::Frame &frame, const camel::runtime::ExecLoop &loop, size_t first) {
-    const LoopShape shape = loopShapeOf(loop);
-    const slot_t state    = frame.get<slot_t>(loop.stateSlot);
     for (size_t j = 0; j < loop.stateCount; ++j) {
-        frame.set(loop.slots[first + j], loopStateComponent(shape, state, j));
+        frame.set(loop.slots[first + j], loopStateComponent(loop, frame, j));
     }
 }
 
@@ -89,6 +97,20 @@ inline void loopBegin(camel::core::context::Frame &frame, const camel::runtime::
     detail::LoopFrameHost host{frame, loop};
     frame.set(loop.roundSlot, camel::core::rtdata::toSlot(int64_t{0}));
     startLoopState(detail::loopShapeOf(loop), host);
+    if (loop.stateComponents) {
+        // The loop's value tuple was made from the first state, as a loop of one value makes its
+        // value; the rounds then work on the components in the body's own slots. The tuple stays
+        // in the state slot — it is the loop's value, and what the collector traces — and is
+        // brought up to date when the loop ends (loopEnd).
+        const slot_t state = frame.get<slot_t>(loop.stateSlot);
+        for (size_t j = 0; j < loop.stateCount; ++j) {
+            frame.set(
+                loop.stateSlots[j],
+                camel::core::rtdata::materializeCallResult(
+                    loopStateComponent(detail::loopShapeOf(loop), state, j),
+                    frame.typeAt<camel::core::type::Type>(loop.stateSlots[j])));
+        }
+    }
     if (loop.hasCond) {
         detail::bindLoopState(frame, loop, loop.stateCount);
     }
@@ -137,10 +159,23 @@ inline bool loopEnd(
     using camel::core::rtdata::toSlot;
     const int64_t round = fromSlot<int64_t>(frame.get<slot_t>(loop.roundSlot));
     if (round < 0) {
+        if (loop.stateComponents) {
+            // The body's tuple was not made (the plan elides it): the loop's value is the tuple
+            // made when the loop started, brought up to date from the components the last round
+            // left. It is the loop's own value, so it is written where it is.
+            const auto shape = detail::loopShapeOf(loop);
+            auto *value      = fromSlot<::Tuple *>(frame.get<slot_t>(loop.stateSlot));
+            ASSERT(value != nullptr, "A loop of components has its value tuple.");
+            for (size_t j = 0; j < loop.stateCount; ++j) {
+                value->set(j, frame.get<slot_t>(loop.stateSlots[j]), shape.valueType);
+            }
+        }
         return false;
     }
-    detail::LoopFrameHost host{frame, loop};
-    takeLoopRound(detail::loopShapeOf(loop), host, frame.get<slot_t>(loop.bodyResultSlot));
+    if (!loop.stateComponents) {
+        detail::LoopFrameHost host{frame, loop};
+        takeLoopRound(detail::loopShapeOf(loop), host, frame.get<slot_t>(loop.bodyResultSlot));
+    }
     frame.set(loop.roundSlot, toSlot(round + 1));
     roundDone(loop, static_cast<size_t>(round + 1));
     if (loop.hasCond) {

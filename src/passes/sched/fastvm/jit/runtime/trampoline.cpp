@@ -53,6 +53,7 @@ using namespace camel::core::context;
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/utils/int_div.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 #include "jit_debug_trace.h"
@@ -711,6 +712,25 @@ slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
                     const auto arm = static_cast<size_t>(frame->get<int32_t>(bc.nargs()[0]));
                     ASSERT(arm < bc.withCnt(), "JOIN arm index out of range in JIT helper.");
                     result = frame->get<slot_t>(bc.wargs()[arm]);
+                }
+                break;
+            }
+            case OpCode::IMOD:
+            case OpCode::LMOD: {
+                // The remainder of the language: x % -1 is 0, and a zero divisor is a fault
+                // (camel/utils/int_div.h, the same as the interpreters' IMOD / LMOD).
+                if (bc.opcode == OpCode::IMOD) {
+                    const Int32 rhs = frame->get<Int32>(bc.fastop[1]);
+                    if (rhs == 0) {
+                        throwRuntimeFault(RuntimeDiag::DivisionByZero);
+                    }
+                    result = toSlot(camel::utils::remainder(frame->get<Int32>(bc.fastop[0]), rhs));
+                } else {
+                    const Int64 rhs = frame->get<Int64>(bc.fastop[1]);
+                    if (rhs == 0) {
+                        throwRuntimeFault(RuntimeDiag::DivisionByZero);
+                    }
+                    result = toSlot(camel::utils::remainder(frame->get<Int64>(bc.fastop[0]), rhs));
                 }
                 break;
             }

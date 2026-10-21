@@ -201,6 +201,23 @@ at a position (`ExecLoopEvent`: `Begin`, `Test`, `End`) are run by the functions
 interpreter that walks the nodes). A nested loop starts again in every round of the loop around
 it; going back to the start of a round does not start or test the loops around it.
 
+**A loop of several values keeps its components, not a tuple per round.** A body that ends in the
+tuple of the next state makes that tuple with a `FILL`, and the next round takes it apart again:
+one allocation and k writes per round, for a tuple nothing ever reads. When the plan can prove
+that the tuple is only a carrier, it is not made at all (`ExecLoop::stateComponents`,
+`ExecPlan::elidedAt`). The proof, in `planStateComponents`: the loop collects nothing, the state
+has at least two components, the body's result is a `FILL` whose template is a constant, its
+`slots()` name every one of the k components exactly once, and every with-input of that `FILL` is
+a node of the body (not a port, not a capture) that writes a slot of its own, and no node but the
+LOOP reads the tuple. Then each round works on the components in the body's own slots, which
+`loopTest` binds to the condition's ports as before; the tuple still exists in the state slot from
+`loopBegin` (a loop whose state is a tuple has one, and the collector traces it) and is brought up
+to date from the components once, when the loop ends. NodeVM and FastVM do not run the elided
+`FILL` (the FastVM does not even emit it, so the JIT never sees it); the other consumers run it,
+which is correct and only costs. A body whose state comes from a port, or whose tuple is read by
+something else, keeps the round-by-round tuple: the plan says nothing, and every back end behaves
+as before.
+
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
 `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
@@ -249,8 +266,57 @@ Before the loops were bytecode, FastVM and the JIT ran a lowering to tail recurs
 A loop with several values of state builds the tuple of the next state every round (the body's
 FILL), which a hand-written recursion over separate parameters does not.
 
-Next steps: compiling a loop with the JIT; passing the k values of the state separately when the
-body ends in a tuple FILL; the translation of a loop to an ONNX Loop; autodiff on the regions.
+That was where the time went: on a 32-core EPYC 7343 (shared, load average 20 to 130), whole-process
+CPU time of ten million rounds, `bench_loop.cml` against the same loop written as a tail recursion
+(`bench_tail.cml`), in ns per round:
+
+| round | `std::nvm` | `std::fvm` |
+|---|---|---|
+| two values of state, `i % 7` (before) | 233.7 | 125.5 |
+| of which the tuple `FILL` | 114 | 61 |
+| of which `:op/mod_l` through a native operator call | 30 | 30 |
+| of which the loop machinery (events, ports, counters) | 90 | 34 |
+| one value of state, no `%` | 91.8 | 33.4 |
+| two values of state, no `%` | 121.8 | 37.9 |
+| two values of state, `i % 7` (after) | 152.3 | 40.9 |
+| the same work as a tail recursion, interpreted | 155.7 | 30.4 |
+
+Two changes, each measured on its own (median of five runs, interleaved, same host):
+
+| | `std::nvm` | `std::fvm` | `std::jit` |
+|---|---|---|---|
+| before | 2.337 s | 1.255 s | 1.216 s |
+| the state as its components (no tuple per round) | 1.630 s | 0.595 s | 0.598 s |
+| `IMOD` / `LMOD`, the remainder as one instruction | 1.523 s | 0.409 s | 0.413 s |
+| the hand-written tail recursion of the same work | 1.557 s | 0.304 s | 0.078 s |
+
+The remainder became an instruction of its own because `%` is in every loop of this shape: `:op/mod_l`
+stays a native call of the operator table, which costs about 30 ns a round in every back end (in the
+JIT it is a call of the runtime, since the operator is not compiled), where `LMOD` is a divide and a
+move in the interpreter and one helper call in compiled code. A compiled graph that meets an `IMOD`
+or `LMOD` runs that bytecode in the helper that the other runtime constructs use
+(`jitHelperBytecode`, and `collectRuntimeConstructs` keeps such a graph framed for it).
+
+What is left, and why the targets of H43 are not met yet:
+
+- `std::nvm` is at 152 ns a round against a target of 70. NodeVM runs a node at a time: 23 ns a
+  node here, so the six or seven nodes of a round are the round. Trimming the events further does
+  not pay; the executor that runs these graphs at interpreter speed is FastVM, which is what
+  `std::fvm` is (40.9 ns a round, and 7.8 ns when the same work is compiled).
+- `std::fvm` is at 40.9 ns against 24.5 (half of the 0.49 s the tail recursion took when H43 was
+  written; that recursion is 30.4 ns today, so half of it is 15.2 ns). Each bytecode of the round
+  costs about 6.8 ns of dispatch and handler, and a round is six of them; a loop cannot be twice as
+  fast as the same work written as a recursion over parameters, both being interpreted. Reaching
+  24.5 ns needs fewer round trips through the dispatch loop: a compiled loop (next item), or a
+  superinstruction that runs a round inside one bytecode.
+- `std::jit` is FastVM's number because a graph with a loop is not compiled yet: the interpreter
+  runs the rounds and only the functions it calls are compiled. The same work as a tail recursion
+  is 7.8 ns a round when `std::jit` compiles it, which is where the loop would land.
+
+Next steps: compiling a loop with the JIT; a superinstruction for the round (the condition, the
+test and the body of a loop whose regions are straight-line bytecode run by one instruction);
+the k values of the state passed as arguments to a compiled loop body; the translation of a loop to
+an ONNX Loop; autodiff on the regions.
 
 ## 6. Tests
 

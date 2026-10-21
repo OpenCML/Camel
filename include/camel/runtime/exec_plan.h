@@ -94,6 +94,15 @@ struct ExecLoop {
     const gc_data_idx_t *slots = nullptr; // &loopSlots[slotsOffset]
     /// The value type of the node when it wraps its state (k > 1 or it collects); else null.
     const camel::core::type::TupleType *valueType = nullptr;
+    /// The state of a loop of several values kept as its k components instead of a tuple made
+    /// again every round: true when the body ends in a tuple FILL that nothing but the LOOP node
+    /// reads and every component is a value the body itself computes (exec_plan.cpp,
+    /// `planStateComponents`). Then stateSlots[j] is the frame slot of component j: the body's
+    /// own slot for it, so a round writes the next state in place and no tuple is allocated; the
+    /// loop's value tuple is made when the loop starts and brought up to date when it ends.
+    bool stateComponents            = false;
+    uint32_t stateSlotsOffset       = 0;
+    const gc_data_idx_t *stateSlots = nullptr; // k slots, by component (stateComponents only)
     uint64_t origin = 0;
 };
 
@@ -170,6 +179,11 @@ class ExecPlan {
     /// loop's first; both are empty when the graph has no such loop.
     std::vector<ExecLoop> loops;
     std::vector<gc_data_idx_t> loopSlots;
+    /// By topo index: the node is the body's tuple FILL of a loop that keeps its state as its
+    /// components (ExecLoop::stateComponents). The FILL builds a tuple nothing reads — the loop
+    /// takes the components themselves and makes its value tuple at its start and end — so a
+    /// back end that walks the plan does not run it. Empty when no loop of the graph does this.
+    std::vector<uint8_t> elidedAt;
     std::vector<uint32_t> loopEventOffsets;
     std::vector<uint32_t> loopEvents;
     std::span<const uint32_t> loopEventsAt(size_t topoIndex) const {
