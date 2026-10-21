@@ -19,6 +19,9 @@ Commands:
                                     time and the peak resident memory of the camel process
   threshold <shape> [pass...]       the largest n that compiles and runs (searched up to --max)
   check                             the fixed set the test plan runs (see CHECK)
+  fanout [n]                        one parameter read by n terms (n = FANOUT_N): the draft keeps a
+                                    list of the readers of a node, and appending to it must cost
+                                    the reader and not the readers so far
   wide [n]                          one function of n independent terms summed in a tree (3n
                                     nodes, 2n frame slots) on the node VM, the bytecode VM and
                                     the JIT; a graph is not limited in size (see WIDE_N)
@@ -128,6 +131,29 @@ def wide_program(n: int) -> Tuple[str, int]:
         "}",
         "func main(): int sync {",
         f"    let total = wide({args})",
+        "    println('scale total={}'->format<total>)",
+        "    return 0",
+        "}",
+    ]
+    return "\n".join(lines) + "\n", sum(1 + i for i in range(n))
+
+
+def fanout_program(n: int) -> Tuple[str, int]:
+    """The program text and the number it prints: `wide(x)` is the n terms `x + i` summed
+    pairwise, so that the parameter has n readers."""
+    level = [f"(x + {i})" for i in range(n)]
+    while len(level) > 1:
+        upper = [f"({level[j]} + {level[j + 1]})" for j in range(0, len(level) - 1, 2)]
+        if len(level) % 2:
+            upper.append(level[-1])
+        level = upper
+    lines = [
+        f"module scale_fanout_{n}",
+        "func wide(x: int): int {",
+        f"    return {level[0]}",
+        "}",
+        "func main(): int sync {",
+        "    let total = wide(1)",
         "    println('scale total={}'->format<total>)",
         "    return 0",
         "}",
@@ -293,6 +319,47 @@ def check_wide(n: int) -> int:
     return 0 if failed == 0 else 1
 
 
+CHUNKS_N = 3000
+
+
+def check_chunks(n: int) -> int:
+    """A commit that adds a node shares every node chunk but the last with the old version."""
+    text, total = wide_program(n)
+    with tempfile.TemporaryDirectory(prefix="camel_scale_") as tmp:
+        path = Path(tmp) / f"scale_chunks_{n}.cml"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        code, out, err, _, _ = run_file(
+            path, ["test::chunks", "std::nvm"], {"CAMEL_ENABLE_TEST_PASSES": "1"})
+    line = next((l for l in out.splitlines() if l.startswith("CHUNKS ")), "")
+    fields = dict(f.split("=") for f in line.split()[1:] if "=" in f)
+    shared, chunks = int(fields.get("shared", "-1")), line.split(" of ")[1].split()[0] if " of " in line else "0"
+    ok = code == 0 and f"scale total={total}" in out.splitlines() and int(chunks) >= 8         and shared == int(chunks) - 1
+    print(f"{'ok  ' if ok else 'FAIL'} {line or (out + err)[:300]}")
+    print("PASS" if ok else "FAILED")
+    return 0 if ok else 1
+
+
+# One parameter with this many readers. Adding a reader used to rebuild the block of the
+# parameter's draft node and leave the old one behind: 40000 readers took 6.5 GB and 8 s.
+FANOUT_N = 40000
+FANOUT_PEAK_KB = 1500 * 1024
+
+
+def check_fanout(n: int) -> int:
+    text, total = fanout_program(n)
+    with tempfile.TemporaryDirectory(prefix="camel_scale_") as tmp:
+        path = Path(tmp) / f"scale_fanout_{n}.cml"
+        path.write_text(text, encoding="utf-8", newline="\n")
+        code, out, err, seconds, peak_kb = run_file(path, ["std::nvm"])
+    ok = code == 0 and f"scale total={total}" in out.splitlines()
+    small = peak_kb <= FANOUT_PEAK_KB  # 0 where the peak is not measured
+    detail = "" if ok else " | ".join((out + err).strip().splitlines()[:3])[:400]
+    print(f"{'ok  ' if ok and small else 'FAIL'} fanout n={n:6} {seconds:6.2f}s "
+          f"peak={peak_kb // 1024}MB (limit {FANOUT_PEAK_KB // 1024}MB) {detail}")
+    print(f"{'PASS' if ok and small else 'FAILED'}")
+    return 0 if ok and small else 1
+
+
 def main(argv: List[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -308,6 +375,10 @@ def main(argv: List[str]) -> int:
     t.add_argument("passes", nargs="*")
     t.add_argument("--max", type=int, default=4096)
     sub.add_parser("check")
+    c = sub.add_parser("chunks")
+    c.add_argument("n", type=int, nargs="?", default=CHUNKS_N)
+    f = sub.add_parser("fanout")
+    f.add_argument("n", type=int, nargs="?", default=FANOUT_N)
     w = sub.add_parser("wide")
     w.add_argument("n", type=int, nargs="?", default=WIDE_N)
     lim = sub.add_parser("limit")
@@ -329,6 +400,10 @@ def main(argv: List[str]) -> int:
         if res.spaces:
             print(res.spaces)
         return 0 if res.ok else 1
+    if args.cmd == "chunks":
+        return check_chunks(args.n)
+    if args.cmd == "fanout":
+        return check_fanout(args.n)
     if args.cmd == "wide":
         return check_wide(args.n)
     if args.cmd == "limit":

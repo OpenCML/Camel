@@ -22,7 +22,7 @@
  * section 6).
  *
  * The statements follow the execution order std::fvm compiles the graph in
- * (buildReachableExecutionTopoIndices): only live nodes, every edge (data, `with`, control)
+ * (ExecPlan::topo): only live nodes, every edge (data, `with`, control)
  * respected, the arms of each branch laid out as contiguous ranges. A branch is an if /
  * else-if / else statement at the place of its BRCH, its arms the statements of their nodes:
  * in the form the front end gives (each arm a graph of its own, called by a FUNC node) the arm
@@ -39,6 +39,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include "code.h"
 #include "cpp_types.h"
@@ -69,6 +70,8 @@ struct Refusal {
 
 /// What every function of a program shares while it is written.
 struct ProgramParts {
+    /// The program the graphs are of: it names the graphs a graph calls.
+    const camel::runtime::Program *program = nullptr;
     ProgramValues values;
     SiteTable sites;
     /// The C++ name of each graph that is a function of the generated program.
@@ -97,7 +100,7 @@ std::string describeFunction(const GCGraph *graph);
 
 /// Whether the FUNC node `ref` of `graph` is the head of a branch arm in the front end's form:
 /// a call of an anonymous graph that the BRCH starts. Such a call is lowered in place.
-bool isArmCall(const GCGraph *graph, gc_node_ref_t ref);
+bool isArmCall(const camel::runtime::Program &program, const GCGraph *graph, gc_node_ref_t ref);
 
 /// The URI of the operator of the OPER node `ref`: what the rule table (operator_rules.h) and
 /// the messages name it by.

@@ -44,6 +44,7 @@
 #include "camel/core/context/frame.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/node_ref.h"
+#include "camel/runtime/program.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -52,6 +53,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {
@@ -88,9 +90,6 @@ struct DraftNodeHeader {
     gc_cnt_t normInputCount = 0;
     gc_cnt_t withInputCount = 0;
     gc_cnt_t ctrlInputCount = 0;
-    gc_cnt_t normUserCount  = 0;
-    gc_cnt_t withUserCount  = 0;
-    gc_cnt_t ctrlUserCount  = 0;
 
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
@@ -111,8 +110,7 @@ struct DraftNodeHeader {
     constexpr size_t usedBytes() const {
         return static_cast<size_t>(payloadBytes) +
                (static_cast<size_t>(normInputCount) + static_cast<size_t>(withInputCount) +
-                static_cast<size_t>(ctrlInputCount) + static_cast<size_t>(normUserCount) +
-                static_cast<size_t>(withUserCount) + static_cast<size_t>(ctrlUserCount)) *
+                static_cast<size_t>(ctrlInputCount)) *
                    sizeof(gc_node_ref_t);
     }
 };
@@ -134,9 +132,6 @@ struct DraftNodeInit {
     std::span<const gc_node_ref_t> normInputs{};
     std::span<const gc_node_ref_t> withInputs{};
     std::span<const gc_node_ref_t> ctrlInputs{};
-    std::span<const gc_node_ref_t> normUsers{};
-    std::span<const gc_node_ref_t> withUsers{};
-    std::span<const gc_node_ref_t> ctrlUsers{};
 };
 
 class DraftNodeView {
@@ -150,13 +145,6 @@ class DraftNodeView {
     static std::span<const gc_node_ref_t> withInputs(const DraftNode *node);
     static std::span<gc_node_ref_t> ctrlInputs(DraftNode *node);
     static std::span<const gc_node_ref_t> ctrlInputs(const DraftNode *node);
-
-    static std::span<gc_node_ref_t> normUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> normUsers(const DraftNode *node);
-    static std::span<gc_node_ref_t> withUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> withUsers(const DraftNode *node);
-    static std::span<gc_node_ref_t> ctrlUsers(DraftNode *node);
-    static std::span<const gc_node_ref_t> ctrlUsers(const DraftNode *node);
 
     template <typename Body> static Body *payloadAs(DraftNode *node) {
         auto bytes = payload(node);
@@ -203,9 +191,58 @@ class DraftNodePool {
     std::vector<void *> oversizeBlocks_;
 };
 
+/// The nodes that read a node, by edge group. A user appears once per group however often it
+/// reads the node. Kept apart from the node's storage so that adding a user costs the user alone.
+///
+/// Order: users are listed in the order they were linked. A list that has grown past
+/// kIndexedUsers also has an index from user to place, so that a user is found, added and
+/// removed at constant cost; there, removing a user moves the last one into its place. The
+/// order is a function of the sequence of edits alone, so equal edits give equal lists.
+struct DraftUserLists {
+    static constexpr size_t kIndexedUsers = 32;
+
+    std::vector<gc_node_ref_t> norm;
+    std::vector<gc_node_ref_t> with;
+    std::vector<gc_node_ref_t> ctrl;
+    std::unique_ptr<std::unordered_map<gc_node_ref_t, uint32_t>> places[3];
+
+    std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) {
+        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    }
+    const std::vector<gc_node_ref_t> &of(DraftEdgeKind kind) const {
+        return kind == DraftEdgeKind::Norm ? norm : kind == DraftEdgeKind::With ? with : ctrl;
+    }
+    /// The index of the `kind` list, built when the list is long enough to want one.
+    std::unordered_map<gc_node_ref_t, uint32_t> *index(DraftEdgeKind kind) {
+        auto &items = of(kind);
+        auto &place = places[static_cast<size_t>(kind)];
+        if (!place && items.size() >= kIndexedUsers) {
+            place = std::make_unique<std::unordered_map<gc_node_ref_t, uint32_t>>();
+            place->reserve(items.size() * 2);
+            for (uint32_t i = 0; i < items.size(); ++i) {
+                place->emplace(items[i], i);
+            }
+        }
+        return place.get();
+    }
+};
+
 class GraphDraft {
   public:
-    static std::unique_ptr<GraphDraft> decode(const GCGraph *graph);
+    /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
+    /// callees of its FUNC nodes) in `program`. Graphs are named in a draft by GraphId.
+    static std::unique_ptr<GraphDraft> decode(const Program &program, const GCGraph *graph);
+
+    /// The program the draft resolves the graphs it refers to in; null for a draft the front
+    /// end builds, whose graphs do not exist yet.
+    const Program *program() const { return program_; }
+    void setProgram(const Program *program) { program_ = program; }
+    /// The graph the draft's graph is written in (GCGraph::outerGraphId).
+    GraphId outerGraphId() const { return outerGraphId_; }
+    void setOuterGraphId(GraphId outer) {
+        ++mutations_;
+        outerGraphId_ = outer;
+    }
 
     GraphDraft()  = default;
     ~GraphDraft() = default;
@@ -213,6 +250,26 @@ class GraphDraft {
     GraphDraft(const GraphDraft &)            = delete;
     GraphDraft &operator=(const GraphDraft &) = delete;
 
+    /// The graph the draft is a draft of: decode takes the id of the graph it decodes, and the
+    /// graph that encode builds carries it (a draft keeps the id of the graph it edits). A draft
+    /// of a new graph is given one with setId (Context::graphIds) before it is encoded.
+    GraphId id() const { return id_; }
+    void setId(GraphId id) {
+        ++mutations_;
+        id_ = id;
+    }
+    /// GCGraph::typeSpecializationRoot and GCGraph::flags of the graph the draft encodes to;
+    /// decode takes them from the graph it decodes.
+    GraphId typeSpecializationRoot() const { return typeSpecializationRoot_; }
+    void setTypeSpecializationRoot(GraphId root) {
+        ++mutations_;
+        typeSpecializationRoot_ = root;
+    }
+    uint8_t flags() const { return flags_; }
+    void setFlags(uint8_t flags) {
+        ++mutations_;
+        flags_ = flags;
+    }
     camel::core::type::FunctionType *funcType() const { return funcType_; }
     /// The names the function captures, in capture order (GCGraph::captureNames).
     std::span<const camel::core::SymId> captureNames() const { return captureNames_; }
@@ -233,6 +290,26 @@ class GraphDraft {
     gc_cnt_t nodeCount() const { return liveNodeCount_; }
     size_t nodeSlotCount() const { return nodesById_.size(); }
     bool empty() const { return liveNodeCount_ == 0; }
+    /// Changes whenever the graphs this draft refers to may have changed: a node was added,
+    /// erased or rewritten, a payload was handed out for writing, a constant or a dependency
+    /// was added. Equal revisions of one draft mean the same references.
+    uint64_t revision() const { return revision_; }
+    /// The graph this draft was decoded from; nullptr for a draft that was built.
+    const GCGraph *baseGraph() const { return base_; }
+    /// Whether an encoding of this draft numbers the nodes as they are, leaving the place of
+    /// an erased node as a Dead record: a draft decoded from a graph keeps its ids, so that
+    /// the version it becomes names its nodes as the graph did. Past half the places dead,
+    /// or for a draft that was built and not decoded, the nodes are numbered anew.
+    bool keepsNodeIds() const {
+        return decoded_ && 2 * static_cast<size_t>(nodesById_.size() - liveNodeCount_) <=
+                               nodesById_.size();
+    }
+    /// Counts the calls that may have changed the draft since it was decoded (every call of a
+    /// member that is not const): a draft of none is the graph it was decoded from.
+    uint64_t mutations() const { return mutations_; }
+    /// A counter the draft also advances whenever its revision() does: a session keeps one
+    /// for all its drafts, to know whether any of them changed what it refers to.
+    void setRefsEpoch(uint64_t *epoch) { refsEpoch_ = epoch; }
 
     bool containsNode(gc_node_ref_t id) const;
     bool containsNode(const DraftNode *node) const;
@@ -266,9 +343,9 @@ class GraphDraft {
 
     std::span<const slot_t> staticSlots() const { return staticSlots_; }
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
-    const std::vector<GCGraph *> &dependencies() const { return dependencies_; }
-    const std::vector<GCGraph *> &subGraphs() const { return subGraphs_; }
-    const std::vector<GCGraph *> &staticGraphRefs() const { return staticGraphRefs_; }
+    const std::vector<GraphId> &dependencies() const { return dependencies_; }
+    const std::vector<GraphId> &subGraphs() const { return subGraphs_; }
+    const std::vector<GraphId> &staticGraphRefs() const { return staticGraphRefs_; }
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normInputsOf(const DraftNode *node) const;
@@ -294,18 +371,26 @@ class GraphDraft {
     /// and the operator pointer the node was created with is dropped (the URI is interned).
     void retargetOperNode(gc_node_ref_t id, std::string_view uri);
 
-    void setFuncType(camel::core::type::FunctionType *funcType) { funcType_ = funcType; }
+    void setFuncType(camel::core::type::FunctionType *funcType) {
+        ++mutations_;
+        funcType_ = funcType;
+    }
     void setCaptureNames(std::span<const camel::core::SymId> names) {
+        ++mutations_;
         captureNames_.assign(names.begin(), names.end());
     }
     /// Records that the function captures `name` (one entry per capture port, in order).
     void addCaptureName(std::string_view name);
     /// Gives the graph this frame layout (possibly one without slots).
     void setRuntimeSlotTypes(std::span<camel::core::type::Type *const> slotTypes) {
+        ++mutations_;
         runtimeSlotTypes_.assign(slotTypes.begin(), slotTypes.end());
         hasFrameLayout_ = true;
     }
-    void setClosureType(camel::core::type::TupleType *closureType) { closureType_ = closureType; }
+    void setClosureType(camel::core::type::TupleType *closureType) {
+        ++mutations_;
+        closureType_ = closureType;
+    }
 
     gc_node_ref_t addNode(const DraftNodeInit &init);
     gc_node_ref_t
@@ -331,8 +416,23 @@ class GraphDraft {
         gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addCallNode(
         camel::core::type::Type *type, const GCCallBody &body = {}, gc_slot_idx_t dataIndex = 0);
+    /// The graph FUNC node `id` calls: its id (invalid while it names none), and the graph the
+    /// program of the draft holds under it (nullptr when none).
+    GraphId calleeIdOf(gc_node_ref_t id) const;
+    GCGraph *calleeGraphOf(gc_node_ref_t id) const;
+    void setCalleeGraph(gc_node_ref_t id, GraphId callee);
+    /// What LOOP node `id` names: its condition graph (invalid for a For loop), its body graph,
+    /// its form and its collection count.
+    GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
+    void setLoopGraphs(gc_node_ref_t id, GraphId cond, GraphId body);
+    /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
+    /// reference table of the graph the draft was decoded from, then the graphs added since.
+    std::span<const GraphId> payloadGraphs() const { return payloadGraphs_; }
+    /// The index of `graph` in payloadGraphs(), added when it is not there; kNoLoopGraph for
+    /// an invalid id.
+    uint32_t payloadGraphIndexOf(GraphId graph);
     gc_node_ref_t addFuncNode(
-        GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
+        GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0);
     /// A LOOP node calling `body.condGraph` and `body.bodyGraph` (camel/runtime/loop.h); the
     /// caller links its inputs and keeps the two graphs among the draft's dependencies.
@@ -393,10 +493,20 @@ class GraphDraft {
     void removeNormPort(gc_node_ref_t id);
     void removeWithPort(gc_node_ref_t id);
     void removeClosureNode(gc_node_ref_t id);
-    void setEntryNode(gc_node_ref_t id) { entry_ = id; }
-    void setExitNode(gc_node_ref_t id) { exit_ = id; }
-    void setOutputNode(gc_node_ref_t id) { output_ = id; }
+    void setEntryNode(gc_node_ref_t id) {
+        ++mutations_;
+        entry_ = id;
+    }
+    void setExitNode(gc_node_ref_t id) {
+        ++mutations_;
+        exit_ = id;
+    }
+    void setOutputNode(gc_node_ref_t id) {
+        ++mutations_;
+        output_ = id;
+    }
     void setReturnNode(gc_node_ref_t id, GCReturnKind kind) {
+        ++mutations_;
         returnNode_ = id;
         returnKind_ = kind;
     }
@@ -405,12 +515,11 @@ class GraphDraft {
     gc_node_ref_t
     materializeStaticValue(slot_t value, camel::core::type::Type *type, uint8_t runtimeFlags = 0);
     void setStaticSlot(size_t index, slot_t value);
-    void addDependency(GCGraph *graph);
-    void addSubGraph(GCGraph *graph);
-    void addStaticGraphRef(GCGraph *graph);
+    void addDependency(GraphId graph);
+    void addSubGraph(GraphId graph);
+    void addStaticGraphRef(GraphId graph);
 
-    GCGraph *encode(
-        const std::string &stableId, const std::string &mangledName, const std::string &name) const;
+    GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
   private:
     static gc_node_ref_t
@@ -424,13 +533,27 @@ class GraphDraft {
     void replaceNodeStorage(gc_node_ref_t id, DraftNode *node);
     void removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
+    std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeKind kind) const;
+    std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeKind kind);
+    std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeKind kind);
+    /// Adds `inputId` at the end of the `kind` inputs of `userId`, in place when the node's
+    /// storage has room.
+    void appendInputEntry(gc_node_ref_t userId, DraftEdgeKind kind, gc_node_ref_t inputId);
     void replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceUsesInList(
         gc_node_ref_t ownerId, std::span<const gc_node_ref_t> users, gc_node_ref_t oldId,
         gc_node_ref_t newId, bool norm, bool with, bool ctrl);
+    GraphId payloadGraphAt(uint32_t index) const;
     void appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id);
+    /// Records node `id` in the list of its kind when that kind has one (see gateIds_).
+    void noteNodeKind(gc_node_ref_t id, GCNodeKind kind);
 
+    GraphId id_                                = kInvalidGraphId;
+    GraphId outerGraphId_                      = kInvalidGraphId;
+    const Program *program_                    = nullptr;
+    GraphId typeSpecializationRoot_            = kInvalidGraphId;
+    uint8_t flags_                             = 0;
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
@@ -439,10 +562,30 @@ class GraphDraft {
     bool hasFrameLayout_                       = false;
     camel::core::type::TupleType *closureType_ = nullptr;
     DraftNodePool pool_;
+    std::vector<GraphId> payloadGraphs_;
+    std::unordered_map<GraphId, uint32_t> payloadGraphIndex_;
     std::vector<DraftNode *> nodesById_;
+    std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<gc_node_ref_t> sourceRefsById_;
     std::vector<gc_node_ref_t> draftIdsBySourceRef_;
     gc_cnt_t liveNodeCount_ = 0;
+    uint64_t revision_      = 0;
+    bool decoded_           = false; // see keepsNodeIds()
+    const GCGraph *base_    = nullptr;
+    uint64_t mutations_     = 0;
+    uint64_t *refsEpoch_    = nullptr;
+    void touchRefs() {
+        ++revision_;
+        if (refsEpoch_) {
+            ++*refsEpoch_;
+        }
+    }
+    // The nodes that are, or were, a GATE, a BRCH or a JOIN, by id, each once. Erased nodes stay
+    // in the lists (ids are not reused) and are skipped by whoever walks them. The rewrites that
+    // concern only these kinds walk the list instead of every node.
+    std::vector<gc_node_ref_t> gateIds_;
+    std::vector<gc_node_ref_t> brchIds_;
+    std::vector<gc_node_ref_t> joinIds_;
 
     gc_node_ref_t entry_      = kInvalidNodeRef;
     gc_node_ref_t exit_       = kInvalidNodeRef;
@@ -455,9 +598,9 @@ class GraphDraft {
     std::vector<gc_node_ref_t> closureNodes_;
     std::vector<slot_t> staticSlots_;
     std::vector<camel::core::type::Type *> staticSlotTypes_;
-    std::vector<GCGraph *> dependencies_;
-    std::vector<GCGraph *> subGraphs_;
-    std::vector<GCGraph *> staticGraphRefs_;
+    std::vector<GraphId> dependencies_;
+    std::vector<GraphId> subGraphs_;
+    std::vector<GraphId> staticGraphRefs_;
 };
 
 } // namespace camel::runtime

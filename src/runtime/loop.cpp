@@ -83,18 +83,18 @@ fillComponent(const GCGraph *graph, gc_node_ref_t result, size_t slot) {
 
 } // namespace
 
-LoopDraftView::LoopDraftView(const GraphDraft &draft, gc_node_ref_t node)
+LoopDraftView::LoopDraftView(const Program &program, const GraphDraft &draft, gc_node_ref_t node)
     : draft_(&draft), node_(node) {
     const DraftNodeHeader *header = draft.header(node);
     ASSERT(
         header != nullptr && header->kind == GCNodeKind::Loop,
         "LoopDraftView of a node that is not a LOOP node.");
-    const auto *body  = reinterpret_cast<const GCLoopBody *>(draft.payloadOf(node).data());
-    kind_             = body->kind;
-    cond_             = body->condGraph;
-    body_             = body->bodyGraph;
+    const GCLoopBody body = draft.loopGraphsOf(node);
+    kind_             = body.kind;
+    cond_             = program.graph(body.condGraph);
+    body_             = program.graph(body.bodyGraph);
     stateCount_       = draft.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
-    collectionCount_  = body->collectionCount;
+    collectionCount_  = body.collectionCount;
 }
 
 Type *LoopDraftView::valueType() const { return draft_->header(node_)->dataType; }
@@ -164,14 +164,15 @@ gc_node_ref_t LoopDraftView::nextState() const { return body_->returnNodeRef(); 
 
 Type *LoopDraftView::bodyResultType() const { return body_->funcType()->exitType(); }
 
-LoopView::LoopView(const GCGraph &graph, gc_node_ref_t node) : graph_(&graph), node_(node) {
+LoopView::LoopView(const Program &program, const GCGraph &graph, gc_node_ref_t node)
+    : program_(&program), graph_(&graph), node_(node) {
     const GCNode *record = graph.node(node);
     ASSERT(
         record != nullptr && record->kind == GCNodeKind::Loop,
         "LoopView of a node that is not a LOOP node.");
     kind_            = graph.loopKindOf(node);
-    cond_            = graph.loopCondGraphOf(node);
-    body_            = graph.loopBodyGraphOf(node);
+    cond_            = program.loopCondOf(graph, node);
+    body_            = program.loopBodyOf(graph, node);
     stateCount_      = graph.normInputsOf(node).size() - (loopHasIterable(kind_) ? 1 : 0);
     collectionCount_ = graph.loopCollectionCountOf(node);
 }
@@ -248,8 +249,8 @@ std::optional<gc_node_ref_t> LoopView::nextCollectionComponent(size_t c) const {
 }
 
 EffectSummary LoopView::effects() const {
-    EffectSummary summary = effectSummaryOf(cond_);
-    summary |= effectSummaryOf(body_);
+    EffectSummary summary = effectSummaryOf(*program_, cond_);
+    summary |= effectSummaryOf(*program_, body_);
     summary.mayFault        = true;
     summary.mayNotTerminate = true;
     return summary;
@@ -276,10 +277,11 @@ slot_t loopCollectedValue(const LoopView &loop, slot_t value, size_t c) {
     return loopValueComponent(loop, value, loop.collectionValueIndex(c));
 }
 
-void validateRuntimeLoopInterface(const GCGraph *graph, gc_node_ref_t node) {
+void validateRuntimeLoopInterface(
+    const Program &program, const GCGraph *graph, gc_node_ref_t node) {
     const LoopKind kind = graph->loopKindOf(node);
-    const GCGraph *cond = graph->loopCondGraphOf(node);
-    const GCGraph *body = graph->loopBodyGraphOf(node);
+    const GCGraph *cond = program.loopCondOf(*graph, node);
+    const GCGraph *body = program.loopBodyOf(*graph, node);
     if (body == nullptr || (loopHasCondition(kind) != (cond != nullptr))) {
         loopFails(graph, node, "its graphs do not match its form");
     }

@@ -27,8 +27,8 @@
  * of function type of an operator that reads graphs (OperatorTraits::inspectsGraphs) through
  * it, so that such an operator sees the graph as the program wrote it, LOOP nodes included
  * (docs/design/op-semantics 11.4). A function value whose graph is not a copy is returned as it
- * is; otherwise the result is a new function value over GCGraph::originalGraph() with the same
- * captured values (the copy has the original's ports and closure: a copy only rewrites nodes
+ * is; otherwise the result is a new function value over the graph of Program::original() with the
+ * same captured values (the copy has the original's ports and closure: a copy only rewrites nodes
  * inside graphs).
  */
 

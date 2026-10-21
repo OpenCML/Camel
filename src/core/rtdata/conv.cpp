@@ -165,7 +165,11 @@ Object *makeGCRefFromGCTracedData(const data_ptr_t &data, camel::core::mm::IAllo
         auto funcData = tt::as_shared<camel::core::data::FunctionData>(data);
         auto *graph   = funcData->graph();
         ASSERT(graph != nullptr, "FunctionData must carry a runtime graph.");
-        auto *gcFunc            = ::Function::create(graph, graph->closureType(), allocator);
+        auto *gcFunc = ::Function::create(
+            funcData->program(),
+            funcData->graphId(),
+            graph->closureType(),
+            allocator);
         Tuple *gcTuple          = gcFunc->tuple();
         const auto *closureType = graph->closureType();
 

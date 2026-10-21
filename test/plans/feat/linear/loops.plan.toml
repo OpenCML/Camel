@@ -1,6 +1,7 @@
 id = "linear.loops"
 order = 348
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "loops"]
 desc = "The structured loop (design principles 3.10): the `do` form compiled to a LOOP node, run by every back end (nvm natively, fvm/jit/prl through the private lowering to tail recursion, fvm/jit natively under a debugger or with std::fvm(native_loop=true)), the elements a string, a map and a tensor give it (11.1, 11.3), its diagnostics, and the refusals of the consumers that do not handle it yet."
 
@@ -566,5 +567,17 @@ backends = ["nvm", "fvm", "jit"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "10000 1 5000 1\n100000000 0 0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+[[tests]]
+name = "loops.reduce_element_view"
+desc = "A value reduce keeps across rounds is a value, not a compact-element view (H29): a callback that returns its element gives the same result on every backend for a slot-shaped `(int, int)` array (one reused view cell), a slot-shaped struct, a non-slot-shaped struct (the view ring), a nested aggregate, a loop-written left fold with a tuple state, the same accumulator after filter/map, an identity map whose callback result is the view that was read, and 200 elements whose kept element is older than the 128-cell ring."
+kind = "behavior"
+case = "../../../cases/loops/reduce_view.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "(1, 30)\n(0, 5)\n(6, 56)\n(3, 20)\n(1, 30)\n{ x: 1, y: 30 }\n{ ok: true, y: 30 }\n((0, 0), 5)\n(1, 30)\n(1, 30)\n(1, 60)\n(200, 0)\n(200, 0)\n{ ok: true, y: 200 }\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000

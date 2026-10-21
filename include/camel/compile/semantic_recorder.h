@@ -34,6 +34,7 @@
 #pragma once
 
 #include "camel/core/source/ids.h"
+#include "camel/runtime/graph_id.h"
 
 #include <string>
 #include <vector>
@@ -50,6 +51,7 @@ class SemanticRecorder {
     using origin_id_t  = camel::source::origin_id_t;
     using Type         = camel::core::type::Type;
     using FunctionType = camel::core::type::FunctionType;
+    using GraphId      = camel::runtime::GraphId;
 
     virtual ~SemanticRecorder() = default;
 
@@ -62,14 +64,14 @@ class SemanticRecorder {
     valueDeclared(origin_id_t decl, const std::string &name, Type *type, bool variable) = 0;
 
     /// Where the value of a name declared with valueDeclared lives when the program runs: in
-    /// the graph `graph` (stable id) the name stands for the node whose origin is `node`.
+    /// the graph `graph` the name stands for the node whose origin is `node`.
     /// `node` is invalid for a parameter or a captured name: those are ports of the graph,
     /// found by position (the names are in the graph's function type). A debugger reads the
     /// value of a name from the slot of that node (docs/technical/35_debugger.md, 6.1).
     /// Optional: the default ignores the report.
     virtual void valueBound(
-        origin_id_t decl, const std::string &name, const std::string &graph, origin_id_t node,
-        Type *type, bool variable) {
+        origin_id_t decl, const std::string &name, GraphId graph, origin_id_t node, Type *type,
+        bool variable) {
         (void)decl;
         (void)name;
         (void)graph;
@@ -95,11 +97,11 @@ class SemanticRecorder {
     virtual void
     valueReferenced(origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) = 0;
 
-    /// The name at `ref` stands for the functions whose graphs have the stable ids `graphs`
-    /// (several: overloads). The origin of a graph is in the debug map of the source context
+    /// The name at `ref` stands for the functions whose graphs are `graphs` (several:
+    /// overloads). The origin of a graph is in the debug map of the source context
     /// once its body has been built, which may be after this report.
-    virtual void functionReferenced(
-        origin_id_t ref, const std::string &name, std::vector<std::string> graphs) = 0;
+    virtual void
+    functionReferenced(origin_id_t ref, const std::string &name, std::vector<GraphId> graphs) = 0;
 
     /// The name at `ref` stands for the generic function declared at `decl`.
     virtual void genericReferenced(origin_id_t ref, const std::string &name, origin_id_t decl) = 0;
@@ -110,18 +112,17 @@ class SemanticRecorder {
         origin_id_t ref, const std::string &name, std::vector<std::string> signatures) = 0;
 
     /// The call at `call`, whose callee expression is at `callee`, was resolved to a function
-    /// of type `type`: the graph `graph` (empty for an operator or a function value), or the
+    /// of type `type`: the graph `graph` (invalid for an operator or a function value), or the
     /// operator `operatorUri`.
     virtual void callResolved(
-        origin_id_t call, origin_id_t callee, const std::string &graph,
-        const std::string &operatorUri, FunctionType *type) = 0;
+        origin_id_t call, origin_id_t callee, GraphId graph, const std::string &operatorUri,
+        FunctionType *type) = 0;
 
     /// The body of the function at `func` was built into the graph `graph`; `type` is its
     /// type, complete once the compilation is (an inferred return type is filled in place).
     /// A generic function is reported once per instance.
-    virtual void functionBuilt(
-        origin_id_t func, const std::string &name, const std::string &graph,
-        FunctionType *type) = 0;
+    virtual void
+    functionBuilt(origin_id_t func, const std::string &name, GraphId graph, FunctionType *type) = 0;
 };
 
 } // namespace camel::compile

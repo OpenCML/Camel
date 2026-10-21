@@ -135,7 +135,7 @@ class DebuggerServer {
     /// and resolvable at runtime via GCGraph::nodeOrigin(). Full replacement, like node IDs.
     void setGirBreakpointOrigins(std::vector<uint64_t> origins);
     bool isGirBreakpointNode(uintptr_t nodePtr) const;
-    bool isGirBreakpointNodeStable(const std::string &stableId) const;
+    bool isGirBreakpointNodeKey(const std::string &nodeKey) const;
     bool isGirBreakpointOrigin(uint64_t origin) const;
     std::unordered_set<uintptr_t> getGirBreakpointNodeIds() const;
     std::vector<std::string> getGirBreakpointNodeIdsForApi() const;
@@ -199,7 +199,7 @@ class DebuggerServer {
     std::unordered_set<std::string> allocBreakSpaces_;
     std::mutex allocBreakSpacesMutex_;
     std::unordered_set<uintptr_t> girBreakpointNodeIds_;
-    std::unordered_set<std::string> girBreakpointStableIds_;
+    std::unordered_set<std::string> girBreakpointNodeKeys_;
     std::unordered_set<uint64_t> girBreakpointOrigins_;
     mutable std::mutex girBreakpointNodeIdsMutex_;
     WorkerDebugHandlerFn workerDebugHandler_;

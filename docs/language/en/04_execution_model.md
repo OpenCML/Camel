@@ -24,7 +24,7 @@ A Camel program is a graph. This chapter explains how this graph is evaluated: e
 - Every source file is a module, made up of declarations ([8.1](08_top_level_and_grammar.md#81-program)).
 - The entry is the function named `main`. Like any other function it is a subgraph, and it can take parameters and return a value:
 
-  - The parameters are the inputs of the program, given on the command line with `--arg name=value`; a missing one is the located error `RuntimeDiag::EntryArgumentMissing`, and is not replaced by zero or a default value.
+  - The parameters are the inputs of the program, given on the command line with `--arg name=value`; a missing one is the located error `RuntimeDiag::EntryArgumentMissing`, and is not replaced by zero or a default value. A value is read by the parameter's declared type: a complex number is written as the language writes one (`1+2i`, `0.5-0.25i`, or `-2i` for the imaginary part only), and a real text is not a complex number.
   - **Only a `main` that declares its return type has a result** (the exit code, and what `-o` writes).
   - When it returns `int` (or `bool`), the return value is the exit code of the process.
   - When it returns a value of another type (`float`, `string`, a tensor, a tuple, ...), this value is the result of the program: it is printed to standard output, or written to a file by `-o <file>`.

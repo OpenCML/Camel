@@ -1,0 +1,79 @@
+/// Complex numbers in the program std::cpp writes: c128 and c64 values, arithmetic (including
+/// division, which faults on the complex zero), `^` with an integer and a complex exponent,
+/// comparisons, conversions, the math module's complex functions, printing without and with a
+/// format, string(z), arrays of complex numbers and a function that takes and gives one.
+module complex_scalar
+
+import { abs, conj, exp, im, nan, re } from math
+
+func square(z: c128): c128 {
+    return z * z
+}
+
+func negate(x: float): float { return -x }
+
+func main(): int sync {
+    let a = 3 + 4i
+    let b = 1 - 2i
+    println(a, b)
+    println(a + b, a - b, a * b)
+    println(a / b)
+    println(-a, -(-a))
+    println(a == 3 + 4i, a == 3 + 5i, a != 3 + 5i)
+    println(square(a))
+    println(a ^ 2, a ^ 3, a ^ 0, a ^ -1)
+    let n = 3
+    println(a ^ n)
+    println(a ^ (1 + 1i))
+    println((1.5 + 0.5i) ^ 2)
+    var k = 1 + 2i
+    k ^= 3
+    println(k)
+
+    // A declared type decides the width: the literal becomes c64 exactly.
+    let z: c64 = 1 + 2i
+    println(z, z + z, z * z, z / z, -z)
+    println(c64(2), c128(z), c64(a))
+    println(re(a), im(a), abs(a), conj(a), exp(1i))
+
+    // Printing with a format: one specification for both parts, and the width for the text.
+    println<'{:.2f}'>(a)
+    println<'{:}'>(a)
+    println<'{:+}'>(a)
+    println<'{:e}'>(a)
+    println<'{:#.0f}'>(a)
+    println<'{:>12.2f}'>(a)
+    println<'{:*>12.2f}'>(a)
+    println<'{:^13.2f}'>(a)
+    println(string(a))
+
+    // A NaN part is text in both forms: the parts are numbers.
+    let notANumber = c128(nan) + 4i
+    println(notANumber)
+    println<'{:.2f}'>(notANumber)
+
+    // A NaN has no sign in text (language reference 2.5.2): a computed negative NaN, in the
+    // real part and in the imaginary part, is `nan` with and without a specification.
+    let negativeNaN = negate(nan)
+    println(c128(negativeNaN) + 4i)
+    println<'{:.2f}'>(c128(negativeNaN) + 4i)
+    println<'{:>12.2f}'>(c128(negativeNaN) + 4i)
+    println(c128(negativeNaN) * 1i)
+    println<'{:.2f}'>(c128(negativeNaN) * 1i)
+
+    // A negative zero in the imaginary part: the plain text writes its magnitude, a format
+    // writes its sign and its digits, as Python does.
+    let negativeZero = conj(3.0 + 0.0i)
+    println(negativeZero)
+    println<'{:.2f}'>(negativeZero)
+
+    // An array of complex numbers: each element is two parts, read back as a value.
+    let xs = [1 + 2i, 3 + 4i]
+    println(xs, xs[0] + xs[1])
+    println(xs[1] * 2i)
+
+    // Division by the complex zero is a fault at the site, as in the interpreter.
+    let zero = a - a
+    println(a / zero)
+    return 0
+}

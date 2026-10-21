@@ -60,7 +60,8 @@ class IndexEvalTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
 
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
 } // namespace camel::tensor::passes

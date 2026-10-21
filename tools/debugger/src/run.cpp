@@ -194,7 +194,7 @@ bool compileInto(const std::string &targetFile) {
     } catch (std::exception &e) {
         std::cout << "Error: " << e.what() << std::endl;
     }
-    core.endCompile(ok ? st.ctx->runtimeRootGraph() : nullptr);
+    core.endCompile(ok ? st.ctx->runtimeProgram()->root() : nullptr);
     st.compiledPending = ok;
     return ok;
 }
@@ -284,12 +284,13 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         st.ctx->clearProcessExitCode();
 
         requireKnownPasses(passes, st.ctx);
-        auto *graph = st.ctx->runtimeRootGraph();
+        const auto *program = st.ctx->runtimeProgram();
         // The values given for the parameters of `main` become constants of the entry graph
         // before the first pass sees it; what `main` returns goes to standard output.
-        graph = camel::execute::bindEntryArgumentSpecs(st.ctx, graph, st.runArgs);
-        if (graph == nullptr)
+        program = camel::execute::bindEntryArgumentSpecs(st.ctx, program, st.runArgs);
+        if (program == nullptr)
             return failed();
+        auto *graph = program->root();
         camel::execute::writeEntryResultTo(st.ctx, std::string());
 
         // The graph before the passes is snapshot 0 (no pass name); the hook collects the
@@ -314,15 +315,15 @@ RunOutcome runScriptOnce(const std::string &targetFile) {
         setPassSnapshotHandler(&passGraphSnapshotHandler, &collector);
         PassSnapshotGuard snapshotGuard;
 
-        auto result = applyPassesDetailed(graph, passes, st.ctx, std::cout);
-        graph       = result.graph;
+        auto result = applyPassesDetailed(program, passes, st.ctx, std::cout);
+        program     = result.program;
         if (result.failed())
             return failed();
         if (result.consumed())
             markLastPassGraphConsumed();
         if (!result.consumed()) {
-            auto fallbackResult = applyPassesDetailed(graph, defaultFallback, st.ctx, std::cout);
-            graph               = fallbackResult.graph;
+            auto fallbackResult = applyPassesDetailed(program, defaultFallback, st.ctx, std::cout);
+            program             = fallbackResult.program;
             if (fallbackResult.failed())
                 return failed();
             if (fallbackResult.consumed())

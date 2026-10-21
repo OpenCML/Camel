@@ -141,4 +141,9 @@ struct OptimizeRewriteConfig {
     /// Restrict algebra to strictly equivalent floating-point rewrites. By default local
     /// reassociation is allowed; precision changes and approximate functions are not implied.
     bool safeFloatingPoint = false;
+    /// Hand the graphs the generic passes skip (a screen says the pass has nothing to do there,
+    /// or the pass already left that content alone) to the pass anyway and fail when it rewrites
+    /// one: a test of the screens (generic/rewrite.h), which must admit every graph a rewrite
+    /// applies to.
+    bool checkScreens = false;
 };

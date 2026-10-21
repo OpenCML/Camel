@@ -177,9 +177,9 @@ std::string freedomJson(const core::sem::ReorderFreedom &f) {
 
 } // namespace
 
-void dumpOperatorInstances(GCGraph *root, std::ostream &os) {
+void dumpOperatorInstances(const Program &program, std::ostream &os) {
     const auto &table = core::OperatorTable::instance();
-    for (GCGraph *graph : collectReachableGraphs(root)) {
+    for (GCGraph *graph : collectReachableGraphs(program)) {
         for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
             if (graph->node(ref)->kind != GCNodeKind::Oper) {
                 continue;

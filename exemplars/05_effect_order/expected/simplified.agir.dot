@@ -2,7 +2,7 @@ digraph GraphIR {
     subgraph cluster_F01 {
         label="main";
         subgraph cluster_F02 {
-            label="__g_8__";
+            label="__g_6__";
             F02 [label="ARGS", type="ARGS"];
             O02 [label="EXIT", type="EXIT"];
             N00 [label="x", type="PORT", param_name="x", param_kind="normal", param_index="0", value_type="int"];
@@ -32,7 +32,7 @@ digraph GraphIR {
                 N07 -> O04 [label="0", type="EXIT"];
             }
             subgraph cluster_F05 {
-                label="__g_6__";
+                label="__g_5__";
                 F05 [label="ARGS", type="ARGS"];
                 O05 [label="EXIT", type="EXIT"];
                 N08 [label="cb", type="PORT", param_name="cb", param_kind="capture", param_index="0", value_type="(x: int) => int"];
@@ -119,6 +119,7 @@ digraph GraphIR {
         }
         subgraph cluster_F06 {
             label="visit$spec3";
+            F06 [label="ARGS", type="ARGS"];
             O06 [label="EXIT", type="EXIT"];
             N22 [label="items", type="PORT", param_name="items", param_kind="normal", param_index="0", value_type="int[]"];
             N23 [label="i", type="PORT", param_name="i", param_kind="normal", param_index="1", value_type="(x: int) => int"];
@@ -169,7 +170,7 @@ digraph GraphIR {
         N31 [label="start", type="DATA", origin=285, span="16:12-16:19", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
         N32 [label=":io/println", type="OPER", role="effect", origin=286, span="16:4-16:11", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
         N33 [label="[3, 1, 2]", type="DATA", origin=288, span="17:22-17:31", srcfile="exemplars/05_effect_order/program.cml", value_type="int[]"];
-        N34 [label="Function(graph=__g_8__, tupleSlots=0)", type="DATA", origin=290, span="17:36-20:5", srcfile="exemplars/05_effect_order/program.cml", value_type="(x: int) => int"];
+        N34 [label="Function(graph=__g_6__, tupleSlots=0)", type="DATA", origin=290, span="17:36-20:5", srcfile="exemplars/05_effect_order/program.cml", value_type="(x: int) => int"];
         N35 [label="total {}", type="DATA", origin=302, span="21:12-21:22", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
         N36 [label=":str/format", type="OPER", origin=303, span="21:30-21:37", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
         N37 [label=":io/println", type="OPER", role="effect", origin=304, span="21:4-21:11", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
@@ -203,7 +204,7 @@ digraph GraphIR {
     N40 [label=":io/println", type="OPER", role="effect", origin=286, span="16:4-16:11", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
     N41 [label="[3, 1, 2]", type="DATA", origin=288, span="17:22-17:31", srcfile="exemplars/05_effect_order/program.cml", value_type="int[]"];
     N42 [label="0", type="DATA", origin=289, span="17:33-17:34", srcfile="exemplars/05_effect_order/program.cml", value_type="int"];
-    N43 [label="Function(graph=__g_8__, tupleSlots=0)", type="DATA", origin=290, span="17:36-20:5", srcfile="exemplars/05_effect_order/program.cml", value_type="(x: int) => int"];
+    N43 [label="Function(graph=__g_6__, tupleSlots=0)", type="DATA", origin=290, span="17:36-20:5", srcfile="exemplars/05_effect_order/program.cml", value_type="(x: int) => int"];
     N44 [label="total {}", type="DATA", origin=302, span="21:12-21:22", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
     N45 [label=":str/format", type="OPER", origin=303, span="21:30-21:37", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];
     N46 [label=":io/println", type="OPER", role="effect", origin=304, span="21:4-21:11", srcfile="exemplars/05_effect_order/program.cml", value_type="string"];

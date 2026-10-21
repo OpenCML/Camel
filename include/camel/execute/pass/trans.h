@@ -26,6 +26,6 @@ class GraphTranslatePass : public GraphIRPass {
     GraphTranslatePass(const camel::core::context::context_ptr_t &ctx) : GraphIRPass(ctx) {};
     virtual ~GraphTranslatePass() = default;
 
-    virtual camel::runtime::GCGraph *
-    apply(camel::runtime::GCGraph *graph, std::ostream &os) override = 0;
+    virtual const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override = 0;
 };

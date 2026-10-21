@@ -93,7 +93,7 @@ struct Binding {
     int function  = -1; // the source function the declaration is in
     int file      = -1; // of the declaration
     int line      = 0;
-    /// The stable id of the graph the builder made the node in: the function's graph, or the
+    /// The id of the graph the builder made the node in: the function's graph, or the
     /// subgraph of the arm the declaration is written in.
     std::string graph;
 };
@@ -133,7 +133,7 @@ struct GraphInfo {
     /// For a subgraph that folds (GraphRole::Arm): the graphs whose branch nodes call it, so
     /// the graphs it is part of when a frame of one of them calls it.
     std::vector<camel::runtime::GCGraph *> owners;
-    std::string stableId;
+    std::string graphId; // the text of the graph's id (camel::runtime::toText)
     /// The ports that hold captured values (closure nodes, or `with` ports after the declared
     /// ones of a function called directly), named by the full names of those values.
     std::unordered_set<camel::runtime::gc_node_ref_t> capturePorts;
@@ -192,7 +192,7 @@ struct DroppedLine {
 /// How a function name given by the user (a function breakpoint) was resolved.
 struct FunctionResolution {
     bool found = false;
-    /// Stable ids of the graphs of the function (one per instance of a generic function).
+    /// Ids of the graphs of the function (one per instance of a generic function).
     std::vector<std::string> graphs;
     std::string fullName; // when found
     std::string message;  // why not, when not found
@@ -228,12 +228,12 @@ class ProgramIndex {
     GraphInfo &graph(camel::runtime::GCGraph *graph);
     /// Every graph reachable from the running root (empty before running()).
     const std::vector<camel::runtime::GCGraph *> &runningGraphs() const { return runningGraphs_; }
-    /// A graph with this stable id is part of the program that runs.
-    bool runs(const std::string &stableId) const { return runningStableIds_.count(stableId) != 0; }
+    /// A graph with this id is part of the program that runs.
+    bool runs(const std::string &graphId) const { return runningGraphIds_.count(graphId) != 0; }
     /// A node with this origin is in the program before the passes.
     bool inInitialGraph(origin_t origin) const { return initialOrigins_.count(origin) != 0; }
-    /// A graph with this stable id is an arm of a branch of the program that runs.
-    bool isArm(const std::string &stableId) const { return armStableIds_.count(stableId) != 0; }
+    /// A graph with this id is an arm of a branch of the program that runs.
+    bool isArm(const std::string &graphId) const { return armGraphIds_.count(graphId) != 0; }
 
     LineResolution resolveLine(const std::string &path, int line);
     /// The lines of `function` from `firstLine` to `lastLine` (inclusive) that the builder left
@@ -308,14 +308,14 @@ class ProgramIndex {
     std::map<LineKey, LineNodes> initialLines_;
     std::map<LineKey, LineNodes> runningLines_;
     std::unordered_set<origin_t> initialOrigins_; // of the nodes of the graph before the passes
-    /// Of the program before the passes, then of the one that runs (findLiveGraphs): the stable
+    /// Of the program before the passes, then of the one that runs (findLiveGraphs): the
     /// ids of the graphs it can run, and the origins of their nodes.
-    std::unordered_set<std::string> liveStableIds_;
+    std::unordered_set<std::string> liveGraphIds_;
     std::unordered_set<origin_t> liveOrigins_;
     std::vector<camel::runtime::GCGraph *> initialGraphs_;
     std::vector<camel::runtime::GCGraph *> runningGraphs_;
-    std::unordered_set<std::string> runningStableIds_;
-    std::unordered_set<std::string> armStableIds_;
+    std::unordered_set<std::string> runningGraphIds_;
+    std::unordered_set<std::string> armGraphIds_;
     /// The arms of the branches of the running program, with the graphs that branch to them.
     ArmOwners armOwners_;
     /// The module of each file of the program (by file index); "" for the entry module.

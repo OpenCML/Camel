@@ -106,6 +106,7 @@ Both streams carry the same bytes on every platform: a line ends with a line fee
 
 - **`--arg name=value`** gives the parameter `name` its value; the option is repeated for each parameter. How `value` is read follows the declared type of the parameter:
   - `int`, `float`, `bool`, `string`: the literal (`3`, `0.5`, `true` / `false`, any text).
+- `c64`, `c128`: a complex number in the text of the language (language reference 2.5.3): the real part, the sign of the imaginary part and the imaginary part, `1+2i` or `0.5-0.25i`, or only the imaginary part with its sign, `-2i`. Each part is read as a float of the declared width. A real text is not a complex number and is refused.
   - `Tensor`: a `.npy` file (the extension may be left out). The file is read as `tensor.load_npy` reads it (float64 data is stored as float32, the module's float storage) and the tensor is then checked against the declared element type and shape; a mismatch (an integer file for a float parameter, another shape) is an error, not a conversion.
   - a struct or a tuple (a model's weights): a directory holding one file per leaf, named by the leaf's path with dots (`fc1.w.npy`, `0.npy`), which is the layout `nn.save_params` writes.
   - `with` parameters are given the same way as ordinary ones. A `var` parameter cannot be given.
@@ -345,7 +346,7 @@ Related settings, all environment variables:
 
 ## Information Display
 
-- `-V`, `--version`: Show version information  
+- `-V`, `--version`: Show version information. The footprint line names the build: `(Build <footprint>)` for a Release build and `(Debug <footprint>)` for a Debug build, which is how the test runner tells the two apart  
 - `-h`, `--help`: Show help information  
 - `-d`, `--docs`: Show documentation of package or module  
 - `-a`, `--about`: Show copyright and project information  
@@ -407,6 +408,24 @@ Camel CLI (`camel`) handles run, check, and inspect. Formatting is provided by a
   - Equivalent to: `camel <file.cml> std::cpp > <name>.cpp`, then `$CXX` (default `c++`, `clang++` on Windows) with `-std=c++20 -O2 -ffp-contract=off -I$CAMEL_HOME/include`. The program does not depend on the Camel runtime; when it uses a module operator with no standalone translation, it is linked with `libcamel`. See [cpp_export_build.md](cpp_export_build.md).
 
 Other tools: `camel-codegen`, `camel-pr` (the profiler), `camel-db` (the debugger), `camel-ls` (the language server). All are built under `build/tools/` and installed with `camel` into `out/latest/bin/`.
+
+### Release and Debug installations
+
+The two build configurations are installed side by side, each with its own `bin`, `lib` and
+`stdlib`, and each addressed by its own `CAMEL_HOME`:
+
+| Build | Command | `CAMEL_HOME` | Artifacts |
+|-------|---------|--------------|-----------|
+| Release | `npm run build` | `out/latest` | `out/latest/bin/camel.exe` |
+| Debug | `npm run debug` | `out/debug` | `out/debug/bin/camel.exe` |
+| Profile | `npm run profile` | `out/latest` | `out/latest/bin/camel.exe` (RelWithDebInfo) |
+
+A Debug build keeps the assertions that a Release build compiles out, and reports itself as
+`(Debug <footprint>)` in `--version`; it also logs the `debug` and `trace` levels that a Release
+build strips (see "Threshold"). A debug installation does not overwrite `out/latest`, so a
+Release binary stays available for comparison; point `CAMEL_HOME` at the tree you mean to run.
+The test runner's `--build debug` / `CAMEL_TEST_BUILD=debug` does the same choice for the tests
+(`docs/test-plans.md`, "The Debug Build And The Debug Layer").
 
 ---
 

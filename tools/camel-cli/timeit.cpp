@@ -453,14 +453,16 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                 stdoutFdRedirect.emplace(stdout);
                 stderrFdRedirect.emplace(stderr);
             }
-            auto *graph = invocation->ctx->runtimeRootGraph();
+            const camel::runtime::Program *program = invocation->ctx->runtimeProgram();
             try {
                 // The list is run in three parts; all names are checked before the first.
                 requireKnownPasses(Run::resolvedPassList, invocation->ctx);
                 // The values given for the parameters of `main` (--arg), as in a plain run.
-                graph =
-                    camel::execute::bindEntryArgumentSpecs(invocation->ctx, graph, Run::entryArgs);
-                if (graph == nullptr) {
+                program = camel::execute::bindEntryArgumentSpecs(
+                    invocation->ctx,
+                    program,
+                    Run::entryArgs);
+                if (program == nullptr) {
                     if (stdoutFdRedirect)
                         stdoutFdRedirect->restore();
                     if (stderrFdRedirect)
@@ -478,8 +480,8 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                 }
                 if (!prefixPasses.empty()) {
                     auto prefixResult =
-                        applyPassesDetailed(graph, prefixPasses, invocation->ctx, execOs);
-                    graph = prefixResult.graph;
+                        applyPassesDetailed(program, prefixPasses, invocation->ctx, execOs);
+                    program = prefixResult.program;
                     if (prefixResult.failed()) {
                         if (stdoutFdRedirect)
                             stdoutFdRedirect->restore();
@@ -505,7 +507,7 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
 
                 const auto startedAt = std::chrono::steady_clock::now();
                 auto timedResult     = applyPassesDetailed(
-                    graph,
+                    program,
                     std::vector<std::string>{Run::timeitPass},
                     invocation->ctx,
                     execOs);
@@ -530,11 +532,11 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     return 1;
                 }
 
-                graph = timedResult.graph;
+                program = timedResult.program;
                 if (!timedResult.consumed() && !suffixPasses.empty()) {
                     auto suffixResult =
-                        applyPassesDetailed(graph, suffixPasses, invocation->ctx, execOs);
-                    graph = suffixResult.graph;
+                        applyPassesDetailed(program, suffixPasses, invocation->ctx, execOs);
+                    program = suffixResult.program;
                     if (suffixResult.failed()) {
                         if (stdoutFdRedirect)
                             stdoutFdRedirect->restore();
@@ -553,9 +555,9 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     }
                 }
 
-                if (graph != nullptr) {
+                if (program != nullptr) {
                     auto fallbackResult =
-                        applyPassesDetailed(graph, Run::fallbackPasses, invocation->ctx, execOs);
+                        applyPassesDetailed(program, Run::fallbackPasses, invocation->ctx, execOs);
                     if (fallbackResult.failed()) {
                         if (stdoutFdRedirect)
                             stdoutFdRedirect->restore();

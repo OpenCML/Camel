@@ -9,7 +9,7 @@
 ### 2.1 角色与属性
 
 - 一个 **Graph** 对应一个函数体（或顶层模块的可执行部分）。
-- **name_ / stableId_**：图名与稳定标识；`stableId_` 用于跨 clone / rewrite 追踪图来源。
+- **name_ / GraphId**：图名与图的身份；`GraphId`（`camel/runtime/graph_id.h`）在程序内稳定，跨 clone / rewrite 不变，由 `Context::graphIds()` 分配。
 - **outer_**：外层图（闭包/嵌套函数时非空）。
 - **signature_**：图的签名与布局摘要，内部包含 `funcType`、`staticDataType`、`runtimeDataType`、`closureType`、`runtimeDataSize`。
 - **staticDataArr_**：静态数据区（`slot_t`），索引 0 保留为空；负 `data_idx_t` 通过它寻址。
@@ -199,8 +199,8 @@
 为了让 frozen 节点尽量不直接持有非平凡析构成员，若干属性已从 Node 自身移到 Graph 侧集中保存：
 
 - **节点调试实体 id**（`Node::debugEntityId()` / `Graph::nodeStableIds_`）：
-  - **Draft**：构造时为占位串 `draft:{graphStableId}:{seq}`，仅保证图内可区分；不再暴露节点地址语义。
-  - **Seal**：`GraphBuilder::finalize()` 在 `rearrange()` 之后调用 `Graph::promoteNodeDebugIds()`，将每条目替换为 **`NodeDebugFingerprint` 物化字符串** `gnode:{016x}{016x}`（定义见 `include/camel/compile/gir/types.h`）。指纹输入包含：所属图的 `stableId()`、`NodeType`、`dataIndex`、各 `LinkType` 上规范化排序后的邻接槽位，以及类型相关盐（如 `PORT` 端口名、`FUNC` 子图 `stableId`、`OPER` 的 `OperatorIndex*`、`DATA` 的静态槽位字节等）；并在同图固定遍历序下混入 **tie-breaker 序号**，进一步降低 128-bit 碰撞风险。
+  - **Draft**：构造时为占位串 `draft:{graphId}:{seq}`，仅保证图内可区分；不再暴露节点地址语义。
+  - **Seal**：`GraphBuilder::finalize()` 在 `rearrange()` 之后调用 `Graph::promoteNodeDebugIds()`，将每条目替换为 **`NodeDebugFingerprint` 物化字符串** `gnode:{016x}{016x}`（定义见 `include/camel/compile/gir/types.h`）。指纹输入包含：所属图的 `graphId()`、`NodeType`、`dataIndex`、各 `LinkType` 上规范化排序后的邻接槽位，以及类型相关盐（如 `PORT` 端口名、`FUNC` 子图 `graphId`、`OPER` 的 `OperatorIndex*`、`DATA` 的静态槽位字节等）；并在同图固定遍历序下混入 **tie-breaker 序号**，进一步降低 128-bit 碰撞风险。
   - **SourceContext**：构图期 `bindGirNodeDraftDebug(Node*, origin_id, SemanticBundle)`；seal 时 `sealPromoteGirNodeDebug(Node*, entityId)` 写入 `DebugMap` 与按实体 id 索引的语义表。对外查询统一 `resolveGirNodeOrigin(Node*)`、`girNodeSemantic(Node*)`；克隆/内联用 `cloneGirNodeDebugBinding`。
 - `PortNode::name`：由 `Graph::nodePortNames_` 保存。
 - `AccsNode` 的字符串 key：由 `Graph::nodeAccsKeys_` 保存。

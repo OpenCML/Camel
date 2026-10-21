@@ -34,6 +34,11 @@
  *
  * How the text of a value is read depends on the declared type of the parameter:
  *   int / float / bool / string   the literal itself (`3`, `0.5`, `true`, any text);
+ *   c64 / c128                    a complex number as the language writes one: the real part,
+ *                                 the sign of the imaginary part and the imaginary part
+ *                                 (`1+2i`, `0.5-0.25i`), or only the imaginary part with its
+ *                                 sign (`-2i`); each part is read as a float is. A real text is
+ *                                 not a complex number;
  *   a struct or tuple             a directory: every leaf is read from
  *                                 `<dir>/<field.path>` (fields and tuple indices joined by
  *                                 dots, the layout nn.save_params writes);
@@ -53,6 +58,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <functional>
 #include <span>
@@ -85,20 +91,20 @@ using EntryArgumentLoader = std::function<
 void registerEntryArgumentLoader(core::type::TypeCode code, EntryArgumentLoader loader);
 
 /**
- * Binds `arguments` to the parameters of the entry graph `root` and returns the entry graph
- * that results (`root` itself when there is nothing to bind). A name that is not a parameter,
+ * Binds `arguments` to the parameters of the entry graph of `program` and returns the program
+ * that results (`program` itself when there is nothing to bind). A name that is not a parameter,
  * a name given twice or a value that cannot be read as the parameter's type is reported as
  * RuntimeDiag::EntryArgumentInvalid in the runtime diagnostics, located at `main`; nullptr is
  * returned then.
  */
-runtime::GCGraph *bindEntryArguments(
-    const core::context::context_ptr_t &context, runtime::GCGraph *root,
+const runtime::Program *bindEntryArguments(
+    const core::context::context_ptr_t &context, const runtime::Program *program,
     std::span<const EntryArgument> arguments);
 
 /// The same for arguments as written on a command line (`name=value` each). A text without
 /// `=` is reported like any other invalid argument.
-runtime::GCGraph *bindEntryArgumentSpecs(
-    const core::context::context_ptr_t &context, runtime::GCGraph *root,
+const runtime::Program *bindEntryArgumentSpecs(
+    const core::context::context_ptr_t &context, const runtime::Program *program,
     std::span<const std::string> specs);
 
 /**
@@ -159,6 +165,5 @@ std::vector<BoundEntryArgument> boundEntryArguments();
 uint64_t entryFunctionOrigin(const core::context::Context &context);
 
 /// The key under which the Builder registers the origin of `main` in the debug map.
-inline constexpr const char *kEntryFunctionOriginKey = "__entry__";
 
 } // namespace camel::execute

@@ -21,6 +21,7 @@
 
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
+#include "camel/runtime/graph_id.h"
 #include "camel/core/slot.h"
 #include "camel/core/source/manager.h"
 
@@ -39,6 +40,7 @@
 namespace camel::runtime {
 class GCGraph;
 class GCGraphManager;
+class Program;
 class DefinitionStore;
 } // namespace camel::runtime
 
@@ -103,6 +105,7 @@ class Context : public std::enable_shared_from_this<Context> {
 
     std::unique_ptr<ExecutorManager> exeMgr_;
     std::unique_ptr<camel::runtime::GCGraphManager> runtimeGraphMgr_;
+    camel::runtime::GraphIdAllocator graphIds_;
     /// See facts(). Created on first use.
     std::unique_ptr<camel::runtime::fact::FactStore> facts_;
     /// See definitions(). Created on first use.
@@ -180,18 +183,32 @@ class Context : public std::enable_shared_from_this<Context> {
         return runtimeErrorReporter_;
     }
     camel::source::source_context_ptr_t sourceContext() const { return sourceContext_; }
-    camel::runtime::GCGraph *runtimeRootGraph();
-    camel::runtime::GCGraph *materializeRuntimeRoot();
-    camel::runtime::GCGraph *adoptRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
-    camel::runtime::GCGraph *installRuntimeRoot(camel::runtime::GCGraph *runtimeRoot);
-    camel::runtime::GCGraph *currentRuntimeRoot() const;
+    /// The program of the context (camel/runtime/program.h): the front end encodes the main
+    /// module's graphs into it the first time it is asked for, and each commit of a rewrite
+    /// installs a new one. The pipeline starts from it.
+    const camel::runtime::Program *runtimeProgram();
+    const camel::runtime::Program *materializeRuntimeProgram();
+    const camel::runtime::Program *adoptRuntimeProgram(const camel::runtime::Program *program);
+    const camel::runtime::Program *installRuntimeProgram(const camel::runtime::Program *program);
+    const camel::runtime::Program *currentRuntimeProgram() const;
     void clearRuntimeGraphs();
+    /// A new, empty Program owned by the context, for whoever builds one.
+    camel::runtime::Program *reserveProgram();
     /// See GCGraphManager::trackDetached / releaseDetached.
-    void trackDetachedRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
+    void trackDetachedRuntimeProgram(const camel::runtime::Program *program);
     void releaseDetachedRuntimeGraphs();
-    /// See GCGraphManager::pin: graphs the core keeps for the context's lifetime (the
+    /// See GCGraphManager::retain.
+    void retainRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
+    /// The newest program of the context that holds this version of `graph` (see
+    /// GCGraphManager::programOf), nullptr when none does.
+    const camel::runtime::Program *
+    programOfRuntimeGraph(const camel::runtime::GCGraph *graph) const;
+    /// See GCGraphManager::pin: programs the core keeps for the context's lifetime (the
     /// definition graphs of operators).
-    void pinRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
+    void pinRuntimeProgram(const camel::runtime::Program *program);
+    /// The allocator of the program's GraphIds (camel/runtime/graph_id.h): every graph the
+    /// front end builds and every graph a rewrite creates takes its id from here.
+    camel::runtime::GraphIdAllocator &graphIds() { return graphIds_; }
     /// The program's graph facts (camel/runtime/facts.h): what passes and back ends derived
     /// about its graphs, each with a stamp that a read checks. Lives as long as the context;
     /// a fact survives rewrites of the program and reads as absent once it no longer holds.
@@ -316,7 +333,7 @@ class Context : public std::enable_shared_from_this<Context> {
     importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");
 
   private:
-    void registerRuntimeGraphDebugInfo(camel::runtime::GCGraph *runtimeRoot);
+    void registerRuntimeGraphDebugInfo(const camel::runtime::Program *program);
 };
 
 } // namespace camel::core::context

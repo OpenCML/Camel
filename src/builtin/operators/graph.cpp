@@ -29,6 +29,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 using namespace camel::core::context;
 
@@ -36,16 +37,22 @@ slot_t __graph_original__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;
     auto *function = norm.get<::Function *>(0);
-    camel::runtime::GCGraph *original =
-        function != nullptr && function->graph() != nullptr ? function->graph()->originalGraph()
-                                                            : nullptr;
-    if (original == nullptr) {
+    // The program the function's program is a private copy of (Program::original), and the
+    // graph of it that this function's graph was copied from.
+    const camel::runtime::Program *original = function != nullptr && function->program() != nullptr
+                                                  ? function->program()->original()
+                                                  : nullptr;
+    if (original == nullptr || original->graph(function->graphId()) == nullptr) {
         return norm.slot(0);
     }
     // `function` is a raw pointer held across the allocation below: nothing may move meanwhile.
     camel::core::mm::NoCollectionScope noCollection;
     const auto *closureType = function->tupleType();
-    auto *result = ::Function::create(original, closureType, camel::core::mm::autoSpace());
+    auto *result            = ::Function::create(
+        original,
+        function->graphId(),
+        closureType,
+        camel::core::mm::autoSpace());
     if (const ::Tuple *closure = function->tuple()) {
         for (size_t i = 0; i < closure->size(); ++i) {
             result->tuple()->set<slot_t>(i, closure->get<slot_t>(i), closureType);

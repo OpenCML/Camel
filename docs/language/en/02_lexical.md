@@ -91,6 +91,8 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 
   A `f32` is written as the shortest text that reads back as that `f32` (`f32(0.1)` is `0.1`). `float(s)` and `parse_float(s)` read every text above. For another form give the placeholder of `format` a specification: `'{:.2f}'->format<2.5>` is `2.50`, `'{:.17g}'->format<0.1>` is `0.10000000000000001`.
 
+  **A NaN has no sign under a format specification either**: `'{:.2f}'` and `'{:>8}'` write a negative NaN as `nan`, and neither a width nor a precision changes that text (an uppercase type letter writes `NAN`, `'{:E}'`). `{:+}` is `+nan`: the `+` is the sign flag added to that text, not the NaN's sign.
+
 ### 2.5.3 Imaginary literals
 
 - A number directly followed by `i`, where no identifier character follows the `i`, is an **imaginary literal**: `4i`, `4.5i`, `1e3i`. `4if` is `4` and `if`; `0xFFi` is `0xFF` and the name `i` (hexadecimal, binary and octal forms take no imaginary suffix).
@@ -98,6 +100,7 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 - A minus sign is still an operator: `-2i` is `-(2i)`, real part 0 and imaginary part -2, printed as `0-2i`.
 - Imaginary literals fold with each other and with real literals exactly: `(1+2i)*(3+4i)` is `-5+10i`. A literal expression with an imaginary part defaults to `c128`; putting it into a real type is `SemanticDiag::LiteralNotRepresentable`, whose help names `re()` and `im()`.
 - The printed form is the real part, `+` or `-`, the magnitude of the imaginary part, and `i`: `3+4i`, `0-2i`, `-1+0i`. A part with a whole value writes no `.0`; each part of a `c64` is the shortest text that reads back as the same `f32`.
+- **A format specification for a complex number writes both parts, as it does in Python.** The number part of the specification (sign, `#`, precision, type letter) applies to each part: `'{:.2f}'` writes `3+4i` as `3.00+4.00i`, `'{:e}'` as `3.000000e+00+4.000000e+00i`, and `'{:#.0f}'` as `3.+4.i`. A `+` or space sign is written on the real part only, the sign of the imaginary part is the separator between the parts, so `{:+}` is `+3+4i` and `{: .2f}` is ` 3.00+4.00i`. The layout part (fill, alignment, width) applies once, to the whole text, with the default alignment at the right: `'{:>12.2f}'` is `  3.00+4.00i`, `'{:*>12.2f}'` is `**3.00+4.00i`, and `'{:^13.2f}'` is ` 3.00+4.00i  `. Zero padding and `=` alignment are errors (`SemanticDiag::ArgumentsRejected`), as they are in Python: `{:08.2f}`, `{:=12.2f}`. The type letter is checked against the parts, which are numbers: `{:s}` is an error. A placeholder with no specification writes the text above (`{}` of `3+4i` is `3+4i`, no parentheses). **When a part is a NaN that part is written `nan`, never `-nan` (the same rule as 2.5.2), with and without a specification.**
 
 ### 2.5.4 Strings
 

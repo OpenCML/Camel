@@ -76,14 +76,16 @@ string TopoNodeSeqDumpPass::getPtrRepr(const string &prefix, uintptr_t ptrVal, b
     return ss.str();
 }
 
-GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+TopoNodeSeqDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     ASSERT(graph != nullptr, "Topo dump requires a non-null runtime root graph.");
 
-    auto sortedGraphs = camel::runtime::collectReachableGraphs(graph);
+    auto sortedGraphs = camel::runtime::collectReachableGraphs(*program, graph);
     ostringstream oss;
 
     for (auto *runtimeGraph : sortedGraphs) {
-        auto sortedNodes     = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+        const auto &sortedNodes = runtimeGraph->execPlan().topo;
         auto formatNodeIdent = [&](gc_node_ref_t nodeRef) {
             return pointerToIdent(requireNode(runtimeGraph, nodeRef));
         };
@@ -100,7 +102,7 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
         auto describeRuntimeNode = [&](gc_node_ref_t nodeRef, const GCNode &node) -> string {
             switch (node.kind) {
             case GCNodeKind::Func: {
-                auto *callee          = runtimeGraph->directCalleeGraphOf(nodeRef);
+                auto *callee          = program->calleeOf(*runtimeGraph, nodeRef);
                 string name           = callee ? callee->name() : "<null>";
                 string res            = format("CALL: {} slot={}", name, node.dataIndex);
                 const auto normInputs = runtimeGraph->normInputsOf(nodeRef);
@@ -203,8 +205,8 @@ GCGraph *TopoNodeSeqDumpPass::apply(GCGraph *graph, std::ostream &os) {
                 return res;
             }
             case GCNodeKind::Loop: {
-                const auto *cond = runtimeGraph->loopCondGraphOf(nodeRef);
-                const auto *body = runtimeGraph->loopBodyGraphOf(nodeRef);
+                const auto *cond = program->loopCondOf(*runtimeGraph, nodeRef);
+                const auto *body = program->loopBodyOf(*runtimeGraph, nodeRef);
                 string res       = format(
                     "LOOP: {} cond={} body={} slot={}",
                     camel::core::loopKindName(runtimeGraph->loopKindOf(nodeRef)),

@@ -113,17 +113,22 @@ ensureValueSlot(GraphDraft &draft, camel::core::type::Type *type, gc_slot_idx_t 
 } // namespace
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(gc_node_ref_t id) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot get mutable payload view from a missing draft node.");
+    touchRefs();
     return DraftNodeView::payload(draftNode);
 }
 
 std::span<std::byte> GraphDraft::mutablePayloadOf(DraftNode *draftNode) {
+    ++mutations_;
     ASSERT(containsNode(draftNode), "Cannot get mutable payload view from a foreign draft node.");
+    touchRefs();
     return DraftNodeView::payload(draftNode);
 }
 
 void GraphDraft::retargetOperNode(gc_node_ref_t id, std::string_view uri) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Oper,
@@ -139,6 +144,7 @@ void GraphDraft::retargetOperNode(gc_node_ref_t id, std::string_view uri) {
 
 gc_node_ref_t GraphDraft::addDataNode(
     camel::core::type::Type *type, gc_slot_idx_t dataIndex, uint8_t runtimeFlags) {
+    ++mutations_;
     return addNode(
         DraftNodeInit{
             .dataIndex    = dataIndex,
@@ -149,6 +155,7 @@ gc_node_ref_t GraphDraft::addDataNode(
 
 gc_node_ref_t GraphDraft::addPortNode(
     camel::core::type::Type *type, gc_slot_idx_t dataIndex, uint8_t runtimeFlags) {
+    ++mutations_;
     return addNode(
         DraftNodeInit{
             .dataIndex    = dataIndex,
@@ -158,12 +165,14 @@ gc_node_ref_t GraphDraft::addPortNode(
 }
 
 gc_node_ref_t GraphDraft::addCastNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Cast});
 }
 
 gc_node_ref_t GraphDraft::addCopyNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Copy});
@@ -171,6 +180,7 @@ gc_node_ref_t GraphDraft::addCopyNode(camel::core::type::Type *type, gc_slot_idx
 
 gc_node_ref_t GraphDraft::addFillNode(
     camel::core::type::Type *type, const GCFillBody &body, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForStruct(body);
     return addNode(
@@ -184,6 +194,7 @@ gc_node_ref_t GraphDraft::addFillNode(
 
 gc_node_ref_t GraphDraft::addFillNode(
     camel::core::type::Type *type, std::span<const std::byte> payload, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     ASSERT(
         payload.empty() || payload.size_bytes() >= sizeof(GCFillBody),
@@ -199,6 +210,7 @@ gc_node_ref_t GraphDraft::addFillNode(
 
 gc_node_ref_t GraphDraft::addAccsNode(
     camel::core::type::Type *type, uint32_t tupleIndex, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCAccsBody body;
     body.accsKind      = GCAccsKind::TupleIndex;
@@ -215,6 +227,7 @@ gc_node_ref_t GraphDraft::addAccsNode(
 
 gc_node_ref_t GraphDraft::addAccsNode(
     camel::core::type::Type *type, std::string_view structKey, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForAccsStructKey(structKey);
     return addNode(
@@ -229,6 +242,7 @@ gc_node_ref_t GraphDraft::addAccsNode(
 gc_node_ref_t GraphDraft::addBrchNode(
     camel::core::type::Type *type, gc_node_ref_t joinRef, std::span<const GCBranchArm> arms,
     gc_node_ref_t defaultArm, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForBranchPayload(joinRef, arms, defaultArm);
     return addNode(
@@ -243,6 +257,7 @@ gc_node_ref_t GraphDraft::addBrchNode(
 gc_node_ref_t GraphDraft::addJoinNode(
     camel::core::type::Type *type, gc_node_ref_t brchRef, gc_cnt_t armCount,
     gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     GCJoinBody body;
     body.brch          = brchRef;
@@ -259,6 +274,7 @@ gc_node_ref_t GraphDraft::addJoinNode(
 
 gc_node_ref_t GraphDraft::addCallNode(
     camel::core::type::Type *type, const GCCallBody &body, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForStruct(body);
     return addNode(
@@ -271,10 +287,11 @@ gc_node_ref_t GraphDraft::addCallNode(
 }
 
 gc_node_ref_t GraphDraft::addFuncNode(
-    GCGraph *calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
+    GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags,
     gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
-    GCFuncBody body{.calleeGraph = calleeGraph};
+    GCFuncRef body{.ref = payloadGraphIndexOf(calleeGraph)};
     const auto payload = bytesForStruct(body);
     return addNode(
         DraftNodeInit{
@@ -288,8 +305,15 @@ gc_node_ref_t GraphDraft::addFuncNode(
 
 gc_node_ref_t GraphDraft::addLoopNode(
     const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
-    dataIndex          = ensureValueSlot(*this, type, dataIndex);
-    const auto payload = bytesForStruct(body);
+    ++mutations_;
+    dataIndex = ensureValueSlot(*this, type, dataIndex);
+    const GCLoopRef ref{
+        .kind            = body.kind,
+        .condRef         = payloadGraphIndexOf(body.condGraph),
+        .bodyRef         = payloadGraphIndexOf(body.bodyGraph),
+        .collectionCount = body.collectionCount,
+    };
+    const auto payload = bytesForStruct(ref);
     return addNode(
         DraftNodeInit{
             .dataIndex = dataIndex,
@@ -301,6 +325,7 @@ gc_node_ref_t GraphDraft::addLoopNode(
 
 gc_node_ref_t GraphDraft::addOperNode(
     camel::core::type::Type *type, operator_t op, std::string_view uri, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex          = ensureValueSlot(*this, type, dataIndex);
     const auto payload = bytesForOperPayload(op, uri);
     return addNode(
@@ -313,16 +338,19 @@ gc_node_ref_t GraphDraft::addOperNode(
 }
 
 gc_node_ref_t GraphDraft::addSyncNode() {
+    ++mutations_;
     return addNode(DraftNodeInit{.dataIndex = 0, .dataType = nullptr, .kind = GCNodeKind::Sync});
 }
 
 gc_node_ref_t GraphDraft::addGateNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{.dataIndex = dataIndex, .dataType = type, .kind = GCNodeKind::Gate});
 }
 
 gc_node_ref_t GraphDraft::addDrefNode(camel::core::type::Type *type, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     dataIndex = ensureValueSlot(*this, type, dataIndex);
     return addNode(
         DraftNodeInit{
@@ -333,65 +361,67 @@ gc_node_ref_t GraphDraft::addDrefNode(camel::core::type::Type *type, gc_slot_idx
 }
 
 void GraphDraft::appendInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId) {
+    ++mutations_;
     ASSERT(node(userId) != nullptr, "Cannot append input to a missing draft node.");
     ASSERT(node(inputId) != nullptr, "Cannot append a missing input draft node.");
-    switch (kind) {
-    case DraftEdgeKind::Norm: {
-        // Value inputs are positional and may legitimately repeat, e.g. `(x, x)`, `[x, x]`,
-        // or `x + x`. The runtime graph must preserve that multiplicity instead of collapsing
-        // repeated edges into a set.
-        const auto inputs =
-            mutatedInputs(normInputsOf(userId), inputId, true, false, kInvalidNodeRef, false);
-        setNormInputs(userId, inputs);
-        break;
+    // Value inputs are positional and may legitimately repeat, e.g. `(x, x)`, `[x, x]`, or
+    // `x + x`; `with` inputs carry ordered payloads for FILL/JOIN/CALL. The runtime graph must
+    // preserve that multiplicity instead of collapsing repeated edges into a set. A control
+    // input is a dependency, which is stated once.
+    if (kind == DraftEdgeKind::Ctrl) {
+        const auto present = ctrlInputsOf(userId);
+        const auto users   = ctrlUsersOf(inputId);
+        const bool already = present.size() <= users.size()
+                                 ? std::find(present.begin(), present.end(), inputId) !=
+                                       present.end()
+                                 : std::find(users.begin(), users.end(), userId) != users.end();
+        if (already) {
+            return;
+        }
     }
-    case DraftEdgeKind::With: {
-        // `with` inputs carry ordered payloads for FILL/JOIN/CALL and therefore need the same
-        // multiset semantics as norm inputs.
-        const auto inputs =
-            mutatedInputs(withInputsOf(userId), inputId, true, false, kInvalidNodeRef, false);
-        setWithInputs(userId, inputs);
-        break;
-    }
-    case DraftEdgeKind::Ctrl: {
-        const auto inputs =
-            mutatedInputs(ctrlInputsOf(userId), inputId, true, false, kInvalidNodeRef, true);
-        setCtrlInputs(userId, inputs);
-        break;
-    }
-    }
+    appendInputEntry(userId, kind, inputId);
+    appendUserRef(
+        inputId,
+        userId,
+        kind == DraftEdgeKind::Norm,
+        kind == DraftEdgeKind::With,
+        kind == DraftEdgeKind::Ctrl);
 }
 
 bool GraphDraft::unlinkInput(DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId) {
-    ASSERT(node(userId) != nullptr, "Cannot unlink input from a missing draft node.");
-    const auto beforeNorm = normInputsOf(userId).size();
-    const auto beforeWith = withInputsOf(userId).size();
-    const auto beforeCtrl = ctrlInputsOf(userId).size();
-    switch (kind) {
-    case DraftEdgeKind::Norm: {
-        const auto inputs =
-            mutatedInputs(normInputsOf(userId), inputId, false, false, kInvalidNodeRef);
-        setNormInputs(userId, inputs);
-        return inputs.size() != beforeNorm;
+    ++mutations_;
+    DraftNode *draftNode = node(userId);
+    ASSERT(draftNode != nullptr, "Cannot unlink input from a missing draft node.");
+    // The first entry that names `inputId` goes; the entries after it move down.
+    auto group = mutableInputs(draftNode, kind);
+    auto it    = std::find(group.begin(), group.end(), inputId);
+    if (it == group.end()) {
+        return false;
     }
-    case DraftEdgeKind::With: {
-        const auto inputs =
-            mutatedInputs(withInputsOf(userId), inputId, false, false, kInvalidNodeRef);
-        setWithInputs(userId, inputs);
-        return inputs.size() != beforeWith;
+    DraftNodeHeader &h = draftNode->header;
+    auto *base         = reinterpret_cast<gc_node_ref_t *>(draftNode->tail + h.payloadBytes);
+    const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount + h.ctrlInputCount;
+    const size_t at    = static_cast<size_t>(&*it - base);
+    std::memmove(base + at, base + at + 1, (total - at - 1) * sizeof(gc_node_ref_t));
+    (kind == DraftEdgeKind::Norm   ? h.normInputCount
+     : kind == DraftEdgeKind::With ? h.withInputCount
+                                   : h.ctrlInputCount)--;
+    // The user stays a user of `inputId` while another entry of the group names it.
+    group = mutableInputs(draftNode, kind);
+    if (std::find(group.begin(), group.end(), inputId) == group.end()) {
+        removeUserRef(
+            inputId,
+            userId,
+            kind == DraftEdgeKind::Norm,
+            kind == DraftEdgeKind::With,
+            kind == DraftEdgeKind::Ctrl);
     }
-    case DraftEdgeKind::Ctrl: {
-        const auto inputs =
-            mutatedInputs(ctrlInputsOf(userId), inputId, false, false, kInvalidNodeRef);
-        setCtrlInputs(userId, inputs);
-        return inputs.size() != beforeCtrl;
-    }
-    }
-    return false;
+    return true;
 }
 
 void GraphDraft::replaceInput(
     DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId, gc_node_ref_t newInputId) {
+    ++mutations_;
     ASSERT(node(userId) != nullptr, "Cannot replace input on a missing draft node.");
     ASSERT(node(newInputId) != nullptr, "Cannot replace with a missing draft node.");
     switch (kind) {
@@ -417,35 +447,41 @@ void GraphDraft::replaceInput(
 }
 
 void GraphDraft::setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set data type on a missing draft node.");
     draftNode->header.dataType = type;
 }
 
 void GraphDraft::setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set data index on a missing draft node.");
     draftNode->header.dataIndex = dataIndex;
 }
 
 void GraphDraft::setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot set runtime flags on a missing draft node.");
     draftNode->header.runtimeFlags = runtimeFlags;
 }
 
 void GraphDraft::setLoopCollectionCount(gc_node_ref_t id, uint32_t count) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
         "Only a LOOP node has collection slots.");
-    auto *body            = DraftNodeView::payloadAs<GCLoopBody>(draftNode);
+    auto *body            = DraftNodeView::payloadAs<GCLoopRef>(draftNode);
     body->collectionCount = count;
 }
 
 void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
+    ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot rewrite a missing draft node.");
+    touchRefs();
 
     const std::vector<gc_node_ref_t> oldNormInputs(
         DraftNodeView::normInputs(draftNode).begin(),
@@ -472,7 +508,11 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     const uint64_t origin     = draftNode->header.origin;
     const uint8_t permissions = draftNode->header.permissions;
     const uint32_t attrs      = draftNode->header.attrs;
+    const GCNodeKind oldKind  = draftNode->header.kind;
     replaceNodeStorage(id, rebuildNode(id, init));
+    if (init.kind != oldKind) {
+        noteNodeKind(id, init.kind);
+    }
     if (init.origin == 0) {
         node(id)->header.origin = origin;
     }
@@ -509,27 +549,40 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
 }
 
 void GraphDraft::appendNormPort(gc_node_ref_t id) {
+    ++mutations_;
     ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a norm port.");
     appendUniqueNodeRef(normPorts_, id);
 }
 
 void GraphDraft::appendWithPort(gc_node_ref_t id) {
+    ++mutations_;
     ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a with port.");
     appendUniqueNodeRef(withPorts_, id);
 }
 
 void GraphDraft::appendClosureNode(gc_node_ref_t id) {
+    ++mutations_;
     ASSERT(node(id) != nullptr, "Cannot register a missing draft node as a closure node.");
     appendUniqueNodeRef(closureNodes_, id);
 }
 
-void GraphDraft::removeNormPort(gc_node_ref_t id) { std::erase(normPorts_, id); }
+void GraphDraft::removeNormPort(gc_node_ref_t id) {
+    ++mutations_;
+    std::erase(normPorts_, id);
+}
 
-void GraphDraft::removeWithPort(gc_node_ref_t id) { std::erase(withPorts_, id); }
+void GraphDraft::removeWithPort(gc_node_ref_t id) {
+    ++mutations_;
+    std::erase(withPorts_, id);
+}
 
-void GraphDraft::removeClosureNode(gc_node_ref_t id) { std::erase(closureNodes_, id); }
+void GraphDraft::removeClosureNode(gc_node_ref_t id) {
+    ++mutations_;
+    std::erase(closureNodes_, id);
+}
 
 void GraphDraft::appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_ref_t id) {
+    ++mutations_;
     if (std::find(refs.begin(), refs.end(), id) == refs.end()) {
         refs.push_back(id);
     }

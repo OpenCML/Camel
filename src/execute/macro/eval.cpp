@@ -218,12 +218,11 @@ struct MacroEvaluator::ValueRoot {
     Type *type   = nullptr;
 };
 
-MacroEvaluator::MacroEvaluator(const context_ptr_t &context)
-    : context_(context),
-      framePool_(
-          std::max<size_t>(
-              kMacroFramePoolSize,
-              camel::execute::framePoolBytes(camel::execute::macroDepthLimit(*context)))),
+MacroEvaluator::MacroEvaluator(const context_ptr_t &context, const camel::runtime::Program *program)
+    : context_(context), program_(program),
+      framePool_(std::max<size_t>(
+          kMacroFramePoolSize,
+          camel::execute::framePoolBytes(camel::execute::macroDepthLimit(*context)))),
       staticAreas_(std::make_unique<MacroStaticAreaStore>()),
       maxDepth_(camel::execute::macroDepthLimit(*context)) {
     framePool_.registerGcTracer();
@@ -346,14 +345,15 @@ namespace {
 
 /// What the candidate calls, for messages: the callee graph, the function constant, or the
 /// operator.
-std::string calleeNameOf(const GCGraph *graph, gc_node_ref_t nodeRef) {
+std::string
+calleeNameOf(const camel::runtime::Program &program, const GCGraph *graph, gc_node_ref_t nodeRef) {
     const auto *node = graph ? graph->node(nodeRef) : nullptr;
     if (!node) {
         return "(unknown)";
     }
     switch (node->kind) {
     case GCNodeKind::Func:
-        if (const GCGraph *callee = graph->directCalleeGraphOf(nodeRef)) {
+        if (const GCGraph *callee = program.calleeOf(*graph, nodeRef)) {
             return callee->name();
         }
         break;
@@ -407,12 +407,11 @@ void MacroEvaluator::noteFailure(
             range.start.line + 1,
             range.start.character + 1);
     }
-    failures_.push_back(
-        Failure{
-            .origin = elsewhere ? origin : callOrigin,
-            .callee = calleeNameOf(candidate.runtimeGraph, candidate.nodeRef),
-            .reason = std::move(reason),
-        });
+    failures_.push_back(Failure{
+        .origin = elsewhere ? origin : callOrigin,
+        .callee = calleeNameOf(*program_, candidate.runtimeGraph, candidate.nodeRef),
+        .reason = std::move(reason),
+    });
 }
 
 void MacroEvaluator::reportFailures() {
@@ -500,7 +499,7 @@ MacroEvaluator::tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     if (!node || node->kind != GCNodeKind::Func || !node->isMacro()) {
         return std::nullopt;
     }
-    auto *calleeGraph = ownerGraph->directCalleeGraphOf(nodeRef);
+    auto *calleeGraph = program_->calleeOf(*ownerGraph, nodeRef);
     if (!areStaticRuntimeDataInputs(ownerGraph, ownerGraph->withInputsOf(nodeRef)) ||
         !areStaticRuntimeDataInputs(ownerGraph, ownerGraph->normInputsOf(nodeRef))) {
         noteNotStatic(
@@ -517,7 +516,11 @@ MacroEvaluator::tryExecuteDirectFunc(GCGraph *ownerGraph, gc_node_ref_t nodeRef,
     (void)os;
     CAMEL_LOG_INFO_S("Macro", "Execute direct macro '{}'.", calleeGraph->name());
     const slot_t value = executeFunction(
-        ::Function::create(calleeGraph, ensureMacroClosureType(calleeGraph), mm::autoSpace()),
+        ::Function::create(
+            program_,
+            calleeGraph->id(),
+            ensureMacroClosureType(calleeGraph),
+            mm::autoSpace()),
         [&](Frame *frame, GCGraph *runtimeGraph) {
             bindRuntimeGraphArgs(
                 frame,
@@ -743,7 +746,7 @@ slot_t MacroEvaluator::executeFunction(
 }
 
 slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t node) {
-    const camel::runtime::LoopView loop(*graph, node);
+    const camel::runtime::LoopView loop(*program_, *graph, node);
     const size_t k           = loop.stateCount();
     const size_t collections = loop.collectionCount();
     const bool wraps         = k > 1 || collections != 0;
@@ -804,8 +807,11 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
         }
         slot_t
         callRound(const camel::execute::LoopShape &shape, GCGraph *callee, const slot_t *element) {
-            auto *funcObj =
-                ::Function::create(callee, ensureMacroClosureType(callee), mm::autoSpace());
+            auto *funcObj = ::Function::create(
+                evaluator.program_,
+                callee->id(),
+                ensureMacroClosureType(callee),
+                mm::autoSpace());
             return evaluator.executeFunction(
                 funcObj,
                 [&](Frame *calleeFrame, GCGraph *) {
@@ -861,7 +867,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     if (recursionDepth_ > maxDepth_) {
         throw MacroExecutionError(tooManyNestedCalls(maxDepth_, runtimeGraph->name()));
     }
-    auto runtimeTopoIndices = camel::execute::buildReachableExecutionTopoIndices(runtimeGraph);
+    const auto &runtimeTopoIndices = runtimeGraph->execPlan().topo;
     std::optional<uint32_t> tillRuntimeIndex;
     std::optional<uint32_t> skipRuntimeIndex;
     std::optional<uint32_t> joinRuntimeIndex;
@@ -1012,12 +1018,13 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
         } break;
 
         case GCNodeKind::Func: {
-            auto *calleeRuntimeGraph = runtimeGraph->directCalleeGraphOf(runtimeNodeIndex);
+            auto *calleeRuntimeGraph = program_->calleeOf(*runtimeGraph, runtimeNodeIndex);
             ASSERT(
                 calleeRuntimeGraph != nullptr,
                 "Runtime FUNC node must have a direct runtime callee graph.");
             auto *funcObj = ::Function::create(
-                calleeRuntimeGraph,
+                program_,
+                calleeRuntimeGraph->id(),
                 ensureMacroClosureType(calleeRuntimeGraph),
                 mm::autoSpace());
             slot_t result = executeFunction(
@@ -1118,11 +1125,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
             const auto *body =
                 runtimeGraph->nodeBodyAs<camel::runtime::GCBrchBody>(runtimeNodeIndex);
             ASSERT(jumpIdx < arms.size(), "Macro BRCH arm index is out of range.");
-            const auto entry = camel::execute::resolveRuntimeBranchArmEntry(
-                runtimeGraph,
-                runtimeNodeIndex,
-                jumpIdx,
-                runtimeTopoIndices);
+            const auto entry = runtimeGraph->execPlan().branchArmEntriesOfNode(runtimeNodeIndex)[jumpIdx];
             if (skipRuntimeIndex.has_value()) {
                 enclosingArms.emplace_back(*skipRuntimeIndex, joinRuntimeIndex);
             }

@@ -47,7 +47,6 @@ third graph model.
 as:
 
 - source `GCGraph*`
-- stable ids
 - mangled names
 - display names
 - session state
@@ -78,9 +77,12 @@ story for names, diagnostics, or source handles.
 The current refactor step enforces the first part of that boundary:
 
 - `GraphDraft` no longer stores runtime source graph identity
-- `GraphDraft` no longer stores stable id / mangled name / graph name
+- `GraphDraft` no longer stores mangled name / graph name
 - runtime rewrite keeps those fields in `RuntimeGraphDraftSession`
-- `GraphDraft::encode(...)` now takes explicit identity/debug strings
+- `GraphDraft::encode(...)` now takes explicit debug strings
+- `GraphDraft` carries the `GraphId` of the graph it is a draft of (decode takes it from the
+  graph, a draft of a new graph is given one with `setId`), and how the graph was derived
+  (`typeSpecializationRoot`, `flags`)
 
 This is an intentional direction change, not a temporary adapter. Future
 compile-time migration should reuse the same contract instead of restoring

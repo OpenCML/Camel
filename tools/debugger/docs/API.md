@@ -216,7 +216,7 @@
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`，`?path=`，`?graphId=`。无 `graphId` 时返回根图摘要（id、name、children、dependencies）；有 `graphId` 时返回该图的 nodes、edges 及 children/dependencies 摘要。
-- **响应**：`{ "ok": true, "graph": { ... } }` 或 `{ "ok": false, "error": "..." }`。节点字段：`id`（图内整数 draft ref）、`graphId`（图 stableId）、`stableId`（`"{graphId}:{id}"` 会话内稳定复合 id）、`type`、`dataType`、`portName?/accsKey?/funcGraphId?/operName?`、`originId`、`span?`。`span` 为 `{ "file", "startLine", "startCharacter", "endLine", "endCharacter" }`，**0 基**（LSP 约定；DAP 客户端自行 +1）。`originId` 是统一的调试节点 id：与 `POST /api/gir-breakpoints` 的 `originIds`、暂停 payload 的 `origin` 同空间，运行时可经 runtime 图的节点 origin 解析。
+- **响应**：`{ "ok": true, "graph": { ... } }` 或 `{ "ok": false, "error": "..." }`。节点字段：`id`（图内整数 draft ref）、`graphId`（图的 `GraphId` 的十进制文本）、`nodeId`（`"{graphId}:{id}"` 会话内稳定复合 id）、`type`、`dataType`、`portName?/accsKey?/funcGraphId?/operName?`、`originId`、`span?`。`span` 为 `{ "file", "startLine", "startCharacter", "endLine", "endCharacter" }`，**0 基**（LSP 约定；DAP 客户端自行 +1）。`originId` 是统一的调试节点 id：与 `POST /api/gir-breakpoints` 的 `originIds`、暂停 payload 的 `origin` 同空间，运行时可经 runtime 图的节点 origin 解析。
 - **错误**：400（多任务且未指定 target）；未配置或 getGirJson 失败时 ok false；graphId 无效时 error "graph not found"。
 
 ---
@@ -225,7 +225,7 @@
 
 - **target**：可选。有 target 转发；无 target 时多任务 400，无任务或单任务用本地数据。
 - **请求**：可选 `?target=`。
-- **响应**：`{ "nodeIds": string[], "originIds": number[] }`，当前断点配置（节点型）。`originIds` 为 canonical 断点 id 空间（见 3.20），`nodeIds` 保留兼容（`0x...` 运行时指针或 stableId 字符串）。
+- **响应**：`{ "nodeIds": string[], "originIds": number[] }`，当前断点配置（节点型）。`originIds` 为 canonical 断点 id 空间（见 3.20），`nodeIds` 保留兼容（`0x...` 运行时指针或节点实体 id 字符串）。
 
 ---
 

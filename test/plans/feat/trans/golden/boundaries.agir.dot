@@ -14,7 +14,7 @@ digraph GraphIR {
                 N00 -> N01 [label="0|0", type="NORM"];
             }
             subgraph cluster_F04 {
-                label="__g_6__";
+                label="__g_5__";
                 F04 [label="ARGS", type="ARGS"];
                 O04 [label="EXIT", type="EXIT"];
                 N02 [label="t", type="PORT", param_name="t", param_kind="capture", param_index="0", value_type="Tensor"];
@@ -42,7 +42,7 @@ digraph GraphIR {
             N0D [label="JOIN", type="JOIN", role="branch-contract", origin=193, span="12:11-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
             N0E [label="BRCH", type="BRCH", origin=192, span="12:11-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="int"];
             N0F [label="__g_4__", type="FUNC", origin=194, span="12:30-12:37", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
-            N10 [label="__g_6__", type="FUNC", origin=197, span="12:43-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
+            N10 [label="__g_5__", type="FUNC", origin=197, span="12:43-12:59", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", value_type="Tensor"];
             F02 -> N08 [label="0", type="NORM_PORT"];
             N0D -> O02 [label="0", type="EXIT"];
             N08 -> N0A [label="0|0", type="NORM"];

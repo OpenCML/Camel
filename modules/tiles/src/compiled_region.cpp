@@ -19,7 +19,7 @@ namespace camel::tiles {
 namespace rt = runtime;
 namespace {
 // This is an in-process CUDA-policy artifact, not a second semantic identity.
-// Graph lineage/revision and the declaration epoch are supplied by FactStore.
+// Graph id/revision and the declaration epoch are supplied by FactStore.
 // Changing the lowering policy must change this hash; device-specific machine
 // compilation remains in the backend's context-local source cache.
 constexpr uint64_t compiledRegionTarget = 0x74696c6573000004ULL;
@@ -40,7 +40,7 @@ bool hasCompiledRegion(Function *function, rt::fact::FactStore &facts) {
     return function && function->graph() &&
            facts.get<std::shared_ptr<const Program>>(
                compiledRegionKind(),
-               rt::fact::Anchor{function->graph()},
+               rt::fact::Anchor{function->program(), function->graph()},
                compiledRegionTarget) != nullptr;
 }
 Program compileTypes(Function *function, rt::fact::FactStore &facts) {
@@ -50,7 +50,7 @@ Program compileTypes(Function *function, rt::fact::FactStore &facts) {
     // contents belong to the invocation, never to the graph's long-lived fact.
     if (function->tuple() && function->tuple()->size())
         throw UnsupportedComputation("type-only compilation requires a closure-free region");
-    const rt::fact::Anchor anchor{function->graph()};
+    const rt::fact::Anchor anchor{function->program(), function->graph()};
     if (auto cached = facts.get<std::shared_ptr<const Program>>(
             compiledRegionKind(),
             anchor,
@@ -79,7 +79,7 @@ Program prepareProgram(
         throw std::runtime_error("expected a function graph");
     // The outlined call expresses static compilation eligibility. Cache presence
     // is not that identity: another reader may already have discarded a stale fact.
-    const rt::fact::Anchor anchor{function->graph()};
+    const rt::fact::Anchor anchor{function->program(), function->graph()};
     if (function->tuple() && function->tuple()->size())
         return compile(function, arguments, facts);
     auto cached = facts.get<std::shared_ptr<const Program>>(

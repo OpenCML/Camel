@@ -23,7 +23,7 @@
 
 | 层次 | 含义 |
 |------|------|
-| **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GCFuncBody::calleeGraph`）克隆进调用方并返回 `DraftInlineResult`。 |
+| **`inlineCallableInDraft`**（`include/camel/runtime/draft_inline.h`） | **通用原语**：对**任意**满足前提的 `FUNC` 节点，把其被调图（`GraphDraft::calleeGraphOf`）克隆进调用方并返回 `DraftInlineResult`。 |
 | **`InlineRewritePass`（`std::opt::inline*`）** | **策略层**：先枚举 `FUNC` 候选，再按策略过滤，并通过 `inlineCallInOrder`（`include/camel/passes/opt/inline.h`）调用上述原语。支持 `Small` / `Arm` / `Hybrid` 三种策略（`InlineTargetStrategy`）。 |
 
 当前 pass 入口命名与含义（注册表见 `src/execute/pass.cpp`）：
@@ -96,7 +96,7 @@ GATE/臂访问预算，不递归展开嵌套 JOIN。已知结果不等于可删�
 3. 后续所有编辑都落在 draft 上（而非直接改 `GCGraph`）；
 4. 结束时：
    - 若无改动，不提交，沿用原图；
-   - 若有改动，调用 `session.commit()`，重新编码可达闭包并替换运行时根图。
+   - 若有改动，调用 `session.commit()`，为改过的图编码新版本并替换运行时根图。
 
 一次会话只内联会话开始时已存在的调用；由内联新暴露出的调用留给下一次会话。
 `applyOptimizeRewritePass` 重复开启会话直到某次会话不再有改动（会话数另有上限 `kMaxSessions`）。
@@ -113,7 +113,7 @@ GATE/臂访问预算，不递归展开嵌套 JOIN。已知结果不等于可删�
 运行时图序列（根图在首位）。对每张图，后继按下面的方式取得：
 
 - 该图在会话中还没有 draft：取运行时图上登记的 `dependencies()`、`subGraphs()` 与
-  `staticGraphRefs()`（`GCGraph::traceGraphs`）；
+  `staticGraphRefs()`（`GraphId`，经会话的工作 `Program` 取得图，`Program::traceGraphs`）；
 - 该图已有 draft：取 draft 上登记的同名三张表，加上 draft 中每个 `FUNC` 节点的被调图，
   以及静态槽位中的值（如函数值）所引用的图。
 
@@ -138,14 +138,16 @@ GATE/臂访问预算，不递归展开嵌套 JOIN。已知结果不等于可删�
 
 ### 4.1 图的身份
 
-draft 中所有指向其他图的引用都是运行时图指针（`GCGraph *`）：
+draft 中所有指向其他图的引用都是图的编号（`GraphId`）：
 
-- `FUNC` 节点负载中的 `GCFuncBody::calleeGraph`；
-- 静态槽位中的函数值所持有的图；
+- `FUNC` 节点负载（`GraphDraft::calleeIdOf` / `setCalleeGraph`；`LOOP` 同，`loopGraphsOf`）：负载是 draft 的 `payloadGraphs()` 表里的下标，表项是 `GraphId`；
+- 静态槽位中的函数值所持有的图（函数值是 `Function(Program, GraphId)`）；
 - draft 上登记的 `dependencies()`、`subGraphs()`、`staticGraphRefs()`。
 
-一张图被 `session.edit` 之后，别的图对它的引用不变，仍然是原来的 `GCGraph` 指针；会话用这个指针
-找到它的 draft。所以会话进行期间一张图只有一个身份，编辑某张图不需要改写其他图里的引用。
+编号经会话的工作 `Program`（`session.work()`）取得图：它是会话所改写的程序的副本，会话期间遇到的
+别的程序里的函数值、特化出的新图都被登记进去（`adoptProgram`、`adoptGraph`）。一张图被
+`session.edit` 之后，别的图对它的引用不变，仍然是同一个编号；提交时才为闭包里的每张图编出新版本，
+并绑定进新的 `Program`。所以会话进行期间一张图只有一个身份，编辑某张图不需要改写其他图里的引用。
 
 ### 4.2 读取被调图
 
@@ -163,16 +165,29 @@ draft 中所有指向其他图的引用都是运行时图指针（`GCGraph *`）
 
 `session.commit()` 负责把会话内的图引用换成新编码的图：
 
-1. 重新收集可达闭包，并为闭包内每张图准备 draft（未编辑过的图在此时解码）；
-2. 为每张图分配新的运行时图，得到“原图 → 新图”的映射；
-3. 按闭包逆序逐图编码，编码时 `FUNC` 的被调图、三张登记表以及静态槽位中的函数值全部经该映射改写；
+1. 重新收集可达闭包（按编号标记，沿冻结图的引用表或 draft 的引用；闭包在 draft 的引用、工作 `Program`
+   的表都没变时沿用上一次的结果）；对没有 `kGraphFlagGatesDissolved` 的图或有 draft 的图做 `GATE` 收口；
+2. 新程序先把闭包里每张图的现版本绑定进去；为需要新版本的图（改过的、原程序没有的、持有指向出现新版本之图的
+   函数值的）分配新的运行时图并绑定，得到“原图 → 新图”的映射；
+3. 逐图编码这些图，编码时三张登记表按 `GraphId` 写出，静态槽位中的函数值按“新程序有该编号则指向新程序”改写；
    编码出的依赖表由 draft 登记的依赖加上每个存活 `FUNC` 节点的被调图组成；
-4. 全部编码完成后做结构检查（见 §8.2）。
+4. 全部编码完成后做结构检查（见 §8.2），只检查新编码的图。
+
+没有改动的图原样留在新程序里，被调图换了版本也不必重编码（它们按编号找被调图）。
+
+**不变式（函数值）。** `Function` 是 `(Program, GraphId)`：它运行的是**它的程序**对该编号以及它所调用的一切所持有
+的版本。程序被替换时旧版本会被释放，所以一张图的静态槽位里的函数值必须指向一个仍持有这些版本的程序。提交因此
+保证：凡持有函数值（`kGraphRefStatic`）的图，只要该函数值指向的图经调用或函数值能到达某个获得新版本的图，这张图
+就一并重编码，其中的函数值改指向新程序。违反它的症状是在后一次提交之后运行（如 `grad` 在运行时展开）时读到已释放
+的旧被调图。
+
+闭包的遍历顺序（从根图广度优先，按各图引用表的顺序）是**引擎看到的顺序**，改写结果依赖它（特化的命名、内联决策、
+增长预算的消耗）；任何加速遍历的实现必须保持这个顺序，不能换成按编号或按集合的顺序。
 
 draft 引用的图必须在闭包内，否则编码时触发断言。引擎每一轮开始时也做同样的检查：闭包内任何
 `FUNC` 节点的被调图不在闭包中时抛出 `std::runtime_error`。
 
-提交之后，不在闭包内的图不会被重新编码；仍被某张登记表或某个节点引用的图则保留在程序中。
+提交之后，不在闭包内的图不会进入新程序（旧程序被替换时释放）；两个程序共有的图只释放一次。
 
 ---
 
@@ -401,7 +416,7 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
 
 ### 8.2 提交时的收口与结构检查
 
-`session.commit()` 在编码前对闭包内每个 draft 调用 `GraphDraft::dissolveUnorderedGates`：没有控制输入
+`session.commit()` 在编码前对闭包内每个 draft（以及还没被提交看过 `GATE` 的图）调用 `GraphDraft::dissolveUnorderedGates`：没有控制输入
 的 `GATE` 只是转发它的值，其值使用者改为直接读取该值，`GATE` 被删除。作为分支臂首或臂尾的 `GATE`
 不删除；它若没有控制输入，则改为等待所属的 `BRCH`。
 
@@ -430,7 +445,7 @@ draft 引用的图必须在闭包内，否则编码时触发断言。引擎每�
   - `edit / rootDraft / tryDraft`：按需取得某张运行时图的 draft
   - `collectReachableRuntimeGraphs`：枚举从根图可达的运行时图
   - `findSpecialization / rememberSpecialization`：会话内的特化缓存
-  - `commit`：重新编码可达闭包并替换运行时根图
+  - `commit`：只为改过的图编码新版本，构成新的 `Program` 并替换运行时根图
 
 ### 9.3 Draft 层（`GraphDraft`）
 

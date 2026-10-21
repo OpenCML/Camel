@@ -1,6 +1,7 @@
 id = "mm.mem_blocks"
 order = 371
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "mm", "array", "block", "diagnostics"]
 desc = "`std::mem::blocks()`: the data-block counters as a struct (`allocs`, `frees`, `live`, `bytes`), callable in every build with no import, so a program can read them between two operations (docs/design-principles 10.5). The counter identity holds, one block-growing loop moves them by one, and the reading is the same on every back end."
 

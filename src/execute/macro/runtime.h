@@ -64,7 +64,9 @@ struct MacroEvalResult {
 
 class MacroEvaluator {
   public:
-    explicit MacroEvaluator(const camel::core::context::context_ptr_t &context);
+    /// An evaluator of the macro calls of the graphs of `program`.
+    MacroEvaluator(
+        const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program);
     ~MacroEvaluator();
 
     std::optional<MacroEvalResult> tryEvaluate(const MacroCandidate &candidate, std::ostream &os);
@@ -98,6 +100,7 @@ class MacroEvaluator {
         std::span<const camel::runtime::gc_node_ref_t> normInputs, size_t withStart = 0) const;
 
     camel::core::context::context_ptr_t context_;
+    const camel::runtime::Program *program_;
     camel::core::context::FramePool framePool_;
     std::unique_ptr<MacroStaticAreaStore> staticAreas_;
     size_t recursionDepth_ = 0;

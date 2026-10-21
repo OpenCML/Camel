@@ -20,12 +20,17 @@
 // Versioned runtime GIR interchange, independent of layout engines and editor protocols.
 #pragma once
 #include "camel/execute/pass/runtime_trans.h"
+#include "camel/runtime/program.h"
 #include <string>
 std::string
 dumpJsonRuntimeGraph(camel::runtime::GCGraph *, const camel::core::context::context_ptr_t &);
+/// The same for a graph of `program`.
+std::string dumpJsonRuntimeGraph(
+    const camel::runtime::Program &program, camel::runtime::GCGraph *root,
+    const camel::core::context::context_ptr_t &ctx);
 class JsonGirDumpPass : public RuntimeGraphTranslatePass {
   public:
     explicit JsonGirDumpPass(const camel::core::context::context_ptr_t &ctx)
         : RuntimeGraphTranslatePass(ctx) {}
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *, std::ostream &) override;
+    const camel::runtime::Program *apply(const camel::runtime::Program *, std::ostream &) override;
 };

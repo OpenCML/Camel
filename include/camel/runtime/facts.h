@@ -50,15 +50,14 @@
  * read, the operator declaration epoch (OperatorTable::declarationEpoch) when its kind reads
  * declarations, and the target hash (class iii). A read compares the stamp with the graphs the
  * reader holds, in every build, and a stale fact reads as absent (and is dropped); the caller
- * computes it again. Until graph-model step 5 brings stable GraphIds and revisions:
- *   - a graph's identity across rewrites is GCGraph::lineage() (kept by every commit for the
- *     rewritten copy of a graph; a new graph gets a new one), and
- *   - its revision is GCGraph::serial(), a process-wide serial number: a commit keeps it for a
- *     graph it did not change and gives a new one to a graph it changed. The serial is
- *     transitive: a graph is changed when it was edited or when a graph it refers to (callee,
- *     nested graph, graph of a function constant, at any depth) was changed. A fact reads its
- *     anchors' graphs and, through them, only graphs they refer to; so the anchors' serials are
- *     the revisions of every graph it read, and the stamp holds one serial per anchored graph
+ * computes it again.
+ *   - A graph is named by its GraphId, which every commit keeps for the rewritten copy of a
+ *     graph.
+ *   - Its revision is GCGraph::revision(), a process-wide number: a commit keeps it for a
+ *     graph it did not change and gives a new one to a graph it changed: the revision of one
+ *     graph. A fact reads its anchors' graphs and, through them, graphs they refer to (callee,
+ *     nested graph, graph of a function constant, at any depth); the stamp holds, per anchored
+ *     graph, closureRevision (reachable.h) of it, which changes when any graph below it does
  *     (the conservative rule: any change anywhere below makes the fact stale).
  * A kind with Dependency::Cone also stores a hash of what it read (its dependency cone); when a
  * revision changed, the cone is hashed again and, when it is equal, the fact stays valid with a
@@ -73,6 +72,7 @@
 #pragma once
 
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <cstdint>
 #include <functional>
@@ -111,9 +111,12 @@ using KindId = uint32_t;
 inline constexpr KindId kNoKind = UINT32_MAX;
 
 /// What a fact is about: a node of a graph, or the graph as a whole (node == kInvalidNodeRef).
+/// `program` is the program the graph is read in: the graphs it refers to are the ones that
+/// program holds.
 struct Anchor {
-    const GCGraph *graph = nullptr;
-    gc_node_ref_t node   = kInvalidNodeRef;
+    const Program *program = nullptr;
+    const GCGraph *graph   = nullptr;
+    gc_node_ref_t node     = kInvalidNodeRef;
 };
 
 /// The value of a fact, type-erased; the kind records the type (KindInfo::payload).
@@ -121,8 +124,8 @@ using Value = std::shared_ptr<const void>;
 
 /// A stamp (design 10.3): when it was computed, in the terms a reader can compare.
 struct Stamp {
-    /// (lineage, serial) of every graph the fact read, one per distinct anchored graph.
-    std::vector<std::pair<uint64_t, uint64_t>> graphs;
+    /// (GraphId, revision) of every graph the fact read, one per distinct anchored graph.
+    std::vector<std::pair<GraphId, uint64_t>> graphs;
     /// OperatorTable::declarationEpoch() when computed; 0 for a kind that reads no declaration.
     uint64_t declarationEpoch = 0;
     /// The hash of the target configuration (class iii); 0 for target-independent kinds.
@@ -150,7 +153,7 @@ struct KindInfo {
     /// The anchors in `graph` at which the kind has a fact to compute (computeFacts): by
     /// default every node (Node) or the graph (Graph); CrossNode and CrossGraph kinds that
     /// want to be computed in bulk say where.
-    std::function<std::vector<std::vector<Anchor>>(const GCGraph &)> anchorsIn;
+    std::function<std::vector<std::vector<Anchor>>(const Program &, const GCGraph &)> anchorsIn;
 };
 
 /**
@@ -178,7 +181,7 @@ template <typename T> struct KindSpec {
     std::function<uint64_t(std::span<const Anchor>)> cone;
     std::function<std::string(const T &)> encode;
     std::function<std::optional<T>(std::string_view)> decode;
-    std::function<std::vector<std::vector<Anchor>>(const GCGraph &)> anchorsIn;
+    std::function<std::vector<std::vector<Anchor>>(const Program &, const GCGraph &)> anchorsIn;
 };
 
 /// Registers a kind, type-erased (see registerKind<T>). Throws std::invalid_argument naming the
@@ -260,8 +263,8 @@ struct Counts {
 /// One stored fact, as forEach shows it.
 struct StoredFact {
     KindId kind = kNoKind;
-    /// (lineage, node) of each anchor.
-    std::vector<std::pair<uint64_t, gc_node_ref_t>> anchors;
+    /// (GraphId, node) of each anchor.
+    std::vector<std::pair<GraphId, gc_node_ref_t>> anchors;
     Value value;
     Stamp stamp;
 };
@@ -298,7 +301,7 @@ class FactStore {
     std::optional<bool> verify(KindId kind, std::span<const Anchor> anchors);
 
     /// Drops the fact at `anchors`; drops every fact anchored (first anchor) on `graph`'s
-    /// lineage; drops everything.
+    /// GraphId; drops everything.
     void invalidate(KindId kind, std::span<const Anchor> anchors);
     void invalidateGraph(const GCGraph *graph);
     void clear();
@@ -345,13 +348,13 @@ class FactStore {
 
   private:
     struct Entry {
-        std::vector<std::pair<uint64_t, gc_node_ref_t>> anchors;
+        std::vector<std::pair<GraphId, gc_node_ref_t>> anchors;
         Value value;
         Stamp stamp;
     };
     struct Key {
         KindId kind;
-        uint64_t lineage;
+        GraphId graph;
         gc_node_ref_t node;
         bool operator==(const Key &) const = default;
     };
@@ -374,17 +377,17 @@ class FactStore {
 /// kind that has compute and is not GraphContent, at every anchor the kind names
 /// (KindInfo::anchorsIn): what a consumer would obtain one by one. Facts already stored and
 /// valid are kept.
-void computeFacts(FactStore &store, GCGraph *root);
+void computeFacts(FactStore &store, const Program &program);
 
 /**
  * `camel inspect --facts`: one line `FACT {json}` per fact about the graphs reachable from
  * `root`: the stored facts whose stamp matches those graphs, then the GraphContent facts read
  * from them. Fields: "kind", "version", "class" ("content", "derived", "target"), "anchors"
  * (a list of {"graph", "node"}, the node omitted for a graph as a whole), "value" (the kind's
- * print), "stamp" ({"revisions": [{"graph", "serial"}], "epoch", "target", "cone"}; null for
+ * print), "stamp" ({"revisions": [{"graph", "revision"}], "epoch", "target", "cone"}; null for
  * GraphContent). Stale facts are not printed (and are dropped). Ordered by kind, then graph and
  * node.
  */
-void dumpFacts(FactStore &store, GCGraph *root, std::ostream &os);
+void dumpFacts(FactStore &store, const Program &program, std::ostream &os);
 
 } // namespace camel::runtime::fact

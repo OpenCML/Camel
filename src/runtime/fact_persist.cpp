@@ -22,7 +22,8 @@
  *
  * The text form of a PortableFact is one line of tab-separated fields:
  *   kind <TAB> version <TAB> anchors <TAB> hashes <TAB> value
- * anchors: `stableId#node` (node `-` for a graph as a whole) joined by `;`; hashes: 16 hex
+ * anchors: `graph#node` (node `-` for a graph as a whole) joined by `;`, the graph by its name in
+ * the program (qualifiedNames); hashes: 16 hex
  * digits each, joined by `;`; the value is the kind's encoding, which must not contain a tab or
  * a newline (the core's encodings are short tokens).
  */
@@ -96,11 +97,11 @@ void hashStatic(Fnv &h, const GCGraph &graph, const GCNode &node) {
     h.str(text.str());
 }
 
-/// The content of one graph, with the graphs it refers to counted by their stable ids.
-uint64_t ownContentHash(const GCGraph &graph) {
+/// The content of one graph, with the graphs it refers to counted by their names.
+uint64_t ownContentHash(const Program &program, const GCGraph &graph) {
     const auto &table = camel::core::OperatorTable::instance();
     Fnv h;
-    h.str(graph.stableId());
+    h.str(graph.name());
     h.str(mangled(graph.funcType()));
     h.refs(graph.normPorts());
     h.refs(graph.withPorts());
@@ -140,12 +141,12 @@ uint64_t ownContentHash(const GCGraph &graph) {
             break;
         }
         case GCNodeKind::Func:
-            h.str(graph.directCalleeGraphOf(ref) ? graph.directCalleeGraphOf(ref)->stableId() : "");
+            h.str(program.calleeOf(graph, ref) ? program.calleeOf(graph, ref)->name() : "");
             break;
         case GCNodeKind::Loop:
             h.u64(static_cast<uint64_t>(graph.loopKindOf(ref)));
-            h.str(graph.loopCondGraphOf(ref) ? graph.loopCondGraphOf(ref)->stableId() : "");
-            h.str(graph.loopBodyGraphOf(ref)->stableId());
+            h.str(program.loopCondOf(graph, ref) ? program.loopCondOf(graph, ref)->name() : "");
+            h.str(program.loopBodyOf(graph, ref)->name());
             break;
         case GCNodeKind::Accs: {
             const auto *body = graph.nodeBodyAs<GCAccsBody>(ref);
@@ -215,6 +216,27 @@ std::vector<std::string_view> split(std::string_view text, char sep) {
     }
 }
 
+/// The graphs of a program by the names a PortableFact uses for them: the graph's name, and for
+/// the second and every later graph of one name, in the order of the GraphIds, the name with
+/// `~<ordinal>` appended. A name is only displayed and compared as a whole, never taken apart;
+/// it is the same in every process that builds the program the same way.
+std::unordered_map<const GCGraph *, std::string>
+qualifiedNames(const std::vector<GCGraph *> &graphs) {
+    std::vector<const GCGraph *> ordered(graphs.begin(), graphs.end());
+    std::sort(ordered.begin(), ordered.end(), [](const GCGraph *a, const GCGraph *b) {
+        return toValue(a->id()) < toValue(b->id());
+    });
+    std::unordered_map<std::string, size_t> seen;
+    std::unordered_map<const GCGraph *, std::string> names;
+    for (const GCGraph *graph : ordered) {
+        const size_t ordinal = ++seen[graph->name()];
+        names.emplace(
+            graph,
+            ordinal == 1 ? graph->name() : std::format("{}~{}", graph->name(), ordinal));
+    }
+    return names;
+}
+
 template <typename T> std::optional<T> number(std::string_view text, int base = 10) {
     T value{};
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), value, base);
@@ -226,7 +248,7 @@ template <typename T> std::optional<T> number(std::string_view text, int base = 
 
 } // namespace
 
-uint64_t portableGraphHash(const GCGraph *graph) {
+uint64_t portableGraphHash(const Program &program, const GCGraph *graph) {
     // The graph and everything below it, each once, in the order the reference tables give.
     Fnv h;
     std::queue<const GCGraph *> work;
@@ -236,8 +258,8 @@ uint64_t portableGraphHash(const GCGraph *graph) {
     while (!work.empty()) {
         const GCGraph *next = work.front();
         work.pop();
-        h.u64(ownContentHash(*next));
-        next->traceGraphs([&](GCGraph *ref) {
+        h.u64(ownContentHash(program, *next));
+        program.traceGraphs(*next, [&](GCGraph *ref) {
             if (seen.insert(ref).second) {
                 work.push(ref);
             }
@@ -299,24 +321,25 @@ std::optional<PortableFact> parsePortableFact(std::string_view line) {
     return fact;
 }
 
-std::vector<PortableFact> exportFacts(FactStore &store, GCGraph *root) {
-    const std::vector<GCGraph *> graphs = collectReachableGraphs(root);
-    std::unordered_map<uint64_t, const GCGraph *> byLineage;
+std::vector<PortableFact> exportFacts(FactStore &store, const Program &program) {
+    const std::vector<GCGraph *> graphs = collectReachableGraphs(program);
+    std::unordered_map<GraphId, const GCGraph *> byId;
     for (const GCGraph *graph : graphs) {
-        byLineage.emplace(graph->lineage(), graph);
+        byId.emplace(graph->id(), graph);
     }
+    const auto names = qualifiedNames(graphs);
     std::unordered_map<const GCGraph *, uint64_t> hashes;
     const auto portable =
         [&](const KindInfo &kind, std::span<const Anchor> anchors, const void *value) {
             PortableFact fact{.kind = kind.key, .version = kind.version};
             std::vector<const GCGraph *> distinct;
             for (const Anchor &anchor : anchors) {
-                fact.anchors.emplace_back(anchor.graph->stableId(), anchor.node);
+                fact.anchors.emplace_back(names.at(anchor.graph), anchor.node);
                 if (std::find(distinct.begin(), distinct.end(), anchor.graph) == distinct.end()) {
                     distinct.push_back(anchor.graph);
                     auto [it, inserted] = hashes.try_emplace(anchor.graph, 0);
                     if (inserted) {
-                        it->second = portableGraphHash(anchor.graph);
+                        it->second = portableGraphHash(program, anchor.graph);
                     }
                     fact.graphHashes.push_back(it->second);
                 }
@@ -334,9 +357,9 @@ std::vector<PortableFact> exportFacts(FactStore &store, GCGraph *root) {
             continue;
         }
         std::vector<Anchor> anchors;
-        for (const auto &[lineage, node] : fact.anchors) {
-            if (auto it = byLineage.find(lineage); it != byLineage.end()) {
-                anchors.push_back(Anchor{it->second, node});
+        for (const auto &[id, node] : fact.anchors) {
+            if (auto it = byId.find(id); it != byId.end()) {
+                anchors.push_back(Anchor{&program, it->second, node});
             }
         }
         if (anchors.size() == fact.anchors.size() &&
@@ -350,13 +373,13 @@ std::vector<PortableFact> exportFacts(FactStore &store, GCGraph *root) {
             continue;
         }
         for (const GCGraph *graph : graphs) {
-            const auto all = kind.anchorsIn ? kind.anchorsIn(*graph) : [&] {
+            const auto all = kind.anchorsIn ? kind.anchorsIn(program, *graph) : [&] {
                 std::vector<std::vector<Anchor>> each;
                 if (kind.scope == Scope::Graph) {
-                    each.push_back({Anchor{graph}});
+                    each.push_back({Anchor{&program, graph}});
                 } else {
                     for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
-                        each.push_back({Anchor{graph, ref}});
+                        each.push_back({Anchor{&program, graph, ref}});
                     }
                 }
                 return each;
@@ -393,7 +416,7 @@ std::string_view importResultName(ImportResult result) {
     return "?";
 }
 
-ImportResult importFact(FactStore &store, GCGraph *root, const PortableFact &fact) {
+ImportResult importFact(FactStore &store, const Program &program, const PortableFact &fact) {
     const KindId id = findKind(fact.kind);
     if (id == kNoKind || !kindInfo(id).decode || kindInfo(id).cls == FactClass::Target) {
         return ImportResult::UnknownKind;
@@ -402,19 +425,20 @@ ImportResult importFact(FactStore &store, GCGraph *root, const PortableFact &fac
     if (kind.version != fact.version) {
         return ImportResult::OtherVersion;
     }
-    std::unordered_map<std::string_view, const GCGraph *> byStableId;
-    for (const GCGraph *graph : collectReachableGraphs(root)) {
-        byStableId.emplace(graph->stableId(), graph);
+    const std::vector<GCGraph *> programGraphs = collectReachableGraphs(program);
+    const auto names                           = qualifiedNames(programGraphs);
+    std::unordered_map<std::string_view, const GCGraph *> byName;
+    for (const GCGraph *graph : programGraphs) {
+        byName.emplace(names.at(graph), graph);
     }
     std::vector<Anchor> anchors;
     std::vector<const GCGraph *> distinct;
-    for (const auto &[stableId, node] : fact.anchors) {
-        auto it = byStableId.find(stableId);
-        if (it == byStableId.end() ||
-            (node != kInvalidNodeRef && !it->second->containsNodeRef(node))) {
+    for (const auto &[name, node] : fact.anchors) {
+        auto it = byName.find(name);
+        if (it == byName.end() || (node != kInvalidNodeRef && !it->second->containsNodeRef(node))) {
             return ImportResult::UnknownGraph;
         }
-        anchors.push_back(Anchor{it->second, node});
+        anchors.push_back(Anchor{&program, it->second, node});
         if (std::find(distinct.begin(), distinct.end(), it->second) == distinct.end()) {
             distinct.push_back(it->second);
         }
@@ -423,7 +447,7 @@ ImportResult importFact(FactStore &store, GCGraph *root, const PortableFact &fac
         return ImportResult::GraphChanged;
     }
     for (size_t i = 0; i < distinct.size(); ++i) {
-        if (portableGraphHash(distinct[i]) != fact.graphHashes[i]) {
+        if (portableGraphHash(program, distinct[i]) != fact.graphHashes[i]) {
             return ImportResult::GraphChanged;
         }
     }

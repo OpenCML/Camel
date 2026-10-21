@@ -65,20 +65,26 @@ struct RegionAnalysis {
     std::vector<std::string> exclusions;
     RegionTransfers transfers;
 };
-RegionAnalysis analyzeRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+RegionAnalysis analyzeRegions(
+    const runtime::Program &program, const runtime::GCGraph &graph,
+    runtime::fact::FactStore &facts);
 std::string loopEligibility(
-    const runtime::GCGraph &graph, runtime::gc_node_ref_t node, runtime::fact::FactStore &facts);
+    const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t node,
+    runtime::fact::FactStore &facts);
 struct RegionDeviceOps {
     operator_t upload, execute, download;
     std::string uploadUri = "tiles:upload", executeUri = "tiles:run_device",
                 downloadUri = "tiles:download";
 };
 void registerRegionPass(RegionDeviceOps preferred);
-// Rewrites a reachable graph set; null executor produces ordinary CPU CALL nodes.
-// Non-null executors use the supplied stable operator URI and packed arguments.
-runtime::GCGraph *outlineRegions(
-    core::context::Context &context, runtime::GCGraph *root, operator_t executor,
-    const std::string &uri, size_t &count, const RegionDeviceOps *device = nullptr);
+// Rewrites the graphs reachable from `root`, a graph of `program`, and returns the program of
+// the rewritten graphs (`program` itself when no region was outlined, `count` is 0 then); null
+// executor produces ordinary CPU CALL nodes. Non-null executors use the supplied stable
+// operator URI and packed arguments.
+const runtime::Program *outlineRegions(
+    core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
+    operator_t executor, const std::string &uri, size_t &count,
+    const RegionDeviceOps *device = nullptr);
 // Register semantic-equivalence checks only when CAMEL_ENABLE_TEST_PASSES is enabled.
 void registerRegionTestPasses(
     operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred);
@@ -87,5 +93,7 @@ slot_t testCompiledCall(ArgsView &with, ArgsView &norm, core::context::Context &
 
 // Inspect one function graph without executing it or initializing CUDA. This is
 // candidate analysis with extracted drafts, not automatic graph execution.
-std::string inspectRegions(const runtime::GCGraph &graph, runtime::fact::FactStore &facts);
+std::string inspectRegions(
+    const runtime::Program &program, const runtime::GCGraph &graph,
+    runtime::fact::FactStore &facts);
 } // namespace camel::tiles

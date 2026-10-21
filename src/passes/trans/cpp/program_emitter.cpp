@@ -148,7 +148,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
     // in place.
     std::unordered_set<const GCGraph *> scanning;
     std::function<void(GCGraph *)> scan = [&](GCGraph *graph) {
-        for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+        for (gc_node_ref_t ref : graph->execPlan().topo) {
             const auto *node = graph->node(ref);
             if (node->kind == GCNodeKind::Data) {
                 if (GCGraph *function = functionConstant(graph, ref);
@@ -160,13 +160,13 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
             if (node->kind != GCNodeKind::Func) {
                 continue;
             }
-            GCGraph *callee = graph->directCalleeGraphOf(ref);
+            GCGraph *callee = parts_.program->calleeOf(*graph, ref);
             if (callee == nullptr) {
                 continue;
             }
             // An arm is lowered in place, unless it is already being lowered further out (a
             // rewrite can leave an arm graph that reaches itself): then it is a function.
-            if (isArmCall(graph, ref) && !scanning.contains(callee)) {
+            if (isArmCall(*parts_.program, graph, ref) && !scanning.contains(callee)) {
                 scanning.insert(callee);
                 scan(callee);
                 scanning.erase(callee);
@@ -328,6 +328,14 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
             kind  = "Float";
             value = std::format("static_cast<float>(args.number({}))", i);
             break;
+        case TypeCode::Complex64:
+            kind  = "ComplexFloat";
+            value = std::format("args.complexFloat({})", i);
+            break;
+        case TypeCode::Complex128:
+            kind  = "ComplexDouble";
+            value = std::format("args.complexDouble({})", i);
+            break;
         case TypeCode::Bool:
             kind  = "Bool";
             value = std::format("args.boolean({})", i);
@@ -342,8 +350,8 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
                 port,
                 std::format(
                     "the parameter '{}' of 'main' has type '{}', and std::cpp reads from the "
-                    "command line only the parameters of type int, i32, float, f32, bool and "
-                    "string (a tensor or a struct is read from files by camel only)",
+                    "command line only the parameters of type int, i32, float, f32, c64, c128, "
+                    "bool and string (a tensor or a struct is read from files by camel only)",
                     names[i],
                     type != nullptr ? type->toString() : std::string("void")),
                 false};
@@ -462,7 +470,7 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
 
 std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
     std::string out = std::format("// graph '{}':\n", graph->name());
-    for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+    for (gc_node_ref_t ref : graph->execPlan().topo) {
         const auto *node = graph->node(ref);
         out += std::format(
             "//   [{}] {} : {}\n",
@@ -473,7 +481,8 @@ std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
     return out;
 }
 
-std::string ProgramEmitter::emit(GCGraph *root) {
+std::string ProgramEmitter::emit(const camel::runtime::Program &runtimeProgram, GCGraph *root) {
+    parts_.program     = &runtimeProgram;
     const bool program = mode_ == CppEmitMode::Plain;
     for (const char *reserved : {"entry", "rt", "std", "main", "depth", "lit", "program"}) {
         globals_.reserve(reserved);
@@ -499,7 +508,7 @@ std::string ProgramEmitter::emit(GCGraph *root) {
         }
         roots.push_back(entry.main);
     } else {
-        for (GCGraph *graph : root->subGraphs()) {
+        for (GCGraph *graph : runtimeProgram.subGraphs(*root)) {
             if (graph != nullptr && !isAnonymous(graph->name())) {
                 roots.push_back(graph);
             }

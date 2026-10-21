@@ -26,16 +26,14 @@
  *                       permission column). Its kinds still encode and decode their values, so
  *                       that a loaded value can be compared with the graph it is loaded with.
  *   (ii)  Derived       a fact whose kind encodes it is written as a PortableFact: the kind's key
- *                       and version, the anchors by the graph's stable id and the node, the
- *                       portable content hash of every anchored graph, the encoded value. Nothing
- *                       process-local enters it (no lineage, serial, OperId, TypeId, pointer);
- *                       the operators a graph uses enter its hash by URI, semantics key and
- *                       version, and traits. Loading checks the kind and version, finds each
- *                       graph by its stable id, compares its hash, decodes the value and stores it
- *                       stamped with the current revisions; any mismatch drops the fact.
- *   (iii) Target        never persisted by the core: a back end keeps its own compile cache, keyed
- *                       as design 10.6 says (content hash, OperatorKeys, permissions, hardware,
- *                       driver, compiler and module versions, options). registerKind refuses
+ *                       and version, the anchors by the graph's name in the program and the node,
+ * the portable content hash of every anchored graph, the encoded value. Nothing process-local
+ * enters it (no GraphId, revision, OperId, TypeId, pointer); the operators a graph uses enter its
+ * hash by URI, semantics key and version, and traits. Loading checks the kind and version, finds
+ * each graph by its name, compares its hash, decodes the value and stores it stamped with the
+ * current revisions; any mismatch drops the fact. (iii) Target        never persisted by the core:
+ * a back end keeps its own compile cache, keyed as design 10.6 says (content hash, OperatorKeys,
+ * permissions, hardware, driver, compiler and module versions, options). registerKind refuses
  *                       encode/decode for these kinds.
  *
  * Note that `.cmo` holds the graphs the front end built (graph-model 4.6): what a cache can hold
@@ -58,17 +56,18 @@ namespace camel::runtime::fact {
  * A hash of the content of `graph` and of every graph it refers to (at any depth), the same in
  * every process for the same program: the function type, ports, numeric permissions, and every
  * node's kind, flags, type (mangled), slot, inputs and payload, where a referred graph counts by
- * its stable id and its own content, an operator by its URI, semantics key with version and
+ * its name and its own content, an operator by its URI, semantics key with version and
  * traits, a static constant by its type and value (a scalar by its bits, an object by its
  * printed form). Source positions do not enter it.
  */
-uint64_t portableGraphHash(const GCGraph *graph);
+uint64_t portableGraphHash(const Program &program, const GCGraph *graph);
 
 /// One fact in the form a cache would hold it.
 struct PortableFact {
     std::string kind;
     uint16_t version = 0;
-    /// (stable id of the graph, node; kInvalidNodeRef for the graph as a whole) per anchor.
+    /// (name of the graph in the program, node; kInvalidNodeRef for the graph as a whole) per
+    /// anchor. The name is the graph's own, with `~<ordinal>` for the second graph of a name.
     std::vector<std::pair<std::string, gc_node_ref_t>> anchors;
     /// portableGraphHash of each distinct anchored graph, in the order of the anchors.
     std::vector<uint64_t> graphHashes;
@@ -84,7 +83,7 @@ std::optional<PortableFact> parsePortableFact(std::string_view line);
 
 /// The facts about the graphs reachable from `root` a cache could keep: every valid stored fact
 /// of a Derived kind that encodes, and every GraphContent value of a kind that encodes.
-std::vector<PortableFact> exportFacts(FactStore &store, GCGraph *root);
+std::vector<PortableFact> exportFacts(FactStore &store, const Program &program);
 
 /// What loading one PortableFact did.
 enum class ImportResult : uint8_t {
@@ -101,6 +100,6 @@ enum class ImportResult : uint8_t {
 std::string_view importResultName(ImportResult result);
 
 /// Loads `fact` into `store` against the program of `root` (see the file comment).
-ImportResult importFact(FactStore &store, GCGraph *root, const PortableFact &fact);
+ImportResult importFact(FactStore &store, const Program &program, const PortableFact &fact);
 
 } // namespace camel::runtime::fact

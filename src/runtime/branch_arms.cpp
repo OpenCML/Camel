@@ -22,7 +22,7 @@
  * (docs/technical/17_graph_rewrite_api_contracts.md, section 4.1).
  *
  * Every back end runs a branch the same way: the execution order
- * (buildReachableExecutionTopoIndices) lays out, between a BRCH and its JOIN, one range per arm,
+ * (ExecPlan::topo) lays out, between a BRCH and its JOIN, one range per arm,
  * each ending at the arm's tail; the BRCH jumps to the range of the arm it selects and the tail
  * jumps to the JOIN. That is only an execution of the graph when the nodes that run because of
  * the BRCH split into arms: each of them feeds exactly one tail. A rewrite that breaks this
@@ -34,6 +34,7 @@
 #include "runtime/graph_build.h"
 
 #include "camel/runtime/graph.h"
+#include "camel/runtime/program.h"
 
 #include <array>
 #include <format>
@@ -85,7 +86,7 @@ std::string_view kindName(GCNodeKind kind) {
 }
 
 /// "OPER 17 (:io/println)", "FUNC 9 (calls 'f')", "GATE 12".
-std::string describe(const GCGraph *graph, gc_node_ref_t ref) {
+std::string describe(const Program &program, const GCGraph *graph, gc_node_ref_t ref) {
     const GCNode *node = graph->node(ref);
     if (!node) {
         return std::format("node {}", ref);
@@ -94,7 +95,7 @@ std::string describe(const GCGraph *graph, gc_node_ref_t ref) {
     if (node->kind == GCNodeKind::Oper) {
         text += std::format(" ({})", graph->nodeBodyAs<GCOperBody>(ref)->uri());
     } else if (node->kind == GCNodeKind::Func) {
-        if (const GCGraph *callee = graph->directCalleeGraphOf(ref)) {
+        if (const GCGraph *callee = program.calleeOf(*graph, ref)) {
             text += std::format(" (calls '{}')", callee->name());
         }
     }
@@ -112,7 +113,7 @@ std::string describe(const GCGraph *graph, gc_node_ref_t ref) {
 
 } // namespace
 
-void validateRuntimeBranchArms(const GCGraph *graph) {
+void validateRuntimeBranchArms(const Program &program, const GCGraph *graph) {
     if (!graph || !graph->hasNodePayload()) {
         return;
     }
@@ -270,7 +271,7 @@ void validateRuntimeBranchArms(const GCGraph *graph) {
                         std::format(
                             "{} runs between BRCH {} and its JOIN {} and belongs to two arms, {} "
                             "and {}: it would run only when arm {} is taken, and arm {} reads it",
-                            describe(graph, ref),
+                            describe(program, graph, ref),
                             brch,
                             join,
                             owner[ref],
@@ -295,7 +296,7 @@ void validateRuntimeBranchArms(const GCGraph *graph) {
                     std::format(
                         "{} runs between BRCH {} and its JOIN {} and belongs to no arm (no arm's "
                         "result depends on it): no back end would run it",
-                        describe(graph, ref),
+                        describe(program, graph, ref),
                         brch,
                         join));
             }
@@ -339,7 +340,7 @@ void validateRuntimeBranchArms(const GCGraph *graph) {
                             std::format(
                                 "{} follows the head {} of arm {} of BRCH {} and belongs to arm "
                                 "{}",
-                                describe(graph, ref),
+                                describe(program, graph, ref),
                                 head,
                                 arm,
                                 brch,

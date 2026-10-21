@@ -22,15 +22,18 @@
 #include "camel/runtime/reachable.h"
 #include "compile.h"
 
-camel::runtime::GCGraph *BytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+BytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     std::vector<camel::runtime::GCGraph *> allGraphs =
-        camel::runtime::collectReachableGraphs(graph);
+        camel::runtime::collectReachableGraphs(*program, graph);
 
     os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";
 
     for (auto *g : allGraphs) {
         auto bytecodes = compile(
             context_,
+            *program,
             g,
             {
                 .enableTailCallDetection = true,
@@ -53,15 +56,17 @@ camel::runtime::GCGraph *BytecodeDumpPass::apply(camel::runtime::GCGraph *graph,
     return nullptr;
 }
 
-camel::runtime::GCGraph *
-LinkedBytecodeDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
-    auto linked = compileAndLink(
+const camel::runtime::Program *
+LinkedBytecodeDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
+    auto linked                    = compileAndLink(
         context_,
+        *program,
         graph,
         {
-            .enableTailCallDetection = true,
-            .enableInlineOperators   = true,
-            .optimizationStrategies  = OptimizationStrategyCode::All,
+                               .enableTailCallDetection = true,
+                               .enableInlineOperators   = true,
+                               .optimizationStrategies  = OptimizationStrategyCode::All,
         });
 
     os << "[index] opcode (opsize) [self] | [fastops] | <with> (norm) | extra\n";

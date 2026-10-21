@@ -394,24 +394,22 @@ int runCommand(int argc, char *argv[]) {
             }
             if (Inspect::dumpGIR) {
                 GraphVizDumpPass pass(ctx);
-                auto *root = ctx->runtimeRootGraph();
-                (void)pass.apply(root, os);
+                (void)pass.apply(ctx->runtimeProgram(), os);
             }
             if (Inspect::dumpTNS) {
-                auto *entry = ctx->runtimeRootGraph();
                 TopoNodeSeqDumpPass pass(ctx);
-                (void)pass.apply(entry, os);
+                (void)pass.apply(ctx->runtimeProgram(), os);
             }
             if (Inspect::dumpInstances) {
-                if (auto *root = ctx->runtimeRootGraph()) {
-                    camel::runtime::dumpOperatorInstances(root, os);
+                if (ctx->runtimeProgram()->root()) {
+                    camel::runtime::dumpOperatorInstances(*ctx->runtimeProgram(), os);
                 }
             }
             if (Inspect::dumpFacts) {
-                if (auto *root = ctx->runtimeRootGraph()) {
+                if (ctx->runtimeProgram()->root()) {
                     camel::runtime::fact::FactStore &facts = ctx->facts();
-                    camel::runtime::fact::computeFacts(facts, root);
-                    camel::runtime::fact::dumpFacts(facts, root, os);
+                    camel::runtime::fact::computeFacts(facts, *ctx->runtimeProgram());
+                    camel::runtime::fact::dumpFacts(facts, *ctx->runtimeProgram(), os);
                 }
             }
             if (Inspect::dumpOps) {
@@ -458,7 +456,8 @@ int runCommand(int argc, char *argv[]) {
         CAMEL_LOG_INFO_S(
             "Main",
             "run | compile | runtime_root={} | user_modules={}",
-            ctx->runtimeRootGraph() ? ctx->runtimeRootGraph()->name() : std::string{"<none>"},
+            ctx->runtimeProgram()->root() ? ctx->runtimeProgram()->root()->name()
+                                          : std::string{"<none>"},
             ctx->allUserModules().size());
 
         if (selectedCommand == Command::Run) {
@@ -485,18 +484,18 @@ int runCommand(int argc, char *argv[]) {
                     // on the command line leaves no effect and no artefact.
                     requireKnownPasses(Run::resolvedPassList, ctx);
                     requireKnownPasses(Run::fallbackPasses, ctx);
-                    auto *graph = ctx->runtimeRootGraph();
+                    const auto *program = ctx->runtimeProgram();
                     if (phase::enabled()) {
                         // The size of the program as the passes receive it.
-                        const GraphStats stats = collectGraphStats(ctx, graph);
+                        const GraphStats stats = collectGraphStats(*program, program->root());
                         phase::count("graph.graphs", stats.graphs);
                         phase::count("graph.nodes", stats.nodes);
                         phase::count("graph.edges", stats.edges);
                     }
                     // The values given for the parameters of `main` become constants of the
                     // entry graph before the first pass sees it.
-                    graph = camel::execute::bindEntryArgumentSpecs(ctx, graph, Run::entryArgs);
-                    if (graph == nullptr) {
+                    program = camel::execute::bindEntryArgumentSpecs(ctx, program, Run::entryArgs);
+                    if (program == nullptr) {
                         ctx->runtimeDiagSink()->dump(os, useJsonFormat);
                         return 1;
                     }
@@ -522,7 +521,7 @@ int runCommand(int argc, char *argv[]) {
                                       << ": " << ec.message() << endl;
                             return 1;
                         }
-                        writePassDump(passDump, "input", graph);
+                        writePassDump(passDump, "input", program->root());
                         setPassSnapshotHandler(&passDumpHandler, &passDump);
                     }
                     // A pass's warnings about the program go where the compiler's go: to
@@ -557,8 +556,8 @@ int runCommand(int argc, char *argv[]) {
                             std::cerr << std::flush;
                         },
                         nullptr);
-                    auto result = applyPassesDetailed(graph, Run::resolvedPassList, ctx, os);
-                    graph       = result.graph;
+                    auto result = applyPassesDetailed(program, Run::resolvedPassList, ctx, os);
+                    program     = result.program;
                     if (result.failed()) {
                         const auto &diags = ctx->runtimeDiagSink();
                         if (diags->hasErrors()) {
@@ -571,8 +570,8 @@ int runCommand(int argc, char *argv[]) {
                     }
                     if (!result.consumed()) {
                         auto fallbackResult =
-                            applyPassesDetailed(graph, Run::fallbackPasses, ctx, os);
-                        graph = fallbackResult.graph;
+                            applyPassesDetailed(program, Run::fallbackPasses, ctx, os);
+                        program = fallbackResult.program;
                         if (fallbackResult.failed()) {
                             const auto &diags = ctx->runtimeDiagSink();
                             if (diags->hasErrors()) {

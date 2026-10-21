@@ -555,7 +555,7 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         ASSERT(!wargs.empty(), "CALL requires with-arg[0] as Function.");
         auto *function = frame->get<Function *>(wargs[0]);
         ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
-        auto *runtimeTarget = function->graph();
+        auto *runtimeTarget = vm->graphOfFunction(function);
         ASSERT(
             runtimeTarget != nullptr,
             "FastVM JIT indirect CALL requires a materialized runtime graph target.");

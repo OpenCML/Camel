@@ -59,8 +59,20 @@ remapNodeSpan(std::span<const gc_node_ref_t> refs, const std::vector<gc_node_ref
     return remapped;
 }
 
+std::vector<std::byte> loopPayloadBytes(GraphDraft &owner, const GCLoopBody &loop) {
+    const GCLoopRef ref{
+        .kind            = loop.kind,
+        .condRef         = owner.payloadGraphIndexOf(loop.condGraph),
+        .bodyRef         = owner.payloadGraphIndexOf(loop.bodyGraph),
+        .collectionCount = loop.collectionCount,
+    };
+    std::vector<std::byte> bytes(sizeof(GCLoopRef));
+    std::memcpy(bytes.data(), &ref, sizeof(ref));
+    return bytes;
+}
+
 std::vector<std::byte> clonePayloadBytes(
-    const GCGraph *sourceGraph, gc_node_ref_t sourceRef,
+    GraphDraft &owner, const GCGraph *sourceGraph, gc_node_ref_t sourceRef,
     const std::vector<gc_node_ref_t> &mapping) {
     const GCNode *sourceNode = sourceGraph->node(sourceRef);
     ASSERT(sourceNode != nullptr, "Runtime draft clone encountered a null source node.");
@@ -84,17 +96,15 @@ std::vector<std::byte> clonePayloadBytes(
     }
 
     if (sourceNode->kind == GCNodeKind::Func) {
-        // A frozen FUNC names its callee by reference-table index; a draft holds the callee.
-        const GCFuncBody callee{.calleeGraph = sourceGraph->directCalleeGraphOf(sourceRef)};
-        std::vector<std::byte> bytes(sizeof(GCFuncBody));
+        // The index is into the source graph's reference table: the owner's has its own.
+        const GCFuncRef callee{
+            .ref = owner.payloadGraphIndexOf(sourceGraph->calleeIdOf(sourceRef))};
+        std::vector<std::byte> bytes(sizeof(GCFuncRef));
         std::memcpy(bytes.data(), &callee, sizeof(callee));
         return bytes;
     }
     if (sourceNode->kind == GCNodeKind::Loop) {
-        const GCLoopBody loop = loopBodyOf(*sourceGraph, sourceRef);
-        std::vector<std::byte> bytes(sizeof(GCLoopBody));
-        std::memcpy(bytes.data(), &loop, sizeof(loop));
-        return bytes;
+        return loopPayloadBytes(owner, loopBodyOf(*sourceGraph, sourceRef));
     }
     const auto body = sourceGraph->nodePayloadBytes(sourceRef);
     std::vector<std::byte> bytes(body.begin(), body.end());
@@ -128,7 +138,7 @@ camel::core::type::Type *resolveRuntimeNodeDataType(const GCGraph *graph, const 
 }
 
 std::vector<std::byte> clonePayloadBytes(
-    const GraphDraft &sourceDraft, gc_node_ref_t sourceRef,
+    GraphDraft &owner, const GraphDraft &sourceDraft, gc_node_ref_t sourceRef,
     const std::vector<gc_node_ref_t> &mapping) {
     const DraftNodeHeader *sourceNode = sourceDraft.header(sourceRef);
     ASSERT(sourceNode != nullptr, "Draft graph clone encountered a missing source node.");
@@ -150,6 +160,16 @@ std::vector<std::byte> clonePayloadBytes(
             arms[i].tail = remapNodeRef(sourceArms[i].tail, mapping);
         }
         return bytes;
+    }
+
+    if (sourceNode->kind == GCNodeKind::Func) {
+        const GCFuncRef callee{.ref = owner.payloadGraphIndexOf(sourceDraft.calleeIdOf(sourceRef))};
+        std::vector<std::byte> bytes(sizeof(GCFuncRef));
+        std::memcpy(bytes.data(), &callee, sizeof(callee));
+        return bytes;
+    }
+    if (sourceNode->kind == GCNodeKind::Loop) {
+        return loopPayloadBytes(owner, sourceDraft.loopGraphsOf(sourceRef));
     }
 
     std::vector<std::byte> bytes(
@@ -196,13 +216,13 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
     // Inline-style clone should preserve the source graph's cross-graph registry.
     // The owner draft may already reference some of them, so GraphDraft keeps the
     // vectors de-duplicated.
-    for (GCGraph *graph : sourceGraph->dependencies()) {
+    for (GraphId graph : sourceGraph->dependencies()) {
         owner.addDependency(graph);
     }
-    for (GCGraph *graph : sourceGraph->subGraphs()) {
+    for (GraphId graph : sourceGraph->subGraphs()) {
         owner.addSubGraph(graph);
     }
-    for (GCGraph *graph : sourceGraph->staticGraphRefs()) {
+    for (GraphId graph : sourceGraph->staticGraphRefs()) {
         owner.addStaticGraphRef(graph);
     }
     CAMEL_LOG_INFO_S("DraftClone", "Clone copied cross-graph registries.");
@@ -251,7 +271,7 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
 
         CAMEL_LOG_INFO_S("DraftClone", "Clone payload for sourceRef={}.", sourceRef);
         const std::vector<std::byte> payload =
-            clonePayloadBytes(sourceGraph, sourceRef, result.sourceToCloned);
+            clonePayloadBytes(owner, sourceGraph, sourceRef, result.sourceToCloned);
         CAMEL_LOG_INFO_S(
             "DraftClone",
             "Clone payload ready for sourceRef={} bytes={}.",
@@ -373,13 +393,13 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
 }
 
 DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDraft &sourceDraft) {
-    for (GCGraph *graph : sourceDraft.dependencies()) {
+    for (GraphId graph : sourceDraft.dependencies()) {
         owner.addDependency(graph);
     }
-    for (GCGraph *graph : sourceDraft.subGraphs()) {
+    for (GraphId graph : sourceDraft.subGraphs()) {
         owner.addSubGraph(graph);
     }
-    for (GCGraph *graph : sourceDraft.staticGraphRefs()) {
+    for (GraphId graph : sourceDraft.staticGraphRefs()) {
         owner.addStaticGraphRef(graph);
     }
 
@@ -421,7 +441,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
             remapNodeSpan(sourceDraft.ctrlInputsOf(sourceRef), result.sourceToCloned));
 
         const std::vector<std::byte> payload =
-            clonePayloadBytes(sourceDraft, sourceRef, result.sourceToCloned);
+            clonePayloadBytes(owner, sourceDraft, sourceRef, result.sourceToCloned);
 
         gc_slot_idx_t mappedDataIndex = sourceNode->dataIndex;
         if (mappedDataIndex > 0) {

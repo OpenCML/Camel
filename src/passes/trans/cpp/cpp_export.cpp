@@ -43,15 +43,19 @@ const char *passName(CppEmitMode mode) {
 
 } // namespace
 
-camel::runtime::GCGraph *CppDumpPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+CppDumpPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    camel::runtime::GCGraph *graph = program->root();
     ASSERT(graph != nullptr, "C++ dump requires a non-null runtime root graph.");
     // A loop is emitted as the tail recursion it means (camel/runtime/loop_lowering.h), on a
     // private copy of the program; the generated tail calls do not grow the stack.
-    graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+    const camel::runtime::Program *lowered =
+        camel::runtime::lowerLoopsToTailRecursion(context_, program);
+    graph = lowered->root();
 
     camel::passes::cpp::ProgramEmitter emitter(context_, mode_);
     try {
-        os << emitter.emit(graph);
+        os << emitter.emit(*lowered, graph);
     } catch (const camel::passes::cpp::Refusal &refusal) {
         // A program outside what the pass translates is refused where the construct is
         // written: at the node, else at the function it is in, else at the entry function.

@@ -28,12 +28,13 @@
 #include "macro.h"
 #include "runtime.h"
 
-camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
-    if (!graph) {
+const camel::runtime::Program *
+MacroRewritePass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    if (!program || !program->root()) {
         return nullptr;
     }
 
-    camel::runtime::RuntimeGraphDraftSession runtimeSession(context_, graph);
+    camel::runtime::RuntimeGraphDraftSession runtimeSession(context_, program);
 
     while (true) {
         bool roundChanged = false;
@@ -41,7 +42,9 @@ camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph,
             // Results belong to this rewrite transaction. Commit clones the static Function
             // values and retires the old graph carriers; retaining an evaluator's old results
             // into the next round would trace Functions that still name those retired graphs.
-            camel::execute::macro_runtime::MacroEvaluator evaluator(context_);
+            camel::execute::macro_runtime::MacroEvaluator evaluator(
+                context_,
+                runtimeSession.program());
             auto runtimeGraphs    = runtimeSession.collectReachableRuntimeGraphs();
             const auto candidates = camel::execute::macro_runtime::collectMacroCandidates(
                 std::span<camel::runtime::GCGraph *const>(
@@ -82,12 +85,12 @@ camel::runtime::GCGraph *MacroRewritePass::apply(camel::runtime::GCGraph *graph,
                 break;
             }
         }
-        graph = runtimeSession.commit();
-        if (!graph) {
+        program = runtimeSession.commit();
+        if (!program) {
             return nullptr;
         }
-        runtimeSession = camel::runtime::RuntimeGraphDraftSession(context_, graph);
+        runtimeSession = camel::runtime::RuntimeGraphDraftSession(context_, program);
     }
 
-    return graph;
+    return program;
 }

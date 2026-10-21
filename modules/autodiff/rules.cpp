@@ -27,6 +27,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft.h"
+#include "camel/runtime/program.h"
 
 #include <string_view>
 #include <vector>
@@ -41,13 +42,12 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
 
 ::Function *attachRule(
     const camel::core::context::context_ptr_t &context, ::Function *function, ::Function *rule) {
-    (void)context;
     namespace rt = camel::runtime;
     using camel::core::type::TupleType;
     using camel::core::type::Type;
 
     rt::GCGraph *source = function->graph();
-    auto draft          = rt::GraphDraft::decode(source);
+    auto draft          = rt::GraphDraft::decode(*function->program(), source);
     Type *ruleType      = rule->graph()->funcType();
     const auto slot     = draft->allocateRuntimeSlot(ruleType);
     const auto capture  = draft->addPortNode(ruleType, slot);
@@ -59,11 +59,15 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
     auto *withRule = TupleType::create(std::move(captured));
     draft->setClosureType(withRule);
 
-    rt::GCGraph *graph = draft->encode(
-        std::string(kRulePrefix) + source->stableId(),
-        std::string(kRulePrefix) + source->mangledName(),
-        source->name());
-    auto *result = ::Function::create(graph, withRule, camel::core::mm::autoSpace());
+    draft->setId(context->graphIds().allocate());
+    draft->setFlags(draft->flags() | rt::kGraphFlagCarriesRule);
+    rt::GCGraph *graph =
+        draft->encode(std::string(kRulePrefix) + source->mangledName(), source->name());
+    auto *result = ::Function::create(
+        rt::makeProgram(*context, function->program(), std::span(&graph, 1)),
+        graph->id(),
+        withRule,
+        camel::core::mm::autoSpace());
     for (size_t i = 0; i < closureType->size(); ++i) {
         result->tuple()->set<slot_t>(i, function->tuple()->get<slot_t>(i), withRule);
     }
@@ -75,7 +79,7 @@ constexpr std::string_view kRulePrefix = "autodiff.vjp/";
 }
 
 bool carriesRule(const camel::runtime::GCGraph *graph) {
-    return graph != nullptr && graph->stableId().starts_with(kRulePrefix);
+    return graph != nullptr && (graph->flags() & camel::runtime::kGraphFlagCarriesRule) != 0;
 }
 
 ::Function *ruleOf(const ::Function *function) {

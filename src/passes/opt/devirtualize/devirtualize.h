@@ -29,7 +29,8 @@ class DevirtualizeRewritePass : public RuntimeGraphRewritePass {
         : RuntimeGraphRewritePass(ctx), growthBudget_(growthBudget) {}
     ~DevirtualizeRewritePass() override = default;
 
-    camel::runtime::GCGraph *apply(camel::runtime::GCGraph *graph, std::ostream &os) override;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
 
   private:
     GrowthBudget growthBudget_{};

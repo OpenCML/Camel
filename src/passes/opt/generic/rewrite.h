@@ -28,7 +28,10 @@
 #include "camel/runtime/draft.h"
 
 #include <functional>
+#include <string>
 #include <string_view>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::passes::generic {
@@ -87,13 +90,45 @@ std::vector<gc_node_ref_t> orderedSources(const GraphDraft &draft, gc_node_ref_t
 void replaceNode(GraphDraft &draft, gc_node_ref_t id, gc_node_ref_t replacement);
 
 /**
- * Runs `rewrite` on the draft of every graph reachable from `graph` and commits when anything
- * changed. `rewrite` returns the number of rewrites it made (their total is stored in `rewrites`
- * when given). Returns the graph to continue with.
+ * The graphs the passes of one run found nothing to rewrite in. What a pass of this file does to
+ * a graph depends on that graph alone (its nodes, constants and types; not the graphs it calls),
+ * so a graph a pass left alone is left alone again by the same pass for as long as that content
+ * is the same, whichever graph object holds it. Rounds of the integrated optimizer ask each pass
+ * about every graph, and most graphs stop changing after the first round.
  */
-camel::runtime::GCGraph *rewriteReachableGraphs(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
+class RewriteMemo {
+  public:
+    bool leftAlone(std::string_view passName, const camel::runtime::GCGraph *graph) const;
+    void remember(std::string_view passName, const camel::runtime::GCGraph *graph);
+
+  private:
+    std::unordered_map<std::string, std::unordered_set<uint64_t>> contentsByPass_;
+};
+
+/**
+ * Whether the pass named may rewrite something in a graph, read from the frozen graph. They are
+ * necessary conditions, not exact ones: false means the pass would find nothing, true means it
+ * might. Opening a draft of a graph costs more than looking at it, and most graphs have nothing
+ * for a given pass.
+ */
+bool mayFold(const camel::runtime::GCGraph &graph);
+bool mayMerge(const camel::runtime::GCGraph &graph);
+bool mayAlgebra(const camel::runtime::GCGraph &graph);
+bool mayRemoveDead(const camel::runtime::GCGraph &graph);
+bool mayReduceControl(const camel::runtime::GCGraph &graph);
+
+/**
+ * Runs `rewrite` on the draft of every graph reachable from the root of `program` and commits
+ * when anything changed. `rewrite` returns the number of rewrites it made (their total is stored
+ * in `rewrites` when given). Returns the program to continue with. A graph for which
+ * `mayRewrite` is given and false, or which the `memo` knows the pass to have left alone, is not
+ * given to `rewrite`; with `checkScreens` it is, and a rewrite there is an error (a screen that
+ * is too strict).
+ */
+const camel::runtime::Program *rewriteReachableGraphs(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
-    size_t *rewrites = nullptr);
+    size_t *rewrites = nullptr, RewriteMemo *memo = nullptr,
+    bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false);
 
 } // namespace camel::passes::generic

@@ -161,6 +161,27 @@ OperatorRule identity() {
     return {[](OperatorCall &c) -> std::optional<std::string> { return c.norm(0).text; }, true};
 }
 
+/// A number as a complex value of the width `to` (`c64(x)`, `c128(x)`):
+/// `rt::complexFromReal<float>(x)` (include/camel/standalone/complex.h).
+OperatorRule complexFromReal(const char *to) {
+    return {
+        [to](OperatorCall &c) -> std::optional<std::string> {
+            return std::format("rt::complexFromReal<{}>({})", to, c.norm(0).text);
+        },
+        true,
+    };
+}
+
+/// A complex value in the width `to` (`c64(z)`, `c128(z)`): `rt::complexFromComplex<double>(z)`.
+OperatorRule complexFromComplex(const char *to) {
+    return {
+        [to](OperatorCall &c) -> std::optional<std::string> {
+            return std::format("rt::complexFromComplex<{}>({})", to, c.norm(0).text);
+        },
+        true,
+    };
+}
+
 /// A conversion that can fault (cast.cpp, camel/core/numeric_convert.h): `rt::fn<To>(x,
 /// "target", site)`; the report has three values (numeric_convert.h names them).
 OperatorRule
@@ -243,6 +264,27 @@ Rules buildRules() {
         r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
     }
 
+    // ---- Complex numbers (ops.cpp complexBinary, complexPower; include/camel/standalone/
+    // complex.h) ----
+    // `+`, `-`, `*`, unary `-`, `==` and `!=` are std::complex's, whose arithmetic is the two
+    // parts' arithmetic in the value's width; `/` faults on the complex zero; `^` is the
+    // runtime's complexPower, an integer exponent by repeated squaring and any other through
+    // std::pow.
+    for (const char *t : {"c", "z"}) {
+        r[std::format(":op/add_{}", t)] = infix("+");
+        r[std::format(":op/sub_{}", t)] = infix("-");
+        r[std::format(":op/mul_{}", t)] = infix("*");
+        r[std::format(":op/neg_{}", t)] = prefix("-");
+        r[std::format(":op/div_{}", t)] =
+            faultingFunction("complexDiv", RuntimeDiag::DivisionByZero, 0);
+        r[std::format(":op/eq_{}", t)] = infix("==");
+        r[std::format(":op/ne_{}", t)] = infix("!=");
+        r[std::format(":op/pow_{}", t)] = runtimeFunction("pow");
+        for (const char *e : {"i", "l"}) {
+            r[std::format(":op/pow_{}_{}", t, e)] = runtimeFunction("pow");
+        }
+    }
+
     // ---- Comparisons (ops.cpp: __builtin__eq__, __builtin__lt_s__, ...) ----
     // Floats compare as numbers (NaN equals nothing); strings by their bytes.
     for (const char *t : {"i", "l", "f", "d", "s"}) {
@@ -298,6 +340,18 @@ Rules buildRules() {
     for (const char *t : {"i", "l", "f", "d", "a"}) {
         r[std::format(":op/{}tos", t)] = runtimeFunction("toText");
     }
+    // A number to a complex value, and a complex value to the other width (cast.cpp, the c64
+    // and c128 groups of globals.cpp): the imaginary part of a number is zero.
+    r[":op/ctoc"] = identity();
+    r[":op/ztoz"] = identity();
+    for (const char *from : {"i", "l", "f", "d"}) {
+        r[std::format(":op/{}toc", from)] = complexFromReal("float");
+        r[std::format(":op/{}toz", from)] = complexFromReal("double");
+    }
+    r[":op/ztoc"] = complexFromComplex("float");
+    r[":op/ctoz"] = complexFromComplex("double");
+    r[":op/ctos"] = runtimeFunction("toText");
+    r[":op/ztos"] = runtimeFunction("toText");
 
     // ---- Strings (ops.cpp __builtin__add_ss__, __builtin__idx__; struct.cpp) ----
     r[":op/add_s"]            = infix("+");
@@ -460,6 +514,15 @@ Rules buildRules() {
         r[std::format("math:round_{}", t)] = cmath("round");
         r[std::format("math:ceil_{}", t)]  = cmath("ceil");
         r[std::format("math:floor_{}", t)] = cmath("floor");
+    }
+    // The complex functions (modules/math/operators.cpp): abs is hypot of the parts, exp is
+    // std::exp of a std::complex, conj negates the imaginary part, re and im read one part.
+    for (const char *t : {"c", "z"}) {
+        r[std::format("math:abs_{}", t)]  = runtimeFunction("complexAbs");
+        r[std::format("math:exp_{}", t)]  = cmath("exp");
+        r[std::format("math:conj_{}", t)] = cmath("conj");
+        r[std::format("math:re_{}", t)]   = runtimeFunction("complexReal");
+        r[std::format("math:im_{}", t)]   = runtimeFunction("complexImag");
     }
 
     // ---- The end of the program (`exit(n)`, `os.exit(n)`) ----

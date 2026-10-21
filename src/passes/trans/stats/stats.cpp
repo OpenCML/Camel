@@ -23,7 +23,7 @@
 
 #include "stats.h"
 
-#include "camel/runtime/draft_session.h"
+#include "camel/runtime/reachable.h"
 
 #include <format>
 #include <ostream>
@@ -50,12 +50,17 @@ std::string GraphStats::toJson() const {
 }
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
+    const camel::runtime::Program *program =
+        root && context ? context->programOfRuntimeGraph(root) : nullptr;
+    return program ? collectGraphStats(*program, root) : GraphStats{};
+}
+
+GraphStats collectGraphStats(const camel::runtime::Program &program, GCGraph *root) {
     GraphStats stats;
     if (!root) {
         return stats;
     }
-    camel::runtime::RuntimeGraphDraftSession session(context, root);
-    for (GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+    for (GCGraph *graph : camel::runtime::collectReachableGraphs(program, root)) {
         ++stats.graphs;
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
             const auto ref   = it.ref();
@@ -96,7 +101,8 @@ GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context,
     return stats;
 }
 
-GCGraph *GraphStatsPass::apply(GCGraph *graph, std::ostream &os) {
-    os << "GRAPH_STATS " << collectGraphStats(context_, graph).toJson() << std::endl;
-    return graph;
+const camel::runtime::Program *
+GraphStatsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    os << "GRAPH_STATS " << collectGraphStats(*program, program->root()).toJson() << std::endl;
+    return program;
 }

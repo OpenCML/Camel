@@ -320,9 +320,9 @@ c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 63d195595160cec9 ok stdlib/signatures/bytes.cml
 ba50ff52809dea87 ok stdlib/signatures/crypto.cml
 651e80439e059f51 ok stdlib/signatures/fs.cml
-730131259dab3541 no stdlib/signatures/globals.cml
+d04883da10736f87 no stdlib/signatures/globals.cml
 e496c47662032c01 ok stdlib/signatures/json.cml
-9b8ae9467061105d ok stdlib/signatures/math.cml
+fb5e438235b1009b ok stdlib/signatures/math.cml
 f8d330763bbcd3e8 ok stdlib/signatures/os.cml
 cc33c44661bbf49e ok stdlib/signatures/para.cml
 8c4fd3d60d0c7232 ok stdlib/signatures/random.cml
@@ -453,6 +453,7 @@ c8a2aea79398ad4a no test/cases/compile/diag_render/syntax_stray_closer.cml
 c8c8348a8e154358 no test/cases/compile/diag_render/syntax_unexpected_token.cml
 4d487e2cae71a5fa ok test/cases/compile/diag_render/warning_dropped_effect.cml
 9165ddabb83666c9 ok test/cases/compile/diag_render/werror_no_position.cml
+54d86d3efe83a767 ok test/cases/compile/entry_args/complex.cml
 32612283d0dbcbcb ok test/cases/compile/entry_args/no_params.cml
 4968e768ad8866a3 ok test/cases/compile/entry_args/scalars.cml
 16e3db9d1dec1061 ok test/cases/compile/entry_args/struct_param.cml
@@ -1027,7 +1028,7 @@ cd1ddad97e914a42 ok test/cases/consistency/values/effect_not_used.cml
 e0caa5ffbbec705e ok test/cases/consistency/values/enums.cml
 e07d1c473be1d396 ok test/cases/consistency/values/float_compare.cml
 de057be27eddcf16 ok test/cases/consistency/values/float_div_zero.cml
-9db32c349a4d7484 ok test/cases/consistency/values/float_special.cml
+229f5352f83b5120 ok test/cases/consistency/values/float_special.cml
 c542e3cd044fdfd6 ok test/cases/consistency/values/float_to_int.cml
 9abd364d25c6d195 ok test/cases/consistency/values/function_values.cml
 4c0d302bc5080c9a ok test/cases/consistency/values/higher_order.cml
@@ -1059,6 +1060,7 @@ ece491c607145dbc ok test/cases/definitions/kernels.cml
 38fb8cae2a40a044 ok test/cases/facts/tensors_and_loops.cml
 61acf4b4dcd0d842 ok test/cases/facts/two_functions.cml
 00fb02a946aa1af0 ok test/cases/feat/mm/blocks.cml
+c68d2c55e0d4c83b ok test/cases/feat/mm/complex.cml
 827a89198ee2c0fa ok test/cases/feat/mm/mem_blocks.cml
 bec40d29daf6e639 ok test/cases/feat/mm/capacity/perm_query_types.cml
 272b762adea784ae ok test/cases/feat/mm/gc/gc_born_old.cml
@@ -1188,6 +1190,7 @@ de83013195ae27f6 ok test/cases/linear/runtime/divide_by_zero.cml
 1606512358f47df6 ok test/cases/linear/runtime/sync_literal_operands.cml
 092b61923ca3ef5e ok test/cases/loops/captures.cml
 86e1cd983fa4c0f2 ok test/cases/loops/collection.cml
+701a7d8e245c7f8d ok test/cases/loops/collection_in_place.cml
 fbf6da4c49894b32 ok test/cases/loops/collection_large.cml
 a12697fd5ca6ce5f ok test/cases/loops/collection_oom.cml
 353f9f7a0a1fabc2 ok test/cases/loops/dropped_effect.cml
@@ -1215,9 +1218,10 @@ e54520efc1c5e1b1 ok test/cases/loops/macro.cml
 2331948ca30d0512 ok test/cases/loops/native_callback_fault.cml
 ccbfb354f7dda082 ok test/cases/loops/onnx_refused.cml
 f9591fe68a90c170 ok test/cases/loops/recursion.cml
+cec0468331d216da ok test/cases/loops/reduce_view.cml
 a910f1e9cdce417e ok test/cases/loops/refuse_loop_no_channel.cml
 cba7b09e77a994a5 ok test/cases/loops/shapes.cml
-4637fbbc40ef5a08 ok test/cases/loops/state_in_place.cml
+c24be36afcb891ea ok test/cases/loops/state_in_place.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 de8066e46383fc72 ok test/cases/macro/hof_calls.cml
 a58dd440e290b13d ok test/cases/modules/bytes_text_reject.cml
@@ -1257,6 +1261,7 @@ d2130fa6bb799f72 ok test/cases/modules/autodiff/grad_through_as.cml
 2d2ee5cf4170794e ok test/cases/modules/autodiff/grad_unexpanded_specialize.cml
 f6f132edf5434991 ok test/cases/modules/autodiff/loop_grad_affine.cml
 8a60a5ff5050a3dc ok test/cases/modules/autodiff/loop_grad_capture_table.cml
+429fb3953cb48530 ok test/cases/modules/autodiff/loop_grad_in_place.cml
 573a6bc4c5028716 ok test/cases/modules/autodiff/loop_grad_nested.cml
 aa9aa9806bb83360 ok test/cases/modules/autodiff/loop_grad_product.cml
 b3bcd3eb62ecc858 ok test/cases/modules/autodiff/loop_grad_refuse_capture.cml
@@ -1829,6 +1834,7 @@ b4c8a24177615791 ok test/cases/tools/lsp/fixtures/main.cml
 4a6ec3390176ac3a ok test/cases/trans/library_module.cml
 f3875ddc8d0d6b42 ok test/cases/trans/port_fill_metadata.cml
 060c9e37e16da8fb ok test/cases/trans/annotated/boundaries.cml
+197f06d3dac30f20 ok test/cases/trans/cpp/complex_scalar.cml
 1235cae4c47855a2 ok test/cases/trans/cpp/exec_mod_scalar.cml
 d832457679ac549b ok test/cases/trans/cpp/fstring.cml
 bf705a16bb502154 ok test/cases/trans/cpp/loop_state_in_place.cml

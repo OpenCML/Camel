@@ -62,9 +62,40 @@ add_library(libcamel SHARED ${LIBCAMEL_SRC})
 # the tools only run through the build-tree runpath.
 set_target_properties(libcamel PROPERTIES PREFIX "")
 
-# Windows: export all symbols for camel-cli and tools linkage.
+# Windows: explicit exports for camel-cli, the tools and the .cmo modules (H30, H16 item 5).
+#
+# WINDOWS_EXPORT_ALL_SYMBOLS is off: a Debug build emits every inline and template function as a
+# real symbol, so "export everything" exceeded the PE limit of 65,535 exported names
+# (lld-link: "too many exported symbols (got 75682, max 65535)") and only the Release build ever
+# linked. cmake/libcamel_exports.def names the symbols the dependent targets import, which is a
+# few hundred. A new cross-boundary symbol fails at link time with its mangled name; that name is
+# added to the list. The list records what the dependent targets need, so it is generated from
+# their import tables, not a second declaration of the API.
+#
+# The Debug export surface is larger than the Release one: profiling entry points
+# (profiler::start_advanced_tracing and friends) are only defined in a Debug library, and the
+# debug tools import them. lld-link accepts one /DEF, so the two lists are concatenated before
+# the link into a per-configuration file.
 if(WIN32)
-    set_target_properties(libcamel PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+    set(LIBCAMEL_EXPORTS_DEF "${PROJECT_SOURCE_DIR}/cmake/libcamel_exports.def")
+    set(LIBCAMEL_EXPORTS_DEBUG_DEF "${PROJECT_SOURCE_DIR}/cmake/libcamel_exports_debug.def")
+    set(LIBCAMEL_EXPORTS_BUILT "${PROJECT_BINARY_DIR}/libcamel_exports_$<CONFIG>.def")
+    set_target_properties(libcamel PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS FALSE)
+    add_custom_command(
+        TARGET libcamel PRE_LINK
+        COMMAND "${CMAKE_COMMAND}"
+            "-DCFG=$<CONFIG>"
+            "-DCOMMON=${LIBCAMEL_EXPORTS_DEF}"
+            "-DEXTRA=${LIBCAMEL_EXPORTS_DEBUG_DEF}"
+            "-DOUT=${LIBCAMEL_EXPORTS_BUILT}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/make_libcamel_def.cmake"
+        VERBATIM)
+    target_link_options(libcamel PRIVATE "LINKER:/DEF:${LIBCAMEL_EXPORTS_BUILT}")
+    # The export lists are link inputs the command line does not make build dependencies: an edit
+    # must relink the library, or the stale import library keeps failing the dependent targets.
+    set_property(
+        TARGET libcamel APPEND PROPERTY LINK_DEPENDS
+        "${LIBCAMEL_EXPORTS_DEF}" "${LIBCAMEL_EXPORTS_DEBUG_DEF}")
 endif()
 
 target_compile_features(libcamel PRIVATE cxx_std_23)

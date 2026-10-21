@@ -37,6 +37,7 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "core/module/entity_internal.h"
 
@@ -64,10 +65,10 @@ std::string firstError(const UserDefinedModule &module) {
 }
 
 /// The operators whose OPER nodes appear in `graph` and every graph reachable from it.
-std::vector<core::OperId> operatorsUsedBy(GCGraph *graph) {
+std::vector<core::OperId> operatorsUsedBy(const Program &program, GCGraph *graph) {
     std::vector<core::OperId> used;
     std::unordered_set<core::OperId> seen;
-    for (GCGraph *g : collectReachableGraphs(graph)) {
+    for (GCGraph *g : collectReachableGraphs(program, graph)) {
         for (gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
             if (g->node(ref)->kind != GCNodeKind::Oper) {
                 continue;
@@ -261,13 +262,14 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
                 d.function,
                 d.params.size()));
     }
-    GCGraph *graph = camel::compile::gir::encodeToRuntimeGraph(function);
+    // Kept for as long as the context, refused or not: nothing else owns them.
+    Program *program = context_.reserveProgram();
+    camel::compile::gir::encodeToRuntimeProgram(function, *program, &context_.graphIds());
+    context_.pinRuntimeProgram(program);
+    GCGraph *graph = program->root();
     if (graph == nullptr) {
         return refuse(std::format("'{}::{}' could not be encoded", d.module, d.function));
     }
-    // Kept for as long as the context, refused or not: nothing else owns them.
-    const std::vector<GCGraph *> closure = collectReachableGraphs(graph);
-    context_.pinRuntimeGraphs(closure);
 
     // The signature (design 9.2): the operator's operands are the function's ordinary
     // parameters; nothing else is bound.
@@ -277,7 +279,7 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     }
     // The effects (design 9.2): within the operator's.
     const auto traits           = table.find(oper);
-    const EffectSummary effects = effectSummaryOf(graph);
+    const EffectSummary effects = effectSummaryOf(*program, graph);
     if (traits && traits->pure && (effects.external || effects.writesVariables)) {
         return refuse("the operator is pure and its definition has an effect");
     }
@@ -286,13 +288,14 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
         return refuse("the operator never faults and its definition may");
     }
     Entry &entry = fresh();
-    entry.uses   = operatorsUsedBy(graph);
+    entry.uses   = operatorsUsedBy(*program, graph);
     entry.built  = std::make_unique<DefinitionGraph>(DefinitionGraph{
-        .oper        = oper,
-        .key         = s->key,
-        .definition  = d,
-        .graph       = graph,
-        .contentHash = fact::portableGraphHash(graph),
+         .oper        = oper,
+         .key         = s->key,
+         .definition  = d,
+         .graph       = graph,
+         .program     = program,
+         .contentHash = fact::portableGraphHash(*program, graph),
     });
     return entry;
 }
@@ -374,7 +377,8 @@ ExpandResult expandDefinition(
     const std::vector<gc_node_ref_t> ctrl(
         draft.ctrlInputsOf(node).begin(),
         draft.ctrlInputsOf(node).end());
-    const gc_node_ref_t call = draft.addFuncNode(definition->graph, resultType);
+    session.adoptProgram(*definition->program);
+    const gc_node_ref_t call = draft.addFuncNode(definition->graph->id(), resultType);
     draft.setNormInputs(call, arguments);
     draft.setCtrlInputs(call, ctrl);
     draft.setNodeOrigin(call, origin);

@@ -25,4 +25,16 @@ namespace camel::core::rtdata {
  */
 std::string debugRunViewSelfTest();
 
+/**
+ * The same escape, deliberately, to prove the debug guard actually aborts (H30). A compact
+ * element view is read and handed to the reduce accumulator store, which asserts in a debug
+ * build: the process aborts with the assertion message instead of keeping a view that names the
+ * next element. A release build compiles the assertion out, materialises the view in the store
+ * and returns a "not-caught" line, which is how a debug-layer test fails loudly when it is
+ * pointed at a release binary.
+ *
+ * Runs only from the `std::gc::views_escape` pass, which exists solely for the debug test layer.
+ */
+std::string debugRunViewEscapeSelfTest();
+
 } // namespace camel::core::rtdata

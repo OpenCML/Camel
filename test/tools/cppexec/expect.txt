@@ -83,6 +83,14 @@ test/cases/compile/entry_args/scalars.cml --arg n=x --arg rate=0.5 --arg name=hi
 test/cases/compile/entry_args/scalars.cml --arg m=1
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg n=4
 
+# Parameters of type c64 / c128 (H15d): the complex text of the language, both the form with a
+# real part and the imaginary-only form, and the same refusals as camel — a real text is not a
+# complex number, and a malformed one is a located error at the argument.
+test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=0.5-0.25i
+test/cases/compile/entry_args/complex.cml --arg z=-2i --arg w=4i
+test/cases/compile/entry_args/complex.cml --arg z=1.5 --arg w=4i
+test/cases/compile/entry_args/complex.cml --arg z=1+2 --arg w=4i
+
 # Loops (design principles 3.10), run through the private lowering to tail recursion.
 test/cases/loops/shapes.cml
 test/cases/loops/effects.cml
@@ -90,3 +98,7 @@ test/cases/loops/captures.cml
 # A loop state appended in place (H17 item 4, single and multiple states): the private copy of
 # the first value translates to the array value itself, which `append` copies when it is shared.
 test/cases/trans/cpp/loop_state_in_place.cml
+
+# Complex numbers (H15c): c64 and c128 are std::complex<float>/<double>, ^ is repeated squaring for
+# an integer exponent, / faults on the complex zero, and one format specification writes both parts.
+test/cases/trans/cpp/complex_scalar.cml

@@ -222,8 +222,11 @@ DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t 
     const uint8_t runtimeFlags = static_cast<uint8_t>(
         (target->funcType() && target->funcType()->modifiers().macro()) ? runtime::kGCNodeFlagMacro
                                                                         : 0);
-    const runtime::gc_node_ref_t id =
-        draft_->addFuncNode(nullptr, target->funcType()->exitType(), runtimeFlags, dataIndex);
+    const runtime::gc_node_ref_t id = draft_->addFuncNode(
+        runtime::kInvalidGraphId,
+        target->funcType()->exitType(),
+        runtimeFlags,
+        dataIndex);
     const auto node = ref(id);
     registerFuncTarget(node, target);
     return node;

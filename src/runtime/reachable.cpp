@@ -28,12 +28,14 @@
 
 #include "camel/runtime/reachable.h"
 
+#include <algorithm>
 #include <queue>
 #include <unordered_set>
 
 namespace camel::runtime {
 
-void forEachReachableGraph(GCGraph *root, const std::function<void(GCGraph *)> &visitor) {
+void forEachReachableGraph(
+    const Program &program, GCGraph *root, const std::function<void(GCGraph *)> &visitor) {
     if (!root) {
         return;
     }
@@ -50,13 +52,32 @@ void forEachReachableGraph(GCGraph *root, const std::function<void(GCGraph *)> &
         }
 
         visitor(graph);
-        graph->traceGraphs([&](GCGraph *next) { worklist.push(next); });
+        program.traceGraphs(*graph, [&](GCGraph *next) { worklist.push(next); });
     }
 }
 
-std::vector<GCGraph *> collectReachableGraphs(GCGraph *root) {
+uint64_t closureRevision(const Program &program, GCGraph *root) {
+    std::vector<GCGraph *> graphs = collectReachableGraphs(program, root);
+    std::sort(graphs.begin(), graphs.end(), [](const GCGraph *a, const GCGraph *b) {
+        return toValue(a->id()) < toValue(b->id());
+    });
+    uint64_t h = 0xcbf29ce484222325ULL;
+    const auto mix = [&h](uint64_t v) { h = (h ^ v) * 0x100000001b3ULL; };
+    mix(toValue(root->id()));
+    for (const GCGraph *graph : graphs) {
+        mix(toValue(graph->id()));
+        mix(graph->revision());
+    }
+    return h;
+}
+
+std::vector<GCGraph *> collectReachableGraphs(const Program &program) {
+    return collectReachableGraphs(program, program.root());
+}
+
+std::vector<GCGraph *> collectReachableGraphs(const Program &program, GCGraph *root) {
     std::vector<GCGraph *> graphs;
-    forEachReachableGraph(root, [&](GCGraph *graph) { graphs.push_back(graph); });
+    forEachReachableGraph(program, root, [&](GCGraph *graph) { graphs.push_back(graph); });
     return graphs;
 }
 

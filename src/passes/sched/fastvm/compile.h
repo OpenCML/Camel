@@ -50,11 +50,13 @@ struct LinkedBytecodeResult {
 };
 
 bytecode_vec_t compile(
-    const ctx::context_ptr_t &ctx, camel::runtime::GCGraph *graph, const CompileStrategy &opt = {},
+    const ctx::context_ptr_t &ctx, const camel::runtime::Program &program,
+    camel::runtime::GCGraph *graph, const CompileStrategy &opt = {},
     std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins = nullptr);
 
-LinkedBytecodeResult
-compileAndLink(ctx::context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt);
+LinkedBytecodeResult compileAndLink(
+    ctx::context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
+    const CompileStrategy &opt);
 
 /// The entry pc of a graph that already has bytecode, if it does.
 using KnownEntryPc = std::function<std::optional<size_t>(camel::runtime::GCGraph *)>;
@@ -67,8 +69,8 @@ using KnownEntryPc = std::function<std::optional<size_t>(camel::runtime::GCGraph
  * time) join the bytecode compiled at startup.
  */
 LinkedBytecodeResult compileAndLinkFrom(
-    ctx::context_ptr_t ctx, camel::runtime::GCGraph *entry, const CompileStrategy &opt,
-    const KnownEntryPc &known, size_t baseOffset);
+    ctx::context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset);
 
 /**
  * The same for exactly the graphs listed (in that order), whatever else they reach: for a host
@@ -76,7 +78,8 @@ LinkedBytecodeResult compileAndLinkFrom(
  * graph a listed graph calls directly must be listed too or have a pc in `known`.
  */
 LinkedBytecodeResult compileAndLinkGraphs(
-    ctx::context_ptr_t ctx, std::span<camel::runtime::GCGraph *const> graphs,
-    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset);
+    ctx::context_ptr_t ctx, const camel::runtime::Program &program,
+    std::span<camel::runtime::GCGraph *const> graphs, const CompileStrategy &opt,
+    const KnownEntryPc &known, size_t baseOffset);
 
 std::string opCodeToString(const Bytecode &bc, const ctx::context_ptr_t &context);

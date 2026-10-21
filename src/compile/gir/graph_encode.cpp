@@ -43,6 +43,7 @@
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
 #include "camel/runtime/control.h"
+#include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
 #include "runtime/graph_build.h"
@@ -80,7 +81,6 @@ using camel::runtime::GCBranchArm;
 using camel::runtime::GCBrchBody;
 using camel::runtime::GCCallBody;
 using camel::runtime::GCFillBody;
-using camel::runtime::GCFuncBody;
 using camel::runtime::GCGraph;
 using camel::runtime::GCGraphBuildAccess;
 using camel::runtime::GCGraphPayloadShape;
@@ -313,9 +313,12 @@ remapNodeRef(draft_node_ref_t sourceRef, const std::vector<draft_node_ref_t> &ma
 
 class EncodeSession {
   public:
-    explicit EncodeSession(graph_ptr_t rootGraph) : rootGraph_(std::move(rootGraph)) {}
+    EncodeSession(
+        graph_ptr_t rootGraph, camel::runtime::Program &program,
+        camel::runtime::GraphIdAllocator *freshIds)
+        : rootGraph_(std::move(rootGraph)), program_(program), freshIds_(freshIds) {}
 
-    GCGraph *run() {
+    void run() {
         ASSERT(rootGraph_ != nullptr, "Cannot encode a null compile graph.");
         const auto reachable = collectReachableGraphs(rootGraph_);
         CAMEL_LOG_INFO_S("GIREncode", "Encoding {} reachable compile graphs.", reachable.size());
@@ -325,11 +328,15 @@ class EncodeSession {
         }
         for (auto &prepared : prepared_) {
             preparedBySource_.emplace(prepared.source.get(), &prepared);
-            if (!prepared.source->stableId().empty()) {
-                preparedByStableId_.emplace(prepared.source->stableId(), &prepared);
+            if (runtime::isValid(prepared.source->graphId())) {
+                preparedById_.emplace(prepared.source->graphId(), &prepared);
             }
         }
         preallocateRuntimeGraphs();
+        for (auto &prepared : prepared_) {
+            program_.bind(prepared.draft->id(), prepared.runtime);
+        }
+        program_.setRoot(resolvePreparedGraph(rootGraph_)->runtime);
         for (auto &prepared : prepared_) {
             patchPreparedFuncPayloads(prepared);
         }
@@ -338,10 +345,8 @@ class EncodeSession {
             finalizeRuntimeGraph(prepared);
         }
         for (auto &prepared : prepared_) {
-            camel::runtime::validateRuntimeGraphCalls(prepared.runtime);
+            camel::runtime::validateRuntimeGraphCalls(program_, prepared.runtime);
         }
-
-        return resolvePreparedGraph(rootGraph_)->runtime;
     }
 
   private:
@@ -350,9 +355,8 @@ class EncodeSession {
         if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
             return it->second;
         }
-        if (!graph->stableId().empty()) {
-            if (auto it = preparedByStableId_.find(graph->stableId());
-                it != preparedByStableId_.end()) {
+        if (runtime::isValid(graph->graphId())) {
+            if (auto it = preparedById_.find(graph->graphId()); it != preparedById_.end()) {
                 return it->second;
             }
         }
@@ -364,9 +368,8 @@ class EncodeSession {
         if (auto it = preparedBySource_.find(graph.get()); it != preparedBySource_.end()) {
             return it->second;
         }
-        if (!graph->stableId().empty()) {
-            if (auto it = preparedByStableId_.find(graph->stableId());
-                it != preparedByStableId_.end()) {
+        if (runtime::isValid(graph->graphId())) {
+            if (auto it = preparedById_.find(graph->graphId()); it != preparedById_.end()) {
                 return it->second;
             }
         }
@@ -375,18 +378,18 @@ class EncodeSession {
                 CAMEL_LOG_WARN_S(
                     "GIREncode",
                     "Compile graph identity fallback matched by name only: requested='{}' "
-                    "stableId='{}'.",
+                    "id={}.",
                     graph->name(),
-                    graph->stableId());
+                    runtime::toValue(graph->graphId()));
                 return &prepared;
             }
         }
         ASSERT(
             false,
             std::format(
-                "Compile graph '{}' (stableId='{}') is not part of the prepared encode set.",
+                "Compile graph '{}' (id={}) is not part of the prepared encode set.",
                 graph->name(),
-                graph->stableId()));
+                runtime::toValue(graph->graphId())));
         return nullptr;
     }
 
@@ -395,6 +398,7 @@ class EncodeSession {
         prepared.source = graph;
         prepared.draft  = std::make_unique<GraphDraft>();
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
+        prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());
         prepared.draft->setCaptureNames(graph->draft().captureNames());
         // Every compiled graph has a frame layout, one without slots included.
@@ -456,17 +460,18 @@ class EncodeSession {
 
             switch (header->kind) {
             case GCNodeKind::Func: {
-                GCFuncBody body{
-                    .calleeGraph = nullptr,
-                };
-                payloadStorage = toPayloadBytes(body);
+                payloadStorage = toPayloadBytes(camel::runtime::GCFuncRef{});
             } break;
             case GCNodeKind::Loop: {
                 // The graphs are patched in once every runtime graph has its place
                 // (patchPreparedFuncPayloads), as for a FUNC node.
-                payloadStorage =
-                    toPayloadBytes(*reinterpret_cast<const camel::runtime::GCLoopBody *>(
-                        graph->draft().payloadOf(sourceId).data()));
+                const auto *source = reinterpret_cast<const camel::runtime::GCLoopRef *>(
+                    graph->draft().payloadOf(sourceId).data());
+                payloadStorage = toPayloadBytes(
+                    camel::runtime::GCLoopRef{
+                        .kind            = source->kind,
+                        .collectionCount = source->collectionCount,
+                    });
             } break;
             case GCNodeKind::Call:
                 payloadStorage.assign(
@@ -620,9 +625,15 @@ class EncodeSession {
             const auto &deps                          = prepared.source->dependencyGraphs();
             const auto &subs                          = prepared.source->subGraphs();
             const std::vector<graph_ptr_t> staticRefs = staticGraphRefsOf(prepared.source);
-            std::vector<GCGraph *> depPtrs(deps.size(), nullptr);
-            std::vector<GCGraph *> subPtrs(subs.size(), nullptr);
-            std::vector<GCGraph *> staticGraphPtrs(staticRefs.size(), nullptr);
+            std::vector<camel::runtime::GraphId> depPtrs(
+                deps.size(),
+                camel::runtime::kInvalidGraphId);
+            std::vector<camel::runtime::GraphId> subPtrs(
+                subs.size(),
+                camel::runtime::kInvalidGraphId);
+            std::vector<camel::runtime::GraphId> staticGraphPtrs(
+                staticRefs.size(),
+                camel::runtime::kInvalidGraphId);
             prepared.bytes = GCGraphBuildAccess::requiredBytes(
                 depPtrs,
                 subPtrs,
@@ -660,19 +671,17 @@ class EncodeSession {
             const auto *header = prepared.source->draft().header(sourceId);
             ASSERT(header != nullptr, "Live source draft node cannot have a null header.");
             if (header->kind == GCNodeKind::Func) {
-                GCFuncBody *body = reinterpret_cast<GCFuncBody *>(
-                    prepared.draft->mutablePayloadOf(preparedId).data());
-                ASSERT(body != nullptr, "Prepared FUNC payload cannot be null.");
-                body->calleeGraph =
-                    resolvePreparedGraph(prepared.source->funcTarget(sourceId))->runtime;
+                prepared.draft->setCalleeGraph(
+                    preparedId,
+                    resolvePreparedGraph(prepared.source->funcTarget(sourceId))->draft->id());
             }
             if (header->kind == GCNodeKind::Loop) {
-                auto *body = reinterpret_cast<camel::runtime::GCLoopBody *>(
-                    prepared.draft->mutablePayloadOf(preparedId).data());
                 const auto &target = prepared.source->loopTarget(sourceId);
-                body->condGraph =
-                    target.cond ? resolvePreparedGraph(target.cond)->runtime : nullptr;
-                body->bodyGraph = resolvePreparedGraph(target.body)->runtime;
+                prepared.draft->setLoopGraphs(
+                    preparedId,
+                    target.cond ? resolvePreparedGraph(target.cond)->draft->id()
+                                : camel::runtime::kInvalidGraphId,
+                    resolvePreparedGraph(target.body)->draft->id());
             }
             ++preparedId;
         }
@@ -698,7 +707,8 @@ class EncodeSession {
             auto *funcObj = fromSlot<StaticFunction *>(slot);
             ASSERT(funcObj != nullptr, "Compile static function slot payload is null.");
             auto *runtimeFunc = ::Function::create(
-                resolvePreparedGraph(funcObj->graph())->runtime,
+                &program_,
+                resolvePreparedGraph(funcObj->graph())->draft->id(),
                 funcObj->tupleType(),
                 camel::core::mm::autoSpace());
             objectCache.emplace(object, runtimeFunc);
@@ -805,24 +815,7 @@ class EncodeSession {
             }
             const auto payload = prepared.draft->payloadOf(nodeId);
             if (header->kind == GCNodeKind::Func) {
-                if (payload.size_bytes() < sizeof(GCFuncBody)) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Prepared FUNC node {} in graph '{}' has truncated payload ({} bytes).",
-                            nodeId,
-                            source->name(),
-                            payload.size_bytes()));
-                }
-                const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                if (body->calleeGraph == reinterpret_cast<GCGraph *>(-1)) {
-                    throw std::runtime_error(
-                        std::format(
-                            "Prepared FUNC node {} in graph '{}' carries invalid callee "
-                            "placeholder -1.",
-                            nodeId,
-                            source->name()));
-                }
-                if (body->calleeGraph == nullptr) {
+                if (!camel::runtime::isValid(prepared.draft->calleeIdOf(nodeId))) {
                     throw std::runtime_error(
                         std::format(
                             "Prepared FUNC node {} in graph '{}' carries a null callee "
@@ -853,21 +846,20 @@ class EncodeSession {
                 }
             }
         }
-        auto *debugRecord =
-            createGraphDebugRecord(source->stableId(), source->name(), source->name());
+        auto *debugRecord = createGraphDebugRecord(source->name(), source->name());
         recordDraftDebugData(debugRecord, *prepared.draft);
 
         const auto &deps = source->dependencyGraphs();
         const auto &subs = source->subGraphs();
-        std::vector<GCGraph *> depPtrs;
-        std::vector<GCGraph *> subPtrs;
+        std::vector<camel::runtime::GraphId> depPtrs;
+        std::vector<camel::runtime::GraphId> subPtrs;
         depPtrs.reserve(deps.size());
         subPtrs.reserve(subs.size());
         for (const auto &dep : deps) {
-            depPtrs.push_back(resolvePreparedGraph(dep)->runtime);
+            depPtrs.push_back(resolvePreparedGraph(dep)->draft->id());
         }
         for (const auto &sub : subs) {
-            subPtrs.push_back(resolvePreparedGraph(sub)->runtime);
+            subPtrs.push_back(resolvePreparedGraph(sub)->draft->id());
         }
         std::vector<Type *> runtimeStaticTypes(
             prepared.draft->staticSlotTypes().begin(),
@@ -932,7 +924,7 @@ class EncodeSession {
             "Static-slot canonicalization finished for graph '{}'.",
             source->name());
         std::vector<graph_ptr_t> compileStaticRefs = staticGraphRefsOf(prepared.source);
-        std::vector<GCGraph *> staticGraphRefs;
+        std::vector<camel::runtime::GraphId> staticGraphRefs;
         staticGraphRefs.reserve(compileStaticRefs.size());
         CAMEL_LOG_INFO_S(
             "GIREncode",
@@ -940,7 +932,7 @@ class EncodeSession {
             source->name(),
             compileStaticRefs.size());
         for (const auto &graph : compileStaticRefs) {
-            staticGraphRefs.push_back(resolvePreparedGraph(graph)->runtime);
+            staticGraphRefs.push_back(resolvePreparedGraph(graph)->draft->id());
         }
         CAMEL_LOG_INFO_S(
             "GIREncode",
@@ -961,7 +953,7 @@ class EncodeSession {
                 "Static runtime tuple type built for graph '{}'.",
                 source->name());
         }
-        GCGraph *runtimeOuterGraph = nullptr;
+        camel::runtime::GraphId runtimeOuterGraph = camel::runtime::kInvalidGraphId;
         if (const auto &outer = source->outerGraph(); outer != nullptr) {
             // A graph encoded without the graph it is written in (a function of a library
             // encoded on its own, camel/runtime/definitions.h) has no outer graph at runtime.
@@ -972,7 +964,8 @@ class EncodeSession {
                 source->name(),
                 outer->name(),
                 outerPrepared != nullptr);
-            runtimeOuterGraph = outerPrepared != nullptr ? outerPrepared->runtime : nullptr;
+            runtimeOuterGraph = outerPrepared != nullptr ? outerPrepared->draft->id()
+                                                         : camel::runtime::kInvalidGraphId;
         }
         CAMEL_LOG_INFO_S(
             "GIREncode",
@@ -985,6 +978,8 @@ class EncodeSession {
         prepared.runtime = GCGraphBuildAccess::constructInPlace(
             prepared.memory,
             prepared.bytes,
+            prepared.draft->id(),
+            camel::runtime::GCGraphDerivation{},
             debugRecord,
             prepared.draft->funcType(),
             prepared.draft->frameSlotTypes(),
@@ -1015,26 +1010,28 @@ class EncodeSession {
             "GIREncode",
             "Constructed runtime graph '{}', validating payload.",
             source->name());
-        validateRuntimeGraphPayload(prepared.runtime);
+        validateRuntimeGraphPayload(program_, prepared.runtime);
     }
 
     graph_ptr_t rootGraph_;
+    camel::runtime::Program &program_;
+    camel::runtime::GraphIdAllocator *freshIds_;
     std::vector<PreparedGraph> prepared_;
     std::unordered_map<DraftGraphBuilder *, PreparedGraph *> preparedBySource_;
-    std::unordered_map<std::string, PreparedGraph *> preparedByStableId_;
+    std::unordered_map<runtime::GraphId, PreparedGraph *> preparedById_;
 };
 
 } // namespace
 
-camel::runtime::GCGraph *encodeToRuntimeGraph(const graph_ptr_t &rootGraph) {
-    auto *runtimeRoot = EncodeSession(rootGraph).run();
-    auto reachable    = camel::runtime::collectReachableGraphs(runtimeRoot);
+void encodeToRuntimeProgram(
+    const graph_ptr_t &rootGraph, camel::runtime::Program &program,
+    camel::runtime::GraphIdAllocator *freshIds) {
+    EncodeSession(rootGraph, program, freshIds).run();
     CAMEL_LOG_INFO_S(
         "GIREncode",
-        "Encoded runtime root '{}' with {} reachable runtime graphs.",
-        runtimeRoot ? runtimeRoot->name() : std::string{"<null>"},
-        reachable.size());
-    return runtimeRoot;
+        "Encoded runtime root '{}' with {} runtime graphs.",
+        program.root() ? program.root()->name() : std::string{"<null>"},
+        program.size());
 }
 
 } // namespace camel::compile::gir

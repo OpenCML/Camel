@@ -49,45 +49,43 @@ The core's kinds (`core_facts.h`):
 `probe` (what a read finds), `verify` (recompute and compare), `invalidate`, `invalidateGraph`,
 `clear`, `forEach`, `counts`.
 
-A fact is indexed by its first anchor's `(lineage, node)` and the kind; any number of anchors is
-allowed. Its stamp holds `(lineage, serial)` of each anchored graph, the declaration epoch when
+A fact is indexed by its first anchor's `(GraphId, node)` and the kind; any number of anchors is
+allowed. Its stamp holds `(GraphId, closure revision)` of each anchored graph, the declaration epoch when
 the kind reads declarations, the target hash, and the cone hash for `Cone` kinds. Every read
 compares them, in release builds too; a stale fact reads as absent and is dropped.
 
-**Lineage and serial** stand in for the design's `GraphId` and `Revision` until graph-model
-step 5:
+**GraphId and revision** name a graph and its content:
 
-- `GCGraph::lineage()`: a new graph gets a new one; a commit gives the copy it encodes of a
-  graph that graph's lineage (`GCGraphBuildAccess::inheritIdentity`).
-- `GCGraph::serial()`: a process-wide serial number. A commit keeps it for a graph it did not
+- `GCGraph::id()`: the graph's `GraphId` (`camel/runtime/graph_id.h`), allocated by the program
+  (`Context::graphIds()`) and kept by every commit for the copy it encodes of a graph; a graph a
+  rewrite creates gets a new one.
+- `GCGraph::revision()`: a process-wide number. A commit keeps it for a graph it did not
   change and gives a new one to a graph that changed: one a pass asked to edit
   (`RuntimeGraphDraftSession::edit`/`rootDraft`) or whose unordered gates the commit dissolved,
   and that the commit did not encode back to the same content (`sameContent`: records, edges,
   payloads, ports, permissions, frame and static layout, static values, the graphs referred to,
-  each by its copy; source positions do not count), or one that refers (at any depth: callee,
-  nested graph, graph of a function constant) to one that changed
-  (`RuntimeGraphDraftSession::changedGraphs`). `std::opt` asks to edit every graph; only those
-  it really changes get a new serial.
+  each by its copy; source positions do not count). `std::opt` asks to edit every graph; only
+  those it really changes get a new revision. The revision is that of one graph.
 
-Because the serial is transitive, the serial of a fact's anchored graphs covers every graph the
-fact read through them: a fact reads its anchors' graphs and graphs they refer to. This is the
-conservative rule of design 10.3, coarser than per-graph revisions: an edit of a callee makes the
-facts on its callers stale too. Step 5 brings per-graph revisions and the snapshot's graph table;
-the interface does not change.
+A fact reads its anchors' graphs and graphs they refer to, so its stamp holds, per anchored graph,
+`closureRevision` (`reachable.h`): a hash of the `(GraphId, revision)` of everything reachable
+from it. This is the conservative rule of design 10.3, coarser than per-node revisions: an edit
+of a callee makes the facts on its callers stale too. The footprint cache of `core.resources`
+is keyed the same way.
 
 ## 4. Rewrites
 
 Every rewrite of the program goes through a `RuntimeGraphDraftSession` commit (`std::opt::inline`,
 `std::opt` and its parts, `std::macro`, specialization, entry arguments, `tensor::fuse`, the ONNX
-export's session, the loop lowering), so the serials are maintained in one place. A fact computed
+export's session, the loop lowering), so the revisions are maintained in one place. A fact computed
 before a pass reads as stale afterwards when the pass changed what it read, and is computed again
 on the next `obtain`; it is never reused silently. A `Cone` kind (`core.shape`) rehashes what it
-read when a serial changed: when that is unchanged (the node's type) the fact stays valid with a
+read when a revision changed: when that is unchanged (the node's type) the fact stays valid with a
 new stamp (`revalidated`).
 
 The loop lowering of std::fvm/std::jit/std::prl/std::cpp commits a detached copy: graphs keep
-their lineage, the graph that held a loop gets a new serial, so facts computed on the program are
-valid on the copy where nothing changed.
+their GraphId, the graph that held a loop gets a new revision, so facts computed on the program
+are valid on the copy where nothing changed.
 
 Facts do not follow a pass on their own (design 10.5: "derived facts are not stale notes that
 happened to survive a clone"); `tx.keep` (a pass re-establishing a fact it maintains) and the
@@ -98,11 +96,11 @@ commit-time verification of kept facts are not implemented yet.
 There is no module cache yet. `fact_persist.h` gives what it will call:
 
 - `portableGraphHash(graph)`: the content of a graph and of everything below it, the same in every
-  process (no lineage, serial, OperId, TypeId or pointer; operators by URI, semantics key and
+  process (no GraphId, revision, OperId, TypeId or pointer; operators by URI, semantics key and
   traits; constants by type and value);
 - `exportFacts(store, root)`: every valid stored fact of a Derived kind that encodes, and every
-  GraphContent value of a kind that encodes, as `PortableFact` (kind, version, anchors by stable
-  id and node, the anchored graphs' hashes, the encoded value), `toText`/`parsePortableFact`;
+  GraphContent value of a kind that encodes, as `PortableFact` (kind, version, anchors by the
+  graph's name in the program and node, the anchored graphs' hashes, the encoded value), `toText`/`parsePortableFact`;
 - `importFact(store, root, fact)`: checks kind, version, graphs and hashes, decodes and stores a
   Derived fact; compares a GraphContent value with the graph.
 
@@ -115,9 +113,9 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
   line `FACT {json}` per fact with its stamp, for example:
 
   ```
-  FACT {"kind":"core.shape","version":1,"class":"derived","anchors":[{"graph":"layer","node":2}],"value":"f32 [2, 4]","stamp":{"revisions":[{"graph":"layer","serial":2}],"epoch":0,"target":0,"cone":"5ea9e00000000050"}}
-  FACT {"kind":"core.reorder","version":1,"class":"derived","anchors":[{"graph":"total","node":1}],"value":"regroup, permute","stamp":{"revisions":[{"graph":"total","serial":3}],"epoch":68,"target":0}}
-  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":2},{"graph":"twice.loop1.body","node":0}],"value":"for: t sequential, t < len(node 1) = 2; element port 0 reads xs(t)","stamp":{"revisions":[{"graph":"twice","serial":4},{"graph":"twice.loop1.body","serial":5}],"epoch":0,"target":0}}
+  FACT {"kind":"core.shape","version":1,"class":"derived","anchors":[{"graph":"layer","node":2}],"value":"f32 [2, 4]","stamp":{"revisions":[{"graph":"layer","revision":2}],"epoch":0,"target":0,"cone":"5ea9e00000000050"}}
+  FACT {"kind":"core.reorder","version":1,"class":"derived","anchors":[{"graph":"total","node":1}],"value":"regroup, permute","stamp":{"revisions":[{"graph":"total","revision":3}],"epoch":68,"target":0}}
+  FACT {"kind":"core.loopDomain","version":1,"class":"derived","anchors":[{"graph":"twice","node":2},{"graph":"twice.loop1.body","node":0}],"value":"for: t sequential, t < len(node 1) = 2; element port 0 reads xs(t)","stamp":{"revisions":[{"graph":"twice","revision":4},{"graph":"twice.loop1.body","revision":5}],"epoch":0,"target":0}}
   FACT {"kind":"core.permissions","version":1,"class":"content","anchors":[{"graph":"total","node":1}],"value":"reassociate","stamp":null}
   ```
 
@@ -134,5 +132,5 @@ of a function value it receives declares `OperatorTraits::inspectsGraphs` (Tiles
 `run_device`, `source`, `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`,
 `with_grad`). On a back end that runs a private lowered copy, every function-typed operand of
 such an operator goes through `:graph/original`, which returns the same function over the
-program's graph (`GCGraph::originalGraph()`): Tiles sees the LOOP of a function on every back end
+program's graph (`Program::original()`): Tiles sees the LOOP of a function on every back end
 (`docs/technical/39_loops.md` section 4).

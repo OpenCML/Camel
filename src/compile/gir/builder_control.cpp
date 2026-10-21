@@ -1402,15 +1402,6 @@ node_handle_t Builder::buildBranch(
     std::vector<draft_node_ref_t> brchCtrlInputs(
         ctrlInputsOf(brchNode).begin(),
         ctrlInputsOf(brchNode).end());
-    std::vector<draft_node_ref_t> brchNormUsers(
-        normUsersOf(brchNode).begin(),
-        normUsersOf(brchNode).end());
-    std::vector<draft_node_ref_t> brchWithUsers(
-        withUsersOf(brchNode).begin(),
-        withUsersOf(brchNode).end());
-    std::vector<draft_node_ref_t> brchCtrlUsers(
-        ctrlUsersOf(brchNode).begin(),
-        ctrlUsersOf(brchNode).end());
     const auto *brchHeader   = nodeHeaderOf(brchNode);
     const auto brchDataIndex = brchHeader->dataIndex != 0
                                    ? brchHeader->dataIndex
@@ -1425,10 +1416,7 @@ node_handle_t Builder::buildBranch(
             .payload      = std::span<const std::byte>(brchBytes.data(), brchBytes.size()),
             .normInputs   = brchNormInputs,
             .withInputs   = brchWithInputs,
-            .ctrlInputs   = brchCtrlInputs,
-            .normUsers    = brchNormUsers,
-            .withUsers    = brchWithUsers,
-            .ctrlUsers    = brchCtrlUsers});
+            .ctrlInputs   = brchCtrlInputs});
     runtime::GCJoinBody joinBody{
         .brch     = nodeIdOf(brchNode),
         .armCount = static_cast<runtime::gc_cnt_t>(branchArms.size())};
@@ -1441,15 +1429,6 @@ node_handle_t Builder::buildBranch(
     std::vector<draft_node_ref_t> joinCtrlInputs(
         ctrlInputsOf(joinNode).begin(),
         ctrlInputsOf(joinNode).end());
-    std::vector<draft_node_ref_t> joinNormUsers(
-        normUsersOf(joinNode).begin(),
-        normUsersOf(joinNode).end());
-    std::vector<draft_node_ref_t> joinWithUsers(
-        withUsersOf(joinNode).begin(),
-        withUsersOf(joinNode).end());
-    std::vector<draft_node_ref_t> joinCtrlUsers(
-        ctrlUsersOf(joinNode).begin(),
-        ctrlUsersOf(joinNode).end());
     const auto *joinHeader = nodeHeaderOf(joinNode);
     const auto joinDataIndex =
         joinHeader->dataIndex != 0 ? joinHeader->dataIndex : currGraph_->addRuntimeSlot(joinType);
@@ -1463,10 +1442,7 @@ node_handle_t Builder::buildBranch(
             .payload      = std::as_bytes(std::span{&joinBody, 1}),
             .normInputs   = joinNormInputs,
             .withInputs   = joinWithInputs,
-            .ctrlInputs   = joinCtrlInputs,
-            .normUsers    = joinNormUsers,
-            .withUsers    = joinWithUsers,
-            .ctrlUsers    = joinCtrlUsers});
+            .ctrlInputs   = joinCtrlInputs});
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
 
@@ -1655,6 +1631,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             factory.addNormArg(gct->loopStateName(j), stateTypes[j], false);
         }
         return createCompileGraph(
+            context_->graphIds().allocate(),
             factory.build(),
             currGraph_,
             std::format("{}.{}", graphBase, role));

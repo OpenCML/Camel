@@ -102,7 +102,7 @@ std::string nodeKindName(GCNodeKind kind) {
 
 json graphSummary(const DraftGraphBuilder *graph) {
     json j;
-    j["id"]   = graph ? graph->stableId() : "";
+    j["id"]   = graph ? camel::runtime::toText(graph->graphId()) : "";
     j["name"] = graph ? graph->name() : "";
     if (graph && graph->funcType()) {
         j["funcTypeSummary"] = graph->funcType()->toString();
@@ -115,14 +115,15 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     const auto node    = graph->draft().ref(nodeId);
     const auto *header = node ? graph->draft().header(nodeId) : nullptr;
     j["id"]            = nodeId;
-    j["graphId"]       = graph->stableId();
+    j["graphId"]       = camel::runtime::toText(graph->graphId());
     j["type"]          = header ? nodeKindName(header->kind) : "DEAD";
     // Entity IDs are only assigned by the (currently unwired) sealing pass, so synthesize a
-    // session-stable composite id: graph stableId + per-graph draft ref. This is the id the
-    // debugger UI shows and can reference back via /api/gir-breakpoints stable-id matching.
-    const std::string stableId = header ? std::format("{}:{}", graph->stableId(), static_cast<uint64_t>(nodeId))
-                                        : std::format("dead:{}", static_cast<int>(nodeId));
-    j["stableId"] = stableId;
+    // session-stable composite id: graph id + per-graph draft ref. This is the id the
+    // debugger UI shows and can reference back via /api/gir-breakpoints node-id matching.
+    const std::string nodeIdText =
+        header ? std::format("{}:{}", camel::runtime::toText(graph->graphId()), static_cast<uint64_t>(nodeId))
+               : std::format("dead:{}", static_cast<int>(nodeId));
+    j["nodeId"] = nodeIdText;
     j["dataType"] = header && header->dataType ? header->dataType->toString() : "";
     if (header && header->kind == GCNodeKind::Port) {
         j["portName"] = graph->nodePortName(node);
@@ -136,7 +137,7 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     }
     if (header && header->kind == GCNodeKind::Func) {
         if (auto callee = graph->funcTarget(node)) {
-            j["funcGraphId"] = callee->stableId();
+            j["funcGraphId"] = camel::runtime::toText(callee->graphId());
             j["funcGraph"]   = callee->name();
         }
     }
@@ -146,9 +147,9 @@ json nodeToJson(const DraftGraphBuilder *graph, draft_node_ref_t nodeId) {
     if (header && header->kind == GCNodeKind::Loop) {
         const auto &target = graph->loopTarget(node);
         if (target.cond) {
-            j["loopCondGraphId"] = target.cond->stableId();
+            j["loopCondGraphId"] = camel::runtime::toText(target.cond->graphId());
         }
-        j["loopBodyGraphId"] = target.body->stableId();
+        j["loopBodyGraphId"] = camel::runtime::toText(target.body->graphId());
     }
     if (auto *sourceContext = sourceContextForGraph(graph)) {
         auto origin = sourceContext->resolveGirNodeOrigin(draftDebugKey(nodeId));
@@ -225,7 +226,7 @@ const DraftGraphBuilder *findGraphById(const DraftGraphBuilder *root, const std:
     if (!root || graphId.empty()) {
         return nullptr;
     }
-    if (root->stableId() == graphId) {
+    if (camel::runtime::toText(root->graphId()) == graphId) {
         return root;
     }
     std::queue<const DraftGraphBuilder *> q;
@@ -237,7 +238,7 @@ const DraftGraphBuilder *findGraphById(const DraftGraphBuilder *root, const std:
         q.pop();
         for (const auto &sub : graph->subGraphs()) {
             if (sub && seen.insert(sub.get()).second) {
-                if (sub->stableId() == graphId) {
+                if (camel::runtime::toText(sub->graphId()) == graphId) {
                     return sub.get();
                 }
                 q.push(sub.get());
@@ -245,7 +246,7 @@ const DraftGraphBuilder *findGraphById(const DraftGraphBuilder *root, const std:
         }
         for (const auto &dep : graph->dependencyGraphs()) {
             if (dep && seen.insert(dep.get()).second) {
-                if (dep->stableId() == graphId) {
+                if (camel::runtime::toText(dep->graphId()) == graphId) {
                     return dep.get();
                 }
                 q.push(dep.get());

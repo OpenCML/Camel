@@ -40,6 +40,7 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/utils/log.h"
+#include "camel/utils/pointer_set.h"
 
 #include <algorithm>
 #include <format>
@@ -53,7 +54,6 @@
 namespace {
 
 using camel::runtime::gc_node_ref_t;
-using camel::runtime::GCFuncBody;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
 using camel::runtime::kInvalidNodeRef;
@@ -113,7 +113,9 @@ size_t inlinedNodeCount(const GCGraph *graph) {
 /// True when running `graph` may have an effect or touch state: it holds an operator that is not
 /// registered as pure, a call of a function value (callee unknown here), or reaches such a graph.
 /// A cycle of graphs is pure when none of its members has an effect of its own.
-bool mayHaveEffects(const GCGraph *graph, std::unordered_set<const GCGraph *> &seen) {
+bool mayHaveEffects(
+    const camel::runtime::Program &program, const GCGraph *graph,
+    std::unordered_set<const GCGraph *> &seen) {
     if (!graph || !seen.insert(graph).second) {
         return false;
     }
@@ -132,28 +134,28 @@ bool mayHaveEffects(const GCGraph *graph, std::unordered_set<const GCGraph *> &s
             }
         }
         if (node->kind == GCNodeKind::Func) {
-            if (mayHaveEffects(graph->directCalleeGraphOf(it.ref()), seen)) {
+            if (mayHaveEffects(program, program.calleeOf(*graph, it.ref()), seen)) {
                 return true;
             }
         }
         if (node->kind == GCNodeKind::Loop) {
-            if (mayHaveEffects(graph->loopCondGraphOf(it.ref()), seen) ||
-                mayHaveEffects(graph->loopBodyGraphOf(it.ref()), seen)) {
+            if (mayHaveEffects(program, program.loopCondOf(*graph, it.ref()), seen) ||
+                mayHaveEffects(program, program.loopBodyOf(*graph, it.ref()), seen)) {
                 return true;
             }
         }
     }
-    for (GCGraph *sub : graph->subGraphs()) {
-        if (mayHaveEffects(sub, seen)) {
+    for (GCGraph *sub : program.subGraphs(*graph)) {
+        if (mayHaveEffects(program, sub, seen)) {
             return true;
         }
     }
     return false;
 }
 
-bool mayHaveEffects(const GCGraph *graph) {
+bool mayHaveEffects(const camel::runtime::Program &program, const GCGraph *graph) {
     std::unordered_set<const GCGraph *> seen;
-    return mayHaveEffects(graph, seen);
+    return mayHaveEffects(program, graph, seen);
 }
 
 /// True when values of `type` may hold a function: inlining a callee returning one exposes the
@@ -181,36 +183,29 @@ bool returnsClosure(const GCGraph *graph) {
     return type && type->hasExitType() && mayHoldFunction(type->exitType());
 }
 
-/// Number of direct calls of each graph in `closure`, read from the session's drafts where a
-/// graph is being edited (calls of graphs created in this session exist only there).
-std::unordered_map<const GCGraph *, size_t> directCallCounts(
-    const camel::runtime::RuntimeGraphDraftSession &session,
-    const std::vector<GCGraph *> &closure) {
-    std::unordered_map<const GCGraph *, size_t> counts;
-    for (GCGraph *graph : closure) {
-        if (const auto *draft = session.tryDraft(graph)) {
-            for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
-                const auto *header = draft->header(id);
-                if (!header || header->kind != GCNodeKind::Func) {
-                    continue;
-                }
-                const auto payload = draft->payloadOf(id);
-                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
-                    const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                    if (body->calleeGraph) {
-                        ++counts[body->calleeGraph];
-                    }
-                }
+/// The callee of each direct call in `graph`, read from the session's draft where the graph is
+/// being edited (calls of graphs created in this session exist only there).
+std::vector<const GCGraph *> directCallees(
+    const camel::runtime::RuntimeGraphDraftSession &session, const GCGraph *graph) {
+    std::vector<const GCGraph *> callees;
+    if (const auto *draft = session.tryDraft(graph)) {
+        for (gc_node_ref_t id = 0; id < draft->nodeSlotCount(); ++id) {
+            const auto *header = draft->header(id);
+            if (!header || header->kind != GCNodeKind::Func) {
+                continue;
             }
-            continue;
+            if (GCGraph *callee = draft->calleeGraphOf(id)) {
+                callees.push_back(callee);
+            }
         }
-        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            if (GCGraph *callee = graph->directCalleeGraphOf(it.ref())) {
-                ++counts[callee];
-            }
+        return callees;
+    }
+    for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+        if (GCGraph *callee = session.work().calleeOf(*graph, it.ref())) {
+            callees.push_back(callee);
         }
     }
-    return counts;
+    return callees;
 }
 
 /// The nodes `id` runs after other than through `skip` (its transitive inputs of every kind).
@@ -265,6 +260,8 @@ struct MacroOperandGraphs {
     /// A macro operator takes a function that is not a constant of the graph (a parameter, the
     /// result of a call): any function of the program may reach it.
     bool all = false;
+    /// The closure holds a macro operator, so the set above depends on the drafts.
+    bool present = false;
 
     bool contains(const GCGraph *graph) const { return all || graphs.contains(graph); }
 };
@@ -302,6 +299,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
             if (!node || node->kind != GCNodeKind::Oper || !node->isMacro()) {
                 continue;
             }
+            result.present = true;
             for (auto inputs : {graph->normInputsOf(it.ref()), graph->withInputsOf(it.ref())}) {
                 for (gc_node_ref_t input : inputs) {
                     const auto *operand = graph->node(input);
@@ -340,10 +338,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
                 if (!header || header->kind != GCNodeKind::Func) {
                     continue;
                 }
-                const auto payload = draft->payloadOf(id);
-                if (payload.size_bytes() >= sizeof(GCFuncBody)) {
-                    reach(reinterpret_cast<const GCFuncBody *>(payload.data())->calleeGraph);
-                }
+                reach(draft->calleeGraphOf(id));
             }
             const auto slots = draft->staticSlots();
             const auto types = draft->staticSlotTypes();
@@ -361,7 +356,7 @@ MacroOperandGraphs collectMacroOperandGraphs(
             if (!*it) {
                 continue;
             }
-            GCGraph *target = graph->directCalleeGraphOf(it.ref());
+            GCGraph *target = session.work().calleeOf(*graph, it.ref());
             if (!target) {
                 target = functionConstantGraph(graph, it.ref());
             }
@@ -381,7 +376,8 @@ struct RuntimeCallGraphSccInfo {
     std::unordered_set<const GCGraph *> reachesRecursion;
 };
 
-RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> &closure) {
+RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(
+    const camel::runtime::Program &program, const std::vector<GCGraph *> &closure) {
     RuntimeCallGraphSccInfo info;
     std::unordered_map<const GCGraph *, size_t> indexOf;
     indexOf.reserve(closure.size());
@@ -401,9 +397,9 @@ RuntimeCallGraphSccInfo analyzeRuntimeCallGraphScc(const std::vector<GCGraph *> 
             // callee: a function called from a loop body that calls the function the loop is
             // in is a recursion through the loop.
             for (GCGraph *callee :
-                 {graph->directCalleeGraphOf(it.ref()),
-                  graph->loopCondGraphOf(it.ref()),
-                  graph->loopBodyGraphOf(it.ref())}) {
+                 {program.calleeOf(*graph, it.ref()),
+                  program.loopCondOf(*graph, it.ref()),
+                  program.loopBodyOf(*graph, it.ref())}) {
                 if (!callee) {
                     continue;
                 }
@@ -559,19 +555,154 @@ struct DeclinedCall {
     size_t callSites;
 };
 
-/// The rewritten root, or nullptr when nothing changed. `growthSpent` counts the nodes copied
+/// The direct calls of the graphs in the closure, kept up to date as the session rewrites
+/// graphs: the number of calls of each graph, and a stamp per graph that changes whenever
+/// something the examination of that graph reads changes (its own draft, the number of calls of
+/// a graph it calls, the closure). A graph examined without result keeps its stamp and the
+/// calls it declined, so that the rounds after it need not examine it again until the stamp
+/// differs. Counting the closure again for every inline made one inline cost (graphs x nodes):
+/// 405 s for std::opt::inline on a 36,000-node program of 1,732 graphs.
+class CallBook {
+  public:
+    explicit CallBook(const camel::runtime::RuntimeGraphDraftSession &session)
+        : session_(session) {}
+
+    size_t calls(const GCGraph *callee) const {
+        const auto it = index_.find(callee);
+        return it == index_.end() ? 0 : slots_[it->second].calls;
+    }
+
+    bool counted(const GCGraph *graph) const {
+        const auto it = index_.find(graph);
+        return it != index_.end() && slots_[it->second].counted;
+    }
+
+    /// Counts the calls of `graph` anew: it entered the closure, or its draft changed.
+    void recount(const GCGraph *graph) { replaceHeld(graph, directCallees(session_, graph)); }
+
+    /// `graph` left the closure: its calls no longer count.
+    void forget(const GCGraph *graph) {
+        replaceHeld(graph, {});
+        slots_[slotOf(graph)].counted = false;
+        slots_[slotOf(graph)].clean.reset();
+    }
+
+    /// `graph`'s draft was rewritten.
+    void rewritten(const GCGraph *graph) {
+        ++slots_[slotOf(graph)].own;
+        recount(graph);
+    }
+
+    /// Everything a scan reads may have changed (the closure, the analyses over it).
+    void invalidateAll() { ++global_; }
+
+    /// What the examination of `graph` reads, as one number that changes when any of it does.
+    uint64_t stampOf(const GCGraph *graph) const {
+        const auto it = index_.find(graph);
+        return it == index_.end() ? global_ : stampOf(slots_[it->second]);
+    }
+
+    /// The examination of `graph` found nothing to do, and declined `declined`.
+    void examined(const GCGraph *graph, std::vector<DeclinedCall> declined) {
+        Slot &slot = slots_[slotOf(graph)];
+        slot.clean = Clean{stampOf(slot), std::move(declined)};
+    }
+
+    /// The calls declined by the last examination of `graph`, when nothing it read has changed
+    /// since and it found nothing to do; null otherwise.
+    const std::vector<DeclinedCall> *unchangedExamination(const GCGraph *graph) const {
+        const auto it = index_.find(graph);
+        if (it == index_.end()) {
+            return nullptr;
+        }
+        const Slot &slot = slots_[it->second];
+        return slot.clean && slot.clean->stamp == stampOf(slot) ? &slot.clean->declined : nullptr;
+    }
+
+  private:
+    struct Clean {
+        uint64_t stamp;
+        std::vector<DeclinedCall> declined;
+    };
+    struct Slot {
+        size_t calls   = 0;
+        bool counted   = false;
+        // Monotone, so that the sum of the ones a stamp reads changes exactly when one of them
+        // does: `own` counts rewrites of the graph, `version` changes of its call count.
+        uint64_t own     = 0;
+        uint64_t version = 0;
+        std::vector<uint32_t> held; // the callees counted for this graph, one entry per call
+        std::optional<Clean> clean;
+    };
+
+    uint32_t slotOf(const GCGraph *graph) {
+        const auto [it, inserted] = index_.try_emplace(graph, static_cast<uint32_t>(slots_.size()));
+        if (inserted) {
+            slots_.emplace_back();
+        }
+        return it->second;
+    }
+
+    uint64_t stampOf(const Slot &slot) const {
+        uint64_t stamp = global_ + slot.own;
+        for (uint32_t callee : slot.held) {
+            stamp += slots_[callee].version;
+        }
+        return stamp;
+    }
+
+    void replaceHeld(const GCGraph *graph, const std::vector<const GCGraph *> &now) {
+        std::vector<uint32_t> nowSlots;
+        nowSlots.reserve(now.size());
+        for (const GCGraph *callee : now) {
+            nowSlots.push_back(slotOf(callee));
+        }
+        const uint32_t self = slotOf(graph);
+        std::unordered_map<uint32_t, long> delta;
+        for (uint32_t callee : slots_[self].held) {
+            --delta[callee];
+        }
+        for (uint32_t callee : nowSlots) {
+            ++delta[callee];
+        }
+        for (const auto &[callee, change] : delta) {
+            if (change != 0) {
+                Slot &slot = slots_[callee];
+                slot.calls = static_cast<size_t>(static_cast<long>(slot.calls) + change);
+                ++slot.version;
+            }
+        }
+        slots_[self].held    = std::move(nowSlots);
+        slots_[self].counted = true;
+    }
+
+    const camel::runtime::RuntimeGraphDraftSession &session_;
+    std::unordered_map<const GCGraph *, uint32_t> index_;
+    std::vector<Slot> slots_;
+    uint64_t global_ = 0;
+};
+
+/// The rewritten program, or nullptr when nothing changed. `growthSpent` counts the nodes copied
 /// so far against `growthBudget` (see OptimizeRewriteConfig::growthBudget). `declinedOut`
 /// receives the direct calls the last round examined and did not inline, with the reason: the
 /// last round of a session that changes nothing examines every call that is left.
-GCGraph *applyRuntimeOptimizeRewrite(
-    const camel::core::context::context_ptr_t &context, GCGraph *runtimeRoot,
+const camel::runtime::Program *applyRuntimeOptimizeRewrite(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
     std::vector<InlineDeclined> &declinedOut) {
-    camel::runtime::RuntimeGraphDraftSession session(context, runtimeRoot);
+    camel::runtime::RuntimeGraphDraftSession session(context, program);
     bool changed              = false;
     size_t appliedInlineCount = 0;
     std::vector<DeclinedCall> declined;
     CAMEL_LOG_INFO_S("OptimizePass", "Runtime rewrite session started.");
+
+    // What the analyses below were computed for: they depend on the closure's members (and on
+    // the graphs, which the session does not change) and are computed again only when it grows.
+    camel::utils::PointerSet<GCGraph> closureSet;
+    std::vector<GCGraph *> previousClosure;
+    RuntimeCallGraphSccInfo sccInfo;
+    MacroOperandGraphs macroOperands;
+    CallBook callBook(session);
 
     while (true) {
         declined.clear();
@@ -581,62 +712,91 @@ GCGraph *applyRuntimeOptimizeRewrite(
             "Runtime rewrite collected reachable closure with {} graphs.",
             closure.size());
 
-        std::unordered_set<GCGraph *> closureSet;
-        RuntimeCallGraphSccInfo sccInfo;
-        MacroOperandGraphs macroOperands;
-        if (config.enableInlining) {
-            macroOperands = collectMacroOperandGraphs(session, closure);
-            closureSet.insert(closure.begin(), closure.end());
-            for (GCGraph *runtimeGraph : closure) {
-                if (!runtimeGraph) {
-                    continue;
-                }
-                for (auto it = runtimeGraph->nodes().begin(); it != runtimeGraph->nodes().end();
-                     ++it) {
-                    const auto *node = *it;
-                    if (!node || node->kind != GCNodeKind::Func) {
-                        continue;
-                    }
-                    GCGraph *callee = runtimeGraph->directCalleeGraphOf(it.ref());
-                    if (!callee) {
-                        continue;
-                    }
-                    if (!closureSet.contains(callee)) {
-                        throw std::runtime_error(
-                            std::format(
-                                "Runtime rewrite discovered FUNC node {} in graph '{}' with callee "
-                                "graph {:p} outside the reachable closure.",
-                                it.ref(),
-                                runtimeGraph->name(),
-                                static_cast<void *>(callee)));
-                    }
+        const bool closureChanged =
+            closureSet.size() != closure.size() ||
+            !std::ranges::all_of(closure, [&](GCGraph *g) { return closureSet.contains(g); });
+        if (closureChanged) {
+            camel::utils::PointerSet<GCGraph> members(closure.size());
+            for (GCGraph *member : closure) {
+                members.insert(member);
+            }
+            for (GCGraph *left : previousClosure) {
+                if (!members.contains(left)) {
+                    callBook.forget(left);
                 }
             }
+            previousClosure = closure;
+            closureSet      = std::move(members);
+            for (GCGraph *runtimeGraph : closure) {
+                if (runtimeGraph && !callBook.counted(runtimeGraph)) {
+                    callBook.recount(runtimeGraph);
+                }
+            }
+            callBook.invalidateAll();
+        }
+        if (config.enableInlining) {
+            if (closureChanged) {
+                for (GCGraph *runtimeGraph : closure) {
+                    if (!runtimeGraph) {
+                        continue;
+                    }
+                    for (auto it = runtimeGraph->nodes().begin();
+                         it != runtimeGraph->nodes().end();
+                         ++it) {
+                        const auto *node = *it;
+                        if (!node || node->kind != GCNodeKind::Func) {
+                            continue;
+                        }
+                        GCGraph *callee = session.work().calleeOf(*runtimeGraph, it.ref());
+                        if (!callee) {
+                            continue;
+                        }
+                        if (!closureSet.contains(callee)) {
+                            throw std::runtime_error(
+                                std::format(
+                                    "Runtime rewrite discovered FUNC node {} in graph '{}' with "
+                                    "callee graph {:p} outside the reachable closure.",
+                                    it.ref(),
+                                    runtimeGraph->name(),
+                                    static_cast<void *>(callee)));
+                        }
+                    }
+                }
 
-            sccInfo = analyzeRuntimeCallGraphScc(closure);
-            CAMEL_LOG_INFO_S(
-                "OptimizePass",
-                "Runtime rewrite SCC analysis finished: {} components, {} recursive graphs, {} "
-                "entry graphs.",
-                sccInfo.components.size(),
-                sccInfo.recursiveGraphs.size(),
-                sccInfo.componentEntryGraphs.size());
+                sccInfo = analyzeRuntimeCallGraphScc(session.work(), closure);
+                CAMEL_LOG_INFO_S(
+                    "OptimizePass",
+                    "Runtime rewrite SCC analysis finished: {} components, {} recursive graphs, "
+                    "{} entry graphs.",
+                    sccInfo.components.size(),
+                    sccInfo.recursiveGraphs.size(),
+                    sccInfo.componentEntryGraphs.size());
+            }
+            // Without a macro operator in the program the set is empty whatever the drafts hold.
+            if (closureChanged || macroOperands.present) {
+                macroOperands = collectMacroOperandGraphs(session, closure);
+                if (macroOperands.present) {
+                    callBook.invalidateAll();
+                }
+            }
         }
 
         bool roundChanged = false;
         bool restartRound = false;
-        // The direct-call counts of the whole closure, shared by the graphs of this round. They
-        // depend only on the drafts, which a round changes in three ways: a specialization or a
-        // devirtualization retargets or creates a FUNC node (the counts are dropped and
-        // recomputed on the next use), and an inline restarts the round. Counting the closure
-        // again for every graph made one inline cost (graphs x nodes): 405 s for std::opt::inline
-        // on a 36,000-node program of 1,732 graphs.
-        std::optional<std::unordered_map<const GCGraph *, size_t>> roundCallCounts;
         for (auto it = closure.rbegin(); it != closure.rend(); ++it) {
             GCGraph *nextGraph = *it;
             if (!nextGraph) {
                 continue;
             }
+
+            // A graph examined without result (nothing specialized, devirtualized or inlined, no
+            // candidate) is not examined again while what the examination read is the same.
+            if (const auto *unchanged = callBook.unchangedExamination(nextGraph)) {
+                declined.insert(declined.end(), unchanged->begin(), unchanged->end());
+                continue;
+            }
+            const size_t declinedBefore = declined.size();
+            bool graphRewritten         = false;
 
             CAMEL_LOG_INFO_S(
                 "OptimizePass",
@@ -669,14 +829,13 @@ GCGraph *applyRuntimeOptimizeRewrite(
                         break; // out of growth budget: a specialization is a copy of the callee
                     }
                     if (camel::runtime::specializeDirectFuncInDraft(session, draft, funcNodeId)) {
-                        changed      = true;
-                        roundChanged = true;
-                        roundCallCounts.reset();
+                        changed        = true;
+                        roundChanged   = true;
+                        graphRewritten = true;
                         // The callee after the rewrite is the copy (counted in full even when
                         // an existing copy was reused).
-                        const auto *body = reinterpret_cast<const GCFuncBody *>(
-                            draft.payloadOf(funcNodeId).data());
-                        growthSpent += body->calleeGraph ? body->calleeGraph->nodeCount() : 0;
+                        const GCGraph *copy = draft.calleeGraphOf(funcNodeId);
+                        growthSpent += copy ? copy->nodeCount() : 0;
                     }
                 }
             }
@@ -700,11 +859,16 @@ GCGraph *applyRuntimeOptimizeRewrite(
                             draft,
                             callNodeId,
                             config.enableBranchedCallSplit)) {
-                        changed      = true;
-                        roundChanged = true;
-                        roundCallCounts.reset();
+                        changed        = true;
+                        roundChanged   = true;
+                        graphRewritten = true;
                     }
                 }
+            }
+            // The direct-call counts are shared by the graphs of this round and by the rounds
+            // that follow: a rewrite of a graph counts that graph's calls again.
+            if (graphRewritten) {
+                callBook.rewritten(nextGraph);
             }
 
             if (!config.enableInlining) {
@@ -713,13 +877,12 @@ GCGraph *applyRuntimeOptimizeRewrite(
             // An unexpanded macro operator will transform this graph and needs it as compiled
             // (see MacroOperandGraphs): nothing is inlined into it.
             if (macroOperands.contains(nextGraph)) {
+                if (!graphRewritten) {
+                    callBook.examined(nextGraph, {});
+                }
                 continue;
             }
 
-            if (!roundCallCounts) {
-                roundCallCounts = directCallCounts(session, closure);
-            }
-            const auto &callCounts = *roundCallCounts;
             std::vector<gc_node_ref_t> candidates;
             candidates.reserve(draft.nodeCount());
             for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -730,27 +893,22 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 if (draft.sourceRefOf(id) == kInvalidNodeRef) {
                     continue;
                 }
-                const auto payload = draft.payloadOf(id);
-                if (payload.size_bytes() < sizeof(GCFuncBody)) {
-                    continue;
-                }
-                const auto *body = reinterpret_cast<const GCFuncBody *>(payload.data());
-                if (!body->calleeGraph || body->calleeGraph == nextGraph) {
+                GCGraph *const calleeGraph = draft.calleeGraphOf(id);
+                if (!calleeGraph || calleeGraph == nextGraph) {
                     continue;
                 }
                 // Growth: the copy must fit the pass's budget and the owner's size cap. Both are
                 // checked last (below), so that a call they stop is known to be one the engine
                 // would otherwise have inlined.
-                const size_t copied = inlinedNodeCount(body->calleeGraph);
-                const size_t calls =
-                    callCounts.contains(body->calleeGraph) ? callCounts.at(body->calleeGraph) : 0;
+                const size_t copied = inlinedNodeCount(calleeGraph);
+                const size_t calls  = callBook.calls(calleeGraph);
                 const auto decline = [&](InlineDecline why) {
                     declined.push_back(
-                        {nextGraph, body->calleeGraph, why, copied, draft.nodeCount(), calls});
+                        {nextGraph, calleeGraph, why, copied, draft.nodeCount(), calls});
                 };
                 if (shouldSkipRecursiveInline(
                         nextGraph,
-                        body->calleeGraph,
+                        calleeGraph,
                         sccInfo,
                         config.inlineConfig)) {
                     decline(InlineDecline::Recursive);
@@ -766,22 +924,22 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 // that calls of it can be devirtualized.
                 // Graphs created in this session (specializations, lifted closures) are not in
                 // the call-graph analysis yet; they qualify in the next session.
-                const bool acyclic = sccInfo.componentOf.contains(body->calleeGraph) &&
-                                     !sccInfo.reachesRecursion.contains(body->calleeGraph);
+                const bool acyclic = sccInfo.componentOf.contains(calleeGraph) &&
+                                     !sccInfo.reachesRecursion.contains(calleeGraph);
                 const bool isSmall =
-                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig) ||
-                    (acyclic && calls == 1) || (acyclic && returnsClosure(body->calleeGraph)) ||
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig) ||
+                    (acyclic && calls == 1) || (acyclic && returnsClosure(calleeGraph)) ||
                     (acyclic && calls > 1 &&
                      (calls - 1) * copied <= config.inlineConfig.duplicationBudgetNodes);
                 CAMEL_LOG_INFO_S(
                     "OptimizePass",
                     "Inline probe '{}' -> '{}': small={} acyclic={} calls={} closure={}.",
                     nextGraph->name(),
-                    body->calleeGraph->name(),
-                    isSmallRuntimeSubgraphForInline(body->calleeGraph, config.inlineConfig),
+                    calleeGraph->name(),
+                    isSmallRuntimeSubgraphForInline(calleeGraph, config.inlineConfig),
                     acyclic,
                     calls,
-                    returnsClosure(body->calleeGraph));
+                    returnsClosure(calleeGraph));
                 const bool isArm = isDraftBranchArmHead(draft, id);
                 const bool suppressNonRecursiveArmInlining =
                     config.inlineConfig.inlineStrategy == InlineTargetStrategy::Hybrid &&
@@ -817,9 +975,7 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 if (!draft.alive(funcNodeId)) {
                     continue;
                 }
-                const size_t copied = inlinedNodeCount(
-                    reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())
-                        ->calleeGraph);
+                const size_t copied = inlinedNodeCount(draft.calleeGraphOf(funcNodeId));
                 if (!camel::passes::opt::inlineCallInOrder(session, draft, funcNodeId)) {
                     continue;
                 }
@@ -828,6 +984,7 @@ GCGraph *applyRuntimeOptimizeRewrite(
                 roundChanged = true;
                 appliedInlineCount++;
                 restartRound = true;
+                callBook.rewritten(nextGraph);
                 // Re-scan the reachable closure after every successful inline.
                 // Hybrid inline changes control/value context for the remaining
                 // FUNC nodes in the same owner graph, so a precomputed
@@ -836,6 +993,13 @@ GCGraph *applyRuntimeOptimizeRewrite(
             }
             if (restartRound) {
                 break;
+            }
+            if (!graphRewritten && candidates.empty()) {
+                callBook.examined(
+                    nextGraph,
+                    std::vector<DeclinedCall>(
+                        declined.begin() + static_cast<std::ptrdiff_t>(declinedBefore),
+                        declined.end()));
             }
             if (appliedInlineCount >= kRuntimeRewriteApplyBudget) {
                 CAMEL_LOG_WARN_S(
@@ -902,8 +1066,7 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
     // is spliced; the inliner hands a call's control predecessors to the body.
     // Only a body that has an effect or touches state cares when it runs; a pure
     // callee (most of a tensor program) gets no extra edge.
-    const bool calleeOrdered = mayHaveEffects(
-        reinterpret_cast<const GCFuncBody *>(draft.payloadOf(funcNodeId).data())->calleeGraph);
+    const bool calleeOrdered = mayHaveEffects(session.work(), draft.calleeGraphOf(funcNodeId));
     for (gc_node_ref_t source : argSources) {
         if (!calleeOrdered) {
             break;
@@ -1030,16 +1193,16 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
 
 } // namespace camel::passes::opt
 
-camel::runtime::GCGraph *applyOptimizeRewritePass(
-    const camel::core::context::context_ptr_t &context, camel::runtime::GCGraph *graph,
+const camel::runtime::Program *applyOptimizeRewritePass(
+    const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::ostream &os, const OptimizeRewriteConfig &config, bool *changedOut) {
     (void)os;
 
-    if (!graph) {
+    if (!program) {
         return nullptr;
     }
     if (!hasAnyRewritePhaseEnabled(config)) {
-        return graph;
+        return program;
     }
     const size_t growthBudget = config.growthBudget.nodes;
     size_t ownGrowthSpent     = 0;
@@ -1052,9 +1215,9 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     bool changed                  = false;
     std::vector<InlineDeclined> declined;
     for (size_t i = 0; i < kMaxSessions; ++i) {
-        GCGraph *rewritten = applyRuntimeOptimizeRewrite(
+        const camel::runtime::Program *rewritten = applyRuntimeOptimizeRewrite(
             context,
-            graph,
+            program,
             config,
             growthBudget,
             growthSpent,
@@ -1063,7 +1226,7 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
             break;
         }
         changed = true;
-        graph   = rewritten;
+        program = rewritten;
     }
     if (config.enableInlining && context) {
         // For a later pass that has to explain a call this one left (see InlineReport).
@@ -1092,5 +1255,5 @@ camel::runtime::GCGraph *applyOptimizeRewritePass(
     if (changedOut) {
         *changedOut = changed;
     }
-    return graph;
+    return program;
 }

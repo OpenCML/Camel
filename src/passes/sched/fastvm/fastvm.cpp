@@ -18,12 +18,14 @@
  */
 
 #include "fastvm.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/core/module/module.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/loop_lowering.h"
+#include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/view.h"
 #include "camel/utils/log.h"
 #include "opperf.h"
@@ -54,18 +56,13 @@ namespace {
 // Framed code reads the collector's request for a safepoint as one byte.
 static_assert(sizeof(camel::core::mm::detail::autoSpaceSafepointSlowPath) == 1);
 
-constexpr size_t kFastVmEntryPcSlot            = 1;
-constexpr size_t kFastVmJitEntrySlot           = 2;
-constexpr size_t kFastVmFlagsSlot              = 3;
-constexpr size_t kFastVmIndirectCallCountSlot  = 5;
-constexpr size_t kFastVmGraphLengthSlot        = 6;
 constexpr uintptr_t kFastVmFlagCompileFailed   = 1u << 0;
 constexpr uintptr_t kFastVmFlagFailureReported = 1u << 1;
 
 inline std::optional<size_t> fastVmEntryPcOf(camel::runtime::GCGraph *graph) {
     if (!graph)
         return std::nullopt;
-    uintptr_t raw = graph->extraSlot(kFastVmEntryPcSlot);
+    uintptr_t raw = graph->execPlan().fastVm.entryPc;
     if (raw == 0)
         return std::nullopt;
     return static_cast<size_t>(raw - 1);
@@ -73,13 +70,13 @@ inline std::optional<size_t> fastVmEntryPcOf(camel::runtime::GCGraph *graph) {
 
 inline void setFastVmEntryPcOf(camel::runtime::GCGraph *graph, size_t pc) {
     if (graph)
-        graph->setExtraSlot(kFastVmEntryPcSlot, static_cast<uintptr_t>(pc) + 1);
+        graph->execPlan().fastVm.entryPc = static_cast<uintptr_t>(pc) + 1;
 }
 
 inline std::optional<size_t> fastVmGraphLengthOf(camel::runtime::GCGraph *graph) {
     if (!graph)
         return std::nullopt;
-    uintptr_t raw = graph->extraSlot(kFastVmGraphLengthSlot);
+    uintptr_t raw = graph->execPlan().fastVm.graphLength;
     if (raw == 0)
         return std::nullopt;
     return static_cast<size_t>(raw - 1);
@@ -87,23 +84,23 @@ inline std::optional<size_t> fastVmGraphLengthOf(camel::runtime::GCGraph *graph)
 
 inline void setFastVmGraphLengthOf(camel::runtime::GCGraph *graph, size_t length) {
     if (graph)
-        graph->setExtraSlot(kFastVmGraphLengthSlot, static_cast<uintptr_t>(length) + 1);
+        graph->execPlan().fastVm.graphLength = static_cast<uintptr_t>(length) + 1;
 }
 
 #if ENABLE_FASTVM_JIT
 inline jit::JitEntryFn fastVmJitEntryOf(camel::runtime::GCGraph *graph) {
-    return graph ? reinterpret_cast<jit::JitEntryFn>(graph->extraSlot(kFastVmJitEntrySlot))
+    return graph ? reinterpret_cast<jit::JitEntryFn>(graph->execPlan().fastVm.jitEntry)
                  : nullptr;
 }
 
 inline void setFastVmJitEntryOf(camel::runtime::GCGraph *graph, jit::JitEntryFn fn) {
     if (graph)
-        graph->setExtraSlot(kFastVmJitEntrySlot, reinterpret_cast<uintptr_t>(fn));
+        graph->execPlan().fastVm.jitEntry = reinterpret_cast<uintptr_t>(fn);
 }
 #endif
 
 inline uintptr_t fastVmFlagsOf(camel::runtime::GCGraph *graph) {
-    return graph ? graph->extraSlot(kFastVmFlagsSlot) : 0;
+    return graph ? graph->execPlan().fastVm.flags : 0;
 }
 
 inline bool fastVmJitCompileFailedOf(camel::runtime::GCGraph *graph) {
@@ -115,7 +112,7 @@ inline void setFastVmJitCompileFailedOf(camel::runtime::GCGraph *graph, bool fai
         return;
     uintptr_t flags = fastVmFlagsOf(graph);
     flags = failed ? (flags | kFastVmFlagCompileFailed) : (flags & ~kFastVmFlagCompileFailed);
-    graph->setExtraSlot(kFastVmFlagsSlot, flags);
+    graph->execPlan().fastVm.flags = flags;
 }
 
 inline bool fastVmJitFailureReportedOf(camel::runtime::GCGraph *graph) {
@@ -127,7 +124,7 @@ inline void setFastVmJitFailureReportedOf(camel::runtime::GCGraph *graph, bool r
         return;
     uintptr_t flags = fastVmFlagsOf(graph);
     flags = reported ? (flags | kFastVmFlagFailureReported) : (flags & ~kFastVmFlagFailureReported);
-    graph->setExtraSlot(kFastVmFlagsSlot, flags);
+    graph->execPlan().fastVm.flags = flags;
 }
 
 #if ENABLE_FASTVM_JIT
@@ -142,7 +139,7 @@ inline void setFastVmJitFramedOf(camel::runtime::GCGraph *graph, bool framed) {
         return;
     uintptr_t flags = fastVmFlagsOf(graph);
     flags           = framed ? (flags | kFastVmFlagJitFramed) : (flags & ~kFastVmFlagJitFramed);
-    graph->setExtraSlot(kFastVmFlagsSlot, flags);
+    graph->execPlan().fastVm.flags = flags;
 }
 #endif
 
@@ -150,11 +147,11 @@ inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
     if (!graph) {
         return 0;
     }
-    const uintptr_t raw = graph->extraSlot(kFastVmIndirectCallCountSlot);
+    const uintptr_t raw = graph->execPlan().fastVm.indirectCallCount;
     const uint32_t next = raw >= static_cast<uintptr_t>(std::numeric_limits<uint32_t>::max())
                               ? std::numeric_limits<uint32_t>::max()
                               : static_cast<uint32_t>(raw) + 1;
-    graph->setExtraSlot(kFastVmIndirectCallCountSlot, static_cast<uintptr_t>(next));
+    graph->execPlan().fastVm.indirectCallCount = static_cast<uintptr_t>(next);
     return next;
 }
 
@@ -345,9 +342,10 @@ constexpr size_t kLateBytecodeReserve = size_t{1} << 22; // 4M bytecodes, 32 MiB
 
 } // namespace
 
-void FastVMSchedPass::precompile(camel::runtime::GCGraph *runtimeRoot) {
+void FastVMSchedPass::precompile(
+    const camel::runtime::Program &program, camel::runtime::GCGraph *runtimeRoot) {
     ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
-    auto linked = compileAndLink(context_, runtimeRoot, kFastVmCompileStrategy);
+    auto linked = compileAndLink(context_, program, runtimeRoot, kFastVmCompileStrategy);
     bytecodes_  = std::move(linked.codes);
     bytecodes_.reserve(bytecodes_.size() + std::max(kLateBytecodeReserve, bytecodes_.size() * 4));
     offsetMap_ = std::move(linked.offsetMap);
@@ -365,6 +363,7 @@ void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
     // graph created at run time can be collected and its address reused by a new one.
     auto linked = compileAndLinkFrom(
         context_,
+        programs_.of(graph),
         graph,
         kFastVmCompileStrategy,
         fastVmEntryPcOf,
@@ -431,6 +430,9 @@ slot_t FastVMSchedPass::callElement(const HigherOrderCallSite &site, Frame *fram
     slot_t result = call(site.entryPc, frame);
 #endif
     --nestedCalls_;
+    // The result is handed straight to its store: `map` copies the element bytes into the output
+    // array, `filter` reads a boolean, `foreach` drops it. A view is therefore harmless here; the
+    // stores where a value outlives the element materialise it (H29).
     return result;
 }
 
@@ -476,9 +478,10 @@ void FastVMSchedPass::observeFault(const camel::core::error::RuntimeFault &fault
     }
 }
 
-camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, std::ostream &os) {
+const camel::runtime::Program *
+FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     (void)os;
-    ASSERT(graph != nullptr, "FastVM requires a non-null runtime root graph.");
+    ASSERT(program->root() != nullptr, "FastVM requires a non-null runtime root graph.");
 
     // Loops. By default they run as the tail recursion they mean, on a private copy of the
     // program (camel/runtime/loop_lowering.h): today that is faster here than the native
@@ -499,10 +502,11 @@ camel::runtime::GCGraph *FastVMSchedPass::apply(camel::runtime::GCGraph *graph, 
         : native ? "native_loop=true"
                  : "the default");
     if (!native) {
-        graph = camel::runtime::lowerLoopsToTailRecursion(context_, graph);
+        program = camel::runtime::lowerLoopsToTailRecursion(context_, program);
     }
-    camel::runtime::GCGraph *runtimeRoot = graph;
-    precompile(runtimeRoot);
+    camel::runtime::GCGraph *runtimeRoot = program->root();
+    programs_.setMain(program);
+    precompile(*program, runtimeRoot);
 
     stackDepth_  = 0;
     nestedCalls_ = 0;
@@ -709,7 +713,14 @@ void FastVMSchedPass::evalLoop(const Bytecode &bc, Frame &currFrame) {
         void beforeRound(size_t) {}
         slot_t initialState(size_t j) { return currFrame.get<slot_t>(nargs[first + j]); }
         slot_t stateValue() { return currFrame.get<slot_t>(self); }
-        void setStateValue(slot_t value) { currFrame.set(self, value); }
+        void setStateValue(slot_t value) {
+            // The next round reads this value: it is a value, not a view of this round's element
+            // (H29). The loop state is a store that outlives the element, so materialise here.
+            const type::Type *stateType = currFrame.typeAt<Type>(self);
+            value = camel::core::rtdata::materializeCallResult(value, stateType);
+            CAMEL_ASSERT_NOT_VIEW(value, stateType, "a loop state");
+            currFrame.set(self, value);
+        }
         slot_t callRound(
             const camel::execute::LoopShape &shape, camel::runtime::GCGraph *target,
             const slot_t *element) {
@@ -764,6 +775,15 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
     const size_t arrSize = currFrame.get<Array *>(nargs[0])->size();
     slot_t init          = currFrame.get<slot_t>(wargs[1]);
 
+    // The accumulator type, resolved once: a value stored into the accumulator outlives the
+    // element read that produced it, so the store materialises it (H29).
+    const type::Type *accumulatorType = nullptr;
+    if (Function *fn = currFrame.get<Function *>(wargs[0]); fn != nullptr) {
+        accumulatorType = fn->graph() != nullptr && fn->graph()->funcType() != nullptr
+                              ? fn->graph()->funcType()->exitType()
+                              : nullptr;
+    }
+
     // Preserve left-fold semantics: an empty array returns the initial value immediately.
     if (arrSize == 0) {
         currFrame.set(self, init);
@@ -783,7 +803,12 @@ void FastVMSchedPass::evalMarkedOperator_reduce_arr(
             Frame *frame = framePool_.acquire(site.runtimeGraph);
             populateMarkedCallFrame(frame, func, std::span<const slot_t>(args, 2));
 
-            currFrame.set(self, callElement(site, frame));
+            // The accumulator is the value the next round reads, so it is a value, not a view of the
+            // element this round read (H29). The store is the boundary: materialise here.
+            const slot_t next = camel::core::rtdata::materializeCallResult(
+                callElement(site, frame), accumulatorType);
+            CAMEL_ASSERT_NOT_VIEW(next, accumulatorType, "the reduce accumulator");
+            currFrame.set(self, next);
         }
     });
 }
@@ -1098,7 +1123,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                         fastVmCallBoundarySafepoint();
                         auto *function = cur->get<Function *>(wargs[0]);
                         ASSERT(function != nullptr, "JIT CALL resolved a null Function callee.");
-                        auto *target = function->graph();
+                        auto *target = programs_.graphOf(function);
                         ASSERT(target != nullptr, "JIT CALL target has no runtime graph.");
                         const uint32_t callCount = noteIndirectCall(target);
                         requireNestedCallRoom(cur);
@@ -1369,7 +1394,7 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
 
 HigherOrderCallSite FastVMSchedPass::higherOrderCallSite(Function *func) {
     ASSERT(func != nullptr, "Higher-order call target function is null.");
-    camel::runtime::GCGraph *runtimeGraph = func->graph();
+    camel::runtime::GCGraph *runtimeGraph = programs_.graphOf(func);
     ASSERT(
         runtimeGraph != nullptr,
         "FastVM higher-order runtime call requires a materialized runtime graph.");

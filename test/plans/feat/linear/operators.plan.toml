@@ -1,6 +1,7 @@
 id = "linear.operators"
 order = 347
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "linear", "ops", "runtime"]
 desc = "Built-in operators on the types that have them, the same result on every back end: string ordering, compound assignment, conversions."
 
