@@ -41,6 +41,10 @@
 #include <cstdio>
 #include <filesystem>
 #include <format>
+#include <functional>
+#include <memory>
+#include <unordered_set>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -204,18 +208,11 @@ bool UserDefinedModule::compileAsLibrary() {
     if (stage_ == CompileStage::Done) {
         return true;
     }
-    if (compiling_ || stage_ != CompileStage::None || !compile(CompileStage::GCT)) {
+    if (compiling_) {
         return false;
     }
-    for (const auto &site : importSites()) {
-        if (std::dynamic_pointer_cast<UserDefinedModule>(site.mod) && site.mod.get() != this) {
-            diagnostics_->of(SemanticDiag::ModuleNotFound)
-                .commit(
-                    site.mod->name(),
-                    "a library compiled on its own (" + name_ +
-                        ") imports modules written in C++ only");
-            return false;
-        }
+    if (stage_ < CompileStage::GCT && !compile(CompileStage::GCT)) {
+        return false;
     }
     struct Compiling {
         bool &flag;
@@ -223,18 +220,26 @@ bool UserDefinedModule::compileAsLibrary() {
         ~Compiling() { flag = false; }
     } compiling(compiling_);
     camel::utils::phase::Scope phaseScope("library", name_);
-    auto builder = std::make_shared<camel::compile::gir::Builder>(context_);
-    builder->declareModule(shared_from_this(), *gct_, diagnostics_);
-    if (diagnostics_->hasErrors()) {
-        return false;
+    // The module is built by the graph builder of its program, not one of its own: the modules
+    // written in Camel it imports are declared there already, by compileImportedModules when
+    // this module's construction tree was built (each of them had to be declared before a body
+    // could name what it exports). Building the library on the same builder keeps the graphs
+    // those modules export the ones their importer names, and the whole import closure is in
+    // one place, so buildLibrary builds the imported bodies too.
+    auto &builder = camel::compile::gir::Builder::of(context_);
+    if (stage_ != CompileStage::Declared) {
+        builder.declareModule(shared_from_this(), *gct_, diagnostics_);
+        if (diagnostics_->hasErrors()) {
+            return false;
+        }
+        stage_ = CompileStage::Declared;
     }
-    stage_ = CompileStage::Declared;
-    if (!builder->buildLibrary(shared_from_this()) || diagnostics_->hasErrors()) {
+    if (!builder.buildLibrary(shared_from_this()) || diagnostics_->hasErrors()) {
         return false;
     }
     // buildLibrary set the program graph (stage Done); the builder owns what the graphs of
     // the module refer to and lives as long as the module.
-    libraryBuilder_ = builder;
+    libraryBuilder_ = context_->graphBuildSession();
     return stage_ == CompileStage::Done;
 }
 
@@ -262,19 +267,6 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     if (!compile(CompileStage::GCT)) {
         return ProgramStatus::Failed;
     }
-    for (const auto &site : importSites()) {
-        if (std::dynamic_pointer_cast<UserDefinedModule>(site.mod) && site.mod.get() != this) {
-            // The same restriction as compileAsLibrary (task H36 joins the two): a module written
-            // in Camel that this one imports would have to be declared to the builder of another
-            // program, and its export table is the program's.
-            diagnostics_->of(SemanticDiag::ModuleNotFound)
-                .commit(
-                    site.mod->name(),
-                    "a library compiled on its own (" + name_ +
-                        ") imports modules written in C++ only");
-            return ProgramStatus::Failed;
-        }
-    }
     struct Compiling {
         bool &flag;
         explicit Compiling(bool &f) : flag(f) { flag = true; }
@@ -287,6 +279,60 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     } buildingProgramOfItsOwn(buildingProgramOfItsOwn_);
     camel::utils::phase::Scope phaseScope("library", name_);
     auto builder = std::make_shared<camel::compile::gir::Builder>(context_);
+    // A module written in Camel may import a library written in Camel (task H36, item 1): the
+    // pass module is a program of its own, so its builder needs those imports declared and built
+    // too. They are declared here, in import order, and built by buildFrom before this module.
+    // Their graphs in this program are separate from the graphs the same module has in the
+    // program that loaded it; the builder keeps them, and the export table of the imported
+    // module is filled by this declaration, as it is whenever a library is compiled.
+    std::vector<std::shared_ptr<UserDefinedModule>> imported;
+    std::unordered_set<const UserDefinedModule *> seen;
+    std::function<bool(const std::shared_ptr<UserDefinedModule> &)> collectImports =
+        [&](const std::shared_ptr<UserDefinedModule> &mod) -> bool {
+        if (mod.get() == this || !seen.insert(mod.get()).second) {
+            return true;
+        }
+        if (!mod->compile(CompileStage::GCT)) {
+            return false;
+        }
+        for (const auto &site : mod->importSites()) {
+            if (auto other = std::dynamic_pointer_cast<UserDefinedModule>(site.mod)) {
+                if (!collectImports(other)) {
+                    return false;
+                }
+            }
+        }
+        imported.push_back(mod);
+        return true;
+    };
+    for (const auto &site : importSites()) {
+        if (auto other = std::dynamic_pointer_cast<UserDefinedModule>(site.mod)) {
+            if (!collectImports(other)) {
+                return ProgramStatus::Failed;
+            }
+        }
+    }
+    // The flag is only for this build: these modules may be built again as part of another
+    // program, and then their root graph must be recorded again.
+    auto restoreImported = std::unique_ptr<void, std::function<void(void *)>>(
+        reinterpret_cast<void *>(1), [&imported](void *) {
+            for (const auto &mod : imported) {
+                mod->buildingProgramOfItsOwn_ = false;
+            }
+        });
+    for (const auto &mod : imported) {
+        // Its names were exported by the builder of the program it was loaded as part of; the
+        // declarations below are this program's own (their graphs are the ones the pass calls),
+        // so they must replace those names, not be refused as duplicates.
+        mod->clearExportedNamespaces();
+        builder->declareModule(mod, *mod->gct_, mod->diagnostics_);
+        if (mod->diagnostics_->hasErrors()) {
+            return ProgramStatus::Failed;
+        }
+        // Its graphs belong to this program's builder, not to the program it was loaded as
+        // part of: setProgramGraph must not replace the graph it had there.
+        mod->buildingProgramOfItsOwn_ = true;
+    }
     builder->declareModule(shared_from_this(), *gct_, diagnostics_);
     if (diagnostics_->hasErrors()) {
         return ProgramStatus::Failed;

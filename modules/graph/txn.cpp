@@ -23,14 +23,19 @@
  * a new Program that shares the graphs nothing changed. The Camel value is a foreign resource
  * (the session is released by the collector at a safepoint, or at once by commit and abort).
  *
- * The edits create no values of the program being processed: a draft holds the static values
- * of its nodes as raw references, and a collection that runs while Camel code is running could
- * move one. Replacing a node by another existing node, and erasing one, need none.
+ * The edits normally create no values of the program being processed: replacing a node by
+ * another existing node, and erasing one, need none. `add_constant` is the way an edit makes a
+ * value (constant folding does): a draft holds the static values of its nodes as raw
+ * references, so a value made there must not move or be collected while Camel code runs. A
+ * string constant is therefore copied into the permanent space, which is neither collected nor
+ * moved (a number is the slot itself); the draft's static slot keeps that reference until
+ * `commit` encodes it. Design principles 3.9 and the graph-store note, 4.2.
  */
 
 #include "txn.h"
 
 #include "handle.h"
+#include "read.h"
 
 #include "camel/core/error/runtime.h"
 #include "camel/core/mm/gen.h"
@@ -85,7 +90,7 @@ ForeignResourceDescriptor txnDescriptor() {
     descriptor.containsCamelReferences = true;
     descriptor.trace                   = [](void *resource, const Object::RefRelocator &relocate,
                           const Type *type) {
-        const auto *state = static_cast<TxnState *>(resource);
+        auto *state = static_cast<TxnState *>(resource);
         if (state->done || !mm::graphSpace().isAllocated(const_cast<Program *>(state->base))) {
             return;
         }
@@ -99,6 +104,9 @@ ForeignResourceDescriptor txnDescriptor() {
                 .ownerKind = "Txn",
                 .slotName  = "program",
             });
+        // The drafts keep the static values of the graphs they edit as raw slots, outside the
+        // object graph. A collection at a safepoint must move them with everything else.
+        state->session.traceStaticSlots(relocate, type);
     };
     descriptor.clone   = nullptr;
     descriptor.movable = true;
@@ -306,6 +314,44 @@ slot_t abortKernel(ArgsView &, ArgsView &norm, Context &) {
     return NullSlot;
 }
 
+/// The node a transaction added for `value` in `graph`. A string is copied into the permanent
+/// space first: the draft's static slots are raw references outside the object graph, and a
+/// transaction value that has become old may not be traced at every safepoint (its wrapper is
+/// not moved, and a foreign resource's references are visited when the wrapper is). The
+/// permanent space is never collected nor moved, so the new value is safe without that tracing;
+/// a number is the slot itself. The transaction's tracer handles the other static values a
+/// draft holds (TxnState's descriptor, `traceStaticSlots`).
+slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
+    static const char *site = "<graph::add_constant>";
+    TxnState &state         = openState(norm, 0, site);
+    const auto *handle      = norm.get<Handle *>(1);
+    Type *type              = norm.type(2);
+    if (handle->kind() != HandleKind::Graph || handle->program() != state.base) {
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the graph belongs to another program than the transaction");
+    }
+    GCGraph *graph = state.base->graph(handle->graph());
+    if (graph == nullptr) {
+        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph does not exist");
+    }
+    slot_t value = norm.slot(2);
+    if (type->code() == TypeCode::String) {
+        auto *text = fromSlot<::String *>(value);
+        value      = toSlot<::String *>(static_cast<::String *>(text->clone(mm::permSpace(), type)));
+    }
+    GraphDraft &draft                 = state.session.edit(graph);
+    const camel::runtime::gc_node_ref_t id = draft.materializeStaticValue(value, type);
+    return toSlot(Handle::create(
+        HandleKind::Node,
+        state.base,
+        graph->id(),
+        id,
+        nullptr,
+        mm::autoSpace()));
+}
+
 struct TxnOp {
     const char *name;
     operator_t kernel;
@@ -384,6 +430,18 @@ const std::vector<oper_group_ptr_t> &txnGroups() {
             functionRule(1, "(f: F) => Graph", [](Type *) -> Type * {
                 return HandleType::get(HandleKind::Graph);
             }));
+        add("add_constant",
+            DynamicFuncTypeResolver::create(
+                {{0, {}}, {3, {false, false, false}}},
+                "(t: Txn, g: Graph, value: T) => Node, T a number, bool or string",
+                [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                    -> std::optional<Type *> {
+                    if (!HandleType::is(norm[0], HandleKind::Txn) ||
+                        !HandleType::is(norm[1], HandleKind::Graph) || !constantType(norm[2])) {
+                        return std::nullopt;
+                    }
+                    return HandleType::get(HandleKind::Node);
+                }));
         return out;
     }();
     return groups;
@@ -399,6 +457,7 @@ const std::unordered_map<std::string, operator_t> &txnKernels() {
         out.emplace("to_function", toKernel);
         out.emplace("program_of", programOfKernel);
         out.emplace("graph_of", graphOfKernel);
+        out.emplace("add_constant", addConstantKernel);
         return out;
     }();
     return kernels;

@@ -1,0 +1,7 @@
+func pick(x: int): int {
+    return if x > 0 then x else 0 - x
+}
+func main(): int sync {
+    println(pick(3))
+    return 0
+}

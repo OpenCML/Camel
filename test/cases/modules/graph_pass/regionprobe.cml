@@ -1,0 +1,37 @@
+module regionprobe
+import { Program, Graph, Node, Region, RegionKind, graphs, nodes, region_of, region_kind, region_parent } from graph
+
+func hasRegion(n: Node): bool {
+    return region_of(n) != null
+}
+
+func isInlineRegion(r: Region): bool {
+    return region_kind(r) == RegionKind::Inline
+}
+
+func isInlineNode(n: Node): bool {
+    return match region_of(n) {
+        case null => false
+        case r => isInlineRegion(r)
+    }
+}
+
+func parentOk(n: Node): bool {
+    return match region_of(n) {
+        case null => true
+        case r => if isInlineRegion(r) then region_parent(r) != null else true
+    }
+}
+
+func reportGraph(g: Graph) sync {
+    let ns = nodes(g)
+    println(len(ns))
+    println(len(ns->filter<hasRegion>))
+    println(len(ns->filter<isInlineNode>))
+    println(len(ns->filter<parentOk>))
+}
+
+export func report(p: Program): Program! sync {
+    graphs(p)->foreach<(g: Graph) => reportGraph(g)>
+    return p
+}

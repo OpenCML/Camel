@@ -50,7 +50,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [crypto](#crypto) | `import { ... } from crypto` | C++ | 2 |
 | [para](#para) | `import { ... } from para` | C++ | 3 |
 | [this](#this) | `import { ... } from this` | C++ | 1 |
-| [graph](#graph) | `import { ... } from graph` | C++ | 37 |
+| [graph](#graph) | `import { ... } from graph` | C++ | 41 |
 
 <a id="built-in-functions"></a>
 
@@ -3277,6 +3277,42 @@ The source origin id of the node, 0 when unknown.
 - Pure.
 - Example: `origin(n)`
 
+### Regions
+
+#### `region_of`
+
+```camel
+region_of: (n: Node) => Region?
+```
+
+The innermost region the node is in. A graph with the body only has no region table, so the
+answer is null; in a graph that has regions, region 0 is the body and every node has one.
+
+- Pure.
+- Example: `region_of(n)`
+
+#### `region_kind`
+
+```camel
+region_kind: (r: Region) => RegionKind
+```
+
+The kind of the region: `Root`, `Arm`, `LoopCond`, `LoopBody`, `Inline`, `Block` or `Dead`.
+
+- Pure.
+- Example: `region_kind(r) == RegionKind::Inline`
+
+#### `region_parent`
+
+```camel
+region_parent: (r: Region) => Region?
+```
+
+The region the region is in; null for the body (region 0).
+
+- Pure.
+- Example: `region_parent(r)`
+
 #### `show`
 
 ```camel
@@ -3381,6 +3417,20 @@ Puts the node `new` of the same graph in the place of `old`, which is removed; w
 
 - With effects: changes the transaction.
 - Example: `replace(t, n, inputs(n)[0])`
+
+#### `add_constant`
+
+```camel
+add_constant: (t: Txn, g: Graph, value: T) => Node
+```
+
+Adds a value the transaction creates to the graph's static values and gives the node that
+holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+space because a value a transaction creates may be live at a safepoint where its draft is not
+traced.
+
+- With effects: changes the transaction.
+- Example: `add_constant(t, g, 7)`
 
 #### `erase`
 

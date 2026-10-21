@@ -491,7 +491,12 @@ std::string camel::execute::detail::describeParams(const std::vector<PassParam> 
     for (const auto &p : declared) {
         if (!text.empty())
             text += ", ";
-        text += p.name + ": " + passParamTypeName(p.type) + " = ";
+        text += p.name + ": " + passParamTypeName(p.type);
+        if (p.required) {
+            text += " (required)";
+            continue;
+        }
+        text += " = ";
         if (auto *b = std::get_if<bool>(&p.defaultValue))
             text += *b ? "true" : "false";
         else if (auto *i = std::get_if<int64_t>(&p.defaultValue))
@@ -554,6 +559,15 @@ std::optional<std::string> camel::execute::detail::bindArgs(
                 withArticle(passParamTypeName(it->type)));
         }
         args.set(w.key, std::move(value), true);
+    }
+    // A parameter without a default has to be written: the pass has no value to fall back to.
+    for (const auto &p : declared) {
+        if (p.required && !seen.contains(p.name)) {
+            return std::format(
+                "parameter '{}' is not written and has no default (the pass declares: {})",
+                p.name,
+                describeParams(declared));
+        }
     }
     return std::nullopt;
 }
