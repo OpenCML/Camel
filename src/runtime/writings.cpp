@@ -1138,25 +1138,55 @@ bool acceptsType(
     return patternType == nullptr || nodeType == nullptr ||
            patternType->assignableFrom(const_cast<camel::core::type::Type *>(nodeType));
 }
+
+/// Whether `oper`'s declared semantics say that exchanging its two operands gives the same value
+/// for a result of type `type` (op-semantics 7.4: `BinaryLaw.commutative`, per element type;
+/// `elementOf` names the element type of an aggregate, an empty one reads the type itself). This
+/// is the fact the matcher reads to try the other order; an operator that does not declare it is
+/// read in the order the program wrote, because only the value of the operator (not a guess about
+/// its name or its shape) can justify the exchange.
+bool declaredCommutative(camel::core::OperId oper, const camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    const camel::core::sem::OperatorSemantics *declared =
+        camel::core::OperatorTable::instance().semantics(oper);
+    if (declared == nullptr || !declared->binary) {
+        return false;
+    }
+    const camel::core::sem::BinaryAlgebra &algebra = *declared->binary;
+    const std::optional<camel::core::type::TypeCode> element =
+        algebra.elementOf ? algebra.elementOf(type)
+                          : std::optional<camel::core::type::TypeCode>(type->code());
+    if (!element) {
+        return false;
+    }
+    for (const camel::core::sem::BinaryLaw &law : algebra.laws) {
+        if (law.element == *element) {
+            return law.commutative;
+        }
+    }
+    return false;
+}
 } // namespace
 
-void DraftWritings::matchFrom(
+bool DraftWritings::matchFrom(
     camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-    std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, const std::function<void()> &emit) {
+    std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
+    const std::function<bool()> &emit) {
     if (at == work.size()) {
-        emit();
-        return;
+        return emit();
     }
     const Item item  = work[at];
     const Pattern &p = *item.pattern;
     switch (p.kind) {
     case Pattern::Kind::Var:
         if (p.constOnly && !constantOf(item.node).has_value()) {
-            return;
+            return false;
         }
         if (const auto *header = draft_.header(item.node);
             header == nullptr || !acceptsType(p.type, header->dataType)) {
-            return;
+            return false;
         }
         if (bound[p.var]) {
             bool same = store_.same(context, bind[p.var], item.node);
@@ -1169,23 +1199,22 @@ void DraftWritings::matchFrom(
                        canonicalConstant(a->first, a->second) ==
                            canonicalConstant(b->first, b->second);
             }
-            if (same) {
-                matchFrom(context, work, at + 1, bind, bound, waits, emit);
-            }
-            return;
+            return same && matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
         }
         bound[p.var] = 1;
         bind[p.var]  = item.node;
-        matchFrom(context, work, at + 1, bind, bound, waits, emit);
-        bound[p.var] = 0;
-        return;
+        {
+            const bool matched = matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
+            bound[p.var]       = 0;
+            return matched;
+        }
     case Pattern::Kind::Constant: {
         const auto found = constantOf(item.node);
-        if (found && found->second == p.type &&
-            canonicalConstant(found->first, p.type) == canonicalConstant(p.value, p.type)) {
-            matchFrom(context, work, at + 1, bind, bound, waits, emit);
+        if (!found || found->second != p.type ||
+            canonicalConstant(found->first, p.type) != canonicalConstant(p.value, p.type)) {
+            return false;
         }
-        return;
+        return matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
     }
     case Pattern::Kind::Op: {
         // The root of a rule is the node itself; below it, any writing of the value read.
@@ -1199,18 +1228,24 @@ void DraftWritings::matchFrom(
                 candidates.push_back(item.node);
             }
         }
-        for (gc_node_ref_t candidate : candidates) {
+        // One pairing of the pattern's operands with a candidate's data inputs. `swapped` reads
+        // the two inputs in the other order; it is legal only for a binary term whose operator's
+        // declared semantics say the exchange gives the same value for this element type.
+        const auto matchCandidate = [&](gc_node_ref_t candidate, bool swapped) -> bool {
             const auto *h = draft_.header(candidate);
             if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
                 h->permissions != matchPerms_ || !acceptsType(p.type, h->dataType) ||
                 !takesPart(candidate) ||
                 reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
                     p.oper) {
-                continue;
+                return false;
             }
             const auto inputs = draft_.normInputsOf(candidate);
             if (inputs.size() != p.args.size() || !draft_.withInputsOf(candidate).empty()) {
-                continue;
+                return false;
+            }
+            if (swapped && (inputs.size() != 2 || !declaredCommutative(p.oper, h->dataType))) {
+                return false;
             }
             // What this term waits for: the rewrite carries it onto the writing that replaces the
             // root, so the law does not move the computation across a control edge's ordering.
@@ -1224,19 +1259,39 @@ void DraftWritings::matchFrom(
             }
             const size_t saved = work.size();
             for (size_t i = 0; i < inputs.size(); ++i) {
-                work.push_back({&p.args[i], inputs[i]});
+                const size_t input = swapped ? (i == 0 ? 1 : 0) : i;
+                work.push_back({&p.args[i], inputs[input]});
             }
-            matchFrom(context, work, at + 1, bind, bound, waits, emit);
+            const bool matched = matchFrom(context, work, at + 1, bind, bound, waits, commuted, emit);
             work.resize(saved);
             if (waits != nullptr) {
                 waits->resize(savedWaits);
             }
+            return matched;
+        };
+        bool accepted = false;
+        for (gc_node_ref_t candidate : candidates) {
+            accepted = matchCandidate(candidate, false) || accepted;
         }
-        return;
+        if (!accepted && commuted) {
+            // Nothing matched in the order the law wrote. A law is about values, not about the
+            // order the program wrote them in: if the operator's semantics say exchanging its
+            // operands gives the same value, the other order denotes the same left side, so the
+            // right side (built below from the law's own text) is the same value too. The
+            // natural order was tried first, so a law that writes the operands in a particular
+            // order keeps that order whenever the program matches it, and the replacement keeps
+            // the written shape. Operators that do not declare commutativity are never commuted,
+            // and a two-way rule's reverse already reads the other order (`commuted` false).
+            for (gc_node_ref_t candidate : candidates) {
+                accepted = matchCandidate(candidate, true) || accepted;
+            }
+        }
+        return accepted;
     }
     case Pattern::Kind::Compute:
-        return; // right side only
+        return false; // right side only
     }
+    return false;
 }
 
 gc_node_ref_t
@@ -1409,11 +1464,13 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                     draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 std::optional<std::vector<gc_node_ref_t>> chosen;
                 std::optional<std::vector<gc_node_ref_t>> chosenWaits;
-                matchFrom(context, work, 0, bind, bound, &matchedWaits, [&] {
+                matchFrom(context, work, 0, bind, bound, &matchedWaits, true, [&] {
                     if (!chosen && (!rule.when || rule.when(Match{*this, node, bind}))) {
                         chosen      = bind;
                         chosenWaits = matchedWaits;
+                        return true;
                     }
+                    return false;
                 });
                 if (!chosen) {
                     continue;
@@ -1535,10 +1592,12 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
-                matchFrom(context, work, 0, bind, bound, nullptr, [&] {
+                matchFrom(context, work, 0, bind, bound, nullptr, !rule.twoWay, [&] {
                     if (!rule.when || rule.when(Match{*this, node, bind})) {
                         found.push_back(Found{r, node, bind});
+                        return true;
                     }
+                    return false;
                 });
             }
         }

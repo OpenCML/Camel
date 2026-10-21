@@ -269,6 +269,7 @@
 | H3 | 依赖节点属性的后续 | 图存储第二版第 5 步 | **部分完成**（H3a 完成，见 H102 行与 reports/H102.md；H3b 未做） |
 | H80 | 慢层全套扫描（原按 H71 记，作者把 H71 分给结构体循环状态后改号） | H6 第 5 项 | **已完成**（Linux 主机 fast/slow/perf/gpu/GC/poison 全层：fast 4788 项 0 失败、基线 19 项全转绿；新增 GC/poison/tiles 三簇转交 H73/H74/H75；报告 reports/H80.md，tiles 逐条清单 reports/H80-gpu-tiles-failures.txt） |
 | H88 | H6 第 1 项的前端四条：移除 `TypeCode::Byte`、期望类型合并为一条通道（frontend 第 6 条）、`append` 就地改写走通用 `setInPlaceForm`（第 7 条）、语言服务器的类型解析取自编译器（第 15 条） | H6 第 1 项 | **已完成**（四个提交，一件一个；报告 reports/H88.md；`from_bytes::<T>` 与 `load_tree` 仍等泛型） |
+| H118 | 交换律匹配（H110 §6 的后续项）：定律只写一种操作数顺序时，程序写反了该不该命中——由算子语义声明的事实决定，还是让定律写两遍；匹配器先按写下顺序、没有可接受的匹配才对调二元算子的两个输入，替换仍按定律右边；用 H110 的 `3.0*(x+1); t+t` 与 `(x+1)*3.0; t+t` 证明两张图相同 | H110、H85 | **已完成**（报告 reports/H118.md；事实在 `sem::OperatorSemantics::binary` 的 `BinaryLaw.commutative`，按算子与元素类型声明：标量 `add`/`mul` 对 Int32/Int64/Float32/Float64/Complex64/Complex128 声明，`sub` 不声明；`tensor:add`/`multiply` 只对 Float32 元素声明，整数张量故意没有声明，匹配器因此不对调。`declaredCommutative` + `matchFrom` 先自然顺序、无接受匹配再交换；`rewrite` 允许，`saturate` 对 `<=>` 传 false（反向已是规则；否则 `rules::library_saturate_all` 从约 0.5 s 涨到 >20 s 超时）。H110 那对现在都是 `(x+1)*6.0`（默认 `float_combine`、严格 `float_double`，右边同形）；`gradient.*` 5 → 4，`3.0` 被 `6.0` 取代；其余计数不变。新增 `algebra_commutative.cml`、3 张图/1 条非交换守卫（`0.0-x`、`1.0/x`）/4 后端执行；`feat/opt/algebra` 184 → 192，五个计划 1554/1554） |
 
 **按队列顺序连续做下去**：一项完成、报告写好、合入 `develop` 后，接着做下一项，不必等检查意见；检查意见到了再回头处理。遇到需要设计判断的地方，按第 4 节写进报告的"待决问题"，跳过被挡住的部分继续做后面的。H2、H7 是语言表面的较大改动，规格已写全，但涉及的判断较多，宁可多问。
 

@@ -342,9 +342,27 @@ class DraftWritings : private WritingObserver {
     };
     /// Matches `work[at..]`; `waits`, when given, collects the control inputs of every operator
     /// term matched (the root included), so a rewrite can give them to the writing it builds.
-    void matchFrom(
+    /// Returns whether any match was accepted (whether `emit` returned true).
+    ///
+    /// A binary term whose operator's semantics declare it commutative for the node's element
+    /// type is read in the written order first. The other order is tried only when the written
+    /// order produced no accepted match, so a law sees its operands where it wrote them, and the
+    /// replacement (which is built from the law's right side) keeps the written order when one
+    /// exists. The fact is read per operator and per element type from
+    /// `sem::OperatorSemantics::binary` (docs/design/op-semantics 7.4); a term whose operator does
+    /// not declare it is never commuted, since a law is about values and the matcher may not
+    /// guess (design principles 9.5).
+    ///
+    /// `commuted` says whether that fallback may run for this rule. A `<=>` rule already states both
+    /// directions, and a saturation applies its reverse as a rule of its own; the fallback is what
+    /// a law that wrote only one order needs, so a two-way rule passes false. (Trying it as well
+    /// only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
+    /// half a second to past the 20 s timeout, H118.) A one-way rule (`=>`) has no reverse and
+    /// passes true.
+    bool matchFrom(
         camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-        std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, const std::function<void()> &emit);
+        std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, bool commuted,
+        const std::function<bool()> &emit);
     gc_node_ref_t build(
         const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);
