@@ -238,6 +238,13 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
 /// stack; scalars and the remaining object-backed types are printed directly.
 void printValue(std::ostream &os, slot_t data, camel::core::type::Type *t);
 
+/// The text of a value with a bound on arrays: an array with more than `arrayLimit` elements
+/// prints as its type, address and length instead of its elements, at every depth of the value.
+/// The frame log uses it so that enabling the Frame category on a program that builds a large
+/// collection does not print that collection element by element on every read (H31).
+void printSlotCapped(
+    std::ostream &os, slot_t data, camel::core::type::Type *t, size_t arrayLimit);
+
 /// The text of a value as `println`, `string(x)` and a `{}` of `format` write it. A float has one
 /// text, the shortest that reads back as the same number (camel::utils::floatText; design
 /// principles 7.7), also as an element of an array, a tuple, a struct, a map or a set.
