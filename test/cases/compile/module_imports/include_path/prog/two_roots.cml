@@ -1,0 +1,11 @@
+/// H129 case 3: two `-I` roots, one for each import (`-I ../roots/one` and
+/// `--include ../roots/two` in the plan).
+module include_two_roots
+
+import alpha
+import beta
+
+func main(): int sync {
+    println(alpha::value() + beta::value())
+    return 0
+}

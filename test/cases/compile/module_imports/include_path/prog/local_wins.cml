@@ -1,0 +1,11 @@
+/// H129 case 2: `shadow` exists both here (`prog/shadow.cml`, value 1) and in the `-I` root
+/// (`../roots/one/shadow.cml`, value 2). The program's own directory comes first, so this
+/// prints 1.
+module include_local_wins
+
+import shadow
+
+func main(): int sync {
+    println(shadow::value())
+    return 0
+}
