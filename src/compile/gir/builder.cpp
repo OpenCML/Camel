@@ -888,6 +888,14 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
                                       i + 1 == gct->size() && !declaration;
             if (tailPosition) {
                 result = visitInPosition(child, tailExpected);
+            } else if (!gct->operands()) {
+                // A statement whose value nothing takes is in no position: the type the
+                // block's value stands at does not reach inside it, or a `let` written before
+                // the value of a `T?` arm would build its initializer in that `T?` (H119). An
+                // operand scope (`gct->operands()`) is in the position of the element or
+                // field it builds, and keeps it.
+                ExpectedValueScope statementScope(expectedValueType_, nullptr);
+                result = visit(child);
             } else {
                 result = visit(child);
             }

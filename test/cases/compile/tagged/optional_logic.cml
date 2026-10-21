@@ -1,0 +1,44 @@
+/**
+ * A position's expected type is applied to the value built there, once (design principles 5.1;
+ * handover H88): it is not the type of the operands of `&&` / `||` (both are `bool`, 4.2), not
+ * the type of the parts of `??` / `!!` (the left side is a `T?`, the right side a `T` or a `T?`,
+ * 3.8), and not the type of a statement whose value nothing takes. The `T?` declarations below
+ * still apply to the whole expression: that is what makes each value nullable.
+ */
+module optional_logic
+
+func maybe(x: int): int! { return x }
+
+func fail(): int! { throw error('Probe', 'always') }
+
+func main(): int sync {
+    let o: bool? = true || false
+    let p: bool? = false && true
+    let q: bool? = !(true || false)
+    let r: bool? = (1 < 2) || (3 == 4)
+    let s: bool? = true && (if 1 < 2 then true else false)
+    let a: int? = 1
+    let b: int? = null
+    let x: int? = a ?? b
+    let y: int? = b ?? a
+    let z: int? = a ?? 5
+    let t: int? = b ?? (if 1 < 2 then 7 else 8)
+    let g: int = maybe(4) !! 0
+    let h: int = fail() !! (if 1 < 2 then 5 else 6)
+    let w: bool? = true
+    let f: float? = if false then 4.75 else sync { let n = (if true then null else 'b') ?? 'ab'; println(n); -1.5 }
+    println(o)
+    println(p)
+    println(q)
+    println(r)
+    println(s)
+    println(x)
+    println(y)
+    println(z)
+    println(t)
+    println(g)
+    println(h)
+    println(w)
+    println(f)
+    return 0
+}

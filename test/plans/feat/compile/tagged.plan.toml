@@ -1292,3 +1292,28 @@ expect_diagnostic_line = 8
 expect_diagnostic_column = 11
 expect_output_contains = ["An error value reached the exit of 'main' without being handled: Zero: zero.", "error_position_pipeline.cml:8:11", "(name=RuntimeDiag::UnhandledError"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "optional_logic"
+desc = "A `bool?` position applies to the whole `&&` / `||` / `??` / `!!` expression, once: the operands of `&&` / `||` are `bool` (4.2), the sides of `??` / `!!` are a `T?` and a `T` or the same `T?` (3.8), and a statement whose value nothing takes has no position of the enclosing arm (H119)."
+kind = "behavior"
+case = "../../../cases/compile/tagged/optional_logic.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_starts_with = "ab\ntrue\nfalse\nfalse\ntrue\ntrue\n1\n1\n1\n7\n4\n5\ntrue\n-1.5\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "optional_operand_not_bool"
+desc = "A `bool?` is still not a `bool` in an operand of `||`: the operand position is a `bool` whatever the surrounding position wants, so the value has to be opened with `??` (design principles 4.2)."
+kind = "negative"
+case = "../../../cases/compile/tagged/err_optional_operand.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LogicalOperandNotBool"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["The left side of '||' has type 'bool?', not 'bool'."]
+expect_output_not_contains = ["never printed", "UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
