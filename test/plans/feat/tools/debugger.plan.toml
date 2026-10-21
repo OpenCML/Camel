@@ -28,7 +28,7 @@ timeout_ms = 300000
 
 [[tests]]
 name = "debugger.dap_stepping"
-desc = "Steps over DAP on both back ends: next, stepIn, stepOut by source line in execution order (a line that is never executed is not a stop, and the console says why), the same by graph node (granularity instruction), recursion as one frame per call with the arms folded into the frames of their function or, switched by camel/setFrames or launched with frames subgraphs, as the subgraphs they are, a tail recursion as the one frame it is, and a branch whose untaken arm never stops."
+desc = "Steps over DAP on both back ends: next, stepIn, stepOut by source line in execution order (a line that is never executed is not a stop, and the console says why), the same by graph node (granularity instruction), recursion as one frame per call with the arms of a branch as regions of the frame they run in (camel/setFrames and frames subgraphs change the presentation without inventing arm frames), a tail recursion as the one frame it is, a step over and a step out at the tail-call site, and a branch whose untaken arm never stops."
 case = "../../../cases/tools/debugger/dap_stepping.test.mjs"
 # Slow layer: measured 8 s in the full serial run (docs/handover/reports/H10.md).
 tier = "slow"

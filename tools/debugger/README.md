@@ -66,7 +66,7 @@ camel-db --serve 8765
 | `bt` | `backtrace` / `where` | 调用栈（完整名字）。 |
 | `locals [n]` | | `bt` 第 n 帧的变量（默认最上面一帧）。 |
 | `print <名字>` | `p` | 名字的值，可带成员访问。 |
-| `frames [functions\|subgraphs]` | | 分支的臂并入所在函数的帧（默认），或显示真实的子图结构。 |
+| `frames [functions\|subgraphs]` | | 分支的臂是所在函数帧的区域；默认合并显示，`subgraphs` 显示真实的影子帧，不臆造臂帧。 |
 | `help` | `h` / `?` | 显示帮助。 |
 | `version` | `v` | 显示版本。 |
 | `quit` | `q` / `exit` | 退出 debugger（会停止 API 服务）。 |
