@@ -26,7 +26,11 @@
  *   float -> integer    NaN, an infinity, or a value whose truncation is outside the integer
  *                       type: RuntimeDiag::ConversionOutOfRange.
  *   int -> i32          a value outside i32: ConversionOutOfRange.
- *   string -> number    the whole string must be one number: RuntimeDiag::InvalidNumberText.
+ *   string -> number    the whole string must be one number (design principles 5.1):
+ *                       RuntimeDiag::InvalidNumberText when it is not one, and
+ *                       ConversionOutOfRange when it is one the type cannot hold (an overflow
+ *                       or an underflow). A good number that does not fit is not "not a
+ *                       number"; the message quotes it and gives the range.
  *
  * Not faults: float -> f32 beyond the range of f32 gives an infinity (IEEE rounding, like any
  * float arithmetic that overflows), and an integer too large to be exact as a float is rounded.
@@ -46,6 +50,19 @@
 
 namespace camel::core {
 
+/// Why a value does not fit the integer type To (`target` is its name in a message): the
+/// reason part of ConversionOutOfRange's message.
+template <std::signed_integral To> std::string integerRangeReason(const char *target) {
+    return std::format(
+        "the value is outside the range of {} ({})", target, camel::utils::integerRangeText<To>());
+}
+
+/// Why a number does not fit the floating-point type To (`target` is its name in a message).
+template <std::floating_point To> std::string floatRangeReason(const char *target) {
+    return std::format(
+        "the value is outside the range of {} ({})", target, camel::utils::floatRangeText<To>());
+}
+
 /// `value` truncated toward zero as the integer type To (`target` is its name in a message).
 template <std::signed_integral To, std::floating_point From>
 To checkedTruncate(From value, const char *target) {
@@ -56,11 +73,7 @@ To checkedTruncate(From value, const char *target) {
             target,
             value != value
                 ? std::string("NaN is not a number an integer can hold")
-                : std::format(
-                      "the value is outside the range of {} ({} to {})",
-                      target,
-                      std::numeric_limits<To>::min(),
-                      std::numeric_limits<To>::max()));
+                : integerRangeReason<To>(target));
     }
     return static_cast<To>(value);
 }
@@ -74,16 +87,14 @@ To checkedNarrow(From value, const char *target) {
             error::RuntimeDiag::ConversionOutOfRange,
             value,
             target,
-            std::format(
-                "the value is outside the range of {} ({} to {})",
-                target,
-                std::numeric_limits<To>::min(),
-                std::numeric_limits<To>::max()));
+            integerRangeReason<To>(target));
     }
     return static_cast<To>(value);
 }
 
-/// The integer written in `text`, which must be that integer and nothing else.
+/// The integer written in `text`, which must be that integer and nothing else. A text that is
+/// not one integer is InvalidNumberText; one that is an integer outside the range of To is
+/// ConversionOutOfRange, with the range in the message.
 template <std::signed_integral To> To integerFromText(std::string_view text, const char *target) {
     To value{};
     switch (camel::utils::parseWholeInteger<To>(text, value)) {
@@ -91,10 +102,10 @@ template <std::signed_integral To> To integerFromText(std::string_view text, con
         return value;
     case camel::utils::NumberTextStatus::OutOfRange:
         error::throwRuntimeFault(
-            error::RuntimeDiag::InvalidNumberText,
-            std::string(text),
-            std::format("{} (the number is outside its range)", target),
-            "an integer");
+            error::RuntimeDiag::ConversionOutOfRange,
+            "'" + std::string(text) + "'",
+            target,
+            integerRangeReason<To>(target));
     default:
         error::throwRuntimeFault(
             error::RuntimeDiag::InvalidNumberText,
@@ -104,7 +115,9 @@ template <std::signed_integral To> To integerFromText(std::string_view text, con
     }
 }
 
-/// The number written in `text`, which must be that number and nothing else.
+/// The number written in `text`, which must be that number and nothing else. A text that is not
+/// one number is InvalidNumberText; one the type cannot hold (an overflow or an underflow) is
+/// ConversionOutOfRange, with the range in the message.
 template <std::floating_point To> To floatFromText(std::string_view text, const char *target) {
     To value{};
     switch (camel::utils::parseWholeFloat<To>(text, value)) {
@@ -112,10 +125,10 @@ template <std::floating_point To> To floatFromText(std::string_view text, const 
         return value;
     case camel::utils::NumberTextStatus::OutOfRange:
         error::throwRuntimeFault(
-            error::RuntimeDiag::InvalidNumberText,
-            std::string(text),
-            std::format("{} (the number is outside its range)", target),
-            "a number");
+            error::RuntimeDiag::ConversionOutOfRange,
+            "'" + std::string(text) + "'",
+            target,
+            floatRangeReason<To>(target));
     default:
         error::throwRuntimeFault(
             error::RuntimeDiag::InvalidNumberText,

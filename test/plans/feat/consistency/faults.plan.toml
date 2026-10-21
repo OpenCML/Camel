@@ -311,6 +311,36 @@ expect_stdout_starts_with = "5\n"
 expect_output_contains = ["Cannot convert 5000000000 to i32: the value is outside the range of i32 (-2147483648 to 2147483647)."]
 
 [[tests]]
+name = "fault.int_text_out_of_range"
+desc = "int('99999999999999999999') is a fault of its own cause: it is a number, and int cannot hold it, so the message says out of range and gives the range instead of 'not a number' (H15f)."
+case = "../../../cases/consistency/faults/int_text_out_of_range.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 36
+expect_stdout_starts_with = "42\n"
+expect_output_contains = ["Cannot convert '99999999999999999999' to int: the value is outside the range of int (-9223372036854775808 to 9223372036854775807)."]
+
+[[tests]]
+name = "fault.float_text_overflow"
+desc = "float('1e999') is a fault of its own cause: it is a number, and float cannot hold it, so the message says out of range and gives the range instead of 'not a number' (H15f)."
+case = "../../../cases/consistency/faults/float_text_overflow.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_line = 7
+expect_diagnostic_column = 38
+expect_stdout_starts_with = "1.5\n"
+expect_output_contains = ["Cannot convert '1e999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude)."]
+
+[[tests]]
+name = "fault.float_text_underflow"
+desc = "float('1e-9999') is the same out-of-range cause: a number too small for float, said as out of range rather than 'not a number' (H15f)."
+case = "../../../cases/consistency/faults/float_text_underflow.cml"
+expect_diagnostic_name = "RuntimeDiag::ConversionOutOfRange"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 38
+expect_stdout_starts_with = "1.5\n"
+expect_output_contains = ["Cannot convert '1e-9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude)."]
+
+[[tests]]
 name = "fault.parse_int"
 desc = "int('abc') stops the program at the conversion (int() of a string is a fault; parse_int returns an error value). The name of the diagnostic is left to the agreement check."
 case = "../../../cases/consistency/faults/parse_int_fault.cml"

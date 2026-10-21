@@ -1,0 +1,14 @@
+/**
+ * float('1e999'): a number text too large for float is out of range, which the message says,
+ * rather than not a number (H15f).
+ */
+module float_text_overflow
+
+func conv(s: string): float { return float(s) }
+
+func main(): int sync {
+    println(conv('1.5'))
+    println(conv('1e999'))
+    println('not reached')
+    return 0
+}

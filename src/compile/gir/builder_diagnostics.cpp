@@ -801,15 +801,23 @@ void Builder::rejectLiteralConversion(
             checkLiteralNumericConversion(data->type()->code(), target->code(), *value);
         }
         return;
-    } catch (const camel::core::error::RuntimeFault &) {
+    } catch (const camel::core::error::RuntimeFault &fault) {
+        // Why the conversion has no value, in the words the conversion uses: the text is not a
+        // number, or it is a number the type cannot hold (which names the range, as an
+        // out-of-range literal does).
+        const std::string reason =
+            text ? (fault.diag() == camel::core::error::RuntimeDiag::ConversionOutOfRange
+                        ? "out of range (" + literal::rangeText(target) + ")"
+                        : std::string("the text is not a number"))
+                 : std::string();
+        rejectLiteralData(
+            data,
+            target,
+            call->origin(),
+            operands.empty() ? nullptr : operands[0].expr,
+            camel::source::kInvalidOriginId,
+            reason);
     }
-    // Whether the argument was text or a number, the same report says why the conversion has
-    // no value: not a number, out of range, or truncated.
-    rejectLiteralData(
-        data,
-        target,
-        call->origin(),
-        operands.empty() ? nullptr : operands[0].expr);
 }
 
 void Builder::rejectAmbiguousCall(
@@ -1061,9 +1069,14 @@ void Builder::rejectLiteralValue(
 
 void Builder::rejectLiteralData(
     const data_ptr_t &data, Type *type, camel::source::origin_id_t where,
-    const GCT::node_ptr_t &written, camel::source::origin_id_t writtenAt) {
+    const GCT::node_ptr_t &written, camel::source::origin_id_t writtenAt,
+    const std::string &reasonGiven) {
     std::string reason;
-    if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
+    if (!reasonGiven.empty()) {
+        // A refusal the conversion already explained (`int('99999999999999999999')` is out of
+        // range, not text that is not a number).
+        reason = reasonGiven;
+    } else if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         reason = "out of range (" + limits + ")";
     } else if (data->type()->isPrimitive() && isIntegerType(type)) {
         // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
