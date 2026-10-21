@@ -53,6 +53,19 @@ std::shared_ptr<StructData> StructDataFactory::build() {
         new StructData(type, std::move(impl_->data), std::move(impl_->holeFields)));
 }
 
+std::shared_ptr<StructData> StructDataFactory::buildAs(StructType *type) {
+    if (type == nullptr || impl_->data.size() != type->size()) {
+        return nullptr;
+    }
+    for (size_t i = 0; i < type->size(); ++i) {
+        if (impl_->data.find(std::string(type->fieldName(i))) == impl_->data.end()) {
+            return nullptr;
+        }
+    }
+    return std::shared_ptr<StructData>(
+        new StructData(type, std::move(impl_->data), std::move(impl_->holeFields)));
+}
+
 StructData::StructData(
     Type *type, std::map<std::string, data_ptr_t> &&data, std::vector<std::string> &&holeFields)
     : CompositeData(type), holeFields_(std::move(holeFields)), data_(std::move(data)) {}
@@ -166,11 +179,14 @@ void StructData::resolve(const data_vec_t &dataList) {
 }
 
 data_ptr_t StructData::clone(bool deep) const {
-    StructDataFactory f;
+    std::map<std::string, data_ptr_t> copy;
     for (const auto &[key, val] : data_) {
-        f.add(key, deep ? val->clone(true) : val);
+        copy[key] = deep ? val->clone(true) : val;
     }
-    return f.build();
+    // The clone is of the same type: the fields of a literal are the fields of its type, and
+    // a named struct type stays named (design principles 5.2).
+    return std::shared_ptr<StructData>(
+        new StructData(type_, std::move(copy), std::vector<std::string>(holeFields_)));
 }
 
 const string StructData::toString() const {
@@ -178,6 +194,26 @@ const string StructData::toString() const {
         return "{}";
     }
     string str = "{ ";
+    // The fields in the order of the type (the declaration's order for a named type), not the
+    // order the map keeps: printing a value shows the order a value of that type has.
+    const auto *structType = tt::as_ptr<StructType>(type_);
+    if (structType != nullptr && structType->size() == data_.size()) {
+        bool first = true;
+        for (size_t i = 0; i < structType->size(); ++i) {
+            const std::string name(structType->fieldName(i));
+            auto it = data_.find(name);
+            if (it == data_.end()) {
+                continue;
+            }
+            if (!first) {
+                str += ", ";
+            }
+            first = false;
+            str += name + ": " + it->second->toString();
+        }
+        str += " }";
+        return str;
+    }
     str += strutil::join(data_, ", ", [](const pair<const string, data_ptr_t> &e) {
         return e.first + ": " + e.second->toString();
     });
@@ -186,8 +222,47 @@ const string StructData::toString() const {
 }
 
 data_ptr_t StructData::convertTo(Type *type) {
+    if (type == nullptr) {
+        return nullptr;
+    }
     if (type->equals(type_)) {
         return tt::as_shared<StructData>(shared_from_this());
     }
-    return nullptr;
+    if (type->code() != TypeCode::Struct || type_ == nullptr ||
+        type_->code() != TypeCode::Struct || !resolved()) {
+        return nullptr;
+    }
+    auto *target       = tt::as_ptr<StructType>(type);
+    const auto *source = tt::as_ptr<StructType>(type_);
+    if (target == nullptr || source == nullptr) {
+        return nullptr;
+    }
+    // Two named struct types are different types: a value of one becomes a value of the other
+    // only through an explicit conversion (design principles 5.2), which is not a data-level
+    // retyping.
+    if (source->named() && target->named()) {
+        return nullptr;
+    }
+    StructDataFactory factory;
+    for (size_t i = 0; i < target->size(); ++i) {
+        const std::string fieldName(target->fieldName(i));
+        auto it = data_.find(fieldName);
+        if (it == data_.end() || it->second == nullptr) {
+            return nullptr;
+        }
+        Type *fieldType = target->typeAt(i);
+        data_ptr_t value = it->second;
+        if (fieldType != nullptr && !fieldType->equals(value->type())) {
+            // A field of another type (a refined module type, a nested struct of another
+            // type): convert it the same way, or refuse.
+            value = value->convertTo(fieldType);
+            if (value == nullptr) {
+                return nullptr;
+            }
+        }
+        factory.add(fieldName, value);
+    }
+    // The fields are in the target type's order (the declaration's order for a named type),
+    // whatever order they were written in.
+    return factory.buildAs(target);
 }

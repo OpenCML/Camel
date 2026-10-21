@@ -372,7 +372,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
 expect_diagnostic_line = 11
 expect_diagnostic_column = 5
-expect_output_contains = ["type '{ x: int, y: float }'", "declared type '{ x: float, y: float }'"]
+expect_output_contains = ["type '{ x: int, y: float }'", "declared type 'Point'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
@@ -504,6 +504,6 @@ kind = "negative"
 case = "../../../cases/compile/literals/context_struct_argument_shape.cml"
 args = ["-E", "short", "${case}"]
 expect_exit = 1
-expect_output_contains = ["context_struct_argument_shape.cml:13:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "({ x: float })", "norm: (p: { x: f32, y: f32 }) => f32"]
+expect_output_contains = ["context_struct_argument_shape.cml:13:17: [Error]: No matching function found", "(name=SemanticDiag::NoMatchingFunction, code=0x0300000F)", "({ x: float })", "norm: (p: Point) => f32"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

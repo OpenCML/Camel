@@ -1359,6 +1359,16 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 entered[i] = param;
                 continue;
             }
+            // An unnamed struct value whose fields are a named parameter's fields, by name,
+            // enters it (design principles 5.2): the field-by-field copy is made once the
+            // callee is known (enterParameters, coerceTo), as for a literal.
+            if (param->code() == TypeCode::Struct && entered[i] != nullptr &&
+                entered[i]->code() == TypeCode::Struct &&
+                structFieldsMatchByName(
+                    tt::as_ptr<StructType>(param), tt::as_ptr<StructType>(entered[i]))) {
+                entered[i] = param;
+                continue;
+            }
             // A literal takes the parameter's type when its value can be one of it (design
             // principles 5.1); whether the value fits is checked when the CAST is made.
             std::optional<literal::Value> value;
@@ -2086,9 +2096,34 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         targetFuncType = funcType;
     }
 
+    // A built-in operator reads the argument types its signature names (the arguments are not
+    // converted on the way in). A struct value that enters a struct parameter is the one
+    // conversion made here (design principles 5.2): an unnamed value is copied into the named
+    // type, field by field and by name, so the operator reads the layout it was given.
+    const auto enterStructParameters = [&](FunctionType *funcType) {
+        const auto enter = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
+            const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+            for (size_t i = 0; i < inputs.size() && i < count; ++i) {
+                Type *param = with ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
+                if (param == nullptr || param->code() != TypeCode::Struct || types[i] == nullptr ||
+                    types[i]->code() != TypeCode::Struct || param->equals(types[i])) {
+                    continue;
+                }
+                if (node_handle_t entered = coerceTo(inputs[i].node, param, inputs[i].expr)) {
+                    inputs[i].node = entered;
+                    types[i]       = param;
+                }
+            }
+        };
+        enter(withInputs, withInputTypes, true);
+        enter(normInputs, normInputTypes, false);
+    };
+
     ASSERT(targetFuncType != nullptr, "Target function type must be resolved.");
     if (targetOperator == nullptr) {
         enterParameters(targetFuncType);
+    } else {
+        enterStructParameters(targetFuncType);
     }
     if (recorder_) {
         recorder_->callResolved(

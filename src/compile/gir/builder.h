@@ -1262,6 +1262,16 @@ class Builder {
     /// nullptr when the value does not enter (camel::core::type::entersImplicitly).
     node_handle_t
     coerceTo(node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// `value` as the struct type `target`, field by field and by name: a real copy, made when
+    /// the fields are the same but not in the same order, or when a field type is refined. No
+    /// copy is made when the layouts already agree (that conversion is a CAST, CastSafety).
+    /// nullptr when `value` is not a struct whose fields are the target's fields, by name and
+    /// with a field-by-field conversion for each. A named struct type is a copy of its fields
+    /// in the declaration's order (design principles 5.2); an unnamed value may enter it this
+    /// way, and an explicit `as` may convert between two named types this way.
+    node_handle_t convertStructValue(
+        node_handle_t value, camel::core::type::StructType *target,
+        const GCT::node_ptr_t &origin);
     /// The constant an array / struct literal written at `origin` becomes when the position
     /// gives its elements / fields the type `target` (design principles 5.1): `f([1, 2])` with
     /// `f(xs: float[])`, `return { a: 1 }` under `{ a: float }`. nullptr when `node` is not a

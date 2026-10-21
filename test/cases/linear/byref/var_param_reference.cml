@@ -110,7 +110,10 @@ func main(): int sync {
     let r3 = both(e, e)
     println(e)
 
-    var p = { x: 1, y: 2 }
+    // A `var` position takes the variable itself, so no value conversion can happen there: the
+    // variable must have the parameter's type (design principles 5.2; an unnamed struct value
+    // enters a named type by being copied, which a reference cannot be).
+    var p: Point = { x: 1, y: 2 }
     wait move_to(p, 4)
     println(p.x + p.y)
 
