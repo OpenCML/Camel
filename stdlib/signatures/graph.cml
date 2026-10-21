@@ -1,0 +1,271 @@
+// Signatures of the graph module: a program as a value. A Program is an immutable snapshot of
+// the graphs; the handles Graph, Node, Op and TypeRef name things inside one Program and compare
+// with `==` and `!=`. Reads are pure. A change is made in a transaction (`open`, `replace`,
+// `erase`, `commit`) that gives a new Program; a pass written in Camel is a function
+// `(p: Program) => Program!` exported by a module, named on the pipeline as `<module>::<function>`.
+// These declarations are reference metadata.
+//
+// A module that holds passes is compiled as a library of its own: it may import modules written
+// in C++ only, and not the library `array`.
+
+// ---- the program ----
+
+/// The Program the running program was compiled to: an immutable snapshot, whose graphs a pass reads.
+/// @pure
+/// @example graphs(current())
+inner func current(): Program {
+    return 'graph:current'
+}
+
+/// Every graph of the program, in the order of their ids.
+/// @pure
+/// @example len(graphs(current()))
+inner func graphs(p: Program): Graph[] {
+    return 'graph:graphs'
+}
+
+/// The entry graph of the program.
+/// @pure
+/// @example name(root(current()))
+inner func root(p: Program): Graph {
+    return 'graph:root'
+}
+
+/// The name of the graph.
+/// @pure
+/// @example name(root(current()))    // '__root__'
+inner func name(g: Graph): string {
+    return 'graph:name'
+}
+
+/// The nodes of the graph in NodeId order; the places of removed nodes are skipped.
+/// @pure
+/// @example nodes(root(current()))
+inner func nodes(g: Graph): Node[] {
+    return 'graph:nodes'
+}
+
+// ---- reading nodes ----
+
+/// The nodes whose values `n` takes as ordinary inputs, in order.
+/// @pure
+/// @example inputs(n)
+inner func inputs(n: Node): Node[] {
+    return 'graph:inputs'
+}
+
+/// The nodes whose values `n` takes as with inputs.
+/// @pure
+/// @example with_inputs(n)
+inner func with_inputs(n: Node): Node[] {
+    return 'graph:with_inputs'
+}
+
+/// The nodes `n` waits for (control inputs).
+/// @pure
+/// @example ctrl_inputs(n)
+inner func ctrl_inputs(n: Node): Node[] {
+    return 'graph:ctrl_inputs'
+}
+
+/// The nodes that read `n` as an input of any kind, once each, in NodeId order.
+/// @pure
+/// @example users(n)
+inner func users(n: Node): Node[] {
+    return 'graph:users'
+}
+
+/// The nodes that read the value of `n` (ordinary or with input), once each.
+/// @pure
+/// @example len(value_users(n)) == 0
+inner func value_users(n: Node): Node[] {
+    return 'graph:value_users'
+}
+
+/// The kind of the node.
+/// @pure
+/// @example kind(n) == NodeKind::Oper
+inner func kind(n: Node): NodeKind {
+    return 'graph:kind'
+}
+
+/// The operator of an operation node, null for any other node.
+/// @pure
+/// @example op(n)
+inner func op(n: Node): Op? {
+    return 'graph:op'
+}
+
+/// The URI of the operator, such as `:op/add_l`.
+/// @pure
+/// @example op_name(o)
+inner func op_name(o: Op): string {
+    return 'graph:op_name'
+}
+
+/// Whether the node is an operation whose operator is declared pure.
+/// @pure
+/// @example is_pure(n)
+inner func is_pure(n: Node): bool {
+    return 'graph:is_pure'
+}
+
+/// Whether the node anchors its graph (its exit, output or return, or the end of a branch arm); a transaction does not replace or erase it.
+/// @pure
+/// @example is_anchor(n)
+inner func is_anchor(n: Node): bool {
+    return 'graph:is_anchor'
+}
+
+/// Whether the node is a constant of the graph.
+/// @pure
+/// @example is_constant(n)
+inner func is_constant(n: Node): bool {
+    return 'graph:is_constant'
+}
+
+/// The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
+/// @pure
+/// @example constant(n, 0)    // int?
+inner func constant(n: Node, sample: T): T? {
+    return 'graph:constant'
+}
+
+/// The type of the node's value, null when it has none.
+/// @pure
+/// @example type_of(n)
+inner func type_of(n: Node): TypeRef? {
+    return 'graph:type_of'
+}
+
+/// The type as a program writes it.
+/// @pure
+/// @example type_name(t)    // 'int'
+inner func type_name(t: TypeRef): string {
+    return 'graph:type_name'
+}
+
+/// The graph a call or function node names, null for any other node.
+/// @pure
+/// @example callee(n)
+inner func callee(n: Node): Graph? {
+    return 'graph:callee'
+}
+
+/// The attributes of the node as text (empty when there are none).
+/// @pure
+/// @example tags(n)
+inner func tags(n: Node): string {
+    return 'graph:tags'
+}
+
+/// The source origin id of the node, 0 when unknown.
+/// @pure
+/// @example origin(n)
+inner func origin(n: Node): int {
+    return 'graph:origin'
+}
+
+/// The node on one line: its id, kind, operator and type.
+/// @pure
+/// @example show(n)    // '%2 Oper :op/mul_l : int'
+inner func show(n: Node): string {
+    return 'graph:show'
+}
+
+/// The number a graph, a node or an operator is known by inside its Program: the GraphId, the NodeId or the OperId. Stable for the Program, so a pass can key a map by it.
+/// @pure
+/// @example id(n)
+inner func id(h: Graph): int {
+    return 'graph:id'
+}
+
+// ---- facts ----
+
+/// What running the graph once does besides computing its value: `external`, `writes_variables`, `may_fault`, `may_not_terminate`.
+/// @pure
+/// @example effects(g).external
+inner func effects(g: Graph): Effects {
+    return 'graph:effects'
+}
+
+/// The tensor shape of the node's value as text, null when its value is no tensor.
+/// @pure
+/// @example shape(n)    // 'f32 [2, 3]'
+inner func shape(n: Node): string? {
+    return 'graph:shape'
+}
+
+/// The numeric permissions the program granted the node, as a bit set (0 for none).
+/// @pure
+/// @example permissions(n)
+inner func permissions(n: Node): int {
+    return 'graph:permissions'
+}
+
+// ---- function values ----
+
+/// The Program a function value lives in.
+/// @pure
+/// @example program_of(f)
+inner func program_of(f: F): Program {
+    return 'graph:program_of'
+}
+
+/// The graph of a function value.
+/// @pure
+/// @example graph_of(f)
+inner func graph_of(f: F): Graph {
+    return 'graph:graph_of'
+}
+
+// ---- transactions ----
+
+/// Opens a transaction on the Program: a private workspace in which graphs are edited. Nothing changes until `commit`.
+/// @effect opens a transaction
+/// @example let t = open(p)
+inner func open(p: Program): Txn {
+    return 'graph:open'
+}
+
+/// Puts the node `new` of the same graph in the place of `old`, which is removed; what `old` ordered stays ordered. A fault when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over.
+/// @effect changes the transaction
+/// @example replace(t, n, inputs(n)[0])
+inner func replace(t: Txn, old: Node, new: Node): void {
+    return 'graph:replace'
+}
+
+/// Removes a node whose value nobody reads. A fault when the value is read or the node anchors its graph.
+/// @effect changes the transaction
+/// @example erase(t, n)
+inner func erase(t: Txn, n: Node): void {
+    return 'graph:erase'
+}
+
+/// Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
+/// @effect changes the transaction
+/// @example commit(t)
+inner func commit(t: Txn): Program! {
+    return 'graph:commit'
+}
+
+/// Drops the transaction.
+/// @effect changes the transaction
+/// @example abort(t)
+inner func abort(t: Txn): void {
+    return 'graph:abort'
+}
+
+/// Opens a transaction on a function value's graph and the graphs it reaches.
+/// @effect opens a transaction
+/// @example open_function(f)
+inner func open_function(f: F): Txn {
+    return 'graph:open_function'
+}
+
+/// Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
+/// @effect changes the transaction
+/// @example to_function(t, f)
+inner func to_function(t: Txn, sample: F): F! {
+    return 'graph:to_function'
+}
