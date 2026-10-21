@@ -187,6 +187,7 @@
 | H28 | 数据块：缓冲区提升为通用机制 | H17d | **已完成**（检查意见 reviews/H17-H22.md） |
 | H29 | fvm/jit 上元组数组的 `reduce` 结果错误 | 无 | **已完成**（检查意见 reviews/H17-H22.md） |
 | H15g | `i32`/`f32` 入口参数按声明类型读取；`let x: int = '42'` 的诊断改为类型不符 | 无 | 甲车道 |
+| H35 | Windows 构建核对 `graph` 模块 C7–C9 新增的导出项（手写的修饰名，未在 Windows 上链接过） | 无 | 己车道，下次 Windows 构建时 |
 | H33 | ONNX 导出的分支调用拆分不再产生输入环 | 协调者一方的 R2c（前端直接产生分支区域）合入后 | 丁车道 |
 | H31 | 诊断并修复 Debug 层的 `Accessing uninitialized slot`（经 `materializeCallResult`，9 项） | 无 | 乙车道，优先 |
 | H30 | Debug 构建能链接，测试运行器增加 Debug 层，视图逃逸断言真正运行 | 无 | 己车道，优先 |
