@@ -2429,6 +2429,13 @@ std::vector<Type *> Builder::collectLoopAppends(
 
 void Builder::markLoopStateInPlace(
     const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial) {
+    // The decision is per state, and only a state of these four properties is rewritten: the
+    // state is an array, its first value is a literal (a Data or FILL node), its next value is
+    // `state->append<v>`, and the body uses that state's port nowhere else. Anything else -- a
+    // struct or tuple state, a first value that is a parameter or an array element, a body that
+    // also reads the state or ends in `return` -- keeps the copying `append`; the values are the
+    // same either way, and only the allocation differs (10.5's in-place guarantee is about the
+    // state's data block, not about a promise on the source).
     const size_t stateCount = loop->loopStateCount();
     if (stateCount == 0 || initial.size() != stateCount || body->returned) {
         return;
