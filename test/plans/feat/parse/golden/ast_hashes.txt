@@ -496,8 +496,11 @@ ef0011e70fceb982 ok test/cases/compile/equality/err_not_equal_function.cml
 e928e3b23ae1e6a6 no test/cases/compile/fstring/bad_expr.cml
 f085e465aa46bf08 ok test/cases/compile/fstring/bad_spec.cml
 111afb0545f55eea ok test/cases/compile/fstring/basic.cml
+0e6224a8c9d0968e ok test/cases/compile/fstring/comment_then_expression.cml
+11c80a4faba0c91c no test/cases/compile/fstring/empty_comment_interpolation.cml
 0ba954c215588942 no test/cases/compile/fstring/empty_interpolation.cml
-2705a8f7fa3fca97 ok test/cases/compile/fstring/escapes.cml
+42f7846f5e8cbe0c no test/cases/compile/fstring/empty_space_interpolation.cml
+ad3ceb697ed4672a ok test/cases/compile/fstring/escapes.cml
 080927f9c4d3209c no test/cases/compile/fstring/lambda_spec.cml
 c84178c41fc992ae ok test/cases/compile/fstring/lambda_spec_format.cml
 9e35e1855c7f816a ok test/cases/compile/fstring/multiline.cml

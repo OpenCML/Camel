@@ -3,6 +3,15 @@ func main(): int sync {
     println('single: \`')
     println("double: \`")
     println(`formatted: \``)
+    println('single dollar: \$')
+    println("double dollar: \$")
+    println(`formatted dollar: \$`)
+    println("""triple dollar: \$""")
     println('literal interpolation: \${x}')
+    println("unicode: \u{4E2D}")
+    println(`unicode: \u{4E2D}`)
+    println("braces from escapes: [\x7B][\x7D]")
+    println(`braces from escapes: [\x7B][\x7D][\u{7B}][\u{7D}]`)
+    println(`invalid unicode kept: \u{xyz}`)
     return 0
 }

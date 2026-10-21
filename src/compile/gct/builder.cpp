@@ -3093,8 +3093,10 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
     // Handle different literal types
     switch (value.type()) {
     case LiteralType::String: {
-        // Decode escaped characters in the string and create a StringData object
-        std::string decoded = decodeEscapes(str);
+        // Decode escaped characters in the string and create a StringData object. A formatted
+        // string's pattern is decoded with `doubleBraces`: a brace that an escape produces is a
+        // literal brace of that pattern, and `format` must see it doubled (H89).
+        std::string decoded = decodeEscapes(str, literal->fromFormattedString());
         // A string is always valid UTF-8 (design principles 11.1); `'\xE4'` alone is not.
         // Write the character itself or `\u{4E2D}`; a byte sequence is a `Bytes` value.
         if (!camel::utf8::isValid(decoded)) {
