@@ -1,0 +1,42 @@
+id = "opt.edges"
+order = 323
+tier = "fast"
+tags = ["feat", "opt", "validation"]
+
+# A commit enforces the edge invariants of a graph (docs/design/graph-store 5.4): no cycle of
+# inputs, and the types agree along the edges. The test passes edit the root graph through the
+# draft API in ways a pass could and commit; the commit refuses the broken ones.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/opt/generic/generic_passes.cml"
+timeout_ms = 20000
+expect_exit = 0
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "valid_edit_is_accepted"
+desc = "Control: a node that breaks no invariant commits."
+args = ["${case}", "test::edges_ok"]
+expect_stdout_contains = ["EDGES accepted"]
+expect_output_not_contains = ["refused"]
+
+[[tests]]
+name = "cycle_is_refused"
+desc = "Two SYNC nodes that wait on each other form a cycle of control inputs; the commit names the cycle."
+args = ["${case}", "test::edges_cycle"]
+expect_stdout_contains = ["EDGES refused", "lies on a cycle of inputs"]
+
+[[tests]]
+name = "copy_type_mismatch_is_refused"
+desc = "A COPY typed i32 of an f32 value: the types disagree along the edge."
+args = ["${case}", "test::edges_type"]
+expect_stdout_contains = ["EDGES refused", "copies a f32 as a i32"]
+
+[[tests]]
+name = "commit_conflict_is_detected"
+desc = "Three sessions on one program (design 4.3.1): after the first commits, the one that wrote the same graph conflicts and its checked commit is refused; the one that wrote another graph does not conflict."
+case = "../../../cases/opt/inline/consecutive_sync_calls.cml"
+args = ["${case}", "test::commit_conflict"]
+expect_stdout_contains = ["CONFLICTS before=0", "CONFLICTS same_graph=1 other_graph=0", "CHECKED refused: 1 graph(s)"]

@@ -31,6 +31,7 @@
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
 #include "camel/passes/test/chunks.h"
+#include "camel/passes/test/edges.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
@@ -965,6 +966,10 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
         TEST_PASS(kChunksTestPass, ChunksTestPass),
+        TEST_PASS(kEdgesCycleTestPass, EdgesCycleTestPass),
+        TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),
+        TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
+        TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
