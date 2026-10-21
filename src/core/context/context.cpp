@@ -766,6 +766,11 @@ void Context::settleRuntimeGraphs(const camel::runtime::Program *keep) {
     runtimeGraphMgr_->settle(keep);
 }
 
+void Context::collectRuntimeGraphs() {
+    ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->collect();
+}
+
 void Context::rootProgramForRun(const camel::runtime::Program *program) {
     ASSERT(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->rootForRun(program);

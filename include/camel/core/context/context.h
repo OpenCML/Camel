@@ -199,6 +199,8 @@ class Context : public std::enable_shared_from_this<Context> {
     void releaseDetachedRuntimeGraphs();
     /// See GCGraphManager::settle / rootForRun / enterRun / release.
     void settleRuntimeGraphs(const camel::runtime::Program *keep = nullptr);
+    /// See GCGraphManager::collect.
+    void collectRuntimeGraphs();
     void rootProgramForRun(const camel::runtime::Program *program);
     void unrootProgramForRun(const camel::runtime::Program *program);
     void enterRun();

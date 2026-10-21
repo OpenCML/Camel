@@ -421,6 +421,8 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     static constexpr size_t kNoBytecode = std::numeric_limits<size_t>::max();
     struct GraphPlan {
         camel::runtime::GCGraph *graph = nullptr;
+        // The execution plan of the graph version, shared with the other back ends.
+        const camel::runtime::ExecPlan *shared = nullptr;
         // False: the graph does not fit the scope model (or task graphs are switched off); it
         // is evaluated node by node in linear order, its calls still as task graphs.
         bool structured = false;
@@ -434,12 +436,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
         // result reaches the tail JOIN only through forwarding GATEs and nested JOINs, with
         // nothing of its arm running after it (the rule NodeVM and FastVM use).
         std::vector<camel::runtime::gc_node_ref_t> tailCalls;
-        // Per node ref. The function of an operator is stored when the operator first runs
-        // (resolving it can import a module, and an unknown operator is a fault of the
-        // execution, not of the plan); nullptr until then.
+        // Per node ref: where an operator reads its arguments. The function of the operator is
+        // kept in the execution plan of the graph (ExecPlan::resolvedOpers) once it has run.
         std::vector<PreparedOper> opers;
         std::vector<camel::runtime::gc_data_idx_t> operArgs;
-        std::unique_ptr<std::atomic<operator_t>[]> resolvedOpers;
         // As an element function of a higher-order operator: 1 when everything the graph can
         // reach is built-in operators and direct calls without recursion (the work of an
         // element is then bounded by the size of the graphs), 0 when not, -1 until asked

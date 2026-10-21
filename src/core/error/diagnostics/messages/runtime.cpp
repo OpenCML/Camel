@@ -145,9 +145,10 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "EntryArgumentMissing",
                 "No value was given for the {0} {1} of 'main'.",
                 "The parameters of 'main' are the inputs of the program. To run it, give each "
-                "one a value on the command line: --arg name=value (a number, true/false or "
-                "text for a scalar, a .npy file for a tensor, a directory of .npy files for a "
-                "struct of tensors). No default is assumed.",
+                "one a value on the command line: --arg name=value (a number, a complex number "
+                "written as the language writes one such as 1+2i, true/false or text for a "
+                "scalar, a .npy file for a tensor, a directory of .npy files for a struct of "
+                "tensors). No default is assumed.",
             },
         },
         {

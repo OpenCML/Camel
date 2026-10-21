@@ -30,6 +30,8 @@
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/passes/test/chunks.h"
+#include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/control.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/trans/json/gir.h"
@@ -943,6 +945,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
+        TEST_PASS(kChunksTestPass, ChunksTestPass),
+        TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),

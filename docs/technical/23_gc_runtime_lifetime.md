@@ -147,11 +147,15 @@ version lives as long as a live `Program` holds it, a `Program` as long as somet
   the heap and `GCGraphManager::sweepMarked()` (installed with `setGraphSweeper`, called after
   `markPhase`) frees the unmarked `Program`s and graph versions; the graph space also asks for a
   major collection when it holds a megabyte (`CAMEL_GRAPH_GC_MB`, default 64) and as much again
-  as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs, and
-  a pass keeps no function value of a replaced program) `collect()` marks from the roots over the
-  `Program`s and the static values of their graphs; it runs when a program is installed or
-  detached programs are released, once the space has grown by a quarter and a megabyte since the
-  last sweep, and is off while a back end runs (`enterRun`).
+  as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs)
+  `collect()` has the heap marked the same way, without sweeping or moving anything
+  (`collectGraphSpace`), so a function value of the heap keeps its `Program` there too; it runs
+  when a program is installed or detached programs are released, once the space has grown by a
+  quarter and a megabyte since the last sweep, and is off while a back end runs (`enterRun`).
+- **FastVM bytecode** of a graph made at run time is given back with the graph version: the plan of
+  the version holds a lease on its range of the bytecode vector (`CodeLease`), the free ranges are
+  kept by `CodeSpace`, and the next graph compiled at run time is placed in a free range that fits
+  before the vector grows.
 - **Commits** share what they did not change, so versions are shared by programs; a graph that
   was left as it was gets its function values retargeted to the new program
   (`retargetFunctions`), so that the programs before the commit are not reached through them.

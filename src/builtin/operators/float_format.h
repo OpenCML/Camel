@@ -24,6 +24,11 @@
  * number, camel::utils::floatText. A placeholder without a format specification, `{}`, writes
  * that text, so that `format`, `string` and `println` agree; a placeholder with one
  * (`{:.2f}`, `{:>8}`, `{:e}`) asks for something else and is formatted by fmt as before.
+ *
+ * The sign of a NaN is not part of the text, with or without a specification (2.5.2 of the
+ * language reference): fmt writes `-nan` for a NaN whose sign bit is set, so the value is made
+ * positive before it is handed over (camel::utils::withoutNaNSign). The plain path needs none:
+ * floatText never writes the sign.
  */
 
 #pragma once
@@ -55,7 +60,7 @@ struct fmt::formatter<camel::builtin::LanguageFloat<T>> : fmt::formatter<T> {
             const std::string text = camel::utils::floatText(f.value);
             return std::copy(text.begin(), text.end(), ctx.out());
         }
-        return fmt::formatter<T>::format(f.value, ctx);
+        return fmt::formatter<T>::format(camel::utils::withoutNaNSign(f.value), ctx);
     }
 
   private:

@@ -228,6 +228,15 @@ template <std::floating_point T> std::string floatText(T value) {
     return text;
 }
 
+/// The value to hand to a text formatter: a NaN becomes the standard quiet NaN, which has no
+/// sign bit set. A NaN's sign says nothing about a value, and text never shows it (`floatText`;
+/// the language reference, 2.5.2: "a NaN has no sign"). Every path that formats a number through
+/// a library (the interpreter hands floats to fmt) applies this first, so no path can write
+/// `-nan`, with or without a format specification.
+template <std::floating_point T> T withoutNaNSign(T value) {
+    return std::isnan(value) ? std::numeric_limits<T>::quiet_NaN() : value;
+}
+
 /// The text of one part of a complex number: a whole part is written as an integer (`3`, so
 /// that `3+4i` is the text of the value, as design principles 5.1 writes it), every other part
 /// by floatText. `-0` is written `0` as a part: the sign of a zero part is not shown.
@@ -255,6 +264,52 @@ template <std::floating_point T> std::string complexText(T real, T imaginary) {
     text += complexPartText(negative ? -imaginary : imaginary);
     text += 'i';
     return text;
+}
+
+/// The two parts of the text of a complex number, each still to be read as a number. `real` is
+/// empty when the text holds only an imaginary part (`-2i`, `4.5i`).
+struct ComplexTextParts {
+    std::string_view real;
+    std::string_view imaginary;
+};
+
+/// Splits the text of a complex number as the language writes one — the real part, the sign of
+/// the imaginary part and the imaginary part (`3+4i`, `3-4i`, `0.5-0.25i`), or only the
+/// imaginary part with its sign (`4i`, `-2i`) — into the two part texts. Nothing is read here:
+/// the caller reads each part by the rule of the number type, so a complex value and a real one
+/// are read by the same rule. Returns false when `text` is not a complex number: it must end in
+/// `i`, and its imaginary part must not be empty (`1+` is not one). A sign that belongs to an
+/// exponent (`1e-3i`, `-1e-3i`) is not a separator.
+inline bool splitComplexText(std::string_view text, ComplexTextParts &out) {
+    if (text.size() < 2 || text.back() != 'i') {
+        return false;
+    }
+    text.remove_suffix(1);
+    if (text.empty()) {
+        return false;
+    }
+    // The imaginary part begins at its sign: the last '+' or '-' that is not the number's own
+    // leading sign and not the sign of an exponent. Without one the text is only the imaginary
+    // part (`2i`, `-2i`).
+    std::size_t at = std::string_view::npos;
+    for (std::size_t i = text.size(); i-- > 1;) {
+        const char c = text[i];
+        if ((c == '+' || c == '-') && text[i - 1] != 'e' && text[i - 1] != 'E') {
+            at = i;
+            break;
+        }
+    }
+    if (at == std::string_view::npos) {
+        out.real      = {};
+        out.imaginary = text;
+        return true;
+    }
+    if (at + 1 >= text.size()) {
+        return false;
+    }
+    out.real      = text.substr(0, at);
+    out.imaginary = text.substr(at);
+    return true;
 }
 
 /// Whether `value`, truncated toward zero, is a value of the signed integer type T. False for

@@ -59,6 +59,9 @@ struct GCGraphPayloadShape {
     bool permissions = false;
     // Whether some node has attributes: only then the graph has an attribute column.
     bool attrs = false;
+    // The graph the draft was decoded from: a chunk of the new graph that has all the content of
+    // the same chunk of this one is that chunk (GCNodeChunk::shares). nullptr: none.
+    const GCGraph *base = nullptr;
 };
 
 struct GCGraphPayloadArena {

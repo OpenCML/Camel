@@ -129,6 +129,11 @@ enum class GCNodeKind : uint8_t {
     // that do not run it natively lower it to a tail recursion first
     // (lowerLoopsToTailRecursion), never in the shared program.
     Loop = 15,
+    // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
+    // from, so a removed node leaves a record with this kind and no inputs, which every
+    // consumer that walks the nodes skips (GCGraph::nodes() does); ids are not reused. A
+    // graph without removed nodes has none.
+    Dead = 255,
 };
 
 enum class GCReturnKind : uint8_t {
@@ -434,8 +439,6 @@ class GCGraph;
 
 class GCGraph : public camel::core::rtdata::Object {
   public:
-    static constexpr size_t kExtraSlotCount = 8;
-
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
     /// The graph's identity within its program, the same for every version of the graph
@@ -482,9 +485,6 @@ class GCGraph : public camel::core::rtdata::Object {
     uint8_t flags() const { return flags_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
-    uintptr_t extraSlot(size_t index) const;
-    void setExtraSlot(size_t index, uintptr_t value);
-    void clearExtraSlots();
 
     /// The reference table: every graph this one refers to, once each (see the file comment).
     /// Program::resolve turns it into graphs.
@@ -511,8 +511,10 @@ class GCGraph : public camel::core::rtdata::Object {
 
     bool hasNodePayload() const;
     const GCGraphNativePayload *nodePayload() const;
-    /// Number of nodes; NodeIds are 0 .. nodeCount() - 1.
+    /// Number of node places: NodeIds are 0 .. nodeCount() - 1, and some of them may be Dead.
     gc_cnt_t nodeCount() const { return nativePayload_.nodeCount; }
+    /// Number of nodes that are not Dead.
+    gc_cnt_t liveNodeCount() const;
     /// Number of edges (input table entries).
     gc_cnt_t edgeCount() const { return nativePayload_.edgeCount; }
     gc_cnt_t branchArmCount() const;
@@ -588,6 +590,9 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The users of every node, built the first time it is asked for and kept with the graph
     /// (the frozen block stores each edge once, as an input). Thread-safe.
     const GCUseIndex &uses() const;
+    /// How to run this version: the order of its nodes, its branches and calls (exec_plan.h).
+    /// Built the first time it is asked for and kept with the graph. Thread-safe.
+    const class ExecPlan &execPlan() const;
     std::span<const gc_node_ref_t> normOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> ctrlOutputsOf(gc_node_ref_t ref) const;
@@ -599,11 +604,14 @@ class GCGraph : public camel::core::rtdata::Object {
 
     class NodeIterator {
       public:
-        NodeIterator(const GCGraph *graph, gc_node_ref_t ref) : graph_(graph), ref_(ref) {}
+        NodeIterator(const GCGraph *graph, gc_node_ref_t ref) : graph_(graph), ref_(ref) {
+            skipDead();
+        }
 
         const GCNode *operator*() const { return graph_->node(ref_); }
         NodeIterator &operator++() {
             ++ref_;
+            skipDead();
             return *this;
         }
         bool operator==(const NodeIterator &other) const {
@@ -613,6 +621,13 @@ class GCGraph : public camel::core::rtdata::Object {
         gc_node_ref_t ref() const { return ref_; }
 
       private:
+        void skipDead() {
+            while (graph_ && ref_ < graph_->nodeCount() &&
+                   graph_->node(ref_)->kind == GCNodeKind::Dead) {
+                ++ref_;
+            }
+        }
+
         const GCGraph *graph_ = nullptr;
         gc_node_ref_t ref_    = 0;
     };
@@ -682,7 +697,8 @@ class GCGraph : public camel::core::rtdata::Object {
     ::Tuple *staticArea_ = nullptr;
     // Built by uses() on first demand, owned by the graph.
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
-    uintptr_t extraSlots_[kExtraSlotCount]{};
+    // Built by execPlan() on first demand, owned by the graph.
+    mutable std::atomic<class ExecPlan *> execPlan_{nullptr};
 };
 
 /// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.
@@ -705,11 +721,11 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
 /// through (rootForRun). Everything else is reached from those: a Program traces its graphs, a
 /// graph its static values, a function value its Program.
 ///
-/// Two collections free what is unreached. Between passes (nothing runs, the heap holds no
-/// function value of the pipeline) collect() marks from the roots over the Programs and the
-/// static values of their graphs. While a program runs the collector of run-time values does it
-/// (sweepMarked): it marks the Programs and graphs through the objects it reaches, and the
-/// manager frees the unmarked ones.
+/// Two collections free what is unreached, and both mark through the heap, so that a function
+/// value of a Program keeps it. Between passes (nothing runs) collect() has the heap marked
+/// without sweeping it (GenerationalAllocatorWithGC::collectGraphSpace). While a program runs
+/// the collector of run-time values does it with a major collection (sweepMarked). The manager
+/// frees the Programs and graphs nothing marked.
 class GCGraphManager {
   public:
     GCGraphManager();
@@ -759,8 +775,8 @@ class GCGraphManager {
     /// the definition graphs of operators (camel/runtime/definitions.h).
     void pin(const Program *program);
 
-    /// Frees the Programs and graph versions nothing reaches, marking from the roots over the
-    /// Programs and the static values of their graphs. Does nothing while a program runs.
+    /// Frees the Programs and graph versions nothing reaches, marking from the roots and the
+    /// heap. Does nothing while a program runs.
     void collect();
     /// The collector of run-time values has marked what it reaches: frees the marked-not Programs
     /// and graph versions.

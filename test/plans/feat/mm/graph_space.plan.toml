@@ -31,3 +31,35 @@ assert(Number(peak[1]) < 6000, `the graph space held ${peak[1]} KB`)
 }
 """
 timeout_ms = 30000
+
+[[tests]]
+name = "graph_space.grad_in_a_loop_fvm"
+desc = "The same 4000 gradients under FastVM: the bytecode of a graph version the collector frees is given back and the next gradient is compiled into it, so the bytecode vector stays at about 11000 entries (all 4000 gradients kept would take more than 140000)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GRAPH_GC_MB=1"]
+expect_exit = 0
+expect_stdout_contains = ["40000.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+const code = /fvm_code_bytecodes=([0-9]+)/.exec(err)
+assert(code !== null, `no code statistics in stderr: ${err}`)
+assert(Number(code[1]) < 40000, `the bytecode vector held ${code[1]} entries`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "graph_space.function_value_keeps_program"
+desc = "A function value of the heap keeps the Program it is of: a test pass makes a program, a function value of its graph, and the program that replaces it, then collects the graph space between passes; the function value still reads its graph afterwards (a freed Program would be a dangling pointer)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
+args = ["${case}", "test::keepfn", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["KEEPFN alive=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

@@ -157,20 +157,24 @@ const Program *GCGraphManager::programOf(const GCGraph *graph) const {
 
 Program *GCGraphManager::reserve() {
     mm::NoCollectionScope noCollection;
-    std::lock_guard lock(mutex_);
-    void *mem = mm::graphSpace().alloc(sizeof(Program), alignof(Program));
-    if (mem == nullptr) {
-        throw std::bad_alloc();
+    Program *program = nullptr;
+    {
+        std::lock_guard lock(mutex_);
+        void *mem = mm::graphSpace().alloc(sizeof(Program), alignof(Program));
+        if (mem == nullptr) {
+            throw std::bad_alloc();
+        }
+        program           = new (mem) Program();
+        program->manager_ = this;
+        programs_.push_back(program);
+        // A program made while a program runs is reached by the function value made for it; one
+        // made by the pipeline is held until the pass is over (settle).
+        if (running_ == 0) {
+            provisional_.push_back(program);
+            gcRoots_.push_back(program);
+        }
     }
-    auto *program     = new (mem) Program();
-    program->manager_ = this;
-    programs_.push_back(program);
-    // A program made while a program runs is reached by the function value made for it; one
-    // made by the pipeline is held until the pass is over (settle).
-    if (running_ == 0) {
-        provisional_.push_back(program);
-        gcRoots_.push_back(program);
-    }
+    // Outside the lock: the collector takes its own lock first and ours in the sweep.
     noteGrowth();
     return program;
 }
@@ -359,54 +363,14 @@ void retargetFunctions(GCGraph *graph, const Program &to) {
 }
 
 void GCGraphManager::collect() {
-    mm::NoCollectionScope noCollection;
-    std::lock_guard lock(mutex_);
-    if (running_ > 0) {
-        return;
-    }
-    std::unordered_set<const Program *> livePrograms;
-    std::unordered_set<GCGraph *> liveGraphs;
-    std::vector<const Program *> work;
-    const auto reach = [&](const Program *program) {
-        if (program != nullptr && livePrograms.insert(program).second) {
-            work.push_back(program);
-        }
-    };
-    reach(current_);
-    for (const auto *list : {&detached_, &pinned_, &provisional_, &runRoots_}) {
-        for (const Program *program : *list) {
-            reach(program);
+    {
+        std::lock_guard lock(mutex_);
+        if (running_ > 0) {
+            return;
         }
     }
-    while (!work.empty()) {
-        const Program *program = work.back();
-        work.pop_back();
-        reach(program->original());
-        for (GCGraph *graph : program->graphs()) {
-            if (!liveGraphs.insert(graph).second) {
-                continue;
-            }
-            std::vector<::Function *> held;
-            functionsInStatics(graph, held);
-            for (::Function *function : held) {
-                reach(function->program());
-            }
-        }
-    }
-    std::vector<Program *> deadPrograms;
-    for (Program *program : programs_) {
-        if (!livePrograms.contains(program)) {
-            deadPrograms.push_back(program);
-        }
-    }
-    std::vector<GCGraph *> deadGraphs;
-    for (GCGraph *graph : graphs_) {
-        if (!liveGraphs.contains(graph)) {
-            deadGraphs.push_back(graph);
-        }
-    }
-    freeDead(deadPrograms, deadGraphs);
-    noteSwept();
+    // The collector marks through the heap too: a function value of a program keeps it.
+    mm::autoSpace().collectGraphSpace();
 }
 
 void GCGraphManager::sweepMarked() {

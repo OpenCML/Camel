@@ -148,7 +148,7 @@ std::vector<GCGraph *> ProgramEmitter::collectFunctions(const std::vector<GCGrap
     // in place.
     std::unordered_set<const GCGraph *> scanning;
     std::function<void(GCGraph *)> scan = [&](GCGraph *graph) {
-        for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+        for (gc_node_ref_t ref : graph->execPlan().topo) {
             const auto *node = graph->node(ref);
             if (node->kind == GCNodeKind::Data) {
                 if (GCGraph *function = functionConstant(graph, ref);
@@ -328,6 +328,14 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
             kind  = "Float";
             value = std::format("static_cast<float>(args.number({}))", i);
             break;
+        case TypeCode::Complex64:
+            kind  = "ComplexFloat";
+            value = std::format("args.complexFloat({})", i);
+            break;
+        case TypeCode::Complex128:
+            kind  = "ComplexDouble";
+            value = std::format("args.complexDouble({})", i);
+            break;
         case TypeCode::Bool:
             kind  = "Bool";
             value = std::format("args.boolean({})", i);
@@ -342,8 +350,8 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
                 port,
                 std::format(
                     "the parameter '{}' of 'main' has type '{}', and std::cpp reads from the "
-                    "command line only the parameters of type int, i32, float, f32, bool and "
-                    "string (a tensor or a struct is read from files by camel only)",
+                    "command line only the parameters of type int, i32, float, f32, c64, c128, "
+                    "bool and string (a tensor or a struct is read from files by camel only)",
                     names[i],
                     type != nullptr ? type->toString() : std::string("void")),
                 false};
@@ -462,7 +470,7 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
 
 std::string ProgramEmitter::inspectComment(GCGraph *graph) const {
     std::string out = std::format("// graph '{}':\n", graph->name());
-    for (gc_node_ref_t ref : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+    for (gc_node_ref_t ref : graph->execPlan().topo) {
         const auto *node = graph->node(ref);
         out += std::format(
             "//   [{}] {} : {}\n",

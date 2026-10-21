@@ -135,6 +135,14 @@ void GenerationalAllocatorWithGC::setGraphSweeper(std::function<void()> sweeper)
     graphSweeper_ = std::move(sweeper);
 }
 
+void GenerationalAllocatorWithGC::collectGraphSpace() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    markPhase();
+    if (graphSweeper_) {
+        graphSweeper_();
+    }
+}
+
 void GenerationalAllocatorWithGC::requestMajorCollection(std::string_view reason) {
     std::lock_guard<std::mutex> lock(mutex_);
     requestCollectionAtSafepointUnlocked(CollectionKind::Major, reason);

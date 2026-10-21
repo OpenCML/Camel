@@ -1,0 +1,124 @@
+// H29: a value that survives an element is never a compact-element view.
+//
+// `reduce` keeps its accumulator across rounds. The element callback may return the element it
+// was given (`(a, b) => if b.1 > a.1 then b else a`), and a compact-element view is tied to the
+// read that produced it: a slot-shaped element is read through one reused thread-local cell, so
+// the next element read overwrites the accumulator in place. The call boundary therefore
+// materialises a returned view; these lines lock that for the slot-shaped shapes (`(int, int)`,
+// `P`), the shapes that are not (`Q`, `((int, int), int)`), a nested aggregate, a left fold
+// written as a loop with a tuple state, and the same accumulator after `filter`/`map`.
+module reduce_view
+
+// Slot-shaped: two 8-byte leaves, no padding. A compact element of this type is read through the
+// reused view cell that made the bug possible.
+type P = { x: int, y: int }
+
+// Not slot-shaped: a bool leaf is one byte, so the view ring (not the reused cell) serves it.
+type Q = { ok: bool, y: int }
+
+func bestTuple(xs: (int, int)[]): (int, int) {
+    return xs->reduce<(a: (int, int), b: (int, int)): (int, int) => if b.1 > a.1 then b else a, (0, 5)>
+}
+
+// The accumulator itself selected in every round: any aliasing of `a` with the current element
+// shows immediately (the result must stay the initial value).
+func keepInit(xs: (int, int)[]): (int, int) {
+    return xs->reduce<(a: (int, int), b: (int, int)): (int, int) => a, (0, 5)>
+}
+
+// A new tuple each round: the result is built, not taken from the element.
+func addTuple(xs: (int, int)[]): (int, int) {
+    return xs->reduce<(a: (int, int), b: (int, int)): (int, int) => (a.0 + b.0, a.1 + b.1), (0, 0)>
+}
+
+func bestStruct(xs: P[]): P {
+    return xs->reduce<(a: P, b: P): P => if b.y > a.y then b else a, { x: 0, y: 5 }>
+}
+
+func bestUnshaped(xs: Q[]): Q {
+    return xs->reduce<(a: Q, b: Q): Q => if b.y > a.y then b else a, { ok: false, y: 5 }>
+}
+
+// A nested aggregate: the outer element is not slot-shaped; its first field is.
+func bestNested(xs: ((int, int), int)[]): ((int, int), int) {
+    return xs->reduce<(a: ((int, int), int), b: ((int, int), int)): ((int, int), int) => if b.1 > a.1 then b else a, ((0, 0), 5)>
+}
+
+// A left fold written as a loop: the state (best, index) is a tuple the loop keeps across rounds.
+func foldLoop(xs: (int, int)[]): (int, int) {
+    let pair = loop best = (0, 5), i = 0 while i < len(xs) do
+        if xs[i].1 > best.1 then (xs[i], i + 1) else (best, i + 1)
+    return pair.0
+}
+
+// The same accumulator after `filter` and after `map`: the element a tuple state takes its
+// fields from goes through the higher-order operators first.
+func bestFiltered(xs: (int, int)[]): (int, int) {
+    let kept = xs->filter<(p: (int, int)): bool => p.1 > 10>
+    return kept->reduce<(a: (int, int), b: (int, int)): (int, int) => if b.1 > a.1 then b else a, (0, 5)>
+}
+
+func bestMapped(xs: (int, int)[]): (int, int) {
+    let doubled = xs->map<(p: (int, int)): (int, int) => (p.0, p.1 * 2)>
+    return doubled->reduce<(a: (int, int), b: (int, int)): (int, int) => if b.1 > a.1 then b else a, (0, 5)>
+}
+
+// Identity/selection: the callback returns the element itself, the hardest case for the view
+// boundary (the value that survives is exactly the view that was read).
+func identity(xs: (int, int)[]): (int, int) {
+    return xs->reduce<(a: (int, int), b: (int, int)): (int, int) => b, (0, 5)>
+}
+
+// `map` whose callback returns its element: the value handed to the output array is exactly the
+// view that was read, so the call boundary makes it a value before the store sees it (the store
+// path materialises a view too; the boundary is what the operator contract promises).
+func identityMap(xs: (int, int)[]): (int, int) {
+    let same = xs->map<(p: (int, int)): (int, int) => p>
+    return same->reduce<(a: (int, int), b: (int, int)): (int, int) => if b.1 > a.1 then b else a, (0, 5)>
+}
+
+func identityMany(xs: (int, int)[]): (int, int) {
+    let same = xs->map<(p: (int, int)): (int, int) => p>
+    return same->reduce<(a: (int, int), b: (int, int)): (int, int) => if b.0 > a.0 then b else a, (0, 0)>
+}
+
+// The ring case: a non-slot-shaped element (a bool leaf is one byte) is read through a ring of
+// 128 cells rather than the one reused cell, so three elements do not alias. The accumulator
+// still must not be a view: the 129th read wraps the ring onto the cell the kept view names.
+func bestMany(xs: (int, int)[]): (int, int) {
+    return xs->reduce<(a: (int, int), b: (int, int)): (int, int) => if b.0 > a.0 then b else a, (0, 0)>
+}
+
+func bestManyQ(xs: Q[]): Q {
+    return xs->reduce<(a: Q, b: Q): Q => if b.y > a.y then b else a, { ok: false, y: 0 }>
+}
+
+func main(): int sync {
+    let tuples = [(1, 30), (2, 6), (3, 20)]
+    println(bestTuple(tuples))
+    println(keepInit(tuples))
+    println(addTuple(tuples))
+    println(identity(tuples))
+    println(identityMap(tuples))
+
+    let ps: P[] = [{ x: 1, y: 30 }, { x: 2, y: 6 }, { x: 3, y: 20 }]
+    println(bestStruct(ps))
+    let qs: Q[] = [{ ok: true, y: 30 }, { ok: false, y: 6 }, { ok: true, y: 20 }]
+    println(bestUnshaped(qs))
+
+    let nested = [((1, 30), 1), ((2, 6), 2), ((3, 20), 3)]
+    println(bestNested(nested))
+
+    println(foldLoop(tuples))
+    println(bestFiltered(tuples))
+    println(bestMapped(tuples))
+
+    // 200 elements with the largest first: the accumulator keeps element 0 while 200 reads go
+    // through the view ring.
+    let many = range(0, 200)->map<(i: int): (int, int) => (200 - i, i)>
+    println(bestMany(many))
+    println(identityMany(many))
+    let manyQ: Q[] = range(0, 200)->map<(i: int): Q => { ok: i % 2 == 0, y: 200 - i }>
+    println(bestManyQ(manyQ))
+    return 0
+}

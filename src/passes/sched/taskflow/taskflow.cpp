@@ -131,7 +131,7 @@ TaskflowExecSchedPass::buildRuntimeBuildInfo(GCGraph *graph) {
     info.skipNodes.resize(graph->nodeCount(), 0);
     info.branchArms.resize(graph->nodeCount());
 
-    for (gc_node_ref_t nodeRef : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+    for (gc_node_ref_t nodeRef : graph->execPlan().topo) {
         const auto *node = requireNode(graph, nodeRef);
         if (node->kind != GCNodeKind::Brch) {
             continue;
@@ -605,46 +605,19 @@ bool TaskflowExecSchedPass::boundedLight(GraphPlan &plan) {
 std::unique_ptr<TaskflowExecSchedPass::GraphPlan>
 TaskflowExecSchedPass::buildGraphPlan(GCGraph *graph) {
     auto plan   = std::make_unique<GraphPlan>();
-    plan->graph = graph;
-    plan->topo  = camel::execute::buildReachableExecutionTopoIndices(graph);
+    plan->graph  = graph;
+    plan->shared = &graph->execPlan();
+    plan->topo   = plan->shared->topo;
 
-    // Tail position, by the rule of the node-by-node evaluator: the tail value must be the
-    // last thing in the linear order except for forwarding GATEs.
-    plan->lastNode = camel::execute::resolveRuntimeTailValueRef(graph);
-    plan->lastNodeIsJoin =
-        plan->lastNode != kInvalidNodeRef && graph->node(plan->lastNode)->kind == GCNodeKind::Join;
-    const auto anchor = std::find(plan->topo.begin(), plan->topo.end(), plan->lastNode);
-    plan->anchorOk =
-        anchor != plan->topo.end() && camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
-                                          graph,
-                                          plan->topo,
-                                          static_cast<size_t>(anchor - plan->topo.begin()));
-    if (plan->anchorOk) {
-        // A call that feeds an inner JOIN of nested branches in tail position (what inlining
-        // a recursive function into itself leaves) is a tail call too: taken as an ordinary
-        // call, a 50000-level tail recursion overflowed the native stack.
-        std::vector<gc_node_ref_t> candidates{plan->lastNode};
-        if (plan->lastNodeIsJoin) {
-            const auto armValues =
-                camel::execute::collectRuntimeTailJoinArmValues(graph, plan->lastNode);
-            candidates.insert(candidates.end(), armValues.begin(), armValues.end());
-        }
-        for (gc_node_ref_t ref : candidates) {
-            const auto *node = ref != kInvalidNodeRef ? graph->node(ref) : nullptr;
-            if (node != nullptr && node->kind == GCNodeKind::Func) {
-                plan->tailCalls.push_back(ref);
-            }
-        }
-        std::sort(plan->tailCalls.begin(), plan->tailCalls.end());
-        plan->tailCalls.erase(
-            std::unique(plan->tailCalls.begin(), plan->tailCalls.end()),
-            plan->tailCalls.end());
-    }
+    // Tail position, by the rule every back end shares (ExecPlan::tailCalls).
+    plan->lastNode       = plan->shared->tailValueRef;
+    plan->lastNodeIsJoin = plan->shared->tailValueIsJoin;
+    plan->anchorOk       = plan->shared->tailAnchorOk;
+    plan->tailCalls      = plan->shared->tailCalls;
 
     // Where each operator of the graph reads its arguments, and room for the operator itself
     // once it has been resolved (executePreparedOperator).
     plan->opers.resize(graph->nodeCount());
-    plan->resolvedOpers = std::make_unique<std::atomic<operator_t>[]>(graph->nodeCount());
     for (gc_node_ref_t ref : plan->topo) {
         if (ref >= plan->opers.size() || requireNode(graph, ref)->kind != GCNodeKind::Oper) {
             continue;
@@ -783,7 +756,7 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                     armScopes.reserve(arms.size());
                     for (size_t arm = 0; arm < arms.size(); ++arm) {
                         const gc_node_ref_t entry =
-                            camel::execute::resolveRuntimeBranchArmEntry(graph, ref, arm, topo);
+                            graph->execPlan().branchArmEntriesOfNode(ref)[arm];
                         if (entry == join) {
                             armScopes.push_back(-1);
                             continue;
@@ -1962,7 +1935,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         plan != nullptr && nodeRef < plan->opers.size() && plan->opers[nodeRef].prepared;
     if (prepared) {
         if (const operator_t resolved =
-                plan->resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
+                plan->shared->resolvedOpers[nodeRef].load(std::memory_order_acquire)) {
             const PreparedOper &oper = plan->opers[nodeRef];
             const data_arr_t wargs{
                 plan->operArgs.data() + oper.withBegin,
@@ -1990,7 +1963,7 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         raiseFault(RuntimeFault::make(RuntimeDiag::UnrecognizedOperatorURI, uri), graph, nodeRef);
     }
     if (prepared) {
-        plan->resolvedOpers[nodeRef].store(*opFunc, std::memory_order_release);
+        plan->shared->resolvedOpers[nodeRef].store(*opFunc, std::memory_order_release);
     }
 
     std::vector<runtime_data_idx_t> withIndices;
@@ -2207,6 +2180,7 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
 
     case GCNodeKind::Bind:
     case GCNodeKind::Dref:
+    case GCNodeKind::Dead:
         // Reserved kinds: never part of a frozen graph (see GCNodeKind). Listed only to keep
         // this switch exhaustive.
         return NullSlot;
@@ -2231,7 +2205,7 @@ void TaskflowExecSchedPass::buildRuntimeNodeTasks(
     FlowT &flowLike, GCGraph *graph, Frame *frame,
     const std::shared_ptr<const RuntimeBuildInfo> &buildInfo, std::vector<tf::Task> &taskMap,
     std::vector<uint8_t> &taskBuilt) {
-    for (gc_node_ref_t nodeRef : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+    for (gc_node_ref_t nodeRef : graph->execPlan().topo) {
         const auto *node = requireNode(graph, nodeRef);
         if (node->kind == GCNodeKind::Brch) {
             buildRuntimeBranchJoinRegion(
@@ -2322,7 +2296,7 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
         }
     };
 
-    for (gc_node_ref_t nodeRef : camel::execute::buildReachableExecutionTopoIndices(graph)) {
+    for (gc_node_ref_t nodeRef : graph->execPlan().topo) {
         const auto *node = requireNode(graph, nodeRef);
         if (node->kind == GCNodeKind::Brch) {
             continue;
@@ -2489,8 +2463,7 @@ gc_node_ref_t TaskflowExecSchedPass::branchArmEntryForLinear(
         const size_t armCount = graph->branchArmsOf(brchRef).size();
         it->second.reserve(armCount);
         for (size_t arm = 0; arm < armCount; ++arm) {
-            it->second.push_back(
-                camel::execute::resolveRuntimeBranchArmEntry(graph, brchRef, arm, topoNodes));
+            it->second.push_back(graph->execPlan().branchArmEntriesOfNode(brchRef)[arm]);
         }
     }
     ASSERT(armIndex < it->second.size(), "Taskflow linear BRCH arm index is out of range.");

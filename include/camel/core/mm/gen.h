@@ -336,6 +336,12 @@ class GenerationalAllocatorWithGC : public IAllocator {
     /// Asks for a major collection at the next safepoint, for a space the collector does not
     /// budget itself (the graph space: Programs and graph versions).
     void requestMajorCollection(std::string_view reason);
+    /// Marks everything the roots, the frames and the handles reach, without sweeping or moving
+    /// anything, and gives the graph space to the sweeper: the Programs and graph versions
+    /// nothing reaches are freed. For a caller that is not at a safepoint (a pass installing a
+    /// program): no object of the auto space is touched, so no raw pointer into it is
+    /// invalidated.
+    void collectGraphSpace();
 
     void registerExternalRootTracer(const void *owner, std::string name, ExternalRootTracer tracer);
 

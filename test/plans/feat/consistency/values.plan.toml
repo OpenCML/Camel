@@ -178,14 +178,13 @@ desc = "with parameters, in call and in chain form."
 case = "../../../cases/consistency/values/with_params.cml"
 golden = "golden/with_params.txt"
 
-# --- agreement only -------------------------------------------------------------------------
+# --- special values and number text ---------------------------------------------------------
 
 [[tests]]
 name = "value.float_special"
-desc = "Infinities, NaN and negative zero, printed and compared. How a NaN prints depends on the C library (-nan with glibc), so the output is only compared between the back ends."
-kind = "behavior"
+desc = "Infinities, NaN and negative zero, printed and compared, against the golden text. A NaN has one text (`nan`, never `-nan`, language reference 2.5.2) on every back end and in every form: without a specification, under a precision, under a width, and with the `+` sign flag. (The NaN text used to depend on the C library: with glibc `printf` a computed negative NaN printed as `-nan` under a specification, so this case was compared between back ends only.)"
 case = "../../../cases/consistency/values/float_special.cml"
-expect_stdout_starts_with = "inf\n-inf\n"
+golden = "golden/float_special.txt"
 
 [[tests]]
 name = "value.max_min_special"
