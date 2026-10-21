@@ -54,23 +54,9 @@ struct RuntimeDraftIdentity {
     std::string name;
 };
 
-enum class RuntimeSpecializationBindingKind : uint8_t {
-    Norm,
-    With,
-    Closure,
-    Lift, // closure nodes turned into norm ports (see devirtualizeStaticCallInDraft)
-};
-
-struct RuntimeSpecializationBindingKey {
-    RuntimeSpecializationBindingKind kind = RuntimeSpecializationBindingKind::Norm;
-    size_t index                          = 0;
-    slot_t value                          = NullSlot;
-    camel::core::type::Type *type         = nullptr;
-    uint8_t runtimeFlags                  = 0;
-
-    bool operator==(const RuntimeSpecializationBindingKey &other) const = default;
-};
-
+/// The key a session remembers a specialization under within itself: the callee graph version
+/// itself and the bindings. The program keeps its own key (specializations.h): an id and a
+/// content revision, so an entry outlives the version it was made for.
 struct RuntimeSpecializationKey {
     GCGraph *baseGraph = nullptr;
     std::vector<RuntimeSpecializationBindingKey> bindings;
@@ -156,8 +142,18 @@ class RuntimeGraphDraftSession {
     GraphDraft &edit(GCGraph *graph);
     GraphDraft &rootDraft();
 
+    /// The specialization made for `key`, if this session or the program it works on already has
+    /// it: the session's own copies first, then the program's table (specializations.h), whose
+    /// entry is used only while the program still holds the graph, the callee is still the
+    /// version the entry was made for, and everything the specialization calls is in the program.
     GCGraph *findSpecialization(const RuntimeSpecializationKey &key) const;
+    /// Remembers the graph the session made for `key`, in the session and (when the key binds no
+    /// GC-managed value) in the program, so a later session over the program finds it.
     void rememberSpecialization(RuntimeSpecializationKey key, GCGraph *graph);
+    /// The name numbers of new specializations, kept by the program so that a program derived
+    /// from another continues where it left off instead of naming a second graph `walk$spec0`.
+    uint64_t nextSpecializationNonce();
+    uint64_t nextLiftNonce();
 
     /// Traces the static values the open drafts hold. The drafts keep them as raw slots, outside
     /// the object graph, so a collection at a safepoint would otherwise move one and leave the
@@ -205,6 +201,11 @@ class RuntimeGraphDraftSession {
     /// the draft's revision is the same, so that asking for the closure of the program again
     /// does not walk the nodes of every draft again.
     const std::vector<std::pair<GraphId, const Program *>> &draftRefs(GCGraph *graph) const;
+    /// Whether a specialization with these bindings may outlive the session: it binds only
+    /// values (no GC-managed object), so the same key means the same specialization in a later
+    /// session over the program (specializations.h).
+    bool specializationLivesInProgram(const RuntimeSpecializationKey &key) const;
+    ProgramSpecializationKey programKeyOf(const RuntimeSpecializationKey &key) const;
 
     camel::core::context::context_ptr_t context_;
     const Program *program_ = nullptr;

@@ -867,8 +867,6 @@ gc_node_ref_t resolveInlineCtrlExit(
 
 bool specializeDirectFuncInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId) {
-    static size_t specializationNonce = 0;
-
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);
     if (!funcHeader || funcHeader->kind != GCNodeKind::Func) {
         return false;
@@ -921,7 +919,7 @@ bool specializeDirectFuncInDraft(
         calleeGraph,
         bindings,
         boundedTypeSpecialization ? kTypeSpecializationTag : std::string_view("spec"),
-        specializationNonce++);
+        session.nextSpecializationNonce());
     ASSERT(specializedGraph != nullptr, "Direct FUNC specialization produced a null graph.");
 
     DraftNodeInit init = snapshotNodeInit(draft, funcNodeId);
@@ -1082,7 +1080,6 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
 bool devirtualizeClosureCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
     gc_node_ref_t fillNodeId) {
-    static size_t liftNonce = 0;
     const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(fillNodeId).data());
     if (fill->fillKind != GCFillKind::FunctionClosure ||
         draft.normInputsOf(fillNodeId).size() != 1) {
@@ -1117,7 +1114,7 @@ bool devirtualizeClosureCallInDraft(
     if (base->withPorts().size() != withInputs.size() - 1) {
         return false;
     }
-    GCGraph *lifted = liftClosureGraph(session, base, liftNonce++);
+    GCGraph *lifted = liftClosureGraph(session, base, session.nextLiftNonce());
     if (!lifted) {
         return false;
     }
@@ -1151,8 +1148,6 @@ bool devirtualizeClosureCallInDraft(
 bool devirtualizeStaticCallInDraft(
     RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t callNodeId,
     bool unwrapGatedCallee) {
-    static size_t specializationNonce = 0;
-
     const DraftNodeHeader *callHeader = draft.header(callNodeId);
     if (!callHeader || callHeader->kind != GCNodeKind::Call) {
         return false;
@@ -1210,7 +1205,8 @@ bool devirtualizeStaticCallInDraft(
         return false;
     }
 
-    GCGraph *targetGraph = specializeClosureBoundGraph(session, function, specializationNonce++);
+    GCGraph *targetGraph =
+        specializeClosureBoundGraph(session, function, session.nextSpecializationNonce());
     if (!targetGraph) {
         return false;
     }

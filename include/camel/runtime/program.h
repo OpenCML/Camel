@@ -37,6 +37,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/runtime/specializations.h"
 
 #include <span>
 #include <vector>
@@ -57,15 +58,16 @@ class Program final : public camel::core::rtdata::Object {
     Program(const Program &other)
         : camel::core::rtdata::Object(), byId_(other.byId_), own_(other.own_),
           satellite_(other.satellite_), version_(other.version_), count_(other.count_),
-          root_(other.root_) {}
+          root_(other.root_), specializations_(other.specializations_) {}
     /// Assigning replaces the table and keeps whose program this is.
     Program &operator=(const Program &other) {
-        byId_      = other.byId_;
-        own_       = other.own_;
-        satellite_ = other.satellite_;
-        version_   = other.version_ + 1;
-        count_     = other.count_;
-        root_      = other.root_;
+        byId_            = other.byId_;
+        own_             = other.own_;
+        satellite_       = other.satellite_;
+        version_         = other.version_ + 1;
+        count_           = other.count_;
+        root_            = other.root_;
+        specializations_ = other.specializations_;
         if (manager_ != nullptr) {
             noteAll();
         }
@@ -215,6 +217,12 @@ class Program final : public camel::core::rtdata::Object {
     }
     void setRoot(GCGraph *root) { root_ = root; }
 
+    /// The specializations made over the graphs of this program (specializations.h): copied
+    /// with the program, so a rewrite that carries a program forward carries what it already
+    /// made.
+    const RuntimeSpecializationTable &specializations() const { return specializations_; }
+    RuntimeSpecializationTable &specializations() { return specializations_; }
+
   private:
     friend class GCGraphManager;
     void note(GCGraph *graph);
@@ -226,6 +234,7 @@ class Program final : public camel::core::rtdata::Object {
     uint64_t version_        = 0;
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
+    RuntimeSpecializationTable specializations_;
 };
 
 /// Makes the function values among the static values of `graph` name `to` where `to` holds the
