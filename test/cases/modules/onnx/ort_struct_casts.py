@@ -9,10 +9,11 @@ copy into the declaration's order, exported field by field), one bound with
 CAST at a call argument), and one on the path where a recursion whose depth depends on the
 model input returns (the CAST inside the ONNX Loop). The program is run twice, by the
 operator (default run) and by the pass (std::macro std::opt onnx::export); every model must
-pass onnx.checker's full check, hold no Cast node (an identity conversion exports as
-nothing, a reorder only identities between the initializer's fields), name its outputs after
-the declaration's fields with the counter an int64, and match NumPy on ONNX Runtime for
-several inputs (counters exactly) within 1e-6 relative to the largest element.
+pass onnx.checker's full check, hold neither a Cast nor a Reshape node (an identity conversion
+exports as nothing, a reorder only identities between the initializer's fields; the loop
+condition's own Cast aside), name its outputs after the declaration's fields with the counter
+an int64, and match NumPy on ONNX Runtime for several inputs (counters exactly) within 1e-6
+relative to the largest element.
 
 Usage: python ort_struct_casts.py   (needs numpy, onnx and onnxruntime)
 """
@@ -95,9 +96,14 @@ def check(path: Path, model: str, label: str) -> bool:
     loaded = onnx.load(str(path))
     onnx.checker.check_model(loaded, full_check=True)
     ops = op_types(loaded.graph)
-    # The identity conversion must leave no node at all. `walk`'s loop condition is the one
-    # place where an ONNX Cast is the operator's own (the counter's comparison), not a struct
-    # conversion: check it here rather than forbidding the operator.
+    # A conversion that only names the value must leave no node at all: neither the ONNX Cast an
+    # element type conversion would need nor the Reshape a data movement would need (H41). The
+    # identity conversion exports as nothing. `walk`'s loop condition is the one place where an
+    # ONNX Cast is the operator's own (the counter's comparison), not a struct conversion: check
+    # it here rather than forbidding the operator.
+    if "Reshape" in ops:
+        print(f"{label} {model}: FAIL, the model holds a Reshape node: {ops}")
+        return False
     if "Cast" in ops and model != "walk":
         print(f"{label} {model}: FAIL, the model holds a Cast node: {ops}")
         return False
