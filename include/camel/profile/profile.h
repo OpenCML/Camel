@@ -53,6 +53,7 @@
 
 #include <cstdint>
 #include <iosfwd>
+#include <ostream>
 #include <string>
 #include <string_view>
 

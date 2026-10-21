@@ -13,6 +13,7 @@
 #include "tiles/internal/capability.h"
 #include "tiles/internal/profile_hooks.h"
 
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <vector>
