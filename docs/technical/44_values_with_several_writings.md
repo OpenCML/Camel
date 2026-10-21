@@ -88,23 +88,22 @@ the program matches that order. The fallback is for a law that wrote only one or
 already states both directions, and a saturation applies its reverse as a rule of its own, so the
 matcher does not commute a two-way rule again (doing so doubled the rearranging matches and took
 `rules::saturate_all` past its 20 s budget). The replacement is built from the law's right side as
-written: the
-matcher only decides which input is bound to which variable, it never reorders the writing the
-law produces, and a law whose right side treats its variables asymmetrically is applied to the
-same values, bound the other way round. Operators that declare no commutativity (`-`, `/`, and
-integer tensor arithmetic) are never read the other way, because the exchange would change the
-value. Mirrored rules in the library (`*_zero_add`, `*_one_mul`, ...) remain correct statements
-but are redundant for matching: the first-written law now covers both orders.
+written: the matcher only decides which input is bound to which variable, it never reorders the
+writing the law produces, and a law whose right side treats its variables asymmetrically is applied
+to the same values, bound the other way round. Operators that declare no commutativity (`-`, `/`,
+and integer tensor arithmetic) are never read the other way, because the exchange would change the
+value. Mirrored rules in the library (`*_zero_add`, `*_one_mul`, ...) remain correct statements but
+are redundant for matching: the first-written law now covers both orders.
 
 The rules of `test/passes` (`test::saturate`) are the local algebra of `std::opt::algebra`: exact
 commutation, neutral elements of wrapping integers, `x*c + x*c`, `x*c1 + x*c2`, `(x*c1)*c2`
 (the last two need `reassociate`, the last also `no_infs`, for floats). Extracted by node count
 they leave the same operators as `std::opt::algebra` on the algebra corpus under the default and
-the strict policy. `shared_product` (a `sync` function) keeps two products because the product `t`
-is also read by the `println`, so the sum becomes a new product while `t` stays for the print, and
-`float_fold` (`(x*c1)*c2`) needs `no_infs`, which the default policy does not grant. Operand order
-is no longer a reason for a product to stay: the matcher tries the other order when the operator's
-semantics declare commutativity (H118).
+the strict policy. `shared_product` (a `sync` function) keeps two products because `t` is also read
+by the `println`: the sum is rewritten to `x * 6` while `t` stays for the print, so both products
+remain. (The old path went through `float_add_self` to `t * 2`, which `float_fold` could not
+reduce without `no_infs`; with the matcher reading the operand order, `float_combine` or
+`float_double` reaches `x * 6` directly.)
 
 ## 5. Extraction
 
