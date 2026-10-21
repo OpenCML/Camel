@@ -89,3 +89,37 @@ const camel::runtime::Program *
 EdgesOkTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     return commitEdit(context_, program, os, Edit::Ok);
 }
+
+const camel::runtime::Program *
+CommitConflictTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    GCGraph *other = nullptr;
+    for (GCGraph *graph : program->graphs()) {
+        if (graph != program->root()) {
+            other = graph;
+            break;
+        }
+    }
+    RuntimeGraphDraftSession first(context_, program);
+    RuntimeGraphDraftSession second(context_, program);
+    RuntimeGraphDraftSession third(context_, program);
+    first.edit(program->root()).addSyncNode();
+    second.edit(program->root()).addSyncNode();
+    if (other != nullptr) {
+        third.edit(other);
+    }
+    os << "CONFLICTS before=" << second.conflicts().size() << "\n";
+    const Program *next = first.commit();
+    os << "CONFLICTS same_graph=" << second.conflicts().size()
+       << " other_graph=" << (other != nullptr ? third.conflicts().size() : 0) << "\n";
+    try {
+        second.commitChecked();
+        os << "CHECKED accepted\n";
+    } catch (const GraphCommitConflict &conflict) {
+        os << "CHECKED refused: " << conflict.graphs().size() << " graph(s)\n";
+    }
+    return next;
+}

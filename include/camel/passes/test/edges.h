@@ -24,6 +24,7 @@
 inline constexpr const char *kEdgesCycleTestPass = "test::edges_cycle";
 inline constexpr const char *kEdgesTypeTestPass  = "test::edges_type";
 inline constexpr const char *kEdgesOkTestPass    = "test::edges_ok";
+inline constexpr const char *kCommitConflictTestPass = "test::commit_conflict";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -40,6 +41,16 @@ class EdgesTypeTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 class EdgesOkTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// Three sessions on one program: the first commits (and so replaces the context's program),
+// the second wrote the same graph, the third another one. Prints what conflicts() says of each
+// and what commitChecked() does.
+class CommitConflictTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
