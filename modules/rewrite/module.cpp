@@ -45,7 +45,12 @@
 #include "camel/runtime/writings.h"
 #include "src/passes/sched/nodevm/nodevm.h"
 
+#include <algorithm>
+#include <cmath>
+#include <format>
+#include <limits>
 #include <optional>
+#include <random>
 
 using namespace camel::core::context;
 using namespace camel::core::module;
@@ -98,6 +103,22 @@ RuleObject *callRule(Context &ctx, ::Function *maker) {
     return static_cast<RuleObject *>(fromSlot<Object *>(made));
 }
 
+/// What a rule object says, as the compiler of rules takes it.
+camel::runtime::RuleSource sourceOf(const RuleObject &rule, uint16_t id) {
+    camel::runtime::RuleSource source;
+    source.name          = std::string(rule.name());
+    source.id            = id;
+    source.needs         = rule.needs();
+    source.bidirectional = rule.twoWay();
+    source.program       = rule.lhs()->program();
+    source.lhs           = rule.lhs()->graphId();
+    source.rhs           = rule.rhs()->graphId();
+    for (int bit = 0; bit < 64; ++bit) {
+        source.constParams.push_back((rule.constParams() >> bit) & 1);
+    }
+    return source;
+}
+
 /// The engine's rules for the rule functions of an array.
 ///
 /// A function is called for each rule, which can move the objects (a safepoint): the array is read
@@ -109,17 +130,7 @@ std::vector<camel::runtime::Rule> engineRules(Context &ctx, ArgsView &norm, size
     for (size_t i = 0; i < count; ++i) {
         const RuleObject *rule =
             callRule(ctx, norm.get<Array *>(argument)->get<::Function *>(i));
-        camel::runtime::RuleSource source;
-        source.name          = std::string(rule->name());
-        source.id            = next++;
-        source.needs         = rule->needs();
-        source.bidirectional = rule->twoWay();
-        source.program       = rule->lhs()->program();
-        source.lhs           = rule->lhs()->graphId();
-        source.rhs           = rule->rhs()->graphId();
-        for (int bit = 0; bit < 64; ++bit) {
-            source.constParams.push_back((rule->constParams() >> bit) & 1);
-        }
+        const camel::runtime::RuleSource source = sourceOf(*rule, next++);
         for (camel::runtime::Rule &compiled : camel::runtime::compileRule(ctx, source)) {
             out.push_back(std::move(compiled));
         }
@@ -221,6 +232,286 @@ slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
+// ---- the check of a rule (graph store decision 5) ----
+
+/// A value of a scalar type, as the operators read it.
+struct Sample {
+    TypeCode code;
+    slot_t slot;
+    double asDouble;
+};
+
+/// Random values of one scalar type. Floats include the special values the permissions of the
+/// rule do not rule out.
+class Sampler {
+  public:
+    Sampler(uint64_t seed, uint8_t needs) : rng_(seed), needs_(needs) {}
+
+    Sample value(TypeCode code, bool constant) {
+        switch (code) {
+        case TypeCode::Int64: {
+            const int64_t v = pickInt(constant);
+            return {code, toSlot<Int64>(v), static_cast<double>(v)};
+        }
+        case TypeCode::Int32: {
+            const int32_t v = static_cast<int32_t>(pickInt(constant));
+            return {code, toSlot<Int32>(v), static_cast<double>(v)};
+        }
+        case TypeCode::Float64: {
+            const double v = pickFloat(constant);
+            return {code, toSlot<Float64>(v), v};
+        }
+        case TypeCode::Float32: {
+            const float v = static_cast<float>(pickFloat(constant));
+            return {code, toSlot<Float32>(v), static_cast<double>(v)};
+        }
+        case TypeCode::Bool: {
+            const bool v = (rng_() & 1) != 0;
+            return {code, toSlot<Bool>(v), v ? 1.0 : 0.0};
+        }
+        default:
+            throw std::invalid_argument("a parameter of a rule has a type the check cannot make");
+        }
+    }
+
+  private:
+    int64_t pickInt(bool constant) {
+        static const int64_t edges[] = {0,
+                                        1,
+                                        -1,
+                                        2,
+                                        3,
+                                        7,
+                                        -5,
+                                        100,
+                                        255,
+                                        1000,
+                                        -1000,
+                                        std::numeric_limits<int32_t>::max(),
+                                        std::numeric_limits<int32_t>::min()};
+        const uint64_t roll = rng_() % 8;
+        if (roll < 4) {
+            return edges[rng_() % (sizeof(edges) / sizeof(edges[0]))];
+        }
+        const int64_t range = constant ? 64 : 100000;
+        return static_cast<int64_t>(rng_() % (2 * range + 1)) - range;
+    }
+
+    double pickFloat(bool constant) {
+        const bool noNans  = (needs_ & camel::core::sem::kNoNans) != 0;
+        const bool noInfs  = (needs_ & camel::core::sem::kNoInfs) != 0;
+        const bool noZeros = (needs_ & camel::core::sem::kNoSignedZeros) != 0;
+        std::vector<double> specials{0.0, 1.0, -1.0, 2.0, 0.5, 3.0, 0.1, 1e-300, 1e300, 1e-310};
+        if (!noZeros) {
+            specials.push_back(-0.0);
+        }
+        if (!noInfs && !constant) {
+            specials.push_back(std::numeric_limits<double>::infinity());
+            specials.push_back(-std::numeric_limits<double>::infinity());
+        }
+        if (!noNans && !constant) {
+            specials.push_back(std::numeric_limits<double>::quiet_NaN());
+        }
+        const uint64_t roll = rng_() % 8;
+        if (roll < 3) {
+            return specials[rng_() % specials.size()];
+        }
+        const double range = constant ? 64.0 : 1000.0;
+        return (static_cast<double>(rng_() % 2000001) / 1000000.0 - 1.0) * range;
+    }
+
+    std::mt19937_64 rng_;
+    uint8_t needs_;
+};
+
+/// Whether two results agree: bit for bit when the rule needs no permission (a NaN is a NaN),
+/// otherwise within a small multiple of the rounding of the steps (the rule changed the order or
+/// the grouping, so the rounding differs).
+bool agree(const Sample &a, const Sample &b, uint8_t needs, double scale, size_t steps) {
+    if (a.code == TypeCode::Float64 || a.code == TypeCode::Float32) {
+        const bool single = a.code == TypeCode::Float32;
+        const double x = a.asDouble, y = b.asDouble;
+        if (std::isnan(x) || std::isnan(y)) {
+            return std::isnan(x) && std::isnan(y);
+        }
+        if (needs == 0) {
+            return single ? fromSlot<Float32>(a.slot) == fromSlot<Float32>(b.slot) &&
+                                std::signbit(x) == std::signbit(y)
+                          : a.slot == b.slot;
+        }
+        if (std::isinf(x) || std::isinf(y)) {
+            return x == y;
+        }
+        const double eps = single ? 1.2e-7 : 2.3e-16;
+        return std::abs(x - y) <=
+               64.0 * static_cast<double>(steps + 1) * eps * (std::abs(x) + std::abs(y) + scale);
+    }
+    if (a.code == TypeCode::Int32) {
+        return fromSlot<Int32>(a.slot) == fromSlot<Int32>(b.slot);
+    }
+    return a.slot == b.slot;
+}
+
+std::string sampleText(const Sample &s) {
+    switch (s.code) {
+    case TypeCode::Int64:
+        return std::to_string(fromSlot<Int64>(s.slot));
+    case TypeCode::Int32:
+        return std::to_string(fromSlot<Int32>(s.slot));
+    case TypeCode::Bool:
+        return fromSlot<Bool>(s.slot) ? "true" : "false";
+    default:
+        return std::format("{}", s.asDouble);
+    }
+}
+
+Sample resultOf(slot_t slot, TypeCode code) {
+    switch (code) {
+    case TypeCode::Int64:
+        return {code, slot, static_cast<double>(fromSlot<Int64>(slot))};
+    case TypeCode::Int32:
+        return {code, slot, static_cast<double>(fromSlot<Int32>(slot))};
+    case TypeCode::Float32:
+        return {code, slot, static_cast<double>(fromSlot<Float32>(slot))};
+    case TypeCode::Float64:
+        return {code, slot, fromSlot<Float64>(slot)};
+    default:
+        return {code, slot, fromSlot<Bool>(slot) ? 1.0 : 0.0};
+    }
+}
+
+/// Counts the operators of a function graph (the steps that round).
+size_t stepsOf(const camel::runtime::GCGraph &graph) {
+    size_t steps = 0;
+    for (camel::runtime::gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        steps += graph.node(ref)->kind == camel::runtime::GCNodeKind::Oper ? 1 : 0;
+    }
+    return steps;
+}
+
+/// `check(rules, samples, seed)`: for every rule, `samples` random instances (random constants
+/// for the const parameters, random values for the others) of its two sides, which must agree.
+/// Returns the report; a line starting with FAIL is a rule that does not hold.
+slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    const int64_t samples = std::max<int64_t>(1, norm.get<Int64>(1));
+    const uint64_t seed   = static_cast<uint64_t>(norm.get<Int64>(2));
+    std::string report;
+    const size_t count = norm.get<Array *>(0)->size();
+    for (size_t index = 0; index < count; ++index) {
+        // The array moves when a function runs: it is read again each time.
+        const RuleObject *rule = callRule(ctx, norm.get<Array *>(0)->get<::Function *>(index));
+        // The rule object is read now and not again: a function runs below, and objects move.
+        const camel::runtime::RuleSource source = sourceOf(*rule, 1);
+        const std::string name(rule->name());
+        const uint8_t needs                     = rule->needs();
+        const uint64_t constParams              = rule->constParams();
+        const camel::runtime::Program *program  = rule->lhs()->program();
+        const camel::runtime::GraphId lhsId     = rule->lhs()->graphId();
+        const camel::runtime::GraphId rhsId     = rule->rhs()->graphId();
+        const camel::runtime::GCGraph *lhsGraph = program->graph(lhsId);
+        const auto *lhsType                     = lhsGraph->funcType();
+        const size_t params                     = lhsType->normTypesCount();
+        const TypeCode resultCode               = lhsType->exitType()->code();
+        const size_t steps = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
+        Sampler sampler(seed * 1000003u + index, needs);
+        NodeVMSchedPass vm(ctx.shared_from_this());
+        std::string failure;
+        for (int64_t sample = 0; sample < samples && failure.empty(); ++sample) {
+            std::vector<Sample> values;
+            std::vector<slot_t> args;
+            double scale = 1.0;
+            for (size_t i = 0; i < params; ++i) {
+                const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
+                values.push_back(sampler.value(lhsType->normTypeAt(i)->code(), isConst));
+                args.push_back(values.back().slot);
+                scale = std::max(scale, std::abs(values.back().asDouble) + 1.0);
+            }
+            const Sample left =
+                resultOf(vm.callGraph(program, program->graph(lhsId), args), resultCode);
+            const Sample right =
+                resultOf(vm.callGraph(program, program->graph(rhsId), args), resultCode);
+            if (!agree(left, right, needs, scale * scale, steps)) {
+                std::string at;
+                for (size_t i = 0; i < values.size(); ++i) {
+                    at += (i == 0 ? "" : ", ") + sampleText(values[i]);
+                }
+                failure = std::format(
+                    "FAIL {}: the two sides differ at ({}): {} and {}",
+                    name,
+                    at,
+                    sampleText(left),
+                    sampleText(right));
+            }
+        }
+        // The engine applies the rule to the left side, with random constants for the const
+        // parameters: it must fire, and the function it gives must agree too.
+        size_t fired = 0, tried = 0;
+        if (failure.empty()) {
+            auto compiled = camel::runtime::compileRule(ctx, source);
+            camel::runtime::Rule one = std::move(compiled.front());
+            one.twoWay               = false;
+            const camel::core::sem::NumericPolicy policy{needs, true};
+            const int64_t instances = std::min<int64_t>(samples, 8);
+            for (int64_t instance = 0; instance < instances && failure.empty(); ++instance) {
+                ++tried;
+                std::vector<Sample> consts;
+                // A session over the left side alone: its result is a program of its own, the
+                // program the rule is in is left as it is.
+                camel::runtime::RuntimeGraphDraftSession session(
+                    ctx.shared_from_this(),
+                    program,
+                    const_cast<camel::runtime::GCGraph *>(lhsGraph));
+                camel::runtime::GraphDraft &draft =
+                    session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
+                const std::vector<camel::runtime::gc_node_ref_t> ports(
+                    draft.normPorts().begin(), draft.normPorts().end());
+                std::vector<slot_t> args;
+                double scale = 1.0;
+                for (size_t i = 0; i < params; ++i) {
+                    const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
+                    Type *type = lhsType->normTypeAt(i);
+                    Sample value = sampler.value(type->code(), isConst);
+                    args.push_back(value.slot);
+                    scale = std::max(scale, std::abs(value.asDouble) + 1.0);
+                    if (isConst) {
+                        const auto constant = draft.materializeStaticValue(value.slot, type);
+                        draft.replaceAllValueUses(ports[i], constant);
+                    }
+                }
+                camel::runtime::DraftWritings writings(draft, policy);
+                const auto stats = writings.rewrite(std::span<const camel::runtime::Rule>(&one, 1));
+                if (stats.applied == 0) {
+                    continue;
+                }
+                ++fired;
+                const camel::runtime::Program *rewritten = session.commitChecked();
+                const Sample before = resultOf(
+                    vm.callGraph(program, program->graph(lhsId), args), resultCode);
+                const Sample after = resultOf(
+                    vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultCode);
+                if (!agree(before, after, needs, scale * scale, steps)) {
+                    failure = std::format(
+                        "FAIL {}: the rewritten left side differs: {} and {}",
+                        name,
+                        sampleText(before),
+                        sampleText(after));
+                }
+            }
+            if (failure.empty() && fired == 0) {
+                failure = std::format(
+                    "FAIL {}: the rule never fired on its own left side in {} tries",
+                    name,
+                    tried);
+            }
+        }
+        report += failure.empty()
+                      ? std::format(
+                            "ok {}: {} samples agree, fired {} of {}\n", name, samples, fired, tried)
+                      : failure + "\n";
+    }
+    return toSlot(String::from(report, mm::autoSpace()));
+}
+
 class RewriteExecutor final : public Executor {
   public:
     explicit RewriteExecutor(context_ptr_t ctx) : Executor(std::move(ctx), kernels()) {}
@@ -236,6 +527,7 @@ class RewriteExecutor final : public Executor {
             {"rewrite", rewriteKernel},
             {"saturate", saturateKernel},
             {"extract", extractKernel},
+            {"check", checkKernel},
         };
     }
 };
@@ -327,6 +619,21 @@ class RewriteModule final : public BuiltinModule {
                               return std::nullopt;
                           return TupleType::fallible(norm[0]);
                       })}}));
+        exportEntity(
+            "check",
+            OperatorGroup::create(
+                "check",
+                {{"rewrite:check",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {3, {false, false, false}}},
+                      "(rules: (() => Rule)[], samples: int, seed: int) => string",
+                      [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (!rulesOf(norm[0]) || norm[1]->code() != TypeCode::Int64 ||
+                              norm[2]->code() != TypeCode::Int64)
+                              return std::nullopt;
+                          return Type::String();
+                      })}}));
         exportEntity("rule_name", ruleReader("name", Type::String()));
         exportEntity("rule_two_way", ruleReader("two_way", Type::Bool()));
         exportEntity("rule_needs", ruleReader("needs", Type::Int64()));
@@ -351,7 +658,8 @@ class RewriteModule final : public BuiltinModule {
              {"consts", true},
              {"rewrite", false},
              {"saturate", false},
-             {"extract", false}});
+             {"extract", false},
+             {"check", false}});
         loaded_ = true;
         return true;
     }
