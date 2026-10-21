@@ -34,8 +34,10 @@
 #include "camel/core/type/typevar.h"
 #include "camel/utils/assert.h"
 
+#include <algorithm>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace camel::core::type {
 
@@ -119,45 +121,77 @@ std::string collectionKeyProblem(
     return "values of this type have no order";
 }
 
-OtherType *findInvalidCollectionKey(Type *type) {
+namespace {
+
+OtherType *findInvalidCollectionKeyImpl(Type *type, std::vector<Type *> &path) {
     if (type == nullptr) {
         return nullptr;
     }
-    const auto among = [](std::span<Type *const> types) -> OtherType * {
+    // A named struct may mention itself through an array; its fields would otherwise be walked
+    // forever. Seeing the same type object on the current path means its parts have already
+    // been searched.
+    if (std::find(path.begin(), path.end(), type) != path.end()) {
+        return nullptr;
+    }
+    const TypeCode code = type->code();
+    const bool composite = code == TypeCode::Array || code == TypeCode::Tuple ||
+                           code == TypeCode::Struct || code == TypeCode::Function ||
+                           asCollectionType(type) != nullptr;
+    if (!composite) {
+        return nullptr;
+    }
+    path.push_back(type);
+    OtherType *found  = nullptr;
+    const auto among = [&path](std::span<Type *const> types) -> OtherType * {
         for (Type *member : types) {
-            if (OtherType *found = findInvalidCollectionKey(member)) {
-                return found;
+            if (OtherType *invalid = findInvalidCollectionKeyImpl(member, path)) {
+                return invalid;
             }
         }
         return nullptr;
     };
-    switch (type->code()) {
+    switch (code) {
     case TypeCode::Array:
-        return findInvalidCollectionKey(static_cast<ArrayType *>(type)->elemType());
+        found = findInvalidCollectionKeyImpl(static_cast<ArrayType *>(type)->elemType(), path);
+        break;
     case TypeCode::Tuple:
-        return among(static_cast<TupleType *>(type)->types());
+        found = among(static_cast<TupleType *>(type)->types());
+        break;
     case TypeCode::Struct:
-        return among(static_cast<StructType *>(type)->types());
+        found = among(static_cast<StructType *>(type)->types());
+        break;
     case TypeCode::Function: {
         auto *func = static_cast<FunctionType *>(type);
-        if (OtherType *found = among(func->withTypesSpan())) {
-            return found;
+        found      = among(func->withTypesSpan());
+        if (found == nullptr) {
+            found = among(func->normTypesSpan());
         }
-        if (OtherType *found = among(func->normTypesSpan())) {
-            return found;
+        if (found == nullptr && func->hasExitType()) {
+            found = findInvalidCollectionKeyImpl(func->exitType(), path);
         }
-        return func->hasExitType() ? findInvalidCollectionKey(func->exitType()) : nullptr;
+        break;
     }
     default:
         break;
     }
-    if (const CollectionType *coll = asCollectionType(type)) {
-        if (!collectionKeyProblem(coll->keyType()).empty()) {
-            return const_cast<CollectionType *>(coll);
+    if (found == nullptr) {
+        if (const CollectionType *coll = asCollectionType(type)) {
+            if (!collectionKeyProblem(coll->keyType()).empty()) {
+                found = const_cast<CollectionType *>(coll);
+            } else {
+                found = among(coll->paramsSpan());
+            }
         }
-        return among(coll->paramsSpan());
     }
-    return nullptr;
+    path.pop_back();
+    return found;
+}
+
+} // namespace
+
+OtherType *findInvalidCollectionKey(Type *type) {
+    std::vector<Type *> path;
+    return findInvalidCollectionKeyImpl(type, path);
 }
 
 // ---- CollectionType ----

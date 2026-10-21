@@ -40,9 +40,11 @@
 #include "camel/core/type/other.h"
 #include "camel/runtime/graph.h"
 
+#include <algorithm>
 #include <format>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace camel::runtime {
 
@@ -51,7 +53,11 @@ using namespace camel::core::type;
 namespace {
 
 /// The first undetermined type in `type`, or nullptr when every part of it is determined.
-const Type *firstUndetermined(const Type *type) {
+/// `path` holds the composite types currently being walked: a named type may mention itself
+/// through an array (`type Node = { children: Node[] }`), which is a cycle between type objects,
+/// not an infinite type. Seeing one again on the same path means its fields have already been
+/// walked, so there is nothing new to find there.
+const Type *firstUndetermined(const Type *type, std::vector<const Type *> &path) {
     if (type == nullptr) {
         return nullptr;
     }
@@ -59,50 +65,67 @@ const Type *firstUndetermined(const Type *type) {
     if (isAuxiliary(code)) {
         return type;
     }
+    if (std::find(path.begin(), path.end(), type) != path.end()) {
+        return nullptr;
+    }
+    path.push_back(type);
+    const Type *found = nullptr;
     switch (code) {
     case TypeCode::Array:
-        return firstUndetermined(static_cast<const ArrayType *>(type)->elemType());
+        found = firstUndetermined(static_cast<const ArrayType *>(type)->elemType(), path);
+        break;
     case TypeCode::Tuple:
         for (Type *member : static_cast<const TupleType *>(type)->types()) {
-            if (const Type *found = firstUndetermined(member)) {
-                return found;
+            if ((found = firstUndetermined(member, path))) {
+                break;
             }
         }
-        return nullptr;
+        break;
     case TypeCode::Struct:
         for (Type *member : static_cast<const StructType *>(type)->types()) {
-            if (const Type *found = firstUndetermined(member)) {
-                return found;
+            if ((found = firstUndetermined(member, path))) {
+                break;
             }
         }
-        return nullptr;
+        break;
     case TypeCode::Function: {
         const auto *func = static_cast<const FunctionType *>(type);
         for (Type *param : func->withTypesSpan()) {
-            if (const Type *found = firstUndetermined(param)) {
-                return found;
+            if ((found = firstUndetermined(param, path))) {
+                break;
             }
         }
-        for (Type *param : func->normTypesSpan()) {
-            if (const Type *found = firstUndetermined(param)) {
-                return found;
+        if (!found) {
+            for (Type *param : func->normTypesSpan()) {
+                if ((found = firstUndetermined(param, path))) {
+                    break;
+                }
             }
         }
-        return func->hasExitType() ? firstUndetermined(func->exitType()) : nullptr;
+        if (!found && func->hasExitType()) {
+            found = firstUndetermined(func->exitType(), path);
+        }
+        break;
     }
     default:
         break;
     }
-    if (type->isOtherType()) {
+    if (!found && type->isOtherType()) {
         // The arguments of a module type (`Map<K, V>`, `Tensor<f32, ...>`); a missing one (an
         // unknown dimension) is null and says nothing about the type of a value.
         for (Type *param : static_cast<const OtherType *>(type)->paramsSpan()) {
-            if (const Type *found = firstUndetermined(param)) {
-                return found;
+            if ((found = firstUndetermined(param, path))) {
+                break;
             }
         }
     }
-    return nullptr;
+    path.pop_back();
+    return found;
+}
+
+const Type *firstUndetermined(const Type *type) {
+    std::vector<const Type *> path;
+    return firstUndetermined(type, path);
 }
 
 void check(const GCGraph *graph, const Type *type, const char *where) {

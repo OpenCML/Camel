@@ -1194,10 +1194,14 @@ namespace {
 struct TypeMention {
     bool any      = false; // the type names itself somewhere in its right-hand side
     bool directly = false; // ... in a place a value of it would be held in, not behind `[]`
+    // ... behind a map, a set or another non-array collection: legal by 5.2, but only the array
+    // case has a representation today.
+    bool viaOtherCollection = false;
 };
 
 void findTypeMention(
-    const AST::node_ptr_t &ast, const std::string &name, bool inCollection, TypeMention &out) {
+    const AST::node_ptr_t &ast, const std::string &name, bool inCollection, bool inArray,
+    TypeMention &out) {
     if (ast == nullptr || out.directly) {
         return;
     }
@@ -1207,6 +1211,7 @@ void findTypeMention(
             ast->loadAs<AST::RefTypeLoad>()->ref().toString() == name) {
             out.any = true;
             out.directly |= !inCollection;
+            out.viaOtherCollection |= inCollection && !inArray;
             return;
         }
         // An array or another collection type holds its elements by reference, which is what
@@ -1214,13 +1219,16 @@ void findTypeMention(
         // the value.
         const bool indirect =
             inCollection || typeType == AST::TypeType::Array || typeType == AST::TypeType::Spec;
+        // `Node[]` is the case with a representation (a slot array); a map or a set is not
+        // handled yet, so its mentions are told apart here.
+        const bool intoArray = inArray || typeType == AST::TypeType::Array;
         for (size_t i = 0; i < ast->size(); ++i) {
-            findTypeMention(ast->at(i), name, indirect, out);
+            findTypeMention(ast->at(i), name, indirect, intoArray, out);
         }
         return;
     }
     for (size_t i = 0; i < ast->size(); ++i) {
-        findTypeMention(ast->at(i), name, inCollection, out);
+        findTypeMention(ast->at(i), name, inCollection, inArray, out);
     }
 }
 
@@ -1276,28 +1284,29 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // nothing: `type Alias = Other` stays an alias for the type `Other` (structural).
         if (typeLoad->params().empty()) {
             // A type that mentions itself where a value of it would have to be held: a cycle
-            // that can never be built (design principles 5.2). Only an enum is declared with
-            // its name in scope, so any other self-reference is reported here (the same rule
-            // as for an alias of a type expression, below).
+            // that can never be built (design principles 5.2). Recursion through an array is
+            // allowed; through a map or a set it is legal by the rule but has no representation
+            // yet, so it is reported rather than left unresolved.
             TypeMention mention;
-            findTypeMention(typeNode, typeLoad->ref().toString(), false, mention);
+            findTypeMention(typeNode, typeLoad->ref().toString(), false, false, mention);
             if (mention.any) {
                 const std::string name = typeLoad->ref().toString();
-                if (!mention.directly) {
-                    // Legal by the rule, but the representation cannot hold it yet (see the
-                    // handover report H23): say so instead of leaving the name unresolved.
-                    diags_->of(SemanticDiag::FeatureNotSupported)
-                        .at(ast->load()->tokenRange())
-                        .commit(std::format(
-                            "a type that mentions itself through an array or another collection "
-                            "('{}')",
-                            name));
-                } else {
+                if (mention.directly) {
                     diags_->of(SemanticDiag::ModuleTypeCycle)
                         .at(ast->load()->tokenRange())
                         .commit(name, name + " -> " + name);
+                    throw BuildAbortException();
                 }
-                throw BuildAbortException();
+                if (mention.viaOtherCollection) {
+                    diags_->of(SemanticDiag::FeatureNotSupported)
+                        .at(ast->load()->tokenRange())
+                        .commit(std::format(
+                            "a type that mentions itself through a map, a set or an enum ('{}')",
+                            name));
+                    throw BuildAbortException();
+                }
+                // Through an array: declareStructType puts the name in scope before the fields
+                // are read, so `type Node = { children: Node[] }` denotes one type object.
             }
         }
         type = declareStructType(typeNode, typeLoad.get());
@@ -1307,7 +1316,7 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // self-reference is reported here, with the chain that closes it (design principles
         // 5.2: recursion is through an array, a map, a set or an enum).
         TypeMention mention;
-        findTypeMention(typeNode, typeLoad->ref().toString(), false, mention);
+        findTypeMention(typeNode, typeLoad->ref().toString(), false, false, mention);
         if (mention.any) {
             const std::string name = typeLoad->ref().toString();
             if (!mention.directly) {
@@ -1445,7 +1454,30 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
     // The tags written on the fields belong to the type declaration (visitTypeDecl made its
     // node the owner); a named struct type is declared here, not through visitStructType.
     const node_ptr_t fieldTagOwner = std::exchange(fieldTagOwner_, nullptr);
-    size_t fieldIndex              = 0;
+    // A non-generic declaration is read with its own name in scope, so a field may hold the
+    // type being declared behind an array (`type Node = { children: Node[] }`, design
+    // principles 5.2). The names are collected first, the instance is made from them, and the
+    // field types are filled in when they have been read: the one type object is what the name
+    // denotes inside the fields and after the declaration.
+    StructType *instance = nullptr;
+    if (!generic) {
+        std::vector<std::string> names;
+        names.reserve(ast->atAs<AST::RepeatedLoad>(0)->size());
+        for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
+            const auto &namedType   = child->loadAs<AST::NamedTypeLoad>();
+            const string &fieldName = namedType->getRef().ident();
+            if (!fieldNames.insert(fieldName).second) {
+                diags_->of(SemanticDiag::DuplicateDictKey)
+                    .at(namedType->tokenRange())
+                    .commit(fieldName);
+                throw BuildAbortException();
+            }
+            names.push_back(fieldName);
+        }
+        instance = StructType::declare(declaration, std::span<Type *const>{}, names);
+        typeScope_->insert(decl->ref(), instance);
+    }
+    size_t fieldIndex = 0;
     for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &namedType   = child->loadAs<AST::NamedTypeLoad>();
         const string &fieldName = namedType->getRef().ident();
@@ -1456,7 +1488,7 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
         // The fields are read in the order written: that order is the type's, and every
         // instance keeps it (design principles 5.2).
         Type *fieldType = visitType(child->atAs<AST::TypeLoad>(0));
-        if (!fieldNames.insert(fieldName).second) {
+        if (generic && !fieldNames.insert(fieldName).second) {
             diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(fieldName);
             throw BuildAbortException();
         }
@@ -1466,9 +1498,8 @@ Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDecl
     Type *result;
     if (!generic) {
         // Without parameters the declaration has one instance, which is the type itself; its
-        // name denotes it from here on.
-        StructType *instance = StructType::get(declaration, std::span<Type *const>{});
-        typeScope_->insert(decl->ref(), instance);
+        // name denotes it from here on (it was already in scope while the fields were read).
+        instance->completeFields(declaration->fields());
         result = instance;
     } else {
         // The written field types are those of the instance whose arguments are the parameters

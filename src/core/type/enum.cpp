@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <format>
 #include <unordered_map>
+#include <vector>
 
 namespace camel::core::type {
 
@@ -318,43 +319,61 @@ EnumType *asEnumTypeOrPrototype(Type *type) {
     return static_cast<EnumType *>(type);
 }
 
-bool containsEnumHole(Type *type) {
+namespace {
+
+bool containsEnumHoleImpl(Type *type, std::vector<const Type *> &path) {
     if (type == nullptr) {
         return false;
     }
     if (type->code() == TypeCode::EnumHole) {
         return true;
     }
+    // A named type may mention itself through an array; seeing it again on the same path says
+    // its fields have already been searched, and the search would not end.
+    if (std::find(path.begin(), path.end(), type) != path.end()) {
+        return false;
+    }
+    path.push_back(type);
+    bool found = false;
     switch (type->code()) {
     case TypeCode::Array:
-        return containsEnumHole(static_cast<ArrayType *>(type)->elemType());
-    case TypeCode::Tuple: {
+        found = containsEnumHoleImpl(static_cast<ArrayType *>(type)->elemType(), path);
+        break;
+    case TypeCode::Tuple:
         for (Type *member : static_cast<TupleType *>(type)->types()) {
-            if (containsEnumHole(member)) {
-                return true;
+            if ((found = containsEnumHoleImpl(member, path))) {
+                break;
             }
         }
-        return false;
-    }
-    case TypeCode::Struct: {
+        break;
+    case TypeCode::Struct:
         for (Type *member : static_cast<StructType *>(type)->types()) {
-            if (containsEnumHole(member)) {
-                return true;
+            if ((found = containsEnumHoleImpl(member, path))) {
+                break;
             }
         }
-        return false;
-    }
+        break;
     default:
         break;
     }
-    if (EnumType *enumType = asEnumTypeOrPrototype(type)) {
-        for (Type *arg : enumType->paramsSpan()) {
-            if (containsEnumHole(arg)) {
-                return true;
+    if (!found) {
+        if (EnumType *enumType = asEnumTypeOrPrototype(type)) {
+            for (Type *arg : enumType->paramsSpan()) {
+                if ((found = containsEnumHoleImpl(arg, path))) {
+                    break;
+                }
             }
         }
     }
-    return false;
+    path.pop_back();
+    return found;
+}
+
+} // namespace
+
+bool containsEnumHole(Type *type) {
+    std::vector<const Type *> path;
+    return containsEnumHoleImpl(type, path);
 }
 
 bool enumEntersFrom(Type *target, Type *source) {

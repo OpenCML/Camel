@@ -68,11 +68,12 @@ void StructDecl::define(std::vector<std::pair<std::string, Type *>> fields) {
 
 namespace {
 
-StructTypeLayout computeLayout(size_t size, size_t refCount, size_t fieldNamesDataSize) {
+StructTypeLayout computeLayout(
+    size_t size, size_t refCount, size_t refCapacity, size_t fieldNamesDataSize) {
     size_t typesSize       = size * sizeof(Type *);
     size_t typeCodesSize   = size * sizeof(TypeCode);
     size_t nameOffsetsSize = size * sizeof(size_t);
-    size_t refsSize        = refCount * sizeof(size_t);
+    size_t refsSize        = refCapacity * sizeof(size_t);
     size_t aTypes          = mm::alignUp(typesSize, alignof(TypeCode));
     size_t aTypeCodes      = mm::alignUp(typeCodesSize, alignof(size_t));
     size_t aNameOffsets    = mm::alignUp(nameOffsetsSize, alignof(size_t));
@@ -83,6 +84,7 @@ StructTypeLayout computeLayout(size_t size, size_t refCount, size_t fieldNamesDa
         .totalSize              = totalSize,
         .size                   = size,
         .refCount               = refCount,
+        .refCapacity            = refCapacity,
         .alignedTypesSize       = aTypes,
         .alignedTypeCodesSize   = aTypeCodes,
         .alignedNameOffsetsSize = aNameOffsets,
@@ -135,10 +137,21 @@ std::vector<std::string> refsOf(const std::vector<std::pair<std::string, Type *>
 
 StructType *StructType::get(StructDecl *decl, std::span<Type *const> args) {
     ASSERT(decl != nullptr, "StructType::get needs a declaration.");
-    ASSERT(decl->defined(), "A struct type is instantiated after its fields are read.");
     ASSERT(
         args.size() == decl->params().size(),
         "StructType::get: one type argument per parameter of the declaration.");
+    // A declaration that names itself through an array is published while its own fields are
+    // still being read (declare()/completeFields()). While that is going on the instance is
+    // reachable through the declaration's name and must be answered here too, before the
+    // "defined" check below.
+    if (internable(args)) {
+        std::lock_guard<std::mutex> lock(structMutex);
+        auto &instances = structInstances();
+        if (auto it = instances.find(instanceKey(decl, args)); it != instances.end()) {
+            return it->second;
+        }
+    }
+    ASSERT(decl->defined(), "A struct type is instantiated after its fields are read.");
     std::vector<std::pair<std::string, Type *>> fields;
     fields.reserve(decl->fields().size());
     if (decl->generic()) {
@@ -219,9 +232,15 @@ StructType *StructType::fromFactoryData(
 
 StructType *StructType::allocate(
     const std::vector<std::pair<std::string, Type *>> &fields,
-    const std::vector<std::string> &refs, StructDecl *decl, std::vector<Type *> typeArgs) {
+    const std::vector<std::string> &refs, StructDecl *decl, std::vector<Type *> typeArgs,
+    size_t refCapacity) {
     size_t size     = fields.size();
     size_t refCount = refs.size();
+    // A declaration being read reserves one refs slot per field: the field types, and so which
+    // fields are Ref, are not known yet. A completed type needs exactly refCount slots.
+    if (refCapacity < refCount) {
+        refCapacity = refCount;
+    }
 
     std::vector<Type *> types;
     std::vector<TypeCode> typeCodes;
@@ -237,7 +256,9 @@ StructType *StructType::allocate(
     for (size_t i = 0; i < size; ++i) {
         const auto &[name, type] = fields[i];
         types.push_back(type);
-        typeCodes.push_back(type->code());
+        // A field of a declaration that is still being read has no type yet; its code is filled
+        // in by completeFields().
+        typeCodes.push_back(type ? type->code() : TypeCode::Void);
         nameOffsets.push_back(currentOffset);
         fieldNamesData += name;
         fieldNamesData += '\0';
@@ -252,7 +273,7 @@ StructType *StructType::allocate(
         refIndices.push_back(std::distance(fields.begin(), it));
     }
 
-    StructTypeLayout layout = computeLayout(size, refCount, fieldNamesData.size());
+    StructTypeLayout layout = computeLayout(size, refCount, refCapacity, fieldNamesData.size());
     EXEC_WHEN_DEBUG(CAMEL_LOG_DEBUG_S(
         "StructType",
         "Allocating StructType: size={}, refCount={}, totalSize: {} bytes",
@@ -269,6 +290,54 @@ StructType *StructType::allocate(
         refIndices.data(),
         decl,
         std::move(typeArgs));
+}
+
+StructType *StructType::declare(
+    StructDecl *decl, std::span<Type *const> args, const std::vector<std::string> &fieldNames) {
+    ASSERT(decl != nullptr, "StructType::declare needs a declaration.");
+    ASSERT(!decl->defined(), "StructType::declare is called before the fields are read.");
+    ASSERT(
+        args.size() == decl->params().size(),
+        "StructType::declare: one type argument per parameter of the declaration.");
+    std::vector<std::pair<std::string, Type *>> fields;
+    fields.reserve(fieldNames.size());
+    for (const std::string &name : fieldNames) {
+        fields.emplace_back(name, nullptr);
+    }
+    std::vector<Type *> typeArgs(args.begin(), args.end());
+    return allocate(fields, {}, decl, std::move(typeArgs), fieldNames.size());
+}
+
+void StructType::completeFields(const std::vector<std::pair<std::string, Type *>> &fields) {
+    ASSERT(decl_ != nullptr, "Only a declared type is completed.");
+    ASSERT(fields.size() == size_, "A struct instance has one field per declared field.");
+    size_t refCount = 0;
+    for (size_t i = 0; i < size_; ++i) {
+        ASSERT(fields[i].first == fieldName(i), "The fields keep the order of the declaration.");
+        Type *type = fields[i].second;
+        ASSERT(type != nullptr, "A completed struct type has a type for every field.");
+        typesPtr_[i]     = type;
+        typeCodesPtr_[i] = type->code();
+        if (type->code() == TypeCode::Ref) {
+            // declare() reserves one refs slot per field, so this cannot overflow.
+            ASSERT(refCount < size_, "Too many Ref fields for the reserved refs array.");
+            refsPtr_[refCount++] = i;
+        }
+    }
+    refCount_ = refCount;
+    // Publish the instance: from here on every use of the declaration's name is this object.
+    // While it was incomplete no one could observe it through the type table, so the table's
+    // rule that an interned type is immutable still holds.
+    if (!internable(typeArgs_)) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(structMutex);
+    auto &instances       = structInstances();
+    const std::string key = instanceKey(decl_, typeArgs_);
+    ASSERT(
+        instances.find(key) == instances.end(),
+        "A struct declaration publishes its own instance once.");
+    instances.emplace(key, this);
 }
 
 std::optional<size_t> StructType::findField(std::string_view name) const {

@@ -64,6 +64,10 @@ struct StructTypeLayout {
     size_t totalSize;
     size_t size;
     size_t refCount;
+    /// Slots reserved in the refs array. It is at least refCount; a struct declaration that is
+    /// still being read reserves one slot per field, because which fields are `Ref` is known
+    /// only after their types are read.
+    size_t refCapacity;
     size_t alignedTypesSize;
     size_t alignedTypeCodesSize;
     size_t alignedNameOffsetsSize;
@@ -199,6 +203,20 @@ class StructType : public CompositeType {
     /// non-generic declaration).
     static StructType *get(StructDecl *decl, std::span<Type *const> args);
 
+    /// The instance the declaration's own name denotes while its fields are being read: the
+    /// field names are known and the field types are not yet. A field may therefore name the
+    /// type being declared (`type Node = { children: Node[] }`): the name is in scope before
+    /// the fields are read, and every use of it denotes this one object. The object is not
+    /// interned while it is incomplete; completeFields() publishes it. Only a non-generic
+    /// declaration is declared this way.
+    static StructType *declare(
+        StructDecl *decl, std::span<Type *const> args,
+        const std::vector<std::string> &fieldNames);
+
+    /// Fills the field types of a type made by declare(), in declaration order, and publishes
+    /// it in the named-instance table. Called once, after StructDecl::define().
+    void completeFields(const std::vector<std::pair<std::string, Type *>> &fields);
+
     /// The declaration of a named struct type, or nullptr for an anonymous one.
     StructDecl *decl() const { return decl_; }
     bool named() const { return decl_ != nullptr; }
@@ -258,11 +276,14 @@ class StructType : public CompositeType {
     static StructType *fromFactoryData(
         const std::vector<std::pair<std::string, Type *>> &fields,
         const std::vector<std::string> &refs);
-    // A new, unshared object; only fromFactoryData() and get() call it.
+    // A new, unshared object; only fromFactoryData(), get() and declare() call it.
+    // `refCapacity` is the number of slots reserved for the refs array; it is at least
+    // refs.size(), and declare() asks for one per field because which fields are `Ref` is known
+    // only when their types are.
     static StructType *allocate(
         const std::vector<std::pair<std::string, Type *>> &fields,
         const std::vector<std::string> &refs, StructDecl *decl = nullptr,
-        std::vector<Type *> typeArgs = {});
+        std::vector<Type *> typeArgs = {}, size_t refCapacity = 0);
 
     /// The declaration of a named type, or nullptr.
     StructDecl *decl_ = nullptr;

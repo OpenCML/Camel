@@ -216,7 +216,7 @@
 | H27 | H24–H26 检查后的小项 | 无 | **已完成**（`2df02675`；报告 reports/H27.md） |
 | H26 | 删除"已退役"类诊断 | 无 | **已完成**（`51c69903`；报告 reports/H26.md） |
 | H24 | 字面量取类型的其余位置 | 无 | **已完成**（`aa71a2c6`；报告 reports/H24.md） |
-| H23 | 路径赋值与递归结构体 | 无（原地部分随 H17） | **部分完成**（第 1、3、4 项已完成 `1e3d20fa`；第 2 项的经数组递归未做；报告 reports/H23.md） |
+| H23 | 路径赋值与递归结构体 | 无（原地部分随 H17） | **已完成**（第 1–4 项；第 2 项的经数组递归在 `handover/H23b-recursive-array`；报告 reports/H23b.md） |
 | H22 | 循环与求导的跟进 | 无 | **已完成**（`292c0479`、`d50794d5`；报告 reports/H22.md） |
 | H20 | H13、H14 检查后的小项 | 无 | **部分完成**（第 2–5 项已入 `bdf40b4e`、`3750aefc`、`2398e598`；第 1 项未做；报告 reports/H20.md） |
 | H9 | 缺陷修复与平台健壮性 | 无 | **已完成**（第 1–4 项已合入；报告 reports/H9.md） |
@@ -574,7 +574,7 @@ let area = match b {
 4. 文档：语言参考 6.11（删去"目标必须是变量本身"）、3.7；删除 `AssignmentTargetNotVariable` 中已不成立的部分，`field_assigned`、`element_assigned` 两个用例改为正例。
 5. 完成后 D4（MCTS）可以开工（还需 H17）。
 
-**剩下什么**：第 2 项的"经数组的递归"（`type Node = { children: Node[] }`）未做，现在报 `FeatureNotSupported`；第 1、3、4 项已完成。
+**剩下什么**：H23 的四项都已完成。第 2 项的经数组递归（`type Node = { children: Node[] }`）在 `handover/H23b-recursive-array` 做完：声明、构造、遍历、路径赋值与移动回收都有用例；经映射/集合的递归仍按设计保留 `FeatureNotSupported`，泛型递归结构体仍未支持（均见 reports/H23b.md）。第 1、3、4 项早在 `1e3d20fa` 合入。
 
 ### H24：字面量取类型的其余位置（2026-10-20 指派，甲车道）
 

@@ -232,9 +232,11 @@ class Builder {
     declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
     /// `type Name<params> = { field: T, ... }`: a named struct type (design principles 5.2).
     /// Its identity is this declaration (and, for a generic one, the type arguments); its
-    /// fields are in the order written here, and every instance keeps that order. The name is
-    /// not in scope while the fields are read: a struct cannot hold itself by value (only
-    /// through an array, a map, a set or an enum, and those are not supported yet; H23).
+    /// fields are in the order written here, and every instance keeps that order. A field may
+    /// hold the type being declared behind an array (`type Node = { children: Node[] }`): the
+    /// name is in scope while the fields are read, as an initially incomplete instance that is
+    /// completed before the declaration returns. A struct cannot hold itself by value, and
+    /// recursion through a map or a set is not represented yet.
     camel::core::type::Type *
     declareStructType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
     /// The variants of the declaration, with the field types of `instance` (the written ones
