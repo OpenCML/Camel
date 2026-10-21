@@ -280,14 +280,14 @@ slot_t NodeVMSchedPass::call(
         // wait here and are restored when the nested JOIN is reached.
         std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> enclosingArms;
         // The loops of the graph that are running, the innermost last.
-        camel::execute::ActiveLoops activeLoops;
+        uint32_t resumedLoop = camel::execute::kNoLoop;
 
         // Tail-call loop. Rebind currRuntimeGraph/currFrame instead of growing the C++ stack.
     loop_start: {
         gcSafepoint("nodevm graph boundary");
         const size_t nodesSize = currNodes.size();
         const bool hasLoops    = !currPlan->loops.empty();
-        activeLoops.clear();
+        resumedLoop = camel::execute::kNoLoop;
 
         size_t i = 0;
         for (; i < nodesSize; ++i) {
@@ -324,7 +324,7 @@ slot_t NodeVMSchedPass::call(
                     *currPlan,
                     i,
                     *currFrame,
-                    activeLoops,
+                    resumedLoop,
                     [&](const camel::runtime::ExecLoop &loop, size_t) {
                         try {
                             gcSafepoint("nodevm loop round");

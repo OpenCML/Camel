@@ -33,19 +33,9 @@
 #include "camel/runtime/exec_plan.h"
 
 #include <cstddef>
-#include <vector>
+#include <cstdint>
 
 namespace camel::execute {
-
-/// A loop of the plan that is running in a frame.
-struct ActiveLoop {
-    uint32_t loop = 0;
-    size_t round  = 0;
-    bool stopped  = false; // the test of the round ended the loop
-};
-
-/// The loops of a plan that are running in one frame, the innermost last.
-using ActiveLoops = std::vector<ActiveLoop>;
 
 namespace detail {
 
@@ -90,17 +80,26 @@ inline void bindLoopState(
 
 /// What stepLoops asks the interpreter to do.
 inline constexpr size_t kNoLoopJump = SIZE_MAX;
+/// The loop whose round the interpreter resumes at the start of: its `Begin` is not run again.
+inline constexpr uint32_t kNoLoop = UINT32_MAX;
 
 /**
  * Runs the events of the loops of `plan` at topo index `at`, in `frame`. Returns the topo index
- * the interpreter goes on at, or kNoLoopJump to run the node at `at`. `roundDone(loop, rounds)`
- * is called when a round ended and the next starts (the interpreter's safepoint and limits).
+ * the interpreter goes on at, or kNoLoopJump to run the node at `at`. When a loop ends a round
+ * and the interpreter goes back to the start of it, `resumed` is that loop and the interpreter
+ * passes it back for the first position it runs: the loop is not started again.
+ * `roundDone(loop, rounds)` is called when a round ended and the next starts (the interpreter's
+ * safepoint and limits).
  */
 template <typename RoundDone>
 inline size_t stepLoops(
     const camel::runtime::ExecPlan &plan, size_t at, camel::core::context::Frame &frame,
-    ActiveLoops &active, RoundDone &&roundDone) {
+    uint32_t &resumed, RoundDone &&roundDone) {
     using camel::runtime::ExecLoopEvent;
+    using camel::core::rtdata::fromSlot;
+    using camel::core::rtdata::toSlot;
+    const uint32_t resumedHere = resumed;
+    resumed                    = kNoLoop;
     for (const uint32_t code : plan.loopEventsAt(at)) {
         const uint32_t index                 = code / 3;
         const camel::runtime::ExecLoop &loop = plan.loops[index];
@@ -108,9 +107,8 @@ inline size_t stepLoops(
         detail::LoopFrameHost host{frame, plan, loop};
         switch (static_cast<ExecLoopEvent>(code % 3)) {
         case ExecLoopEvent::Begin:
-            // Going back to the start of a round meets this again.
-            if (active.empty() || active.back().loop != index) {
-                active.push_back({index, 0, false});
+            if (index != resumedHere) {
+                frame.set(loop.roundSlot, toSlot<int64_t>(0));
                 startLoopState(detail::loopShapeOf(loop), host);
                 if (loop.hasCond) {
                     detail::bindLoopState(frame, plan, loop, k);
@@ -118,23 +116,22 @@ inline size_t stepLoops(
             }
             break;
         case ExecLoopEvent::Test: {
-            ActiveLoop &now = active.back();
-            ASSERT(now.loop == index, "A loop tests a round it did not start.");
-            bool stop      = false;
-            slot_t element = NullSlot;
+            const int64_t round = fromSlot<int64_t>(frame.get<slot_t>(loop.roundSlot));
+            bool stop           = false;
+            slot_t element      = NullSlot;
             if (loop.hasCond) {
-                stop = !camel::core::rtdata::fromSlot<bool>(frame.get<slot_t>(loop.condResultSlot));
+                stop = !fromSlot<bool>(frame.get<slot_t>(loop.condResultSlot));
             }
             if (!stop && loop.iterates) {
                 const ::Array *array = frame.get<::Array *>(loop.iterableSlot);
-                if (now.round >= array->size()) {
+                if (static_cast<size_t>(round) >= array->size()) {
                     stop = true;
                 } else {
-                    element = array->getSlot(now.round);
+                    element = array->getSlot(static_cast<size_t>(round));
                 }
             }
             if (stop) {
-                now.stopped = true;
+                frame.set(loop.roundSlot, toSlot<int64_t>(-1));
                 if (loop.position != at) {
                     return loop.position;
                 }
@@ -147,21 +144,20 @@ inline size_t stepLoops(
             detail::bindLoopState(frame, plan, loop, first + (loop.iterates ? 1 : 0));
         } break;
         case ExecLoopEvent::End: {
-            ActiveLoop &now = active.back();
-            ASSERT(now.loop == index, "A loop ends a round it did not start.");
-            if (now.stopped) {
-                active.pop_back();
-                break;
+            const int64_t round = fromSlot<int64_t>(frame.get<slot_t>(loop.roundSlot));
+            if (round < 0) {
+                break; // the test stopped the loop; its state is the value
             }
             takeLoopRound(
                 detail::loopShapeOf(loop),
                 host,
                 frame.get<slot_t>(loop.bodyResultSlot));
-            ++now.round;
-            roundDone(loop, now.round);
+            frame.set(loop.roundSlot, toSlot<int64_t>(round + 1));
+            roundDone(loop, static_cast<size_t>(round + 1));
             if (loop.hasCond) {
                 detail::bindLoopState(frame, plan, loop, k);
             }
+            resumed = index;
             return loop.begin;
         }
         }

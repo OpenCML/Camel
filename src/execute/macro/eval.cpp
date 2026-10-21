@@ -978,7 +978,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
     };
 
     const auto &plan = runtimeGraph->execPlan();
-    camel::execute::ActiveLoops activeLoops;
+    uint32_t resumedLoop = camel::execute::kNoLoop;
     const size_t maxRounds = plan.loops.empty() ? 0 : camel::execute::macroRoundLimit(*context_);
     for (size_t at = 0; at < runtimeTopoIndices.size(); ++at) {
         const uint32_t runtimeNodeIndex = runtimeTopoIndices[at];
@@ -996,7 +996,7 @@ slot_t MacroEvaluator::executeGraph(Frame *frame, GCGraph *runtimeGraph) {
                 plan,
                 at,
                 *frame,
-                activeLoops,
+                resumedLoop,
                 [&](const camel::runtime::ExecLoop &, size_t rounds) {
                     if (rounds >= maxRounds) {
                         throw MacroExecutionError(

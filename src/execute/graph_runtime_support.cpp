@@ -358,6 +358,11 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             for (gc_node_ref_t input : graph->normInputsOf(index)) {
                 visit(input);
             }
+            for (gc_node_ref_t input : graph->withInputsOf(index)) {
+                if (!inLoop(input)) {
+                    visit(input);
+                }
+            }
             for (uint32_t part : parts) {
                 if (part == 0) {
                     continue;

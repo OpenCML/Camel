@@ -84,6 +84,9 @@ struct ExecLoop {
     gc_data_idx_t iterableSlot   = 0;
     gc_data_idx_t condResultSlot = 0;
     gc_data_idx_t bodyResultSlot = 0;
+    /// The slot the rounds are counted in: the number of rounds done while the loop runs, -1 once
+    /// its test has stopped it.
+    gc_data_idx_t roundSlot      = 0;
     /// loopSlots[slotsOffset ..< +k] the slots of the first values of the state, then k of the
     /// condition's ports (when hasCond), then the body's ports: the element first (when it
     /// iterates), then k.

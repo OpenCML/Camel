@@ -127,8 +127,9 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
         }
         const auto results = graph.withInputsOf(ref);
         ASSERT(
-            results.size() == (loop.hasCond ? 2u : 1u),
-            "A loop of regions reads the results of its regions.");
+            results.size() == (loop.hasCond ? 3u : 2u),
+            "A loop of regions reads the results of its regions and its round.");
+        loop.roundSlot      = dataIndexOf(graph, results.back());
         loop.bodyResultSlot = dataIndexOf(graph, valueBehindGates(graph, results[0]));
         if (loop.hasCond) {
             loop.condResultSlot = dataIndexOf(graph, valueBehindGates(graph, results[1]));
