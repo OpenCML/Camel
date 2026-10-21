@@ -40,4 +40,10 @@ class DeviceUnavailable : public std::runtime_error {
 /// (`--devices cpu`). Without `--devices` it is device 0, which is preferred when there is one
 /// and ignored (the host runs the program) when there is not.
 std::optional<int> configuredCudaOrdinal();
+/// Told when the process takes its one probe of the CUDA back end, before the driver is asked.
+/// The device sources are also built into the module's own check executables, which link neither
+/// libcamel nor its headers, so the probe cannot write a line through the core's logger itself;
+/// the module registers a callback where it is loaded (module.cpp). Null when the device code is
+/// used without the module, which records nothing.
+inline void (*deviceProbeStarted)() = nullptr;
 } // namespace camel::tiles

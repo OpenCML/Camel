@@ -12,6 +12,7 @@
 #include "tiles/internal/dispatch.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/core/source/manager.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/program.h"
 #include "tiles/internal/graph_values.h"
@@ -57,6 +58,16 @@ Function *gpuFunction(
     draft.setFuncType(signature);
     auto *closureType = ty::TupleType::create({signature});
     draft.setClosureType(closureType);
+    // The wrapper graph is synthesized, so its `tiles:prefer_gpu` node has no source of its own.
+    // Give it the place of the function it wraps: the `@gpu` declaration is where a device is
+    // asked for, and a device fault raised at the synthesized node is then reported there
+    // instead of `?:?:` (H105 report, section 6 item 6). The call site is not recoverable here:
+    // one wrapper serves every call of the function, and the fault is raised at the dispatch node
+    // rather than at a particular call.
+    const auto origin =
+        context.sourceContext()
+            ? context.sourceContext()->debugMap().graphOrigin(source->graph()->id())
+            : camel::source::kInvalidOriginId;
     const auto original = draft.addPortNode(signature, draft.allocateRuntimeSlot(signature));
     draft.appendClosureNode(original);
     std::vector<rt::gc_node_ref_t> inputs;
@@ -77,6 +88,9 @@ Function *gpuFunction(
         run,
         "tiles:prefer_gpu",
         draft.allocateRuntimeSlot(resultType));
+    if (origin != camel::source::kInvalidOriginId) {
+        draft.setNodeOrigin(output, origin);
+    }
     draft.setWithInputs(output, std::span(&original, 1));
     draft.setNormInputs(output, std::span(&packed, 1));
     draft.setOutputNode(output);
@@ -85,6 +99,11 @@ Function *gpuFunction(
     draft.setId(context.graphIds().allocate());
     auto *graph =
         draft.encode("tiles.gpu/" + source->graph()->mangledName(), source->graph()->name());
+    if (origin != camel::source::kInvalidOriginId) {
+        // The wrapper graph means the same place as its dispatch node, so a site that knows
+        // only the graph (no node) is located too.
+        context.sourceContext()->debugMap().registerGraphOrigin(graph->id(), origin);
+    }
     auto *result = ::Function::create(
         rt::makeProgram(context, source->program(), std::span(&graph, 1)),
         graph->id(),
