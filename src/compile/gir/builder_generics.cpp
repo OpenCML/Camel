@@ -76,7 +76,13 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             continue;
         }
         const std::string name = child->name();
-        Type *type             = child->at(0)->dataType();
+        if (child->nativeDeclaration()) {
+            // A body-less declaration is a rule of an operator, generic or not; a generic one is
+            // instantiated by its resolver when it is called, not from a template (handover
+            // H19, step 1).
+            continue;
+        }
+        Type *type = child->at(0)->dataType();
         if (name.empty() || !isGenericHere(type)) {
             continue;
         }

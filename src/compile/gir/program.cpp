@@ -259,6 +259,11 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
                 // Reported (a redeclaration); the declaration is left out.
             }
         }
+        // The body-less declarations are exported as the operator groups of their names once
+        // all of them have been read: the group of a name is its set of overloads (handover
+        // H19, step 1). A module written in Camel otherwise exports through the program's
+        // table; an operator group is the module's own, as it is for a C++ module.
+        exportNativeOperators();
         // What step two builds, in the order it is written; and the export list.
         GCT::node_ptr_t expt = nullptr;
         for (size_t i = 0; i < root->size(); ++i) {
@@ -269,6 +274,9 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
             if (child->type() == GCT::NodeKind::EXPT) {
                 expt = child;
                 continue;
+            }
+            if (child->type() == GCT::NodeKind::FUNC && child->nativeDeclaration()) {
+                continue; // a declaration of an operator: no graph of its own
             }
             if (child->type() == GCT::NodeKind::FUNC) {
                 FunctionType *declared = tt::as_ptr<FunctionType>(child->at(0)->dataType());

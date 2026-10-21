@@ -242,4 +242,60 @@ class DynamicFuncTypeResolver : public FuncTypeResolver {
     ResolverFunc resolver_;
 };
 
+/**
+ * The rule of a body-less declaration: the signature written in a Camel module is the signature
+ * the operator has (design principles 6.4; handover H19, step 1). The declared type is the one
+ * source of the parameters and the result, so the resolver accepts exactly what the declaration
+ * says and nothing else:
+ *
+ *  - a signature without type variables is a fixed rule: an argument list of the declared
+ *    shape whose argument types are assignable to the declared parameter types;
+ *  - a signature with `typeas` variables is a family: the variables are bound from the argument
+ *    types, every variable must be bound, and the resulting concrete signature is checked
+ *    against the arguments. Each call therefore resolves to its own concrete signature while
+ *    the operator URI stays one.
+ *
+ * The operator table takes the number of parameters from the declaration as well, so a
+ * declaration is checked for overlapping rules by the ordinary operator-group registration.
+ */
+class DeclaredFuncTypeResolver : public FuncTypeResolver {
+  public:
+    explicit DeclaredFuncTypeResolver(FunctionType *declared);
+
+    static resolver_ptr_t create(FunctionType *declared) {
+        return std::make_unique<DeclaredFuncTypeResolver>(declared);
+    }
+
+    std::optional<FunctionType *> resolve(
+        const type_vec_t &with, const type_vec_t &norm,
+        const ModifierSet &modifiers) const override;
+
+    std::string signature() const override { return funcType_->toString(); }
+
+    bool varParameters(std::vector<bool> &with, std::vector<bool> &norm) const override {
+        for (size_t i = 0; i < funcType_->withTypesCount(); ++i) {
+            with.push_back(funcType_->withIsVarAt(i));
+        }
+        for (size_t i = 0; i < funcType_->normTypesCount(); ++i) {
+            norm.push_back(funcType_->normIsVarAt(i));
+        }
+        return true;
+    }
+
+    /// The signature as declared, closed (an operator's type is not a function still being
+    /// built); null when the declaration has type variables, whose instances are not this rule.
+    FunctionType *fixedSignature() const override { return generic_ ? nullptr : funcType_; }
+
+    /// The declared signature, with its parameter names.
+    FunctionType *funcType() const { return funcType_; }
+    size_t withCount() const { return funcType_->withTypesCount(); }
+    size_t normCount() const { return funcType_->normTypesCount(); }
+
+  private:
+    FunctionType *funcType_;
+    /// The names of the type variables the declaration binds; empty for a fixed signature.
+    std::vector<std::string> bindable_;
+    bool generic_ = false;
+};
+
 } // namespace camel::core::type

@@ -172,6 +172,14 @@ class Builder {
         GCT::node_ptr_t exportList = nullptr;
         // Whether step two found it in error.
         bool failed = false;
+        // The body-less declarations of the module (handover H19, step 1): per name, the
+        // operator URI each rule declares and the rule itself. They are exported as one
+        // operator group once every declaration of the module has been read.
+        struct NativeOperators {
+            std::string name;
+            std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>> rules;
+        };
+        std::vector<NativeOperators> nativeOperators;
         // What the link step reports per module, collected while its bodies are built.
         std::vector<BuiltFunction> builtFunctions;
         std::vector<compile_graph_ptr_t> builtBodies;
@@ -280,6 +288,15 @@ class Builder {
     // everything but the functions with decorators, which exist once their bodies are built
     // (`decorated`).
     void exportDeclarations(const GCT::node_ptr_t &expt, bool decorated);
+    // A body-less declaration of the current module (design principles 6.4; handover H19, step
+    // 1): checked against the operator table and the loaded executors, then kept as a rule of
+    // the operator group of its name.
+    void declareNativeOperator(const GCT::node_ptr_t &gct);
+    // Exports the operator groups of the body-less declarations of the current module, one group
+    // per declared name, after its declarations were read.
+    void exportNativeOperators();
+    // The operator URI a body-less declaration names, from its `#op<'...'>` tag when it has one.
+    std::optional<std::string> nativeOperatorUri(const GCT::node_ptr_t &gct);
     // Notes the nodes of the root graph added since `firstNode` as nodes of the current module.
     void claimRootNodes(size_t firstNode);
     // Makes the root graph the first time a module is declared.

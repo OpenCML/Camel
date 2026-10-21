@@ -168,6 +168,12 @@ std::vector<OperatorDescription> describeOperators(const Module &module) {
                 auto *dynamic = dynamic_cast<type::DynamicFuncTypeResolver *>(resolver.get())) {
                 d.withCount = dynamic->withCount();
                 d.normCount = dynamic->normCount();
+            } else if (
+                auto *declared =
+                    dynamic_cast<type::DeclaredFuncTypeResolver *>(resolver.get())) {
+                // A body-less declaration: the written signature says the parameter counts.
+                d.withCount = static_cast<int>(declared->withCount());
+                d.normCount = static_cast<int>(declared->normCount());
             }
             if (const auto id = traits.lookup(uri)) {
                 d.semantics = traits.semantics(*id);
