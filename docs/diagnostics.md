@@ -169,7 +169,6 @@ prints one entry.
 | `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
 | `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
 | `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
-| `0x03000185` | [SemanticDiag::ModuleRenamed](#modulerenamed) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4369,35 +4368,6 @@ func bad(t: {a: int, b: int}): int {
 
 func main(): int {
     return bad({a: 1, b: 2})
-}
-```
-
-### ModuleRenamed
-
-`0x03000185` · Error · `SemanticDiag::ModuleRenamed`
-
-**Message**
-
-```text
-The module '{0}' was renamed to '{1}'.
-```
-
-**Help**
-
-```text
-Import '{1}' instead; '{0}' is no longer a module (handover H114).
-```
-
-**Example** (`test/cases/modules/rename/env_old.cml`, run as `camel test/cases/modules/rename/env_old.cml`)
-
-```camel
-module env_old
-
-import { get_env } from sys
-
-func main(): int sync {
-    println(get_env('PATH'))
-    return 0
 }
 ```
 

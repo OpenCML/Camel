@@ -1,6 +1,6 @@
 /**
- * `process` is the module of the process, the machine and the terminal (handover H114, which
- * renamed `os`); this proves the new name imports and its operators run.
+ * `process` is the module of the process and the machine (handover H114, which renamed `os`;
+ * the terminal is `io`'s); this proves the new name imports and its operators run.
  */
 module process_new
 

@@ -1,5 +1,5 @@
 /**
- * The old spelling is no longer a module: the diagnostic names `process` (handover H114).
+ * The old spelling is simply not a module: the import is an ordinary unknown-module error.
  */
 module process_old
 
