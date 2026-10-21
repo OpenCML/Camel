@@ -147,11 +147,8 @@ struct OperatorTraits {
     bool callsGraphs = false;
     /// The operator reads the graphs of the function values it receives as arguments (it
     /// compiles, exports or differentiates them) instead of only calling them. Such an operator
-    /// is given the program's own graphs, with their structure (a LOOP node: docs/design/
-    /// op-semantics 11.4), also on a back end that runs a private, lowered copy of the program:
-    /// lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) passes each of its operands of
-    /// function type through `:graph/original`, which takes a function value of the copy back
-    /// to the program's graph it was copied from (Program::original).
+    /// sees the program's own graphs, with their structure (a LOOP node and its regions:
+    /// docs/design/op-semantics 11.4).
     bool inspectsGraphs = false;
 };
 

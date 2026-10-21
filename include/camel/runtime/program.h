@@ -56,7 +56,7 @@ class Program final : public camel::core::rtdata::Object {
     Program(const Program &other)
         : camel::core::rtdata::Object(), byId_(other.byId_), own_(other.own_),
           satellite_(other.satellite_), version_(other.version_), count_(other.count_),
-          root_(other.root_), original_(other.original_) {}
+          root_(other.root_) {}
     /// Assigning replaces the table and keeps whose program this is.
     Program &operator=(const Program &other) {
         byId_      = other.byId_;
@@ -65,7 +65,6 @@ class Program final : public camel::core::rtdata::Object {
         version_   = other.version_ + 1;
         count_     = other.count_;
         root_      = other.root_;
-        original_  = other.original_;
         if (manager_ != nullptr) {
             noteAll();
         }
@@ -196,14 +195,6 @@ class Program final : public camel::core::rtdata::Object {
             }
         }
     }
-    /// The program this one is a private copy of, nullptr when it is not one. A back end that
-    /// runs a rewritten copy of the program (lowerLoopsToTailRecursion, which commits its
-    /// session detached) gets a program whose original is the program it rewrote, followed
-    /// back to the first program that is not a copy. Operators that read the graphs of
-    /// function values (OperatorTraits::inspectsGraphs) are handed the original, so that they
-    /// see the program as it was written (op-semantics 11.4).
-    const Program *original() const { return original_; }
-
     /// Construction; see the file comment.
     void bind(GraphId id, GCGraph *graph) {
         ++version_;
@@ -222,7 +213,6 @@ class Program final : public camel::core::rtdata::Object {
         byId_[index] = graph;
     }
     void setRoot(GCGraph *root) { root_ = root; }
-    void setOriginal(const Program *original) { original_ = original; }
 
   private:
     friend class GCGraphManager;
@@ -235,7 +225,6 @@ class Program final : public camel::core::rtdata::Object {
     uint64_t version_        = 0;
     size_t count_            = 0;
     GCGraph *root_           = nullptr;
-    const Program *original_ = nullptr;
 };
 
 /// Makes the function values among the static values of `graph` name `to` where `to` holds the

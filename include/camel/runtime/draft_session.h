@@ -166,8 +166,8 @@ class RuntimeGraphDraftSession {
 
     std::vector<GCGraph *> collectReachableRuntimeGraphs() const;
     /// Encodes the edited closure into a new program and returns it. A session over the
-    /// program's root installs it as the program of the context; with `detached` (a back end's
-    /// private rewrite, such as lowering loops before it runs) the program is left as it is and
+    /// program's root installs it as the program of the context; with `detached` (a private
+    /// rewrite, such as the working copy of autodiff) the program is left as it is and
     /// the new program is kept alive as a detached one (Context::trackDetachedRuntimeProgram).
     const Program *commit(bool detached = false);
     /// The graphs the session read or wrote (decoded or edited) whose version in the context's

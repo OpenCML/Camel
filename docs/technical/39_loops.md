@@ -2,8 +2,8 @@
 
 This note describes how a loop goes from source to execution. The normative text is
 `docs/design-principles.cn.md`, sections 3.10 (a loop is an expression with a state; no `break`
-or `continue`; a `LOOP` node lowered to tail recursion at each subsystem's entry, then made native
-one subsystem at a time; one capture table for the condition and the body; `for … while`
+or `continue`; a `LOOP` node whose condition and body are regions of the graph it is in, run in
+that graph's frame by every back end; `for … while`
 is a third form of the same node; several values of state are a tuple; the `do`
 syntax) and 7.5 (`@numeric` covers loop bodies). The design work behind it is `docs/design/loops`, the
 node card is in `docs/design/graph-model` 3.5, and the consumer API is
@@ -49,51 +49,43 @@ body. Both `EXEC`s carry the numeric permissions in force where the loop is writ
    (`LoopStateWithoutType`). A sequence that is not an array (a string, a map, a tensor) is
    turned into its array of elements by the `__iter__` operator the sequence's type resolves,
    and any other type is `LoopSequenceNotIterable`; see section 2a.
-2. The condition graph and the body graph (`f.loopN.cond`, `f.loopN.body`) are created with
-   their ports (the state; the body the element first) before either is built, and are
-   registered as **capture twins** (`captureTwins_`): `captureInto` makes every capture made
-   into one also into the other, at the same position. So the two capture tables are equal at
-   every moment, including captures the link step adds later.
-3. Each graph is built as a body of its own (a block, `sync` if written so, `return` ends the
-   block with the next state). The condition must be a `bool` (`LoopConditionNotBool`); the
-   body must give the state (`LoopBodyTypeMismatch`), a value that enters it (an `int` for an
-   `int?`) gets the CAST at the body's exit.
-4. The capture ports become with-ports; the LOOP node is added with Norm inputs (the array,
-   the first values); its With inputs are linked by the link step, in the twins' order, as the
-   captures of a FUNC node are.
-5. Like a branch, the loop uses every variable its graphs capture and writes those they write
-   (ordering, `wait`, `IgnoredSideEffect`); in a sync block it joins the chain. A loop whose
-   value nothing uses outside a sync block does not run; when its graphs have effects that is
-   reported as `EffectNotExecuted` ("The loop").
+2. The condition and the body are regions of the current graph (`LoopCond`, `LoopBody`), built
+   where they are written like the arms of a branch (`Builder::buildArm`). Their ports (the
+   state; the body the element first) are Port nodes of the graph that belong to the region and
+   are declared as names in its scope; everything else the code names is read where it is, so a
+   loop has no capture table.
+3. Each part is a block (`sync` if written so, `return` ends the block with the next state).
+   The condition must be a `bool` (`LoopConditionNotBool`); the body must give the state
+   (`LoopBodyTypeMismatch`), a value that enters it (an `int` for an `int?`) gets the CAST at the
+   body's exit.
+4. The LOOP node is added with Norm inputs (the array, the first values) and With inputs the
+   results of the parts (the body's, then the condition's) and a Port node of type `int64`, the
+   slot the back ends count the rounds in.
+5. Like a branch, the loop uses every variable its parts used and writes those they wrote
+   (`mergeArmVariables`: ordering, `wait`, `IgnoredSideEffect`); in a sync block it joins the
+   chain. A loop whose value nothing uses outside a sync block does not run; when its parts have
+   effects that is reported as `EffectNotExecuted` ("The loop").
 
 Storage (`include/camel/runtime/graph.h`): kind 15; the frozen payload `GCLoopRef` holds the form
-and the reference-table indexes of the two graphs (both marked callee); a draft holds
-`GCLoopBody` with the graphs themselves. Both payloads also hold `collectionCount`, the number of
-collection slots (section 3.1, zero for a loop written in source today). Decode, clone, both
-encoders, the session's graph enumeration and reachability know it. Every commit checks the
-payload (I12/I13) and `validateRuntimeLoopInterface` (op-semantics I18, I19).
-
-**Region form.** The graphs above are what the front end builds. Right after it
-(`Context::materializeRuntimeProgram`, `passes::opt::regionizeLoops`, `src/passes/opt/inline/loops.cpp`)
-the condition and the body are copied into the graph that has the LOOP node as its `LoopCond` and
-`LoopBody` regions (`GCRegion`): the state ports (the element first, for the body) are the ports
-of the region, named by `GCRegion::params`; the values the graphs captured are read where they
-are, so the node has no capture table; and the With inputs of the node are the results of the
-regions (the body's, then the condition's), which is how what the regions compute is reached
-from the node. The payload names no graph (`condRef` and `bodyRef` are none), the loop graphs
-leave the program, and a graph that has loops holds their nodes: the passes, the facts and the
-validator see them as nodes of one graph with regions. `LoopView` reads both forms
-(`inRegions()`); a loop in graph form only exists for the code that reads a loop as two graphs.
-`runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`) makes that form from the region
-form, in a private program: the lowering to tail recursion (std::prl, std::cpp) and autodiff use
-it; autodiff regionizes its gradient again.
-`test::outline_loops` shows the result in a dump.
+(`condRef` and `bodyRef` are none: the node names no graph) and `collectionCount`, the number of
+collection slots (section 3.1, zero for a loop written in source today). The regions are
+`GCRegion`s of kind `LoopCond` and `LoopBody` owned by the node: their ports are the Port nodes
+the code reads the state and the element through, named by `GCRegion::params`; the With inputs of
+the node are the results of the regions (which is how what they compute is reached from the node)
+and the round counter. A graph that has loops holds their nodes: the passes, the facts and the
+validator see them as nodes of one graph with regions. Every commit checks the payload (I12/I13)
+and `validateRuntimeLoopInterface` (op-semantics I18, I19). `LoopView` reads the node; a consumer
+that needs the condition and the body as graphs of their own (autodiff) takes them out in a
+private program, `runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`), and puts them
+back, `passes::opt::regionizeLoops` (`src/passes/opt/inline/loops.cpp`). `test::outline_loops`
+shows the graph form in a dump.
 
 `std::rgir` shows the node (`LOOP while`); in graph form it names the graphs:
 
 ```
 N2A [label="LOOP while cond=main.loop2.cond body=main.loop2.body", type="LOOP", ...];
 ```
+(`graph form` is what `test::outline_loops` and autodiff's working copy have.)
 
 ## 2a. The elements of a string, a map and a tensor
 
@@ -119,8 +111,7 @@ today; the question is in the H4b report).
 The result is that the LOOP node's iterable port is always an array, and every consumer sees
 one form: `LoopView::iterable()` is the array of elements (an OPER node when a conversion was
 made), the element port has its element type (I18), `driveLoopRounds`
-(`include/camel/execute/loop_driver.h`) takes one element per round from it, and the lowering
-(`src/runtime/loop_lowering.cpp`) uses `:struct/len_arr` and `:op/idx_arr` on it. No back end
+(`include/camel/execute/loop_driver.h`) takes one element per round from it. No back end
 has iteration code of its own, and `std::cpp` handles the string conversion (`rt::chars`)
 while maps and tensors stay untranslated types there.
 
@@ -203,33 +194,20 @@ contribution would be dropped without a sign of it.
 | autodiff | differentiated through a synthesized reverse loop (section 3.2); the forward loop collects the tape |
 | debugger | the condition and the body are regions of the graph of their function: part of its frame, with the names of their ports |
 
-**The lowering** (`camel/runtime/loop_lowering.h`): per loop, three graphs,
-`rec(i, S; c, xs) = if go then next(S; c, i, xs) else done(S)`, `next = rec(i + 1, body(xs[i],
-S; c); c, xs)`, `done(S) = S`, with `go` the condition, `i < len(xs)`, or both (the condition
-first). The arms are graphs under a BRCH, as the front end builds an `if`, so the call of `rec`
-is in tail position on every back end, and the lowered loop is not counted against the recursion
-limit. The program is committed **detached** (`RuntimeGraphDraftSession::commit(true)`): the
-context's program keeps its LOOP nodes.
-
-The parallel scheduler also accepts function graphs obtained during execution, for example
-the CPU fallback of a native operator that reads a function's original graph. Its per-run
-execution-graph cache lowers such a graph once, under a mutex, before allocating the callee
-frame. Arguments and captures are bound through the resulting frame's own ports. Detached
-copies and their original graphs remain rooted by the context's graph manager; the cache
-holds no function values or invocation data. Concurrent publication of those graph roots is
-serialized, with collections inhibited only while publishing or rewriting, never while
-running the callee. The bytecode hand-off excludes original LOOP graphs, so bytecode compiled
-for a source graph cannot be paired with a lowered graph's frame layout.
+**The range of a loop.** The plan (`ExecPlan`, `src/execute/exec_plan.cpp`) lays a loop out as one
+piece: what its regions read from outside, the first values of the state, the nodes of the
+condition, those of the body, then the LOOP node (`computeExecutionOrder`). `ExecLoop` records the
+positions, the data slots a round reads and writes and the slot of the round counter; the events
+at a position (`ExecLoopEvent`: `Begin`, `Test`, `End`) are run by the functions of
+`camel/execute/loop_frame.h` (`loopBegin`, `loopTest`, `loopEnd`, and `stepLoops` for an
+interpreter that walks the nodes). A nested loop starts again in every round of the loop around
+it; going back to the start of a round does not start or test the loops around it.
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
 `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
-`OperatorTraits::inspectsGraphs`. The lowering passes every operand of function type of such an
-operator through `:graph/original` (`src/builtin/operators/graph.h`), which turns a function
-value of the private copy into the same function over the program's graph it was copied from
-(`Program::original()`, recorded by the detached commit; the closure is kept, a copy has its
-original's ports). So Tiles sees a function's LOOP, and the ONNX export refuses it where it is
-written, on every back end (`modules.tiles` `loop_structure_*`, `linear.loops`
+`OperatorTraits::inspectsGraphs`. It sees a function's LOOP and its regions (`modules.tiles`
+`loop_structure_*`), and the ONNX export refuses it where it is written (`linear.loops`
 `loops.onnx_refused_lowered`). autodiff differentiates a function's own LOOP node instead of
 refusing it: the forward loop collects each round's residuals in its collection slots and the
 reverse pass is a loop over those arrays (section 3.2, `linear.loops`
@@ -258,10 +236,7 @@ components are updated in place, and each round's `v_c` is appended to tape `c` 
 append is unobservable). The work tuple lives in the node's slot (NodeVM, FastVM) or in a rooted
 tuple, so the arrays are traced; the tapes grow on the run-time heap, so a
 limit hit is `RuntimeDiag::MemoryExhausted` reported while "collecting the values a loop produces
-each round" at the loop's source location. There is no round limit. The lowering does the same
-with two hidden operators, `:loop/collector` (a fresh array, once before the loop) and
-`:loop/collect` (append in place, returns the tape), effectful by default so no pass removes or
-reorders them; `next` carries the `(state…, tape…)` tuple.
+each round" at the loop's source location. There is no round limit.
 
 ## 5. Timings
 
@@ -272,13 +247,12 @@ process, one container, the median of three runs:
 |---|---|---|
 | 2.06 s | 1.08 s | 1.07 s |
 
-Before the loops were bytecode, FastVM and the JIT ran the private lowering (1.67 s, 1.88 s) and
-the first native instruction was slower than that (it entered the interpreter again for each of
-its two calls a round). A loop with several values of state builds the tuple of the next state
-every round (the body's FILL), which a hand-written recursion over separate parameters does not.
+Before the loops were bytecode, FastVM and the JIT ran a lowering to tail recursion (1.67 s, 1.88 s).
+A loop with several values of state builds the tuple of the next state every round (the body's
+FILL), which a hand-written recursion over separate parameters does not.
 
 Next steps: compiling a loop with the JIT; passing the k values of the state separately when the
-body ends in a tuple FILL; and in their turn std::prl, std::cpp, ONNX and autodiff.
+body ends in a tuple FILL; the translation of a loop to an ONNX Loop; autodiff on the regions.
 
 ## 6. Tests
 

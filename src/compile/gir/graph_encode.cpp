@@ -271,6 +271,16 @@ std::vector<draft_node_ref_t> collectLiveDraftNodes(const GraphDraft &draft) {
         if (header == nullptr) {
             continue;
         }
+        if (header->kind == GCNodeKind::Loop) {
+            // The ports of its regions are part of it, whether the code reads them or not.
+            for (auto part : {runtime::GCRegionKind::LoopCond, runtime::GCRegionKind::LoopBody}) {
+                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
+                    for (draft_node_ref_t port : draft.regionPortsOf(region)) {
+                        pushRoot(port);
+                    }
+                }
+            }
+        }
         if (header->kind == GCNodeKind::Brch) {
             const auto *payload =
                 reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(current).data());
@@ -618,6 +628,12 @@ class EncodeSession {
             prepared.draft->setRegionResult(id, mapped(region.result));
             prepared.draft->setRegionOrigin(id, region.origin);
             prepared.draft->setRegionAttrs(id, region.attrs);
+            prepared.draft->setRegionParams(id, region.params);
+            std::vector<runtime::gc_node_ref_t> ports;
+            for (runtime::gc_node_ref_t port : built.regionPortsOf(r)) {
+                ports.push_back(mapped(port));
+            }
+            prepared.draft->setRegionPorts(id, ports);
         }
         prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
         CAMEL_LOG_INFO_S(
@@ -682,14 +698,6 @@ class EncodeSession {
                 prepared.draft->setCalleeGraph(
                     preparedId,
                     resolvePreparedGraph(prepared.source->funcTarget(sourceId))->draft->id());
-            }
-            if (header->kind == GCNodeKind::Loop) {
-                const auto &target = prepared.source->loopTarget(sourceId);
-                prepared.draft->setLoopGraphs(
-                    preparedId,
-                    target.cond ? resolvePreparedGraph(target.cond)->draft->id()
-                                : camel::runtime::kInvalidGraphId,
-                    resolvePreparedGraph(target.body)->draft->id());
             }
             ++preparedId;
         }
