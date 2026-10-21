@@ -74,6 +74,7 @@ struct RawFact {
     enum class Kind : uint8_t {
         TypeExpression,
         TypeDeclared,
+        TypeReferenced,
         ValueDeclared,
         ExpressionTyped,
         ValueReferenced,
@@ -119,6 +120,15 @@ class Recorder : public camel::compile::SemanticRecorder {
     void typeDeclared(origin_id_t decl, const std::string &name, Type *type) override {
         facts.push_back(
             {.kind = RawFact::Kind::TypeDeclared, .at = decl, .type = type, .name = name});
+    }
+    void typeReferenced(
+        origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) override {
+        facts.push_back(
+            {.kind  = RawFact::Kind::TypeReferenced,
+             .at    = ref,
+             .other = decl,
+             .type  = type,
+             .name  = name});
     }
     void valueReferenced(
         origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) override {
@@ -445,6 +455,29 @@ class ModelBuilder {
         return Location{file, model_->files_[file].syntax.decls[decl].nameRange};
     }
 
+    // Where the type a name of `module` stands for is declared, when it is one of the sources
+    // being analysed: the compiler recorded the place while it declared the type, possibly in
+    // the module the name is imported from (Module::noteTypeDeclarationOrigin). Empty when the
+    // type is built in or its declaration is not in these sources.
+    std::vector<Location>
+    typeDeclarationOf(const camel::core::module::Module &module, const Reference &ref) {
+        std::vector<Location> out;
+        const camel::core::module::Module *declaring = &module;
+        Reference name                               = ref;
+        if (declaring->typeDeclarationOrigin(name) == 0) {
+            if (auto source = declaring->importedSource(name)) {
+                declaring = source->first.get();
+                name      = source->second;
+            }
+        }
+        if (auto where = locate(declaring->typeDeclarationOrigin(name))) {
+            if (auto decl = findDecl(*where, name.ident())) {
+                out.push_back(declLocation(where->file, *decl));
+            }
+        }
+        return out;
+    }
+
     // ---- compilation ----
 
     void compile() {
@@ -696,6 +729,20 @@ class ModelBuilder {
                     addUnique(file.declFacts[*decl].types, typeId(fact.type));
                 }
                 break;
+            case RawFact::Kind::TypeReferenced:
+                if (auto ref = findRef(*where)) {
+                    RefFacts &rf = file.refFacts[*ref];
+                    rf.resolved  = true;
+                    if (fact.type != nullptr) {
+                        addUnique(rf.types, typeId(fact.type));
+                    }
+                    if (auto declAt = locate(fact.other)) {
+                        if (auto decl = findDecl(*declAt, fact.name)) {
+                            addUnique(rf.targets, declLocation(declAt->file, *decl));
+                        }
+                    }
+                }
+                break;
             case RawFact::Kind::ValueReferenced:
                 if (auto ref = findRef(*where)) {
                     RefFacts &rf = file.refFacts[*ref];
@@ -886,6 +933,11 @@ class ModelBuilder {
                     ext->kind = ExternalName::Kind::Type;
                     ext->signatures.push_back(sourceSpelling((*type)->toString()));
                 }
+                if (ext->definitions.empty()) {
+                    // The type's own declaration, not the import: the compiler recorded where
+                    // it is, in the module the name comes from (task H82).
+                    ext->definitions = typeDeclarationOf(module, ref);
+                }
             }
             if (!ext) {
                 continue;
@@ -984,6 +1036,7 @@ class ModelBuilder {
                     ext.kind   = ExternalName::Kind::Type;
                     ext.module = mod->name();
                     ext.signatures.push_back(sourceSpelling(type->toString()));
+                    ext.definitions = typeDeclarationOf(*mod, ref);
                     model_->namespaces_[space].push_back(std::move(ext));
                 });
             }

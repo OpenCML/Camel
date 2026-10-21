@@ -184,6 +184,11 @@ class Module : public std::enable_shared_from_this<Module> {
     std::vector<std::pair<Reference, NamedImport>> namedImports_;
     /// Every import of a module, in the order they were written (see noteImport).
     std::vector<ImportSite> importSites_;
+    /// Where each type this module declares was declared: the reference it was declared under in
+    /// this module (see visitTypeDecl) to the origin of the declaration's name. The compiler
+    /// fills it as it declares the types; the language server reads it to answer where a type
+    /// name's declaration is, including across modules (task H82).
+    std::unordered_map<std::string, camel::source::origin_id_t> typeDeclarationOrigins_;
 
     // Tags (design principles 6.2): the declarations this module makes, and the facts written
     // on its declarations and on the fields of its type declarations.
@@ -295,6 +300,18 @@ class Module : public std::enable_shared_from_this<Module> {
 
     std::optional<Type *>
     getImportedType(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
+
+    /// Records where the declaration of the type named `ref` in this module is (its name's
+    /// origin); the compiler calls it while it declares the module's types.
+    void noteTypeDeclarationOrigin(const Reference &ref, camel::source::origin_id_t origin) {
+        typeDeclarationOrigins_[ref.toString()] = origin;
+    }
+    /// The origin of the declaration of the type named `ref` in this module, or 0 when the
+    /// module does not declare it (the type is imported, built in or a parameter).
+    camel::source::origin_id_t typeDeclarationOrigin(const Reference &ref) const {
+        const auto it = typeDeclarationOrigins_.find(ref.toString());
+        return it == typeDeclarationOrigins_.end() ? 0 : it->second;
+    }
     /// Whether some import binds a module or namespace prefix that `prefix` names, or begins
     /// with (`using namespace lib::Tools` after `import lib`).
     bool hasImportedPrefix(const Reference &prefix) const;
