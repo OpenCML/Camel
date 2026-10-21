@@ -290,7 +290,7 @@ func main(): int sync {
 - When nothing determines the variables it is the compile-time error `SemanticDiag::GenericFunctionAsValue` (or, for an argument, `SemanticDiag::GenericArgumentsMismatch`), which names them: `let g = id` has no context (write the type); in `apply(id, id)` each argument waits for the other.
 - An imported generic function can be a value too (`xss->map<reverse>`, with `reverse` from the `array` module).
 
-**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; type arguments cannot be written at a call (whether to allow that is undecided).
+**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value.
 
 ## 7.6 Annotations
 

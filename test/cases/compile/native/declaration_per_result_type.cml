@@ -1,0 +1,15 @@
+/**
+ * The per-dtype rules `tensor:from_bytes` registers in C++ (`from_bytes_f32`, `from_bytes_i64`,
+ * `from_bytes_bool`) as one name with a result type per rule. Written as declarations they are
+ * a redeclaration: one name has one signature, and a declaration names one operator URI
+ * (handover H103).
+ */
+module tensor
+
+import { Tensor } from tensor
+
+#op<'tensor:from_bytes_f32'>
+export func from_bytes(encoded: Bytes, shape: int[]): Tensor<f32>
+
+#op<'tensor:from_bytes_i64'>
+export func from_bytes(encoded: Bytes, shape: int[]): Tensor<int>

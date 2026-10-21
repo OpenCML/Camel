@@ -290,7 +290,7 @@ func main(): int sync {
 - 确定不了是编译期错误 `SemanticDiag::GenericFunctionAsValue`（或作为实参时的 `SemanticDiag::GenericArgumentsMismatch`），指出哪个变量定不下来：`let g = id` 没有上下文（写出类型）；`apply(id, id)` 两个实参互相等对方。
 - 导入的泛型函数同样可以作值（`xss->map<reverse>`，`reverse` 来自 `array` 模块）。
 
-**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；调用时不能显式给出类型实参（是否允许尚未决定）。
+**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值。
 
 ## 7.6 标注
 

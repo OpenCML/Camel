@@ -34,6 +34,17 @@ assert(input.normalized.stdout.trim() === want, `shape selection changed: ${inpu
 timeout_ms = 8000
 
 [[tests]]
+name = "type_arguments_from_fields"
+desc = "A `static for` binds a field's type and the binding can be written as an explicit type argument of a recursive call, so the design's tree walk (generic-structure 3.1.3) is an ordinary generic function: the three `int` leaves are 1, 2 and 3 by depth."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/type_arguments_from_fields.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "match_type_has_no_branch_node"
 desc = "The selected case is straight-line code: the graph of a function whose body is only a `match type` contains no BRCH or CASE node."
 kind = "behavior"
