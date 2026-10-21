@@ -1,0 +1,12 @@
+/**
+ * `twice` on a `Pair<int>`: the overload is a generic operator template of `pair_models`, found
+ * through the type's declaration and instantiated for this call (design principles 5.7).
+ */
+import { pair } from pair_models
+import { twice } from pair_gen
+
+func main(): int sync {
+    let p = twice(pair(1, 2))
+    println(p.a, p.b)
+    return 0
+}

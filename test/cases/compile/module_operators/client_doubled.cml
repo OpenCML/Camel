@@ -1,0 +1,12 @@
+/**
+ * `gen_imports` sees `+` through its own import of `models`; the use through the type's
+ * declaring module finds the same overload. One candidate, so the call is not ambiguous.
+ */
+import { mk } from models
+import { twice } from gen_imports
+
+func main(): int sync {
+    let b = twice(mk(3))
+    println(b.v)
+    return 0
+}

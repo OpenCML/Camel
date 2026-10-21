@@ -1,0 +1,106 @@
+id = "compile.module_operators"
+order = 338
+tier = "fast"
+tags = ["feat", "compile", "semantic", "ops", "modules", "generics"]
+desc = "An operator is looked for in the module that declares the operand's type as well as where the expression is written, and nowhere else (design principles 5.7)."
+
+[[tests]]
+name = "operator_in_declaring_module"
+desc = "A generic function in one module uses `+`, `==` and `!=` of the type declared in another module, which it does not import."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/client.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "4\ntrue\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "declaring_module_operator_is_not_doubled"
+desc = "The module that writes the expression imports the declaring module too: the overload is one candidate, not two, so the instance is not ambiguous."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/client_doubled.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "compound_assignment_follows_declaring_module_operator"
+desc = "`x += y` in a generic function follows the plain `+` of the module that declares the type (4.3, 5.7)."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/client_bump.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "enum_operator_in_declaring_module"
+desc = "An enum declared in one module, with its operator beside it, used from a generic function in another module."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/enum_client.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "generic_operator_in_declaring_module"
+desc = "A generic operator template (`operator +` over `Pair<T>`) declared beside a generic type: the instance of the generic function finds and instantiates it through the type's declaration."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/pair_client.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "2 4\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "anonymous_type_has_no_declaring_module"
+desc = "An operator for an anonymous struct type is not reachable from another module: the type is declared in no module, so there is nothing to add to the expression's own scope."
+kind = "negative"
+case = "../../../cases/compile/module_operators/anon_client.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "anon_gen.cml:8:16:", "({ v: int }, { v: int })", "operator '+' is not defined for these operand types"]
+expect_output_not_contains = ["searched the operators", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "builtin_type_through_named_type"
+desc = "A value of a named alias of a builtin type has no declaring module of its own: `+` stays the builtin one."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/alias_client.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "two_offering_modules_are_not_searched"
+desc = "Two modules offer `+` for a type declared in a third; neither is the declaring module, so the instance does not see them, though the caller imports both. The message names the two modules that were searched."
+kind = "negative"
+case = "../../../cases/compile/module_operators/two_client.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "two_gen.cml:9:16:", "(Box, Box)", "operator '+' is not defined for these operand types", "searched the operators visible in module 'two_gen' (where the expression is) and those of module 'two_models' (which declares 'Box')"]
+expect_output_not_contains = ["two_left", "two_right", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "module_own_operator_wins_over_callers_imports"
+desc = "The expression's module has its own `+`; the caller's imports of two other modules offering it are not candidates, so the module's own overload is chosen without ambiguity."
+kind = "behavior"
+case = "../../../cases/compile/module_operators/own_client.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "300\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

@@ -156,6 +156,170 @@ const Builder::OperatorOverloads &Builder::importedOperatorOverloadsOf(const std
     return importedOperators_.emplace(key, std::move(set)).first->second;
 }
 
+// ---- An operator of the module that declares the operand's type (design principles 5.7) ----
+//
+// Names are looked up lexically where the expression is written. A value of a dependent type
+// variable is also operated on as its type's declaration means, so an instance looks for the
+// operator in the module that declares the operand's named type as well, not only in the module
+// the generic function is written in; what the caller imported is not looked at. The types are
+// concrete by the time an instance is built, so the declaring modules come from the operand
+// types. Anonymous types (no declaration), builtin types and aliases of them (no declaration of
+// their own) have no declaring module and are left to the lexical scope and the built-ins.
+
+std::vector<std::pair<std::string, std::string>> Builder::declaringModulesOf(
+    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    std::vector<std::pair<std::string, std::string>> found;
+    const auto add = [&](Type *type) {
+        type = valueTypeOf(type);
+        if (type == nullptr) {
+            return;
+        }
+        std::string module;
+        std::string name;
+        if (type->code() == TypeCode::Struct) {
+            const auto *structType = tt::as_ptr<StructType>(type);
+            if (structType->named()) {
+                module = structType->decl()->moduleName();
+                name   = structType->decl()->name();
+            }
+        } else if (const auto *enumType = asEnumType(type); enumType != nullptr) {
+            module = enumType->decl()->moduleName();
+            name   = enumType->decl()->name();
+        }
+        // The module this unit builds is already in the lexical scope of the expression.
+        if (module.empty() || (module_ && module == module_->name())) {
+            return;
+        }
+        if (std::ranges::find(found, std::make_pair(module, name)) == found.end()) {
+            found.emplace_back(std::move(module), std::move(name));
+        }
+    };
+    for (Type *type : withTypes) {
+        add(type);
+    }
+    for (Type *type : normTypes) {
+        add(type);
+    }
+    return found;
+}
+
+module_ptr_t Builder::moduleNamed(const std::string &name) {
+    if (module_ && module_->name() == name) {
+        return module_;
+    }
+    if (context_) {
+        for (const module_ptr_t &candidate : context_->allUserModules()) {
+            if (candidate && candidate->name() == name) {
+                return candidate;
+            }
+        }
+    }
+    // The type came from the module, so it is loaded: this lookup never loads one.
+    return nullptr;
+}
+
+std::string Builder::moduleDisplayName(const std::string &name) {
+    if (const module_ptr_t module = moduleNamed(name); module) {
+        return module->declaredName().empty() ? module->name() : module->declaredName();
+    }
+    return name;
+}
+
+bool Builder::addDeclaringModuleOverloads(
+    node_handle_t dref, const std::string &group, const type_vec_t &withTypes,
+    const type_vec_t &normTypes) {
+    if (instantiationDepth_ == 0 || dref == nullptr) {
+        // No dependent type variable: the operator is looked up where it is written, as before.
+        return false;
+    }
+    const auto declaring = declaringModulesOf(withTypes, normTypes);
+    if (declaring.empty()) {
+        return false;
+    }
+    // `!=` has no overloads of its own: an overload of `==` gives it (design principles 4.3),
+    // exactly as for the overloads the program declares (operatorDrefOf).
+    const bool negated       = group == "__neq__";
+    const std::string wanted = negated ? std::string("__eq__") : group;
+    auto known               = operatorOverloads_.find(dref);
+    if (known == operatorOverloads_.end()) {
+        known = operatorOverloads_.emplace(dref, operatorOverloadsOf(group)).first;
+    }
+    OperatorOverloads &set = known->second;
+    bool added             = false;
+    for (const auto &[moduleName, typeName] : declaring) {
+        const module_ptr_t module = moduleNamed(moduleName);
+        if (!module) {
+            continue;
+        }
+        for (const auto &overload : module->exportedOperatorOverloads(wanted)) {
+            const entity &exported = overload.overloads;
+            if (camel::core::module::detail::EntityAccess::isGraphSet(exported)) {
+                for (const auto &graph : *asCompileGraphSet(
+                         camel::core::module::detail::EntityAccess::graphSet(exported))) {
+                    if (std::ranges::find(set.graphs, graph) == set.graphs.end()) {
+                        set.graphs.push_back(graph);
+                        set.moduleOf[graph.get()] = moduleName;
+                        added                     = true;
+                    }
+                }
+            } else if (camel::core::module::detail::EntityAccess::isGenericTemplate(exported)) {
+                auto generic = std::static_pointer_cast<GenericTemplate>(
+                    camel::core::module::detail::EntityAccess::genericTemplate(exported));
+                if (std::ranges::find(set.templates, generic) == set.templates.end()) {
+                    set.templates.push_back(generic);
+                    set.moduleOf[generic.get()] = moduleName;
+                    added                       = true;
+                }
+            }
+        }
+    }
+    if (negated && added) {
+        negatedEqualities_.insert(dref);
+    }
+    return added;
+}
+
+bool Builder::hasDeclaringModuleOperator(
+    const std::string &group, const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    if (instantiationDepth_ == 0) {
+        return false;
+    }
+    for (const auto &[moduleName, typeName] : declaringModulesOf(withTypes, normTypes)) {
+        if (const module_ptr_t module = moduleNamed(moduleName);
+            module && !module->exportedOperatorOverloads(group).empty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::string Builder::operatorSearchScopeText(
+    const type_vec_t &withTypes, const type_vec_t &normTypes) {
+    if (instantiationDepth_ == 0) {
+        return {};
+    }
+    const auto declaring = declaringModulesOf(withTypes, normTypes);
+    if (declaring.empty()) {
+        // Nothing outside the lexical scope was searched: the usual message says it all.
+        return {};
+    }
+    std::string where = "this module";
+    if (module_ && context_ && context_->mainModule() != module_ && !module_->name().empty()) {
+        where = "module '" + moduleDisplayName(module_->name()) + "'";
+    }
+    std::string text =
+        "; searched the operators visible in " + where + " (where the expression is)";
+    text += declaring.size() == 1 ? " and those of module " : " and those of modules ";
+    for (size_t i = 0; i < declaring.size(); ++i) {
+        if (i > 0) {
+            text += i + 1 == declaring.size() ? " and " : ", ";
+        }
+        text += "'" + moduleDisplayName(declaring[i].first) + "' (which declares '" +
+                declaring[i].second + "')";
+    }
+    return text;
+}
+
 bool Builder::hasProgramOperatorOverloads(const std::string &group) {
     if (!camel::core::isOverloadableOperatorGroup(group)) {
         return false;
@@ -651,9 +815,25 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // Only for a type a module defines. The built-in types have their own operators, and
     // where one is missing (`%=` on a float, `+=` on an array) that stays an error.
     // Or for any type when the program overloads the plain operator: `m &= n` on a type of
-    // the program is `m = m & n` through its `operator &` (design principles 4.2, 4.3).
+    // the program is `m = m & n` through its `operator &` (design principles 4.2, 4.3). In a
+    // generic instance the plain operator may come from the module that declares the operand's
+    // type (design principles 5.7), and the rebinding follows it there too.
     Type *target = valueTypeOf(nodeTypeOf(operands[0].node));
-    if (target == nullptr || (!target->isOtherType() && !hasProgramOperatorOverloads(plainName))) {
+    if (target == nullptr) {
+        return nullptr;
+    }
+    bool plainOverloaded = hasProgramOperatorOverloads(plainName);
+    if (!plainOverloaded && instantiationDepth_ > 0) {
+        // Design principles 5.7: the module that declares the operand's type offers the
+        // operator with it, so `x += y` follows that `+` as it follows one visible here.
+        type_vec_t operandTypes;
+        operandTypes.reserve(operands.size());
+        for (const Argument &operand : operands) {
+            operandTypes.push_back(nodeTypeOf(operand.node));
+        }
+        plainOverloaded = hasDeclaringModuleOperator(plainName, {}, operandTypes);
+    }
+    if (!target->isOtherType() && !plainOverloaded) {
         return nullptr;
     }
     const auto make = [&](GCT::node_ptr_t node) {
@@ -1544,6 +1724,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         targetFuncType = factoryType;
     };
 
+    // Design principles 5.7: an instance also uses the operators of the module that declares
+    // the operand's type, so a module can offer its type and its operators together. The types
+    // of the instance are concrete now, and the set is built from them, so an overload found
+    // both there and through an import of this module stays one candidate.
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+            const auto &ops = std::get<oper_group_ptr_t>(drefTarget);
+            addDeclaringModuleOverloads(
+                targetNode, ops->name(), withInputTypes, normInputTypes);
+        }
+    }
+
     // An operator with overloads of the program: one of them, or the built-in group below.
     // `a != b` by an overload of `==` is the negation of that call (`negateResult`).
     compile_graph_ptr_t operatorOverload = nullptr;
@@ -1849,6 +2042,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         "; operator '{}' is not defined for these operand types",
                         symbol);
                 }
+                // Where it was looked for, when that went beyond the lexical scope: an
+                // operator of the type's declaring module was searched for and not found
+                // (design principles 5.7), so the message names the modules involved.
+                argTypesStr += operatorSearchScopeText(withInputTypes, normInputTypes);
                 // Every argument written in the parentheses of an operator that takes some of
                 // them in angle brackets (`split('a,b', ',')`, `put(m, k, v)`): if the call
                 // resolves with the trailing arguments moved there, say so.

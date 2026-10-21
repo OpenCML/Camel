@@ -298,6 +298,12 @@ class Module : public std::enable_shared_from_this<Module> {
     /// one imports, in any form, exports under `group` or `group#k` (a generic overload),
     /// ordered by module name, then by name.
     std::vector<ImportedOperatorOverloads> importedOperatorOverloads(const std::string &group) const;
+    /// Every overload of the operator function `group` (`__add__`) this module itself exports,
+    /// in the order importedOperatorOverloads uses: what a module written in Camel exports under
+    /// `group` or `group#k` (a generic overload), by name. Design principles 5.7: the module that
+    /// declares a type offers its operators with it, so a use of the type elsewhere reads this
+    /// set whether or not it imported the module.
+    std::vector<ImportedOperatorOverloads> exportedOperatorOverloads(const std::string &group);
 
     std::optional<Type *> getExportedType(const Reference &ref) const;
     std::optional<entity> getExportedEntity(const Reference &ref) const;

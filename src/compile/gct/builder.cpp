@@ -1384,7 +1384,8 @@ std::vector<Type *> Builder::bindTypeParameters(
 Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
     const string name                    = decl->ref().toString();
     const auto enumLoad                  = ast->loadAs<AST::EnumTypeLoad>();
-    EnumDecl *declaration                = EnumDecl::create(name, decl->params());
+    EnumDecl *declaration                = EnumDecl::create(
+        name, decl->params(), module_ ? module_->name() : std::string());
     const bool generic                   = !decl->params().empty();
     scope_ptr_t<Reference, Type *> outer = typeScope_;
     if (generic) {
@@ -1422,7 +1423,8 @@ Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLo
 Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
     const string name                    = decl->ref().toString();
     const bool generic                   = !decl->params().empty();
-    StructDecl *declaration              = StructDecl::create(name, decl->params());
+    StructDecl *declaration              = StructDecl::create(
+        name, decl->params(), module_ ? module_->name() : std::string());
     scope_ptr_t<Reference, Type *> outer = typeScope_;
     std::vector<Type *> parameters;
     if (generic) {

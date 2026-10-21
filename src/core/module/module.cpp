@@ -455,12 +455,6 @@ Module::importedOperatorOverloads(const std::string &group) const {
     // import of the module brings them, whatever it names (design principles 10.2), so they
     // are looked up in the modules imported, not among the names imported. A generic overload
     // is exported under `group#k` (the GIR builder's exportOperatorOverloads).
-    const auto isOverloadOf = [&](const Reference &ref) {
-        const std::string &ident = ref.ident();
-        return ref.plain() &&
-               (ident == group || (ident.size() > group.size() && ident.starts_with(group) &&
-                                   ident[group.size()] == '#'));
-    };
     std::vector<std::shared_ptr<Module>> modules;
     for (const ImportSite &site : importSites_) {
         if (site.mod && std::ranges::find(modules, site.mod) == modules.end()) {
@@ -469,19 +463,37 @@ Module::importedOperatorOverloads(const std::string &group) const {
     }
     std::ranges::sort(modules, [](const auto &a, const auto &b) { return a->name() < b->name(); });
     for (const auto &mod : modules) {
-        mod->declareEntities();
-        std::vector<std::pair<Reference, entity>> found;
-        mod->exportedEntityNS()->forEach([&](const Reference &ref, const entity &ent) {
-            if (isOverloadOf(ref) && !ent.isOperGroup()) {
-                found.emplace_back(ref, ent);
-            }
-        });
-        std::ranges::sort(found, [](const auto &a, const auto &b) {
-            return a.first.toString() < b.first.toString();
-        });
-        for (auto &[ref, ent] : found) {
-            result.push_back({mod, ref, std::move(ent)});
+        for (auto &overload : mod->exportedOperatorOverloads(group)) {
+            result.push_back(std::move(overload));
         }
+    }
+    return result;
+}
+
+std::vector<Module::ImportedOperatorOverloads>
+Module::exportedOperatorOverloads(const std::string &group) {
+    // The declarations of the module are complete before any function body of the program is
+    // built (design principles 10.1), so this is a no-op by the time an operator is resolved.
+    declareEntities();
+    std::vector<ImportedOperatorOverloads> result;
+    const auto isOverloadOf = [&](const Reference &ref) {
+        const std::string &ident = ref.ident();
+        return ref.plain() &&
+               (ident == group || (ident.size() > group.size() && ident.starts_with(group) &&
+                                   ident[group.size()] == '#'));
+    };
+    std::vector<std::pair<Reference, entity>> found;
+    exportedEntityNS()->forEach([&](const Reference &ref, const entity &ent) {
+        if (isOverloadOf(ref) && !ent.isOperGroup()) {
+            found.emplace_back(ref, ent);
+        }
+    });
+    std::ranges::sort(found, [](const auto &a, const auto &b) {
+        return a.first.toString() < b.first.toString();
+    });
+    const auto self = shared_from_this();
+    for (auto &[ref, ent] : found) {
+        result.push_back({self, ref, std::move(ent)});
     }
     return result;
 }
