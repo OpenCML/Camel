@@ -369,7 +369,7 @@ timeout_ms = 6000
 
 [[tests]]
 name = "export_train_step_branch_disjoint"
-desc = "E13/T5 (fixed): a branched training step whose arms use DISJOINT parameter subsets exports. Every arm pullback yields a full gradient struct, so the branch JOIN is aggregate-typed and the exporter emits one multi-output If for it (plus one If for the branch value)."
+desc = "E13/T5 (fixed): a branched training step whose arms use DISJOINT parameter subsets exports. Every arm pullback yields a full gradient struct: the branch value becomes one If and the pullback call one multi-output If (its arms call the arm pullbacks), so the model has an If per branched value."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_train_step_branch_disjoint.cml"
 args = ["${case}"]
@@ -387,7 +387,7 @@ const model = readOnnxModel(path.join(input.test_tmp, 'export_train_step_branch_
 assert(model.inputs.join() === 'w1,b1,w2,b2,w3,b3,wo,bo,we,be,input1', `weights must be graph inputs: ${model.inputs}`)
 assert(model.outputs.length === 11, `loss and 10 updated weights must be outputs: ${model.outputs}`)
 const count = (op) => model.ops.filter((o) => o === op).length
-assert(count('If') === 3, `expected an If per branched value (loss, pullback pieces), got ${model.ops}`)
+assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
 assert(!model.initializers.some((n) => /^(w1|b1|w2|b2|w3|b3|wo|bo|we|be)$/.test(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
@@ -424,7 +424,7 @@ const buf = fs.readFileSync(file)
 const mark = Buffer.from([0x22, 0x02, 0x49, 0x66])
 let ifs = 0, at = 0
 while ((at = buf.indexOf(mark, at)) !== -1) { ifs += 1; at += 1 }
-assert(ifs >= 7, `expected at least the 2^3 - 1 = 7 If nodes of the forward's decision tree, got ${ifs}`)
+assert(ifs >= 6, `expected an If per gate decision and per pullback selection (3 + 3), got ${ifs}`)
 }
 """
 timeout_ms = 20000
