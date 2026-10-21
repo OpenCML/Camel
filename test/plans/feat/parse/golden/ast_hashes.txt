@@ -453,7 +453,7 @@ c8a2aea79398ad4a no test/cases/compile/diag_render/syntax_stray_closer.cml
 c8c8348a8e154358 no test/cases/compile/diag_render/syntax_unexpected_token.cml
 4d487e2cae71a5fa ok test/cases/compile/diag_render/warning_dropped_effect.cml
 9165ddabb83666c9 ok test/cases/compile/diag_render/werror_no_position.cml
-54d86d3efe83a767 ok test/cases/compile/entry_args/complex.cml
+0ae220e3af5b0b89 ok test/cases/compile/entry_args/complex.cml
 32612283d0dbcbcb ok test/cases/compile/entry_args/no_params.cml
 4968e768ad8866a3 ok test/cases/compile/entry_args/scalars.cml
 16e3db9d1dec1061 ok test/cases/compile/entry_args/struct_param.cml

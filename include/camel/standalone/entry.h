@@ -24,8 +24,9 @@
  *     ./program --arg n=3 --arg name=hi
  *
  * Each value is read by the parameter's declared type exactly as src/execute/entry_args.cpp
- * reads it (an integer, a number, a complex number in the language's text (`1+2i`, `-2i`),
- * `true`/`false`, the text as it is), the arguments are checked in the order they are written
+ * reads it (an integer, a number token, a complex number in the language's text (`1+2i`, `-2i`;
+ * a real number such as `1.5` is its real part with an imaginary part of zero), `true`/`false`,
+ * the text as it is), the arguments are checked in the order they are written
  * and the first that is wrong is reported, then a parameter given no value is reported, all of
  * them in one report. The reports are those of `camel`, byte for byte (EntryArgumentInvalid,
  * EntryArgumentMissing at the entry function): the compiler renders them into two Sites with the
@@ -42,8 +43,8 @@
 
 #include <charconv>
 #include <complex>
+#include <concepts>
 #include <cstdint>
-#include <cstdlib>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -54,11 +55,11 @@ namespace camel::standalone {
 /// How the value of a parameter of `main` is read from its text.
 enum class EntryKind {
     Int,   // an integer: an optional `+`, then the digits of an int64 (no range check for i32)
-    Float, // a number strtod reads entirely
-    ComplexFloat,  // a c64: the text of a complex number, its parts read as floats of that width
-    ComplexDouble, // a c128: the same text, its parts read as doubles
-    Bool,          // `true` or `false`
-    Text,          // the text as it is
+    Float, // one number token, read by camel::utils::parseWholeFloat
+    C64,   // a c64: the text of a complex number, its parts read as floats of that width
+    C128,  // a c128: the same text, its parts read as doubles
+    Bool,  // `true` or `false`
+    Text,  // the text as it is
 };
 
 /// A parameter of `main`: its name and how its value is read.
@@ -117,8 +118,8 @@ class EntryArguments {
     /// The value of the parameter at `index`, read by its kind (the one it was declared with).
     int64_t integer(std::size_t index) const { return values_[index].integer; }
     double number(std::size_t index) const { return values_[index].number; }
-    std::complex<float> complexFloat(std::size_t index) const { return values_[index].complexF; }
-    std::complex<double> complexDouble(std::size_t index) const { return values_[index].complexD; }
+    std::complex<float> c64(std::size_t index) const { return values_[index].complexF; }
+    std::complex<double> c128(std::size_t index) const { return values_[index].complexD; }
     bool boolean(std::size_t index) const { return values_[index].boolean; }
     Str text(std::size_t index) const { return Str(values_[index].text); }
 
@@ -132,26 +133,28 @@ class EntryArguments {
         std::string text;
     };
 
-    /// One number as `camel` reads a float parameter: the whole text, by strtod.
-    static bool readNumber(std::string_view text, double &out) {
-        if (text.empty()) {
-            return false;
-        }
-        const std::string copy(text);
-        char *end = nullptr;
-        out       = std::strtod(copy.c_str(), &end);
-        return end == copy.c_str() + copy.size();
+    /// One number as `camel` reads one: the language's whole-token float parser (camel/utils/
+    /// number_text.h), not strtod's wider grammar. No hexadecimal form, no `Infinity`, no
+    /// blanks; an optional sign, digits with an optional fraction and exponent, `inf` or `nan`.
+    template <std::floating_point T> static bool readNumber(std::string_view text, T &out) {
+        return camel::utils::parseWholeFloat<T>(text, out) ==
+               camel::utils::NumberTextStatus::Ok;
     }
 
     /// A complex number as `camel` reads one: the two parts are numbers (camel/utils/
-    /// number_text.h splits the text; the parts are read by readNumber). A real text is not a
-    /// complex number.
-    static bool readComplex(const std::string &text, double &real, double &imaginary) {
+    /// number_text.h splits the text; the parts are read by readNumber at the declared width).
+    /// A text that is not written as a complex number is read as a real one, whose imaginary
+    /// part is zero: a literal takes its type from context (design principles 5.1), so `1.5` is
+    /// `1.5+0i`.
+    template <std::floating_point T>
+    static bool readComplex(const std::string &text, T &real, T &imaginary) {
         camel::utils::ComplexTextParts parts;
+        imaginary = T{};
         if (!camel::utils::splitComplexText(text, parts)) {
-            return false;
+            real = T{};
+            return readNumber(text, real);
         }
-        real = 0.0;
+        real = T{};
         return (parts.real.empty() || readNumber(parts.real, real)) &&
                readNumber(parts.imaginary, imaginary);
     }
@@ -200,20 +203,27 @@ class EntryArguments {
             }
             break;
         }
-        case EntryKind::ComplexFloat:
-        case EntryKind::ComplexDouble: {
-            double real      = 0.0;
-            double imaginary = 0.0;
-            if (!readComplex(text, real, imaginary)) {
+        case EntryKind::C64:
+        case EntryKind::C128: {
+            bool readable = false;
+            if (parameters_[index].kind == EntryKind::C64) {
+                float real      = 0.0f;
+                float imaginary = 0.0f;
+                readable         = readComplex(text, real, imaginary);
+                value.complexF   = {real, imaginary};
+            } else {
+                double real      = 0.0;
+                double imaginary = 0.0;
+                readable         = readComplex(text, real, imaginary);
+                value.complexD   = {real, imaginary};
+            }
+            if (!readable) {
                 fault(
                     invalid,
                     {name,
-                     "'" + text + "' is not a complex number (write 1+2i, -2i or 0.5-0.25i)"});
-            }
-            if (parameters_[index].kind == EntryKind::ComplexFloat) {
-                value.complexF = {static_cast<float>(real), static_cast<float>(imaginary)};
-            } else {
-                value.complexD = {real, imaginary};
+                     "'" + text +
+                         "' is not a complex number (write 1+2i, -2i, 0.5-0.25i or a real "
+                         "number such as 1.5)"});
             }
             break;
         }

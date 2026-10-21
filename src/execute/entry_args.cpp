@@ -42,7 +42,7 @@
 #include "camel/utils/utf8.h"
 
 #include <charconv>
-#include <cstdlib>
+#include <concepts>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -158,14 +158,8 @@ bool parseInt(const std::string &text, int64_t &out) {
     return result.ec == std::errc() && result.ptr == last && first != last;
 }
 
-bool parseFloat(std::string_view text, double &out) {
-    if (text.empty()) {
-        return false;
-    }
-    const std::string copy(text);
-    char *end = nullptr;
-    out       = std::strtod(copy.c_str(), &end);
-    return end == copy.c_str() + copy.size();
+template <std::floating_point T> bool parseFloat(std::string_view text, T &out) {
+    return camel::utils::parseWholeFloat<T>(text, out) == camel::utils::NumberTextStatus::Ok;
 }
 
 Loaded loadValue(const std::string &text, Type *declared, const std::string &what);
@@ -248,21 +242,40 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
     case TypeCode::Complex128: {
         // The text of a complex number (language reference 2.5.3): a real part, the sign of the
         // imaginary part and the imaginary part (`1+2i`, `0.5-0.25i`), or only the imaginary
-        // part with its sign (`-2i`). Each part is read by the same rule as a float parameter,
-        // so the parts of a complex value and a real value are read the same way. A real text
-        // is not a complex one: it has no imaginary part.
+        // part with its sign (`-2i`). A text that is not written as a complex number but is a
+        // number is its real part with an imaginary part of zero: a literal takes its type from
+        // context (design principles 5.1), so `1.5` is `1.5+0i`, as `let z: c128 = 1.5` takes
+        // it. Each part is read by the language's whole-token float parser at the declared width
+        // (number_text.h), the same rule a float parameter follows, so the parts of a complex
+        // value and a real value are read the same way.
         camel::utils::ComplexTextParts parts;
-        double real      = 0.0;
-        double imaginary = 0.0;
-        if (!camel::utils::splitComplexText(text, parts) ||
-            (!parts.real.empty() && !parseFloat(parts.real, real)) ||
-            !parseFloat(parts.imaginary, imaginary)) {
+        const bool complexText = camel::utils::splitComplexText(text, parts);
+        const bool single      = declared->code() == TypeCode::Complex64;
+        float realF            = 0.0f;
+        float imaginaryF       = 0.0f;
+        double realD           = 0.0;
+        double imaginaryD      = 0.0;
+        const bool readable =
+            single
+                ? (complexText ? ((parts.real.empty() || parseFloat(parts.real, realF)) &&
+                                  parseFloat(parts.imaginary, imaginaryF))
+                               : parseFloat(text, realF))
+                : (complexText ? ((parts.real.empty() || parseFloat(parts.real, realD)) &&
+                                  parseFloat(parts.imaginary, imaginaryD))
+                               : parseFloat(text, realD));
+        if (!readable) {
             refuse(
-                std::format("'{}' is not a complex number (write 1+2i, -2i or 0.5-0.25i)", text));
+                std::format(
+                    "'{}' is not a complex number (write 1+2i, -2i, 0.5-0.25i or a real number "
+                    "such as 1.5)",
+                    text));
         }
         return rooted(
-            rtdata::toSlot<rtdata::Complex *>(
-                rtdata::Complex::create(real, imaginary, declared->code(), mm::autoSpace())),
+            rtdata::toSlot<rtdata::Complex *>(rtdata::Complex::create(
+                single ? static_cast<double>(realF) : realD,
+                single ? static_cast<double>(imaginaryF) : imaginaryD,
+                declared->code(),
+                mm::autoSpace())),
             declared);
     }
     case TypeCode::Bool: {
