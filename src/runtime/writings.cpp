@@ -25,6 +25,10 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <unordered_map>
@@ -448,9 +452,11 @@ bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms,
     const auto *ha = draft_.header(a);
     const auto *hb = draft_.header(b);
     if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
-        draft_.nodeRegion(a) != draft_.nodeRegion(b)) {
+        draft_.nodeRegion(a) != draft_.nodeRegion(b) || ha->permissions != hb->permissions ||
+        (perms & ~ha->permissions) != 0) {
         throw std::logic_error(
-            "Two writings of a value have the same type and are in the same region.");
+            "Two writings of a value have the same type, region and permissions, and the "
+            "permissions the equivalence needs.");
     }
     const bool changed = store_.merge(a, b, perms, rule, 0, this);
     rebuild();
@@ -480,7 +486,13 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
         }
     }
     GraphDraft::WritingScope scope(draft_);
-    const gc_node_ref_t node = draft_.addNode(init);
+    // A node that computes a value into the frame gets a slot of its own.
+    DraftNodeInit made = init;
+    if (made.dataIndex == 0 && made.dataType != nullptr && made.kind != GCNodeKind::Data &&
+        made.kind != GCNodeKind::Port) {
+        made.dataIndex = draft_.allocateRuntimeSlot(made.dataType);
+    }
+    const gc_node_ref_t node = draft_.addNode(made);
     draft_.setNormInputs(node, norm);
     draft_.setWithInputs(node, with);
     if (key.has_value()) {
@@ -495,6 +507,227 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
         ix.keyOf[node] = std::move(*key);
     }
     return node;
+}
+
+namespace {
+
+std::mutex &costModelsMutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::map<std::string, std::shared_ptr<const CostModel>> &costModels() {
+    static std::map<std::string, std::shared_ptr<const CostModel>> models;
+    return models;
+}
+
+class NodeCountModel : public CostModel {
+  public:
+    double nodeCost(const CostContext &, gc_node_ref_t) const override { return 1.0; }
+};
+
+class WeightedModel : public CostModel {
+  public:
+    double nodeCost(const CostContext &context, gc_node_ref_t node) const override {
+        const GraphDraft &draft = context.draft;
+        const auto *h           = draft.header(node);
+        switch (h->kind) {
+        case GCNodeKind::Data:
+        case GCNodeKind::Port:
+            return 0.1;
+        case GCNodeKind::Cast:
+            return 0.5;
+        case GCNodeKind::Oper: {
+            const std::string_view uri =
+                reinterpret_cast<const GCOperBody *>(draft.payloadOf(node).data())->uri();
+            auto has = [&](std::string_view name) { return uri.find(name) != uri.npos; };
+            if (has("div") || has("mod")) {
+                return 8.0;
+            }
+            if (has("mul")) {
+                return 3.0;
+            }
+            if (has("add") || has("sub") || has("neg")) {
+                return 1.0;
+            }
+            return 2.0;
+        }
+        default:
+            return 2.0;
+        }
+    }
+};
+
+void ensureBuiltinCostModels() {
+    static const bool once = [] {
+        costModels().emplace("nodes", std::make_shared<NodeCountModel>());
+        costModels().emplace("weighted", std::make_shared<WeightedModel>());
+        return true;
+    }();
+    (void)once;
+}
+
+} // namespace
+
+void registerCostModel(std::string name, std::shared_ptr<const CostModel> model) {
+    std::lock_guard lock(costModelsMutex());
+    ensureBuiltinCostModels();
+    costModels()[std::move(name)] = std::move(model);
+}
+
+std::shared_ptr<const CostModel> findCostModel(const std::string &name) {
+    std::lock_guard lock(costModelsMutex());
+    ensureBuiltinCostModels();
+    auto found = costModels().find(name);
+    return found == costModels().end() ? nullptr : found->second;
+}
+
+ExtractStats DraftWritings::extract(const CostModel &model, camel::core::context::Context *context) {
+    GraphDraft::WritingScope scope(draft_);
+    rebuild();
+    ExtractStats stats;
+    const size_t slots = draft_.nodeSlotCount();
+    const CostContext costContext{draft_, context};
+    constexpr double kInfinite = std::numeric_limits<double>::infinity();
+
+    // The value each node is a writing of, and how many writings the value has.
+    std::vector<gc_node_ref_t> classOf(slots, kInvalidNodeRef);
+    std::vector<uint8_t> multi(slots, 0);
+    std::vector<double> own(slots, 0.0);
+    for (gc_node_ref_t node = 0; node < slots; ++node) {
+        if (!draft_.alive(node)) {
+            continue;
+        }
+        const uint8_t context = contextOf(node);
+        classOf[node]         = store_.canon(context, node);
+        multi[node]           = store_.members(context, node).empty() ? 0 : 1;
+        own[node]             = model.nodeCost(costContext, node);
+        if (!(own[node] > 0.0)) {
+            throw std::logic_error("A cost model gives every node a positive cost.");
+        }
+    }
+    for (gc_node_ref_t node = 0; node < slots; ++node) {
+        if (draft_.alive(node) && multi[node] && classOf[node] == node) {
+            ++stats.classes;
+        }
+    }
+
+    // The cheapest way to compute each value: the cost of a writing is its own plus that of the
+    // values it reads. Repeated until nothing gets cheaper; the first writing (smallest node)
+    // wins a tie.
+    std::vector<double> best(slots, kInfinite);
+    std::vector<gc_node_ref_t> chosen(slots, kInvalidNodeRef);
+    const auto inputsOf = [&](gc_node_ref_t node) {
+        std::vector<gc_node_ref_t> all;
+        for (auto part :
+             {draft_.normInputsOf(node), draft_.withInputsOf(node), draft_.ctrlInputsOf(node)}) {
+            all.insert(all.end(), part.begin(), part.end());
+        }
+        return all;
+    };
+    bool changed = true;
+    for (size_t round = 0; changed && round <= slots; ++round) {
+        changed = false;
+        for (gc_node_ref_t node = 0; node < slots; ++node) {
+            if (!draft_.alive(node)) {
+                continue;
+            }
+            double total = own[node];
+            bool known   = true;
+            for (gc_node_ref_t input : inputsOf(node)) {
+                const double cost = best[classOf[input]];
+                if (cost == kInfinite) {
+                    known = false;
+                    break;
+                }
+                total += cost;
+            }
+            if (known && total < best[classOf[node]]) {
+                best[classOf[node]]   = total;
+                chosen[classOf[node]] = node;
+                changed               = true;
+            }
+        }
+    }
+
+    // What stays: every node that is the only writing of its value, what the graph names (its
+    // ports, entry, exit, result), and the writing chosen for every value that is read.
+    std::vector<uint8_t> selected(slots, 0);
+    std::vector<gc_node_ref_t> work;
+    const auto select = [&](gc_node_ref_t node) {
+        if (node != kInvalidNodeRef && draft_.alive(node) && !selected[node]) {
+            selected[node] = 1;
+            work.push_back(node);
+        }
+    };
+    for (gc_node_ref_t node = 0; node < slots; ++node) {
+        if (draft_.alive(node) && !multi[node]) {
+            select(node);
+        }
+    }
+    for (auto list : {draft_.normPorts(), draft_.withPorts(), draft_.closureNodes()}) {
+        for (gc_node_ref_t node : list) {
+            select(node);
+        }
+    }
+    for (gc_node_ref_t node :
+         {draft_.entryNode(), draft_.exitNode(), draft_.outputNode(), draft_.returnNode()}) {
+        select(node);
+    }
+    for (size_t at = 0; at < work.size(); ++at) {
+        for (gc_node_ref_t input : inputsOf(work[at])) {
+            const gc_node_ref_t pick = chosen[classOf[input]];
+            if (pick == kInvalidNodeRef) {
+                throw std::logic_error(
+                    "A value has no writing that does not read itself.");
+            }
+            select(pick);
+        }
+        if (!multi[work[at]] && chosen[classOf[work[at]]] == kInvalidNodeRef) {
+            throw std::logic_error(
+                "A node reads a value that has no writing that does not read itself.");
+        }
+    }
+
+    // The nodes that stay read the writings that stay.
+    for (gc_node_ref_t node = 0; node < slots; ++node) {
+        if (!selected[node]) {
+            continue;
+        }
+        bool rewired = false;
+        const auto pick = [&](std::span<const gc_node_ref_t> inputs) {
+            std::vector<gc_node_ref_t> picked(inputs.begin(), inputs.end());
+            for (gc_node_ref_t &input : picked) {
+                const gc_node_ref_t to = chosen[classOf[input]];
+                if (to != input) {
+                    input   = to;
+                    rewired = true;
+                }
+            }
+            return picked;
+        };
+        const auto norm = pick(draft_.normInputsOf(node));
+        const auto with = pick(draft_.withInputsOf(node));
+        const auto ctrl = pick(draft_.ctrlInputsOf(node));
+        if (rewired) {
+            draft_.setNormInputs(node, norm);
+            draft_.setWithInputs(node, with);
+            draft_.setCtrlInputs(node, ctrl);
+            ++stats.rewired;
+        }
+    }
+    for (gc_node_ref_t node = 0; node < slots; ++node) {
+        if (draft_.alive(node) && !selected[node]) {
+            draft_.eraseNode(node);
+            ++stats.erased;
+        }
+    }
+    draft_.setWritings({});
+    store_ = WritingStore();
+    index_ = std::make_unique<Index>();
+    pending_.clear();
+    queued_.clear();
+    return stats;
 }
 
 gc_node_ref_t DraftWritings::find(gc_node_ref_t node) {

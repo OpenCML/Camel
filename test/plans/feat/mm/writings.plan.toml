@@ -85,3 +85,16 @@ expect_stdout_contains = ["WRITINGS chunks_shared ok", "WRITINGS info chunks_sha
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "writings.extract"
+desc = "Extraction picks one writing for every value by cost and leaves the executable state: `a + 1` is also written `1 + a`, the cost model likes the second, and the users of the value read it; the program, run after the pass, prints what it printed. A value that is one of its own writings (`a == a * 1`) takes the one that does not read itself, whatever the model likes."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS commuted_is_new_writing ok", "WRITINGS extract_took_the_liked_writing ok", "WRITINGS extract_rewired_users ok", "WRITINGS extract_is_executable ok", "WRITINGS extracted_graph_runs ok", "WRITINGS one_found ok", "WRITINGS self_reading_writing_excluded ok", "\n15"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

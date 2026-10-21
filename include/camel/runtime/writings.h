@@ -49,6 +49,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace camel::core::context {
+class Context;
+}
+
 namespace camel::runtime {
 
 /// Told which nodes change class when two classes join (the nodes of the smaller class).
@@ -116,6 +120,35 @@ class WritingStore {
 };
 
 
+/// What a cost model may look at: the draft, and the context for the facts about the program
+/// (a back end's model reads the shapes there).
+struct CostContext {
+    const GraphDraft &draft;
+    camel::core::context::Context *context = nullptr;
+};
+
+/// What it costs to compute a value one way (graph store design 3.6). The cost of a writing is
+/// its own cost plus the costs of the values it reads, so the writing chosen for a value never
+/// reads that value itself. Replaceable: the target decides (Tiles registers one for the GPU).
+class CostModel {
+  public:
+    virtual ~CostModel() = default;
+    /// The cost of computing `node` from the values it reads; positive.
+    virtual double nodeCost(const CostContext &context, gc_node_ref_t node) const = 0;
+};
+
+/// The models by name: "nodes" (every node costs one), "weighted" (a division costs more than a
+/// product, which costs more than a sum; constants and parameters are nearly free), and what a
+/// module registers.
+void registerCostModel(std::string name, std::shared_ptr<const CostModel> model);
+std::shared_ptr<const CostModel> findCostModel(const std::string &name);
+
+struct ExtractStats {
+    size_t classes  = 0; // values with more than one writing
+    size_t rewired  = 0; // nodes whose inputs were changed to other writings
+    size_t erased   = 0; // writings not chosen
+};
+
 /// The writings of the values of a draft: the classes (WritingStore) and the congruence closure
 /// over them. Nodes that compute the same thing from the same classes are one value, so
 /// merging two values merges whatever is built from them; nothing is rewritten, no input of a
@@ -157,6 +190,11 @@ class DraftWritings : private WritingObserver {
     gc_node_ref_t find(gc_node_ref_t node);
     /// The writings of the value `node` is one of, ascending (empty: the only one).
     std::span<const gc_node_ref_t> writingsOf(gc_node_ref_t node);
+    /// Picks one writing for every value, by the cost model, and leaves the draft in the
+    /// executable state: the inputs of the nodes that stay read the chosen writings, the other
+    /// writings are erased, the equivalences are dropped. Throws when a value that is read has
+    /// no writing that does not read itself.
+    ExtractStats extract(const CostModel &model, camel::core::context::Context *context = nullptr);
     /// How many merges congruence closure made.
     size_t congruentMerges() const { return congruentMerges_; }
 

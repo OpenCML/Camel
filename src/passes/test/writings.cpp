@@ -293,6 +293,121 @@ void roundtrip(Report &r, const camel::core::context::context_ptr_t &ctx, const 
     r.check("table_is_content", grown->graph(id) != after);
 }
 
+/// A model that likes one node and dislikes the other operators.
+class LikesNode : public CostModel {
+  public:
+    LikesNode(gc_node_ref_t liked, double operCost, double portCost)
+        : liked_(liked), operCost_(operCost), portCost_(portCost) {}
+    double nodeCost(const CostContext &context, gc_node_ref_t node) const override {
+        if (node == liked_) {
+            return 1.0;
+        }
+        const auto kind = context.draft.header(node)->kind;
+        return kind == GCNodeKind::Oper ? operCost_ : kind == GCNodeKind::Port ? portCost_ : 1.0;
+    }
+
+  private:
+    gc_node_ref_t liked_;
+    double operCost_;
+    double portCost_;
+};
+
+gc_node_ref_t firstOperWith(const GraphDraft &draft, std::string_view part, size_t skip = 0) {
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (draft.alive(id) && draft.header(id)->kind == GCNodeKind::Oper) {
+            const auto uri =
+                reinterpret_cast<const GCOperBody *>(draft.payloadOf(id).data())->uri();
+            if (uri.find(part) != uri.npos && skip-- == 0) {
+                return id;
+            }
+        }
+    }
+    return kInvalidNodeRef;
+}
+
+/// `a + 1` written as `1 + a` as well: the value takes the writing the model likes; a value
+/// that is one of its own writings (`a * 1`) takes the one that does not read itself. Returns
+/// the program with the first extraction committed.
+const Program *extraction(
+    Report &r, const camel::core::context::context_ptr_t &ctx, const Program &program) {
+    const GCGraph *graph = graphNamed(program, "f");
+    if (graph == nullptr) {
+        return &program;
+    }
+    const GraphId id = graph->id();
+    const Program *extracted = &program;
+    {
+        RuntimeGraphDraftSession session(ctx, &program);
+        GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+        DraftWritings writings(draft);
+        writings.build();
+        const gc_node_ref_t add = firstOperWith(draft, "add");
+        const auto inputs       = std::vector<gc_node_ref_t>(
+            draft.normInputsOf(add).begin(), draft.normInputsOf(add).end());
+        const auto payload = std::vector<std::byte>(
+            draft.payloadOf(add).begin(), draft.payloadOf(add).end());
+        DraftNodeInit init;
+        init.kind        = GCNodeKind::Oper;
+        init.dataType    = draft.header(add)->dataType;
+        init.permissions = draft.nodePermissions(add);
+        init.region      = draft.nodeRegion(add);
+        init.payload     = payload;
+        const gc_node_ref_t commuted =
+            writings.lookupOrAdd(init, std::array{inputs[1], inputs[0]});
+        writings.assertEqual(add, commuted);
+        r.check("commuted_is_new_writing", commuted != add && writings.find(commuted) == writings.find(add));
+        const LikesNode model(commuted, 10.0, 1.0);
+        const ExtractStats stats = writings.extract(model, ctx.get());
+        r.os << "WRITINGS info extract classes=" << stats.classes << " rewired=" << stats.rewired
+             << " erased=" << stats.erased << "\n";
+        r.check("extract_took_the_liked_writing", stats.classes >= 1 && stats.erased >= 2);
+        r.check("extract_rewired_users", stats.rewired >= 2);
+        r.check("extract_is_executable", draft.writings().empty());
+        extracted = session.commit();
+        r.check(
+            "extracted_graph_runs",
+            extracted->graph(id) != nullptr && extracted->graph(id)->executable());
+    }
+    {
+        // A value that is one of its own writings: a == a * 1.
+        RuntimeGraphDraftSession session(ctx, extracted);
+        GraphDraft &draft = session.edit(const_cast<GCGraph *>(extracted->graph(id)));
+        DraftWritings writings(draft);
+        writings.build();
+        const gc_node_ref_t mul = firstOperWith(draft, "mul");
+        const auto payload = std::vector<std::byte>(
+            draft.payloadOf(mul).begin(), draft.payloadOf(mul).end());
+        const auto ports = portsOf(draft);
+        gc_node_ref_t one = kInvalidNodeRef;
+        for (gc_node_ref_t node = 0; node < draft.nodeSlotCount(); ++node) {
+            if (draft.alive(node) && draft.header(node)->kind == GCNodeKind::Data &&
+                draft.header(node)->dataType == draft.header(ports[0])->dataType) {
+                one = node;
+            }
+        }
+        r.check("one_found", one != kInvalidNodeRef);
+        DraftNodeInit init;
+        init.kind        = GCNodeKind::Oper;
+        init.dataType    = draft.header(ports[0])->dataType;
+        init.permissions = draft.nodePermissions(mul);
+        init.region      = draft.nodeRegion(mul);
+        init.payload     = payload;
+        const gc_node_ref_t times = writings.lookupOrAdd(init, std::array{ports[0], one});
+        writings.assertEqual(ports[0], times);
+        const LikesNode perverse(times, 1.0, 100.0);
+        bool threw = false;
+        ExtractStats stats;
+        try {
+            stats = writings.extract(perverse, ctx.get());
+        } catch (const std::logic_error &) {
+            threw = true;
+        }
+        r.check("self_reading_writing_excluded", !threw && draft.writings().empty() && stats.erased == 1);
+        (void)session.commit();
+    }
+    return extracted;
+}
+
 /// Two chains of 300 steps: merging their parameters merges every step.
 void chains(Report &r, const Program &program) {
     const GCGraph *graph = graphNamed(program, "chains");
@@ -319,7 +434,8 @@ WritingsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     deep(report);
     congruence(report, *program);
     roundtrip(report, context_, *program);
+    const Program *result = extraction(report, context_, *program);
     chains(report, *program);
     apart(report, *program);
-    return program;
+    return result;
 }
