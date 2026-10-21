@@ -1,0 +1,65 @@
+id = "mm.graph_space"
+order = 373
+tier = "fast"
+tags = ["feat", "mm", "gc", "graph_space"]
+desc = """
+The graph space holds the Programs and graph versions of the context, and the collector of
+run-time values sweeps it: a Program is reached by the function values made in it, a graph by
+the Programs that hold it, and what nothing reaches is freed. 4000 calls of grad build 4000
+gradient Programs (3 graphs each, about 12 MB if all were kept); with the graph space asked to
+collect at 1 MB the high-water mark of the space stays a small multiple of what is alive.
+"""
+
+[[tests]]
+name = "graph_space.grad_in_a_loop"
+desc = "4000 gradients built at run time: the output is right, the collector ran, and the graph space never held more than 6 MB (it held all of them, 12.9 MB, when nothing was freed). Pipeline: std::nvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
+args = ["${case}", "std::nvm"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GRAPH_GC_MB=1"]
+expect_exit = 0
+expect_stdout_contains = ["40000.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+const major = /major=([0-9]+)/.exec(err)
+const peak = /graph_peak_kb=([0-9]+)/.exec(err)
+assert(major !== null && peak !== null, `no statistics in stderr: ${err}`)
+assert(Number(major[1]) >= 1, `the collector never ran: ${major[0]}`)
+assert(Number(peak[1]) < 6000, `the graph space held ${peak[1]} KB`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "graph_space.grad_in_a_loop_fvm"
+desc = "The same 4000 gradients under FastVM: the bytecode of a graph version the collector frees is given back and the next gradient is compiled into it, so the bytecode vector stays at about 11000 entries (all 4000 gradients kept would take more than 140000)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
+args = ["${case}", "std::fvm"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GRAPH_GC_MB=1"]
+expect_exit = 0
+expect_stdout_contains = ["40000.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const err = input.normalized.stderr
+const code = /fvm_code_bytecodes=([0-9]+)/.exec(err)
+assert(code !== null, `no code statistics in stderr: ${err}`)
+assert(Number(code[1]) < 40000, `the bytecode vector held ${code[1]} entries`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "graph_space.function_value_keeps_program"
+desc = "A function value of the heap keeps the Program it is of: a test pass makes a program, a function value of its graph, and the program that replaces it, then collects the graph space between passes; the function value still reads its graph afterwards (a freed Program would be a dangling pointer)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/graph_space_grad.cml"
+args = ["${case}", "test::keepfn", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["KEEPFN alive=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

@@ -587,6 +587,16 @@ class FramePool {
     void traceActiveFrames(
         const camel::core::mm::GenerationalAllocatorWithGC::RefRelocator &relocate) const {
         forEachActiveFrame([&](Frame *frame) {
+            // The graph being run stays: its version may be held by no program any more.
+            if (frame->runtimeGraph_ != nullptr) {
+                relocate(
+                    static_cast<camel::core::rtdata::Object *>(frame->runtimeGraph_),
+                    nullptr,
+                    camel::core::rtdata::RefTraceInfo{
+                        .ownerKind = "Frame",
+                        .slotName  = "graph",
+                    });
+            }
             if (frame->staticArea_ && frame->staticDataLayout()) {
                 frame->staticArea_->updateRefs(relocate, frame->staticDataLayout());
             }

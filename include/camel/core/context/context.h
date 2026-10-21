@@ -197,8 +197,15 @@ class Context : public std::enable_shared_from_this<Context> {
     /// See GCGraphManager::trackDetached / releaseDetached.
     void trackDetachedRuntimeProgram(const camel::runtime::Program *program);
     void releaseDetachedRuntimeGraphs();
-    /// See GCGraphManager::retain.
-    void retainRuntimeGraphs(std::span<camel::runtime::GCGraph *const> graphs);
+    /// See GCGraphManager::settle / rootForRun / enterRun / release.
+    void settleRuntimeGraphs(const camel::runtime::Program *keep = nullptr);
+    /// See GCGraphManager::collect.
+    void collectRuntimeGraphs();
+    void rootProgramForRun(const camel::runtime::Program *program);
+    void unrootProgramForRun(const camel::runtime::Program *program);
+    void enterRun();
+    void leaveRun();
+    void releaseRuntimeGraph(camel::runtime::GCGraph *graph);
     /// The newest program of the context that holds this version of `graph` (see
     /// GCGraphManager::programOf), nullptr when none does.
     const camel::runtime::Program *

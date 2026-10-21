@@ -18,6 +18,7 @@
  */
 
 #include "camel/core/rtdata/func.h"
+#include "camel/core/mm.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
@@ -34,7 +35,25 @@ void Function::rebind(const camel::runtime::Program *program, camel::runtime::Gr
 
 void Function::updateRefs(const rtdata::Object::RefRelocator &relocate, const type::Type *type) {
     (void)type;
-    if (camel::runtime::GCGraph *runtimeGraph = graph()) {
+    // The Program the function was made in lives as long as the function does. A function the
+    // collector reaches after the program was freed (a dead one, not yet swept) names nothing.
+    const bool programLive =
+        program_ != nullptr &&
+        camel::core::mm::graphSpace().isAllocated(const_cast<camel::runtime::Program *>(program_));
+    if (programLive) {
+        relocate(
+            static_cast<rtdata::Object *>(const_cast<camel::runtime::Program *>(program_)),
+            nullptr,
+            rtdata::RefTraceInfo{
+                .owner     = this,
+                .ownerType = type,
+                .slotType  = nullptr,
+                .ownerKind = "Function",
+                .slotName  = "program",
+                .slotIndex = rtdata::RefTraceInfo::npos,
+            });
+    }
+    if (camel::runtime::GCGraph *runtimeGraph = programLive ? graph() : nullptr) {
         // A runtime-created graph (e.g. an autodiff gradient graph built while the program
         // runs) is no graph-carrier root: it is only reachable through this Function. Trace it
         // so its static constants live exactly as long as the Function does. Program graphs
