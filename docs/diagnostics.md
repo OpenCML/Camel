@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-193 diagnostics: 176 errors, 17 warnings.
+194 diagnostics: 177 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
