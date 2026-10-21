@@ -271,7 +271,15 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     if (compiling_) {
         return ProgramStatus::Failed;
     }
-    if (!compile(CompileStage::GCT)) {
+    // A module that does not parse throws its diagnostic out of compile(); the diagnostic is
+    // kept with the module, and the caller turns a failed program into the reason a pass is
+    // not available. A pass module the user is still editing is a problem of that pass
+    // specification, not an exception out of the pipeline, so the throw stops here.
+    try {
+        if (!compile(CompileStage::GCT)) {
+            return ProgramStatus::Failed;
+        }
+    } catch (const Diagnostic &) {
         return ProgramStatus::Failed;
     }
     struct Compiling {
