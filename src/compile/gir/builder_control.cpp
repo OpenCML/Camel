@@ -1035,7 +1035,16 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     const bool onNull  = kind == Kind::NullThen;
     const char *symbol = onNull ? "??" : kind == Kind::ErrorThen ? "!!" : "?->";
 
-    node_handle_t subject = valueNodeOf(visit(gct->at(0)));
+    // The left side is a `T?` (`T!`) as the name it is, and the right side is a `T` or the
+    // same `T?` (design principles 3.8): neither is in the position the whole expression
+    // stands at, so neither takes that position's type. The position's type applies to the
+    // branch's value once, where the branch stands (`checkValue`); leaking it down here gave
+    // the subject's arms a `float?` and the right side the form of the whole result (H119).
+    node_handle_t subject = nullptr;
+    {
+        ExpectedValueScope subjectScope(expectedValueType_, nullptr);
+        subject = valueNodeOf(visit(gct->at(0)));
+    }
     if (onNull && asTagged(valueTypeOf(nodeTypeOf(subject))) == nullptr &&
         isNarrowedName(gct->at(0))) {
         // `x ?? d` where an `if` around it already narrowed `x` to a `T` (design principles
@@ -1065,8 +1074,14 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
 
     if (kind != Kind::ErrorPass) {
         // Arm 0 is the right-hand side, a subgraph of its own: it is entered, and so
-        // evaluated, only when the tag selects it. Arm 1 takes the value out.
-        arms[0] = buildArm(exec);
+        // evaluated, only when the tag selects it. Arm 1 takes the value out. The right
+        // side's position is the payload type: a plain `T` is what it is, and a `T?` is what
+        // the chained form hands on (a value of another form is left as it is, and the test
+        // below names it).
+        {
+            ExpectedValueScope fallbackScope(expectedValueType_, payload);
+            arms[0] = buildArm(exec);
+        }
         // Design principles 3.8: the right-hand side is a `T`, and the result is a `T`; or
         // it is itself a `T?` (`T!` for `!!`), and the result is that: `a ?? b ?? 9` tries
         // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
@@ -1388,6 +1403,14 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
         return nullptr; // an `if` that tests no name against null
     }
 
+    // `&&` and `||` are branches (design principles 4.2), but their operands are not in the
+    // position the whole expression stands at: the condition and both sides are `bool`
+    // whatever that position wants. The position's type applies to the branch's value once,
+    // where the branch stands (`checkValue`); leaking it down here made a `bool?` operand out
+    // of the literal `false` in `let o: bool? = true || false` (H119).
+    Type *const operandType = logical ? Type::Bool() : expectedValueType_;
+    ExpectedValueScope operandScope(expectedValueType_, operandType);
+
     // Narrowing (design principles 3.8). In the arm of `if x != null then A else B`
     // that excludes null, `x` is a `T`: the arm starts by taking the value out of `x`, and
     // the name `x` stands for that value inside the arm, as `v` does in
@@ -1564,11 +1587,22 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         LEAVE("BRCH");
         return node;
     }
-    const auto &res = visit(gct->at(0));
-    ASSERT(
-        res.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of BRCH node.");
-    node_handle_t condNode = any_cast<node_handle_t>(res);
+    // The condition of an `if` is a `bool` (design principles 3.7), and the value a `match`
+    // selects on is of its own type: neither is in the position the branch stands at, so the
+    // position's type must not leak into what is built there (H119). The position applies to
+    // the branch's value once, where the branch stands.
+    const bool ifBranch = gct->size() > 1 && gct->at(1)->caseType() == GCT::CaseType::True;
+    node_handle_t condNode{};
+    if (ifBranch) {
+        condNode = visitInPosition(gct->at(0), Type::Bool());
+    } else {
+        ExpectedValueScope scrutineeScope(expectedValueType_, nullptr);
+        const auto &res = visit(gct->at(0));
+        ASSERT(
+            res.type() == typeid(node_handle_t),
+            "Unexpected result type from Enter the child of BRCH node.");
+        condNode = any_cast<node_handle_t>(res);
+    }
     node_handle_t node{};
     if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr && isNarrowedName(gct->at(0))) {
         // `match x { case null => ...  case v => ... }` where an `if` around it already

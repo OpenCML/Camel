@@ -2489,12 +2489,15 @@ The {1} side of '{0}' has type '{2}', not 'bool'.
 '&&' and '||' are branches on a 'bool': 'a && b' is 'if a then b else false', 'a || b' is 'if a then true else b'. The right side is evaluated only when the left side does not decide, both sides are 'bool', and neither operator can be overloaded. For logic that evaluates both sides (element-wise logic on tensors, an operator of a type of your own) use '&' and '|'.
 ```
 
-**Example** (`test/cases/consistency/logical/left_not_bool.cml`, run as `camel -E short test/cases/consistency/logical/left_not_bool.cml`)
+**Example** (`test/cases/compile/tagged/err_optional_operand.cml`, run as `camel test/cases/compile/tagged/err_optional_operand.cml`)
 
 ```camel
+module err_optional_operand
+
 func main(): int sync {
-    let n = 3
-    println(n && true)
+    let o: bool? = true
+    let p = o || false
+    println(p)
     return 0
 }
 ```
