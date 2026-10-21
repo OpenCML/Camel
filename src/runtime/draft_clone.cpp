@@ -32,6 +32,7 @@
 #include "camel/runtime/draft_clone.h"
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <cstring>
 #include <unordered_map>
 
@@ -203,9 +204,62 @@ camel::core::type::Type *resolveDraftNodeDataType(const GraphDraft &draft, gc_no
     return nullptr;
 }
 
+const GCRegion &regionOf(const GraphDraft &draft, uint32_t id) { return draft.region(id); }
+const GCRegion &regionOf(const GCGraph &graph, uint32_t id) { return *graph.region(id); }
+std::span<const gc_node_ref_t> portsOf(const GraphDraft &draft, uint32_t id) {
+    return draft.regionPortsOf(id);
+}
+std::span<const gc_node_ref_t> portsOf(const GCGraph &graph, uint32_t id) {
+    return graph.regionPorts(id);
+}
+
+/// Puts the cloned nodes in regions of `owner`: those of the source in `intoRegion`, those of its
+/// regions in regions made again as children of it. `Source` is a GCGraph or a GraphDraft.
+template <typename Source>
+void adoptRegions(
+    GraphDraft &owner, const Source &source, const std::vector<gc_node_ref_t> &sourceToCloned,
+    uint32_t intoRegion) {
+    const size_t count = source.regionCount();
+    if (count == 0 && intoRegion == 0) {
+        return;
+    }
+    const auto mapNode = [&](gc_node_ref_t ref) {
+        return ref < sourceToCloned.size() ? sourceToCloned[ref] : kInvalidNodeRef;
+    };
+    std::vector<uint32_t> regionMap(std::max<size_t>(count, 1), intoRegion);
+    for (uint32_t r = 1; r < count; ++r) {
+        const GCRegion &from = regionOf(source, r);
+        if (from.kind == GCRegionKind::Dead) {
+            continue;
+        }
+        const uint32_t made = owner.addRegion(from.kind, regionMap[from.parent], mapNode(from.owner), from.index);
+        regionMap[r]        = made;
+        owner.setRegionResult(made, mapNode(from.result));
+        owner.setRegionOrigin(made, from.origin);
+        owner.setRegionAttrs(made, from.attrs);
+        owner.setRegionInline(made, from.inlineOf, kInvalidNodeRef);
+        std::vector<gc_node_ref_t> ports;
+        for (gc_node_ref_t port : portsOf(source, r)) {
+            ports.push_back(mapNode(port));
+        }
+        owner.setRegionPorts(made, ports);
+    }
+    for (gc_node_ref_t ref = 0; ref < sourceToCloned.size(); ++ref) {
+        const gc_node_ref_t cloned = sourceToCloned[ref];
+        if (cloned == kInvalidNodeRef) {
+            continue;
+        }
+        const uint32_t target = regionMap[source.nodeRegion(ref)];
+        if (target != 0) {
+            owner.setNodeRegion(cloned, target);
+        }
+    }
+}
+
 } // namespace
 
-DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGraph *sourceGraph) {
+DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
+    GraphDraft &owner, const GCGraph *sourceGraph, uint32_t intoRegion) {
     ASSERT(sourceGraph != nullptr, "Runtime draft clone requires a non-null source graph.");
     CAMEL_LOG_INFO_S(
         "DraftClone",
@@ -389,10 +443,12 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGrap
     result.returnNode = remapNodeRef(sourceGraph->returnNodeRef(), result.sourceToCloned);
     result.returnKind = sourceGraph->returnKind();
     CAMEL_LOG_INFO_S("DraftClone", "Clone finished for graph '{}'.", sourceGraph->name());
+    adoptRegions(owner, *sourceGraph, result.sourceToCloned, intoRegion);
     return result;
 }
 
-DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDraft &sourceDraft) {
+DraftGraphCloneResult cloneDraftGraphIntoDraft(
+    GraphDraft &owner, const GraphDraft &sourceDraft, uint32_t intoRegion) {
     for (GraphId graph : sourceDraft.dependencies()) {
         owner.addDependency(graph);
     }
@@ -515,6 +571,7 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDra
     result.outputNode = remapNodeRef(sourceDraft.outputNode(), result.sourceToCloned);
     result.returnNode = remapNodeRef(sourceDraft.returnNode(), result.sourceToCloned);
     result.returnKind = sourceDraft.returnKind();
+    adoptRegions(owner, sourceDraft, result.sourceToCloned, intoRegion);
     return result;
 }
 

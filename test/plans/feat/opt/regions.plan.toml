@@ -1,0 +1,79 @@
+id = "opt.regions"
+order = 369
+tier = "fast"
+tags = ["feat", "opt", "regions"]
+desc = """
+Regions (docs/design/graph-store 3.3): a column of the region a node is in and a table of the
+regions of a graph, kept by decode, encode, commit and the chunks. `test::regions` puts nodes of
+a program's largest graph in two nested regions and commits; the new version has them, a decode
+and a second commit with no change in between give the same version, and the program runs as
+before (no back end reads regions yet).
+"""
+
+[[tests]]
+name = "regions.survive_commit"
+desc = "Two nested Block regions with a result and a port survive a commit and a recommit; the program still runs."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_output_contains = ["REGIONS count=3 in_inner=2 in_outer=1 result=ok ports=1 within=1", "REGIONS recommit same=1", "tensor("]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.survive_optimization"
+desc = "The regions are kept by the rewrites that follow: std::opt after test::regions leaves the program's result unchanged."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::regions", "std::opt", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_output_contains = ["REGIONS count=3", "tensor("]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.inline_origin"
+desc = "std::opt::inline puts the body of each function it inlines in a region of kind inline, inside the region of the call, which names the function it came from (std::jgir shows them); the program still runs."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "std::jgir"]
+expect_exit = 0
+expect_output_contains = ["\"regions\"", "\"kind\": \"inline\"", "\"inlined\": \"forward\"", "\"region\": \"g1r1\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.inline_runs"
+desc = "A program inlined by std::opt::inline, with its inline regions, runs on every back end as before."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_contains = ["tensor("]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.dot_clusters"
+desc = "std::gir_regions and std::rgir_regions draw the regions of a graph as clusters inside the cluster of its function; std::gir and std::rgir draw the same graph without them."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "std::gir_regions"]
+expect_exit = 0
+expect_output_contains = ["label=\"inlined forward\""]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.dot_default_unchanged"
+desc = "Without the regions option the dump has no region cluster."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "std::opt::inline", "std::rgir"]
+expect_exit = 0
+expect_output_not_contains = ["inlined forward"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

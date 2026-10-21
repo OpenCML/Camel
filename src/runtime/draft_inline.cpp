@@ -1897,9 +1897,17 @@ DraftInlineResult inlineCallableInDraft(
     ctrlPreds                  = controlFrontier(draft, ctrlPreds);
     const bool hasExternalCtrl = !ctrlPreds.empty();
 
-    DraftGraphCloneResult cloned = calleeDraftView
-                                       ? cloneDraftGraphIntoDraft(draft, *calleeDraftView)
-                                       : cloneRuntimeGraphIntoDraft(draft, calleeGraph);
+    // The body goes in a region of its own, inside the region of the call: where the code
+    // came from stays recorded after the call is gone.
+    const uint32_t inlineRegion =
+        draft.addInlineRegion(draft.nodeRegion(funcNodeId), calleeGraph->id(), kInvalidNodeRef);
+    draft.setRegionOrigin(inlineRegion, static_cast<uint32_t>(draft.nodeOrigin(funcNodeId)));
+    DraftGraphCloneResult cloned =
+        calleeDraftView ? cloneDraftGraphIntoDraft(draft, *calleeDraftView, inlineRegion)
+                        : cloneRuntimeGraphIntoDraft(draft, calleeGraph, inlineRegion);
+    if (cloned.returnNode != kInvalidNodeRef) {
+        draft.setRegionResult(inlineRegion, cloned.returnNode);
+    }
     CAMEL_LOG_INFO_S(
         "DraftInline",
         "Inline splice node {} cloned {} nodes from callee.",
