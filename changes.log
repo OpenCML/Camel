@@ -1,4 +1,10 @@
 [0.2.21]
+Changes:
+- 规则引擎：rule 声明（解析、格式化、编译成函数）、RuleSource 与 compileRule、rewrite/saturate/extract/check，以及 rules 模块的标准整数与浮点规则库（26 条精确规则）和 rules::simplify/rules::saturate_all。
+- 遍可以用 Camel 写：遍模块按程序编译（模块级值存在）、可 import Camel 库、参数可以来自 with；新增 PassNeedsExtraction 与 std::opt::extract。
+- 图 API 起步：句柄类型与 NodeKind、Program 的图遍历、is_written_slot、图的写作与等价类、按代价抽取。
+- 分支臂成为 Arm region：前端直接建、各后端与调试器读，锚点删除；导出表改为从 libcamel 的导入对象生成，不再手写。
+- 名义结构体：类型是它的声明而不是字段，C++ 翻译、ONNX 导出与 LSP 随之更新。
 
 [0.2.20]
 Changes:
