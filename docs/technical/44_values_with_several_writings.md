@@ -42,9 +42,12 @@ Pure nodes with the same key (kind, own permissions, region, type, operator or c
 classes of the inputs) are one value. Merging two values repairs the users of the smaller class
 until nothing merges (egg's `rebuild`). Only a pure function of its inputs takes part: constants
 (bit for bit, so `0.0` is not `-0.0`; not GC-traced), conversions, accesses, pure operators; not
-a node with a control input, not one written in place, not one reading a variable. Every other
-node is alone in its class. (A pure node with control inputs does not take part in congruence,
-but a rule can be rooted at it: section 4.) Nodes of different permissions or regions are never merged.
+a node written in place, not one reading a variable. A control input takes no part in this
+question: it orders the node, it does not make the value different (design principles 3.3, 3.4;
+H95), so a pure node that waits for something takes part like any other writing of its value and
+may be an inner node of a rule's left side (section 4). Extraction gives the writing that stays
+the control inputs of every writing of its value (section 5). Every other node is alone in its
+class. Nodes of different permissions or regions are never merged.
 
 While a draft has equivalences, every member that changes or removes a node refuses
 (`std::logic_error`) unless it runs inside `GraphDraft::WritingScope`, which the engine opens.
@@ -64,18 +67,25 @@ operators, computed constants). `DraftWritings::saturate(rules, Budget)`:
    used up. There is no time budget: the same rules, graph and budget give the same writings.
 
 **Control inputs.** A pure node that waits for something (a `sync` function's sum waits for the
-`println` before it) can be the root of a rule, never an inner node of its left side. The
-writing the rule adds has no control inputs; extraction gives the writing that stays the control
-inputs of every writing of its value that had some (mapped to the writings chosen for them), so
-the order the program wrote is kept. Rules are tried only at the nodes whose operator is the
-head of their left side (an index built at the start of each round).
+`println` before it) takes part in matching like any other writing: a law over data inputs is
+sound whatever the node is ordered after, so the control input does not keep it out (H110). What
+the engine must not do is move the computation across the control edge's ordering, so a rule
+match collects the control inputs of every operator term the law stops reading (the root
+included), and the writing the rule builds waits for all of them. A rule whose right side is an
+existing writing rather than a new operator is not applied to a match with waits, since it cannot
+be given them; extraction would otherwise give the chosen writing the waits of the other writings
+of its value (section 5), but a rewritten node is what carries the law's result here. Rules are
+tried only at the nodes whose operator is the head of their left side (an index built at the start
+of each round).
 
 The rules of `test/passes` (`test::saturate`) are the local algebra of `std::opt::algebra`: exact
 commutation, neutral elements of wrapping integers, `x*c + x*c`, `x*c1 + x*c2`, `(x*c1)*c2`
 (the last two need `reassociate`, the last also `no_infs`, for floats). Extracted by node count
 they leave the same operators as `std::opt::algebra` on the algebra corpus under the default and
-the strict policy. The difference: `shared_product` (a `sync` function) keeps its sum, because a
-node with a control input takes no part.
+the strict policy. `shared_product` (a `sync` function) keeps two products because the product is
+also read by the `println`, so the sum becomes `t * 2` and the coefficient law cannot fold it
+further: `t` is `x * 3`, and the pattern `x * c1` does not match a constant on the left (it is not
+a control-input effect; `order.graph` covers the control-input case).
 
 ## 5. Extraction
 
@@ -110,8 +120,8 @@ declare `acceptsWritings()` gets a diagnostic instead of the program.
 
 - **The retention boundary** (fixed, H63). Section 5 used to describe a boundary the code did not
   implement: `DraftWritings::extract` kept every node with `!multi[node] && !takesPart(node)`,
-  which also selected pure nodes with control inputs (`shapeOf` returned 3) and kinds
-  `shapeTakesPart` does not cover, notably a GC-traced constant. A pure node that nothing reached
+  which also selected pure nodes that do not take part and kinds `shapeTakesPart` does not cover,
+  notably a GC-traced constant. A pure node that nothing reached
   stayed in the extracted program; a rule whose right side writes a string constant left one dead
   constant per saturation round. `extract` now selects by the boundary itself
   (`writtenInPlace(node) || carriesOrdering(draft_, node)`) and then by reachability from what the
@@ -119,6 +129,13 @@ declare `acceptsWritings()` gets a diagnostic instead of the program.
   `s + 'y'` four rounds and checks that the extraction removes the 15 dead constants the added
   writings wrote; `writings.extract` and the other plans cover that effects, orders and written
   variables still stay.
+- **Control inputs in matching** (fixed, H110). Section 4 used to say a pure node that waits can
+  be a rule root but never an inner term, and the code expressed that as a third shape
+  (`shapeOf` returned 3) so congruence would not merge it. The guard was about ordering, not
+  about shape or law soundness: `rewrite` only transferred the *root's* control inputs, so a
+  rewritten inner term would have been moved across the effect's ordering. It now transfers the
+  waits of every operator term the law stops reading, and the shape is gone: a control input
+  neither keeps a node out of its class nor out of a term (H95).
 - Matching tries each rule at every node with its head operator each round, rebuilding that index
   every round; an index kept up to date between rounds would only matter for graphs where most
   nodes are new each round.

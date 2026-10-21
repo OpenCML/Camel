@@ -259,9 +259,12 @@ const Program *extractWritings(
 /// node ever changes, and the graph stays acyclic node by node.
 ///
 /// Only a node that is a pure function of its inputs takes part: a constant, a conversion, an
-/// access, a pure operator, with no control input, not written in place and not reading a
-/// variable. Every other node is alone in its class. Two nodes are congruent only in the same
-/// region and with the same numeric permissions (design principles 7.5, op-semantics 6.4).
+/// access, a pure operator, not written in place and not reading a variable. Every other node is
+/// alone in its class. A control input does not keep a node out: it orders the computation, it
+/// does not make the value different (design principles 3.3, 3.4; H95), and extraction gives the
+/// writing that stays the control inputs of every writing of its value. Two nodes are congruent
+/// only in the same region and with the same numeric permissions (design principles 7.5,
+/// op-semantics 6.4).
 class DraftWritings : private WritingObserver {
   public:
     explicit DraftWritings(
@@ -326,20 +329,22 @@ class DraftWritings : private WritingObserver {
 
   private:
     struct Index;
-    /// 1: the node takes part in congruence and in every match; 3: it only could be the root of
-    /// a rule (it has control inputs, which a replacement takes over); 2: it does not.
+    /// 1: the node takes part in congruence and in every match — it computes its value from its
+    /// data inputs; 2: it does not. A control input takes no part in this question: it orders the
+    /// node, it does not make the value different (design principles 3.3, 3.4; H95).
     uint8_t shapeOf(gc_node_ref_t node);
     bool writtenInPlace(gc_node_ref_t node);
     bool takesPart(gc_node_ref_t node);
-    bool canBeRoot(gc_node_ref_t node);
     camel::core::sem::PermissionMask contextOf(gc_node_ref_t node) const;
     struct Item {
         const Pattern *pattern;
         gc_node_ref_t node;
     };
+    /// Matches `work[at..]`; `waits`, when given, collects the control inputs of every operator
+    /// term matched (the root included), so a rewrite can give them to the writing it builds.
     void matchFrom(
         camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-        std::vector<uint8_t> &bound, const std::function<void()> &emit);
+        std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, const std::function<void()> &emit);
     gc_node_ref_t build(
         const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);

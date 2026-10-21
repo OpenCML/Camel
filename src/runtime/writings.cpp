@@ -391,13 +391,13 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node) {
     }
 }
 
-/// Whether a node of this shape takes part in congruence, apart from the nodes it reads.
+/// Whether a node of this shape computes its value from its data inputs alone, apart from the
+/// nodes it reads. A control input is not part of this question: it orders the node, it does not
+/// make the value different (design principles 3.3, 3.4; H95), so a pure computation with a
+/// control input is a pure computation still.
 bool shapeTakesPart(
     const GraphDraft &draft, GCNodeKind kind, gc_slot_idx_t dataIndex, const Type *type,
-    std::span<const std::byte> payload, size_t ctrlInputs) {
-    if (ctrlInputs != 0) {
-        return false;
-    }
+    std::span<const std::byte> payload) {
     switch (kind) {
     case GCNodeKind::Data: {
         if (dataIndex >= 0) {
@@ -447,7 +447,7 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
         const auto *h = draft_.header(node);
         bool yes =
             h != nullptr && draft_.alive(node) &&
-            shapeTakesPart(draft_, h->kind, h->dataIndex, h->dataType, draft_.payloadOf(node), 0) &&
+            shapeTakesPart(draft_, h->kind, h->dataIndex, h->dataType, draft_.payloadOf(node)) &&
             !writtenInPlace(node);
         if (yes && h->kind == GCNodeKind::Oper) {
             yes = !readsVariable(
@@ -456,19 +456,17 @@ uint8_t DraftWritings::shapeOf(gc_node_ref_t node) {
                 draft_.withInputsOf(node),
                 [&](gc_node_ref_t in) { return writtenInPlace(in); });
         }
-        // 1: takes part; 3: would, but has control inputs (it can be the root of a rule only);
-        // 2: does not.
-        takes[node] = !yes ? 2 : draft_.ctrlInputsOf(node).empty() ? 1 : 3;
+        // 1: takes part; 2: does not. The control inputs are not asked: they order the node and
+        // do not make the value different (H95), so they neither keep it out of a class of
+        // writings nor out of a rule's term. A rewrite that replaces a node with control inputs
+        // carries them over to the writing that replaces it (`rewrite`), so the order the program
+        // wrote survives the replacement.
+        takes[node] = yes ? 1 : 2;
     }
     return takes[node];
 }
 
 bool DraftWritings::takesPart(gc_node_ref_t node) { return shapeOf(node) == 1; }
-
-bool DraftWritings::canBeRoot(gc_node_ref_t node) {
-    const uint8_t shape = shapeOf(node);
-    return shape == 1 || shape == 3;
-}
 
 namespace {
 
@@ -622,7 +620,7 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
     auto &ix = *index_;
     std::optional<NodeKey> key;
     if (!greedy_ &&
-        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload, 0) &&
+        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload) &&
         !(init.kind == GCNodeKind::Oper && readsVariable(draft_, norm, with, [&](gc_node_ref_t in) {
               return writtenInPlace(in);
           }))) {
@@ -816,8 +814,8 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
     // not decide which side effects happen, so it does not trim a node with an effect, a node
     // that carries the program's order, or a value written in place. Everything else is a pure
     // computation — a writing of its own value like any other — and stays only if something that
-    // stays reads it. That includes a pure node with control inputs (shape 3): the control input
-    // orders it, it does not make it an effect. A saturation that added thousands of candidate
+    // stays reads it. That includes a pure node with control inputs: the control input orders
+    // it, it does not make it an effect. A saturation that added thousands of candidate
     // writings therefore does not leave them in the extracted program as dead nodes.
     std::vector<uint8_t> selected(slots, 0);
     std::vector<gc_node_ref_t> work;
@@ -1144,7 +1142,7 @@ bool acceptsType(
 
 void DraftWritings::matchFrom(
     camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
-    std::vector<uint8_t> &bound, const std::function<void()> &emit) {
+    std::vector<uint8_t> &bound, std::vector<gc_node_ref_t> *waits, const std::function<void()> &emit) {
     if (at == work.size()) {
         emit();
         return;
@@ -1172,20 +1170,20 @@ void DraftWritings::matchFrom(
                            canonicalConstant(b->first, b->second);
             }
             if (same) {
-                matchFrom(context, work, at + 1, bind, bound, emit);
+                matchFrom(context, work, at + 1, bind, bound, waits, emit);
             }
             return;
         }
         bound[p.var] = 1;
         bind[p.var]  = item.node;
-        matchFrom(context, work, at + 1, bind, bound, emit);
+        matchFrom(context, work, at + 1, bind, bound, waits, emit);
         bound[p.var] = 0;
         return;
     case Pattern::Kind::Constant: {
         const auto found = constantOf(item.node);
         if (found && found->second == p.type &&
             canonicalConstant(found->first, p.type) == canonicalConstant(p.value, p.type)) {
-            matchFrom(context, work, at + 1, bind, bound, emit);
+            matchFrom(context, work, at + 1, bind, bound, waits, emit);
         }
         return;
     }
@@ -1205,7 +1203,7 @@ void DraftWritings::matchFrom(
             const auto *h = draft_.header(candidate);
             if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
                 h->permissions != matchPerms_ || !acceptsType(p.type, h->dataType) ||
-                !(at == 0 ? canBeRoot(candidate) : takesPart(candidate)) ||
+                !takesPart(candidate) ||
                 reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
                     p.oper) {
                 continue;
@@ -1214,12 +1212,25 @@ void DraftWritings::matchFrom(
             if (inputs.size() != p.args.size() || !draft_.withInputsOf(candidate).empty()) {
                 continue;
             }
+            // What this term waits for: the rewrite carries it onto the writing that replaces the
+            // root, so the law does not move the computation across a control edge's ordering.
+            const size_t savedWaits = waits != nullptr ? waits->size() : 0;
+            if (waits != nullptr) {
+                for (gc_node_ref_t wait : draft_.ctrlInputsOf(candidate)) {
+                    if (std::find(waits->begin(), waits->end(), wait) == waits->end()) {
+                        waits->push_back(wait);
+                    }
+                }
+            }
             const size_t saved = work.size();
             for (size_t i = 0; i < inputs.size(); ++i) {
                 work.push_back({&p.args[i], inputs[i]});
             }
-            matchFrom(context, work, at + 1, bind, bound, emit);
+            matchFrom(context, work, at + 1, bind, bound, waits, emit);
             work.resize(saved);
+            if (waits != nullptr) {
+                waits->resize(savedWaits);
+            }
         }
         return;
     }
@@ -1381,7 +1392,7 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
         size_t appliedInRound = 0;
         const size_t slots    = draft_.nodeSlotCount();
         for (gc_node_ref_t node = 0; node < slots; ++node) {
-            if (!draft_.alive(node) || !canBeRoot(node)) {
+            if (!draft_.alive(node) || !takesPart(node)) {
                 continue;
             }
             const camel::core::sem::PermissionMask context = contextOf(node);
@@ -1394,10 +1405,14 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
+                std::vector<gc_node_ref_t> matchedWaits(
+                    draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
                 std::optional<std::vector<gc_node_ref_t>> chosen;
-                matchFrom(context, work, 0, bind, bound, [&] {
+                std::optional<std::vector<gc_node_ref_t>> chosenWaits;
+                matchFrom(context, work, 0, bind, bound, &matchedWaits, [&] {
                     if (!chosen && (!rule.when || rule.when(Match{*this, node, bind}))) {
-                        chosen = bind;
+                        chosen      = bind;
+                        chosenWaits = matchedWaits;
                     }
                 });
                 if (!chosen) {
@@ -1420,9 +1435,12 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
                 if (made == node) {
                     continue;
                 }
-                const std::vector<gc_node_ref_t> waits(
-                    draft_.ctrlInputsOf(node).begin(),
-                    draft_.ctrlInputsOf(node).end());
+                // Everything the match read that ordered it: the root's own control inputs and
+                // those of the operator terms the law stops reading. A law over data inputs is
+                // sound whatever the node is ordered after, but the engine must not move the
+                // computation across an effect, so the writing that replaces it waits for all of
+                // them (design principles 3.3, 3.4; H95).
+                const std::vector<gc_node_ref_t> waits = chosenWaits.value_or(std::vector<gc_node_ref_t>{});
                 // A node that already existed cannot be made to wait without risking a cycle.
                 if (!waits.empty() && made < before) {
                     continue;
@@ -1494,7 +1512,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
         std::unordered_map<camel::core::OperId, std::vector<gc_node_ref_t>> byOper;
         for (gc_node_ref_t node = 0; node < slots; ++node) {
             if (draft_.alive(node) && draft_.header(node)->kind == GCNodeKind::Oper &&
-                canBeRoot(node)) {
+                takesPart(node)) {
                 byOper[reinterpret_cast<const GCOperBody *>(draft_.payloadOf(node).data())->oper]
                     .push_back(node);
             }
@@ -1517,7 +1535,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 std::vector<Item> work{{&rule.lhs, node}};
                 std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
                 std::vector<uint8_t> bound(varCount, 0);
-                matchFrom(context, work, 0, bind, bound, [&] {
+                matchFrom(context, work, 0, bind, bound, nullptr, [&] {
                     if (!rule.when || rule.when(Match{*this, node, bind})) {
                         found.push_back(Found{r, node, bind});
                     }
