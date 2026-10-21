@@ -166,6 +166,12 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":macro/cmp",
 };
 
+/**
+ * The traits of an operator, as `find` reports them. They are not stored: every one is derived
+ * from the operator's semantic record (`sem::OperatorSemantics`), the only place a fact is
+ * declared (`traitsOf`, operator_table.cpp). Declaring a trait means declaring the fact the
+ * record holds; the two cannot disagree.
+ */
 struct OperatorTraits {
     /// No side effects and no hidden state: the result depends only on the arguments, so a call
     /// may be evaluated at compile time, merged with an identical call, or removed if unused.
@@ -316,10 +322,16 @@ class OperatorTable {
     bool isPure(std::string_view uri) const;
 
     /// True when execution can invoke function inputs. Lock-free.
-    bool callsGraphs(OperId id) const { return (traitBits(id) & kCallsGraphs) != 0; }
+    bool callsGraphs(OperId id) const {
+        const sem::OperatorSemantics *facts = record(id);
+        return facts != nullptr && (facts->callsGraphs || facts->elementCalls.has_value());
+    }
 
     /// True when the operator reads the graphs of the function values it receives.
-    bool readsGraphs(OperId id) const { return (traitBits(id) & kReadsGraphs) != 0; }
+    bool readsGraphs(OperId id) const {
+        const sem::OperatorSemantics *facts = record(id);
+        return facts != nullptr && facts->readsGraphs;
+    }
 
     /// True when running the operator is an effect visible outside the program's variables:
     /// it is neither pure nor state-only. True for an undeclared operator.
@@ -450,9 +462,10 @@ class OperatorTable {
         std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators);
 
     /// The declared semantics, or nullptr when nobody declared any. Lock-free; the record
-    /// stays valid until the process exits.
+    /// stays valid until the process exits. A record that only carries traits (set without
+    /// declareSemantics) is not semantics: this returns nullptr for it.
     const sem::OperatorSemantics *semantics(OperId id) const {
-        return entries_[id].semantics.load(std::memory_order_acquire);
+        return entries_[id].declared.load(std::memory_order_acquire);
     }
 
     /// Whether running the operator writes the resource the ordinary (or with) operand `index`
@@ -489,19 +502,6 @@ class OperatorTable {
   private:
     OperatorTable();
 
-    // Trait bits of an entry. kDeclared distinguishes "declared effectful" from "nobody
-    // declared it". kNoFault is stored inverted so that an all-zero byte is the conservative
-    // reading of every trait.
-    enum : uint8_t {
-        kDeclared       = 1 << 0,
-        kPure           = 1 << 1,
-        kElementwise    = 1 << 2,
-        kStateOnly      = 1 << 3,
-        kNoFault        = 1 << 4,
-        kCallsGraphs = 1 << 5,
-        kReadsGraphs = 1 << 6,
-    };
-
     // Family bits of an entry, fixed when the URI is interned (see isBuiltin, isAssignment).
     enum : uint8_t {
         kFamilyBuiltin    = 1 << 0,
@@ -511,7 +511,6 @@ class OperatorTable {
     struct Entry {
         SymId uri      = kEmptySym;
         uint8_t family = 0;
-        std::atomic<uint8_t> traits{0};
         // Guarded by mutex_. A folder is heap-allocated once and replaced only at load time, so
         // readers may keep the pointer after releasing the lock.
         type::resolver_ptr_t resolver;
@@ -526,24 +525,30 @@ class OperatorTable {
 
         /// The call-site facts (declareCallSpec), or null.
         std::unique_ptr<CallSpec> callSpec;
-        /// The published semantics record (owned by declarations_), or nullptr.
-        std::atomic<const sem::OperatorSemantics *> semantics{nullptr};
+        /// The facts record (owned by declarations_), or nullptr when nothing is declared. Its
+        /// effect/elementwise/callsGraphs/readsGraphs/faults members are what the traits are
+        /// derived from; set() may publish one before there is any semantics.
+        std::atomic<const sem::OperatorSemantics *> facts{nullptr};
+        /// The published semantics record (owned by declarations_), or nullptr while only
+        /// traits are declared. It is `facts` whenever that has real semantics.
+        std::atomic<const sem::OperatorSemantics *> declared{nullptr};
     };
 
-    static uint8_t encode(OperatorTraits traits);
-    static OperatorTraits decode(uint8_t bits);
+    /// The traits of `facts`, derived here and nowhere else.
+    static OperatorTraits traitsOf(const sem::OperatorSemantics &facts);
+    /// The facts record of `id` (traits included), or nullptr. Lock-free, never freed.
+    const sem::OperatorSemantics *record(OperId id) const {
+        return entries_[id].facts.load(std::memory_order_acquire);
+    }
 
     /// intern() for callers that already hold mutex_ exclusively.
     OperId internLocked(std::string_view uri);
-    uint8_t traitBits(OperId id) const {
-        return entries_[id].traits.load(std::memory_order_relaxed);
-    }
 
     mutable std::shared_mutex mutex_;
     std::unordered_map<SymId, OperId> ids_; // URI symbol -> entry index
     camel::utils::AppendOnlyTable<Entry> entries_;
-    /// Every semantics record ever published, replaced ones included (a reader may still hold
-    /// one). Guarded by mutex_.
+    /// Every facts record ever published, replaced ones included (a reader may still hold one).
+    /// Guarded by mutex_.
     std::vector<std::unique_ptr<const sem::OperatorSemantics>> declarations_;
     std::atomic<uint64_t> epoch_{0};
 };

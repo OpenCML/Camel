@@ -50,21 +50,19 @@ OperatorTable::OperatorTable() {
     }
 }
 
-uint8_t OperatorTable::encode(OperatorTraits traits) {
-    return static_cast<uint8_t>(
-        kDeclared | (traits.pure ? kPure : 0) | (traits.elementwise ? kElementwise : 0) |
-        (traits.stateOnly ? kStateOnly : 0) | (traits.mayFault ? 0 : kNoFault) |
-        (traits.callsGraphs ? kCallsGraphs : 0) | (traits.readsGraphs ? kReadsGraphs : 0));
-}
-
-OperatorTraits OperatorTable::decode(uint8_t bits) {
+OperatorTraits OperatorTable::traitsOf(const sem::OperatorSemantics &facts) {
+    // The one mapping from facts to trait bits. Nothing else computes a trait.
     return OperatorTraits{
-        .pure           = (bits & kPure) != 0,
-        .elementwise    = (bits & kElementwise) != 0,
-        .stateOnly      = (bits & kStateOnly) != 0,
-        .mayFault       = (bits & kNoFault) == 0,
-        .callsGraphs    = (bits & kCallsGraphs) != 0,
-        .readsGraphs    = (bits & kReadsGraphs) != 0,
+        .pure = facts.effect == sem::Effect::Pure,
+        .elementwise =
+            facts.elementwise || (facts.binary && facts.binary->elementwise),
+        .stateOnly = facts.effect == sem::Effect::StateOnly,
+        // No fault list: undeclared, may fault. An empty list: it never faults.
+        .mayFault  = !facts.faults || !facts.faults->empty(),
+        // Calling the function values it receives (declared, or by calling elements) is what
+        // makes the call depend on those functions.
+        .callsGraphs = facts.callsGraphs || facts.elementCalls.has_value(),
+        .readsGraphs = facts.readsGraphs,
     };
 }
 
@@ -110,8 +108,35 @@ std::optional<OperId> OperatorTable::lookup(std::string_view uri) const {
 }
 
 void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
-    const OperId id = intern(uri);
-    entries_[id].traits.store(encode(traits), std::memory_order_relaxed);
+    std::unique_lock lock(mutex_);
+    const OperId id = internLocked(uri);
+    Entry &entry    = entries_[id];
+    const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
+    // The traits are not a second declaration: they are facts of the same record, and a
+    // record may exist before any semantics (the effects of a built-in operator are declared
+    // before its numeric semantics).
+    sem::OperatorSemantics facts =
+        old ? *old : sem::OperatorSemantics{.key = sem::OperatorKey::of(uri)};
+    facts.effect = traits.stateOnly ? sem::Effect::StateOnly
+                 : traits.pure      ? sem::Effect::Pure
+                                    : sem::Effect::Effectful;
+    facts.elementwise  = traits.elementwise;
+    facts.callsGraphs  = traits.callsGraphs;
+    facts.readsGraphs  = traits.readsGraphs;
+    // "Never faults" is the empty list. Saying it may fault (the default) does not take back
+    // a declared empty list; a declaration that does contradict it is refused when the
+    // semantics are declared (checkSemantics).
+    if (!traits.mayFault) {
+        facts.faults = std::vector<sem::FaultSpec>{};
+    }
+    declarations_.push_back(
+        std::make_unique<const sem::OperatorSemantics>(std::move(facts)));
+    entry.facts.store(declarations_.back().get(), std::memory_order_release);
+    if (entry.declared.load(std::memory_order_relaxed) != nullptr) {
+        // Semantics already published: the traits belong to the same record, so publish the
+        // updated one there too. No version bump: a trait is not a semantics fact.
+        entry.declared.store(declarations_.back().get(), std::memory_order_release);
+    }
 }
 
 void OperatorTable::declare(
@@ -122,11 +147,13 @@ void OperatorTable::declare(
 }
 
 std::optional<OperatorTraits> OperatorTable::find(OperId id) const {
-    const uint8_t bits = traitBits(id);
-    if ((bits & kDeclared) == 0) {
+    const sem::OperatorSemantics *facts = record(id);
+    // Effect::Undeclared is the record of an operator whose semantics were declared without
+    // anybody saying what it does to the world: find says nobody declared its traits.
+    if (facts == nullptr || facts->effect == sem::Effect::Undeclared) {
         return std::nullopt;
     }
-    return decode(bits);
+    return traitsOf(*facts);
 }
 
 std::optional<OperatorTraits> OperatorTable::find(std::string_view uri) const {
@@ -134,7 +161,10 @@ std::optional<OperatorTraits> OperatorTable::find(std::string_view uri) const {
     return id ? find(*id) : std::nullopt;
 }
 
-bool OperatorTable::isPure(OperId id) const { return (traitBits(id) & kPure) != 0; }
+bool OperatorTable::isPure(OperId id) const {
+    const sem::OperatorSemantics *facts = record(id);
+    return facts != nullptr && facts->effect == sem::Effect::Pure;
+}
 
 bool OperatorTable::isPure(std::string_view uri) const {
     const auto id = lookup(uri);
@@ -142,7 +172,9 @@ bool OperatorTable::isPure(std::string_view uri) const {
 }
 
 bool OperatorTable::hasExternalEffect(OperId id) const {
-    return (traitBits(id) & (kPure | kStateOnly)) == 0;
+    const sem::OperatorSemantics *facts = record(id);
+    return facts == nullptr ||
+           (facts->effect != sem::Effect::Pure && facts->effect != sem::Effect::StateOnly);
 }
 
 bool OperatorTable::hasExternalEffect(std::string_view uri) const {
@@ -176,7 +208,7 @@ std::string checkVarAgainstResources(
 void OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resolver) {
     std::unique_lock lock(mutex_);
     Entry &entry = entries_[internLocked(uri)];
-    if (const sem::OperatorSemantics *declared = entry.semantics.load(std::memory_order_relaxed);
+    if (const sem::OperatorSemantics *declared = entry.declared.load(std::memory_order_relaxed);
         declared != nullptr && declared->resources) {
         const std::string problem =
             checkVarAgainstResources(uri, *declared->resources, resolver.get());
@@ -389,10 +421,6 @@ std::string checkSemantics(
             }
         }
     }
-    // 5b. A higher-order operator calls the function values it receives: its traits say so.
-    if (record.elementCalls && traits && !traits->callsGraphs) {
-        return "element calls: the operator calls graphs (declare callsGraphs in its traits)";
-    }
     // 6. The definition names a function of a library module and binds each parameter to an
     //    operand. That the function's signature agrees with the operator's, that its effects
     //    are within the operator's and that no definition reaches its own operator is checked
@@ -418,11 +446,15 @@ std::string checkSemantics(
 
 void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantics semantics) {
     std::unique_lock lock(mutex_);
-    const OperId id    = internLocked(uri);
-    Entry &entry       = entries_[id];
-    const uint8_t bits = entry.traits.load(std::memory_order_relaxed);
+    const OperId id                  = internLocked(uri);
+    Entry &entry                     = entries_[id];
+    const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
+    // The traits declared so far are the old record's: the checks compare the new semantics
+    // with the facts already declared, and the derivation is the same one find() uses.
     const std::optional<OperatorTraits> traits =
-        (bits & kDeclared) != 0 ? std::optional(decode(bits)) : std::nullopt;
+        old != nullptr && old->effect != sem::Effect::Undeclared
+            ? std::optional<OperatorTraits>(traitsOf(*old))
+            : std::nullopt;
     std::string problem = checkSemantics(uri, semantics, traits);
     if (problem.empty() && semantics.resources) {
         // Declared before or after its signature is registered: checked once both are there.
@@ -432,15 +464,13 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
             throw std::invalid_argument(signature);
         }
     }
-    if (problem.empty()) {
-        if (const sem::OperatorSemantics *old = entry.semantics.load(std::memory_order_relaxed);
-            old != nullptr && std::tie(semantics.key.major, semantics.key.minor) <
-                                  std::tie(old->key.major, old->key.minor)) {
-            problem = std::format(
-                "it would replace {} by the lower version {}",
-                old->key.toString(),
-                semantics.key.toString());
-        }
+    if (problem.empty() && old != nullptr &&
+        std::tie(semantics.key.major, semantics.key.minor) <
+            std::tie(old->key.major, old->key.minor)) {
+        problem = std::format(
+            "it would replace {} by the lower version {}",
+            old->key.toString(),
+            semantics.key.toString());
     }
     if (!problem.empty()) {
         throw std::invalid_argument(
@@ -449,40 +479,68 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
                 uri,
                 problem));
     }
+    // The record is one: the semantics declared here do not erase the facts declared before
+    // (an effect, an elementwise law, a fault list). They are the same record's fields.
+    if (old != nullptr) {
+        if (semantics.effect == sem::Effect::Undeclared) {
+            semantics.effect = old->effect;
+        }
+        semantics.elementwise = semantics.elementwise || old->elementwise;
+        semantics.callsGraphs = semantics.callsGraphs || old->callsGraphs;
+        semantics.readsGraphs = semantics.readsGraphs || old->readsGraphs;
+        if (!semantics.faults && old->faults) {
+            semantics.faults = old->faults;
+        }
+    }
     declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(semantics)));
-    entry.semantics.store(declarations_.back().get(), std::memory_order_release);
+    const sem::OperatorSemantics *published = declarations_.back().get();
+    entry.facts.store(published, std::memory_order_release);
+    entry.declared.store(published, std::memory_order_release);
     epoch_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec resources) {
-    // A record of its own when the operator has none; otherwise the same record with the
-    // resources added, one minor version up (facts added, design 4.1). Load time only: the read
+    // A record of its own when the operator has no semantics; otherwise the same record with
+    // the resources added, one minor version up (facts added, design 4.1). A record that only
+    // carries traits keeps them: the resources join the same facts. Load time only: the read
     // of the old record and the declaration are not one step, as for every declaration.
+    std::unique_lock lock(mutex_);
+    const OperId id                  = internLocked(uri);
+    Entry &entry                     = entries_[id];
+    const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
     sem::OperatorSemantics record;
-    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
-        record = *semantics(*id);
+    if (old != nullptr && entry.declared.load(std::memory_order_relaxed) != nullptr) {
+        record = *old;
         if (record.resources != resources) {
             ++record.key.minor;
         }
     } else {
+        record = old != nullptr ? *old : sem::OperatorSemantics{};
         record.key = sem::OperatorKey::of(uri);
     }
     record.resources = std::move(resources);
+    lock.unlock();
     declareSemantics(uri, std::move(record));
 }
 
 void OperatorTable::declareDefinition(std::string_view uri, sem::Definition definition) {
     // As declareResources: a record of its own, or the existing one a minor version up.
+    std::unique_lock lock(mutex_);
+    const OperId id                  = internLocked(uri);
+    Entry &entry                     = entries_[id];
+    const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
     sem::OperatorSemantics record;
-    if (const auto id = lookup(uri); id && semantics(*id) != nullptr) {
-        record = *semantics(*id);
+    if (old != nullptr && entry.declared.load(std::memory_order_relaxed) != nullptr) {
+        record = *old;
         if (record.definition != definition) {
             ++record.key.minor;
         }
     } else {
+        record = old != nullptr ? *old : sem::OperatorSemantics{};
         record.key = sem::OperatorKey::of(uri);
     }
     record.definition = std::move(definition);
+    lock.unlock();
     declareSemantics(uri, std::move(record));
 }
 

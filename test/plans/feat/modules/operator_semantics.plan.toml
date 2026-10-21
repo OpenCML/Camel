@@ -21,6 +21,15 @@ verify_script = """
 const out = input.normalized.stdout
 const line = (l) => assert(out.includes(l), `missing: ${l}`)
 line('SEMANTICS valid accepted')
+line('SEMANTICS traits semtest:derived_pure pure=1 elementwise=0 stateOnly=0 mayFault=0 callsGraphs=0 readsGraphs=0')
+line('SEMANTICS traits semtest:derived_pure pure=0 elementwise=0 stateOnly=1 mayFault=0 callsGraphs=0 readsGraphs=0')
+line('SEMANTICS derived_calls accepted')
+line('SEMANTICS traits semtest:derived_calls pure=0 elementwise=0 stateOnly=0 mayFault=1 callsGraphs=1 readsGraphs=0')
+line('SEMANTICS derived_elementwise accepted')
+line('SEMANTICS traits semtest:derived_elementwise pure=1 elementwise=1 stateOnly=0 mayFault=1 callsGraphs=0 readsGraphs=0')
+line('SEMANTICS derived_faults accepted')
+line('SEMANTICS traits semtest:derived_faults pure=1 elementwise=0 stateOnly=0 mayFault=1 callsGraphs=0 readsGraphs=0')
+line('SEMANTICS traits semtest:derived_undeclared undeclared')
 for (const [check, reason] of [
   ['key_names_other_operator', "'semtest:a' are rejected: its key semtest:b@1.0 names another operator"],
   ['lower_version', 'it would replace semtest:ok@1.2 by the lower version semtest:ok@1.1'],

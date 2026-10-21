@@ -145,15 +145,16 @@ C++ 模块也可以导出值（设计原则 10.1）：在构造函数里 `export
 
 ## 4. 语义性质（纯度）注册
 
-算子表 `OperatorTable`（`include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits`：
+算子表 `OperatorTable`（`include/camel/core/operator_table.h`）为每个算子 URI 保存一项，项的编号是 `OperId`，`OPER` 节点的负载里存的就是这个编号（URI 文本驻留在符号表里，全进程只存一份）。表项上的 `OperatorTraits` **不是另存的一份声明**：每个字段都由该算子的语义记录 `sem::OperatorSemantics` 的对应事实派生（`OperatorTable::traitsOf`，`src/core/operator_table.cpp`），派生是唯一的映射。`set(uri, traits)` 登记的是记录上的效果事实（`effect`、`elementwise`、`callsGraphs`、`readsGraphs`、`faults`），`declareSemantics` 登记记录的其余部分，两者写同一份记录、互不覆盖。因此不可能出现“trait 说纯、语义记录说会写”的分歧：只有一份事实。
 
-| 字段 | 含义 |
-|------|------|
-| `pure` | 无副作用、无隐藏状态，结果只依赖实参。这样的调用可以在编译期求值、与相同调用合并、未被使用时删除。 |
-| `elementwise` | 输出的第 i 个元素只依赖各输入（广播后）的第 i 个元素。 |
-| `stateOnly` | 不是纯函数，但效果不超出程序自身的变量（创建或读取变量）。不会被折叠、合并或跨越写操作移动，也不作为用户可观察的效果报告。 |
-| `mayFault` | 可能出故障（除零、越界、转换放不进目标类型）。**缺省为真**；确定不会出故障的才声明为假。目前没有任何遍依据它改变行为（图数据模型设计稿 Q1 待定）。 |
-| `callsGraphs` | 执行中会调用实参里的函数值（`map`、`reduce` 等高阶算子与 `attempt`），它做什么取决于传进来的函数。 |
+| 字段 | 含义 | 记录上的来源 |
+|------|------|------|
+| `pure` | 无副作用、无隐藏状态，结果只依赖实参。这样的调用可以在编译期求值、与相同调用合并、未被使用时删除。 | `effect == Pure` |
+| `elementwise` | 输出的第 i 个元素只依赖各输入（广播后）的第 i 个元素。 | `elementwise`，或 `binary.elementwise` |
+| `stateOnly` | 不是纯函数，但效果不超出程序自身的变量（创建或读取变量）。不会被折叠、合并或跨越写操作移动，也不作为用户可观察的效果报告。 | `effect == StateOnly` |
+| `mayFault` | 可能出故障（除零、越界、转换放不进目标类型）。**缺省为真**；故障表为空表示确定不会出故障。目前没有任何遍依据它改变行为（图数据模型设计稿 Q1 待定）。 | `faults`：缺省→真，空表→假，非空→真 |
+| `callsGraphs` | 执行中会调用实参里的函数值（`map`、`reduce` 等高阶算子与 `attempt`），它做什么取决于传进来的函数。 | `callsGraphs`，或声明了 `elementCalls` |
+| `readsGraphs` | 读实参里的函数值的图（编译、导出、微分），而不只是调用它们。 | `readsGraphs` |
 
 遍与调度器按编号认算子，不比较 URI 文本：
 
@@ -183,13 +184,16 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 
 ### 4.2 算子语义：数值、下标与归约律
 
-traits 之外，算子表的每一项可以带一份只读、带版本的语义记录 `sem::OperatorSemantics`（`include/camel/core/operator_semantics.h`；设计见 [算子语义协议](../design/op-semantics/README.cn.md)），由模块在加载时用 `OperatorTable::declareSemantics(uri, record)` 登记，登记前检查（键与 URI 一致、版本不降、数值部分自洽、归约律自洽；失败抛 `std::invalid_argument`）。查询 `semantics(id)` 无锁；没有记录、或记录缺某一部分，读法都是保守的。
+同一份语义记录（`include/camel/core/operator_semantics.h`；设计见 [算子语义协议](../design/op-semantics/README.cn.md)）既带 §4 的效果事实，也带数值、下标、归约律等部分，由模块在加载时用 `OperatorTable::declareSemantics(uri, record)` 登记，登记前检查（键与 URI 一致、版本不降、数值部分自洽、归约律自洽；失败抛 `std::invalid_argument`）。`set` 先登记的效果事实在 `declareSemantics` 时保留，反之亦然。查询 `semantics(id)` 无锁；没有记录、或记录缺某一部分，读法都是保守的。
 
 | 部分 | 内容 |
 |------|------|
 | `key` | `protocol:name@主.次`，跨进程的稳定标识；结果、故障、访问改变时主版本加一，只增加事实时次版本加一 |
+| `effect` | 效果事实：`Pure`、`StateOnly`、`Effectful`；未声明（`Undeclared`）按 `Effectful` 读。§4 的 `pure`/`stateOnly` 由它派生 |
+| `elementwise` | 逐元素事实；`binary.elementwise` 也计入 §4 的 `elementwise` |
+| `callsGraphs` / `readsGraphs` | 调用/读取实参里的函数值；`elementCalls` 蕴含 `callsGraphs` |
 | `numeric` | 精确、正确舍入（规范算法）、有 ulp 上界、不透明；舍入所在类型；对哪些 `@numeric` 许可敏感 |
-| `faults` | 会出的故障（可缺省，缺省时看 `mayFault`） |
+| `faults` | 会出的故障（可缺省，缺省时按“可能出故障”读；空表表示不会出故障） |
 | `indexing` | 实例化函数（`include/camel/core/index_semantics.h`）：一次调用的迭代域、各操作数的访问映射、写映射 |
 | `laws` | 归约律（每种元素类型一条）：运算、输入/累加/结果类型、初值、顺序、空域、确切的结合与交换性、单位元 |
 

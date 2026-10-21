@@ -405,8 +405,29 @@ struct ElementCalls {
 
 // ---- The record --------------------------------------------------------------------------
 
+/**
+ * What the operator does besides compute its result (design principles 3.3), the fact the
+ * `OperatorTraits` effect bits are derived from. `Undeclared`: nobody said; an operator is then
+ * treated as effectful, as if declared `Effectful` (the difference is that `find` still says
+ * nobody declared it). `Effectful`: it can change something outside the program's own
+ * variables. `StateOnly`: it creates, reads or changes a variable and nothing outside the
+ * program's variables. `Pure`: its result depends only on its arguments.
+ */
+enum class Effect : uint8_t { Undeclared, Pure, StateOnly, Effectful };
+
 struct OperatorSemantics {
     OperatorKey key;
+    /// The effect fact; `OperatorTraits::pure` and `stateOnly` are derived from it, never
+    /// declared separately (operator_table.h, traitsOf).
+    Effect effect = Effect::Undeclared;
+    /// Output element i depends only on input elements i (after broadcasting). Also derived
+    /// from a declared `binary.elementwise` law, so the two cannot disagree.
+    bool elementwise = false;
+    /// While it runs, the operator calls function values it received as arguments; also true
+    /// for every operator with an `elementCalls` declaration.
+    bool callsGraphs = false;
+    /// It reads the graphs of the function values it receives instead of only calling them.
+    bool readsGraphs = false;
     /// The index semantics (camel/core/index_semantics.h): the instance of one call. Empty when
     /// not declared: the operator reads its operands whole and writes its result whole, and
     /// nothing is known about which elements depend on which.
