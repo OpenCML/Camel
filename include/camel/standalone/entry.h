@@ -28,14 +28,16 @@
  * a real number such as `1.5` is its real part with an imaginary part of zero), `true`/`false`,
  * the text as it is), the arguments are checked in the order they are written
  * and the first that is wrong is reported, then a parameter given no value is reported, all of
- * them in one report. A number text that cannot be read is refused with the sentence of its
- * cause, rendered from the catalogue (InvalidNumberText when it is not a number,
- * ConversionOutOfRange when the type cannot hold it, with the range). The reports are those of
- * `camel`, byte for byte (EntryArgumentInvalid, EntryArgumentMissing at the entry function): the
- * compiler renders them into Sites with the values left as marks (core.h), and they end the
- * program as a fault does (exit code 1, the report on standard output). The translated types are
- * the scalars, the complex numbers included; a parameter of another type is refused when the
- * program is translated.
+ * them in one report. A number text is read at the width the parameter is declared with (an
+ * `i32` is read as an int32 and an `f32` as a float), so a value the declared type cannot hold
+ * is refused with that type's name and its range. A number text that cannot be read is refused
+ * with the sentence of its cause, rendered from the catalogue (InvalidNumberText when it is not
+ * a number, ConversionOutOfRange when the type cannot hold it, with the range). The reports are
+ * those of `camel`, byte for byte (EntryArgumentInvalid, EntryArgumentMissing at the entry
+ * function): the compiler renders them into Sites with the values left as marks (core.h), and
+ * they end the program as a fault does (exit code 1, the report on standard output). The
+ * translated types are the scalars, the complex numbers included; a parameter of another type is
+ * refused when the program is translated.
  */
 
 #pragma once
@@ -55,14 +57,19 @@
 
 namespace camel::standalone {
 
-/// How the value of a parameter of `main` is read from its text.
+/// How the value of a parameter of `main` is read from its text. Each integer and float kind
+/// reads the text at the width the parameter is declared with: an `i32` is an int32 all the way
+/// (a text outside its range is refused with the range of `i32`, not read as an int64 and
+/// narrowed), and an `f32` is a float all the way (design principles 5.1).
 enum class EntryKind {
-    Int,   // an integer: an optional `+`, then the digits of an int64 (no range check for i32)
-    Float, // one number token, read by camel::utils::parseWholeFloat
-    C64,   // a c64: the text of a complex number, its parts read as floats of that width
-    C128,  // a c128: the same text, its parts read as doubles
-    Bool,  // `true` or `false`
-    Text,  // the text as it is
+    Int,     // an `int`: an optional `+`, then the digits of an int64
+    Int32,   // an `i32`: the same grammar, read as an int32
+    Float,   // a `float`: one number token, read by camel::utils::parseWholeFloat<double>
+    Float32, // an `f32`: the same grammar, read as a float
+    C64,     // a c64: the text of a complex number, its parts read as floats of that width
+    C128,    // a c128: the same text, its parts read as doubles
+    Bool,    // `true` or `false`
+    Text,    // the text as it is
 };
 
 /// A parameter of `main`: its name and how its value is read.
@@ -135,7 +142,9 @@ class EntryArguments {
 
     /// The value of the parameter at `index`, read by its kind (the one it was declared with).
     int64_t integer(std::size_t index) const { return values_[index].integer; }
+    int32_t integer32(std::size_t index) const { return values_[index].integer32; }
     double number(std::size_t index) const { return values_[index].number; }
+    float number32(std::size_t index) const { return values_[index].number32; }
     std::complex<float> c64(std::size_t index) const { return values_[index].complexF; }
     std::complex<double> c128(std::size_t index) const { return values_[index].complexD; }
     bool boolean(std::size_t index) const { return values_[index].boolean; }
@@ -144,7 +153,9 @@ class EntryArguments {
   private:
     struct Value {
         int64_t integer               = 0;
+        int32_t integer32             = 0;
         double number                 = 0;
+        float number32                = 0.0f;
         std::complex<float> complexF  = {};
         std::complex<double> complexD = {};
         bool boolean                  = false;
@@ -155,9 +166,10 @@ class EntryArguments {
     /// one more cause than a real one: its imaginary part.
     enum class ReadStatus { Ok, NotANumber, OutOfRange, OutOfRangeImaginary };
 
-    /// One integer as `camel` reads one: the language's whole-token integer parser.
-    static ReadStatus readInteger(std::string_view text, int64_t &out) {
-        switch (camel::utils::parseWholeInteger<int64_t>(text, out)) {
+    /// One integer as `camel` reads one: the language's whole-token integer parser, at the width
+    /// the parameter is declared with (`i32` reads an int32, so its range is the range checked).
+    template <std::signed_integral T> static ReadStatus readInteger(std::string_view text, T &out) {
+        switch (camel::utils::parseWholeInteger<T>(text, out)) {
         case camel::utils::NumberTextStatus::Ok:
             return ReadStatus::Ok;
         case camel::utils::NumberTextStatus::OutOfRange:
@@ -265,8 +277,22 @@ class EntryArguments {
             }
             break;
         }
+        case EntryKind::Int32: {
+            const ReadStatus status = readInteger(text, value.integer32);
+            if (status != ReadStatus::Ok) {
+                fault(invalid, {name, refusal(index, status, text)});
+            }
+            break;
+        }
         case EntryKind::Float: {
             const ReadStatus status = readNumber(text, value.number);
+            if (status != ReadStatus::Ok) {
+                fault(invalid, {name, refusal(index, status, text)});
+            }
+            break;
+        }
+        case EntryKind::Float32: {
+            const ReadStatus status = readNumber(text, value.number32);
             if (status != ReadStatus::Ok) {
                 fault(invalid, {name, refusal(index, status, text)});
             }

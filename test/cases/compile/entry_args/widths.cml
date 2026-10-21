@@ -1,0 +1,11 @@
+/// The parameters of `main` are read at the width they are declared with (design principles
+/// 5.1, language reference 2.5): `i32` is an int32 and `f32` a float all the way. A text the
+/// declared type cannot hold is refused with that type's name and range (`i32`,
+/// -2147483648 to 2147483647; `f32`, at most about 3.4e38 in magnitude), and a text that fits is
+/// converted once, at that width.
+module entry_arg_widths
+
+func main(n: i32, rate: f32): int sync {
+    println(n, rate)
+    return 0
+}

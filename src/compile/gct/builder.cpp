@@ -298,22 +298,41 @@ static bool isIntegerPrimitive(Type *type) {
 
 // A literal that could not be converted to the type its position asks for: out of the range
 // of a narrower numeric type (`let b: i32 = 3000000000`), a decimal literal in an integer type
-// (`let x: int = 1.9`), text that is not a number, or a value of another type. One diagnostic
-// says which literal, which type, and why (handover H24).
+// (`let x: int = 1.9`), or a value of another type. One diagnostic says which literal, which
+// type, and why (handover H24).
+//
+// A text where a number is expected is not a range problem and not a text that is not a number
+// either: there is no implicit text-to-number conversion (design principles 5.1), so it is a
+// type mismatch, reported with the diagnostic the same position gives a variable of type
+// `string` (DeclaredTypeMismatch in a declared position, DynamicCastForbidden for an explicit
+// `as`).
+//
 // `written` is the element's text as it is in the source, when the caller can read it (design
 // principles 5.1: the message quotes the source's spelling); empty falls back to the value.
+// `explicitCast` says the literal stands under an `as` conversion rather than in a declared
+// position.
 template <typename Diags, typename Range>
 static void reportLiteralCastFailure(
     Diags &diags, const Range &range, const data_ptr_t &data, Type *type,
-    const std::string &written = {}) {
+    const std::string &written = {}, bool explicitCast = false) {
+    if (data->type()->code() == TypeCode::String) {
+        if (explicitCast) {
+            diags->of(SemanticDiag::DynamicCastForbidden)
+                .at(range)
+                .commit("string", type->toString());
+        } else {
+            diags->of(SemanticDiag::DeclaredTypeMismatch)
+                .at(range)
+                .commit("string", type->toString());
+        }
+        return;
+    }
     std::string reason;
     if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         reason = "out of range (" + limits + ")";
     } else if (data->type()->isPrimitive() && isIntegerPrimitive(type)) {
         // A numeric type that is not an integer keeps its fraction (`1.9` -> `int`).
         reason = "the value would be truncated";
-    } else if (data->type()->code() == TypeCode::String) {
-        reason = "the text is not a number";
     } else {
         reason = "the value cannot become that type";
     }
@@ -2155,14 +2174,16 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
-                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
+                reportLiteralCastFailure(
+                    diags_, ast->load()->tokenRange(), data, dstType, {}, /*explicitCast=*/true);
                 throw BuildAbortException();
             }
             auto convertedData = data->convertTo(dstType);
             if (convertedData) {
                 res = tree_->makeData(convertedData);
             } else {
-                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
+                reportLiteralCastFailure(
+                    diags_, ast->load()->tokenRange(), data, dstType, {}, /*explicitCast=*/true);
                 throw BuildAbortException();
             }
         } else {

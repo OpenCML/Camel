@@ -40,7 +40,7 @@ let names: string[] = []
 var count = 0
 ```
 
-- 必须有初值。类型可以省略，由初值推出；写出类型时初值必须是这个类型（字面量按所写的类型解释：`let a: i32 = 3`、`let b: f32 = 1`、`let c: float = 0.1 + 0.2`；字面量之间的运算按精确值算完再放进去，见 [3.2](03_data_model.md#32-数值)）。其他表达式必须本来就是这个类型，或是它接受的类型：`var acc: V = p`（`p: V`）直接成立，途中不做任何转换（`let x: float = n`，`n: int`，是 `SemanticDiag::DeclaredTypeMismatch`，应写 `float(n)`）。写出的类型是 `T?`、`T!` 时，`T` 的值装入这个形式（[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)）。
+- 必须有初值。类型可以省略，由初值推出；写出类型时初值必须是这个类型（字面量按所写的类型解释：`let a: i32 = 3`、`let b: f32 = 1`、`let c: float = 0.1 + 0.2`；字面量之间的运算按精确值算完再放进去，见 [3.2](03_data_model.md#32-数值)）。其他表达式必须本来就是这个类型，或是它接受的类型：`var acc: V = p`（`p: V`）直接成立，途中不做任何转换（`let x: float = n`，`n: int`，是 `SemanticDiag::DeclaredTypeMismatch`，应写 `float(n)`）。**文本也不转换**：`let x: int = '42'` 是 `DeclaredTypeMismatch`（消息说 `string` 不能作为 `int`），取数应写 `int('42')` 或 `parse_int('42')`。写出的类型是 `T?`、`T!` 时，`T` 的值装入这个形式（[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)）。
 - 作用域是所在的块（或模块顶层）。同一作用域里不能重复声明同一个名字；内层的块、lambda 可以遮蔽外层的名字。
 - **解构**：元组可以解构，也可以一次声明多个名字：
 

@@ -63,7 +63,6 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
         return cppStringLiteral(camel::core::error::runtimeDiagMessage(diag, std::move(args)));
     };
     switch (code) {
-    case camel::core::type::TypeCode::Int32:
     case camel::core::type::TypeCode::Int64:
         return std::format(
             "{{{}, {}, nullptr}}",
@@ -73,7 +72,15 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
                 {"'" + mark + "'",
                  "int",
                  camel::core::integerRangeReason<int64_t>("int")}));
-    case camel::core::type::TypeCode::Float32:
+    case camel::core::type::TypeCode::Int32:
+        return std::format(
+            "{{{}, {}, nullptr}}",
+            message(RuntimeDiag::InvalidNumberText, {mark, "i32", "an integer"}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'",
+                 "i32",
+                 camel::core::integerRangeReason<int32_t>("i32")}));
     case camel::core::type::TypeCode::Float64:
         return std::format(
             "{{{}, {}, nullptr}}",
@@ -81,6 +88,13 @@ std::string entryNumberText(camel::core::type::TypeCode code) {
             message(
                 RuntimeDiag::ConversionOutOfRange,
                 {"'" + mark + "'", "float", camel::core::floatRangeReason<double>("float")}));
+    case camel::core::type::TypeCode::Float32:
+        return std::format(
+            "{{{}, {}, nullptr}}",
+            message(RuntimeDiag::InvalidNumberText, {mark, "f32", "a number"}),
+            message(
+                RuntimeDiag::ConversionOutOfRange,
+                {"'" + mark + "'", "f32", camel::core::floatRangeReason<float>("f32")}));
     case camel::core::type::TypeCode::Complex64:
     case camel::core::type::TypeCode::Complex128: {
         const bool single       = code == camel::core::type::TypeCode::Complex64;
@@ -377,16 +391,16 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
             value = std::format("args.integer({})", i);
             break;
         case TypeCode::Int32:
-            kind  = "Int";
-            value = std::format("static_cast<int32_t>(args.integer({}))", i);
+            kind  = "Int32";
+            value = std::format("args.integer32({})", i);
             break;
         case TypeCode::Float64:
             kind  = "Float";
             value = std::format("args.number({})", i);
             break;
         case TypeCode::Float32:
-            kind  = "Float";
-            value = std::format("static_cast<float>(args.number({}))", i);
+            kind  = "Float32";
+            value = std::format("args.number32({})", i);
             break;
         case TypeCode::Complex64:
             kind  = "C64";

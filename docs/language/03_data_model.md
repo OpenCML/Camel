@@ -44,7 +44,7 @@ type Pair<T> = (T, T)
 
 ## 3.2 数值
 
-- **数值之间不做隐式转换。** 两个不同类型的*变量*混算（`i32` 与 `int`、`int` 与 `float`）是编译期错误（`SemanticDiag::NoMatchingFunction`），`let y: float = n`（`n` 是 `int`）也是（`SemanticDiag::DeclaredTypeMismatch`）。需要时显式转换。会跟着上下文动的是**字面量**，不是变量：`1 + 2.0` 是 `1.0 + 2.0`，`let x: f32 = 1` 里的 `1` 是 `f32`（见本节末与设计原则 5.1）。
+- **数值之间不做隐式转换。** 两个不同类型的*变量*混算（`i32` 与 `int`、`int` 与 `float`）是编译期错误（`SemanticDiag::NoMatchingFunction`），`let y: float = n`（`n` 是 `int`）也是（`SemanticDiag::DeclaredTypeMismatch`）。需要时显式转换。**文本也不是数**：没有文本到数字的隐式转换，`let x: int = '42'` 是 `SemanticDiag::DeclaredTypeMismatch`（消息说 `string` 不能作为 `int`），`'42' as int` 是 `SemanticDiag::DynamicCastForbidden`（`as` 不做数值转换）；取数用 `int(s)`、`parse_int(s)`，浮点用 `float(s)`、`parse_float(s)`。会跟着上下文动的是**字面量**，不是变量：`1 + 2.0` 是 `1.0 + 2.0`，`let x: f32 = 1` 里的 `1` 是 `f32`（见本节末与设计原则 5.1）。
 - 转换函数：`int(x)`、`i64(x)`、`i32(x)`、`float(x)`、`f64(x)`、`f32(x)`、`c64(x)`、`c128(x)`、`string(x)`。`c64`、`c128` 从实数类型与另一个复数类型取值：实数成为实部、虚部为 0，`c128` 转 `c64` 时两个部分都按 f32 舍入。复数转实数不自动，也不在转换函数里，用 `re()`、`im()`。
 - 复数的运算：`+`、`-`、`*`、`/`、一元 `-`，按复数算术（`i * i` 是 `-1+0i`）；`==`、`!=` 按两个部分比较。没有大小比较、`%`：复数没有顺序。`^` 有（整数指数精确，见 3.2 末）。`abs(z)` 是模（`c64` 给 `f32`，`c128` 给 `float`），`re(z)`、`im(z)` 取实部、虚部，`conj(z)` 取共轭，`exp(z)` 是复指数；它们来自 `math` 模块。复数不能作 `Map` 的键或 `Set` 的元素（没有顺序）。打印与格式说明的规则见 [2.5.3](02_lexical.md#253-虚数字面量)。
 - `i64`、`f64` 只是 `int`、`float` 的另一种写法。诊断、图（`std::rgir`、`inspect`）与编辑器里显示的类型一律用 `int`、`float`：泛型实例叫 `first<int>`，不是 `first<i64>`。

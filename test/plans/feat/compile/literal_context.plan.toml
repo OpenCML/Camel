@@ -233,6 +233,66 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "context.text_declared_int"
+desc = "`let x: int = '42'` is a type mismatch, not text that is not a number (H15g): there is no implicit text-to-number conversion (design principles 5.1), so it reports DeclaredTypeMismatch, says a `string` is not an `int`, and points at `int(s)` / `parse_int(s)`."
+kind = "negative"
+case = "../../../cases/compile/literals/context_text_declared_int.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'string', which is not the declared type 'int'", "'int(s)' or 'parse_int(s)'"]
+expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.text_declared_float"
+desc = "The neighbour (H15g): a text where a `float` is declared is the same type mismatch, naming `string` and `float`."
+kind = "negative"
+case = "../../../cases/compile/literals/context_text_declared_float.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'string', which is not the declared type 'float'"]
+expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.text_declared_complex"
+desc = "The neighbour (H15g): a text where a `c128` is declared is the same type mismatch; the message names the complex type."
+kind = "negative"
+case = "../../../cases/compile/literals/context_text_declared_complex.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'string', which is not the declared type 'c128'"]
+expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.text_as_int"
+desc = "`'42' as int` is a forbidden cast of a text to a number, not text that is not a number (H15g): DynamicCastForbidden says `string` cannot become `int`, and the help names `int(s)` / `parse_int(s)`."
+kind = "negative"
+case = "../../../cases/compile/literals/context_text_as_int.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DynamicCastForbidden"
+expect_diagnostic_line = 9
+expect_diagnostic_column = 13
+expect_output_contains = ["Dynamic cast from 'string' to 'int' is not allowed", "'int(s)' or 'parse_int(s)'"]
+expect_output_not_contains = ["the text is not a number", "LiteralNotRepresentable"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "context.text_out_of_range"
 desc = "`int('99999999999999999999')` is `LiteralNotRepresentable` with the reason out of range and the range, not 'the text is not a number' (H15f)."
 kind = "negative"
