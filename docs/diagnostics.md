@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-182 diagnostics: 165 errors, 17 warnings.
+187 diagnostics: 170 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -150,6 +150,11 @@ prints one entry.
 | `0x0300016C` | [SemanticDiag::RuleTagNotRequires](#ruletagnotrequires) | Error |
 | `0x0300016D` | [SemanticDiag::TagParameterType](#tagparametertype) | Error |
 | `0x0300016E` | [SemanticDiag::TagShadowsPermission](#tagshadowspermission) | Error |
+| `0x03000170` | [SemanticDiag::StaticMatchNotExhaustive](#staticmatchnotexhaustive) | Error |
+| `0x03000171` | [SemanticDiag::StaticMatchUnreachableCase](#staticmatchunreachablecase) | Error |
+| `0x03000172` | [SemanticDiag::StaticTypeNotConcrete](#statictypenotconcrete) | Error |
+| `0x03000173` | [SemanticDiag::StaticMatchTooDeep](#staticmatchtoodeep) | Error |
+| `0x03000174` | [SemanticDiag::GenericInstantiationCycle](#genericinstantiationcycle) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -1186,19 +1191,32 @@ Cannot call function '{0}' with type '{1}' as its type is not fully constructed 
 This often occurs when a function without an explicit return type calls itself, preventing the compiler from inferring the actual return type. Consider explicitly specifying the function's return type to avoid this issue.
 ```
 
-**Example** (`test/cases/compile/generics/err_recursive_untyped.cml`, run as `camel test/cases/compile/generics/err_recursive_untyped.cml`)
+**Example** (`test/cases/compile/module_load/order_values.cml`, run as `camel test/cases/compile/module_load/order_values.cml`)
 
 ```camel
-module err_recursive_untyped
-
-func count(xs: (typeas T)[], i: int) {
-    return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
-}
+// Top-level declarations do not depend on the order they are written in (design principles
+// 10.1): a value uses values written after it, a function uses a value written after it, a
+// function without a declared return type is called before it is written.
+let area = pi * r * r
+let pi = 3.14159
+let r = 2.0
 
 func main(): int sync {
-    println(count([1, 2], 0))
+    println(area, twice(), offset())
     return 0
 }
+
+func twice() {
+    return k * 2
+}
+
+let k = 21
+
+func offset(): int {
+    return k + later
+}
+
+let later = 100
 ```
 
 ### ImportNameNotExported
@@ -3788,6 +3806,141 @@ module err_tag_shadows_permission
 tag reassociate on func
 
 func main(): int {
+    return 0
+}
+```
+
+### StaticMatchNotExhaustive
+
+`0x03000170` · Error · `SemanticDiag::StaticMatchNotExhaustive`
+
+**Message**
+
+```text
+No case of this 'match type' selects the type '{0}'.
+```
+
+**Help**
+
+```text
+The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every type. Add the case for this shape, or end with '#leaf' or '_'.
+```
+
+**Example** (`test/cases/compile/static_expansion/match_type_exhaustive.cml`, run as `camel test/cases/compile/static_expansion/match_type_exhaustive.cml`)
+
+```camel
+module match_type_exhaustive
+
+func only_composite(t: typeas T): int {
+    return match type T {
+        case struct => 1
+        case tuple => 2
+    }
+}
+
+func main(): int sync {
+    println(only_composite(1))
+    return 0
+}
+```
+
+### StaticMatchUnreachableCase
+
+`0x03000171` · Error · `SemanticDiag::StaticMatchUnreachableCase`
+
+**Message**
+
+```text
+The case '{0}' selects every type the cases after it could select.
+```
+
+**Help**
+
+```text
+'#leaf' and '_' select every type, so they must be the last case of a 'match type'.
+```
+
+**Example** (`test/cases/compile/static_expansion/match_type_unreachable.cml`, run as `camel test/cases/compile/static_expansion/match_type_unreachable.cml`)
+
+```camel
+module match_type_unreachable
+
+func after_leaf(t: typeas T): int {
+    return match type T {
+        case #leaf => 1
+        case struct => 2
+    }
+}
+
+func main(): int sync {
+    println(after_leaf(1))
+    return 0
+}
+```
+
+### StaticTypeNotConcrete
+
+`0x03000172` · Error · `SemanticDiag::StaticTypeNotConcrete`
+
+**Message**
+
+```text
+The type matched here is still '{0}' when the function is instantiated.
+```
+
+**Help**
+
+```text
+'match type' needs a concrete type. Bind every type variable of the subject, or use it in a generic function whose call gives them.
+```
+
+*No example: no test small enough to show raises it.*
+
+### StaticMatchTooDeep
+
+`0x03000173` · Error · `SemanticDiag::StaticMatchTooDeep`
+
+**Message**
+
+```text
+The 'match type' bodies are nested {0} deep.
+```
+
+**Help**
+
+```text
+A 'match type' inside the selected body of another one is expanded at compile time; nest fewer of them.
+```
+
+*No example: no test small enough to show raises it.*
+
+### GenericInstantiationCycle
+
+`0x03000174` · Error · `SemanticDiag::GenericInstantiationCycle`
+
+**Message**
+
+```text
+The generic function '{0}' is instantiated with {1} while that same instance is being built, and its return type is not known yet.
+```
+
+**Help**
+
+```text
+A recursive generic call can be built only after the return type is known. Write the return type of the function, or make the recursive call use strictly smaller type arguments.
+```
+
+**Example** (`test/cases/compile/generics/err_recursive_untyped.cml`, run as `camel test/cases/compile/generics/err_recursive_untyped.cml`)
+
+```camel
+module err_recursive_untyped
+
+func count(xs: (typeas T)[], i: int) {
+    return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
+}
+
+func main(): int sync {
+    println(count([1, 2], 0))
     return 0
 }
 ```

@@ -179,6 +179,12 @@ enum class SemanticDiag : uint32_t {
     RuleTagNotRequires     = 0x00016C,
     TagParameterType       = 0x00016D,
     TagShadowsPermission   = 0x00016E,
+    // Static expansion (design principles 5.5, handover H51): 0x170 and up.
+    StaticMatchNotExhaustive  = 0x000170,
+    StaticMatchUnreachableCase = 0x000171,
+    StaticTypeNotConcrete     = 0x000172,
+    StaticMatchTooDeep        = 0x000173,
+    GenericInstantiationCycle = 0x000174,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

@@ -1198,6 +1198,54 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StaticMatchNotExhaustive,
+            {
+                "StaticMatchNotExhaustive",
+                "No case of this 'match type' selects the type '{0}'.",
+                "The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a "
+                "structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every "
+                "type. Add the case for this shape, or end with '#leaf' or '_'.",
+            },
+        },
+        {
+            SemanticDiag::StaticMatchUnreachableCase,
+            {
+                "StaticMatchUnreachableCase",
+                "The case '{0}' selects every type the cases after it could select.",
+                "'#leaf' and '_' select every type, so they must be the last case of a "
+                "'match type'.",
+            },
+        },
+        {
+            SemanticDiag::StaticTypeNotConcrete,
+            {
+                "StaticTypeNotConcrete",
+                "The type matched here is still '{0}' when the function is instantiated.",
+                "'match type' needs a concrete type. Bind every type variable of the subject, "
+                "or use it in a generic function whose call gives them.",
+            },
+        },
+        {
+            SemanticDiag::StaticMatchTooDeep,
+            {
+                "StaticMatchTooDeep",
+                "The 'match type' bodies are nested {0} deep.",
+                "A 'match type' inside the selected body of another one is expanded at compile "
+                "time; nest fewer of them.",
+            },
+        },
+        {
+            SemanticDiag::GenericInstantiationCycle,
+            {
+                "GenericInstantiationCycle",
+                "The generic function '{0}' is instantiated with {1} while that same instance "
+                "is being built, and its return type is not known yet.",
+                "A recursive generic call can be built only after the return type is known. "
+                "Write the return type of the function, or make the recursive call use "
+                "strictly smaller type arguments.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",

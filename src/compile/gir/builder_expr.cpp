@@ -689,6 +689,43 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     throw BuildAbortException();
 }
 
+bool Builder::valueNameExists(const std::string &written, const GCT::node_ptr_t &gct) {
+    if (written.starts_with(kBuiltinPrefix)) {
+        return true;
+    }
+    if (camel::core::isOverloadableOperatorGroup(written) || isOperatorName(written)) {
+        // The operator group exists even if no overload takes these operands; a call picks
+        // an overload, and its diagnostic belongs to the code that is built.
+        return true;
+    }
+    const std::string name = moduleLevelName(written);
+    if (nodeAt(name).has_value() || templateScope_->get(name).has_value() ||
+        graphsAt(name).has_value() || decoratedGraphAt(name).has_value()) {
+        return true;
+    }
+    if (written.find("::") != std::string::npos) {
+        // A qualified name: a variant of an enum or a name of an imported module. Their
+        // resolution needs the type or the module, which the build of the selected case
+        // does; for a case that is not selected the name is at least qualified.
+        return true;
+    }
+    if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
+        if (importedEntity(written, ImportLayer::Named).has_value()) {
+            return true;
+        }
+    }
+    if (isOperatorName(written) || module_->hasImportedRef(written)) {
+        if (module_->hasImportedRef(written) && importedEntity(written).has_value()) {
+            return true;
+        }
+    }
+    if (throughUsing(written, gct)) {
+        return true;
+    }
+    return module_->hasImportedRef(written, ImportLayer::Ambient) &&
+           importedEntity(written, ImportLayer::Ambient).has_value();
+}
+
 node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     ENTER("CAST");
     ExpectedValueScope expectedScope(expectedValueType_, boundType(gct->targetType()));
