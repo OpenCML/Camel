@@ -1857,6 +1857,7 @@ eda3a0faed456fe0 ok test/cases/opt/generic/gate_value_dependency.cml
 2cbe06923aebe2d4 ok test/cases/opt/generic/recursion_unroll.cml
 a03ab8457e8f2c56 ok test/cases/opt/generic/shape_unroll.cml
 b4de848a8f51d64b ok test/cases/opt/generic/simplify_growth_budget.cml
+bed24ef679ea599d ok test/cases/opt/generic/specialization_survives_the_round.cml
 586a11be0d4b82fa ok test/cases/opt/generic/specialize_growing_shape.cml
 5c9343372e8c4995 ok test/cases/opt/generic/static_branches.cml
 e978ff58deb502b9 ok test/cases/opt/generic/unread_gate.cml

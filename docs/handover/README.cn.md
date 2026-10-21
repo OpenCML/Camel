@@ -165,6 +165,7 @@
 
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
+| H70 | H44c 待决第 2 项：补一个"特化跨轮仍可达"的用例，锁住程序级特化表的用处 | 无 | **已完成**（报告 reports/H70.md；`specialization_survives_the_round.copy_is_reused_in_a_later_round`：程序级表 7 条 / 12 图 174 节点，7 份 `walk` 副本全部从根可达且其中一份被后面的轮次原样取回；会话级表 12 份副本 / 17 图 254 节点，钉住形态 10 条；`feat/opt/generic` 87/87、`feat/parse/frontend` 4/4） |
 | H63 | **抽取的保留边界与作者裁定不符**：`DraftWritings::extract` 按"不参与同余"预选，连带保留纯节点（shape 3、GC 追踪常量等），饱和造出的死写法留在抽取结果里；按裁定改为"有副作用／承载顺序／被写入的变量"保留，纯节点只按可达性 | 无 | **已完成**（报告 reports/H63.md；回归 `rules.extract_keeps_no_unreachable_pure_node`：4 轮饱和后 33 节点、15 个死字符串常量，修复后抽取回 3 节点、0 个；`mm/writings`、`opt/algebra`、`rules`、`loops`、`autodiff`（去 PyTorch 对照）、`smoke`、`feat/opt` 共 1020/1020） |
 | H62 | 无 JIT 构建（CI 的 `linux-x64-nojit` 腿）在 `fastvm.cpp` 读 `jitConfig_` 而该成员只在 `#if ENABLE_FASTVM_JIT` 内声明——构建红，发布 CI 会跟着红 | 无 | **已完成**（各处按构建分开，无 JIT 时剖析后端名就是 `std::fvm`；无 JIT 全量重建后 fast 层 4769 / 4757 pass / 0 fail / 12 skip；报告 reports/H62.md） |
 | H61 | 规则引擎按作者裁定的三项：`analysis` 接收多个模式变量；抽取的保留边界写进设计稿；`algebra.cpp` 对等的次序（先元素类型定律、再张量定律；`safe_fp` 就是 `#strict`） | 无 | **部分完成**（第 1、2 项完成；第 3 项只记后果、未实施；报告 reports/H61.md。§3.2 记下的抽取缺陷由 H63 修复；措辞张力按作者更正解决——裁定括注"按依赖求值只适用于纯计算"是协调者的误写、已删除，设计原则 3.1 不变，见 reports/H63.md） |
@@ -196,7 +197,7 @@
 | H5b | 在声明类型的模块里找算子（设计原则 5.7，按 H5 报告第 5 节的计划） | 无 | **已完成**（`6e54035c`；报告 reports/H5b.md） |
 | H15i | 下溢一致、`inf`/`nan` 数据文本、`09` 与 `077` 的词法、元组字面量分支、删除不可达诊断 | 无 | **已完成**（`584ef85c`；报告 reports/H15i.md） |
 | H45 | `if` 臂里的循环在所有后端给出错值 | 无 | **已完成** |
-| H44c | H44b 的两个待决问题：缓存不使图存活（Q2）；内联历史（Q1） | 无 | **已完成**（第 1、2 项已入；H44 第 2 项仍未落地，证据见 reports/H44c.md） |
+| H44c | H44b 的两个待决问题：缓存不使图存活（Q2）；内联历史（Q1） | 无 | **已完成**（第 1、2 项已入；H44 第 2 项仍未落地，证据见 reports/H44c.md；待决第 2 项"特化跨轮仍可达"的用例由 H70 完成，见 reports/H70.md） |
 | H44b | 特化缓存放在程序一级、跨会话保留；之后落地结构体 CAST 折叠并删除导出绕行 | 无 | **部分完成**（第 1 项已入，H44c 按裁决改为“缓存不拥有图”；第 2 项未落地；`unended_unrolling` 的导出拒绝 96 s → 0.015 s；报告 reports/H44b.md、reports/H44c.md） |
 | H46 | `std::cpp` 生成代码中 `rt::Site` 预渲染的递归深度消息损坏 | 无 | **已完成**（`60d92431`；报告 reports/H46.md） |
 | H44 | ONNX 重名输出、折叠常量的 Safe 结构体 CAST（不依赖它展开）、结构体循环状态 | 无 | **部分完成**（第 1 项已入 `ce16c788`；第 2 项已落地（H60：折叠把函数返回的值当作可替换锚点，`constantOf` 的 CAST 穿透已删，导出模型不变；报告 reports/H60.md）；第 3 项未做；报告 reports/H44.md） |
