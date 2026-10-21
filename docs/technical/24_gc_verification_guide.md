@@ -337,6 +337,11 @@ Use this rule when extending GC coverage:
   header, or broken allocator metadata.
 - Verifier failures after collection usually indicate missed root relocation, missed write barrier,
   stale remembered-set entry, or finalizer/reclamation ordering problems.
+- A slot whose static type is an aggregate (a tuple or a struct) that points outside every managed
+  region is usually a compact element view that was stored instead of materialised
+  (`rtdata/view.h`): a view is a Struct/Tuple header in the thread-local view store, not an
+  allocated object, so every store that keeps a value must materialise it first (`Tuple::set`,
+  `Struct::set`, `Array::set`, `Frame::set`; H73).
 - A remembered-set self-test failure usually points to a container write path that bypassed typed
   setters or forgot to record the actual old owner.
 - A foreign-resource self-test failure usually points to incorrect dispose idempotency, wrapper

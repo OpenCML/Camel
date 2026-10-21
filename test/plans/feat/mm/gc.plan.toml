@@ -500,3 +500,39 @@ expect_exit = 0
 expect_stdout_contains = ["-12.0 -12.0 24.0", "[2, 3, 2] 12.0 120.0", "\n-12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "gc.view_frame_store.stress.nvm"
+desc = "An element of a compact array of pure-data tuples or structs is read as a view into the array block, and a higher-order operator binds it into its callback's frame: the frame is a GC root, so the store materialises the view instead of tracing a pointer into the thread-local view ring. A collection every third allocation and at every safepoint, with the heap verified before and after each, while the callback runs (nvm)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_view_frame_store.cml"
+args = ["${case}", "std::gc::verify", "${run_nvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "24 24 10"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gc.view_frame_store.stress.fvm"
+desc = "An element of a compact array of pure-data tuples or structs is read as a view into the array block, and a higher-order operator binds it into its callback's frame: the frame is a GC root, so the store materialises the view instead of tracing a pointer into the thread-local view ring. A collection every third allocation and at every safepoint, with the heap verified before and after each, while the callback runs (fvm, whose callback calls out and so reaches a call-boundary safepoint)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_view_frame_store.cml"
+args = ["${case}", "std::gc::verify", "${run_fvm}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "24 24 10"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gc.view_frame_store.stress.jit"
+desc = "An element of a compact array of pure-data tuples or structs is read as a view into the array block, and a higher-order operator binds it into its callback's frame: the frame is a GC root, so the store materialises the view instead of tracing a pointer into the thread-local view ring. A collection every third allocation and at every safepoint, with the heap verified before and after each, while the callback runs (jit)."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_view_frame_store.cml"
+args = ["${case}", "std::gc::verify", "${run_jit}"]
+envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=both"]
+expect_exit = 0
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "24 24 10"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

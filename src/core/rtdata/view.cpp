@@ -18,6 +18,7 @@
 #include "camel/core/rtdata/view.h"
 
 #include "camel/core/mm.h"
+#include "camel/core/rtdata/aggregate.h"
 #include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
@@ -157,15 +158,7 @@ bool isViewSlot(slot_t slot, const type::Type *type) {
     if (slot == NullSlot || type == nullptr) {
         return false;
     }
-    if (type->code() == type::TypeCode::Struct) {
-        const auto *object = fromSlot<const Struct *>(slot);
-        return object != nullptr && object->isView();
-    }
-    if (type->code() == type::TypeCode::Tuple) {
-        const auto *object = fromSlot<const Tuple *>(slot);
-        return object != nullptr && object->isView();
-    }
-    return false;
+    return isViewValue(slot, type->code());
 }
 
 void assertStoredValueIsNotView(slot_t slot, const type::Type *type, std::string_view where) {
