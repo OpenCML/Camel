@@ -134,6 +134,12 @@ RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
 camel::runtime::gc_node_ref_t resolveRuntimeBranchArmEntry(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
     std::span<const camel::runtime::gc_node_ref_t> topoOrder);
+// Checks that the Arm regions of `graph` hold what the arms of its branches hold by the older
+// reckoning (camel/runtime arm_members.h over the frozen graph): the same nodes, for every arm of
+// every branch the execution order reaches. Throws std::runtime_error naming the branch and the
+// arm. Kept while the back ends move from reckoning the arms to reading the regions.
+void verifyBranchArmRegions(
+    camel::runtime::GCGraph *graph, std::span<const camel::runtime::gc_node_ref_t> topoOrder);
 size_t selectRuntimeBranchArm(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef,
     camel::core::context::Frame *frame);

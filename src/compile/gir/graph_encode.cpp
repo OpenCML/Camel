@@ -611,6 +611,7 @@ class EncodeSession {
         // Later statements may make an earlier control edge redundant. Clean up once before
         // freezing, with a smaller work cap than the explicit optimization stage.
         camel::runtime::reduceControlDependencies(*prepared.draft, 8192);
+        prepared.draft->refreshArmRegions();
         prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
         CAMEL_LOG_INFO_S(
             "GIREncode",

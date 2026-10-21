@@ -501,6 +501,13 @@ class GraphDraft {
     void setRegionOrigin(uint32_t id, uint32_t origin);
     void setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t callSite);
     void setRegionAttrs(uint32_t id, uint32_t attrs);
+    /// Makes the Arm regions of the BRCH nodes match the arms the graph has now: one region per
+    /// arm (its id kept while the arm is), holding what runs only when the arm is taken
+    /// (arm_members.h), nested as the branches are. Run before a draft is encoded.
+    /// Costs a walk over the graph for each branch, so it is done only when the environment asks
+    /// (armRegionsDerived): CAMEL_DERIVE_ARM_REGIONS=1. Nothing reads the Arm regions yet.
+    void refreshArmRegions();
+    static bool armRegionsDerived();
     /// True when `inner` is `outer` or lies in it.
     bool regionWithin(uint32_t inner, uint32_t outer) const;
     /// Source origin of node `id` (see DraftNodeHeader::origin).

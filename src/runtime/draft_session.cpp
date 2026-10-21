@@ -999,6 +999,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     const auto allocate = [&](GCGraph *graph) {
         ensureDraft(graph);
         const DraftEntry &entry = *drafts_.at(graph);
+        entry.draft->refreshArmRegions();
         const size_t bytes      = draftGraphBytes(context_, *entry.draft, graph);
         GCGraph *copy           = allocateGraph(context_, entry.identity, *entry.draft, bytes);
         fresh.emplace(graph, copy);
@@ -1223,6 +1224,7 @@ void GraphDraftGroup::encode() {
     std::vector<GCGraph *> members;
     for (GraphId id : order_) {
         Member &m = member(id);
+        m.draft->refreshArmRegions();
         bytes.emplace(id, draftGraphBytes(context_, *m.draft, nullptr));
         graphs.emplace(id, allocateGraph(context_, m.identity, *m.draft, bytes.at(id)));
         members.push_back(graphs.at(id));
