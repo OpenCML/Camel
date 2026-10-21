@@ -51,7 +51,7 @@ ArrayStorage arrayStorageFor(const Type *elementType);
 size_t arrayElementSize(TypeCode code);
 
 /// True for the numeric scalar type codes that compact arrays and DLPack call a number
-/// (ints, floats, bool, byte).
+/// (ints, floats, bool).
 bool isCompactElementType(TypeCode code);
 
 // Factory for constructing ArrayType (may use STL containers).

@@ -74,41 +74,48 @@ void reportFunctionReference(
 }
 } // namespace
 
+node_handle_t Builder::literalDataInType(const GCT::node_ptr_t &gct, Type *expected) {
+    // A literal in a position takes the position's type while it is made (design principles
+    // 5.1): the value written is converted exactly, and a composite literal element by element.
+    // Making it in its own type first would leave that literal unused in the graph; every
+    // other conversion of a value into its position is coerceTo (checkValue).
+    if (gct == nullptr || gct->type() != GCT::NodeKind::DATA || expected == nullptr) {
+        return nullptr;
+    }
+    const data_ptr_t &data = gct->data();
+    if (expected->assignableFrom(data->type())) {
+        return nullptr;
+    }
+    if (isComposite(data->type()->code())) {
+        if (!tt::as_shared<CompositeData>(data)->resolved()) {
+            return nullptr;
+        }
+        const data_ptr_t typed = compositeDataInType(data, expected, gct);
+        if (typed == nullptr) {
+            return nullptr;
+        }
+        node_handle_t result = currGraph_->addStaticDataNode(typed);
+        if (varied_ && currGraph_->outerGraph().get() != nullptr) {
+            node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
+            linkNodes(LinkType::Norm, result, copyNode);
+            result = copyNode;
+        }
+        registerNodeOrigin(context_, result, gct, "gir.data.literal");
+        return result;
+    }
+    if (!expected->isPrimitive()) {
+        return nullptr;
+    }
+    const literal::Value *exact = literalValueOfGct(gct);
+    if (exact == nullptr || !literal::kindEnters(*exact, expected)) {
+        return nullptr;
+    }
+    return literalInType(*exact, expected, gct, true);
+}
+
 node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
     ENTER("DATA");
     const data_ptr_t &data = gct->data();
-
-    // A literal that is the value of a body — an arm's value, or a function's last expression —
-    // is in the position the body stands at, so it takes that position's type (design
-    // principles 5.1): `let x: float = if c then 1 else 2` has float arms, and so has a
-    // `match` whose value is declared a float. The value written is converted exactly, and a
-    // composite literal element by element.
-    if (gct == tailStatement_ && expectedValueType_ != nullptr &&
-        !expectedValueType_->assignableFrom(data->type())) {
-        Type *expected = expectedValueType_;
-        if (isComposite(data->type()->code())) {
-            if (tt::as_shared<CompositeData>(data)->resolved()) {
-                if (const data_ptr_t typed = compositeDataInType(data, expected, gct)) {
-                    node_handle_t result = currGraph_->addStaticDataNode(typed);
-                    if (varied_ && currGraph_->outerGraph().get() != nullptr) {
-                        node_handle_t copyNode = currGraph_->addCopyNode(typed->type());
-                        linkNodes(LinkType::Norm, result, copyNode);
-                        result = copyNode;
-                    }
-                    registerNodeOrigin(context_, result, gct, "gir.data.literal");
-                    LEAVE("DATA");
-                    return result;
-                }
-            }
-        } else if (expected->isPrimitive()) {
-            if (const literal::Value *exact = literalValueOfGct(gct);
-                exact != nullptr && literal::kindEnters(*exact, expected)) {
-                node_handle_t literal = literalInType(*exact, expected, gct, true);
-                LEAVE("DATA");
-                return literal;
-            }
-        }
-    }
 
     node_handle_t node{};
     TypeCode dataType = data->type()->code();

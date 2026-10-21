@@ -1375,6 +1375,15 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
         recorder->typeDeclared(ast->load()->origin(), typeLoad->ref().toString(), type);
     }
+    // Where a use of this name is to say it was declared: the language server answers
+    // "where is this type declared" from this, in this module and in the modules importing it.
+    {
+        std::vector<std::string> declared(namespacePath_);
+        const auto paths = typeLoad->ref().paths();
+        declared.insert(declared.end(), paths.begin(), paths.end());
+        declared.push_back(typeLoad->ref().ident());
+        module_->noteTypeDeclarationOrigin(Reference(declared), ast->load()->origin());
+    }
     if (exportedRefs_.contains(typeLoad->ref().toString())) {
         // Exported at once: a module that imports this one back may need it before this one
         // is through (see visitModule).
@@ -5075,25 +5084,46 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     // Layer 1 and 2: the types of the enclosing scopes and of the module, from the innermost
     // namespace out. The built-in type names (`int`, `Map`, ...) are at the top of the scopes.
     std::optional<Type *> found;
+    std::optional<Reference> foundRef;
     for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && !found;) {
         std::vector<std::string> parts(namespacePath_.begin(), namespacePath_.begin() + depth);
         const Reference candidate(own);
         parts.insert(parts.end(), candidate.paths().begin(), candidate.paths().end());
         parts.push_back(candidate.ident());
-        found = typeScope_->get(Reference(parts));
+        Reference lookup(parts);
+        found = typeScope_->get(lookup);
+        if (found) {
+            foundRef = std::move(lookup);
+        }
     }
+    // What the builders report about a use of a type name: the type it denotes and where that
+    // type is declared, when the declaration is in the sources (not for a built-in name or a
+    // type variable). The language server reads this instead of resolving type names itself.
+    const auto report = [&](Type *type, origin_id_t decl) -> Type * {
+        if (auto *recorder = context_ ? context_->semanticRecorder() : nullptr) {
+            recorder->typeReferenced(ast->load()->origin(), ref.ident(), decl, type);
+        }
+        return type;
+    };
+    // Where the module a name is imported from declared it.
+    const auto importedOrigin = [&](const Reference &name) -> origin_id_t {
+        if (const auto source = module_->importedSource(name, ImportLayer::Named)) {
+            return source->first->typeDeclarationOrigin(source->second);
+        }
+        return 0;
+    };
     if (found) {
         // An imported type named `Map` or `Set` comes before the built-in of that name.
         if (isCollectionPrototype(found.value())) {
             if (const auto imported = module_->getImportedType(ref); imported.has_value()) {
-                return imported.value();
+                return report(imported.value(), importedOrigin(ref));
             }
         }
-        return found.value();
+        return report(found.value(), module_->typeDeclarationOrigin(*foundRef));
     }
     // Layer 3: imported by name, or through a module or namespace prefix.
     if (const auto imported = module_->getImportedType(ref, ImportLayer::Named)) {
-        return imported.value();
+        return report(imported.value(), importedOrigin(ref));
     }
     if (const auto source = module_->importedSource(ref, ImportLayer::Named)) {
         // Imported, and not declared (yet): perhaps the types form a cycle across modules.
@@ -5101,11 +5131,17 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     }
     // Layer 4: through a `using namespace` in force; two that give different types are an
     // error where the name is used.
-    std::vector<std::pair<std::string, Type *>> viaUsing;
+    struct UsedType {
+        std::string shown;
+        Type *type;
+        origin_id_t origin;
+    };
+    std::vector<UsedType> viaUsing;
     for (const auto &frame : usingFrames_) {
         for (const Reference &using_ : frame) {
             const std::string prefixed = using_.toString() + "::" + written;
             Type *type                 = nullptr;
+            origin_id_t origin         = 0;
             // The full name of the candidate, for AmbiguousName (design principles 10.2).
             std::string shown = prefixed;
             for (size_t depth = namespacePath_.size() + 1; depth-- > 0 && type == nullptr;) {
@@ -5114,14 +5150,16 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
                     candidate += namespacePath_[i] + "::";
                 }
                 if (auto own = typeScope_->get(Reference(candidate + prefixed))) {
-                    type  = own.value();
-                    shown = module_->qualifiedName(Reference(candidate + prefixed));
+                    type   = own.value();
+                    origin = module_->typeDeclarationOrigin(Reference(candidate + prefixed));
+                    shown  = module_->qualifiedName(Reference(candidate + prefixed));
                 }
             }
             if (type == nullptr) {
                 if (auto imported =
                         module_->getImportedType(Reference(prefixed), ImportLayer::Named)) {
-                    type = imported.value();
+                    type   = imported.value();
+                    origin = importedOrigin(Reference(prefixed));
                     if (const auto source =
                             module_->importedSource(Reference(prefixed), ImportLayer::Named)) {
                         shown = source->first->qualifiedName(source->second);
@@ -5129,18 +5167,20 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
                 }
             }
             if (type != nullptr && std::ranges::none_of(viaUsing, [&](const auto &have) {
-                    return have.second == type;
+                    return have.type == type;
                 })) {
-                viaUsing.emplace_back(shown, type);
+                viaUsing.push_back(UsedType{shown, type, origin});
             }
         }
     }
     if (viaUsing.size() == 1) {
-        return viaUsing.front().second;
+        return report(viaUsing.front().type, viaUsing.front().origin);
     }
     if (viaUsing.size() > 1) {
         std::string sources;
-        for (const auto &[name, type] : viaUsing) {
+        for (const auto &[name, type, origin] : viaUsing) {
+            (void)type;
+            (void)origin;
             sources += (sources.empty() ? "" : ", ") + name;
         }
         diags_->of(SemanticDiag::AmbiguousName)
@@ -5150,7 +5190,7 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     }
     // Layer 5: what the built-in module and the modules of operators bring along.
     if (const auto ambient = module_->getImportedType(ref, ImportLayer::Ambient)) {
-        return ambient.value();
+        return report(ambient.value(), 0);
     }
     if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
         throw BuildAbortException();

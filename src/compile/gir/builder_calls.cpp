@@ -434,7 +434,7 @@ node_handle_t Builder::partialApplicationOf(
         if (param == nullptr || entersImplicitly(param, boundTypes[i])) {
             continue;
         }
-        node_handle_t entered = coerceTo(bound[i].node, param, bound[i].expr);
+        node_handle_t entered = checkValue(bound[i].node, param, bound[i].expr);
         ASSERT(entered != nullptr, "An argument the binding accepted is converted.");
         bound[i].node = entered;
     }

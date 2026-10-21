@@ -471,29 +471,6 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                         }),
                 },
             }),
-        // `acc = acc->append<v>` written as a statement: the compiler writes this group for it
-        // (Builder::rebindingAppendOf), no program can name it. The variable is bound to the
-        // new array, which is built in place when only the variable refers to the old one
-        // (__builtin__assn_append__). Its types are those of `append`.
-        OperatorGroup::create(
-            "__assn_append__",
-            {
-                {
-                    ":op/assn_append",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {2, {true, false}}},
-                        "(var self: T[], value: T) => T[]",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> optional<Type *> {
-                            if (norm[0]->code() != TypeCode::Array)
-                                return nullopt;
-                            const auto &arrType = tt::as_ptr<ArrayType>(norm[0]);
-                            if (!arrType->elemType()->assignableFrom(norm[1]))
-                                return nullopt;
-                            return arrType;
-                        }),
-                },
-            }),
         OperatorGroup::create(
             "__assn_add__",
             {

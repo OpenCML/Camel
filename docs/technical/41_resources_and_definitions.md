@@ -53,7 +53,8 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:var/get`, `:var/peek` | read the cell (operand 0); the value read may share what it holds |
 | `:var/take` | read-modify-write of the cell (it hands an in-place form the cell's own array) |
 | `:op/assn`, `:op/assn_<t>`, `:op/assn_owned` | write the cell; the result is the value stored |
-| `:op/assn_<op>_<t>`, `:op/assn_append` | read-modify-write of the cell |
+| `:op/assn_<op>_<t>` | read-modify-write of the cell |
+| `:struct/append_arr_in_place`, `:op/set_index_in_place` | read-modify-write of operand 0; the result is that object |
 | `algo:*_in_place` | read-modify-write of an object (operand 0); the result is that object |
 | `:io/print`, `:io/println`, `tensor:show` | write `io:stdout`, external |
 | `:io/input`, `os:get_char(s)`, `os:clear_input_buffer` | read-modify-write `io:stdin`, external |

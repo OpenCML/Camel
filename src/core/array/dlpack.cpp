@@ -52,8 +52,6 @@ DLDataType toDLPackType(TypeCode code) {
         return DLDataType{0, 64, 1};
     case TypeCode::Bool:
         return DLDataType{6, 8, 1};
-    case TypeCode::Byte:
-        return DLDataType{1, 8, 1};
     case TypeCode::Complex64:
         return DLDataType{5, 64, 1};
     case TypeCode::Complex128:
@@ -81,9 +79,6 @@ TypeCode fromDLPackType(const DLDataType &dtype) {
     }
     if (dtype.code == 6 && dtype.bits == 8) {
         return TypeCode::Bool;
-    }
-    if (dtype.code == 1 && dtype.bits == 8) {
-        return TypeCode::Byte;
     }
     if (dtype.code == 5 && dtype.bits == 64) {
         return TypeCode::Complex64;

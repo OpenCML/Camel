@@ -80,8 +80,6 @@ int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool de
         return static_cast<int>(static_cast<int64_t>(result));
     case TypeCode::Bool:
         return result != 0 ? 1 : 0;
-    case TypeCode::Byte:
-        return static_cast<int>(static_cast<uint8_t>(result));
     case TypeCode::Void:
         return 0;
     default:

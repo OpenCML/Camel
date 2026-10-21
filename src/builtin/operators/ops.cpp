@@ -207,7 +207,7 @@ slot_t __builtin__var_new__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __builtin__var_get__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Tuple *cell = variableOf(norm);
     // The value leaves the variable: from here on something else may refer to it, so the
-    // variable no longer grows it in place (__builtin__assn_append__).
+    // variable no longer grows it in place (:op/assn_owned sets the mark again).
     cell->setHoldsUnsharedArray(false);
     return cell->get<slot_t>(0);
 }
@@ -230,59 +230,18 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rhs;
 }
 
-// `acc = acc->append<v>` written as a statement (Builder::rebindingAppendOf). The meaning is
-// that of the rebinding: `append` returns a new array and the variable is bound to it, the
-// old array unchanged (design principles 11.3). Changing the array in place gives the same
-// result when nothing but the variable refers to it, which the cell records
-// (Tuple::holdsUnsharedArray): the flag is set only here, after storing an array made here,
-// and cleared by every read of the variable (:var/get) and every other write (:op/assn), so
-// while it is set no reference to the array has left the cell. The first append after the
-// variable was read copies (with room to grow); the appends that follow, as long as nothing
-// reads the variable in between, grow that copy in place, as `xs->append<v>` used to.
-//
-// Collectors: the array is changed with the write barrier of Array::append, as `append` used
-// to change it; the cell keeps it alive and a moving collector updates the cell's slot. The
-// flag is a field of the cell, so it moves with it. Parallel scheduler: the operator runs on one
-// thread and reads and writes only its own cell; two threads use one cell at the same time
-// only when the elements of a parallel `map` write a captured `var`, whose order the
-// language leaves to the program (design principles 3.6) and which raced already when
-// `append` changed the array in place.
-slot_t __builtin__assn_append__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    Tuple *cell        = variableOf(norm);
-    auto *cellType     = static_cast<TupleType *>(norm.type(0));
-    auto *arrType      = static_cast<ArrayType *>(cellType->typeAt(0));
-    const slot_t value = norm.slot(1);
-    if (cell->holdsUnsharedArray()) {
-        Array *arr = cell->get<Array *>(0);
-        arr->append(value, arrType);
-        return toSlot(arr);
-    }
-    const Array *old = cell->get<Array *>(0);
-    const size_t n   = old->size();
-    // Room for the appends that are likely to follow, so that a loop of them stays linear.
-    // (Allocation never collects or moves an object: `old` stays valid; mm/gen.h.)
-    Array *res = Array::create(mm::autoSpace(), arrType, 0);
-    res->reserve(n + n / 2 + 1, arrType);
-    for (size_t i = 0; i < n; ++i) {
-        res->append(old->get<slot_t>(i), arrType);
-    }
-    res->append(value, arrType);
-    cell->set<slot_t>(0, toSlot(res), cellType);
-    cell->setHoldsUnsharedArray(true);
-    return toSlot(res);
-}
-
-// `xs = xs->sort` written as a statement, for an operator that declares an in-place form
-// (OperatorTable::setInPlaceForm; Builder::inPlaceRebindingOf). The compiler writes
+// `xs = xs->sort`, `acc = acc->append<v>` written as a statement, for an operator that
+// declares an in-place form (OperatorTable::setInPlaceForm; Builder::inPlaceRebindingOf). The
+// compiler writes
 //
 //     :op/assn_owned(xs, <the in-place form>(..., :var/take(xs)))
 //
 // The meaning is that of the rebinding (design principles 11.3): the operator returns a
-// new array and the variable is bound to it. :var/take hands the in-place form an array no one
-// else refers to: the variable's own array when the variable is its only holder (the mark
-// __builtin__assn_append__ describes), otherwise a copy of it. The form changes that array and
-// returns it, and :op/assn_owned stores it and sets the mark, as nothing else refers to it.
-// Between the two nothing reads the variable: the three are one statement of a sync block.
+// new value and the variable is bound to it. :var/take hands the in-place form an array no one
+// else refers to: the variable's own array when the variable is its only holder (the mark set
+// by :op/assn_owned), otherwise a copy of it. The form changes that array and returns it, and
+// :op/assn_owned stores it and sets the mark, as nothing else refers to it. Between the two
+// nothing reads the variable: the three are one statement of a sync block.
 //
 // Collectors: the copy is a new object, and the in-place forms reorder the slots of an array
 // of numbers, which hold no references. The flag is a field of the cell (it moves with it).

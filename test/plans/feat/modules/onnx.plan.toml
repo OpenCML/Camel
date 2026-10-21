@@ -2493,7 +2493,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "export_var_append"
-desc = "export_model of a function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_append`, design principles 11.3): refused with a located diagnostic naming the append; the program's own run before the export still prints the tensor."
+desc = "export_model of a function that grows an array variable with `acc = acc->append<v>` (the in-place `:op/assn_owned`, design principles 11.3): refused with a located diagnostic naming the append; the program's own run before the export still prints the tensor."
 kind = "negative"
 case = "../../../cases/modules/onnx/export_var_append.cml"
 args = ["${case}", "std::macro"]

@@ -49,8 +49,6 @@ template <typename T> class PrimaryData : public Data {
             type_ = type::Type::Float64();
         } else if constexpr (std::is_same_v<T, bool>) {
             type_ = type::Type::Bool();
-        } else if constexpr (std::is_same_v<T, char>) {
-            type_ = type::Type::Byte();
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
@@ -65,8 +63,6 @@ template <typename T> class PrimaryData : public Data {
             return data_ == 0;
         } else if constexpr (std::is_same_v<T, bool>) {
             return data_ == false;
-        } else if constexpr (std::is_same_v<T, char>) {
-            return data_ == '\0';
         } else {
             static_cml_assert(!std::is_same_v<T, T>, "Unsupported type");
         }
@@ -86,8 +82,6 @@ template <typename T> class PrimaryData : public Data {
     virtual const std::string toString() const override {
         if constexpr (std::is_same_v<T, bool>) {
             return data_ ? "true" : "false";
-        } else if constexpr (std::is_same_v<T, char>) {
-            return std::string(1, data_);
         } else if constexpr (std::is_same_v<T, float>) {
             std::ostringstream oss;
             oss << std::fixed << std::setprecision(3) << data_;
@@ -113,7 +107,6 @@ using LongData   = PrimaryData<int64_t>;
 using FloatData  = PrimaryData<float>;
 using DoubleData = PrimaryData<double>;
 using BoolData   = PrimaryData<bool>;
-using ByteData   = PrimaryData<std::byte>;
 
 // Whether the value of a literal can be held by the narrower primitive type `to`: an int64 in
 // an i32, a finite double in an f32. A double too large for an f32 would become an infinity

@@ -557,6 +557,34 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     return typed;
 }
 
+node_handle_t Builder::checkValue(
+    node_handle_t node, Type *expected, const GCT::node_ptr_t &origin) {
+    if (node == nullptr || expected == nullptr) {
+        return node;
+    }
+    // A name of a generic function has no type of its own until the position says which
+    // instance is wanted (design principles 5.5); genericValueFor reports when it cannot.
+    if (genericDrefs_.contains(node)) {
+        node = genericValueFor(node, expected, origin);
+    }
+    return coerceTo(node, expected, origin);
+}
+
+node_handle_t Builder::visitInPosition(const GCT::node_ptr_t &gct, Type *expected) {
+    ExpectedValueScope scope(expectedValueType_, expected);
+    if (node_handle_t literal = literalDataInType(gct, expected); literal != nullptr) {
+        return literal;
+    }
+    node_handle_t node = valueNodeOf(visit(gct));
+    if (node_handle_t checked = checkValue(node, expected, gct); checked != nullptr) {
+        return checked;
+    }
+    // The value does not take the position's type. The position's own check reports it with
+    // the diagnostic that names the place (a declared return type, a branch's arms); leaving
+    // the value as it is keeps that one report.
+    return node;
+}
+
 node_handle_t Builder::compositeLiteralInType(
     node_handle_t node, Type *target, const GCT::node_ptr_t &origin) {
     if (origin == nullptr || target == nullptr || asTagged(target) != nullptr ||
@@ -1996,7 +2024,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (loopExpected != nullptr) {
             // A value that is not the empty literal is converted only when its position
             // accepts it; one that does not fit stays as it is and is reported below.
-            if (node_handle_t typed = coerceTo(node, loopExpected, expr); typed != nullptr) {
+            if (node_handle_t typed = checkValue(node, loopExpected, expr); typed != nullptr) {
                 node = typed;
             }
         }
@@ -2679,20 +2707,7 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             gct);
     }
     // A function that declares T? or T! returns its plain value boxed (see adaptExitValue).
-    resNode                    = adaptExitValue(gct, resNode);
-    // The value a `return` gives is a position with an expected type too (design principles
-    // 5.1): a struct whose fields are the declared type's fields, by name but in another
-    // order, is copied into the declared type rather than refused. Between two named types
-    // this does not apply: the value must already be of the declared type (an `as` is written
-    // where it is made).
-    if (Type *expected = expectedExitTypeHere(); expected != nullptr &&
-                                                  expected->code() == TypeCode::Struct &&
-                                                  nodeTypeOf(resNode)->code() == TypeCode::Struct) {
-        if (node_handle_t converted = coerceTo(resNode, expected, gct->at(0));
-            converted != nullptr) {
-            resNode = converted;
-        }
-    }
+    resNode = adaptExitValue(gct, resNode);
     node_handle_t outputAnchor = resNode;
     node_vec_t pendingCtrlInputs;
     if (auto modifier = modifierOf(resNode); modifier.has_value()) {
@@ -2749,12 +2764,12 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     // The last statement of a body is the value the body hands on: a branch there (`if c then
     // … else …` as a function's whole body) stands in the position of that value, and so do
     // the `return`s written in its arms (handover H24: an arm's `return` takes the type of the
-    // position the arm is at, never the declared type of the function around it).
-    Type *outerTail               = std::exchange(tailExpectedType_, tailPositionType());
-    const GCT::Node *outerTailFor = std::exchange(tailExpectedFor_, gct);
+    // position the arm is at, never the declared type of the function around it). The position
+    // is passed to visitExecNode, which builds that statement through the same expected-type
+    // channel every other position uses.
     node_handle_t result{};
     try {
-        result = visitExecNode(gct);
+        result = visitExecNode(gct, tailPositionType());
         if (lastBlockStatement_.first != nullptr) {
             const void *body = activeArm() != nullptr ? static_cast<const void *>(activeArm())
                                                        : static_cast<const void *>(currGraph_.get());
@@ -2763,14 +2778,10 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     } catch (...) {
         synced_         = outerSynced;
         lastSyncedNode_ = outerLast;
-        tailExpectedType_ = outerTail;
-        tailExpectedFor_  = outerTailFor;
         throw;
     }
     synced_         = outerSynced;
     lastSyncedNode_ = outerLast;
-    tailExpectedType_ = outerTail;
-    tailExpectedFor_  = outerTailFor;
     return result;
 }
 

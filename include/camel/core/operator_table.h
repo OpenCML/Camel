@@ -117,22 +117,21 @@ inline constexpr OperId VarGet          = 2; // ":var/get"  reading a variable
 inline constexpr OperId VarPeek         = 3; // ":var/peek" a read whose value cannot be kept
 inline constexpr OperId VarTake         = 4; // ":var/take" the value, moved out of the variable
 inline constexpr OperId AssnOwned       = 5; // ":op/assn_owned"
-inline constexpr OperId AssnAppend      = 6; // ":op/assn_append"
-inline constexpr OperId SetField        = 7; // ":op/set_field"
-inline constexpr OperId SetIndex        = 8; // ":op/set_index"
-inline constexpr OperId TagIsNull       = 9; // ":op/tag_is_null"
-inline constexpr OperId TagNullValue    = 10; // ":op/tag_null_value"
-inline constexpr OperId TagIsError      = 11; // ":op/tag_is_error"
-inline constexpr OperId TagErrorValue   = 12; // ":op/tag_error_value"
-inline constexpr OperId TagErrorInfo    = 13; // ":op/tag_error_info"
-inline constexpr OperId TagThrow        = 14; // ":op/tag_throw"
-inline constexpr OperId EnumMake        = 15; // ":enum/make"
-inline constexpr OperId EnumTag         = 16; // ":enum/tag"
-inline constexpr OperId EnumField       = 17; // ":enum/field"
-inline constexpr OperId CopyArray       = 18; // ":struct/copy_arr"
-inline constexpr OperId AppendOwned     = 19; // ":struct/append_arr_owned"
-inline constexpr OperId MacroCmp        = 20; // ":macro/cmp"
-inline constexpr OperId kWellKnownCount = 21; // kNoOper included
+inline constexpr OperId SetField        = 6; // ":op/set_field"
+inline constexpr OperId SetIndex        = 7; // ":op/set_index"
+inline constexpr OperId TagIsNull       = 8; // ":op/tag_is_null"
+inline constexpr OperId TagNullValue    = 9; // ":op/tag_null_value"
+inline constexpr OperId TagIsError      = 10; // ":op/tag_is_error"
+inline constexpr OperId TagErrorValue   = 11; // ":op/tag_error_value"
+inline constexpr OperId TagErrorInfo    = 12; // ":op/tag_error_info"
+inline constexpr OperId TagThrow        = 13; // ":op/tag_throw"
+inline constexpr OperId EnumMake        = 14; // ":enum/make"
+inline constexpr OperId EnumTag         = 15; // ":enum/tag"
+inline constexpr OperId EnumField       = 16; // ":enum/field"
+inline constexpr OperId CopyArray       = 17; // ":struct/copy_arr"
+inline constexpr OperId AppendOwned     = 18; // ":struct/append_arr_owned"
+inline constexpr OperId MacroCmp        = 19; // ":macro/cmp"
+inline constexpr OperId kWellKnownCount = 20; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -149,7 +148,6 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":var/peek",
     ":var/take",
     ":op/assn_owned",
-    ":op/assn_append",
     ":op/set_field",
     ":op/set_index",
     ":op/tag_is_null",

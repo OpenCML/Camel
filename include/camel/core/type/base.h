@@ -72,32 +72,31 @@ enum class TypeCode : uint32_t {
     Float32  = makeTypeCode(TypeFlag::Primitive, 0x002),
     Float64  = makeTypeCode(TypeFlag::Primitive, 0x003),
     Bool     = makeTypeCode(TypeFlag::Primitive, 0x004),
-    Byte     = makeTypeCode(TypeFlag::Primitive, 0x005),
-    Void     = makeTypeCode(TypeFlag::Primitive, 0x006),
-    String   = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x007),
-    Array    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x008),
-    Tuple    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x009),
-    Struct   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00A),
-    Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00B),
-    Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00C),
-    // 0x00D was `any`, removed (design principles 5.10): no value has a type that is
-    // undetermined after compilation. 0x00E was the union type `A | B`, retired (5.3): a sum
+    Void     = makeTypeCode(TypeFlag::Primitive, 0x005),
+    String   = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x006),
+    Array    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x007),
+    Tuple    = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x008),
+    Struct   = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x009),
+    Function = makeTypeCode(TypeFlag::Composite | TypeFlag::GC_Traced, 0x00A),
+    Ref      = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00B),
+    // 0x00C was `any`, removed (design principles 5.10): no value has a type that is
+    // undetermined after compilation. 0x00D was the union type `A | B`, retired (5.3): a sum
     // of types is an `enum`.
     // Compile-time only (camel/core/type/typevar.h): a type variable of a generic function
     // or of a parameterised type declaration, and a parameterised type declaration itself.
     // Neither is the type of a node of a graph.
-    TypeVar  = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00F),
-    TypeFunc = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x010),
+    TypeVar  = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00E),
+    TypeFunc = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x00F),
     // The argument of a pending enum instance that its value does not determine (`Option<_>`).
     // Compile time only: no value has this type.
-    EnumHole = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x011),
+    EnumHole = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x010),
     // Complex numbers (design principles 5.1): two IEEE parts, `c64` (two f32) and `c128` (two
     // f64). They are numbers, but not primitive in the encoding's sense: a value does not fit
     // in one slot (c128 is 16 bytes, c64 needs a box so that a number is one kind of value),
     // so the data object is GC-traced like a String. `isComplex` below is the predicate to
     // ask instead of `isPrimitive`.
-    Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
-    Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x013),
+    Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x011),
+    Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
     Other      = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 
@@ -152,7 +151,7 @@ std::string typeCodeToString(TypeCode code);
 /// by hand as text (the type rules of built-in operators); a Type prints itself that way.
 std::string sourceTypeSpelling(std::string_view text);
 
-extern const signed char primitiveTypeConvMatrix[8][8];
+extern const signed char primitiveTypeConvMatrix[6][6];
 
 class Type;
 using type_vec_t = std::vector<Type *>;
@@ -227,7 +226,6 @@ class Type {
     static Type *Float64();
     static Type *Float();
     static Type *Bool();
-    static Type *Byte();
     static Type *Void();
     static Type *String();
     static Type *Complex64();

@@ -28,7 +28,7 @@ assert(undeclared.length === 0, `operators without a purity declaration: ${undec
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
 const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'sys:get_env', 'sys:get_cwd',
   'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'os:whoami', 'os:cpu_count', 'os:sleep', 'os:exit',
-  ':io/print', ':io/println', ':io/input', ':op/assn', ':op/assn_append', 'para:rendezvous',
+  ':io/print', ':io/println', ':io/input', ':op/assn', ':op/assn_owned', 'para:rendezvous',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)

@@ -141,8 +141,6 @@ py::object camelToPy(camel::core::type::Type *t, slot_t s, camel::core::context:
         return py::cast(fromSlot<Float64>(s));
     case TypeCode::Bool:
         return py::cast(fromSlot<Bool>(s));
-    case TypeCode::Byte:
-        return py::cast(static_cast<int>(static_cast<unsigned>(fromSlot<Byte>(s))));
     case TypeCode::Void:
         return py::none();
     case TypeCode::String: {
@@ -597,15 +595,6 @@ pyToCamel(py::object obj, Type *targetType, camel::core::context::Context &ctx) 
             return toSlot(py::cast<Float64>(obj));
         case TypeCode::Bool:
             return toSlot(py::cast<Bool>(obj));
-        case TypeCode::Byte: {
-            int v = py::cast<int>(obj);
-            if (v < 0 || v > 255) {
-                throwRuntimeFault(
-                    RuntimeDiag::RuntimeError,
-                    "python.unwrap: byte value must be 0-255");
-            }
-            return toSlot(static_cast<Byte>(static_cast<unsigned>(v)));
-        }
         case TypeCode::String: {
             std::string str = py::cast<std::string>(obj);
             return toSlot(String::from(str, mm::autoSpace()));

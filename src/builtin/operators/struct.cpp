@@ -362,6 +362,14 @@ slot_t __append_owned_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(arr);
 }
 
+// The in-place form of `append` (OperatorTable::setInPlaceForm): the array is the one
+// :var/take handed the call, which no one else refers to, so it may take the element in place.
+// When its storage cannot be written in place (an array of references, a view, a block
+// someone else holds) it copies exactly like `append`; the result is the same either way.
+slot_t __append_in_place_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    return __append_owned_arr__(with, norm, ctx);
+}
+
 // `xs->extend<ys>`: a new array, the elements of xs and then those of ys. xs is unchanged.
 slot_t __extend_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const Array *arr  = norm.get<Array *>(0);

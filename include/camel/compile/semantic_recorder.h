@@ -92,6 +92,18 @@ class SemanticRecorder {
         (void)type;
     }
 
+    /// The name at `ref` stands for the type `type`, whose declaration is at `decl`; `decl` is
+    /// invalid when the builder does not know the declaration (a type variable, a built-in
+    /// name) or when the type is declared outside the sources being compiled. Optional: the
+    /// default ignores the report.
+    virtual void
+    typeReferenced(origin_id_t ref, const std::string &name, origin_id_t decl, Type *type) {
+        (void)ref;
+        (void)name;
+        (void)decl;
+        (void)type;
+    }
+
     /// The name at `ref` stands for the value that `decl` bound to `declName` (see
     /// valueDeclared); `decl` is invalid when the builder does not know the declaration.
     virtual void
