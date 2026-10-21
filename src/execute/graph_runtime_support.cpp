@@ -808,7 +808,7 @@ void writeRuntimeFillSlots(
         auto *arrayType = tt::as_ptr<camel::core::type::ArrayType>(targetType);
         for (size_t i = 0; i < values.size(); ++i) {
             CAMEL_ASSERT_NOT_VIEW(
-                values[i], arrayType->elementType(), "a FILL into an array");
+                values[i], arrayType->elemType(), "a FILL into an array");
             array->set<slot_t>(slots[i], values[i], arrayType);
         }
     } break;

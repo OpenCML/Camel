@@ -1,6 +1,7 @@
 id = "mm.blocks"
 order = 370
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "mm", "array", "block", "dlpack"]
 desc = "Data-block storage: a small numeric array is inline, a view promotes it once and shares the block, block bytes are counted, and DLPack export/import is zero-copy (docs/design/arrays-memory/README.cn.md, sections 2 and 3.3)."
 
