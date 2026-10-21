@@ -316,7 +316,7 @@ e161ae730c757b4e ok showcase/c2-mlp-mnist/train.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 f8a426c8e96936da ok stdlib/bytes.cml
 173076cd43673a6b ok stdlib/perf.cml
-5bed5b6facc3fd63 ok stdlib/rules.cml
+dc425a313698f684 ok stdlib/rules.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 0539c1402fbe163c ok stdlib/signatures/algo.cml
 ba50ff52809dea87 ok stdlib/signatures/crypto.cml
@@ -831,11 +831,13 @@ cb91792c07cb9264 no test/cases/compile/semantic/try_not_in_language.cml
 e8928bd66be13ec1 ok test/cases/compile/semantic/type_contains_itself.cml
 c763c15acc84ef96 ok test/cases/compile/semantic/type_recursion_through_map.cml
 d7b768e95cb9dfd1 ok test/cases/compile/semantic/unresolved_reference.cml
+85d4097ec9730dc7 ok test/cases/compile/static_expansion/comprehension_field_order.cml
+db9711229a73e1f1 ok test/cases/compile/static_expansion/comprehension_value_type.cml
 e2351af2c964f64e ok test/cases/compile/static_expansion/comprehension_void_element.cml
-a98de8fd0f232f13 ok test/cases/compile/static_expansion/comprehensions.cml
+2287f2bdb3bf9fed ok test/cases/compile/static_expansion/comprehensions.cml
 8501ff837910619c ok test/cases/compile/static_expansion/comprehensions_graph.cml
 449ef22714447961 ok test/cases/compile/static_expansion/comprehensions_rebuild.cml
-cdce26077d5ae48e ok test/cases/compile/static_expansion/fields_and_access.cml
+31492f5f69ac00cf ok test/cases/compile/static_expansion/fields_and_access.cml
 ca9fa691761f00f6 ok test/cases/compile/static_expansion/match_type_exhaustive.cml
 6d011d3422c19172 ok test/cases/compile/static_expansion/match_type_shapes.cml
 79078d0336adfffe ok test/cases/compile/static_expansion/match_type_unreachable.cml
@@ -852,6 +854,7 @@ fb437291c20113b7 ok test/cases/compile/static_expansion/static_loop_body_type.cm
 2b33001cfdf2c58c ok test/cases/compile/static_expansion/static_loop_graph.cml
 6b878e647580a173 ok test/cases/compile/static_expansion/static_loop_name_repeated.cml
 cd98d8ee83fb64e4 ok test/cases/compile/static_expansion/static_loop_not_composite.cml
+328cf099bfd3ff27 ok test/cases/compile/static_expansion/type_position_empty_tuple.cml
 77fbc50ce9497a10 ok test/cases/compile/surface/angle_then_name_line.cml
 23b4227b58ad2534 ok test/cases/compile/surface/angle_then_semicolon.cml
 2cddb4818955c832 ok test/cases/compile/surface/angle_then_string_line.cml
@@ -907,6 +910,7 @@ ea95d3ed9a96616e ok test/cases/compile/tags/err_tag_shadows_permission.cml
 8a46ed23b5a19733 ok test/cases/compile/tags/err_undeclared.cml
 0805b6064bbc79f8 ok test/cases/compile/tags/float.cml
 f4c1ab05bea62ebf ok test/cases/compile/tags/graph.cml
+696c35c979c070dd ok test/cases/compile/tags/independent.cml
 ef2a2f385af2db1a ok test/cases/compile/tags/permissions.cml
 d336d09053a3b840 ok test/cases/compile/tags/reads.cml
 5eca29bf4975bd18 ok test/cases/compile/tags/strict_algebra.cml
@@ -1213,7 +1217,7 @@ ad80ceb4d3c7a1fb ok test/cases/format/mixed_arguments.cml
 9728ed05ff8c66fa ok test/cases/format/namespace_messy.cml
 5b09db9d5fb90816 ok test/cases/format/options.cml
 eb74f3b204df0390 no test/cases/format/pattern_empty.cml
-34864c94814e96bd ok test/cases/format/static_for_and_access.cml
+6220926588bd2f8b ok test/cases/format/static_for_and_access.cml
 65060b9066b305b7 ok test/cases/format/static_loop.cml
 351e78128c8cac8d ok test/cases/format/subscript.cml
 6e2b9f9a38158b5e no test/cases/format/syntax_error.cml
@@ -1611,8 +1615,11 @@ a4167c31852a3565 ok test/cases/modules/random/random_independence.cml
 5848ceb70884974f ok test/cases/modules/rules/analysis_lib.cml
 502a08d03e1d1c89 ok test/cases/modules/rules/analysis_parts.cml
 ba6c69862cc7f282 ok test/cases/modules/rules/analysis_target.cml
+f9499b4f100b3332 ok test/cases/modules/rules/bare_boundary.cml
+325787eb615a4880 ok test/cases/modules/rules/bare_counts.cml
+c7e5e70f7684c0aa ok test/cases/modules/rules/bare_target.cml
 1f6d0b3ce21e8f81 ok test/cases/modules/rules/check_bound.cml
-8cec10cbaaacd0b3 ok test/cases/modules/rules/check_library.cml
+6b3fa16f0553f24b ok test/cases/modules/rules/check_library.cml
 bfd5c4e36d823588 ok test/cases/modules/rules/check_rules.cml
 5666c69689d0db05 ok test/cases/modules/rules/check_when.cml
 a9449b97a132a283 ok test/cases/modules/rules/counts.cml
@@ -1634,7 +1641,11 @@ b79b9a9655dd938f ok test/cases/modules/rules/requires_nd.cml
 bd6a1b7e933768d9 ok test/cases/modules/rules/requires_target.cml
 d4cdcd8b121aaa36 ok test/cases/modules/rules/same_module_pass.cml
 f8de024a8a466154 ok test/cases/modules/rules/simplify.cml
+6bc62c44e253dac0 ok test/cases/modules/rules/strict_target.cml
 d25636a7ba48c26c ok test/cases/modules/rules/target.cml
+79fa9632b86fb28a ok test/cases/modules/rules/tensor_boundary.cml
+21bb03567585dc39 ok test/cases/modules/rules/tensor_counts.cml
+9f51df7b06724773 ok test/cases/modules/rules/tensor_target.cml
 c2518f7f4f8a24b6 ok test/cases/modules/rules/typed_boundary.cml
 b204172021d829f1 ok test/cases/modules/rules/typed_boundary_double.cml
 b808b41155bc25f7 ok test/cases/modules/rules/typed_boundary_guards.cml
@@ -2141,7 +2152,7 @@ fd0085d4accf46b4 ok test/plans/feat/format/golden/mixed_arguments.cml
 a5db29965a226f05 ok test/plans/feat/format/golden/namespace.cml
 84451c2364b8eb0c ok test/plans/feat/format/golden/options.cml
 0207c9a93bb1c8b3 no test/plans/feat/format/golden/pattern_empty.cml
-da9c89554298b9b2 ok test/plans/feat/format/golden/static_for_and_access.cml
+baf0571f25864940 ok test/plans/feat/format/golden/static_for_and_access.cml
 db5844fca249b9cb ok test/plans/feat/format/golden/static_loop.cml
 028bf7fc5c63ff0b ok test/plans/feat/format/golden/subscript.cml
 69ecdfed21290bb7 ok test/plans/feat/format/golden/tuple_singleton.cml
@@ -2383,3 +2394,7 @@ bedf77fd1a165217 ok probes/probe_s192.cml
 73a483227e8cc47a ok probes/probe_s196.cml
 a60f35812146ae77 ok probes/probe_s197.cml
 0247e5f9f94e9d6e ok probes/probe_s198.cml
+655a63169614a92e ok probes/probe_s199.cml
+a7404c49a6e9c61e ok probes/probe_s200.cml
+73a5a9c130730f36 ok probes/probe_s201.cml
+bf825f30134930f6 ok probes/probe_s202.cml
