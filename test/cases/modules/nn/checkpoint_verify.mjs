@@ -30,14 +30,34 @@ function snapshotTree(directory) {
     walk(directory, '')
     return entries
 }
+// The account this process runs as, named by its SID: `USERDOMAIN\USERNAME` is not reliable on a
+// runner, where the deny ACE is accepted for a name the token does not carry, so the write is not
+// refused at all and `icacls /remove:d` cannot find the entry it made.
+function currentUserSid() {
+    const who = spawnSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8' })
+    assert.equal(who.status, 0, who.stdout + who.stderr)
+    const fields = who.stdout.trim().split(',')
+    return fields[fields.length - 1].replace(/"/g, '').trim()
+}
 // Writes into a directory are refused for this process: on Windows with a deny ACE on the
 // directory (deny ACEs bind administrators too), elsewhere with the permission bits. Returns
 // the undo.
 function denyWrites(directory) {
     if (process.platform === 'win32') {
-        const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
+        const user = `*${currentUserSid()}`
         const denied = spawnSync('icacls', [directory, '/deny', `${user}:(W)`], { encoding: 'utf8' })
         assert.equal(denied.status, 0, denied.stdout + denied.stderr)
+        // Prove the deny binds this process before the test relies on it: a runner whose ACLs do
+        // not refuse the write would otherwise turn the case into a green test of nothing.
+        const probe = path.join(directory, '.deny-probe')
+        let refused = false
+        try {
+            fs.writeFileSync(probe, 'x')
+            fs.rmSync(probe, { force: true })
+        } catch {
+            refused = true
+        }
+        assert(refused, 'the deny ACE did not refuse a write to the directory')
         return () => {
             const undone = spawnSync('icacls', [directory, '/remove:d', user], { encoding: 'utf8' })
             assert.equal(undone.status, 0, undone.stdout + undone.stderr)

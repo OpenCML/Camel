@@ -1310,9 +1310,9 @@ cba7b09e77a994a5 ok test/cases/loops/shapes.cml
 c24be36afcb891ea ok test/cases/loops/state_in_place.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 de8066e46383fc72 ok test/cases/macro/hof_calls.cml
-a58dd440e290b13d ok test/cases/modules/bytes_text_reject.cml
-c83cf32976e94d1c ok test/cases/modules/bytes_values.cml
-649528f797bc56b6 ok test/cases/modules/fs_binary_roundtrip.cml
+c96746199ab07fa4 ok test/cases/modules/bytes_text_reject.cml
+14de4ac15fcb6436 ok test/cases/modules/bytes_values.cml
+f5599ee347287b8f ok test/cases/modules/fs_binary_roundtrip.cml
 2dddeba382c1e7c6 ok test/cases/modules/graph_facts.cml
 e3c3e7a58fd7dfbd ok test/cases/modules/graph_function.cml
 962fd5d756f31d27 ok test/cases/modules/graph_kinds.cml
