@@ -23,10 +23,12 @@
  * For each place and kind of fault, the report is rendered now, when the program is written,
  * by the compiler's own renderer (src/core/error/diagnostics/render.cpp), in both formats
  * `camel` has (the rich text and the one-line form). What only the running program knows is
- * left as a mark (the byte 0x1F and the index of the value) that the runtime fills in. So a
- * fault in the generated program reports the same text as in the interpreters, source excerpt
- * included, without the program carrying a renderer or its source files
- * (docs/design/cpp-standalone/README.cn.md, 7.1).
+ * left as a mark (the byte 0x1F and the index of the value) that the runtime fills in. A
+ * value the compiler did know (the recursion limit the program is translated with) is
+ * written as that value instead, and `Site::filled` names it so the runtime still puts the
+ * value in effect there. So a fault in the generated program reports the same text as in the
+ * interpreters, source excerpt included, without the program carrying a renderer or its
+ * source files (docs/design/cpp-standalone/README.cn.md, 7.1 and 7.4).
  */
 
 #pragma once
@@ -63,10 +65,13 @@ class SiteTable {
 
     /// The name of the Site of a fault of `kind` at node `node` of `graph`. `args` are the
     /// arguments of the diagnostic's message and suggestion templates, in order: a constant
-    /// text, or valueMark(k).
+    /// text, or valueMark(k). `filled` is the text of a runtime argument the compiler did
+    /// know (the recursion limit): it is written as it is in `args`, and the runtime replaces
+    /// its first occurrence in the message with the value in effect.
     std::string siteFor(
         const camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t node,
-        camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
+        camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args,
+        std::string filled = {});
 
     /// The name of the Place of the call of a runtime module's operator at `node` of `graph`
     /// (camel/standalone/core.h): the source excerpt and the start of the one-line report,
@@ -96,12 +101,14 @@ class SiteTable {
         std::string kind;     // for an error value (attempt): the name without its prefix
         std::string message;  // for an error value: the message
         std::string location; // for an error value: `file.cml:line:col`
+        std::string filled;   // a runtime value written as the text the compiler knew
     };
 
     /// A new Site of a fault of `kind` at `origin` (none when it is kInvalidOriginId), whose
     /// name is `at_<line>_<column>`. Shared by siteFor and siteAt.
     std::string makeSite(
-        uint64_t origin, camel::core::error::RuntimeDiag kind, const std::vector<std::string> &args);
+        uint64_t origin, camel::core::error::RuntimeDiag kind,
+        const std::vector<std::string> &args, std::string filled = {});
 
     /// `file.cml:line:col` of `d`'s range, the file without its directory (as an error value
     /// names it, src/execute/fault_isolation.cpp).

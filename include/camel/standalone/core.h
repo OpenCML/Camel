@@ -31,9 +31,12 @@
  * program defines. It holds the report of that fault in the two formats of `camel`
  * (CAMEL_ERROR_FORMAT=text, the default, and =short), rendered by the compiler when it wrote
  * the program, so that the text is the one the interpreters print, byte for byte. What is
- * known only when the fault happens (an index, a length, the limit) is written there as a
- * placeholder, the byte 0x1F followed by one digit, the position of the value among the
- * arguments of fault().
+ * known only when the fault happens (an index, a length) is written there as a placeholder,
+ * the byte 0x1F followed by one digit, the position of the value among the arguments of
+ * fault(). A value the compiler did know when it wrote the program (the recursion limit the
+ * program was translated with) is written as that value, and `Site::filled` names it: fault()
+ * puts the value in effect in its place, so a different limit in the environment still shows
+ * in the report (design note 7.4).
  */
 
 #pragma once
@@ -68,6 +71,8 @@ struct Site {
     const char *kind;     // the diagnostic's name without its prefix: "DivisionByZero"
     const char *message;  // its message
     const char *location; // `file.cml:line:col`, the file without its directory
+    const char *filled;   // a value the compiler knew, written in the report: fault() replaces
+                          // its first occurrence in the message; null when there is none
 };
 
 /// A place where an operator of a runtime module runs (bridge.h): what kind of fault it raises
@@ -124,15 +129,32 @@ class Fault {
     Texts texts_;
 };
 
-/// Raises a fault at `site`; `values` are the texts the report's marks stand for.
+/// Raises a fault at `site`; `values` are the texts the report's marks stand for, and, for a
+/// site with a known value (`filled`), the value in effect.
 [[noreturn]] inline void fault(const Site &site, const std::vector<std::string> &values = {}) {
-    throw Fault(
-        Fault::Texts{
-            withValues(site.text, values),
-            withValues(site.brief, values),
-            site.kind,
-            withValues(site.message, values),
-            site.location});
+    const auto replaceFirst = [](std::string &text, std::string_view from, std::string_view to) {
+        if (from.empty()) {
+            return;
+        }
+        if (const std::size_t at = text.find(from); at != std::string::npos) {
+            text.replace(at, from.size(), to);
+        }
+    };
+    std::string message = withValues(site.message, values);
+    std::string text    = withValues(site.text, values);
+    std::string brief   = withValues(site.brief, values);
+    if (site.filled != nullptr && site.filled[0] != '\0' && !values.empty()) {
+        // The compiler wrote how it knew the value (the limit the program was translated
+        // with); the message in the reports is replaced by the one with the value in effect.
+        const std::string translated = site.message;
+        std::string actual           = translated;
+        replaceFirst(actual, site.filled, values.front());
+        replaceFirst(text, translated, actual);
+        replaceFirst(brief, translated, actual);
+        message = std::move(actual);
+    }
+    throw Fault(Fault::Texts{
+        std::move(text), std::move(brief), site.kind, std::move(message), site.location});
 }
 
 /// `exit(n)`: the program ends with exit code `n` once the output is written. A C++ exception,
