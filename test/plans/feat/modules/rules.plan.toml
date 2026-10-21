@@ -356,3 +356,13 @@ assert(input.normalized.stdout === expected, `stdout was: ${JSON.stringify(input
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "rules.extract_keeps_no_unreachable_pure_node"
+desc = "The retention boundary of extraction (graph store 3.5/3.6): saturation adds a second writing of `s + 'y'` (a new sum and the string constant its right side wrote), the cost model chooses the original writing, so the added constant is a pure node nothing reads. `check` prints the graph's size and the number of unread string constants before and after `extract`: the extraction deletes the added constant (the graph keeps its size, no unread constant), while a side effect, an order or a written value would stay."
+kind = "behavior"
+case = "../../../cases/modules/rules/extract_boundary.cml"
+args = ["${case}", "extract_boundary::check", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "tabled nodes 33 unread constants 0\nextracted nodes 3 unread constants 0\nay by\n"
+timeout_ms = 20000

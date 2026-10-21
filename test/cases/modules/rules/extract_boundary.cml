@@ -1,0 +1,95 @@
+/**
+ * The retention boundary of extraction (graph store 3.5/3.6, design principles 3.1): saturation
+ * only adds writings; extraction keeps a pure node only when something that stays reaches it.
+ *
+ * `tag` holds `s + 'y'`. The rule below is the same expression (`a + b` with `b` the constant
+ * 'y'), so saturation adds a second writing of that value: a new `:op/add_s` and, below it, the
+ * string constant the right side wrote. The cost model gives both writings the same cost and the
+ * first (smallest) node wins, so the added writing is not chosen and nothing will read it.
+ *
+ * The added constant is a DATA node of a GC-traced type, which takes no part in congruence
+ * (`shapeOf` returns 2): it is a *pure* node, and the extraction used to keep every node that
+ * takes no part in congruence unconditionally. `check` prints the size of the graph before the
+ * extraction and after it, and how many string constants nothing reads; with the boundary
+ * implemented the extraction deletes the added constant and the graph keeps its original size.
+ */
+module extract_boundary
+import {
+    Program, Node, Graph, graphs, nodes, name, users, is_constant, type_of, type_name, constant
+} from graph
+import { saturate, extract } from rewrite
+
+/// Whether the node is the constant 'y': the rule applies only where it is the same expression.
+func isY(n: Node): bool {
+    return match constant(n, '') {
+        case null => false
+        case v => v == 'y'
+    }
+}
+
+rule tag_y(a: string, b: string) { a + b => a + 'y' } when isY(b)
+
+func tag(s: string): string {
+    return s + 'y'
+}
+
+func main(): int sync {
+    println(tag('a'), tag('b'))
+    return 0
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+/// The string constants of `function` that nothing reads: a constant has no effect, so an
+/// extraction that follows the boundary deletes one that no kept node reads.
+func unreadConstants(p: Program, function: string): int {
+    return len(
+        nodesOf(p, function)->filter<(n: Node): bool =>
+            is_constant(n) && typeText(n) == 'string' && len(users(n)) == 0
+        >
+    )
+}
+
+/// Saturates, reports the graph, extracts, reports it again. The extraction is the second step so
+/// the two reports see the graph before and after it.
+export func check(p: Program): Program! sync {
+    let tabled = saturate(p, [tag_y], 4)
+    return match tabled {
+        case error e => tabled
+        case q => reportTabled(q)
+    }
+}
+
+func reportTabled(q: Program): Program! sync {
+    println(
+        'tabled nodes',
+        len(nodesOf(q, 'tag')),
+        'unread constants',
+        unreadConstants(q, 'tag')
+    )
+    let out = extract(q, 'nodes')
+    return match out {
+        case error e => out
+        case r => reportExtracted(r)
+    }
+}
+
+func reportExtracted(r: Program): Program! sync {
+    println(
+        'extracted nodes',
+        len(nodesOf(r, 'tag')),
+        'unread constants',
+        unreadConstants(r, 'tag')
+    )
+    return r
+}
