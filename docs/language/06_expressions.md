@@ -50,12 +50,20 @@ println(`pi = ${3.14159:.2f}`)      // 'pi = {:.2f}'->format<3.14159>
 | `p.x` | 结构体字段。不存在的字段是编译期错误 `SemanticDiag::InvalidAccessIndex` |
 | `t.0` | 元组成员，下标是字面量，越界是编译期错误 |
 | `xs[i]` | 数组元素。越界（含负数）是故障 `RuntimeDiag::IndexOutOfRange` |
+| `xs[idx]` | `idx` 是整数数组：按 `idx` 的顺序取这些位置上的元素（`take`），见下 |
+| `xs[a:b]`、`xs[a:b:s]`、`xs[:b]`、`xs[a:]`、`xs[:]` | 切片，见下 |
 | `m[k]` | 映射查找，类型是 `V?`（[3.6](03_data_model.md#36-映射与集合)） |
 | `mod::name` | 限定名 |
 
 - 对数组不能用 `.`（`xs.1` 是 `SemanticDiag::TypeNotIndexable`）。
 - 下标紧贴被访问的表达式，不能有空白。
-- 切片写法 `xs[a:b]`、`xs[a:b:c]` 保留，尚未实现：它没有专门的诊断，编译器按“下标运算符没有接受这些实参的重载”报告 `SemanticDiag::NoMatchingFunction`。用 `xs->slice<a, b>`。
+- **下标从 0 开始，负数不是从尾部数**：`xs[-1]` 是故障 `RuntimeDiag::IndexOutOfRange`。最后一个元素写 `last(xs)`。
+- **`xs[idx]` 是 `take`**：`idx` 的类型必须是 `int[]`，结果是 `idx` 各位置上的元素，按 `idx` 的顺序；同一个位置出现两次就取两次。越界与负数都是故障 `RuntimeDiag::IndexOutOfRange`。结果是一份新数组，不是视图（[5.4](../design-principles.cn.md)）。
+- **切片沿第一维，左闭右开**：`xs[a:b]` 是位置 `a` 到 `b-1`。`a` 省略表示从头，`b` 省略表示到末尾，`xs[:]` 是整个数组；`s` 是步长。切片是**共用数据块的视图**（[5.4](../design-principles.cn.md)），不复制元素。
+  - 两端都是 0 到 `len(xs)` 之间的位置（`b` 可以等于长度，表示取到最后一个）；负数或越界是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致（[3.9](../design-principles.cn.md)）。`b < a` 是空数组，不是故障。长度在编译期已知而边界是常量时，越界是编译期错误（[3.9](../design-principles.cn.md)）。
+  - 步长目前只支持 `s == 1`。步长不为 1 的切片是带步长的视图，需要 H17 的数组表示，所以现在是故障 `RuntimeDiag::InvalidArgument`（张量上是编译期错误），诊断里点名 H17；要一份拷贝写 `slice(xs, 0, a, b, s)`。
+  - 元素是对象的数组（`[[1, 2], [3, 4]]` 这类）按行复制，槽数组没有可共用的数据块（H17 记录）。
+- **多维下标**：`xs[:, 0]`、`xs[a:b, c]` 的语法已经接受，但它的视图要沿其余维取坐标，同样需要 H17 的数组表示；现在写它会得到编译期错误 `SemanticDiag::ConstructNotSupported`，诊断里点名 H17，并提示先用 `take` 或逐维取。
 - **字符串下标按码点**：`s[i]` 是第 `i` 个码点，结果是只含这一个字符的字符串（`'中文'[0]` 是 `'中'`）；越界同样是故障。要数值用 `str` 模块的 `codepoints`（见 [标准库参考](../stdlib-reference.md)）。
 
 ## 6.4 调用

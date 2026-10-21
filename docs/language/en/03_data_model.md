@@ -101,13 +101,14 @@ println(xs[0], len(xs), grid[0][1])
 - **The elements are positions with an expected type** (design principles 5.1): the expected type is the array's element type, and a literal element takes it. `let xs: float[] = [1, 2.0]` and `let xs: float[] = [1, 2]` are both a `float[]`, and so is `[1, 2] as float[]`.
 - With no expected type, the literals in one array take the widest kind (integer < decimal): `[1, 2.0]` is a `float[]`, that is `[1.0, 2.0]`.
 - An element that **already has a type** (a variable, the result of a call) is not converted implicitly, and a different type is an error: `let n = 1; let xs: float[] = [n, 2.0]` and `let xs: float[] = [n]` are `SemanticDiag::ElementTypeMismatch`, reported at the element (`Cannot insert data of type 'int' into a(n) array with element type 'float'`). Elements whose types have no common type and are not literals are `SemanticDiag::ElementTypeMismatch` too.
-- Subscripts start at 0; an out-of-range subscript (including a negative one) is the fault `RuntimeDiag::IndexOutOfRange`.
+- Subscripts start at 0; an out-of-range subscript (including a negative one) is the fault `RuntimeDiag::IndexOutOfRange`. Several positions at once are written `xs[idx]` with an `int[]` (that is `take`), a slice is written `xs[a:b]` (a view sharing the data block), see [6.3](06_expressions.md#63-access-and-subscripts).
 - Built-in functions:
 
   | Form | Result |
   |---|---|
   | `len(xs)` | Length |
   | `head(xs)`, `tail(xs)` | The first element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`, as for `xs[0]`); the array without its first element |
+  | `last(xs)` | The last element (of an empty array: the fault `RuntimeDiag::IndexOutOfRange`). A negative subscript does not count from the end, so use this for the last element, not `xs[-1]` |
   | `range(a, b)` | `[a, a+1, ..., b-1]`; empty when `a >= b` |
   | `xs->slice<a, b>` | A new array of subscripts `a` to `b-1`. `a` and `b` are positions from 0 to the length; a bound outside the array (a negative one included) is the fault `RuntimeDiag::SliceOutOfRange`, as an index out of range is a fault. With both bounds inside the array and `b < a` the result is empty. To take "at most n" use `take` and `drop` of the `array` module, which cut by definition |
   | `concat(xs, ys)` | Concatenation into a new array |

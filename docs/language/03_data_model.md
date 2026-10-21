@@ -102,13 +102,14 @@ println(xs[0], len(xs), grid[0][1])
 - **元素是"有期望类型的位置"**（设计原则 5.1）：期望的类型就是数组的元素类型，字面量元素取它。`let xs: float[] = [1, 2.0]` 与 `let xs: float[] = [1, 2]` 都是 `float[]`；`[1, 2] as float[]` 也一样。
 - 没有期望类型时，同一个数组里的字面量取最宽的一种（整数 < 小数）：`[1, 2.0]` 是 `float[]`，也就是 `[1.0, 2.0]`。
 - 元素是**已经取好类型的值**（变量、调用结果）时不做隐式转换，类型不同就是错误：`let n = 1; let xs: float[] = [n, 2.0]` 与 `let xs: float[] = [n]` 都是 `SemanticDiag::ElementTypeMismatch`，报在元素上（`Cannot insert data of type 'int' into a(n) array with element type 'float'`）。元素类型之间没有共同的类型且不是字面量时同样是 `SemanticDiag::ElementTypeMismatch`。
-- 下标从 0 开始；越界（包括负数）是故障 `RuntimeDiag::IndexOutOfRange`。
+- 下标从 0 开始；越界（包括负数）是故障 `RuntimeDiag::IndexOutOfRange`。按整数数组一次取多个位置写 `xs[idx]`（即 `take`），切片写 `xs[a:b]`（是共用数据块的视图），见 [6.3](06_expressions.md#63-访问与下标)。
 - 内建函数：
 
   | 写法 | 结果 |
   |---|---|
   | `len(xs)` | 长度 |
   | `head(xs)`、`tail(xs)` | 第一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`，与 `xs[0]` 相同）；去掉第一个元素的数组 |
+  | `last(xs)` | 最后一个元素（空数组是故障 `RuntimeDiag::IndexOutOfRange`）。负数下标不是从尾部数，所以取末尾元素用它，不写 `xs[-1]` |
   | `range(a, b)` | `[a, a+1, ..., b-1]`；`a >= b` 时为空 |
   | `xs->slice<a, b>` | 下标 `a` 到 `b-1` 的新数组。`a`、`b` 是 0 到长度之间的位置；越出数组（包括负数）是故障 `RuntimeDiag::SliceOutOfRange`，与下标越界一致。两端都在数组内而 `b < a` 时结果为空。要“至多取 n 个”用 `array` 模块的 `take`、`drop`，它们按定义截断 |
   | `concat(xs, ys)` | 连接成新数组 |
