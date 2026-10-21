@@ -246,6 +246,7 @@ Array *Array::createCompact(
         array->capacity_ = view ? numel : (elemSize == 0 ? 0 : block->bytes() / elemSize);
         array->dataPtr_  = block->data() + byteOffset;
         array->noteFinalizable();
+        array->noteBlockHeld(block);
     } else if (inlineData) {
         array->block_    = nullptr;
         array->capacity_  = numel;
@@ -263,6 +264,7 @@ Array *Array::createCompact(
             std::memset(array->dataPtr_, 0, bytes);
         }
         array->noteFinalizable();
+        array->noteBlockHeld(created);
     }
     return array;
 }
@@ -888,12 +890,14 @@ void Array::growCompact(uint64_t newCapacity) {
         offset_   = 0;
         capacity_ = newCapacity;
         noteFinalizable();
+        noteBlockHeld(block);
         return;
     }
     if (block_->unique() && offset_ == 0 && !view_) {
         block_->grow(newBytes);
         dataPtr_  = block_->data();
         capacity_ = newCapacity;
+        noteBlockHeld(block_);
         return;
     }
     // Shared (a view, or another array): copy to a new block and leave the old one to its
@@ -913,6 +917,7 @@ void Array::growCompact(uint64_t newCapacity) {
         old->release();
     }
     noteFinalizable();
+    noteBlockHeld(block);
 }
 
 void Array::appendSlot(slot_t value, const type::ArrayType *arrayType) {
@@ -982,6 +987,7 @@ void Array::adoptBlock(Block *block, size_t newBytes) {
         old->release();
     }
     noteFinalizable();
+    noteBlockHeld(block);
 }
 
 bool Array::canWriteInPlace() const {
@@ -1008,6 +1014,7 @@ void Array::ensureBlock() {
     offset_   = 0;
     capacity_ = numel_;
     noteFinalizable();
+    noteBlockHeld(block);
 }
 
 void Array::releaseBlock() noexcept {
@@ -1023,6 +1030,14 @@ void Array::finalize() noexcept {
         Block *block = block_;
         block_        = nullptr;
         block->releaseFromFinalizer();
+    }
+}
+
+Array::Block *Array::heldBlock() const noexcept { return block_; }
+
+void Array::noteBlockHeld(Block *block) {
+    if (block != nullptr && allocator_ != nullptr) {
+        allocator_->noteBlockHeld(this, block);
     }
 }
 

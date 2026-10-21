@@ -31,6 +31,7 @@
 #include "camel/core/module/userdef.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/symbol.h"
 #include "camel/core/type/base.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_inline.h"
@@ -62,6 +63,30 @@ std::string firstError(const UserDefinedModule &module) {
         }
     }
     return "it does not compile";
+}
+
+/// The first error of a module's diagnostics as a secondary location: its range (resolved with
+/// the module's tokens when the builder left it as one) and its own text. Nothing when the module
+/// has no error or the error has no position.
+std::optional<core::error::DiagLabel> firstErrorLocation(const UserDefinedModule &module) {
+    const auto diags = module.diagnostics();
+    if (!diags) {
+        return std::nullopt;
+    }
+    const auto errors = diags->errors();
+    if (errors.empty()) {
+        return std::nullopt;
+    }
+    core::error::Diagnostic first = *errors.front();
+    if (module.parser()) {
+        first.fetchRange(core::error::RangeConverter(module.parser()->tokenPositions()));
+    }
+    const auto *range = std::get_if<core::error::CharRange>(&first.range);
+    if (range == nullptr) {
+        return std::nullopt;
+    }
+    return core::error::DiagLabel{
+        *range, first.name + ": " + first.message, core::error::diagnosticPath(first)};
 }
 
 /// The operators whose OPER nodes appear in `graph` and every graph reachable from it.
@@ -216,17 +241,24 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
 
 std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
     const std::string &moduleName, const std::string &functionName, std::string &problem,
-    bool &absent) {
+    bool &absent, std::optional<core::error::DiagLabel> *errorLocation) {
     std::lock_guard lock(mutex_);
     const std::string key = moduleName + "::" + functionName;
     if (auto it = functions_.find(key); it != functions_.end()) {
         problem = it->second.problem;
         absent  = it->second.absent;
+        if (errorLocation != nullptr) {
+            *errorLocation = it->second.errorLocation;
+        }
         return it->second.found;
     }
-    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent) {
-        absent          = isAbsent;
-        functions_[key] = {found, problem, isAbsent};
+    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent,
+                              std::optional<core::error::DiagLabel> location = std::nullopt) {
+        absent  = isAbsent;
+        if (errorLocation != nullptr) {
+            *errorLocation = location;
+        }
+        functions_[key] = {found, problem, isAbsent, location};
         return found;
     };
     const auto module = importLibrary(moduleName, problem);
@@ -246,9 +278,18 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
         return remember(std::nullopt, false);
     }
     if (status != UserDefinedModule::ProgramStatus::Built) {
-        problem =
-            std::format("its library '{}' does not compile: {}", moduleName, firstError(*module));
-        return remember(std::nullopt, false);
+        // The library's own first error becomes a secondary location, so the pipeline's
+        // InvalidPassParameter carries the file, line, column and source line of what really
+        // failed instead of stitching that text into its message (H36c). A failure with no
+        // position (an imported module that does not compile) keeps its reason in the message.
+        auto location = firstErrorLocation(*module);
+        if (location) {
+            problem = std::format("its library '{}' does not compile", moduleName);
+        } else {
+            problem = std::format(
+                "its library '{}' does not compile: {}", moduleName, firstError(*module));
+        }
+        return remember(std::nullopt, false, std::move(location));
     }
     Program *program = context_.reserveProgram();
     camel::compile::gir::encodeToRuntimeProgram(rootGraph, *program, &context_.graphIds());
@@ -297,7 +338,9 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
     if (!module) {
         return refuse(problem);
     }
-    const auto entity = module->getExportedEntity(Reference(d.function));
+    // The library is declared into the context's program (compileAsLibrary); its exported names
+    // are that program's table (one table per program, task H42).
+    const auto entity = context_.programExports().exportedEntity(*module, Reference(d.function));
     using Access      = core::module::detail::EntityAccess;
     if (!entity) {
         return refuse(std::format("'{}' exports no '{}'", d.module, d.function));
@@ -337,9 +380,31 @@ DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {
 
     // The signature (design 9.2): the operator's operands are the function's ordinary
     // parameters; nothing else is bound.
-    if (graph->normPorts().size() != d.params.size() || !graph->withPorts().empty() ||
-        !graph->closureNodes().empty()) {
+    if (graph->normPorts().size() != d.params.size()) {
         return refuse("its graph does not take exactly the declared parameters");
+    }
+    if (!graph->withPorts().empty()) {
+        return refuse(
+            "its graph takes a with parameter, and a definition is called with the operator's "
+            "operands only");
+    }
+    if (!graph->closureNodes().empty()) {
+        // A capture is a module-level value of the definition's own module (task H37): a
+        // definition library is encoded as the function graph alone, so there is no root graph
+        // that could compute the value and no call site whose closure could carry it.
+        std::string captured;
+        for (const auto name : graph->captureNames()) {
+            if (!captured.empty()) {
+                captured += ", ";
+            }
+            captured += std::format("'{}'", core::symbolText(name));
+        }
+        return refuse(
+            std::format(
+                "its graph captures {} of the module's top level; a definition is a function of "
+                "the operator's operands, so a module-level value cannot be bound",
+                captured.empty() ? std::format("{} value(s)", graph->closureNodes().size())
+                                 : captured));
     }
     // The effects (design 9.2): within the operator's.
     const auto traits           = table.find(oper);
@@ -435,7 +500,7 @@ ExpandResult expandDefinition(
 
     // The call of the definition, in the node's place: its value, its control edges, its
     // source position.
-    const uint8_t permissions = draft.nodePermissions(node);
+    const camel::core::sem::PermissionMask permissions = draft.nodePermissions(node);
     const uint32_t attrs      = draft.nodeAttrs(node);
     const uint64_t origin     = draft.nodeOrigin(node);
     const std::vector<gc_node_ref_t> ctrl(
@@ -483,3 +548,4 @@ ExpandResult expandDefinition(
 }
 
 } // namespace camel::runtime
+

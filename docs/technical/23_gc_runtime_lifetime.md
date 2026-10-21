@@ -202,7 +202,9 @@ reserved so far, at most 256 MB), so neither allocation nor promotion fails shor
 refusing memory. Major collections are paced by volume for both old spaces: one is asked for
 when a space has taken, since its last sweep, the larger of a floor (32 MB for the elder space,
 `CAMEL_GC_LARGE_BUDGET_MB` for large objects) and `CAMEL_GC_GROWTH_PERCENT` percent of what
-that sweep left alive. `CAMEL_GC_HEAP_LIMIT_MB` bounds what the two hold together.
+that sweep left alive. `CAMEL_GC_HEAP_LIMIT_MB` bounds what the two hold together. In the
+generational collector a third volume paces a major collection: the blocks held by values
+promoted to the elder space (see "Promoted-block pacing" below).
 
 What C++ code may do with objects under either collector is the subject of
 `36_gc_handle_rules.md`. In short for this file: a minor collection updates the roots in place
@@ -307,6 +309,33 @@ contract above), and that wait is what a lower setting pays for. Freed large blo
 a size-class cache (up to 256 MB) and reused, so steady-state tensor workloads recycle hot memory
 instead of faulting fresh pages in; cached blocks stay resident, so the resident peak sits up to
 256 MB above what the space holds.
+
+### Promoted-block pacing
+
+A data block held by an array or a `Bytes` value moves with its owner, and when the owner is
+promoted the block can be released only by a major collection: a minor collection does not sweep
+the elder space. A program that promotes block-owning arrays and then drops them would therefore
+hold those blocks until some unrelated volume crossed the elder budget. The allocator counts
+block bytes **by block identity, not per value**. `rtdata::Object::heldBlock()` returns the block
+the value holds (or null), and `Block::claimPacingBytes()` returns the bytes that have not been
+counted yet, so one block reached through an array and a `reshape` view (or through two arrays)
+adds its bytes once whichever view is promoted first; a later view claims nothing, and growth of
+an already-counted block adds only the delta. A value can also take a block over after it was
+promoted: a view of an inline array, `Array::growCompact` moving inline data into a block,
+`Array::adoptBlock`, or `BytesObject::adopt`. Those sites call `IAllocator::noteBlockHeld` at the
+takeover; the collector counts the block there when the owner is already in the elder space, just
+as if the block had been promoted with the value. The allocator asks for a major collection at
+the next safepoint once the bytes promoted or adopted since the last sweep exceed a budget. After
+every sweep the budget is the larger of the large-object floor (`CAMEL_GC_LARGE_BUDGET_MB`,
+default 4 MB) and `CAMEL_GC_GROWTH_PERCENT` percent (default 100) of the block bytes the sweep
+left in promoted values; the rule and the floor are the same as for the large-object space,
+because these are the same kind of bytes: pure data outside the collected heap that only a full
+mark-sweep can reclaim. The live base is summed with `Block::claimSweepGeneration()` for the same
+identity reason: one block reached through several surviving views is counted once, not once per
+view. With the default, a program that keeps `B` bytes in promoted arrays whose blocks are still
+live holds at most about twice that, plus one pacing window; a program that keeps nothing holds
+about one floor plus the window. The garbage blocks are released by the deferred-release queue
+after that major collection runs (`mm/deferred.h`), before the next window is measured.
 
 GC finalization now runs before mark-sweep frees unreachable elder or large objects. In the
 young-copying path, dead nursery/from-space wrappers are finalized before the semispace reset, while

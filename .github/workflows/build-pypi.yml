@@ -46,10 +46,11 @@ permissions:
 env:
   # Instruction-set baseline of the published libcamel (cmake/Options.cmake, docs/build-options.en.md).
   # Never `native` here: the wheel must run on CPUs other than the runner's.
-  # PENDING OWNER DECISION: x86-64-v2 (SSE4.2/POPCNT, no AVX/FMA) is the conservative placeholder;
-  # the alternatives are `baseline` (SSE2 only) and `x86-64-v3` (AVX2+FMA, closest to local builds).
+  # The owner's decision (2026-10-21, docs/design-principles 9.10): x86-64-v3, i.e. AVX2 and FMA.
+  # A wheel built for v3 refuses to start on a machine without AVX2 -- that is the accepted cost of
+  # the performance, and ci.yml builds and tests at the same level so CI tests what is shipped.
   # The value is an x86-64 level: an arm64 matrix cell, once enabled, must override it (`baseline`).
-  CAMEL_TARGET_ARCH: x86-64-v2
+  CAMEL_TARGET_ARCH: x86-64-v3
 
 jobs:
   build-wheel:
@@ -137,6 +138,17 @@ jobs:
           choco install llvm ninja cmake -y --no-progress
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Select Clang (Windows)
+        # Without this, `conan profile detect` sees the image's MSVC and writes compiler=msvc, and
+        # Conan's toolchain then sets CMAKE_GENERATOR_PLATFORM=x64 -- which CMake rejects outright
+        # for the Ninja generator ("does not support platform specification"). ci-leg.yml exports
+        # CC/CXX for the same reason; the profile must say clang, because libcamel is built with it.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          "CC=clang" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CXX=clang++" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Verify Clang (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -163,7 +175,26 @@ jobs:
         run: python -m pip install --upgrade pip "conan>=2.10"
 
       - name: Conan default profile
-        run: conan profile detect --force
+        # Adjusted the way ci.yml adjusts it: the detected cppstd is 14, and taskflow 3.10.0
+        # requires 17, so `conan install` otherwise ends with "Current cppstd (14) is lower than
+        # the required C++ standard (17)" and no wheel is ever built.
+        run: |
+          conan profile detect --force
+          profile="$(conan profile path default)"
+          # Not `sed -i`: on the Windows runner its rename crosses devices and fails.
+          python - "$profile" <<'EOF'
+          import re, sys
+          path = sys.argv[1]
+          text = open(path, encoding="utf-8").read()
+          text = re.sub(r"(?m)^compiler\.cppstd=.*$", "compiler.cppstd=23", text)
+          # Never pin compiler.runtime_version. A pinned value makes Conan look up the Visual Studio
+          # whose toolset ships that runtime, and the image now carries VS 2026 (14.5x) with no VS 17
+          # installed, so a pinned v144 ends in "VS non-existing installation: Visual Studio 17" while
+          # it builds a dependency. Clang takes the runtime of the MSVC it drives anyway.
+          text = re.sub(r"(?m)^compiler\.runtime_version=.*\n?", "", text)
+          open(path, "w", encoding="utf-8", newline="\n").write(text)
+          EOF
+          cat "$profile"
 
       - name: Install npm dependencies (skip husky / postinstall conan wipe)
         run: npm ci --ignore-scripts

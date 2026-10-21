@@ -1213,7 +1213,8 @@ std::string FunctionEmitter::callDepth(const GCGraph *graph, gc_node_ref_t ref) 
             graph,
             ref,
             RuntimeDiag::MaxRecursionDepthExceeded,
-            {graph->name(), SiteTable::valueMark(0)}));
+            {graph->name(), std::to_string(program_.recursionLimit)},
+            std::to_string(program_.recursionLimit)));
 }
 
 // ---- Composite values (design note, section 4) ----
@@ -1696,7 +1697,8 @@ bool FunctionEmitter::lowerHigherOrder(
         g,
         ref,
         RuntimeDiag::MaxRecursionDepthExceeded,
-        {g->name(), SiteTable::valueMark(0)});
+        {g->name(), std::to_string(program_.recursionLimit)},
+        std::to_string(program_.recursionLimit));
     const auto norm = g->normInputsOf(ref);
     const auto with = g->withInputsOf(ref);
     std::string expr;

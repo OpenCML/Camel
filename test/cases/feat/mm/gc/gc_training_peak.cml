@@ -1,0 +1,36 @@
+/**
+ * A training-style loop keeps its peak near its live set. The model is a `[width, 4]` tensor,
+ * the batch `[batch, width]`, and each step computes the integer-label softmax cross entropy of
+ * `X @ w` through `grad` and applies the gradient (the shape H40 section 8 shows: the labels are
+ * a tensor cast to int64 inside the differentiated function, which the discrete-value rule now
+ * accepts). The batch and the model stay alive; the logits, the gradient and the updated model
+ * of each step are garbage. The high-water mark is the live set plus one pacing window, and it
+ * does not grow with `steps`; the loss falls as the model trains, so the loop really ran.
+ */
+module gc_training_peak
+
+import { Tensor, cast, ones, zeros } from tensor
+import { softmax_cross_entropy, sgd } from nn
+import { grad } from autodiff
+
+with <w: Tensor>
+func loss(X: Tensor, labels: Tensor): float {
+    return softmax_cross_entropy(X @ w, cast(labels, 'int64'))
+}
+
+func main(steps: int, batch: int, width: int): int sync {
+    let X = ones([batch, width])
+    let labels = cast(zeros([batch]), 'int64')
+    let w = zeros([width, 4])
+    let loss_grad = grad(loss)
+    let start = std::mem::blocks()
+    let (iLeft, wf, peak, low, released, total) = loop i = steps, wf = w, peak = 0, low = 1000000000000, released = 0, total = 0.0 while i > 0 do {
+        let g = loss_grad<wf>(X, labels)
+        let next = sgd(wf, g, 0.5)
+        let now = std::mem::blocks()
+        let bytes = now.bytes
+        (i - 1, next, if bytes > peak then bytes else peak, if bytes < low then bytes else low, now.frees - start.frees, total + loss<wf>(X, labels))
+    }
+    println('gc_training_peak base={} peak={} low={} released={} loss={}'->format<start.bytes, peak, low, released, total / float(steps)>)
+    return 0
+}

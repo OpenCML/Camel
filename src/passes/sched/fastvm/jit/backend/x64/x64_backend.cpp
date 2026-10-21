@@ -143,9 +143,6 @@ std::vector<JitBlocker> collectBlockers(const CompilationUnit &unit, bool firstO
         if (firstOnly && !found.empty())
             return found;
         const Bytecode &bc = unit.bytecodes[pc];
-        if (bc.opcode == OpCode::LBEG || bc.opcode == OpCode::LTST || bc.opcode == OpCode::LEND) {
-            add(pc, "LOOP", "pc=" + std::to_string(pc) + " a loop is not compiled (the graph is interpreted)");
-        }
         if (bc.opcode == OpCode::BRCH) {
             // The lowering jumps to the entries of the jump table.
             const size_t table = pc + bc.opsize;
@@ -253,11 +250,18 @@ std::vector<JitBlocker> collectRuntimeConstructs(const CompilationUnit &unit, bo
         case OpCode::SCHD:
             add(pc, "SCHD", where + " unsupported opcode SCHD");
             break;
-        case OpCode::IMOD:
+case OpCode::IMOD:
         case OpCode::LMOD:
             // The remainder runs in the helper (it faults on a zero divisor), so the graph
             // needs the frame a helper call runs against.
             add(pc, "IMOD", fallback + " contains an integer remainder");
+            break;
+        case OpCode::LBEG:
+        case OpCode::LTST:
+        case OpCode::LEND:
+            // The rounds run in the frame through the loop helpers of trampoline.h; a graph with
+            // a loop is framed code.
+            add(pc, "LOOP", fallback + " contains a loop (LBEG/LTST/LEND)");
             break;
         case OpCode::FUNC:
         case OpCode::TAIL: {
@@ -468,6 +472,9 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
     const uint64_t helperOper      = reinterpret_cast<uint64_t>(&jitHelperOper);
     const uint64_t helperBytecode  = reinterpret_cast<uint64_t>(&jitHelperBytecode);
     const uint64_t helperBranchArm = reinterpret_cast<uint64_t>(&jitHelperBranchArm);
+    const uint64_t helperLoopBegin = reinterpret_cast<uint64_t>(&jitHelperLoopBegin);
+    const uint64_t helperLoopTest  = reinterpret_cast<uint64_t>(&jitHelperLoopTest);
+    const uint64_t helperLoopEnd   = reinterpret_cast<uint64_t>(&jitHelperLoopEnd);
     // Owns the parameter blocks the NativeJitFuncCall MIRs point to, until encoding is done.
     std::vector<std::unique_ptr<NativeJitCallParams>> callParams;
 
@@ -521,6 +528,13 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
                 blockStarts.insert(next + arm);
             break;
         case OpCode::JUMP:
+            blockStarts.insert(getJumpTargetPc(&base[p]));
+            blockStarts.insert(next);
+            break;
+        case OpCode::LTST:
+        case OpCode::LEND:
+            // LTST jumps to its LEND when the loop stops; LEND jumps back to the first
+            // instruction of a round. The slot cache must not carry a value across either.
             blockStarts.insert(getJumpTargetPc(&base[p]));
             blockStarts.insert(next);
             break;
@@ -1290,6 +1304,27 @@ X64Backend::LowerResult X64Backend::compileBytecodeWith(
             // Fallback: keep the bytecode CFG shape and let the MIR encoder patch
             // the final relative offset after the whole buffer is laid out.
             build.emitJmpRel32(static_cast<uint32_t>(target));
+            break;
+        }
+        // The three events of a loop of regions (framed code). The frame carries the state, the
+        // ports and the round counter, so the helpers of loop_frame.h run the round exactly as
+        // the interpreters do; the code then jumps on what the event returned: LTST to its LEND
+        // when the loop stops, LEND back to the first instruction of a round when another one
+        // follows. Both events are barriers for the slot cache (the helpers write the frame).
+        case OpCode::LBEG:
+            build.emitCallHelper(static_cast<uint32_t>(pc), helperLoopBegin);
+            slotCache.clear();
+            break;
+        case OpCode::LTST:
+        case OpCode::LEND: {
+            build.emitCallHelper(
+                static_cast<uint32_t>(pc),
+                bc.opcode == OpCode::LTST ? helperLoopTest : helperLoopEnd);
+            x64::VRegId vContinue = nextVReg++;
+            build.emitVMovFromRax(vContinue);
+            build.emitVTest(vContinue);
+            build.emitJneRel32(static_cast<uint32_t>(getJumpTargetPc(&bc)));
+            slotCache.clear();
             break;
         }
         case OpCode::RETN: {

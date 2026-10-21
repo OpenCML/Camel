@@ -77,7 +77,7 @@ slot_t ruleKernel(ArgsView &, ArgsView &norm, Context &) {
     auto *object    = RuleObject::create(
         name,
         norm.get<rtdata::Bool>(1),
-        static_cast<uint8_t>(norm.get<rtdata::Int64>(2)),
+        static_cast<camel::core::sem::PermissionMask>(norm.get<rtdata::Int64>(2)),
         static_cast<uint64_t>(norm.get<rtdata::Int64>(3)),
         norm.get<::Function *>(4),
         norm.get<::Function *>(5),
@@ -91,7 +91,7 @@ slot_t ruleWhenKernel(ArgsView &, ArgsView &norm, Context &) {
     auto *object    = RuleObject::create(
         name,
         norm.get<rtdata::Bool>(1),
-        static_cast<uint8_t>(norm.get<rtdata::Int64>(2)),
+        static_cast<camel::core::sem::PermissionMask>(norm.get<rtdata::Int64>(2)),
         static_cast<uint64_t>(norm.get<rtdata::Int64>(3)),
         norm.get<::Function *>(4),
         norm.get<::Function *>(5),
@@ -330,7 +330,7 @@ struct Sample {
 /// rule do not rule out.
 class Sampler {
   public:
-    Sampler(uint64_t seed, uint8_t needs) : rng_(seed), needs_(needs) {}
+    Sampler(uint64_t seed, camel::core::sem::PermissionMask needs) : rng_(seed), needs_(needs) {}
 
     Sample value(TypeCode code, bool constant) {
         switch (code) {
@@ -407,13 +407,13 @@ class Sampler {
     }
 
     std::mt19937_64 rng_;
-    uint8_t needs_;
+    camel::core::sem::PermissionMask needs_;
 };
 
 /// Whether two results agree: bit for bit when the rule needs no permission (a NaN is a NaN),
 /// otherwise within a small multiple of the rounding of the steps (the rule changed the order or
 /// the grouping, so the rounding differs).
-bool agree(const Sample &a, const Sample &b, uint8_t needs, double scale, size_t steps) {
+bool agree(const Sample &a, const Sample &b, camel::core::sem::PermissionMask needs, double scale, size_t steps) {
     if (a.code == TypeCode::Float64 || a.code == TypeCode::Float32) {
         const bool single = a.code == TypeCode::Float32;
         const double x = a.asDouble, y = b.asDouble;
@@ -505,7 +505,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // The rule object is read now and not again: a function runs below, and objects move.
         const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
         const std::string name(rule->name());
-        const uint8_t needs                     = rule->needs();
+        const camel::core::sem::PermissionMask needs = rule->needs();
         const uint64_t constParams              = rule->constParams();
         const camel::runtime::Program *program  = rule->lhs()->program();
         const camel::runtime::GraphId lhsId     = rule->lhs()->graphId();
@@ -815,3 +815,4 @@ class RewriteModule final : public BuiltinModule {
 extern "C" Module *camel_module_create(Context *ctx) {
     return new RewriteModule(ctx->shared_from_this());
 }
+

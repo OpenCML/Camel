@@ -149,11 +149,6 @@ std::optional<TensorShape> computeShape(std::span<const Anchor> anchors) {
     return shapeOfType(anchors[0].graph->node(anchors[0].node)->dataType());
 }
 
-uint64_t shapeCone(std::span<const Anchor> anchors) {
-    // compute reads the node's type and nothing else: the type is the whole cone.
-    return 0x5ea9e000'00000000ULL ^ anchors[0].graph->node(anchors[0].node)->typeId;
-}
-
 // ---- core.instance, core.reorder -------------------------------------------------------------
 
 /// The OPER node's operator declares index semantics.
@@ -290,7 +285,7 @@ std::vector<std::vector<Anchor>> loopAnchors(const Program &program, const GCGra
 // ---- core.permissions ------------------------------------------------------------------------
 
 std::optional<int> computePermissions(std::span<const Anchor> anchors) {
-    const uint8_t mask = anchors[0].graph->nodePermissions(anchors[0].node);
+    const camel::core::sem::PermissionMask mask = anchors[0].graph->nodePermissions(anchors[0].node);
     return mask != 0 ? std::optional<int>(mask) : std::nullopt;
 }
 
@@ -299,11 +294,12 @@ CoreKinds registerCoreKinds() {
     k.shape = registerKind(KindSpec<TensorShape>{
         .key               = "core.shape",
         .owner             = "core",
-        .dependency        = Dependency::Cone,
+        // compute reads the node's record and nothing else (its type): the shape holds while the
+        // node does, though another node of its graph changed (facts.h, Dependency::Node).
+        .dependency        = Dependency::Node,
         .readsDeclarations = false,
         .compute           = computeShape,
         .print             = [](const TensorShape &s) { return toString(s); },
-        .cone              = shapeCone,
         .encode            = encodeShape,
         .decode            = decodeShape,
     });
@@ -347,7 +343,7 @@ CoreKinds registerCoreKinds() {
         .cls               = FactClass::GraphContent,
         .readsDeclarations = false,
         .compute           = computePermissions,
-        .print = [](const int &mask) { return sem::permissionsText(static_cast<uint8_t>(mask)); },
+        .print = [](const int &mask) { return sem::permissionsText(static_cast<camel::core::sem::PermissionMask>(mask)); },
         .encode = [](const int &mask) { return std::to_string(mask); },
         .decode = [](std::string_view text) -> std::optional<int> {
             const auto value = integer(text);
@@ -459,3 +455,4 @@ std::string toString(const LoopDomain &d) {
 }
 
 } // namespace camel::runtime::fact
+

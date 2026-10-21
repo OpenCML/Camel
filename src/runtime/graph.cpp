@@ -1046,7 +1046,7 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
 struct PayloadStaging {
     std::vector<GCNode> nodes; // nodeCount + 1 records; the last is a sentinel
     std::vector<uint32_t> origins;
-    std::vector<uint8_t> permissions;
+    std::vector<camel::core::sem::PermissionMask> permissions;
     std::vector<uint32_t> attrs;
     std::vector<uint32_t> regions;
     std::vector<gc_node_ref_t> inputs;
@@ -1170,7 +1170,7 @@ void buildNodeChunks(
             const size_t recordsAt = sizeof(GCNodeChunk);
             const size_t originsAt = align8(recordsAt + count * sizeof(GCNode));
             const size_t permsAt   = originsAt + align8(count * sizeof(uint32_t));
-            const size_t attrsAt   = permsAt + (shape.permissions ? align8(count) : 0);
+            const size_t attrsAt   = permsAt + (shape.permissions ? align8(count * sizeof(camel::core::sem::PermissionMask)) : 0);
             const size_t regionsAt = attrsAt + (shape.attrs ? align8(count * sizeof(uint32_t)) : 0);
             const size_t edgesAt = regionsAt + (shape.regions ? align8(count * sizeof(uint32_t)) : 0);
             const size_t payloadAt = edgesAt + align8(edges * sizeof(gc_node_ref_t));
@@ -1183,7 +1183,7 @@ void buildNodeChunks(
             chunk->payloadWordCount = static_cast<uint32_t>(words);
             chunk->origins          = reinterpret_cast<uint32_t *>(base + originsAt);
             chunk->permissions =
-                shape.permissions ? reinterpret_cast<uint8_t *>(base + permsAt) : nullptr;
+                shape.permissions ? reinterpret_cast<camel::core::sem::PermissionMask *>(base + permsAt) : nullptr;
             chunk->attrs   = shape.attrs ? reinterpret_cast<uint32_t *>(base + attrsAt) : nullptr;
             chunk->regions = shape.regions ? reinterpret_cast<uint32_t *>(base + regionsAt) : nullptr;
             chunk->edges   = reinterpret_cast<gc_node_ref_t *>(base + edgesAt);
@@ -1202,7 +1202,10 @@ void buildNodeChunks(
             }
             std::memcpy(chunk->origins, staging.origins.data() + first, count * sizeof(uint32_t));
             if (chunk->permissions) {
-                std::memcpy(chunk->permissions, staging.permissions.data() + first, count);
+                std::memcpy(
+                    chunk->permissions,
+                    staging.permissions.data() + first,
+                    count * sizeof(camel::core::sem::PermissionMask));
             }
             if (chunk->attrs) {
                 std::memcpy(chunk->attrs, staging.attrs.data() + first, count * sizeof(uint32_t));
@@ -1591,7 +1594,7 @@ uint32_t GCGraph::nodeAttrs(gc_node_ref_t ref) const {
     return containsNodeRef(ref) && chunkOf(ref).attrs ? chunkOf(ref).attrs[ref & (kNodeChunkNodes - 1)] : 0;
 }
 
-uint8_t GCGraph::nodePermissions(gc_node_ref_t ref) const {
+camel::core::sem::PermissionMask GCGraph::nodePermissions(gc_node_ref_t ref) const {
     return containsNodeRef(ref) && chunkOf(ref).permissions
                ? chunkOf(ref).permissions[ref & (kNodeChunkNodes - 1)]
                : 0;
@@ -1726,6 +1729,42 @@ std::span<const std::byte> GCGraph::nodePayloadBytes(gc_node_ref_t ref) const {
     }
     const size_t words = (bytes + kPayloadWordBytes - 1) / kPayloadWordBytes;
     return {body, words * kPayloadWordBytes};
+}
+
+uint64_t GCGraph::nodeContentHash(gc_node_ref_t ref) const {
+    const GCNode *n = node(ref);
+    if (n == nullptr) {
+        return 0;
+    }
+    // FNV-1a over the node: its record, the run of nodes it consumes and its payload (see the
+    // declaration in graph.h).
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    const auto mix = [&hash](const void *data, size_t bytes) {
+        const auto *read = static_cast<const uint8_t *>(data);
+        for (size_t i = 0; i < bytes; ++i) {
+            hash ^= read[i];
+            hash *= 0x100000001b3ULL;
+        }
+    };
+    const auto mixValue = [&mix](const auto &value) { mix(&value, sizeof(value)); };
+    const auto mixInputs = [&mix, &mixValue](std::span<const gc_node_ref_t> inputs) {
+        mixValue(static_cast<uint64_t>(inputs.size()));
+        for (gc_node_ref_t input : inputs) {
+            mixValue(input);
+        }
+    };
+    mixValue(n->kind);
+    mixValue(n->flags);
+    mixValue(n->reserved);
+    mixValue(n->dataIndex);
+    mixValue(n->typeId);
+    mixInputs(normInputsOf(ref));
+    mixInputs(withInputsOf(ref));
+    mixInputs(ctrlInputsOf(ref));
+    const std::span<const std::byte> payload = nodePayloadBytes(ref);
+    mixValue(static_cast<uint64_t>(payload.size()));
+    mix(payload.data(), payload.size());
+    return hash;
 }
 
 GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
@@ -2053,3 +2092,4 @@ void collectStaticGraphRefsRecursive(
 }
 
 } // namespace camel::runtime
+

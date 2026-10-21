@@ -506,7 +506,7 @@ void GraphDraft::rewriteNode(gc_node_ref_t id, const DraftNodeInit &init) {
     // A rewritten node keeps its source origin, its numeric permissions and its attributes
     // unless the rewrite gives it others.
     const uint64_t origin     = draftNode->header.origin;
-    const uint8_t permissions = draftNode->header.permissions;
+    const camel::core::sem::PermissionMask permissions = draftNode->header.permissions;
     const uint32_t attrs      = draftNode->header.attrs;
     const GCNodeKind oldKind  = draftNode->header.kind;
     replaceNodeStorage(id, rebuildNode(id, init));
@@ -598,3 +598,4 @@ void GraphDraft::appendUniqueNodeRef(std::vector<gc_node_ref_t> &refs, gc_node_r
 }
 
 } // namespace camel::runtime
+

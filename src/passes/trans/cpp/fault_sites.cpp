@@ -93,7 +93,7 @@ std::string SiteTable::valueMark(size_t k) {
 
 std::string SiteTable::siteFor(
     const GCGraph *graph, gc_node_ref_t node, RuntimeDiag kind,
-    const std::vector<std::string> &args) {
+    const std::vector<std::string> &args, std::string filled) {
     const auto key = std::make_tuple(
         static_cast<const void *>(graph),
         static_cast<uint16_t>(node),
@@ -101,7 +101,7 @@ std::string SiteTable::siteFor(
     if (auto it = index_.find(key); it != index_.end()) {
         return sites_[it->second].name;
     }
-    std::string name = makeSite(nodeOriginNear(graph, node), kind, args);
+    std::string name = makeSite(nodeOriginNear(graph, node), kind, args, std::move(filled));
     index_.emplace(key, sites_.size() - 1);
     return name;
 }
@@ -112,7 +112,7 @@ std::string SiteTable::siteAt(
 }
 
 std::string SiteTable::makeSite(
-    uint64_t origin, RuntimeDiag kind, const std::vector<std::string> &args) {
+    uint64_t origin, RuntimeDiag kind, const std::vector<std::string> &args, std::string filled) {
     // The templates take up to ten arguments; those not given are empty.
     std::array<std::string, 10> a;
     for (size_t i = 0; i < args.size() && i < a.size(); ++i) {
@@ -151,6 +151,7 @@ std::string SiteTable::makeSite(
         .kind     = d.name.substr(d.name.rfind(':') + 1),
         .message  = d.message,
         .location = locationOf(d),
+        .filled   = std::move(filled),
     };
     sites_.push_back(std::move(site));
     return sites_.back().name;
@@ -178,6 +179,7 @@ std::string SiteTable::unlocated(RuntimeDiag kind, const std::vector<std::string
         .kind     = d.name.substr(d.name.rfind(':') + 1),
         .message  = d.message,
         .location = "",
+        .filled   = "",
     };
     sites_.push_back(std::move(site));
     return sites_.back().name;
@@ -226,6 +228,7 @@ std::string SiteTable::placeFor(const GCGraph *graph, gc_node_ref_t node) {
         .kind     = "",
         .message  = "",
         .location = locationOf(d),
+        .filled   = "",
     };
     index_.emplace(key, sites_.size());
     sites_.push_back(std::move(site));
@@ -245,15 +248,18 @@ std::string SiteTable::definitions() const {
                 cppStringLiteral(site.location));
             continue;
         }
+        const std::string filled =
+            site.filled.empty() ? std::string("nullptr") : cppStringLiteral(site.filled);
         out += std::format(
-            "// {}\nconst rt::Site {}{{\n    {},\n    {},\n    {},\n    {},\n    {}}};\n",
+            "// {}\nconst rt::Site {}{{\n    {},\n    {},\n    {},\n    {},\n    {},\n    {}}};\n",
             site.comment,
             site.name,
             cppStringLiteral(site.text),
             cppStringLiteral(site.brief),
             cppStringLiteral(site.kind),
             cppStringLiteral(site.message),
-            cppStringLiteral(site.location));
+            cppStringLiteral(site.location),
+            filled);
     }
     return out;
 }

@@ -50,6 +50,7 @@ class FactStore;
 
 namespace camel::core::module {
 class Module;
+class ProgramExports;
 }
 
 namespace camel::compile {
@@ -137,6 +138,10 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, std::shared_ptr<const void>> passFacts_;
     /// See setSemanticRecorder.
     camel::compile::SemanticRecorder *semanticRecorder_ = nullptr;
+    /// The exported entities of the program this context is building (see programExports).
+    /// Declared before the builder session so that the builder, which refers to it, is
+    /// destroyed first.
+    std::unique_ptr<module::ProgramExports> programExports_;
     /// See graphBuildSession.
     std::shared_ptr<void> graphBuildSession_;
     /// The regular files of each directory a module was looked up in (getModulePathAndKind),
@@ -201,6 +206,10 @@ class Context : public std::enable_shared_from_this<Context> {
     const camel::runtime::Program *materializeRuntimeProgram();
     const camel::runtime::Program *adoptRuntimeProgram(const camel::runtime::Program *program);
     const camel::runtime::Program *installRuntimeProgram(const camel::runtime::Program *program);
+    /// installRuntimeProgram, but only while `expected` is still the installed program (see
+    /// GCGraphManager::replaceRootIfCurrent): answers whether it installed it.
+    bool installRuntimeProgramIfCurrent(const camel::runtime::Program *expected,
+                                        const camel::runtime::Program *program);
     const camel::runtime::Program *currentRuntimeProgram() const;
     void clearRuntimeGraphs();
     /// A new, empty Program owned by the context, for whoever builds one.
@@ -217,6 +226,9 @@ class Context : public std::enable_shared_from_this<Context> {
     void enterRun();
     void leaveRun();
     void releaseRuntimeGraph(camel::runtime::GCGraph *graph);
+    /// See GCGraphManager::noteUnbound: a graph a rewrite encoded and has not bound in a
+    /// program yet, which the collector frees once the pass is over if nothing binds it.
+    void noteUnboundRuntimeGraph(camel::runtime::GCGraph *graph);
     /// The newest program of the context that holds this version of `graph` (see
     /// GCGraphManager::programOf), nullptr when none does.
     const camel::runtime::Program *
@@ -348,6 +360,18 @@ class Context : public std::enable_shared_from_this<Context> {
      * it on first use (camel::compile::gir::Builder::of).
      */
     std::shared_ptr<void> &graphBuildSession() { return graphBuildSession_; }
+
+    /**
+     * The exported entities of the program compiled on this context: the names each module
+     * declares for this program, with the graphs this program built (design principles 10.1;
+     * one table per program, task H42). The graph builder of the context's program shares this
+     * table; a program of its own (a pass compiled by compileAsProgram) has one of its own, so
+     * the same module can be declared in both without either seeing the other's graphs.
+     *
+     * Created on first use. Readers that are not the graph builder (the semantic analysis, an
+     * operator's definition lookup) read it here.
+     */
+    camel::core::module::ProgramExports &programExports();
 
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }

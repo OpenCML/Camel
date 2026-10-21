@@ -365,6 +365,11 @@ void FastVMSchedPass::leaseCode(camel::runtime::GCGraph *graph, size_t start, si
     }
     graph->execPlan().fastVm.codeLease =
         std::make_shared<CodeLease>(codeSpace_, start, length);
+#if ENABLE_FASTVM_JIT
+    // A version that already has its JIT entry (a second lease of the same graph) keeps the entry
+    // cleared with the new lease.
+    attachJitEntry(graph, fastVmJitEntryOf(graph));
+#endif
 }
 
 void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
@@ -532,6 +537,12 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
             vm->statsWrite();
             if (std::getenv("CAMEL_GC_STATS") != nullptr) {
                 std::cerr << "fvm_code_bytecodes=" << vm->bytecodes_.size() << '\n';
+#if ENABLE_FASTVM_JIT
+                // The entries name the graph versions that were compiled on the way; one whose
+                // version the collector freed must not be here (it would name a dead graph and
+                // the map would grow with every run-time specialization).
+                std::cerr << "fvm_jit_entries=" << vm->jitEntryCount() << '\n';
+#endif
             }
         }
     } statsAtExit{this};
@@ -1124,8 +1135,37 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
 }
 
 camel::runtime::GCGraph *FastVMSchedPass::jitFnToGraph(JitEntryFn fn) const {
-    auto it = jitFnToGraph_.find(fn);
-    return it != jitFnToGraph_.end() ? it->second : nullptr;
+    std::lock_guard lock(jitCache_->mutex);
+    auto it = jitCache_->byFn.find(fn);
+    return it != jitCache_->byFn.end() ? it->second : nullptr;
+}
+
+size_t FastVMSchedPass::jitEntryCount() const {
+    std::lock_guard lock(jitCache_->mutex);
+    return jitCache_->byFn.size();
+}
+
+void FastVMSchedPass::attachJitEntry(camel::runtime::GCGraph *graph, JitEntryFn fn) {
+    if (!graph || !fn) {
+        return;
+    }
+    {
+        std::lock_guard lock(jitCache_->mutex);
+        jitCache_->byFn[fn] = graph;
+    }
+    // The entry names the version: the lease of its bytecode range clears the entry when the
+    // collector frees the version. The hook holds the cache weakly, as the version may outlive
+    // the pass (and, with it, the cache it names).
+    auto *lease = static_cast<CodeLease *>(graph->execPlan().fastVm.codeLease.get());
+    if (lease == nullptr) {
+        return;
+    }
+    const std::weak_ptr<JitGraphCache> cache = jitCache_;
+    lease->onRelease = [cache, fn] {
+        if (const auto alive = cache.lock()) {
+            alive->forget(fn);
+        }
+    };
 }
 
 JitEntryFn FastVMSchedPass::jitFnOf(camel::runtime::GCGraph *graph) const {
@@ -1250,7 +1290,7 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
     if (fn) {
         setFastVmJitFramedOf(graph, framed);
         setJitFnOf(graph, fn);
-        jitFnToGraph_[fn] = graph;
+        attachJitEntry(graph, fn);
         statsNoteCompiled(entryPc);
         setJitCompileFailedOf(graph, false);
         setJitFailureReportedOf(graph, false);

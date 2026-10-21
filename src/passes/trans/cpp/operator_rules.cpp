@@ -424,9 +424,10 @@ Rules buildRules() {
     // The loop-state form (Builder::markLoopStateInPlace): writing in place is an optimisation of
     // `append`, and this back end has only the copying form, which gives the same values.
     r[":struct/append_arr_owned"] = withArgument("append");
-    // The private copy of a loop's first value, which the same rewrite puts before the loop: an
-    // Array here is a value, and `append` copies a block that another holder shares, so the copy
-    // itself has nothing to do (rt::append takes the array by value).
+    // The private copy one state of a loop takes (Builder::markLoopStateInPlace, per state),
+    // which the same rewrite puts before the loop: an Array here is a value, and `append` copies
+    // a block that another holder shares, so the copy itself has nothing to do (rt::append takes
+    // the array by value).
     r[":struct/copy_arr"] = identity();
     r[":struct/extend_arr"]   = withArgument("concat");
     r[":struct/contains_arr"] = withArgument("contains");

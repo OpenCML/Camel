@@ -439,7 +439,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         ENTER("DREF");
         genericCalleeAllowed_   = false;
         const std::string plain = written.substr(kBuiltinPrefix.size());
-        const auto entity       = context_->importModule("")->getExportedEntity(Reference(plain));
+        const auto entity       = context_->importModule("")->getNativeEntity(Reference(plain));
         ASSERT(
             entity.has_value() && entity->isOperGroup(),
             "A built-in operator the compiler names does not exist: " + plain);
@@ -565,14 +565,14 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     std::optional<camel::core::module::entity> named;
     if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
         importedName = true;
-        named        = module_->getImportedEntity(written, ImportLayer::Named);
+        named        = importedEntity(written, ImportLayer::Named);
     }
     if (isOperatorName(written) || (named.has_value() && named->isOperGroup())) {
         // Operator groups (`+`, and the operators a module of operators brings) take their
         // overloads from every layer (design principles 10.2; the graph model, N3).
         importedName = importedName || module_->hasImportedRef(written);
         if (importedName) {
-            opt = module_->getImportedEntity(written);
+            opt = importedEntity(written);
         }
     } else if (named.has_value()) {
         opt = named;
@@ -588,7 +588,7 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         opt          = match->entity;
     } else if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
         importedName = true;
-        opt          = module_->getImportedEntity(written, ImportLayer::Ambient);
+        opt          = importedEntity(written, ImportLayer::Ambient);
     }
     if (importedName) {
         // An import of this name does not imply that the imported module exported it.
@@ -902,7 +902,7 @@ node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
 }
 
 node_handle_t Builder::variableOperator(const std::string &group, node_handle_t input) {
-    const auto entity = module_->getImportedEntity(group);
+    const auto entity = importedEntity(group);
     ASSERT(entity.has_value() && entity->isOperGroup(), "Variable operators are not available.");
     const std::vector<StaticArg> statics(1);
     const auto op = entity->operGroup()->resolve({}, {nodeTypeOf(input)}, statics, Modifier::None);

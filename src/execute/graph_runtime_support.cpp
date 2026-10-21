@@ -648,11 +648,14 @@ BranchArmEntries::BranchArmEntries(
     if (!regions.any()) {
         return;
     }
-    // The first node of each arm region that runs something, in the order of the plan: a
-    // constant, a port or a forwarding GATE is not where the arm starts. The nodes of the regions
-    // inside an arm are its nodes too, so what is found for a region is handed to the region
-    // around it. A node of an arm laid out before its BRCH was needed by code outside the branch
-    // and runs whether the arm is taken or not: it is no part of the range the BRCH jumps over.
+    // The first node of each arm region in the order of the plan, whatever it does: an
+    // interpreter resumes the arm at this position and runs the events of the loops that start
+    // there before the node, so the first round of a loop can begin at a position whose node is
+    // only a port or a constant that does nothing by itself (a loop in an arm; H45). The nodes of
+    // the regions inside an arm are its nodes too, so what is found for a region is handed to the
+    // region around it. A node of an arm laid out before its BRCH was needed by code outside the
+    // branch and runs whether the arm is taken or not: it is no part of the range the BRCH jumps
+    // over.
     constexpr size_t kNone = std::numeric_limits<size_t>::max();
     std::unordered_map<gc_node_ref_t, size_t> position;
     position.reserve(topoOrder.size());
@@ -673,13 +676,8 @@ BranchArmEntries::BranchArmEntries(
                 continue;
             }
         }
-        const auto kind = graph.node(ref)->kind;
-        const bool runs = kind != camel::runtime::GCNodeKind::Data &&
-                          kind != camel::runtime::GCNodeKind::Port &&
-                          kind != camel::runtime::GCNodeKind::Sync &&
-                          kind != camel::runtime::GCNodeKind::Gate;
         const uint32_t at = regions.tin(control);
-        if (runs && first[at] == kNone) {
+        if (first[at] == kNone) {
             first[at] = i;
         }
         last[at] = i;

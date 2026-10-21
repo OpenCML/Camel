@@ -48,6 +48,12 @@
  * fact stored or matching the graph, and equal to a fresh computation), then edits `main`
  * (adds an unused constant) and loads them again: the facts about `main` and the graphs that
  * refer to it are refused (`graph changed`), the others are stored.
+ *
+ * `test::facts_node` is the node-level rule (Dependency::Node, design 4.4): it stores a fact
+ * about one node of the root twice, once for a kind of that rule and once for a kind of the
+ * conservative rule (Anchors), adds a node to the root and commits; the first reads valid,
+ * the second stale. Then it changes the node itself and commits: the first reads stale too
+ * (`FACTS node_other node=valid graph=stale`, `FACTS node_self node=stale`).
  */
 
 #pragma once
@@ -59,6 +65,7 @@ inline constexpr const char *kFactStoreTestPass = "test::facts";
 inline constexpr const char *kFactSeedTestPass    = "test::facts_seed";
 inline constexpr const char *kFactCheckTestPass   = "test::facts_check";
 inline constexpr const char *kFactPersistTestPass = "test::facts_persist";
+inline constexpr const char *kFactNodeTestPass    = "test::facts_node";
 
 class FactStoreTestPass : public RuntimeGraphRewritePass {
   public:
@@ -82,6 +89,13 @@ class FactCheckTestPass : public RuntimeGraphRewritePass {
 };
 
 class FactPersistTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+class FactNodeTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

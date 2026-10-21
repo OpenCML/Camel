@@ -29,7 +29,13 @@
 #include <utility> // for std::forward
 #include <vector>
 
+namespace camel::core::rtdata {
+class Object;
+}
+
 namespace camel::core::mm {
+
+class Block;
 
 constexpr size_t KB = 1024;
 constexpr size_t MB = 1024 * KB;
@@ -69,6 +75,16 @@ class IAllocator {
     // finalizer (rtdata::Object::finalize) that must run when the object dies. A collector
     // that reclaims dead objects without visiting them needs to know; the others do not.
     virtual void noteFinalizable(void *payload) { (void)payload; }
+
+    // Tells the allocator that `owner` now holds `block`: the array layer calls this when an
+    // array takes a block over (a view of an inline array, a growth, an in-place operation).
+    // A collector that paces the block bytes held by elder values counts the block here, so an
+    // array that is already in the elder space when it gets a block counts like any other.
+    // Other allocators ignore it.
+    virtual void noteBlockHeld(camel::core::rtdata::Object *owner, Block *block) {
+        (void)owner;
+        (void)block;
+    }
 
     // Bulk-free the given list of object headers.
     virtual void freeBulk(const std::vector<ObjectHeader *> &objects) {

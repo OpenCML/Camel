@@ -375,7 +375,7 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
         // through the one query for the facts of a node (camel/core/tags.h): an attribute only
         // on the nodes that have any, so that the dump of a program without tags is unchanged.
         const camel::core::tag::Facts facts = camel::core::tag::factsOf(*graph, nodeRef);
-        const uint8_t permissions           = facts.permissions;
+        const camel::core::sem::PermissionMask permissions = facts.permissions;
         const string valueAttr =
             (valueType.empty() ? "" : std::format(", value_type=\"{}\"", escape(valueType))) +
             (permissions == 0 ? ""
@@ -713,3 +713,4 @@ GraphVizDumpPass::apply(const camel::runtime::Program *program, std::ostream &os
     os << dumpGraph(graph);
     return nullptr;
 }
+

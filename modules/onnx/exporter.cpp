@@ -3567,7 +3567,12 @@ void emitOutputs(Emitter &emitter, const Value &result, const std::string &name)
                 name,
                 result.ty ? result.ty->toString() : "a value of unknown type"));
     }
-    const std::string output = emitter.node("Identity", {emitter.operand(result)}, {}, name);
+    // A graph output is a value of its own: two outputs that are the same result (the same
+    // tensor and scalar, or one returned twice) need two Identity nodes with two names, because
+    // a model's graph may not name one value as two outputs. node() would merge the second
+    // Identity into the first by structural CSE.
+    const std::string output =
+        emitter.appendIdentity(emitter.graph(), emitter.operand(result), name);
     emitter.graph().outputs.push_back(valueInfoOf(output, facts));
 }
 
@@ -3741,11 +3746,6 @@ OptimizeRewriteConfig exportRewriteConfig() {
     OptimizeRewriteConfig config;
     // Everything that is not recursive is inlined; ONNX has no calls.
     config.inlineConfig.smallSubgraphMaxNonDataPortNodes = std::numeric_limits<size_t>::max();
-    // The pullback of a data-dependent branch is an indirect call of a closure projected out
-    // of the branch's JOIN; split it into per-arm calls with one JOIN per value. The graph is
-    // only walked as a value DAG from here on (no execution topo is built), so the sibling
-    // JOINs this creates are valid.
-    config.enableBranchedCallSplit = true;
     // An export has to reach straight-line code or it is refused, so it is not held to the growth
     // bounds that keep an optimization pass cheap (the growth_budget parameter belongs to the
     // pass on the pipeline, and an export that runs after it may be held to it). A graph too

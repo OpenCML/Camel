@@ -585,7 +585,7 @@ class Compiler {
                 // Only this operator's lowering inherits its lexical grant.
                 // Arguments and separately called functions have already been
                 // lowered with their own permissions and must remain unchanged.
-                const uint8_t permissions =
+                const camel::core::sem::PermissionMask permissions =
                     camel::core::tag::factsOf(*g, id).permissions;
                 for (size_t i = first; i < program.nodes.size(); ++i) {
                     program.nodes[i].permissions = permissions;
@@ -1010,3 +1010,4 @@ void bindRegionArguments(
     planStorage(program);
 }
 } // namespace camel::tiles
+

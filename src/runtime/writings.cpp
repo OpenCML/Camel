@@ -144,7 +144,7 @@ bool WritingStore::unionIn(
     return true;
 }
 
-WritingStore::Layer &WritingStore::layer(uint8_t context) {
+WritingStore::Layer &WritingStore::layer(camel::core::sem::PermissionMask context) {
     auto it = std::lower_bound(
         layers_.begin(),
         layers_.end(),
@@ -168,7 +168,7 @@ WritingStore::Layer &WritingStore::layer(uint8_t context) {
 }
 
 bool WritingStore::merge(
-    gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule, uint8_t flags,
+    gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule, uint8_t flags,
     WritingObserver *observer) {
     // The context of the equivalence itself decides whether it is new.
     Layer &own       = layer(perms);
@@ -182,17 +182,17 @@ bool WritingStore::merge(
     return isNew;
 }
 
-gc_node_ref_t WritingStore::canon(uint8_t context, gc_node_ref_t node) {
+gc_node_ref_t WritingStore::canon(camel::core::sem::PermissionMask context, gc_node_ref_t node) {
     return findIn(layer(context), node);
 }
 
-gc_node_ref_t WritingStore::find(uint8_t context, gc_node_ref_t node) {
+gc_node_ref_t WritingStore::find(camel::core::sem::PermissionMask context, gc_node_ref_t node) {
     Layer &l        = layer(context);
     const auto root = findIn(l, node);
     return root < l.smallest.size() ? l.smallest[root] : root;
 }
 
-std::span<const gc_node_ref_t> WritingStore::members(uint8_t context, gc_node_ref_t node) {
+std::span<const gc_node_ref_t> WritingStore::members(camel::core::sem::PermissionMask context, gc_node_ref_t node) {
     Layer &l        = layer(context);
     const auto root = findIn(l, node);
     auto it         = l.members.find(root);
@@ -206,15 +206,15 @@ std::span<const gc_node_ref_t> WritingStore::members(uint8_t context, gc_node_re
     return it->second.nodes;
 }
 
-std::vector<uint8_t> WritingStore::contexts() const {
-    std::vector<uint8_t> result;
+std::vector<camel::core::sem::PermissionMask> WritingStore::contexts() const {
+    std::vector<camel::core::sem::PermissionMask> result;
     for (const Layer &l : layers_) {
         result.push_back(l.context);
     }
     return result;
 }
 
-std::vector<gc_node_ref_t> WritingStore::classRoots(uint8_t context) {
+std::vector<gc_node_ref_t> WritingStore::classRoots(camel::core::sem::PermissionMask context) {
     Layer &l = layer(context);
     std::vector<gc_node_ref_t> roots;
     for (const auto &entry : l.members) {
@@ -233,7 +233,7 @@ using camel::core::type::Type;
 /// What makes two nodes the same value when their inputs are.
 struct NodeKey {
     uint8_t kind     = 0;
-    uint8_t perms    = 0;
+    camel::core::sem::PermissionMask perms    = 0;
     uint32_t region  = 0;
     const Type *type = nullptr;
     std::string payload;
@@ -277,7 +277,7 @@ DraftWritings::DraftWritings(GraphDraft &draft, camel::core::sem::NumericPolicy 
 
 DraftWritings::~DraftWritings() = default;
 
-uint8_t DraftWritings::contextOf(gc_node_ref_t node) const {
+camel::core::sem::PermissionMask DraftWritings::contextOf(gc_node_ref_t node) const {
     return policy_.effective(draft_.nodePermissions(node));
 }
 
@@ -386,7 +386,7 @@ namespace {
 /// The key of a node of the given parts; `canonOf` names the class of an input.
 template <typename CanonOf>
 NodeKey makeKey(
-    const GraphDraft &draft, GCNodeKind kind, uint8_t perms, uint32_t region, const Type *type,
+    const GraphDraft &draft, GCNodeKind kind, camel::core::sem::PermissionMask perms, uint32_t region, const Type *type,
     gc_slot_idx_t dataIndex, std::span<const std::byte> payload,
     std::span<const gc_node_ref_t> norm, std::span<const gc_node_ref_t> with, CanonOf &&canonOf) {
     NodeKey key;
@@ -434,7 +434,7 @@ void DraftWritings::enqueue(gc_node_ref_t node) {
     }
 }
 
-void DraftWritings::joined(uint8_t context, std::span<const gc_node_ref_t> moved) {
+void DraftWritings::joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) {
     for (gc_node_ref_t node : moved) {
         for (auto users : {draft_.normUsersOf(node), draft_.withUsersOf(node)}) {
             for (gc_node_ref_t user : users) {
@@ -454,7 +454,7 @@ void DraftWritings::index(gc_node_ref_t node) {
     if (!takesPart(node)) {
         return;
     }
-    const uint8_t context = contextOf(node);
+    const camel::core::sem::PermissionMask context = contextOf(node);
     const auto *h         = draft_.header(node);
     NodeKey key           = makeKey(
         draft_,
@@ -507,14 +507,14 @@ void DraftWritings::rebuild() {
     }
 }
 
-bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule) {
+bool DraftWritings::assertEqual(gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule) {
     const bool changed = assertEqualDeferred(a, b, perms, rule);
     rebuild();
     return changed;
 }
 
 bool DraftWritings::assertEqualDeferred(
-    gc_node_ref_t a, gc_node_ref_t b, uint8_t perms, uint16_t rule) {
+    gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms, uint16_t rule) {
     const auto *ha = draft_.header(a);
     const auto *hb = draft_.header(b);
     if (ha == nullptr || hb == nullptr || ha->dataType != hb->dataType ||
@@ -668,7 +668,7 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         if (!draft_.alive(node)) {
             continue;
         }
-        const uint8_t context = contextOf(node);
+        const camel::core::sem::PermissionMask context = contextOf(node);
         classOf[node]         = store_.canon(context, node);
         multi[node]           = store_.members(context, node).empty() ? 0 : 1;
         own[node]             = model.nodeCost(costContext, node);
@@ -977,7 +977,7 @@ void traceRuleConstants(
 
 std::optional<std::pair<slot_t, camel::core::type::Type *>>
 DraftWritings::constantOf(gc_node_ref_t node) {
-    const uint8_t context = contextOf(node);
+    const camel::core::sem::PermissionMask context = contextOf(node);
     const auto members    = store_.members(context, node);
     const auto look       = [&](gc_node_ref_t candidate)
         -> std::optional<std::pair<slot_t, camel::core::type::Type *>> {
@@ -1005,7 +1005,7 @@ DraftWritings::constantOf(gc_node_ref_t node) {
 }
 
 gc_node_ref_t DraftWritings::constantNode(
-    slot_t value, camel::core::type::Type *type, uint8_t perms, uint32_t region) {
+    slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region) {
     NodeKey key;
     key.kind   = static_cast<uint8_t>(GCNodeKind::Data);
     key.perms  = perms;
@@ -1029,7 +1029,7 @@ gc_node_ref_t DraftWritings::constantNode(
 }
 
 void DraftWritings::matchFrom(
-    uint8_t context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
+    camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
     std::vector<uint8_t> &bound, const std::function<void()> &emit) {
     if (at == work.size()) {
         emit();
@@ -1260,7 +1260,7 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
             if (!draft_.alive(node) || !canBeRoot(node)) {
                 continue;
             }
-            const uint8_t context = contextOf(node);
+            const camel::core::sem::PermissionMask context = contextOf(node);
             matchPerms_           = draft_.header(node)->permissions;
             for (const Rule &rule : rules) {
                 if ((rule.needs & ~context) != 0 || rule.lhs.kind != Pattern::Kind::Op) {
@@ -1385,7 +1385,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                 continue;
             }
             for (gc_node_ref_t node : candidates->second) {
-                const uint8_t context = contextOf(node);
+                const camel::core::sem::PermissionMask context = contextOf(node);
                 if ((rule.needs & ~context) != 0) {
                     continue;
                 }
@@ -1447,3 +1447,4 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
 }
 
 } // namespace camel::runtime
+

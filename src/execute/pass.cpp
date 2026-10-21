@@ -24,6 +24,8 @@
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/mm.h"
+#include "camel/core/module/module.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/tags.h"
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/foreign_handle.h"
@@ -35,6 +37,7 @@
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/edges.h"
+#include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/rules.h"
 #include "camel/passes/test/saturate.h"
@@ -45,6 +48,7 @@
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/exec_plan.h"
 #include "camel/passes/test/regions.h"
+#include "camel/passes/test/arm_loop_regions.h"
 #include "camel/passes/trans/json/gir.h"
 #include "macro/macro.h"
 #include "pass_spec.h"
@@ -1047,6 +1051,9 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
+        TEST_PASS(kCommitMergeTestPass, CommitMergeTestPass),
+        TEST_PASS(kGraphReleaseTestPass, GraphReleaseTestPass),
+        TEST_PASS(kFactNodeTestPass, FactNodeTestPass),
         TEST_PASS(kWritingsTestPass, WritingsTestPass),
         TEST_PASS(kTabledTestPass, TabledTestPass),
         TEST_PASS(kSaturateTestPass, SaturateTestPass),
@@ -1056,6 +1063,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
+        TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
         TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
@@ -1109,6 +1117,9 @@ struct ResolvedPass {
     PassFactory factory;                // the pass with its parameters bound; null if not usable
     bool known = false;                 // the name is a pass
     std::optional<std::string> problem; // the parameters are wrong
+    /// When the problem is a pass module that does not compile: its first error, as a secondary
+    /// location (H36c).
+    std::optional<DiagLabel> errorLocation;
 };
 
 /// Resolves `name` or `name(key=value, ...)`. Prints nothing.
@@ -1136,9 +1147,14 @@ ResolvedPass resolvePass(const std::string &spec) {
     return result;
 }
 
-Diagnostic invalidParameterDiagnostic(const std::string &spec, const std::string &problem) {
+Diagnostic invalidParameterDiagnostic(
+    const std::string &spec, const std::string &problem,
+    const std::optional<DiagLabel> &errorLocation = std::nullopt) {
     setPipelineStage("pass:" + specName(spec));
-    auto diag  = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
+    auto diag = DiagnosticBuilder::of(RuntimeDiag::InvalidPassParameter).commit(spec, problem);
+    if (errorLocation) {
+        diag.related.push_back(*errorLocation);
+    }
     diag.stage = "pass:" + specName(spec);
     setPipelineStage("");
     return diag;
@@ -1236,10 +1252,13 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     }
     // A function written in Camel: the module is a library of its own, compiled now.
     std::string problem;
-    camel::execute::registerCamelPass(ctx, name.substr(0, sep), name.substr(sep + 2), problem);
+    std::optional<DiagLabel> errorLocation;
+    camel::execute::registerCamelPass(
+        ctx, name.substr(0, sep), name.substr(sep + 2), problem, &errorLocation);
     resolved = resolvePass(spec);
     if (!resolved.factory && !problem.empty()) {
-        resolved.problem = problem;
+        resolved.problem       = problem;
+        resolved.errorLocation = errorLocation;
     }
     return resolved;
 }
@@ -1248,7 +1267,7 @@ void requireKnownPasses(const std::vector<std::string> &passes, const context_pt
     for (const auto &name : passes) {
         auto resolved = resolvePassWithModule(name, ctx);
         if (resolved.problem) {
-            throw invalidParameterDiagnostic(name, *resolved.problem);
+            throw invalidParameterDiagnostic(name, *resolved.problem, resolved.errorLocation);
         }
         if (resolved.factory) {
             continue;
@@ -1313,10 +1332,82 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
     return warning;
 }
 
+namespace {
+
+/// The Camel passes of the pipeline that declare `#reads<...>` on their function, by the tag
+/// they name: a pass written in Camel reads tags by saying so, the counterpart of a C++
+/// module's `read_by` (design principles 6.2). The module is loaded here because the warning
+/// is computed before the pipeline builds the passes.
+std::map<std::string, std::vector<std::string>> declaredReadersOf(
+    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+    std::map<std::string, std::vector<std::string>> readers;
+    for (const auto &spec : passes) {
+        const std::string pass = resolveAlias(specName(spec));
+        const size_t sep       = pass.rfind("::");
+        if (sep == std::string::npos) {
+            continue;
+        }
+        const std::string moduleName = pass.substr(0, sep);
+        const std::string function   = pass.substr(sep + 2);
+        // `std::` passes are the core's (C++), not a module: loading "std" would be an error.
+        if (moduleName == "std" || moduleName.starts_with("std::")) {
+            continue;
+        }
+        try {
+            const auto module = ctx->importModule(moduleName);
+            if (!module || !module->loaded()) {
+                continue;
+            }
+            const auto facts = camel::core::tag::ofDeclaration(*module, Reference(function));
+            if (facts == camel::core::attr::kNoAttrs) {
+                continue;
+            }
+            const auto value =
+                camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
+            if (value == camel::core::attr::kNoValue) {
+                continue;
+            }
+            const auto add = [&](const std::string &tag) {
+                // The fact stores the name as the pass wrote it; the use of the tag in a
+                // program names it qualified. Resolve it in the pass's module, then in the core.
+                std::string key = tag;
+                if (const auto id = camel::core::tag::find(moduleName, tag)) {
+                    key = camel::core::tag::get(*id)->name;
+                } else if (const auto core = camel::core::tag::find(tag)) {
+                    key = camel::core::tag::get(*core)->name;
+                }
+                readers[key].push_back(pass);
+            };
+            const camel::core::attr::Value decoded = camel::core::attr::value(value);
+            if (decoded.kind == camel::core::attr::ValueKind::Symbol) {
+                add(decoded.text);
+            } else if (decoded.kind == camel::core::attr::ValueKind::Tuple) {
+                for (const auto item : decoded.items) {
+                    const camel::core::attr::Value tag = camel::core::attr::value(item);
+                    if (tag.kind == camel::core::attr::ValueKind::Symbol) {
+                        add(tag.text);
+                    }
+                }
+            }
+        } catch (...) {
+            // A module that cannot be read here names no readers; the pass itself reports why
+            // when the pipeline builds it.
+        }
+    }
+    return readers;
+}
+
+} // namespace
+
 std::vector<Diagnostic> tagsNeverReadWarnings(
     const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     std::vector<Diagnostic> warnings;
     if (!ctx) {
+        return warnings;
+    }
+    // No tag is written, so there is nothing to warn about: returning here also keeps the
+    // pipeline from loading pass modules it would not otherwise load.
+    if (ctx->tagUses().empty()) {
         return warnings;
     }
     // The names in the pipeline, as written and as they resolve (an alias strips to the pass's
@@ -1328,15 +1419,28 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
         inPipeline.push_back(name);
         inPipeline.push_back(resolveAlias(name));
     }
+    const auto camelReaders = declaredReadersOf(passes, ctx);
     for (const auto &use : ctx->tagUses()) {
-        bool read = false;
+        // The passes the tag's declaration names, and the Camel passes that say with
+        // `#reads<...>` that they read it.
+        std::vector<std::string> readers;
         for (const std::string &reader : use.readBy) {
             // Only a pass that declared itself a reader of tag facts counts: a name that
             // happens to be in the pipeline but reads no facts leaves the tag with no effect,
             // which is what the warning says.
-            if (!camel::core::tag::isReader(reader)) {
-                continue;
+            if (camel::core::tag::isReader(reader)) {
+                readers.push_back(reader);
             }
+        }
+        if (const auto declared = camelReaders.find(use.name); declared != camelReaders.end()) {
+            for (const std::string &reader : declared->second) {
+                if (std::find(readers.begin(), readers.end(), reader) == readers.end()) {
+                    readers.push_back(reader);
+                }
+            }
+        }
+        bool read = false;
+        for (const std::string &reader : readers) {
             for (const std::string &name : inPipeline) {
                 if (name == reader || name.starts_with(reader + "::")) {
                     read = true;
@@ -1350,13 +1454,13 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
         if (read) {
             continue;
         }
-        std::string readers;
-        for (const std::string &reader : use.readBy) {
-            readers += (readers.empty() ? "" : ", ") + reader;
+        std::string readersText;
+        for (const std::string &reader : readers) {
+            readersText += (readersText.empty() ? "" : ", ") + reader;
         }
         auto warning = DiagnosticBuilder::of(SemanticDiag::TagHasNoReader)
                            .atOrigin(use.origin)
-                           .commit(use.name, readers);
+                           .commit(use.name, readersText);
         warning.stage = "tag:" + use.name;
         warnings.push_back(std::move(warning));
     }
@@ -1532,3 +1636,4 @@ const camel::runtime::Program *applyPasses(
     const context_ptr_t &ctx, std::ostream &os) {
     return applyPassesDetailed(program, passes, ctx, os).program;
 }
+

@@ -78,7 +78,7 @@ struct GCGraphPayloadArena {
 
     GCNode *nodes              = nullptr; // nodeCount + 1 records
     uint32_t *origins          = nullptr; // nodeCount source origins
-    uint8_t *permissions       = nullptr; // nodeCount numeric permissions, or null
+    camel::core::sem::PermissionMask *permissions = nullptr; // nodeCount permissions, or null
     uint32_t *attrs            = nullptr; // nodeCount attribute sets, or null
     uint32_t *regions          = nullptr; // nodeCount regions, or null
     GCRegion *regionTable      = nullptr; // regionCount regions
@@ -193,9 +193,8 @@ void validateRuntimeGraphCalls(
 /// The edge invariants (graph_edges.cpp): no cycle of inputs, and the types agree along the
 /// edges. Run with validateRuntimeGraphCalls, because the types of a call's callee are read.
 /// Throws std::runtime_error naming the graph, the nodes and what disagrees.
-/// `state` (graph.h, GraphState) says what to expect of the graph: only a NonExecutable graph may
-/// hold a cycle of inputs (the back ends refuse it when they build the execution plan).
 void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
 } // namespace camel::runtime
+

@@ -1,0 +1,87 @@
+// Loops of regions run by compiled code (docs/technical/39_loops.md, section 4): main calls
+// these functions through the interpreter's direct call, which compiles each of them at its
+// first call under `std::jit(hot_threshold=0)`. Their rounds then run in the frame as framed
+// code, and the values are the interpreter's: one state over an array, two states under a
+// condition, `for ... while`, an empty array, a nested loop, a loop that collects, a body that
+// calls a function, and a body that calls a function whose own loop runs while the outer loop is
+// on the machine stack. A loop in a branch arm is `arm_loops.cml`'s matrix
+// (`linear.loops_in_arms`).
+func sum_squares(xs: int[]): int {
+    let total = loop acc = 0 for x in xs do acc + x * x
+    return total
+}
+
+func countdown(n: int): int {
+    let (i, acc) = loop i = n, acc = 0 while i > 0 do (i - 1, acc + i)
+    return acc
+}
+
+func until_above(xs: int[], limit: int): int {
+    let hit = loop hit = -1 for x in xs while hit < 0 do if x > limit then x else hit
+    return hit
+}
+
+func over_empty(xs: int[]): int {
+    let n = loop n = 7 for x in xs do n + x
+    return n
+}
+
+func nested(): int {
+    let total = loop acc = 0 for i in [1, 2, 3] do loop row = acc for j in [1, 2] do row + i * j
+    return total
+}
+
+func collects(n: int): (int[], int) {
+    return loop xs = [] as int[], total = 0 while len(xs) < n do (xs->append<10>, total + 1)
+}
+
+func row_sum(row: int[]): int {
+    let s = loop s = 0 for v in row do s + v
+    return s
+}
+
+func rows_total(rows: int[][]): int {
+    let total = loop total = 0 for row in rows do total + row_sum(row)
+    return total
+}
+
+func square(x: int): int {
+    return x * x
+}
+
+func through_call(xs: int[]): int {
+    let total = loop acc = 0 for x in xs do acc + square(x)
+    return total
+}
+
+// A body that is a `sync` block: its effects run every round, in order, in compiled code.
+func ticks(n: int): int sync {
+    let (k, rounds) = loop k = n, rounds = 0 while k > 0 do sync {
+        println('tick', k)
+        (k - 1, rounds + 1)
+    }
+    return rounds
+}
+
+// A block whose `return` ends it with the next state (design principles 3.10, 39_loops.md 2.3).
+func sum_to(n: int): int {
+    let (i, acc) = loop i = 0, acc = 0 while i < n do {
+        return (i + 1, acc + i)
+    }
+    return acc
+}
+
+func main(): int sync {
+    println(sum_squares([1, 2, 3, 4]))
+    println(countdown(4))
+    println(until_above([3, 12, 7, 15], 9))
+    println(over_empty([]))
+    println(nested())
+    let (xs, rounds) = collects(3)
+    println(xs, rounds)
+    println(rows_total([[1, 2, 3], [4, 5], [6]]))
+    println(through_call([2, 3, 4]))
+    println(ticks(3))
+    println(sum_to(5))
+    return 0
+}

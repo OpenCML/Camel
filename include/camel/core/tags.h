@@ -64,6 +64,7 @@
 #include "camel/common/ref.h"
 #include "camel/core/data/base.h"
 #include "camel/core/node_attrs.h"
+#include "camel/core/operator_semantics.h"
 
 namespace camel::runtime {
 class GCGraph;
@@ -121,10 +122,17 @@ struct Decl {
     attr::AttrKey key = attr::kNoKey;
     /// A standard numeric-permission tag (design principles 7.2): the permission it grants, as
     /// a `sem::PermissionMask`; 0 when the tag grants no permission. Writing the tag on a
-    /// function or a block grants the permission to the code written there, exactly as
-    /// `@numeric(...)` does. `finite_math` is a group of the four assumptions and has 0 here;
-    /// its members carry their bits.
-    uint8_t permission = 0;
+    /// function or a block grants the permission to the code written there. `finite_math` is a
+    /// group of the four assumptions and has 0 here; its members carry their bits.
+    sem::PermissionMask permission = 0;
+    /// The tag's arguments are tag names, not values (`#reads<reassociate, contract>`): the AST
+    /// builder reads each as a symbol instead of an expression. Used by the standard tag
+    /// `reads`, whose value is the tuple of the names.
+    bool names = false;
+    /// The number of arguments is not the number of parameters: any number, at least one. The
+    /// value is always a tuple (one argument still makes a one-item tuple), so a key of kind
+    /// tuple holds every use.
+    bool variadic = false;
     /// `on nodes` and a C++ declaration: the value for the with-arguments written, nullopt
     /// when the arguments do not give one. Null: the arguments make the value (see above).
     std::function<std::optional<attr::AttrValueId>(std::span<const data::data_ptr_t> args)>
@@ -147,18 +155,19 @@ std::optional<TagId> find(std::string_view name);
 std::optional<TagId> find(std::string_view module, std::string_view ident);
 
 /// Declares the tags the language itself names, once per process: the numeric permissions of
-/// design principles 7.2 (`reassociate`, `contract`, `approx_math`, `change_precision`, the
-/// four finite-math assumptions and their group `finite_math`). They are names of the core, so
-/// a program writes them without importing anything. Idempotent.
+/// design principles 7.2 (`reassociate`, `contract`, `approx_math`, `change_precision`,
+/// `nondeterministic`, the four finite-math assumptions and their group `finite_math`), and
+/// `reads`, the declaration tag with which a Camel pass names the tags it reads. They are names
+/// of the core, so a program writes them without importing anything. Idempotent.
 void declareStandardTags();
 
 /// The numeric permission a tag grants; 0 for a tag that is not a permission, and for the
 /// `finite_math` group (whose members carry the four assumptions).
-uint8_t permissionOf(TagId id);
+sem::PermissionMask permissionOf(TagId id);
 
 /// The numeric permission the tag `name` grants, resolving the core's standard tags and the
 /// group `finite_math`; 0 when `name` is not a permission tag (including an undeclared name).
-uint8_t permissionOfName(std::string_view name);
+sem::PermissionMask permissionOfName(std::string_view name);
 
 /// The `read_by` passes of the tags in `tags`, sorted and without repeats. An empty list when no
 /// tag in the set names a reader.
@@ -173,6 +182,14 @@ void declareReader(std::string_view pass);
 /// Whether `written` names a registered reader: the registered pass itself or a path below it
 /// (the registered `std::opt` matches `std::opt::inline`).
 bool isReader(std::string_view written);
+
+/// Records that the pass `pass` reads the tag `tag`: a Camel pass writes `#reads<tag, ...>` on
+/// its function, and `registerCamelPass` records each name here. `tag` is as written in the
+/// program (`reassociate`, `main::fast`); a use of the tag is considered read when a pass of
+/// the pipeline is one of its readers, just as a `read_by` list of the declaration is.
+void declareTagReader(std::string_view tag, std::string_view pass);
+/// The passes that declared they read `tag`, as written, sorted and without repeats.
+std::vector<std::string> readersOfTag(std::string_view tag);
 
 /// `func`, `type`, `field`, `nodes`, `param`; empty for none or several.
 std::string_view positionName(Position position);
@@ -213,7 +230,7 @@ struct Facts {
     attr::AttrSetId tags = attr::kNoAttrs;
     /// The numeric permissions granted (`sem::PermissionMask`): the permission tags written on
     /// the declaration, and for a function the permissions of its body.
-    uint8_t permissions = 0;
+    sem::PermissionMask permissions = 0;
     /// The `read_by` passes of the tags present, sorted and without repeats.
     std::vector<std::string> readers;
 };
@@ -254,7 +271,7 @@ void attachPermissionsToDeclaration(
     module::Module &module,
     const Reference &name,
     std::string_view signature,
-    uint8_t permissions);
+    sem::PermissionMask permissions);
 
 // ---- Inspection ----------------------------------------------------------------------------
 

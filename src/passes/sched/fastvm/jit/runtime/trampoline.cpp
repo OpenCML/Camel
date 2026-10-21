@@ -53,6 +53,7 @@ using namespace camel::core::context;
 #include "camel/core/mm.h"
 #include "camel/core/operator.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/loop_frame.h"
 #include "camel/utils/int_div.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -761,6 +762,46 @@ slot_t jitHelperBranchArm(slot_t *slots, void *ctx, size_t pc) {
     });
 }
 
+// The three events of a loop of regions. The rules of a round are the interpreter's own
+// (camel/execute/loop_frame.h), so the compiled code runs exactly what gotovm.cpp and casevm.cpp
+// run at the same bytecode: the state, the ports and the round counter live in the frame.
+slot_t jitHelperLoopBegin(slot_t *slots, void *ctx, size_t pc) {
+    return runJitHelper(ctx, [&]() -> slot_t {
+        auto *jc     = static_cast<JitContext *>(ctx);
+        Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
+        Frame *frame = reinterpret_cast<Frame *>(slots[0]);
+        ASSERT(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
+        camel::execute::loopBegin(*frame, *bc.extra()->loop);
+        return NullSlot;
+    });
+}
+
+slot_t jitHelperLoopTest(slot_t *slots, void *ctx, size_t pc) {
+    return runJitHelper(ctx, [&]() -> slot_t {
+        auto *jc     = static_cast<JitContext *>(ctx);
+        Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
+        Frame *frame = reinterpret_cast<Frame *>(slots[0]);
+        ASSERT(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
+        return camel::execute::loopTest(*frame, *bc.extra()->loop) ? slot_t{1} : slot_t{0};
+    });
+}
+
+slot_t jitHelperLoopEnd(slot_t *slots, void *ctx, size_t pc) {
+    return runJitHelper(ctx, [&]() -> slot_t {
+        auto *jc     = static_cast<JitContext *>(ctx);
+        Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
+        Frame *frame = reinterpret_cast<Frame *>(slots[0]);
+        ASSERT(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
+        // The round safepoint of FastVM (gotovm.cpp, casevm.cpp): a collection may run here,
+        // and a loop that collects reports a memory limit at the loop (loop_frame.h).
+        const bool more = camel::execute::loopEnd(
+            *frame,
+            *bc.extra()->loop,
+            camel::execute::loopRoundSafepoint([&] { fastVmCallBoundarySafepoint(); }));
+        return more ? slot_t{1} : slot_t{0};
+    });
+}
+
 #else
 // Comment normalized during runtime-graph refactor.
 slot_t trampolineFunc(slot_t *, void *, size_t) { return {}; }
@@ -774,6 +815,9 @@ slot_t finishDirectJitCall(slot_t, slot_t *, void *) { return {}; }
 slot_t jitHelperOper(slot_t *, void *, size_t) { return {}; }
 slot_t jitHelperBytecode(slot_t *, void *, size_t) { return {}; }
 slot_t jitHelperBranchArm(slot_t *, void *, size_t) { return {}; }
+slot_t jitHelperLoopBegin(slot_t *, void *, size_t) { return {}; }
+slot_t jitHelperLoopTest(slot_t *, void *, size_t) { return {}; }
+slot_t jitHelperLoopEnd(slot_t *, void *, size_t) { return {}; }
 #endif
 
 } // extern "C"

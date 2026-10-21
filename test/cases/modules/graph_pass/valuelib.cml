@@ -1,0 +1,10 @@
+// A library written in Camel that exports a top-level value, so a pass module can import a value
+// rather than only a function (task H37; H36 item 1 lifted the restriction that a library
+// compiled on its own imports modules written in C++ only).
+module valuelib
+
+export let five = 5
+
+export func nine(): int {
+    return 9
+}

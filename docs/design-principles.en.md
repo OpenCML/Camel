@@ -555,7 +555,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 9.10 Schedulers, back ends and releases
 
 - **The parallel scheduler hands a subgraph with nothing to parallelize to the bytecode interpreter**, and counts the recursion limit by the same rule: when `--max-recursion-depth` is raised, deep non-tail recursion runs to the end on `std::prl` just as on `std::fvm`.
-- The instruction-set baseline of the release package is `x86-64-v2`.
+- The instruction-set baseline of the release package is `x86-64-v3` (AVX2 and FMA; raised from `x86-64-v2` on 2026-10-21, see the ruling log).
 
 ---
 
@@ -680,6 +680,7 @@ Design motivation: the dynamism of the Python language itself determines its fle
 ### 13.4 Distribution
 
 - Sharding is written as the tag `#shard<[axis name, ...]>`, which can be attached to function parameters; axis names are abstract, the size of an axis is injected at execution time; the same information can also be written in a schedule file. The `shard` pass of the standard library derives the sharding of each result, inserts communication (ordinary operators with side effects) and reports inconsistencies; an operator for which derivation cannot continue (a native operator without a declared index mapping) falls back to gather-then-compute, which is correct but slower. The type system is unchanged. The order of summation across cards follows 7.6.
+- **Placement (a tendency, not a red line)**: the user declares where computation runs; GPU is not the default. Usually the source states only the intent (`#gpu`, `#cpu` on a function, block or module) and the compiler derives residency, transfers and synchronisation from the graph; which card and how many is usually run-time configuration (such as `--devices`), so the same code moves between machines unchanged. When needed, the source may name a specific device (pipeline stages, pinning to a card for performance, heterogeneous devices), and run-time configuration may override or complete it. Engineering convenience and the optimisation ceiling come before the tidiness of "no configuration in source".
 
 ### 13.5 Training infrastructure
 

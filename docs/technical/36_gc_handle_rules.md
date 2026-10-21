@@ -34,6 +34,7 @@ safepoints and nowhere else. A safepoint is reached by exactly these:
 | Reached by | Where |
 |---|---|
 | A call of a Camel function | `std::nvm`: entry of every graph. `std::fvm`, `std::jit` (interpreter): every `CALL`, `FUNC`, `TAIL`. `std::tf` / `std::prl`: whenever a worker is outside a region (below) |
+| A round of a loop | the round boundary of every back end that runs loops in the frame (`loopEnd`, `LEND`): `std::nvm`, `std::fvm`, `std::jit` (compiled or interpreted, `07_jit_architecture.md` 17.9), the macro evaluator and `std::prl` — once per round, before the next round's state is bound |
 | A higher-order operator calling its element function | the same, once per element: `map`, `apply`, `filter`, `reduce`, `foreach` and everything built on them |
 | The macro evaluator | before every static operator, at every function entry, at every node (`src/execute/macro/eval.cpp`) |
 | A pass boundary | before and after every pass (`src/execute/pass.cpp`) |
@@ -206,7 +207,7 @@ root tracers), and nothing read before a call is used after it.
   value is live in a register or on the machine stack: the register allocator refuses a value
   that lives across one, and the code reads the frame again afterwards. Its stack map at those
   points is empty, so a safepoint under it is allowed, including one reached by an operator it
-  called.
+  called or by the round boundary of a loop whose rounds it runs (`LEND`, section 17.9).
   Neither kind contains the address of an object when objects can move: an object constant is
   read from the static area of the graph, a root that is updated in place (section 5), each
   time it is used. With mark-sweep frameless code still has such constants as immediates.

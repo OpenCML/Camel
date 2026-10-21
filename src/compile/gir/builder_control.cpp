@@ -1889,7 +1889,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (type != nullptr && type->code() != TypeCode::Array) {
             const std::vector<StaticArg> statics(1);
             std::optional<oper_idx_ptr_t> elements;
-            if (const auto group = module_->getImportedEntity("__iter__");
+            if (const auto group = importedEntity("__iter__");
                 group.has_value() && group->isOperGroup()) {
                 elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
             }
@@ -2429,6 +2429,13 @@ std::vector<Type *> Builder::collectLoopAppends(
 
 void Builder::markLoopStateInPlace(
     const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial) {
+    // The decision is per state, and only a state of these four properties is rewritten: the
+    // state is an array, its first value is a literal (a Data or FILL node), its next value is
+    // `state->append<v>`, and the body uses that state's port nowhere else. Anything else -- a
+    // struct or tuple state, a first value that is a parameter or an array element, a body that
+    // also reads the state or ends in `return` -- keeps the copying `append`; the values are the
+    // same either way, and only the allocation differs (10.5's in-place guarantee is about the
+    // state's data block, not about a promise on the source).
     const size_t stateCount = loop->loopStateCount();
     if (stateCount == 0 || initial.size() != stateCount || body->returned) {
         return;
@@ -2521,7 +2528,7 @@ void Builder::markLoopStateInPlaceOne(
     if (valueType == nullptr) {
         return;
     }
-    const auto group = module_->getImportedEntity("__append_owned__");
+    const auto group = importedEntity("__append_owned__");
     if (!group.has_value() || !group->isOperGroup()) {
         return;
     }
@@ -2534,7 +2541,7 @@ void Builder::markLoopStateInPlaceOne(
     // The loop starts from a private copy of its first value. A literal is a constant of the
     // graph: the same array object on every evaluation of the loop's site, so appending to it
     // in place would edit the program's own literal. One copy per loop entry buys every round.
-    const auto copyGroup = module_->getImportedEntity("__copy_arr__");
+    const auto copyGroup = importedEntity("__copy_arr__");
     if (!copyGroup.has_value() || !copyGroup->isOperGroup()) {
         return;
     }

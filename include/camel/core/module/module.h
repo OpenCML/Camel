@@ -21,6 +21,7 @@
 
 #include "camel/core/source/ids.h"
 
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -35,6 +36,7 @@
 #include "camel/core/data/base.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_semantics.h"
 
 namespace camel::compile::gir {
 class DraftGraphBuilder;
@@ -45,6 +47,8 @@ namespace camel::core::module {
 namespace detail {
 class EntityAccess;
 }
+
+class ProgramExports;
 
 using Type = camel::core::type::Type;
 class Entity {
@@ -134,6 +138,10 @@ class Module : public std::enable_shared_from_this<Module> {
     };
 
   protected:
+    /// The export tables of one program read a module's import bindings directly: which name
+    /// comes from which module is a fact of the module (the source), not of the program.
+    friend class ProgramExports;
+
     struct ImportedRefBinding {
         std::shared_ptr<Module> mod;
         Reference remoteRef;
@@ -152,16 +160,22 @@ class Module : public std::enable_shared_from_this<Module> {
     std::string declaredName_;
     std::string path_;
     context_ptr_t context_;
+    /// The types this module declares and exports. A type declaration is the module's own: it
+    /// is built once, with the module's construction tree, and means the same in every program
+    /// (design principles 10.1, types). Entities are NOT kept here: an exported function or
+    /// top-level value is an artifact of one program, and lives in that program's
+    /// ProgramExports (see below) — the same module may be part of several programs at once.
     type_ns_ptr_t exportedTypeNS_;
-    entity_ns_ptr_t exportedEntityNS_;
+    /// The entities the module itself brings (a C++ module's operators, constants and tags),
+    /// filled when the module is loaded and never rewritten. A module written in Camel
+    /// exports its entities into ProgramExports; this table stays empty for it.
+    entity_ns_ptr_t nativeEntityNS_;
     std::vector<Reference> defaultImportedRefs_;
     /// A ref may come from multiple modules (same-name function/operator overloads);
     /// group imported bindings by the local ref visible in this module.
     std::unordered_map<Reference, std::vector<ImportedRefBinding>> importedRefMap_;
     /// Namespace imports map a local prefix to an exported prefix in another module.
     std::vector<ImportedNamespaceBinding> importedNamespaceBindings_;
-    /// Cache merged imported entities to avoid re-merging on every query, per layer.
-    mutable std::unordered_map<Reference, entity> importedEntityCache_[3];
     /// The imports by name, in the order they were written (see noteNamedImport).
     std::vector<std::pair<Reference, NamedImport>> namedImports_;
     /// Every import of a module, in the order they were written (see noteImport).
@@ -173,12 +187,11 @@ class Module : public std::enable_shared_from_this<Module> {
     // The declaration's name, then the signature of one overload (empty when the name cannot be
     // overloaded), to the facts or the granted numeric permissions.
     std::map<std::string, std::map<std::string, camel::core::attr::AttrSetId>> declarationTags_;
-    std::map<std::string, std::map<std::string, uint8_t>> declarationPermissions_;
+    std::map<std::string, std::map<std::string, sem::PermissionMask>> declarationPermissions_;
     std::map<std::pair<std::string, size_t>, camel::core::attr::AttrSetId> fieldTags_;
 
     std::vector<ImportedRefBinding>
     importedBindingsForRef(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
-    void clearImportedEntityCache();
 
   public:
     Module(const std::string &name, const std::string &path, context_ptr_t ctx);
@@ -222,9 +235,10 @@ class Module : public std::enable_shared_from_this<Module> {
             load();
         }
     }
-    /// Makes the entities the module exports readable (getExportedEntity, exportedEntityNS):
-    /// for a module written in Camel, once its declarations are known, before any function
-    /// body of the program is built.
+    /// Makes the module's own declarations readable (getNativeEntity, nativeEntityNS): for a
+    /// module written in Camel, once its declarations are known, before any function body of
+    /// the program is built. The entities a program declares for the module are that program's
+    /// (ProgramExports), and are already there by the same point.
     virtual void declareEntities() {
         if (!loaded()) {
             load();
@@ -240,7 +254,6 @@ class Module : public std::enable_shared_from_this<Module> {
     void markImportedNamespaceFromMod(
         const Reference &localPrefix, const Reference &remotePrefix,
         const std::shared_ptr<Module> &mod);
-    bool importAllRefsFromImportedNamespace(const Reference &localPrefix);
     void importDefaultRefsFromMod(const std::shared_ptr<Module> &mod);
     void importAllRefsFromMod(const std::shared_ptr<Module> &mod);
     bool hasImportedRef(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
@@ -261,12 +274,10 @@ class Module : public std::enable_shared_from_this<Module> {
 
     bool exportDefaultImportRef(const Reference &ref);
     bool exportType(const Reference &ref, Type *type);
+    /// Declares an entity the module itself brings (a C++ module's operator group, constant or
+    /// tag; design principles 10.1). A module written in Camel does not call this: what it
+    /// exports is the program's, and is recorded by that program's ProgramExports.
     bool exportEntity(const Reference &ref, const entity &ent);
-    /// Forgets every name this module exports (types and entities). A module written in Camel
-    /// may be declared again by the builder of a program of its own (a pass: userdef.cpp,
-    /// compileAsProgram); that builder must export its own declarations, which would otherwise
-    /// be refused as duplicates and the importers would keep the graphs of the first build.
-    void clearExportedNamespaces();
     /// Exports the constant `value` under `ref` (a C++ module's `math::pi`; design principles
     /// 10.1). A use of the name is that constant in the graph where it is used: no node of the
     /// root graph, no capture, nothing evaluated when the module is imported. Only data that
@@ -280,8 +291,6 @@ class Module : public std::enable_shared_from_this<Module> {
 
     std::optional<Type *>
     getImportedType(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
-    std::optional<entity>
-    getImportedEntity(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
     /// Whether some import binds a module or namespace prefix that `prefix` names, or begins
     /// with (`using namespace lib::Tools` after `import lib`).
     bool hasImportedPrefix(const Reference &prefix) const;
@@ -295,21 +304,13 @@ class Module : public std::enable_shared_from_this<Module> {
         Reference remoteRef;
         entity overloads;
     };
-    /// Every overload of the operator function `group` (`__add__`) this module imported
-    /// (design principles 10.2: the overloads of an operator from every layer are one set):
-    /// first the operator groups, merged; then what each module written in Camel that this
-    /// one imports, in any form, exports under `group` or `group#k` (a generic overload),
-    /// ordered by module name, then by name.
-    std::vector<ImportedOperatorOverloads> importedOperatorOverloads(const std::string &group) const;
-    /// Every overload of the operator function `group` (`__add__`) this module itself exports,
-    /// in the order importedOperatorOverloads uses: what a module written in Camel exports under
-    /// `group` or `group#k` (a generic overload), by name. Design principles 5.7: the module that
-    /// declares a type offers its operators with it, so a use of the type elsewhere reads this
-    /// set whether or not it imported the module.
-    std::vector<ImportedOperatorOverloads> exportedOperatorOverloads(const std::string &group);
 
+    /// The type `ref` names among the types this module exports, or nullopt.
     std::optional<Type *> getExportedType(const Reference &ref) const;
-    std::optional<entity> getExportedEntity(const Reference &ref) const;
+    /// The entity the module itself declares under `ref` (a C++ module's operator group or
+    /// constant). A name a program exported for the module is not here: ask the program's
+    /// ProgramExports (exportedEntity), which falls back to this table.
+    std::optional<entity> getNativeEntity(const Reference &ref) const;
 
     const std::vector<Reference> &defaultImportedRefs() const;
     /// For tools that list what a module can name (camel/service/semantic): the local names
@@ -317,7 +318,7 @@ class Module : public std::enable_shared_from_this<Module> {
     std::vector<Reference> importedRefs() const;
     std::vector<std::pair<std::string, std::shared_ptr<Module>>> importedNamespaces() const;
     type_ns_ptr_t exportedTypeNS() const;
-    entity_ns_ptr_t exportedEntityNS() const;
+    entity_ns_ptr_t nativeEntityNS() const;
 
     // ---- Tags (design principles 6.2; camel/core/tags.h) -----------------------------------
 
@@ -340,10 +341,10 @@ class Module : public std::enable_shared_from_this<Module> {
     void setDeclarationTags(
         const Reference &name, std::string_view signature, camel::core::attr::AttrSetId tags);
     /// The numeric permissions the declaration grants (its body's), over every overload.
-    uint8_t declarationPermissions(const Reference &name) const;
-    uint8_t declarationPermissions(const Reference &name, std::string_view signature) const;
+    sem::PermissionMask declarationPermissions(const Reference &name) const;
+    sem::PermissionMask declarationPermissions(const Reference &name, std::string_view signature) const;
     void setDeclarationPermissions(
-        const Reference &name, std::string_view signature, uint8_t permissions);
+        const Reference &name, std::string_view signature, sem::PermissionMask permissions);
     /// The facts written on field `index` of the type this module declares as `typeName`.
     camel::core::attr::AttrSetId fieldTags(const Reference &typeName, size_t index) const;
     void setFieldTags(
@@ -364,6 +365,71 @@ class Module : public std::enable_shared_from_this<Module> {
     }
 };
 
+/// The export tables of one program: which entity each module it declares exports in this
+/// program. An exported function, generic template, top-level value or tag is an artifact of
+/// one program (its builder made the graphs), so it belongs here, not to the Module object —
+/// the same module may take part in several programs at once (design principles 10.1; a pass
+/// written in Camel is compiled as a program of its own over the modules the program being
+/// transformed loaded, task H42). Types are not here: a type declaration is the module's own
+/// and is the same in every program (Module::exportedTypeNS).
+///
+/// One table per program also means one imported-name cache per program: what a name imported
+/// into a module resolves to is the program's graphs.
+class ProgramExports {
+  public:
+    ProgramExports()                                  = default;
+    ProgramExports(const ProgramExports &)            = delete;
+    ProgramExports &operator=(const ProgramExports &) = delete;
+
+    /// Records that `module` exports `ref` as `ent` in this program. False when the name is
+    /// already taken (a name is one entity per module).
+    bool exportEntity(const Module &module, const Reference &ref, const entity &ent);
+
+    /// The entity `module` exports under `ref` in this program; when the program declared none
+    /// of that name, the module's own (native) entity of that name.
+    std::optional<entity> exportedEntity(const Module &module, const Reference &ref) const;
+
+    /// Calls `visit` for every name `module` brings to this program: the ones this program
+    /// declared, then the module's own (native) names that no program name hides.
+    void forEachExportedEntity(
+        const Module &module,
+        const std::function<void(const Reference &, const entity &)> &visit) const;
+
+    /// The entity a name imported into `importer` stands for in this program: its import
+    /// bindings (named, ambient or all, design principles 10.2), each module's export read from
+    /// this table, then merged (same-name functions and operator overloads are one set). Cached
+    /// per importing module, name and layer.
+    std::optional<entity> importedEntity(
+        const Module &importer, const Reference &ref, ImportLayer layer = ImportLayer::All);
+
+    /// Every overload of the operator function `group` (`__add__`) `importer` imported (design
+    /// principles 10.2: the overloads of an operator from every layer are one set): first the
+    /// operator groups, merged; then what each module written in Camel that `importer` imports,
+    /// in any form, exports under `group` or `group#k` (a generic overload), ordered by module
+    /// name, then by name.
+    std::vector<Module::ImportedOperatorOverloads>
+    importedOperatorOverloads(const Module &importer, const std::string &group);
+
+    /// Every overload of the operator function `group` (`__add__`) `module` itself exports in
+    /// this program, in the order importedOperatorOverloads uses: what the module exports under
+    /// `group` or `group#k` (a generic overload), by name. Design principles 5.7: the module that
+    /// declares a type offers its operators with it, so a use of the type elsewhere reads this
+    /// set whether or not it imported the module.
+    std::vector<Module::ImportedOperatorOverloads>
+    exportedOperatorOverloads(Module &module, const std::string &group);
+
+  private:
+    struct ModuleExports {
+        entity_ns_ptr_t entities = std::make_shared<Namespace<std::string, entity>>();
+    };
+    struct ImportedEntities {
+        std::unordered_map<Reference, entity> merged[3];
+    };
+    std::unordered_map<const Module *, ModuleExports> exports_;
+    std::unordered_map<const Module *, ImportedEntities> imported_;
+};
+
 using module_ptr_t = std::shared_ptr<Module>;
 
 } // namespace camel::core::module
+

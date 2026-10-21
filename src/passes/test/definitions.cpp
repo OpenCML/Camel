@@ -123,6 +123,7 @@ DefinitionsTestPass::apply(const camel::runtime::Program *program, std::ostream 
     declare("tensor:rsqrt", "bad_definitions", "nope", 1);
     declare("tensor:log", "bad_definitions", "generic", 1);
     declare("tensor:matmul", "bad_definitions", "captured", 1);
+    declare("tensor:pow", "bad_definitions", "call_captured", 2);
     declare("tensor:gelu", "broken_definitions", "gelu", 1);
     declare("tensor:erf", "no_such_library", "erf", 1);
     for (const auto &[check, uri] : std::map<std::string, std::string>{
@@ -133,6 +134,7 @@ DefinitionsTestPass::apply(const camel::runtime::Program *program, std::ostream 
              {"missing_function", "tensor:rsqrt"},
              {"generic", "tensor:log"},
              {"capture", "tensor:matmul"},
+             {"call_capture", "tensor:pow"},
              {"library_does_not_compile", "tensor:gelu"},
              {"library_not_found", "tensor:erf"},
          }) {

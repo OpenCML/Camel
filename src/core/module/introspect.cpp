@@ -146,7 +146,7 @@ std::string semanticsJson(const sem::OperatorSemantics &s) {
 
 std::vector<OperatorDescription> describeOperators(const Module &module) {
     std::vector<OperatorDescription> result;
-    const auto entities = module.exportedEntityNS();
+    const auto entities = module.nativeEntityNS();
     if (!entities) {
         return result;
     }

@@ -637,7 +637,7 @@ void Builder::markNonRetainingReads() {
         }
         return unchainedWriter[draft] = found;
     };
-    const auto peekGroup = context_->importModule("")->getExportedEntity(Reference("__var_peek__"));
+    const auto peekGroup = context_->importModule("")->getNativeEntity(Reference("__var_peek__"));
     ASSERT(
         peekGroup.has_value() && peekGroup->isOperGroup(),
         "The built-in __var_peek__ is missing.");

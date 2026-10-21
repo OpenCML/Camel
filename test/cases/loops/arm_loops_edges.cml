@@ -1,0 +1,100 @@
+// The edges of a loop written in a branch arm (H45): a loop that runs no round, `for ... while`,
+// a loop in an arm inside a loop's body, a loop of a loop inside an arm, a loop and another `if`
+// in one arm (a region three deep), the same in a macro function's arm, four calls in one
+// expression, an effect after the loop in a `sync` arm, a body that ignores its state, two loops
+// in one arm, an initial value computed in the arm, and the loop's value feeding another
+// condition.
+func then_for(flag: bool, xs: int[]): int {
+    if flag then loop acc = 0 for x in xs do acc + x else -1
+}
+
+func for_while(flag: bool, xs: int[]): int {
+    if flag then loop hit = -1 for x in xs while hit < 0 do if x > 2 then x else hit else -2
+}
+
+func nested_arm_loop(flag: bool): int {
+    if flag then loop total = 0 for i in [1, 2, 3] do total + (if i > 1 then loop acc = 0 for j in [10, 20] do acc + j * i else 0) else -1
+}
+
+// A loop directly in the body of a loop that is in an arm: its regions are regions of the outer
+// loop's body (1 + 2 = 3, 2 + 4 = 6, 3 + 6 = 9, so 18).
+func nested_loops(flag: bool): int {
+    if flag then loop total = 0 for i in [1, 2, 3] do total + (loop part = 0 for j in [1, 2] do part + j * i) else -1
+}
+
+// An arm that holds a loop and another `if` whose own arm holds a loop: the regions are three
+// deep (arm, arm, loop body). 1 + 2 + 3 = 6, 10 + 20 = 30, 30 + 6 = 36, 6 + 36 = 42.
+func three_deep(flag: bool, flag2: bool, xs: int[]): int {
+    if flag then {
+        let s = loop acc = 0 for x in xs do acc + x
+        let t = if flag2 then {
+            let u = loop acc = 0 for x in [1, 2] do acc + x * 10
+            u + s
+        } else {
+            s
+        }
+        s + t
+    } else {
+        -1
+    }
+}
+
+macro func macro_arm(flag: bool): int {
+    if flag then loop acc = 0 for x in [1, 2, 3] do acc + x else -1
+}
+
+func sync_after(flag: bool, xs: int[]): int sync {
+    if flag then sync {
+        let s = loop acc = 0 for x in xs do acc + x
+        println('sum', s)
+        s + 1
+    } else {
+        -1
+    }
+}
+
+func const_body(flag: bool): int {
+    if flag then loop acc = 0 for x in [1, 2, 3] do 5 else -1
+}
+
+func two_loops(flag: bool, xs: int[]): int {
+    if flag then {
+        let a = loop acc = 0 for x in xs do acc + x
+        let b = loop acc = 0 for x in xs do acc + x * 2
+        a + b
+    } else {
+        -1
+    }
+}
+
+func computed_initial(flag: bool, n: int): int {
+    if flag then loop acc = n * 2 for x in [1, 2, 3] do acc + x else -1
+}
+
+func feeds_condition(flag: bool, xs: int[]): int {
+    let s = if flag then loop acc = 0 for x in xs do acc + x else 0
+    if s > 3 then s * 2 else s
+}
+
+func main(): int sync {
+    println('empty', then_for(true, []))
+    println('for-while', for_while(true, [1, 2, 3, 4]), for_while(true, [1, 2]))
+    println('nested', nested_arm_loop(true))
+    println('nested-loops', nested_loops(true), nested_loops(false))
+    println(
+        'three-deep',
+        three_deep(true, true, [1, 2, 3]),
+        three_deep(true, false, [1, 2, 3]),
+        three_deep(false, true, [1, 2, 3]))
+    println('macro', macro_arm(true), macro_arm(false))
+    println(
+        'four',
+        then_for(true, [1, 2, 3]) + then_for(true, [1, 2, 3]) +
+            then_for(true, [1, 2, 3]) + then_for(true, [1, 2, 3]))
+    println('sync', sync_after(true, [1, 2, 3]))
+    println('const-body', const_body(true), const_body(false))
+    println('two-loops', two_loops(true, [1, 2, 3]))
+    println('initial', computed_initial(true, 10), computed_initial(false, 10))
+    println('feeds', feeds_condition(true, [1, 2, 3]), feeds_condition(true, [1]), feeds_condition(false, [1, 2, 3]))
+    return 0
+}

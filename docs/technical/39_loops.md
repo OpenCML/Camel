@@ -184,7 +184,7 @@ contribution would be dropped without a sign of it.
 | Consumer | How it runs a LOOP |
 |---|---|
 | `std::nvm` | natively, in the frame of the function: the plan lays the nodes of the condition, those of the body and the LOOP node out as one range (`ExecLoop`), and the interpreter starts, tests and ends rounds at the positions the plan names (`ExecLoopEvent`); the state is in the node's slot |
-| `std::fvm`, `std::jit` | natively, as bytecode: the plan's events are three instructions, `LBEG` (the loop starts), `LTST` (the condition has run: stop, or bind the body's ports) and `LEND` (the body has run: the next state, and a backward jump to the start of a round), run by the same functions as NodeVM's (`loopBegin`, `loopTest`, `loopEnd`). A graph with a loop is not compiled by the JIT yet: it runs in the interpreter, and the functions it calls are compiled |
+| `std::fvm`, `std::jit` | natively, as bytecode: the plan's events are three instructions, `LBEG` (the loop starts), `LTST` (the condition has run: stop, or bind the body's ports) and `LEND` (the body has run: the next state, and a backward jump to the start of a round), run by the same functions as NodeVM's (`loopBegin`, `loopTest`, `loopEnd`). A graph with a loop is compiled as framed code (`07_jit_architecture.md`, 17.9): the three instructions call those functions on the frame and jump on what they return, and `LEND` polls the round safepoint as the interpreter does, so the rounds stay interruptible at the same position |
 | `std::macro` evaluator | natively, in the frame of the function (`stepLoops`), at most 1,000,000 rounds |
 | `std::prl` | a graph with a loop is evaluated node by node, with the same events as NodeVM's (`stepLoops`), or, when it is serial, run as bytecode |
 | `std::cpp` | a `for (;;)` of its own: the state in variables, the condition and the body in the loop, the next components computed before any variable is assigned (`FunctionEmitter::lowerLoop`) |
@@ -217,6 +217,19 @@ to date from the components once, when the loop ends. NodeVM and FastVM do not r
 which is correct and only costs. A body whose state comes from a port, or whose tuple is read by
 something else, keeps the round-by-round tuple: the plan says nothing, and every back end behaves
 as before.
+
+**A loop in an arm of a branch.** The nodes of an arm are one range between its BRCH and its JOIN
+(`17_graph_rewrite_api_contracts.md`, 4.1), and a loop inside the arm is laid out inside that
+range: its condition, its body and the LOOP node. The arm's entry in the plan is the **first**
+node of the range, not the first node of it that does something: a loop's first position is the
+first node of its regions, which is usually a port of the body, and the `Begin`/`Test` events of
+the first round sit at that position. An entry chosen past it would skip the events, so the first
+round would run with unbound ports and the loop would lose it (the bug H45 fixed). Every back end
+that jumps to an arm entry — NodeVM, FastVM/JIT, Taskflow, the macro evaluator — starts at the
+range's first node, so a loop in an arm gives the value of the same loop in the function body.
+A loop inside another loop's body that is itself in an arm, and an arm that holds a loop and
+another `if`, are the same: each loop's condition and body are regions of where the loop is, and
+the commit refuses a graph where they are not (`17_graph_rewrite_api_contracts.md`, 4.1).
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
@@ -331,6 +344,16 @@ string), and progen's `loop` feature (all forms, sync bodies with effects).
 refusals), `parse.rulings` (syntax, AST, GCT, graph), `tools.debugger` `debugger.loop_frames`,
 three loop programs in `test/tools/cppexec/expect.txt`, and progen's `loop` feature (all forms,
 sync bodies with effects).
+
+`test/plans/feat/linear/loops_in_arms.plan.toml` is the matrix of a loop written in a branch arm
+(section 4): the whole `then` and `else` arm, a `while`, two values of state, statements after the
+loop in the arm, an `if` in the body, a `match` arm, two loops in two arms, a collecting loop, a
+loop in the root graph's arm, and the edges (no round, `for … while`, a loop inside a loop's body,
+a loop of a loop in an arm, an arm holding a loop and another `if`, a macro function's arm, a
+value computed in the arm) — every value the one the loop gives in the function body, on
+`std::nvm`, `std::fvm`, `std::jit` (compiled, also without inlining), `std::prl`
+(also `bytecode=false`) and `std::macro`. `loops_in_arms.regions` is the commit-time check that a
+loop's condition and body are regions of where the loop is (section 4).
 
 `test/plans/feat/linear/loop_collect.plan.toml` covers collection slots through two test-only
 passes (`test::loop_collect`, `test::loop_collect_summary`, enabled by

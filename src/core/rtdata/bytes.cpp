@@ -50,6 +50,7 @@ BytesObject *BytesObject::adopt(mm::Block *block, size_t length, mm::IAllocator 
     }
     auto *out = new (memory) BytesObject(length, block);
     allocator.noteFinalizable(out);
+    allocator.noteBlockHeld(out, block);
     return out;
 }
 std::string_view BytesObject::view() const {
@@ -84,6 +85,7 @@ void BytesObject::finalize() noexcept {
         block_ = nullptr;
     }
 }
+mm::Block *BytesObject::heldBlock() const noexcept { return block_; }
 std::optional<size_t> invalidUtf8Offset(std::string_view bytes) {
     const size_t at = camel::utf8::invalidOffset(bytes);
     if (at == camel::utf8::npos)
