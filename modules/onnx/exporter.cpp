@@ -1078,6 +1078,34 @@ bool isCarriable(const Value &v) {
     return tensor::asTensorType(v.ty) != nullptr || tensor::isSupportedTensorScalar(v.ty->code());
 }
 
+/// What a value that a Loop cannot carry is, for a diagnostic: an array, a string, a function.
+std::string valueKind(const Value &leaf) {
+    if (leaf.isClosure() ||
+        (leaf.isConstant() && leaf.ty && leaf.ty->code() == TypeCode::Function)) {
+        return "a function";
+    }
+    if (leaf.isSymbolic() && leaf.form == Value::Form::IntArray) {
+        return "an int array whose elements depend on the model input";
+    }
+    if (leaf.isConstant() && leaf.ty) {
+        return std::format("a value of type '{}'", leaf.ty->toString());
+    }
+    return "a value that is neither a tensor nor a scalar";
+}
+
+/// What prevents `v` from being carried, named by its first offending leaf (a struct that holds
+/// an array is refused for the array, not for the struct).
+std::string carriedKind(const Value &v) {
+    std::vector<Value> leaves;
+    flattenValue(v, leaves);
+    for (const Value &leaf : leaves) {
+        if (!isCarriable(leaf)) {
+            return valueKind(leaf);
+        }
+    }
+    return valueKind(v);
+}
+
 /// A symbolic value named `name` with the form, dtype and shape of `like`.
 Value placeholderLike(const Value &like, std::string name) {
     if (type::Type *scalar = scalarCamelTypeOf(like)) {
@@ -1085,6 +1113,82 @@ Value placeholderLike(const Value &like, std::string name) {
     }
     const TensorFacts facts = factsOf(like);
     return Value::symbolic(std::move(name), facts.dtype, facts.shape);
+}
+
+/// The values a Loop carries for one argument (H44's outline, H71 item 3): the value itself when
+/// it is a tensor or a scalar, and the leaves of a struct or tuple in the order `flattenValue`
+/// gives them. False when there is nothing to carry (no leaf, or a leaf that a Loop cannot
+/// carry: an array, a string, a function). The leaf order is the type's declaration order, so
+/// the rebuilt value has the layout the program wrote.
+bool carriableLeaves(const Value &v, std::vector<Value> &leaves) {
+    leaves.clear();
+    flattenValue(v, leaves);
+    if (leaves.empty()) {
+        return false;
+    }
+    return std::ranges::all_of(leaves, [](const Value &leaf) { return isCarriable(leaf); });
+}
+
+/// The name of part `index` of an aggregate of type `ty`, for naming a leaf after its path.
+std::string partName(type::Type *ty, size_t index) {
+    if (ty == nullptr) {
+        return std::to_string(index);
+    }
+    if (ty->code() == TypeCode::Struct) {
+        auto *strct = static_cast<type::StructType *>(ty);
+        if (index < strct->size()) {
+            return std::string(strct->fieldName(index));
+        }
+    }
+    return std::to_string(index);
+}
+
+/// The paths of the leaves `flattenValue` yields, in the same order: "w", "deep_h", "0". A Loop's
+/// state input is named after the path it rebuilds, so the emitted graph reads like the struct.
+void leafPaths(const Value &v, std::string path, std::vector<std::string> &out) {
+    if (v.isAggregate()) {
+        for (size_t i = 0; i < v.fields.size(); ++i) {
+            leafPaths(v.fields[i], path + "_" + partName(v.camelType, i), out);
+        }
+        return;
+    }
+    if (v.isConstant() && v.ty && v.slot != NullSlot &&
+        (v.ty->code() == TypeCode::Tuple || v.ty->code() == TypeCode::Struct)) {
+        const std::vector<Value> fields = elementsOf(v.slot, v.ty);
+        for (size_t i = 0; i < fields.size(); ++i) {
+            leafPaths(fields[i], path + "_" + partName(v.ty, i), out);
+        }
+        return;
+    }
+    out.push_back(std::move(path));
+}
+
+/// `like`, rebuilt from placeholders named after `hint` in `carriableLeaves`' order: one
+/// placeholder per leaf, and the aggregate reads them as its fields. A Loop's state input is
+/// such a value; the executor keeps the leaves and the program keeps seeing the struct.
+Value placeholderState(const Value &like, std::string_view hint, Emitter &emitter) {
+    std::vector<Value> leaves;
+    if (!carriableLeaves(like, leaves)) {
+        return placeholderLike(like, emitter.fresh(hint));
+    }
+    if (leaves.size() == 1 && isCarriable(like)) {
+        return placeholderLike(like, emitter.fresh(hint));
+    }
+    std::vector<std::string> paths;
+    leafPaths(like, std::string(hint), paths);
+    if (paths.size() != leaves.size()) {
+        paths.clear();
+        for (size_t i = 0; i < leaves.size(); ++i) {
+            paths.push_back(std::format("{}_{}", hint, i));
+        }
+    }
+    std::vector<Value> placeholders;
+    placeholders.reserve(leaves.size());
+    for (size_t i = 0; i < leaves.size(); ++i) {
+        placeholders.push_back(placeholderLike(leaves[i], emitter.fresh(paths[i])));
+    }
+    size_t next = 0;
+    return rebuildValue(like, placeholders, next);
 }
 
 } // namespace
@@ -1259,24 +1363,48 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
              Value::symbolicScalar("", type::Type::Bool())});
         contAt = outputs.size() - 1;
     }
-    std::vector<std::optional<size_t>> nextAt(loop.ports.size());
+    std::vector<std::vector<std::optional<size_t>>> nextAt(loop.ports.size());
+    std::vector<std::vector<Value>> nextLeaves(loop.ports.size());
     out.next.resize(loop.ports.size());
     for (size_t k = 0; k < loop.ports.size(); ++k) {
         if (sameValue(a.next[k], b.next[k])) {
             out.next[k] = a.next[k];
-        } else {
-            if (!isCarriable(a.next[k]) || !isCarriable(b.next[k])) {
+            continue;
+        }
+        // A carried struct or tuple changes leaf by leaf: each leaf that differs is one output of
+        // the If, and the aggregate is rebuilt from the leaves (H44's outline, as for the result
+        // below). A leaf that is the same on both paths keeps its value.
+        std::vector<Value> la, lb;
+        flattenValue(a.next[k], la);
+        flattenValue(b.next[k], lb);
+        if (la.size() != lb.size()) {
+            unsupported(
+                act,
+                std::format(
+                    "argument {} of a recursion whose depth depends on the model input holds a "
+                    "different number of values on the two paths of a branch",
+                    k + 1));
+        }
+        std::vector<std::optional<size_t>> at(la.size());
+        for (size_t j = 0; j < la.size(); ++j) {
+            if (sameValue(la[j], lb[j])) {
+                continue;
+            }
+            if (!isCarriable(la[j]) || !isCarriable(lb[j])) {
                 unsupported(
                     act,
                     std::format(
-                        "argument {} of a recursion whose depth depends on the model input "
-                        "(counting from 1, `with` parameters first) is a tuple, struct or array "
-                        "that a recursive call changes; a loop carries tensors and scalars: pass "
-                        "the elements as separate arguments",
-                        k + 1));
+                        "a recursive call changes argument {} of a recursion whose depth "
+                        "depends on the model input (counting from 1, `with` parameters first), "
+                        "which is {}; a loop carries tensors and scalars and tuples and structs "
+                        "of them",
+                        k + 1,
+                        valueKind(isCarriable(la[j]) ? lb[j] : la[j])));
             }
-            nextAt[k] = request(a.next[k], b.next[k]);
+            at[j] = request(la[j], lb[j]);
         }
+        nextAt[k] = std::move(at);
+        nextLeaves[k] = std::move(la);
     }
     // The result, leaf by leaf: a recursion may return a tuple or struct (nested) of tensors
     // and scalars. A leaf that is the same on both sides, or a constant next to a side that
@@ -1284,19 +1412,6 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
     std::vector<Value> resultLeaves;
     std::vector<std::optional<size_t>> resultAt;
     const Value *resultLike = nullptr;
-    const auto leafKind     = [](const Value &leaf) -> std::string {
-        if (leaf.isClosure() ||
-            (leaf.isConstant() && leaf.ty && leaf.ty->code() == TypeCode::Function)) {
-            return "a function";
-        }
-        if (leaf.isSymbolic() && leaf.form == Value::Form::IntArray) {
-            return "an int array whose elements depend on the model input";
-        }
-        if (leaf.isConstant() && leaf.ty) {
-            return std::format("a value of type '{}'", leaf.ty->toString());
-        }
-        return "a value that is neither a tensor nor a scalar";
-    };
     if (a.result && b.result) {
         std::vector<Value> la, lb;
         flattenValue(*a.result, la);
@@ -1325,7 +1440,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                         "element must be a tensor or a scalar (float, int, bool) of one type on "
                         "every path",
                         j,
-                        !isCarriable(la[j]) || !isCarriable(lb[j]) ? leafKind(bad)
+                        !isCarriable(la[j]) || !isCarriable(lb[j]) ? valueKind(bad)
                                                                    : "of different types on them"));
             }
             resultAt[j] = request(la[j], lb[j]);
@@ -1351,7 +1466,7 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
                         "a recursion whose depth depends on the model input returns {} (element "
                         "{} of its result) on a path next to a recursive call; it can return "
                         "tensors and scalars (float, int, bool) and tuples or structs of them",
-                        leafKind(real),
+                        valueKind(real),
                         j));
             }
             std::vector<int64_t> dims;
@@ -1391,8 +1506,16 @@ Evaluator::BodyOutcome Evaluator::mergeOutcomes(
             out.contName = names[*contAt];
         }
         for (size_t k = 0; k < loop.ports.size(); ++k) {
-            if (nextAt[k]) {
-                out.next[k] = placeholderLike(outputs[*nextAt[k]].like, names[*nextAt[k]]);
+            bool rebuilt = false;
+            for (size_t j = 0; j < nextAt[k].size(); ++j) {
+                if (nextAt[k][j]) {
+                    nextLeaves[k][j] = placeholderLike(outputs[*nextAt[k][j]].like, names[*nextAt[k][j]]);
+                    rebuilt           = true;
+                }
+            }
+            if (rebuilt) {
+                size_t leaf         = 0;
+                out.next[k]         = rebuildValue(a.next[k], nextLeaves[k], leaf);
             }
         }
         for (size_t j = 0; j < resultAt.size(); ++j) {
@@ -1538,7 +1661,7 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
         std::vector<Value> inputs = args;
         for (size_t k = 0; k < count; ++k) {
             if (carried[k]) {
-                inputs[k] = placeholderLike(args[k], emitter_.fresh(hint));
+                inputs[k] = placeholderState(args[k], hint, emitter_);
             }
         }
         return inputs;
@@ -1549,7 +1672,8 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
     // counter that starts at the constant 0).
     std::vector<bool> carriable(count, false);
     for (size_t k = 0; k < count; ++k) {
-        carriable[k] = isCarriable(args[k]);
+        std::vector<Value> leaves;
+        carriable[k] = carriableLeaves(args[k], leaves);
     }
     std::vector<bool> carried(count, false);
     {
@@ -1564,9 +1688,13 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                 if (loop.changed[k] && !carriable[k]) {
                     unsupported(
                         act,
-                        "a tuple, struct or array argument changes across a recursion whose "
-                        "depth depends on the model input; only tensors and scalars can be "
-                        "carried by a loop");
+                        std::format(
+                            "a recursive call changes argument {} of a recursion whose depth "
+                            "depends on the model input (counting from 1, `with` parameters "
+                            "first), which is {}; a loop carries tensors and scalars and tuples "
+                            "and structs of them",
+                            k + 1,
+                            carriedKind(args[k])));
                 }
                 carried[k] = loop.changed[k];
             }
@@ -1588,6 +1716,8 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
     Graph bodyGraph;
     std::vector<ValueInfo> bodyInputs, bodyOutputs;
     std::vector<Value> finals = args;
+    std::vector<std::vector<Value>> initLeaves(count);
+    std::vector<size_t> leafArgument;
     try {
         const std::vector<Value> inputs = withPlaceholders(carried, "state");
         const std::string iter          = emitter_.fresh("loop_iter");
@@ -1613,23 +1743,39 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
                 }
                 continue;
             }
-            const TensorFacts in  = factsOf(inputs[k]);
-            const TensorFacts out = factsOf(outcome.next[k]);
-            if (!in.dtype || in.dtype != out.dtype || !in.shape || !out.shape ||
-                *in.shape != *out.shape) {
+            // A struct or tuple argument is carried leaf by leaf, in the order of its fields
+            // (H44's outline): the Loop state holds the leaves, and the body rebuilt from them
+            // is the struct the program wrote. Every leaf must keep its dtype and shape.
+            std::vector<Value> inLeaves, outLeaves;
+            carriableLeaves(inputs[k], inLeaves);
+            flattenValue(outcome.next[k], outLeaves);
+            flattenValue(args[k], initLeaves[k]);
+            if (inLeaves.size() != outLeaves.size() || inLeaves.size() != initLeaves[k].size()) {
                 unsupported(
                     act,
-                    "the dtype or shape of a value changes from one call of a recursion to the "
+                    "the number of values a recursion carries changes from one call to the "
                     "next; a loop can only carry values of a fixed dtype and shape");
             }
-            stateIn.push_back(valueInfoOf(inputs[k].name, in));
-            stateOut.push_back(valueInfoOf(
-                emitter_.node(
-                    "Identity",
-                    {emitter_.operand(outcome.next[k], *in.dtype)},
-                    {},
-                    "state_out"),
-                in));
+            for (size_t j = 0; j < inLeaves.size(); ++j) {
+                const TensorFacts in  = factsOf(inLeaves[j]);
+                const TensorFacts out = factsOf(outLeaves[j]);
+                if (!in.dtype || in.dtype != out.dtype || !in.shape || !out.shape ||
+                    *in.shape != *out.shape) {
+                    unsupported(
+                        act,
+                        "the dtype or shape of a value changes from one call of a recursion to "
+                        "the next; a loop can only carry values of a fixed dtype and shape");
+                }
+                stateIn.push_back(valueInfoOf(inLeaves[j].name, in));
+                stateOut.push_back(valueInfoOf(
+                    emitter_.node(
+                        "Identity",
+                        {emitter_.operand(outLeaves[j], *in.dtype)},
+                        {},
+                        "state_out"),
+                    in));
+                leafArgument.push_back(k);
+            }
         }
         const TensorFacts flag{TypeCode::Bool, tensor::StaticShape{}};
         stateIn.insert(stateIn.begin(), valueInfoOf(condIn, flag));
@@ -1652,21 +1798,31 @@ Value Evaluator::translateLoop(Activation &act, GCGraph *fn, std::vector<Value> 
         emitter_.operand(
             Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
             TypeCode::Bool)};
-    std::vector<size_t> carriedIndex;
     for (size_t k = 0; k < count; ++k) {
         if (carried[k]) {
-            loopInputs.push_back(emitter_.operand(args[k], factsOf(args[k]).dtype));
-            carriedIndex.push_back(k);
+            for (const Value &leaf : initLeaves[k]) {
+                loopInputs.push_back(emitter_.operand(leaf, factsOf(leaf).dtype));
+            }
         }
     }
     const std::vector<std::string> outputs = emitter_.nodeN(
         "Loop",
         std::move(loopInputs),
         {Attribute::makeGraph("body", std::move(bodyGraph))},
-        carriedIndex.size(),
+        leafArgument.size(),
         "loop_state");
-    for (size_t i = 0; i < carriedIndex.size(); ++i) {
-        finals[carriedIndex[i]] = placeholderLike(args[carriedIndex[i]], outputs[i]);
+    size_t output = 0;
+    for (size_t k = 0; k < count; ++k) {
+        if (!carried[k]) {
+            continue;
+        }
+        // The Loop hands the leaves back; the argument is the struct they make up.
+        std::vector<Value> leafValues;
+        for (const Value &leaf : initLeaves[k]) {
+            leafValues.push_back(placeholderLike(leaf, outputs[output++]));
+        }
+        size_t next = 0;
+        finals[k]   = rebuildValue(args[k], leafValues, next);
     }
 
     // The result: the body once more, at the final state, where it returns.
@@ -1726,12 +1882,16 @@ std::vector<Value> Evaluator::emitLoop(
     }
     emitter_.pushScope("loop_body");
     std::vector<ValueInfo> inputs, outputs;
+    // One Loop state input per leaf (H44's outline): a struct or tuple carried value is flattened
+    // in the order of its fields, and the leaves are what the Loop keeps between calls.
+    std::vector<std::vector<Value>> initLeaves(init.size());
+    std::vector<size_t> leafArgument;
     try {
         const std::string iter   = emitter_.fresh("loop_iter");
         const std::string condIn = emitter_.fresh("loop_cond_in");
         std::vector<Value> state;
         for (const Value &v : init) {
-            state.push_back(placeholderLike(v, emitter_.fresh("state")));
+            state.push_back(placeholderState(v, "state", emitter_));
         }
         const auto [cont, next] = body(Value::symbolicScalar(iter, type::Type::Int64()), state);
         if (next.size() != init.size()) {
@@ -1746,19 +1906,37 @@ std::vector<Value> Evaluator::emitLoop(
         outputs.push_back(
             valueInfoOf(emitter_.node("Identity", {cont ? *cont : always}, {}, "loop_cond"), flag));
         for (size_t k = 0; k < init.size(); ++k) {
-            const TensorFacts in  = factsOf(state[k]);
-            const TensorFacts out = factsOf(next[k]);
-            if (!isCarriable(next[k]) || !in.dtype || in.dtype != out.dtype || !in.shape ||
-                !out.shape || *in.shape != *out.shape) {
+            std::vector<Value> inLeaves, outLeaves;
+            const bool carries = carriableLeaves(state[k], inLeaves);
+            flattenValue(next[k], outLeaves);
+            flattenValue(init[k], initLeaves[k]);
+            if (!carries || inLeaves.size() != outLeaves.size() ||
+                inLeaves.size() != initLeaves[k].size()) {
                 unsupported(
                     act,
                     "the dtype or shape of a value changes from one call of a recursion to the "
                     "next; a loop can only carry values of a fixed dtype and shape");
             }
-            inputs.push_back(valueInfoOf(state[k].name, in));
-            outputs.push_back(valueInfoOf(
-                emitter_.node("Identity", {emitter_.operand(next[k], *in.dtype)}, {}, "state_out"),
-                in));
+            for (size_t j = 0; j < inLeaves.size(); ++j) {
+                const TensorFacts in  = factsOf(inLeaves[j]);
+                const TensorFacts out = factsOf(outLeaves[j]);
+                if (!in.dtype || in.dtype != out.dtype || !in.shape || !out.shape ||
+                    *in.shape != *out.shape) {
+                    unsupported(
+                        act,
+                        "the dtype or shape of a value changes from one call of a recursion to "
+                        "the next; a loop can only carry values of a fixed dtype and shape");
+                }
+                inputs.push_back(valueInfoOf(inLeaves[j].name, in));
+                outputs.push_back(valueInfoOf(
+                    emitter_.node(
+                        "Identity",
+                        {emitter_.operand(outLeaves[j], *in.dtype)},
+                        {},
+                        "state_out"),
+                    in));
+                leafArgument.push_back(k);
+            }
         }
     } catch (...) {
         emitter_.popScope();
@@ -1772,18 +1950,26 @@ std::vector<Value> Evaluator::emitLoop(
         emitter_.operand(
             Value::constant(rtdata::toSlot<bool>(true), type::Type::Bool()),
             TypeCode::Bool)};
-    for (const Value &v : init) {
-        loopInputs.push_back(emitter_.operand(v, factsOf(v).dtype));
+    for (size_t k = 0; k < init.size(); ++k) {
+        for (const Value &leaf : initLeaves[k]) {
+            loopInputs.push_back(emitter_.operand(leaf, factsOf(leaf).dtype));
+        }
     }
     const std::vector<std::string> names = emitter_.nodeN(
         "Loop",
         std::move(loopInputs),
         {Attribute::makeGraph("body", std::move(bodyGraph))},
-        init.size(),
+        leafArgument.size(),
         "loop_state");
     std::vector<Value> finals;
+    size_t output = 0;
     for (size_t k = 0; k < init.size(); ++k) {
-        finals.push_back(placeholderLike(init[k], names[k]));
+        std::vector<Value> leafValues;
+        for (const Value &leaf : initLeaves[k]) {
+            leafValues.push_back(placeholderLike(leaf, names[output++]));
+        }
+        size_t next = 0;
+        finals.push_back(rebuildValue(init[k], leafValues, next));
     }
     return finals;
 }
@@ -4261,3 +4447,6 @@ Model exportFunction(
 }
 
 } // namespace camel::onnx
+
+
+

@@ -1,0 +1,143 @@
+/**
+ * Autodiff sees through a struct loop state (H71 item 2, design principles 9.9): the state is
+ * one struct, the tape carries the same struct as its tangent, and the reverse pass reads the
+ * fields it needs. Before this, the forward rewrite took the programme's own field read (`q.a`)
+ * for the loop's state projection, and the graph crashed while being scheduled.
+ *
+ * The shapes: a struct state the body also uses as a whole (`sumP(q)`), so the state is not
+ * split into its fields (H71 item 1); the same in a nested struct; a struct state with a field
+ * that has no tangent (`{a: float, n: int}`, whose tangent is `{a: float}`); a one-field struct;
+ * and a state whose struct part stays whole while its counter is a component of its own.
+ *
+ * Every gradient is 24.0: `a' = a·(1 + d)` over d = 1, 2, 3 is `a·2·3·4`, and the tuple state
+ * `(a, b)` with the same computation gives the same number (the reference). `mixedPart` adds
+ * `b·d` with `b = 1` each round, so its gradient is 1. `box`/`boxRead` have an array field
+ * whose append is grown in place or copied once the round must be taped, and give 2 and 6.
+ *
+ * `treeLoss` differentiates a struct parameter tree (`{p: {a, b}, c}`), four rounds of
+ * `a' = a + d·sum(t)` over d = 1, 2: the gradient is `{p: {a: 4, b: 4}, c: 4}`.
+ */
+module loop_grad_struct_state
+
+import { grad } from autodiff
+
+type P = { a: float, b: float }
+type T = { p: P, c: float }
+
+func sumP(p: P): float {
+    return p.a + p.b
+}
+
+func sumT(t: T): float {
+    return t.p.a + t.p.b + t.c
+}
+
+type Counter = { a: float, n: int }
+
+func sumC(c: Counter): float {
+    return c.a + float(c.n)
+}
+
+// The body reads the state as a whole (`sumP(q)`), so the state stays one struct.
+with <x: float>
+func whole(): float {
+    let q = loop q = { a: x, b: 1.0 } for d in [1.0, 2.0, 3.0] do { a: q.a + d * sumP(q), b: q.b }
+    return q.a
+}
+
+// The same, one level down: the state's `p` field is a struct and the body uses it as a whole.
+with <x: float>
+func nested(): float {
+    let q = loop q = { p: { a: x, b: 0.0 }, c: 1.0 } for d in [1.0, 2.0, 3.0] do {
+        p: { a: q.p.a + d * sumT(q), b: q.p.b },
+        c: q.c
+    }
+    return q.p.a
+}
+
+// A struct state with a field that has no tangent: `n` is carried, but the tangent is `{a}`.
+with <x: float>
+func counter(): float {
+    let q = loop q = { a: x, n: 0 } for d in [1.0, 2.0, 3.0] do {
+        a: q.a * (1.0 + d) + 0.0 * sumC(q),
+        n: q.n + 1
+    }
+    return q.a + 0.0 * sumC(q)
+}
+
+// A one-field struct state, used as a whole (not split into its field).
+type One = { a: float }
+
+func sumOne(o: One): float {
+    return o.a
+}
+
+with <x: float>
+func oneField(): float {
+    let q = loop q = { a: x } for d in [1.0, 2.0, 3.0] do { a: q.a + d * sumOne(q) }
+    return q.a
+}
+
+// A state whose struct part is passed whole (so it stays a component) beside a counter.
+func bump(p: P, d: float): P {
+    return { a: p.a + p.b * d, b: p.b }
+}
+
+with <x: float>
+func mixedPart(): float {
+    let q = loop q = { p: { a: x, b: 1.0 }, n: 0 } for d in [1.0, 2.0, 3.0] do {
+        p: bump(q.p, d),
+        n: q.n + 1
+    }
+    return q.p.a + 0.0 * q.p.b + 0.0 * float(q.n)
+}
+
+// The same computation as `whole`, with the state's parts as states of their own: the tuple
+// form's gradient is the reference for the struct form.
+with <x: float>
+func tupleRef(): float {
+    let (a, b) = loop a = x, b = 1.0 for d in [1.0, 2.0, 3.0] do (a + d * (a + b), b)
+    return a
+}
+
+// A struct state whose array field is appended: the field is a state of its own (H71 item 1),
+// and the in-place append the builder chose falls back to the copying one so that the round can
+// be taped (design principles 9.9). `box` appends `w` three times, and the two values read after
+// the loop give 2. `boxRead` appends `xs[0] · 2` (a read of the state, so the copy form), and
+// the three appended 2s give 6.
+with <w: float>
+func box(): float {
+    let q = loop q = { xs: [0.0], n: 0 } while q.n < 3 do { xs: q.xs->append<w>, n: q.n + 1 }
+    return q.xs[1] + q.xs[2]
+}
+
+with <w: float>
+func boxRead(): float {
+    let q = loop q = { xs: [w], n: 0 } while q.n < 3 do { xs: q.xs->append<q.xs[0] * 2.0>, n: q.n + 1 }
+    return q.xs[1] + q.xs[2] + q.xs[3]
+}
+
+// A struct parameter tree as the differentiated value.
+with <t: T>
+func treeLoss(): float {
+    let q = loop q = { p: { a: t.p.a, b: t.p.b }, c: t.c } for d in [1.0, 2.0] do {
+        p: { a: q.p.a + d * sumT(t), b: q.p.b + 1.0 },
+        c: q.c
+    }
+    return sumP(q.p) + q.c
+}
+
+func main(): int sync {
+    let g_whole     = grad(whole)<1.0>()
+    let g_nested    = grad(nested)<1.0>()
+    let g_counter   = grad(counter)<1.0>()
+    let g_one       = grad(oneField)<1.0>()
+    let g_mixed     = grad(mixedPart)<1.0>()
+    let g_tuple     = grad(tupleRef)<1.0>()
+    let g_box       = grad(box)<3.0>()
+    let g_box_read  = grad(boxRead)<1.0>()
+    let g_tree      = grad(treeLoss)<{ p: { a: 2.0, b: 3.0 }, c: 4.0 }>()
+    'loop_grad_struct_state grads={} {} {} {} {} {} {} {} {}'->format<
+        g_whole, g_nested, g_counter, g_one, g_mixed, g_tuple, g_box, g_box_read, g_tree>->println
+    return 0
+}

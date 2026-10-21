@@ -1208,12 +1208,15 @@ class Builder {
     /// state the body hands the append call back directly, with several it returns a tuple whose
     /// j-th component is state j's next value.
     void markLoopStateInPlace(
-        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial);
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
+        const std::vector<bool> &privateInitial = {});
     /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
     /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
+    /// `initialIsPrivate`: the first value is a projection of a value the loop does not own (a
+    /// part of a struct state, H71); it is copied once before the loop either way.
     void markLoopStateInPlaceOne(
         const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-        size_t index, node_handle_t next);
+        size_t index, node_handle_t next, bool initialIsPrivate = false);
     /// Recognises a state that starts as an empty array and whose only use is appending one
     /// value per round, and gives the loop a collection slot for the appended values
     /// (design principles 3.10). The state itself stays: it is the value the program sees and
