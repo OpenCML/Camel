@@ -1101,6 +1101,11 @@ std::vector<DebugCore::Variable> DebugCore::localsOf(const Chain &chain) {
                 break;
             }
         }
+        if (found != nullptr &&
+            !home->info->visibleAt(
+                found->controlRegion, home->node != nullptr ? home->node->controlRegion : 0)) {
+            continue; // a name of an arm that does not run (or is over)
+        }
         auto known = byDeclaration.find(b->decl);
         if (found == nullptr) {
             const bool ofThisChain = b->graph.empty() || chainGraphs.count(b->graph) != 0;

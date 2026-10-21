@@ -105,6 +105,8 @@ struct NodeInfo {
     origin_t origin                   = 0;
     SourceLoc loc;
     int function = -1; // source function the node was written in
+    /// The innermost arm or loop region the node is in (GraphInfo::visibleAt); 0 for the body.
+    uint32_t controlRegion = 0;
     /// The scheduler does work for the node (constants, ports and gates are not executed).
     bool executes = false;
     std::string label;
@@ -142,6 +144,24 @@ struct GraphInfo {
     std::unordered_map<camel::runtime::gc_node_ref_t, uint32_t> byRef;
     std::unordered_multimap<origin_t, uint32_t> byOrigin;
     std::unordered_map<int, uint32_t> bySlot;
+    /// By region id: the control region (arm, loop condition or body) the region is in; 0 for the
+    /// body. Empty for a graph without regions.
+    std::vector<uint32_t> regionOuter;
+
+    /// A name declared in control region `region` is there while the code runs in `region` or
+    /// in a region inside it, as the names of a block are.
+    bool visibleAt(uint32_t region, uint32_t at) const {
+        for (int guard = 0; region != 0 && guard < 4096; ++guard) {
+            if (at == region) {
+                return true;
+            }
+            if (at == 0 || at >= regionOuter.size()) {
+                return false;
+            }
+            at = regionOuter[at];
+        }
+        return region == 0;
+    }
 
     const NodeInfo *node(camel::runtime::gc_node_ref_t ref) const {
         auto it = byRef.find(ref);
