@@ -858,13 +858,13 @@ s with the ASCII letters A-Z in lower case. Every other character is kept as it 
 #### `replace`
 
 ```camel
-replace: <from: string, to: string> (s: string) => string
+replace: <from_: string, to: string> (s: string) => string
 ```
 
-s with every occurrence of from replaced by to, found from left to right without overlap.
+s with every occurrence of from_ replaced by to, found from left to right without overlap.
 
 - Pure.
-- Failure: fault `InvalidArgument` when from is empty.
+- Failure: fault `InvalidArgument` when from_ is empty.
 - Example: `'a-b-c'->replace<'-', '+'>` gives `'a+b+c'`
 
 #### `find`
