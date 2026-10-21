@@ -4038,15 +4038,7 @@ A field cannot be taken from '{0}' by a compile-time key.
 't.[key]' names a field of a struct or an element of an ordinary tuple. A 'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or an array has no fields.
 ```
 
-**Example** (`test/cases/compile/native/missing.cml`, run as `camel test/cases/compile/native/missing.cml`)
-
-```camel
-import { absent } from missing_module
-
-func main(): int {
-    return absent(1)
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### StaticAccessUnknownField
 
