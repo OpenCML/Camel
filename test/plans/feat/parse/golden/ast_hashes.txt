@@ -495,7 +495,11 @@ ef0011e70fceb982 ok test/cases/compile/equality/err_not_equal_function.cml
 5590d41464afffa2 ok test/cases/compile/equality/err_types_differ.cml
 e928e3b23ae1e6a6 no test/cases/compile/fstring/bad_expr.cml
 f085e465aa46bf08 ok test/cases/compile/fstring/bad_spec.cml
-47bc7d8db95f0866 ok test/cases/compile/fstring/basic.cml
+111afb0545f55eea ok test/cases/compile/fstring/basic.cml
+0ba954c215588942 no test/cases/compile/fstring/empty_interpolation.cml
+2705a8f7fa3fca97 ok test/cases/compile/fstring/escapes.cml
+080927f9c4d3209c no test/cases/compile/fstring/lambda_spec.cml
+c84178c41fc992ae ok test/cases/compile/fstring/lambda_spec_format.cml
 9e35e1855c7f816a ok test/cases/compile/fstring/multiline.cml
 a26927eb51fff7cc ok test/cases/compile/fstring/nested.cml
 cd8038cdb5d6d81c ok test/cases/compile/function_values/capture_operator_name.cml
@@ -1774,6 +1778,8 @@ d5350cbd17ad4ab0 ok test/cases/modules/tiles/batch_matmul.cml
 86113175d9f9f4c4 ok test/cases/modules/tiles/boundaries.cml
 d7f09150b2048d4a ok test/cases/modules/tiles/branch_effect.cml
 8deb1282283424ad ok test/cases/modules/tiles/branches.cml
+56d563603d97ff10 ok test/cases/modules/tiles/cast_dtype.cml
+d39356dc4df797d4 ok test/cases/modules/tiles/cast_like.cml
 fa8efa1b9430518e ok test/cases/modules/tiles/compiled_region.cml
 0f969d23938d7bac ok test/cases/modules/tiles/consistency.cml
 3f924524b970918f ok test/cases/modules/tiles/core_views.cml
@@ -2023,7 +2029,7 @@ de2b4111ac30bce6 ok test/cases/tools/debugger/fixtures/unhandled.cml
 9ea2e7cbbf1b10ce ok test/cases/tools/grammar/comments.cml
 6aad29dc1f920033 ok test/cases/tools/grammar/functions.cml
 d1b1fea632363f9c no test/cases/tools/grammar/keywords.cml
-1eeb4911d31e2a27 ok test/cases/tools/grammar/literals.cml
+bb434836d73bcca5 ok test/cases/tools/grammar/literals.cml
 d7f0b21101169429 ok test/cases/tools/grammar/modules.cml
 2205ea17169f2f20 no test/cases/tools/grammar/operators.cml
 5b89a02b11b0ecee ok test/cases/tools/grammar/types.cml

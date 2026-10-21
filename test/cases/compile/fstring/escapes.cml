@@ -1,0 +1,8 @@
+module fstring_escapes
+func main(): int sync {
+    println('single: \`')
+    println("double: \`")
+    println(`formatted: \``)
+    println('literal interpolation: \${x}')
+    return 0
+}

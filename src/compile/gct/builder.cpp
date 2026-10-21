@@ -2901,10 +2901,21 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         data = tt::as_shared<Data>(make_shared<StringData>(decoded));
     } break;
     case LiteralType::FString: {
-        // FString (formatted string) is not supported
-        diags_->of(SemanticDiag::FeatureNotSupported)
+        // Unreachable: the AST builder lowers every formatted string to the same
+        // `'...'->format<...>` tree (design principles 11.5; AST Builder::visitFStringData),
+        // and a pattern refuses one instead of producing a formatted-string literal. There is
+        // therefore no source text that can put a FString literal in the GCT.
+        ASSERT(
+            false,
+            "A formatted-string literal reached the GCT: the AST builder no longer lowers "
+            "every formatted string to a format call.");
+        // A debug build aborts above; a release build reports the compiler defect instead of
+        // blaming the program for a feature it never wrote.
+        diags_->of(InternalDiag::UnknownInternalError)
             .at(ast->load()->tokenRange())
-            .commit("FString");
+            .commit(
+                "a formatted-string literal reached the GCT; the front end should have lowered "
+                "it to a format call");
         throw BuildAbortException();
     } break;
     case LiteralType::Integer: {

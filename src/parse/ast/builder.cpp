@@ -3711,9 +3711,9 @@ Value Builder::visitLiteralData(cst::Literal context) {
 
 namespace {
 
-/// The text of a formatted string that is not an interpolation: `\${` is the literal `${` and
-/// every other escape is left for decodeEscapes to decode (a brace has no escape: it is
-/// literal, and is doubled for `format` afterwards).
+/// The text of a formatted string that is not an interpolation: only `\${` is decoded here,
+/// because it is what keeps `${` from starting an interpolation. Every character escape, the
+/// backtick included, is left for decodeEscapes, the one table of every string literal.
 std::string decodeFStringText(std::string_view text) {
     std::string out;
     out.reserve(text.size());
@@ -3724,16 +3724,19 @@ std::string decodeFStringText(std::string_view text) {
                 i += 2;
                 continue;
             }
-            if (text[i + 1] == '`') {
-                out += '`'; // `\`` is a literal backtick (it also does not close the string)
-                ++i;
-                continue;
-            }
         }
         out += text[i];
     }
     return out;
 }
+
+/// Shown when the text taken as a format specification contains `=>`: the ':' of a lambda's
+/// return type at the top level of an interpolation was read as the start of the specification.
+/// The same sentence is used where the format check fails (gir/builder_operators.cpp).
+constexpr std::string_view kLambdaNeedsParenthesesHint =
+    "a lambda with a return type needs its own parentheses at the top level of an "
+    "interpolation: the ':' of the return type is read as the start of the format "
+    "specification. Write it as ${((x: int): int => x)}";
 
 /// The pattern text for `format`: the literal braces of a formatted string are doubled, so
 /// `format` prints them.
@@ -3778,7 +3781,16 @@ Value Builder::visitFStringData(cst::Literal context) {
     const syn::TokenRef token = context->firstToken();
     const std::string &source = context->tree()->source();
     const std::string_view whole(source);
-    const auto interpolations = context->tree()->tokens().interpolationsOf(token->index());
+    const syn::TokenBuffer &buffer = context->tree()->tokens();
+    const auto interpolations      = buffer.interpolationsOf(token->index());
+
+    // Where an interpolation lies in the file: from its `$` to just past its `}`. A diagnostic
+    // about the interpolation itself (not about the expression inside it) points here.
+    const auto interpolationRange = [&buffer](const syn::FStringInterpolation &part) {
+        return CharRange{
+            {buffer.lineOf(part.open), buffer.columnOf(part.open)},
+            {buffer.lineOf(part.close + 1), buffer.columnOf(part.close + 1)}};
+    };
 
     std::vector<node_ptr_t> args;
     std::string pattern;
@@ -3801,12 +3813,34 @@ Value Builder::visitFStringData(cst::Literal context) {
         cursor = static_cast<size_t>(part.close) + 1;
 
         syn::TokenBuffer tokens = syn::Lexer::tokenizeRange(source, part.exprBegin, part.exprEnd);
-        syn::Tree sub           = syn::Parser::parseExpression(std::move(tokens));
+        // A buffer of nothing but Eof is `${}` (or `${:spec}`): an interpolation without an
+        // expression is its own mistake, not a parse error inside an expression (H20 item 1).
+        if (tokens.size() == 1) {
+            diags_->of(SyntaxDiag::EmptyInterpolation).at(interpolationRange(part)).commit();
+            failed = true;
+            continue;
+        }
+        const size_t beforeExpression = diags_->count();
+        syn::Tree sub                 = syn::Parser::parseExpression(std::move(tokens));
         syn::reportLexicalErrors(sub.tokens(), *diags_);
         if (sub.tokens().errors().empty()) {
             syn::reportSyntaxErrors(sub, *diags_);
         }
         if (!sub.root() || sub.hasErrors()) {
+            // The first ':' outside every bracket ends the expression. A lambda with a return
+            // type has such a ':' at its top level, so its `=>` ended up in the specification
+            // and the expression is incomplete: say what the fix is (H20 item 1).
+            if (part.hasSpec) {
+                const std::string_view spec = whole.substr(
+                    part.specBegin, static_cast<size_t>(part.specEnd) - part.specBegin);
+                if (spec.find("=>") != std::string_view::npos) {
+                    diags_->addRelatedToErrorsFrom(
+                        beforeExpression,
+                        DiagLabel{
+                            interpolationRange(part),
+                            std::string(kLambdaNeedsParenthesesHint)});
+                }
+            }
             failed = true;
             continue;
         }

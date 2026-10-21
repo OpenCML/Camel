@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-187 diagnostics: 170 errors, 17 warnings.
+188 diagnostics: 171 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -39,6 +39,7 @@ prints one entry.
 | `0x0200000C` | [SyntaxDiag::ComparisonNeedsSpace](#comparisonneedsspace) | Error |
 | `0x0200000D` | [SyntaxDiag::AngleCloseAfterSpace](#anglecloseafterspace) | Error |
 | `0x0200000E` | [SyntaxDiag::LineStartsWithOperator](#linestartswithoperator) | Error |
+| `0x0200000F` | [SyntaxDiag::EmptyInterpolation](#emptyinterpolation) | Error |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn |
 | `0x03000000` | [SemanticDiag::UnknownSemanticError](#unknownsemanticerror) | Error |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error |
@@ -536,7 +537,15 @@ A declaration binds a name to a value: let {0} = <value>, or with a type: let {0
 Expected {0} before {1}.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/fstring/lambda_spec.cml`, run as `camel test/cases/compile/fstring/lambda_spec.cml`)
+
+```camel
+module fstring_lambda_spec
+func main(): int sync {
+    print(`A ${(x: int): int => x}`)
+    return 0
+}
+```
 
 ### UnexpectedToken
 
@@ -638,6 +647,32 @@ A line break ends a statement unless the line is visibly unfinished. To continue
 ```
 
 *No example: no test small enough to show raises it.*
+
+### EmptyInterpolation
+
+`0x0200000F` · Error · `SyntaxDiag::EmptyInterpolation`
+
+**Message**
+
+```text
+An interpolation has no expression to format.
+```
+
+**Help**
+
+```text
+Write an expression between '${' and '}': ${value}. For a literal '${' write '\${'.
+```
+
+**Example** (`test/cases/compile/fstring/empty_interpolation.cml`, run as `camel test/cases/compile/fstring/empty_interpolation.cml`)
+
+```camel
+module fstring_empty_interpolation
+func main(): int sync {
+    print(`A ${}`)
+    return 0
+}
+```
 
 ### ComparisonAcrossLines
 

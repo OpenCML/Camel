@@ -113,7 +113,7 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 ### 2.5.4 Strings
 
 - Single or double quotes: `'Hello'`, `"Hello"`; the two are equivalent, and one kind of quote can be written directly inside the other.
-- Escapes: `\n`, `\t`, `\r`, `\\`, `\'`, `\"`, `\xHH`.
+- Escapes: `\n`, `\t`, `\r`, `\\`, `\'`, `\"`, `` \` ``, `\xHH`. Every string (single-quoted, double-quoted, triple-quoted and the backquoted formatted string) shares this one table.
 - Triple-quoted multi-line strings: `'''...'''` or `"""..."""`, which may contain newlines.
 - A backquoted **formatted string** `` `...` `` interpolates with `${expression}`; the format specification of `${expression:spec}` is the one of `format` ([2.5.4.1](#2541-formatted-strings)).
 - A string is a sequence of bytes. `len` gives the number of bytes: `len('héllo')` is 6, `len('中文')` is 6.
@@ -123,8 +123,9 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 - In a backquoted string `${` starts an **interpolation** that ends at its matching `}`; inside is an arbitrary expression ([6.2](06_expressions.md#62-literals-and-construction)). Strings, comments, braces and backquoted strings may appear again inside it, each closing where it should: `` `point ${({ x: 1 }).x}` ``, `` `${'{'}${'}'}` ``.
 - After the expression an optional `:spec` gives a format specification; the colon must be at the top level of the interpolation (not inside any brackets). The specification is exactly that of a placeholder of `format` (`{:5d}`, `{:.2f}`, `{:>8}`). A specification the type of the value does not take is a compile-time error `SemanticDiag::ArgumentsRejected`, located at that interpolation.
 - **An ordinary `{` or `}` is a literal character and needs no escape**: `` `{ }` `` prints `{ }`. Only `${` together starts an interpolation.
-- `\${` is a literal `${` and starts no interpolation.
-- It may span lines, which are kept as written; the escapes inside a line are those of a string (`\n`, `\t`, `\\`, `\'`, `\"`, `\xHH`), and `` \` `` is a literal backtick (it does not close the string either).
+- `\${` is a literal `${` and starts no interpolation; it belongs to formatted strings only. An ordinary string has no `${` meaning, so `\${` is an unknown escape and is kept as written.
+- It may span lines, which are kept as written; the escapes inside a line are those of a string (`\n`, `\t`, `\\`, `\'`, `\"`, `` \` ``, `\xHH`), and `` \` `` is a literal backtick (it does not close the string either).
+- An interpolation with no expression, `${}`, is the error `SyntaxDiag::EmptyInterpolation`; it is reported separately from an ordinary syntax error inside the interpolation.
 - It is shorthand for `'...'->format<...>`: the same tree and the same meaning ([6.2](06_expressions.md#62-literals-and-construction)).
 
 ```cml

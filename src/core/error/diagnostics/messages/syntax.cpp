@@ -157,6 +157,15 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
+            SyntaxDiag::EmptyInterpolation,
+            {
+                "EmptyInterpolation",
+                "An interpolation has no expression to format.",
+                "Write an expression between '${{' and '}}': ${{value}}. For a literal '${{' "
+                "write '\\${{'.",
+            },
+        },
+        {
             SyntaxDiag::ComparisonAcrossLines,
             {
                 "ComparisonAcrossLines",

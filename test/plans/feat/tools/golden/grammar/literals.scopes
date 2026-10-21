@@ -248,7 +248,7 @@
 #              ^ keyword.operator.assignment.camel
 #                ^ string.interpolated.backtick.camel punctuation.definition.string.begin.camel
 #                 ^^^^^^^^^^ string.interpolated.backtick.camel
-#                           ^^ string.interpolated.backtick.camel
+#                           ^^ string.interpolated.backtick.camel constant.character.escape.camel
 #                             ^^^^^ string.interpolated.backtick.camel
 #                                  ^ string.interpolated.backtick.camel punctuation.definition.string.end.camel
 >
