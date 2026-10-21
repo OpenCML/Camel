@@ -20,6 +20,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/mm.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/pure.h"
 #include "camel/core/type/storage.h"
@@ -133,6 +134,13 @@ Type *ArrayType::resolve(const type_vec_t &typeList) const {
             // Elements of refinement-carrying types (e.g. tensors of different shapes) share
             // their least common type.
             newElemType = joined;
+        } else if (entersImplicitly(type, newElemType)) {
+            // An element of the more specific type (an unnamed struct value beside a named
+            // one, design principles 5.2): the array is of the type it enters, and the value
+            // is converted where it is put into the array.
+            newElemType = type;
+        } else if (entersImplicitly(newElemType, type)) {
+            // Already the type the new element enters.
         } else {
             throw DiagnosticBuilder::of(SemanticDiag::ElementTypeMismatch)
                 .commit("Array", type->toString(), newElemType->toString());

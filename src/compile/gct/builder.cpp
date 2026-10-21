@@ -298,22 +298,41 @@ static bool isIntegerPrimitive(Type *type) {
 
 // A literal that could not be converted to the type its position asks for: out of the range
 // of a narrower numeric type (`let b: i32 = 3000000000`), a decimal literal in an integer type
-// (`let x: int = 1.9`), text that is not a number, or a value of another type. One diagnostic
-// says which literal, which type, and why (handover H24).
+// (`let x: int = 1.9`), or a value of another type. One diagnostic says which literal, which
+// type, and why (handover H24).
+//
+// A text where a number is expected is not a range problem and not a text that is not a number
+// either: there is no implicit text-to-number conversion (design principles 5.1), so it is a
+// type mismatch, reported with the diagnostic the same position gives a variable of type
+// `string` (DeclaredTypeMismatch in a declared position, DynamicCastForbidden for an explicit
+// `as`).
+//
 // `written` is the element's text as it is in the source, when the caller can read it (design
 // principles 5.1: the message quotes the source's spelling); empty falls back to the value.
+// `explicitCast` says the literal stands under an `as` conversion rather than in a declared
+// position.
 template <typename Diags, typename Range>
 static void reportLiteralCastFailure(
     Diags &diags, const Range &range, const data_ptr_t &data, Type *type,
-    const std::string &written = {}) {
+    const std::string &written = {}, bool explicitCast = false) {
+    if (data->type()->code() == TypeCode::String) {
+        if (explicitCast) {
+            diags->of(SemanticDiag::DynamicCastForbidden)
+                .at(range)
+                .commit("string", type->toString());
+        } else {
+            diags->of(SemanticDiag::DeclaredTypeMismatch)
+                .at(range)
+                .commit("string", type->toString());
+        }
+        return;
+    }
     std::string reason;
     if (const std::string limits = literalRangeViolation(data, type); !limits.empty()) {
         reason = "out of range (" + limits + ")";
     } else if (data->type()->isPrimitive() && isIntegerPrimitive(type)) {
         // A numeric type that is not an integer keeps its fraction (`1.9` -> `int`).
         reason = "the value would be truncated";
-    } else if (data->type()->code() == TypeCode::String) {
-        reason = "the text is not a number";
     } else {
         reason = "the value cannot become that type";
     }
@@ -1137,6 +1156,37 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         // The name is in scope before the variants are read, so that a variant field can hold
         // the enum itself (`type Tree = enum { Node(Tree, Tree) }`).
         type = declareEnumType(typeNode, typeLoad.get());
+    } else if (typeNode->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::Struct) {
+        // `type Name<params> = { field: T, ... }` declares a named struct type (design
+        // principles 5.2). A name used where a value of a struct type is expected declares
+        // nothing: `type Alias = Other` stays an alias for the type `Other` (structural).
+        if (typeLoad->params().empty()) {
+            // A type that mentions itself where a value of it would have to be held: a cycle
+            // that can never be built (design principles 5.2). Only an enum is declared with
+            // its name in scope, so any other self-reference is reported here (the same rule
+            // as for an alias of a type expression, below).
+            TypeMention mention;
+            findTypeMention(typeNode, typeLoad->ref().toString(), false, mention);
+            if (mention.any) {
+                const std::string name = typeLoad->ref().toString();
+                if (!mention.directly) {
+                    // Legal by the rule, but the representation cannot hold it yet (see the
+                    // handover report H23): say so instead of leaving the name unresolved.
+                    diags_->of(SemanticDiag::FeatureNotSupported)
+                        .at(ast->load()->tokenRange())
+                        .commit(std::format(
+                            "a type that mentions itself through an array or another collection "
+                            "('{}')",
+                            name));
+                } else {
+                    diags_->of(SemanticDiag::ModuleTypeCycle)
+                        .at(ast->load()->tokenRange())
+                        .commit(name, name + " -> " + name);
+                }
+                throw BuildAbortException();
+            }
+        }
+        type = declareStructType(typeNode, typeLoad.get());
     } else if (typeLoad->params().empty()) {
         // A type that mentions itself where a value of it would have to be held: a cycle that
         // can never be built. Only an enum is declared with its name in scope, so any other
@@ -1199,8 +1249,10 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     return declNode;
 }
 
-void Builder::bindTypeParameters(
+std::vector<Type *> Builder::bindTypeParameters(
     const AST::TypeDeclLoad *decl, const AST::node_ptr_t &ast, const std::string &name) {
+    std::vector<Type *> parameters;
+    parameters.reserve(decl->params().size());
     for (const string &param : decl->params()) {
         const Reference paramRef(param);
         if (typeScope_->has(paramRef, false)) {
@@ -1216,8 +1268,11 @@ void Builder::bindTypeParameters(
                 .commit(name, "its parameter '" + param + "' already denotes a type here");
             throw BuildAbortException();
         }
-        typeScope_->insert(paramRef, TypeVarType::create(param, false));
+        Type *variable = TypeVarType::create(param, false);
+        typeScope_->insert(paramRef, variable);
+        parameters.push_back(variable);
     }
+    return parameters;
 }
 
 Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
@@ -1253,6 +1308,50 @@ Type *Builder::declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLo
         result = function;
     }
     if (generic) {
+        typeScope_ = outer;
+    }
+    return result;
+}
+
+Type *Builder::declareStructType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl) {
+    const string name                    = decl->ref().toString();
+    const bool generic                   = !decl->params().empty();
+    StructDecl *declaration              = StructDecl::create(name, decl->params());
+    scope_ptr_t<Reference, Type *> outer = typeScope_;
+    std::vector<Type *> parameters;
+    if (generic) {
+        pushScope();
+        parameters = bindTypeParameters(decl, ast, name);
+    }
+    std::vector<std::pair<std::string, Type *>> fields;
+    std::unordered_set<string> fieldNames;
+    for (const auto &child : *ast->atAs<AST::RepeatedLoad>(0)) {
+        const auto &namedType   = child->loadAs<AST::NamedTypeLoad>();
+        const string &fieldName = namedType->getRef().ident();
+        // The fields are read in the order written: that order is the type's, and every
+        // instance keeps it (design principles 5.2).
+        Type *fieldType = visitType(child->atAs<AST::TypeLoad>(0));
+        if (!fieldNames.insert(fieldName).second) {
+            diags_->of(SemanticDiag::DuplicateDictKey).at(namedType->tokenRange()).commit(fieldName);
+            throw BuildAbortException();
+        }
+        fields.emplace_back(fieldName, fieldType);
+    }
+    declaration->define(std::move(fields));
+    Type *result;
+    if (!generic) {
+        // Without parameters the declaration has one instance, which is the type itself; its
+        // name denotes it from here on.
+        StructType *instance = StructType::get(declaration, std::span<Type *const>{});
+        typeScope_->insert(decl->ref(), instance);
+        result = instance;
+    } else {
+        // The written field types are those of the instance whose arguments are the parameters
+        // themselves; a use `Name<int>` replaces them (as `type Pair<T> = (T, T)` does).
+        StructType *body = StructType::get(declaration, parameters);
+        Type *function   = TypeFunctionType::create(name, decl->params(), body);
+        typeScope_->insert(decl->ref(), function);
+        result = function;
         typeScope_ = outer;
     }
     return result;
@@ -2155,14 +2254,16 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
             asTagged(dstType) == nullptr && !intoCollection) {
             const auto &data = dataNode->data();
             if (dstType->castSafetyFrom(data->type()) != CastSafety::Safe) {
-                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
+                reportLiteralCastFailure(
+                    diags_, ast->load()->tokenRange(), data, dstType, {}, /*explicitCast=*/true);
                 throw BuildAbortException();
             }
             auto convertedData = data->convertTo(dstType);
             if (convertedData) {
                 res = tree_->makeData(convertedData);
             } else {
-                reportLiteralCastFailure(diags_, ast->load()->tokenRange(), data, dstType);
+                reportLiteralCastFailure(
+                    diags_, ast->load()->tokenRange(), data, dstType, {}, /*explicitCast=*/true);
                 throw BuildAbortException();
             }
         } else {
@@ -3174,13 +3275,24 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
     StructDataFactory factory;
     bool dangling       = false;
     node_ptr_t execNode = makeExec(false, true);
-    for (const auto &child : fields) {
-        const auto &named      = child->loadAs<AST::NamedDataLoad>();
-        const std::string name = named->ref().ident();
-        Type *fieldType        = sType->typeAt(*sType->findField(name));
-        const auto &valueAst   = child->atAs<AST::DataLoad>(0);
-        bool nested            = false;
-        node_ptr_t fieldNode   = visitDataInto(valueAst, fieldType, nested);
+    // The fields are built in the type's order (the declaration's order for a named type),
+    // not the order they are written in: a literal at a position of a struct type is a value
+    // of that type (design principles 5.2), so `{ y: 1, x: 2 }` at `Point` is a `Point` whose
+    // fields are `x, y`.
+    for (size_t i = 0; i < sType->size(); ++i) {
+        const std::string name(sType->fieldName(i));
+        const AST::node_ptr_t *written = nullptr;
+        for (const auto &child : fields) {
+            if (child->loadAs<AST::NamedDataLoad>()->ref().ident() == name) {
+                written = &child;
+                break;
+            }
+        }
+        ASSERT(written != nullptr, "A struct literal field was checked to exist by name.");
+        Type *fieldType      = sType->typeAt(i);
+        const auto &valueAst = (*written)->atAs<AST::DataLoad>(0);
+        bool nested          = false;
+        node_ptr_t fieldNode = visitDataInto(valueAst, fieldType, nested);
         if (asTagged(fieldType) != nullptr) {
             // A field of `T?` / `T!`: the value enters the form, as it does at any position
             // whose type is written (design principles 3.8).
@@ -3196,12 +3308,32 @@ node_ptr_t Builder::visitStructInto(const AST::node_ptr_t &ast, Type *structType
         } else if (!nested) {
             fieldNode = literalNodeInType(fieldNode, fieldType, valueAst);
         }
-        auto [data, _] = extractData(fieldNode, execNode, dangling);
+        auto [data, fieldDangling] = extractData(fieldNode, execNode);
+        if (fieldDangling) {
+            dangling = true;
+        }
+        if (!fieldDangling && (data == nullptr || data->type() == nullptr ||
+                               !fieldType->assignableFrom(data->type()))) {
+            // A field written as a variable keeps its own type (design principles 5.1): the
+            // literal is of an unnamed struct type whose field is of another type, and the
+            // conversion at the position it is written in reports it, as it would without
+            // building the literal in the position's type.
+            LEAVE("StructData");
+            return visitData(ast);
+        }
         factory.add(name, data);
     }
-    const data_ptr_t built = factory.build();
-    node_ptr_t res         = tree_->makeData(built);
-    entered                = structType->equals(built->type());
+    const data_ptr_t built = factory.buildAs(sType);
+    if (built == nullptr) {
+        // A field is not there or is another type: the conversion that finds the literal of
+        // another type reports it.
+        LEAVE("StructData");
+        return visitData(ast);
+    }
+    node_ptr_t res = tree_->makeData(built);
+    // The literal is a value of the type the position gives it: its fields are that type's
+    // fields, in that type's order.
+    entered = true;
     if (dangling) {
         *execNode << res;
         res = execNode;

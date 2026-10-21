@@ -19,7 +19,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | String | `string` | Sequence of bytes, immutable |
 | Array | `T[]` | Elements of the same type; length determined at run time |
 | Tuple | `(T1, T2, ...)` | By position, accessed with `.0`, `.1` |
-| Struct | `{ x: T1, y: T2 }` | By name, accessed with `.x` |
+| Struct | `{ x: T1, y: T2 }`, or the name a `type` declares | By name, accessed with `.x`; `type Name = { ... }` declares a named type, see 3.3.3 |
 | Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
 | May be null | `T?` | See 3.4 |
 | May fail | `T!` | See 3.4 |
@@ -43,7 +43,7 @@ type Pair<T> = (T, T)
 
 ## 3.2 Numbers
 
-- **No implicit conversions between numbers.** Two *variables* of different types do not mix (`i32` with `int`, `int` with `float`), and `let y: float = n` with `n` an `int` is `SemanticDiag::DeclaredTypeMismatch`: both are compile-time errors (`SemanticDiag::NoMatchingFunction` for the former). Convert explicitly where needed. What moves with the context is a **literal**, not a variable: `1 + 2.0` is `1.0 + 2.0`, and the `1` in `let x: f32 = 1` is an `f32` (see the end of this section and design principles 5.1).
+- **No implicit conversions between numbers.** Two *variables* of different types do not mix (`i32` with `int`, `int` with `float`), and `let y: float = n` with `n` an `int` is `SemanticDiag::DeclaredTypeMismatch`: both are compile-time errors (`SemanticDiag::NoMatchingFunction` for the former). Convert explicitly where needed. **Text is not a number either**: there is no implicit text-to-number conversion, so `let x: int = '42'` is `SemanticDiag::DeclaredTypeMismatch` (the message says a `string` cannot be used as an `int`) and `'42' as int` is `SemanticDiag::DynamicCastForbidden` (`as` does not convert numbers). Read a number out of text with `int(s)` or `parse_int(s)`, and a float with `float(s)` or `parse_float(s)`. What moves with the context is a **literal**, not a variable: `1 + 2.0` is `1.0 + 2.0`, and the `1` in `let x: f32 = 1` is an `f32` (see the end of this section and design principles 5.1).
 - Conversion functions: `int(x)`, `i64(x)`, `i32(x)`, `float(x)`, `f64(x)`, `f32(x)`, `c64(x)`, `c128(x)`, `string(x)`. `c64` and `c128` take a real type or the other complex type: a real becomes the real part with an imaginary part of 0, and a `c128` becomes a `c64` with both parts rounded to f32. A complex value does not become a real one by itself and there is no conversion function for it; use `re()` and `im()`.
 - Arithmetic on complex numbers: `+`, `-`, `*`, `/` and unary `-`, by complex arithmetic (`i * i` is `-1+0i`); `==` and `!=` compare both parts. There is no ordering and no `%`: complex numbers have no order. `^` is defined (an integer exponent is exact; see the end of 3.2). `abs(z)` is the magnitude (`f32` for a `c64`, `float` for a `c128`), `re(z)` and `im(z)` are the two parts, `conj(z)` is the conjugate, and `exp(z)` is the complex exponential; they come from the `math` module. A complex number cannot be a `Map` key or a `Set` element (no order). The printed form and the format specifications are in [2.5.3](02_lexical.md#253-imaginary-literals).
 - `i64` and `f64` are only other spellings of `int` and `float`. Diagnostics, graphs (`std::rgir`, `inspect`) and editors always show `int` and `float`: an instance of a generic function is `first<int>`, not `first<i64>`.
@@ -147,7 +147,19 @@ println(p, q.x)
 { x: 3, y: 4 } 4
 ```
 
-Struct types are compared by the names and types of their fields; `type` only gives a name. A literal must give all the fields the type requires.
+A struct type is written in one of two ways, and they are two different kinds of type (design principles 5.2):
+
+- **An anonymous struct type** writes its fields, as in `{ x: int, y: int }`. Its identity is exactly what is written: the field names, their types and their **written order** are all part of the type, so `{ x: int, y: int }` and `{ y: int, x: int }` are two different types (`==`, overloads and `Map` keys follow this identity).
+- **A named struct type** is declared by `type Point = { x: int, y: int }`. Its identity is **the declaration itself** (the module that declares it plus the name, plus the type arguments for a generic type). `Point` and another `type Spot = { x: int, y: int }` with exactly the same fields are two different types; printing, diagnostics and graphs show the name, `Point`. `type P = Other` is not such a declaration — it is only another name for `Other`.
+
+A literal must give all the fields the type requires. The fields of a declared type are in the order the declaration writes them: they are accessed by name, printed in declaration order, and that is the order of the value's layout. An anonymous struct type keeps its written order.
+
+A value of an anonymous struct type may be used directly where a named struct type is expected (the shapes match):
+
+- when the field names and types correspond one to one (the order may differ) it *enters* that type: it is copied field by field when a copy is needed, and the resulting value has the named type;
+- when the field sets do not correspond (a field is missing, extra, or has the wrong type) it is a compile-time error — `SemanticDiag::DeclaredTypeMismatch` at a declaration, `SemanticDiag::NoMatchingFunction` at a call.
+
+Nothing converts between two named types implicitly, even when their fields are identical: `let q: Spot = p` is a compile-time error, and `p as Spot` is required. `as` matches the fields by name; when the field sets do not correspond it is `SemanticDiag::DynamicCastForbidden`, and when they correspond but in another order the value is copied into the new order (no copy is made when the order is the same). A generic parameter does not become more permissive because of this: `Box<Point>` and `Box<{ x: int, y: int }>` are different types (design principles 5.8).
 
 ### 3.3.4 Strings
 

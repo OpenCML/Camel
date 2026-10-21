@@ -1,14 +1,15 @@
 /**
- * An export whose simplification does not end. `mk` is declared to return `{ w: Tensor }`, so
- * the weights are a constant of the exported function whose type says neither element type
- * nor shape. Where the recursion is called the constant itself is visible and the next state
- * gets a precise type; inside the recursion only the declared type is. Every level the
- * simplification unrolls is therefore more precisely typed than the loop it would become, and
- * one more level is unrolled each time, until the memory for graphs is full.
+ * A constant typed by a declared struct type that says neither element type nor shape, used
+ * inside a recursion. Since a struct type's identity is its declaration (design principles
+ * 5.2, H5), the literal `{ w: weights() }` is a value of `P`, and `m` is a `P` wherever it is
+ * seen, including where the recursion is called. The loop is therefore the same at every
+ * level, the simplification ends, and the export succeeds.
  *
- * That is refused at the recursive call (line 24) with what grew, instead of the unlocated
- * "Runtime draft encoding failed to allocate ... bytes". (Converting the weights where they
- * are used, `m.w as Tensor<f32, const [2, 2]>`, makes the program export.)
+ * Before H5 the value was an unnamed struct typed by its fields where the constant was
+ * visible: each unrolled level was more precisely typed than the loop, one more level was
+ * unrolled each time, and the export was refused (TranslationRefused at the recursive call,
+ * or the unlocated "Runtime draft encoding failed to allocate ... bytes"). The onnx plan keeps
+ * this program as the record of that change.
  */
 module unended_unrolling
 

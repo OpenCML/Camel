@@ -53,7 +53,7 @@ set_source_files_properties(kernels/unary_generic.cpp
 
 # x86-64: add AVX2+FMA and AVX-512F GEMM and unary units, selected at runtime after a CPU check.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
-  target_sources(tensor_cmo PRIVATE
+  target_sources(tensor_cmo_objects PRIVATE
     kernels/gemm_avx2.cpp kernels/gemm_avx512.cpp kernels/unary_avx2.cpp kernels/unary_avx512.cpp)
   set_source_files_properties(kernels/gemm_avx2.cpp
     PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
@@ -63,14 +63,14 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64|X86_64")
     PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx2;-mfma")
   set_source_files_properties(kernels/unary_avx512.cpp
     PROPERTIES COMPILE_OPTIONS "-mavx512f;-mavx2;-mfma;-ffp-contract=on")
-  target_compile_definitions(tensor_cmo PRIVATE CAMEL_TENSOR_HAS_AVX2_UNIT=1)
+  target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_HAS_AVX2_UNIT=1)
 endif()
 
 # Optional system BLAS for GEMM (cmake/options.json: CAMEL_TENSOR_BLAS).
 if(CAMEL_TENSOR_BLAS)
   find_package(BLAS REQUIRED)
   find_path(CAMEL_CBLAS_INCLUDE_DIR cblas.h PATH_SUFFIXES openblas REQUIRED)
-  target_include_directories(tensor_cmo PRIVATE ${CAMEL_CBLAS_INCLUDE_DIR})
+  target_include_directories(tensor_cmo_objects PRIVATE ${CAMEL_CBLAS_INCLUDE_DIR})
   target_link_libraries(tensor_cmo PRIVATE ${BLAS_LIBRARIES})
-  target_compile_definitions(tensor_cmo PRIVATE CAMEL_TENSOR_USE_CBLAS=1)
+  target_compile_definitions(tensor_cmo_objects PRIVATE CAMEL_TENSOR_USE_CBLAS=1)
 endif()

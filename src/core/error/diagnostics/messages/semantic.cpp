@@ -228,7 +228,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "DynamicCastForbidden",
                 "Dynamic cast from '{0}' to '{1}' is not allowed.",
-                "Use types that allow safe conversion, or ensure the conversion is valid.",
+                "Use types that allow safe conversion, or ensure the conversion is valid. Nothing "
+                "is converted implicitly: a text becomes a number with 'int(s)' or 'parse_int(s)' "
+                "('float(s)', 'parse_float(s)' for a float), a number of another type with "
+                "'float(n)', and a module type with 'v as T'.",
             },
         },
         {
@@ -793,9 +796,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "DeclaredTypeMismatch",
                 "This value has type '{0}', which is not the declared type '{1}'.",
                 "A declaration written with a type takes a value of that type; nothing is "
-                "converted on the way (a number does not become a float by itself). Convert "
-                "the value explicitly, e.g. 'float(n)' or 'v as T', or change the declared "
-                "type.",
+                "converted on the way (a number does not become a float by itself, and a text "
+                "does not become a number). Convert the value explicitly: 'float(n)' for a "
+                "number of another type, 'int(s)' or 'parse_int(s)' for a text (the same for "
+                "'i32', 'f32', 'f64' and the complex types), 'v as T' for a module type; or "
+                "change the declared type.",
             },
         },
         {

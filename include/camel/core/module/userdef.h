@@ -25,6 +25,8 @@
 
 #include "camel/parse/parse.h"
 
+#include <vector>
+
 namespace camel::runtime {
 class GCGraph;
 }
@@ -63,6 +65,12 @@ class UserDefinedModule : public Module {
     bool compiling_ = false;
     // compileAsLibrary(): the graph builder of its own the module was built by, kept with it.
     std::shared_ptr<void> libraryBuilder_;
+    // compileAsProgram(): the graph builder of each program of its own, one per entry function,
+    // kept with the module for as long as the graphs it made are used.
+    std::vector<std::shared_ptr<void>> programBuilders_;
+    // Set while compileAsProgram() builds: the graph of that program is not the graph the
+    // module was loaded as part of, so setProgramGraph must not replace it.
+    bool buildingProgramOfItsOwn_ = false;
 
   public:
     UserDefinedModule(
@@ -80,6 +88,13 @@ class UserDefinedModule : public Module {
     bool compile(CompileStage till = CompileStage::Done);
     /// Whether compile() is running for this module.
     bool compiling() const { return compiling_; }
+    /// How building a library as a program of its own ended (compileAsProgram).
+    enum class ProgramStatus {
+        Built,          ///< Its root graph is returned.
+        NoSuchFunction, ///< The module exports no function of that name.
+        NotAFunction,   ///< The name is not one non-generic function.
+        Failed          ///< The module does not compile; its diagnostics say why.
+    };
     /**
      * Compiles the module as a library of its own (docs/design/op-semantics, section 9): parsed,
      * declared and built by a graph builder that is not the program's, without an entry
@@ -90,6 +105,26 @@ class UserDefinedModule : public Module {
      * and built it). False when it is in error; its diagnostics say why.
      */
     bool compileAsLibrary();
+    /**
+     * Compiles the module as a program of its own whose entry is the exported function
+     * `entryFunction` (a pass written in Camel: src/execute/camel_pass.cpp), by a graph builder
+     * of its own. `Built` with `root` set to its root graph, `NoSuchFunction` or `NotAFunction`
+     * when the export table has no such function, `Failed` when the module does not compile (its
+     * diagnostics say why).
+     *
+     * The program is the module, not the function: its root graph holds the top-level values of
+     * the module and calls the function, so a module-level `let` — a literal, an expression, or
+     * the result of a function call — is computed before the call, as a program computes its
+     * top-level values before `main` (design principles 10.1). Encoding the function's graph
+     * alone, as a definition library does, leaves its capture ports unbound: nothing computes
+     * the values they stand for.
+     *
+     * The build is a program of its own and does not replace the graph the module was loaded as
+     * part of; its builder is kept with the module, like the one of compileAsLibrary.
+     */
+    ProgramStatus compileAsProgram(
+        const std::string &entryFunction, std::string &problem,
+        std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root);
     /// Called by the program's graph builder once the program is built: `root` is its root
     /// graph, and the module is done.
     void setProgramGraph(const std::shared_ptr<camel::compile::gir::DraftGraphBuilder> &root);

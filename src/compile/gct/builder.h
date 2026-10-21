@@ -210,13 +210,21 @@ class Builder {
         const std::string &symbol, const AST::node_ptr_t &funcData, const AST::node_ptr_t &decl);
     node_ptr_t visitTypeDecl(const AST::node_ptr_t &ast);
     /// The parameters of a type declaration, as type variables in the scope pushed around its
-    /// right-hand side. Reports a parameter that is repeated or that denotes a type already.
-    void bindTypeParameters(
+    /// right-hand side, in parameter order. Reports a parameter that is repeated or that
+    /// denotes a type already.
+    std::vector<camel::core::type::Type *> bindTypeParameters(
         const AST::TypeDeclLoad *decl, const AST::node_ptr_t &ast, const std::string &name);
     /// `type Name<params> = enum { ... }`: the declaration is created and its name is in scope
     /// before the variants are read, so that a field can hold the enum being declared.
     camel::core::type::Type *
     declareEnumType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
+    /// `type Name<params> = { field: T, ... }`: a named struct type (design principles 5.2).
+    /// Its identity is this declaration (and, for a generic one, the type arguments); its
+    /// fields are in the order written here, and every instance keeps that order. The name is
+    /// not in scope while the fields are read: a struct cannot hold itself by value (only
+    /// through an array, a map, a set or an enum, and those are not supported yet; H23).
+    camel::core::type::Type *
+    declareStructType(const AST::node_ptr_t &ast, const AST::TypeDeclLoad *decl);
     /// The variants of the declaration, with the field types of `instance` (the written ones
     /// for the declaration's own instance).
     std::vector<camel::core::type::EnumVariant>

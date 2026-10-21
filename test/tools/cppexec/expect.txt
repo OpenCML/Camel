@@ -114,6 +114,20 @@ test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=1e9999 --arg name
 test/cases/compile/entry_args/scalars.cml --arg n=3 --arg rate=1e-9999 --arg name=hi --arg loud=true
 test/cases/compile/entry_args/scalars.cml --arg n=99999999999999999999 --arg rate=0.5 --arg name=hi --arg loud=true
 
+# The width a parameter is declared with (H15g): an `i32` is read as an int32 and an `f32` as a
+# float, so the boundary values fit and a value the declared type cannot hold is refused with
+# that type's name and range, exactly as camel refuses it. The largest and smallest values of
+# each width, one refusal per width, text that is not an integer, and one c64 part.
+test/cases/compile/entry_args/widths.cml --arg n=2147483647 --arg rate=3.4028235e38
+test/cases/compile/entry_args/widths.cml --arg n=-2147483648 --arg rate=1.4e-45
+test/cases/compile/entry_args/widths.cml --arg n=3000000000 --arg rate=0.5
+test/cases/compile/entry_args/widths.cml --arg n=3 --arg rate=3.5e38
+test/cases/compile/entry_args/widths.cml --arg n=three --arg rate=0.5
+test/cases/compile/entry_args/widths.cml --arg n=1 --arg rate=1.00000005960464479
+test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=3.4028235e38+1i
+test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=3.5e38+1i
+test/cases/compile/entry_args/complex.cml --arg z=1+2i --arg w=1+3.5e38i
+
 # Loops (design principles 3.10), run through the private lowering to tail recursion.
 test/cases/loops/shapes.cml
 test/cases/loops/effects.cml

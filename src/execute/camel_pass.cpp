@@ -38,7 +38,8 @@ namespace camel::execute {
 namespace {
 
 /// Whether `graph` has the signature of a pass: one ordinary parameter of type Program, no
-/// with parameter, result `Program!`.
+/// with parameter, result `Program!`. `graph` is the root of the tool program, whose type is the
+/// signature of its entry (the pass function).
 bool hasPassSignature(const camel::runtime::GCGraph &graph) {
     const auto *type = graph.funcType();
     if (type == nullptr || type->normTypesCount() != 1 || type->withTypesCount() != 0 ||

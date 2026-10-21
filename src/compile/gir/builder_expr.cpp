@@ -170,8 +170,18 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             auto filledType = dataType->resolved()
                                   ? dataType
                                   : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes);
+            // The literal part of the array takes the element type the computed part gave the
+            // array: a constant element written as an unnamed struct in another order is copied
+            // into the named type it enters (design principles 5.2), so every slot is of the
+            // array's element type.
+            data_ptr_t literalData = data;
+            if (filledType->code() == TypeCode::Array && !filledType->equals(data->type())) {
+                if (data_ptr_t converted = data->convertTo(filledType)) {
+                    literalData = converted;
+                }
+            }
             auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holes);
-            node_handle_t srcNode = currGraph_->addStaticDataNode(data, filledType);
+            node_handle_t srcNode = currGraph_->addStaticDataNode(literalData, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
             // An array written in place with some elements computed: the constant elements
@@ -799,10 +809,28 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return valueNode;
         }
         if (!targetType->assignableFrom(have)) {
-            diags_->of(SemanticDiag::DeclaredTypeMismatch)
-                .atOrigin(gct->origin())
-                .commit(have->toString(), targetType->toString());
-            throw BuildAbortException();
+            // An unnamed struct value whose fields are the declared type's fields, by name
+            // but in another order, is copied into the declared type (design principles 5.2);
+            // a value of another named type never is (`as` is written where it is made).
+            bool converted = false;
+            if (targetType->code() == TypeCode::Struct && have->code() == TypeCode::Struct) {
+                auto *targetStruct = tt::as_ptr<StructType>(targetType);
+                auto *haveStruct   = tt::as_ptr<StructType>(have);
+                if (targetStruct != nullptr && haveStruct != nullptr && targetStruct->named() &&
+                    !haveStruct->named()) {
+                    if (node_handle_t copied = convertStructValue(valueNode, targetStruct, gct);
+                        copied != nullptr) {
+                        valueNode = copied;
+                        converted = true;
+                    }
+                }
+            }
+            if (!converted) {
+                diags_->of(SemanticDiag::DeclaredTypeMismatch)
+                    .atOrigin(gct->origin())
+                    .commit(have->toString(), targetType->toString());
+                throw BuildAbortException();
+            }
         }
     }
     if (asTagged(targetType) != nullptr &&
@@ -819,6 +847,17 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     const CastSafety safety = targetType->castSafetyFrom(sourceType);
     if (safety != CastSafety::Safe &&
         !(safety == CastSafety::Unsafe && targetType->isOtherType())) {
+        // An explicit `as` between struct types whose fields are the same by name but in
+        // another order (or between two named types) is a copy, field by field (design
+        // principles 5.2). A shape that does not match at all stays refused.
+        if (targetType->code() == TypeCode::Struct && sourceType->code() == TypeCode::Struct) {
+            if (node_handle_t copied =
+                    convertStructValue(valueNode, tt::as_ptr<StructType>(targetType), gct);
+                copied != nullptr) {
+                LEAVE("CAST");
+                return copied;
+            }
+        }
         diags_->of(SemanticDiag::DynamicCastForbidden)
             .atOrigin(gct->origin())
             .commit(sourceType->toString(), targetType->toString());
