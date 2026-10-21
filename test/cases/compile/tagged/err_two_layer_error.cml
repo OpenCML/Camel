@@ -1,0 +1,16 @@
+/**
+ * `int!?` is nullable(fallible(int)): the outer form is the null, so `case error e` is not a
+ * case of this `match` (H123; design principles 3.9).
+ */
+module err_two_layer_error
+
+func main(): int sync {
+    println('never printed')
+    let r: int!? = 5
+    let s = match r {
+        case error e => 0
+        case v => v !! 1
+    }
+    println(s)
+    return 0
+}
