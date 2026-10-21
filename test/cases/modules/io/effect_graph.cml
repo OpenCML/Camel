@@ -1,0 +1,11 @@
+/**
+ * One effectful call is enough for the graph to carry the effect fact: `std::jgir` marks the
+ * `io:get_chars` node with the `effect` role because the module declares the operator impure.
+ */
+module main
+
+import { get_chars } from io
+
+func main(): int sync {
+    return len(get_chars(1))
+}

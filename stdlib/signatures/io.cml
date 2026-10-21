@@ -1,0 +1,37 @@
+/**
+ * Signatures of the `io` module (C++ operators, modules/io).
+ *
+ * The terminal: what it has waiting to be read, the keys themselves, and raw mode. The standard
+ * streams and `print`/`println`/`input`/`eprintln` are the prelude's; `Stream` and a `stdin` value
+ * are later work (H19 question 5).
+ *
+ * For reference only: these declarations are not compiled. They are checked against the
+ * operators the module registers, and docs/stdlib-reference.md is generated from them
+ * (scripts/stdlib-reference.mjs).
+ */
+
+/// Switches the terminal to raw mode (keys arrive one by one, unechoed) or back.
+/// @effect changes the terminal
+/// @fails fault `RuntimeError` when the terminal refuses
+/// @example set_terminal_raw_mode(true)
+export func set_terminal_raw_mode(enabled: bool): void
+
+/// Whether a key press is waiting to be read.
+/// @effect reads the terminal
+/// @example has_input()    // true or false
+export func has_input(): bool
+
+/// One character of pending terminal input.
+/// @effect reads the terminal
+/// @example get_char()    // 'w'
+export func get_char(): string
+
+/// Up to max characters of pending terminal input.
+/// @effect reads the terminal
+/// @example get_chars(3)    // at most three characters
+export func get_chars(max: int): string
+
+/// Discards the terminal input that is waiting.
+/// @effect reads the terminal
+/// @example clear_input_buffer()
+export func clear_input_buffer(): void

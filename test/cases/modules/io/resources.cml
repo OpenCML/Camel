@@ -1,0 +1,11 @@
+/**
+ * A program that imports `io` so that `camel inspect --ops` lists the module's operators and the
+ * resources they declare.
+ */
+module main
+
+import io
+
+func main(): int {
+    return 0
+}

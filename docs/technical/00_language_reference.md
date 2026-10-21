@@ -131,7 +131,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 
 - **模块声明**：`module <名称>`，如 `module main`、`module fib`。模块名为标识符或点分名。
 - **导入**：`import (moduleName | (identDef | bracedIdents) from moduleName)`。  
-  - 例：`import { now } from time`、`import { set_terminal_raw_mode, has_input, get_char } from os`、`import { zen } from this`。
+  - 例：`import { now } from time`、`import { set_terminal_raw_mode, has_input, get_char } from io`、`import { zen } from this`。
 - **命名空间**：`namespace IdentRef { ... }`，命名空间内可声明函数、类型、导入、导出和嵌套命名空间。声明会以限定引用导出或访问，如 `Tensor::ones`、`Parameter::new`、`module::Tools::inc`。
 - **using namespace**：`using namespace identRef`，将已导入命名空间中的导出符号注入当前模块或当前命名空间。
 - **导出**：`export (dataDecl | typeDecl | bracedIdents)`，使符号可被其他模块导入。
