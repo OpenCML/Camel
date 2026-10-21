@@ -160,9 +160,18 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Look up the file for a module. Any suffix other than .cmo is treated as source code; .cmo is
      * treated as a dynamic library. An empty first value means not found. */
     std::pair<std::string, bool> getModulePathAndKind(const std::string &moduleName);
+    /** `getModulePathAndKind` for one search root: `base/<name>.cmo` or `base/<name>.*`, then the
+     * same inside `base/<name>/`. Used for the directory of the importing module, before the
+     * global search paths (H112). */
+    std::pair<std::string, bool>
+    findModuleUnder(const std::string &baseDir, const std::string &moduleName);
     std::string getModulePath(const std::string &moduleName);
     bool moduleFileExists(const std::string &moduleName);
     module_ptr_t tryLoadModule(const std::string &moduleName);
+    /// Load the module at a path that was resolved for it (a `.cmo` as a dynamic library, any
+    /// other file as source). Kept apart from the lookup so a caller can name the directory the
+    /// path was found in.
+    module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
     /** Collect lookup attempts for a missing module so error messages can report them. */
     std::vector<std::string> getModuleSearchDiagnostics(const std::string &moduleName) const;
     /** Return the base search paths that were actually consulted; for .cmo load failures we only
