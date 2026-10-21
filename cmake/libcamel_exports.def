@@ -85,7 +85,6 @@ EXPORTS
     ?bodyStateParam@LoopView@runtime@camel@@QEBAI_K@Z
     ?Bool@Type@type@core@camel@@SAPEAV1234@XZ
     ?boundEntryArguments@execute@camel@@YA?AV?$vector@UBoundEntryArgument@execute@camel@@V?$allocator@UBoundEntryArgument@execute@camel@@@std@@@std@@XZ
-    ?branchArmsOf@GCGraph@runtime@camel@@QEBA?AV?$span@$$CBUGCBranchArm@runtime@camel@@$0?0@std@@I@Z
     ?build@FunctionTypeFactory@type@core@camel@@QEAAPEAVFunctionType@234@XZ
     ?build@StructTypeFactory@type@core@camel@@QEAAPEAVStructType@234@XZ
     ?calleeGraphOf@GraphDraft@runtime@camel@@QEBAPEAVGCGraph@23@I@Z
@@ -246,7 +245,7 @@ EXPORTS
     ?importedModules@Context@context@core@camel@@QEBA?AV?$vector@V?$shared_ptr@VModule@module@core@camel@@@std@@V?$allocator@V?$shared_ptr@VModule@module@core@camel@@@std@@@2@@std@@XZ
     ?initialState@LoopDraftView@runtime@camel@@QEBAI_K@Z
     ?initialState@LoopView@runtime@camel@@QEBAI_K@Z
-    ?inlineCallInOrder@opt@passes@camel@@YA?AUDraftInlineResult@runtime@3@AEAVRuntimeGraphDraftSession@53@AEAVGraphDraft@53@I@Z
+    ?inlineCallInOrder@opt@passes@camel@@YA?AUDraftInlineResult@runtime@3@AEAVRuntimeGraphDraftSession@53@AEAVGraphDraft@53@I_N@Z
     ?instance@DerivativeRegistry@core@camel@@SAAEAV123@XZ
     ?instance@NodeRoleRegistry@runtime@camel@@SAAEAV123@XZ
     ?instance@OperatorTable@core@camel@@SAAEAV123@XZ
@@ -261,7 +260,6 @@ EXPORTS
     ?invalidUtf8Offset@rtdata@core@camel@@YA?AV?$optional@_K@std@@V?$basic_string_view@DU?$char_traits@D@std@@@5@@Z
     ?invokeFunction@execute@camel@@YA_KAEAVContext@context@core@2@PEAVFunction@@V?$span@$$CB_K$0?0@std@@2@Z
     ?isAggregate@core@camel@@YA_NPEBVType@type@12@@Z
-    ?isBranchArmAnchor@GraphDraft@runtime@camel@@QEBA_NI@Z
     ?isBytesType@type@core@camel@@YA_NPEBVType@123@@Z
     ?isErrorValue@rtdata@core@camel@@YA_N_K@Z
     ?isPure@OperatorTable@core@camel@@QEBA_NI@Z
@@ -385,7 +383,6 @@ EXPORTS
     ?resolveRuntimeTailValueRef@execute@camel@@YAIPEAVGCGraph@runtime@2@@Z
     ?resolveSpan@SourceContext@source@camel@@QEBA?AUCharRange@error@core@3@I@Z
     ?resource@ForeignResourceObject@rtdata@core@camel@@QEAAPEAXXZ
-    ?retargetBranchArmAnchors@GraphDraft@runtime@camel@@QEAAXIII@Z
     ?returnKind@GCGraph@runtime@camel@@QEBA?AW4GCReturnKind@23@XZ
     ?returnNodeRef@GCGraph@runtime@camel@@QEBAIXZ
     ?rootDraft@RuntimeGraphDraftSession@runtime@camel@@QEAAAEAVGraphDraft@23@XZ
@@ -498,3 +495,9 @@ EXPORTS
     ?updateRefs@Variant@rtdata@core@camel@@UEAAXAEBV?$function@$$A6APEAVObject@rtdata@core@camel@@PEAV1234@PEBVType@type@34@AEBURefTraceInfo@234@@Z@std@@PEBVType@type@34@@Z
 
     ; Imported by a target built after this list was derived; regenerate the list when this repeats.
+    ?armCountOf@GCGraph@runtime@camel@@QEBAII@Z
+    ?setNodeRegion@GraphDraft@runtime@camel@@QEAAXII@Z
+    ?nodeRegion@GraphDraft@runtime@camel@@QEBAII@Z
+    ?isArmCall@GraphDraft@runtime@camel@@QEBA_NI@Z
+    ?raiseBranchArms@runtime@camel@@YAPEBVProgram@12@AEBV?$shared_ptr@VContext@context@core@camel@@@std@@PEBV312@PEAVGCGraph@12@@Z
+    ?lowerBranchArms@opt@passes@camel@@YAPEBVProgram@runtime@3@AEBV?$shared_ptr@VContext@context@core@camel@@@std@@PEBV453@PEAVGCGraph@53@_N@Z
