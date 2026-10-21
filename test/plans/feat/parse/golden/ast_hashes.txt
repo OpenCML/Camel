@@ -828,11 +828,13 @@ cb91792c07cb9264 no test/cases/compile/semantic/try_not_in_language.cml
 e8928bd66be13ec1 ok test/cases/compile/semantic/type_contains_itself.cml
 c763c15acc84ef96 ok test/cases/compile/semantic/type_recursion_through_map.cml
 d7b768e95cb9dfd1 ok test/cases/compile/semantic/unresolved_reference.cml
+85d4097ec9730dc7 ok test/cases/compile/static_expansion/comprehension_field_order.cml
+db9711229a73e1f1 ok test/cases/compile/static_expansion/comprehension_value_type.cml
 e2351af2c964f64e ok test/cases/compile/static_expansion/comprehension_void_element.cml
-a98de8fd0f232f13 ok test/cases/compile/static_expansion/comprehensions.cml
+2287f2bdb3bf9fed ok test/cases/compile/static_expansion/comprehensions.cml
 8501ff837910619c ok test/cases/compile/static_expansion/comprehensions_graph.cml
 449ef22714447961 ok test/cases/compile/static_expansion/comprehensions_rebuild.cml
-cdce26077d5ae48e ok test/cases/compile/static_expansion/fields_and_access.cml
+31492f5f69ac00cf ok test/cases/compile/static_expansion/fields_and_access.cml
 ca9fa691761f00f6 ok test/cases/compile/static_expansion/match_type_exhaustive.cml
 6d011d3422c19172 ok test/cases/compile/static_expansion/match_type_shapes.cml
 79078d0336adfffe ok test/cases/compile/static_expansion/match_type_unreachable.cml
@@ -844,6 +846,7 @@ ebb3d62600aa9e9a ok test/cases/compile/static_expansion/static_access_not_consta
 d1a293bc446a2986 ok test/cases/compile/static_expansion/static_access_shadowed_key.cml
 43524b0e9d87233e ok test/cases/compile/static_expansion/static_access_unknown_field.cml
 38a822bb892446dd ok test/cases/compile/static_expansion/static_for_not_composite.cml
+328cf099bfd3ff27 ok test/cases/compile/static_expansion/type_position_empty_tuple.cml
 77fbc50ce9497a10 ok test/cases/compile/surface/angle_then_name_line.cml
 23b4227b58ad2534 ok test/cases/compile/surface/angle_then_semicolon.cml
 2cddb4818955c832 ok test/cases/compile/surface/angle_then_string_line.cml
@@ -1203,7 +1206,7 @@ ad80ceb4d3c7a1fb ok test/cases/format/mixed_arguments.cml
 9728ed05ff8c66fa ok test/cases/format/namespace_messy.cml
 5b09db9d5fb90816 ok test/cases/format/options.cml
 eb74f3b204df0390 no test/cases/format/pattern_empty.cml
-34864c94814e96bd ok test/cases/format/static_for_and_access.cml
+6220926588bd2f8b ok test/cases/format/static_for_and_access.cml
 351e78128c8cac8d ok test/cases/format/subscript.cml
 6e2b9f9a38158b5e no test/cases/format/syntax_error.cml
 e39a9bd8bac6e3d2 ok test/cases/format/tuple_singleton.cml
@@ -2125,7 +2128,7 @@ fd0085d4accf46b4 ok test/plans/feat/format/golden/mixed_arguments.cml
 a5db29965a226f05 ok test/plans/feat/format/golden/namespace.cml
 84451c2364b8eb0c ok test/plans/feat/format/golden/options.cml
 0207c9a93bb1c8b3 no test/plans/feat/format/golden/pattern_empty.cml
-da9c89554298b9b2 ok test/plans/feat/format/golden/static_for_and_access.cml
+baf0571f25864940 ok test/plans/feat/format/golden/static_for_and_access.cml
 028bf7fc5c63ff0b ok test/plans/feat/format/golden/subscript.cml
 69ecdfed21290bb7 ok test/plans/feat/format/golden/tuple_singleton.cml
 d0ff0c1893586f15 ok test/plans/feat/format/golden/type_params.cml
@@ -2366,3 +2369,7 @@ bedf77fd1a165217 ok probes/probe_s192.cml
 73a483227e8cc47a ok probes/probe_s196.cml
 a60f35812146ae77 ok probes/probe_s197.cml
 0247e5f9f94e9d6e ok probes/probe_s198.cml
+655a63169614a92e ok probes/probe_s199.cml
+a7404c49a6e9c61e ok probes/probe_s200.cml
+73a5a9c130730f36 ok probes/probe_s201.cml
+bf825f30134930f6 ok probes/probe_s202.cml
