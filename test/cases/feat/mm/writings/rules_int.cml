@@ -11,6 +11,9 @@ func add_comm__rhs(a: int, b: int): int { return b + a }
 func mul_comm__lhs(a: int, b: int): int { return a * b }
 func mul_comm__rhs(a: int, b: int): int { return b * a }
 
+func add_swap_both__lhs(a: int, b: int): int { return a + b }
+func add_swap_both__rhs(a: int, b: int): int { return b + a }
+
 func add_zero__lhs(x: int): int { return x + 0 }
 func add_zero__rhs(x: int): int { return x }
 

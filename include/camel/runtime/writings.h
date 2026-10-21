@@ -201,6 +201,8 @@ struct Rule {
     Pattern lhs;
     Pattern rhs;
     std::function<bool(const Match &)> when;
+    /// The rule comes from a `<=>`: it holds both ways, which only a saturation can use.
+    bool twoWay = false;
 };
 
 /// What a saturation may spend; the result does not depend on time. Rounds are passes over all
@@ -209,6 +211,13 @@ struct Budget {
     size_t rounds       = 8;
     size_t newWritings  = 1u << 20;
     size_t unions       = 1u << 22;
+};
+
+struct RewriteStats {
+    size_t rounds  = 0;
+    size_t applied = 0;
+    size_t erased  = 0;
+    bool fixpoint  = false; // a round applied nothing
 };
 
 struct SaturateStats {
@@ -280,6 +289,13 @@ class DraftWritings : private WritingObserver {
     /// budget is used up. The same rules, graph and budget give the same writings.
     // (a saturation matches the nodes whose permissions are the root's own)
     SaturateStats saturate(std::span<const Rule> rules, const Budget &budget = {});
+    /// Applies the rules one way, in place, on a draft with one writing per value (rewrite
+    /// design 3, `rewrite`): in a round, the nodes in order, at each the rules in the order of
+    /// the list, the first that matches (and whose condition holds) replaces the node's value by
+    /// its right side, the nodes nothing reads any more are erased. Rounds are repeated until a
+    /// round applies nothing or `maxRounds` is reached. A rule that holds both ways is refused
+    /// (std::invalid_argument).
+    RewriteStats rewrite(std::span<const Rule> rules, size_t maxRounds = 16);
     /// The constant node `value` of `type` in this region with these permissions: the one there
     /// is, or a new one.
     gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, uint8_t perms, uint32_t region);
@@ -325,6 +341,7 @@ class DraftWritings : private WritingObserver {
 
     GraphDraft &draft_;
     uint8_t matchPerms_ = 0;
+    bool greedy_        = false; // rewrite(): nodes are replaced, so nothing is looked up by key
     camel::core::sem::NumericPolicy policy_;
     WritingStore store_;
     std::unique_ptr<Index> index_;

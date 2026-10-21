@@ -210,6 +210,7 @@ Rule compileDirection(
     rule.lhs   = left.read();
     rule.rhs   = right.read();
     rule.when  = source.when;
+    rule.twoWay = source.bidirectional;
     for (uint32_t var : right.variables()) {
         if (!left.variables().contains(var)) {
             throw RuleCompileError(
