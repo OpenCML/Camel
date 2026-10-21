@@ -31,9 +31,12 @@
 const camel::runtime::Program *
 RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
+    // The largest graph that has arms, if any has, so that they are among the regions it keeps.
     GCGraph *largest = nullptr;
+    const auto hasArms = [](const GCGraph *graph) { return graph->regionCount() > 1; };
     for (GCGraph *graph : program->graphs()) {
-        if (largest == nullptr || graph->nodeCount() > largest->nodeCount()) {
+        if (largest == nullptr || (hasArms(graph) && !hasArms(largest)) ||
+            (hasArms(graph) == hasArms(largest) && graph->nodeCount() > largest->nodeCount())) {
             largest = graph;
         }
     }

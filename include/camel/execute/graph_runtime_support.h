@@ -118,7 +118,6 @@ class RunScope {
 };
 
 struct RuntimeBranchArmRegion {
-    camel::runtime::gc_node_ref_t headIndex = camel::runtime::kInvalidNodeRef;
     camel::runtime::gc_node_ref_t tailIndex = camel::runtime::kInvalidNodeRef;
     camel::runtime::gc_node_ref_t joinIndex = camel::runtime::kInvalidNodeRef;
     std::vector<camel::runtime::gc_node_ref_t> topoIndices;

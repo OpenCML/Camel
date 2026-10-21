@@ -70,12 +70,6 @@ gc_node_ref_t addInt(GraphDraft &draft, int64_t value) {
     return draft.materializeStaticValue(camel::core::rtdata::toSlot<int64_t>(value), Type::Int64());
 }
 
-void setResult(GraphDraft &draft, gc_node_ref_t result) {
-    draft.setOutputNode(result);
-    draft.setExitNode(result);
-    draft.setReturnNode(result, camel::runtime::GCReturnKind::Self);
-}
-
 /// The value of the LOOP node after the rewrite: (state…, array_0, array_1).
 Type *collectedValueType(const std::vector<Type *> &stateTypes, Type *elem) {
     std::vector<Type *> components = stateTypes;
@@ -111,8 +105,13 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         // every tape entry would show the final array: the tape needs the copying form, and the
         // body falls back to it. The program is legal either way, so this is a fallback and not
         // a refusal (design principles: an optimization never makes a legal program fail).
-        GraphDraft &body = session.edit(view.bodyGraph());
-        camel::runtime::fallBackToCopyingAppend(body);
+        GraphDraft &body      = session.edit(owner);
+        const gc_node_ref_t loopId = body.draftIdOfSourceRef(id);
+        ASSERT(loopId != kInvalidNodeRef, "A LOOP node is not in its graph's draft.");
+        const uint32_t bodyRegion = body.loopRegionOf(loopId, camel::runtime::GCRegionKind::LoopBody);
+        camel::runtime::fallBackToCopyingAppend(body, bodyRegion);
+        // What the body gets is written in its region.
+        body.setInsertRegion(bodyRegion);
         std::vector<Type *> stateTypes;
         for (size_t j = 0; j < k; ++j) {
             stateTypes.push_back(view.stateType(j));
@@ -158,13 +157,15 @@ size_t rewriteGraph(RuntimeGraphDraftSession &session, GCGraph *owner, bool summ
         body.setNormInputs(fill, std::span<const gc_node_ref_t>(&source, 1));
         body.setWithInputs(fill, values);
         body.setNodeOrigin(fill, origin);
-        body.setFuncType(body.funcType()->withExitType(bodyType));
-        setResult(body, fill);
+        body.setInsertRegion(0);
+        // The result of the body is the node's first With input.
+        std::vector<gc_node_ref_t> results(body.withInputsOf(loopId).begin(), body.withInputsOf(loopId).end());
+        results[0] = fill;
+        body.setWithInputs(loopId, results);
 
         // The node: its value is the state and the two tapes.
-        GraphDraft &ownerDraft      = session.edit(owner);
-        const gc_node_ref_t draftId = ownerDraft.draftIdOfSourceRef(id);
-        ASSERT(draftId != kInvalidNodeRef, "A LOOP node is not in its graph's draft.");
+        GraphDraft &ownerDraft      = body;
+        const gc_node_ref_t draftId = loopId;
         Type *const valueType = collectedValueType(stateTypes, elem);
         ownerDraft.setNodeDataType(draftId, valueType);
         ownerDraft.setNodeDataIndex(draftId, ownerDraft.allocateRuntimeSlot(valueType));

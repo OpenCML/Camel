@@ -44,6 +44,7 @@
 #include "camel/execute/limits.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/loop_outline.h"
 #include "camel/utils/log.h"
 
 #include <algorithm>
@@ -745,8 +746,26 @@ slot_t MacroEvaluator::executeFunction(
     }
 }
 
-slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t node) {
-    const camel::runtime::LoopView loop(*program_, *graph, node);
+const camel::runtime::Program *MacroEvaluator::programWithLoopGraphs(GCGraph *graph) {
+    if (loopProgram_ == nullptr) {
+        loopProgram_ = camel::runtime::outlineLoopRegions(context_, program_, program_->root());
+    }
+    if (loopProgram_->graph(graph->id()) != nullptr) {
+        return loopProgram_;
+    }
+    auto &own = loopPrograms_[graph->id()];
+    if (own == nullptr) {
+        own = camel::runtime::outlineLoopRegions(context_, program_, graph);
+    }
+    return own;
+}
+
+slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *regionGraph, gc_node_ref_t node) {
+    // The loop as two graphs, in a program that holds them; the graph that has the node is the
+    // same one with the same nodes and slots.
+    const camel::runtime::Program *loopProgram = programWithLoopGraphs(regionGraph);
+    GCGraph *graph                             = loopProgram->graph(regionGraph->id());
+    const camel::runtime::LoopView loop(*loopProgram, *graph, node);
     const size_t k           = loop.stateCount();
     const size_t collections = loop.collectionCount();
     const bool wraps         = k > 1 || collections != 0;
@@ -768,6 +787,7 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
     // for each, with the state in a tuple the evaluator roots.
     struct Host {
         MacroEvaluator &evaluator;
+        const camel::runtime::Program *loopProgram;
         Frame *frame;
         GCGraph *graph;
         camel::runtime::LoopView loop;
@@ -808,7 +828,7 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
         slot_t
         callRound(const camel::execute::LoopShape &shape, GCGraph *callee, const slot_t *element) {
             auto *funcObj = ::Function::create(
-                evaluator.program_,
+                loopProgram,
                 callee->id(),
                 ensureMacroClosureType(callee),
                 mm::autoSpace());
@@ -833,6 +853,7 @@ slot_t MacroEvaluator::executeLoop(Frame *frame, GCGraph *graph, gc_node_ref_t n
         ::Array *iterable() { return frame->get<::Array *>(dataIndexOf(graph, *iterableNode)); }
     } host{
         *this,
+        loopProgram,
         frame,
         graph,
         loop,

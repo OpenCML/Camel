@@ -77,3 +77,14 @@ expect_exit = 0
 expect_output_not_contains = ["inlined forward"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "regions.exec_plan"
+desc = "test::exec_plan prints the order the back ends run a graph in, with the region of each node and the entry and tail of each arm of its branches: the program has a BRCH with both arms."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate.cml"
+args = ["${case}", "test::exec_plan"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_output_contains = ["PLAN run ", " arm0=", " arm1="]
+timeout_ms = 20000

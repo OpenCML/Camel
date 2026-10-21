@@ -47,6 +47,7 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/loop_outline.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
@@ -3500,7 +3501,13 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     GCGraph *function, bool withValue) {
-    // The arms of the branches are graphs of their own for the differentiation.
+    // The loops and the arms of the branches are graphs of their own for the differentiation.
+    const camel::runtime::Program *outlined =
+        camel::runtime::outlineLoopRegions(context, program, function);
+    if (outlined != program) {
+        function = outlined->graph(function->id());
+        program  = outlined;
+    }
     const camel::runtime::Program *raised = camel::runtime::raiseBranchArms(context, program, function);
     if (raised != program) {
         function = raised->graph(function->id());
@@ -3508,14 +3515,19 @@ GradientGraph buildGradientGraph(
     }
     Engine engine(context, program, function);
     GCGraph *graph = engine.gradient(function, withValue);
-    // The gradient reads like any program: its arms are regions.
+    // The gradient reads like any program: its arms and its loops are regions.
     GCGraph *root = graph;
     const camel::runtime::Program *lowered =
         camel::passes::opt::lowerBranchArms(context, engine.group().program(), root, true);
     if (lowered != engine.group().program()) {
         graph = lowered->graph(graph->id());
     }
-    return {lowered, graph};
+    const camel::runtime::Program *regionized =
+        camel::passes::opt::regionizeLoops(context, lowered, graph, true);
+    if (regionized != lowered) {
+        graph = regionized->graph(graph->id());
+    }
+    return {regionized, graph};
 }
 
 } // namespace camel::autodiff

@@ -373,7 +373,9 @@ void visitDraftGraphs(
             if (isValid(loop.condGraph)) {
                 visitor(loop.condGraph, nullptr);
             }
-            visitor(loop.bodyGraph, nullptr);
+            if (isValid(loop.bodyGraph)) {
+                visitor(loop.bodyGraph, nullptr);
+            }
             continue;
         }
         if (!header || header->kind != GCNodeKind::Func) {

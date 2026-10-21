@@ -151,8 +151,7 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
 }
 
 node_handle_t Builder::createFuncDataNode(
-    const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization,
-    node_handle_t branch) {
+    const graph_ptr_t &graph, bool callableAsResult, bool allowParameterization) {
     ASSERT(
         !(callableAsResult && allowParameterization),
         "Cannot enable both callableAsResult and allowParameterization options.");
@@ -196,7 +195,7 @@ node_handle_t Builder::createFuncDataNode(
         }
         node_handle_t funcNode = currGraph_->addFuncNode(graph, 0);
         markMacroNode(funcNode);
-        addCaptureSite(funcNode, graph, branch);
+        addCaptureSite(funcNode, graph);
         bindGraphScopedFuncNodeDebug(sourceContext, graphOrigin, graph, funcNode);
         return funcNode;
     }

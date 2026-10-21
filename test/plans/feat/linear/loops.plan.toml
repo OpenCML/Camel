@@ -282,12 +282,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "loops.rgir"
-desc = "On the graph a loop is one LOOP node naming its form and its two graphs (`LOOP while cond=main.loop2.cond body=main.loop2.body`); `for` has no condition graph."
+desc = "On the graph a loop is one LOOP node naming its form (`LOOP while`); its condition and its body are regions of the graph that has the node."
 kind = "behavior"
 case = "../../../cases/parse/rulings/loop_forms.cml"
 args = ["${case}", "std::rgir"]
 expect_exit = 0
-expect_stdout_contains = ["LOOP for body=main.loop1.body", "LOOP while cond=main.loop2.cond body=main.loop2.body", "LOOP for body=main.loop3.body", "LOOP for-while cond=main.loop4.cond body=main.loop4.body", "label=\"main.loop2.cond\""]
+expect_stdout_contains = ["tooltip=\"LOOP for", "tooltip=\"LOOP while", "tooltip=\"LOOP for-while"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

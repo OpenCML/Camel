@@ -40,6 +40,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/loop_outline.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/assert.h"
 
@@ -566,6 +567,10 @@ const Program *lowerLoopsToTailRecursion(
     const camel::core::context::context_ptr_t &context, const Program *program, GCGraph *root) {
     if (program == nullptr || root == nullptr || !programHasLoops(*program, root)) {
         return program;
+    }
+    // The loops of a program are regions; the lowering reads a loop as its two graphs.
+    if (const Program *outlined = outlineLoopRegions(context, program, root); outlined != program) {
+        return lowerLoopsToTailRecursion(context, outlined, outlined->graph(root->id()));
     }
     RuntimeGraphDraftSession session(context, program, root);
     std::vector<LoopShape> loops;

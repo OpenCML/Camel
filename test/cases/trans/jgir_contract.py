@@ -33,7 +33,8 @@ for g in graphs.values():
         assert n["kind"] not in ("ARGS", "EXIT"), "visual boundaries are not real nodes"
         assert "outputType" in n
         if n["kind"] == "LOOP":
-            assert n["loop"]["body"] in graphs
+            # A loop is two regions of its graph; one in graph form names two graphs.
+            assert n["loop"]["bodyRegion"] != 0 or n["loop"]["body"] in graphs
             assert n["loop"]["condition"] is None or n["loop"]["condition"] in graphs
             assert n["outputType"] in ("int", "(int, int)")
         if n.get("callee") is not None:

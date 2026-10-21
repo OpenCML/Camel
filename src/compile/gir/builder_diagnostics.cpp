@@ -137,6 +137,9 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
     if (std::ranges::find(callees, callee.get()) == callees.end()) {
         callees.push_back(callee.get());
     }
+    if (ArmBuild *arm = activeArm()) {
+        arm->callees.push_back(callee.get());
+    }
     auto summary = captures_.find(callee.get());
     if (summary == captures_.end() || summary->second.variables.empty()) {
         return {};
@@ -155,7 +158,7 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
 
 void Builder::reportIgnoredCapturedWrites() {
     for (const PendingIgnoredWrite &pending : unit_->pendingIgnoredWrites) {
-        std::set<node_handle_t> written;
+        std::set<node_handle_t> written = pending.written;
         for (DraftGraphBuilder *graph : pending.graphs) {
             written.merge(capturedWritesOf(graph));
         }
@@ -241,8 +244,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Func: {
         const auto callee = calleeOf(node);
-        // An arm is entered by its branch, which is what gets reported.
-        if (callee == nullptr || armGraphs_.contains(callee.get())) {
+        if (callee == nullptr) {
             return false;
         }
         return declaresEffects(callee->funcType()) || effectfulGraphs_.contains(callee.get());
@@ -258,13 +260,35 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
                effectfulGraphs_.contains(target.body.get());
     }
     case runtime::GCNodeKind::Join: {
-        for (draft_node_ref_t arm : withInputsOf(node)) {
-            node_handle_t armNode = nodeDraftOf(node)->ref(arm);
-            if (nodeIsKind(armNode, runtime::GCNodeKind::Func)) {
-                const auto callee = calleeOf(armNode);
-                if (callee != nullptr && effectfulGraphs_.contains(callee.get())) {
-                    return true;
-                }
+        // The branch is an effect when what an arm gives depends on one inside the arm.
+        const runtime::GraphDraft &draft = graph->draft();
+        const draft_node_ref_t join      = nodeIdOf(node);
+        const auto *body = reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(join).data());
+        std::vector<uint32_t> arms;
+        for (size_t k = 0; k < draft.withInputsOf(join).size(); ++k) {
+            if (const uint32_t region = draft.armRegionOf(body->brch, k); region != 0) {
+                arms.push_back(region);
+            }
+        }
+        const auto inArms = [&](draft_node_ref_t id) {
+            const uint32_t region = draft.nodeRegion(id);
+            return region != 0 && std::ranges::any_of(arms, [&](uint32_t arm) {
+                       return draft.regionWithin(region, arm);
+                   });
+        };
+        std::unordered_set<draft_node_ref_t> seen;
+        std::vector<draft_node_ref_t> work(draft.withInputsOf(join).begin(), draft.withInputsOf(join).end());
+        while (!work.empty()) {
+            const draft_node_ref_t id = work.back();
+            work.pop_back();
+            if (!inArms(id) || !seen.insert(id).second) {
+                continue;
+            }
+            if (isEffectNode(graph, draft.ref(id))) {
+                return true;
+            }
+            for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+                work.insert(work.end(), inputs.begin(), inputs.end());
             }
         }
         return false;
@@ -476,18 +500,14 @@ void Builder::reportUnusedFallibleValues() {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
                 // dropped where the arm ends.
                 for (draft_node_ref_t armId : draft.withInputsOf(id)) {
-                    node_handle_t arm   = draft.ref(armId);
-                    const auto armGraph = nodeIsKind(arm, runtime::GCNodeKind::Func)
-                                              ? graph->funcTarget(arm)
-                                              : nullptr;
-                    if (armGraph == nullptr ||
-                        armGraph->draft().returnNode() == runtime::kInvalidNodeRef) {
-                        continue;
+                    node_handle_t value = draft.ref(armId);
+                    if (nodeIsKind(value, runtime::GCNodeKind::Gate) &&
+                        !normInputsOf(value).empty()) {
+                        value = draft.ref(normInputsOf(value).front());
                     }
-                    node_handle_t value = armGraph->draft().ref(armGraph->draft().returnNode());
-                    if (TupleType *type = fallibleTypeOf(armGraph, value);
+                    if (TupleType *type = fallibleTypeOf(graph, value);
                         type != nullptr && !discardedValues_.contains(value)) {
-                        warn(armGraph, value, type, "");
+                        warn(graph, value, type, "");
                     }
                 }
                 continue;
@@ -652,8 +672,8 @@ void Builder::markNonRetainingReads() {
     syncedReads_.clear();
 }
 
-void Builder::rejectDiscardedValue(const DraftGraphBuilder *graph) {
-    if (auto it = bodyValueStatement_.find(graph); it != bodyValueStatement_.end()) {
+void Builder::rejectDiscardedValue(const void *body) {
+    if (auto it = bodyValueStatement_.find(body); it != bodyValueStatement_.end()) {
         rejectUnusedPureResult(it->second.first, it->second.second);
     }
 }

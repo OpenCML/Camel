@@ -176,8 +176,9 @@
 4. 一个 `BRCH` 被多个 `JOIN` 读（`devirtualizeBranchedCallInDraft`，只在 `enableBranchedCallSplit` 下产生）
    是仅供导出的值 DAG，不可执行，不校验。
 
-**区域由谁维护。** 前端把臂建成一张子图，在 `BRCH` 之后用一个 `FUNC` 调用它（该区域里只有这个调用，区域的
-`callSite` 指向它）；物化程序时 `lowerBranchArms` 把这些调用内联进拥有分支的图，臂的节点进入臂的区域。改写遍
+**区域由谁维护。** 前端在写臂的地方直接建出臂：臂的每个节点落在这条臂的区域里（`GraphDraft::setInsertRegion`），
+臂里读外面的节点、等待 `BRCH` 的根节点由建图补上控制边；`JOIN` 的 with 输入就是臂的结果。自动微分把臂提成
+子图再放回时用 `raiseBranchArms` / `lowerBranchArms`（`callSite` 标出还是一次调用的臂）。改写遍
 维护区域：新加或改接输入的节点落在其输入中最内层的控制区域里（`GraphDraft::inheritRegion`，`JOIN` 除外）；
 `rewriteNode` 保留区域；擦除 `BRCH`/`LOOP` 时它拥有的区域并入外层（`dissolveRegionsOf`）；一个遍替换节点时，
 新节点要放进被替换节点所在的区域（`DraftNodeInit::region`、`setNodeRegion`）。
