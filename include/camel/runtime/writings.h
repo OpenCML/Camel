@@ -313,4 +313,20 @@ class DraftWritings : private WritingObserver {
     size_t congruentMerges_ = 0;
 };
 
+/// A fact about a value with several writings: the join of what each writing gives (an
+/// analysis of the rewrite design, 4.2: more writings only make the fact more exact or leave it
+/// as it is). `on` gives the fact of one writing from the facts of the values it reads.
+template <typename Fact, typename On, typename Join>
+Fact classFact(DraftWritings &writings, gc_node_ref_t node, On &&on, Join &&join) {
+    const auto members = writings.writingsOf(node);
+    if (members.empty()) {
+        return on(node);
+    }
+    Fact fact = on(members.front());
+    for (size_t i = 1; i < members.size(); ++i) {
+        fact = join(fact, on(members[i]));
+    }
+    return fact;
+}
+
 } // namespace camel::runtime

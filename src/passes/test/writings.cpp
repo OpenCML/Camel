@@ -408,6 +408,40 @@ const Program *extraction(
     return extracted;
 }
 
+/// The fact of a value with several writings is the join of the facts of the writings: here
+/// the largest node number, over `a + 1` written as `1 + a`.
+void facts(Report &r, const camel::core::context::context_ptr_t &ctx, const Program &program) {
+    const GCGraph *graph = graphNamed(program, "f");
+    if (graph == nullptr) {
+        return;
+    }
+    RuntimeGraphDraftSession session(ctx, &program);
+    GraphDraft &draft = session.edit(const_cast<GCGraph *>(graph));
+    DraftWritings writings(draft);
+    writings.build();
+    const gc_node_ref_t add = firstOperWith(draft, "add");
+    const auto inputs       = std::vector<gc_node_ref_t>(
+        draft.normInputsOf(add).begin(), draft.normInputsOf(add).end());
+    const auto payload =
+        std::vector<std::byte>(draft.payloadOf(add).begin(), draft.payloadOf(add).end());
+    DraftNodeInit init;
+    init.kind        = GCNodeKind::Oper;
+    init.dataType    = draft.header(add)->dataType;
+    init.permissions = draft.nodePermissions(add);
+    init.region      = draft.nodeRegion(add);
+    init.payload     = payload;
+    const gc_node_ref_t commuted = writings.lookupOrAdd(init, std::array{inputs[1], inputs[0]});
+    writings.assertEqual(add, commuted);
+    // The fact of a writing: its node number (a stand-in for a real analysis); the join keeps
+    // the larger.
+    const auto on   = [](gc_node_ref_t node) { return static_cast<int>(node); };
+    const auto join = [](int a, int b) { return std::max(a, b); };
+    const int joined = classFact<int>(writings, add, on, join);
+    const gc_node_ref_t port = portsOf(draft)[0];
+    r.check("class_fact_is_the_join", joined == static_cast<int>(commuted) && joined > static_cast<int>(add));
+    r.check("single_writing_fact_is_its_own", classFact<int>(writings, port, on, join) == static_cast<int>(port));
+}
+
 /// Two chains of 300 steps: merging their parameters merges every step.
 void chains(Report &r, const Program &program) {
     const GCGraph *graph = graphNamed(program, "chains");
@@ -435,6 +469,7 @@ WritingsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     congruence(report, *program);
     roundtrip(report, context_, *program);
     const Program *result = extraction(report, context_, *program);
+    facts(report, context_, *program);
     chains(report, *program);
     apart(report, *program);
     return result;

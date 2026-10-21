@@ -172,3 +172,16 @@ expect_exit = 0
 expect_stdout_contains = ["SATURATE-INFO strict rounds=1", "saturated=0", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "writings.facts"
+desc = "The fact of a value with several writings is the join of the facts of its writings (the analysis of the rewrite design 4.2); a value with one writing has the fact of that writing."
+kind = "behavior"
+case = "../../../cases/feat/mm/writings/congruence.cml"
+args = ["${case}", "test::writings", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
+expect_exit = 0
+expect_stdout_contains = ["WRITINGS class_fact_is_the_join ok", "WRITINGS single_writing_fact_is_its_own ok"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
