@@ -95,11 +95,14 @@ using JitEntryFn = slot_t (*)(slot_t *slots, void *ctx);
 // One construct of a graph's bytecode that keeps the graph from being compiled, or from being
 // compiled as frameless code. `kind` is a stable short name for counting (OPER, CAST, COPY, FILL,
 // CALL, ACCS, FUNC-other-graph, TAIL-other-graph, BRCH-match, JOIN-match, SCHD, frame-too-large,
-// no-static-area, ...); `text` is the sentence the compile log gives.
+// no-static-area, ...); `text` is the sentence the compile log gives. `detail` says what the
+// statistics add to the kind: for a LOOP it is "native" when the rounds of it are lowered to
+// native code, or "helper: <why>" when they go through the loop helpers (trampoline.h).
 struct JitBlocker {
     size_t pc = 0;
     std::string kind;
     std::string text;
+    std::string detail;
 };
 
 class IJitBackend {

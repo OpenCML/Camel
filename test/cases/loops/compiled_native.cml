@@ -1,0 +1,49 @@
+// The rounds of a loop that a back end lowers to native code (H55): the state components live in
+// the body's own slots, the test is a compare and a branch, the back edge a jump, and the round
+// count is not kept, because nothing of such a round reads it (loop_frame.h). Every function here
+// is one of those shapes and the values are the interpreters'. The shapes that cannot be lowered
+// keep the loop helpers and are compiled.cml's: a `for` over a sequence, a collecting loop, a
+// `sync` body, a nested loop, a body with an operator.
+
+// Three state components: the condition reads one of them, the body writes all three.
+func three(n: int): (int, int, int) {
+    return loop i = 0, a = 0, b = 1 while i < n do (i + 1, a + i, b * 2)
+}
+
+// No round at all: the test stops the loop before the first one, and its value is the first state,
+// brought up to date from the components on the way out.
+func no_round(n: int): (int, int) {
+    return loop i = n, acc = 0 while i < 0 do (i + 1, acc + 1)
+}
+
+// The condition reads one component and the body writes both.
+func split(n: int): (int, int) {
+    return loop i = 0, total = 0 while i < n do (i + 1, total + i * 2)
+}
+
+// The division of the body is native code in the round (`markDivision`): the fault path of the
+// round is the JIT's own and the driver reports it at the instruction's origin.
+func fault(n: int): (int, int) {
+    return loop i = 0, acc = 0 while i < n do (i + 1, acc + 100 / (i - 2))
+}
+
+// The same loop called twice: each call runs its rounds in its own frame.
+func twice(n: int): int {
+    let (i, a, b) = three(n)
+    let (j, c, d) = three(n + 1)
+    return i + a + b + j + c + d
+}
+
+func main(): int sync {
+    let (i, a, b) = three(4)
+    println(i, a, b)
+    let (x, y) = no_round(5)
+    println(x, y)
+    let (p, q) = split(4)
+    println(p, q)
+    println(twice(3))
+    // The third round divides by zero (i = 2).
+    let (u, v) = fault(3)
+    println(u, v)
+    return 0
+}
