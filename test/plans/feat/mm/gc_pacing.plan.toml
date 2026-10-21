@@ -20,7 +20,12 @@ the CAMEL_GC_LARGE_BUDGET_MB floor (default 4 MB) and CAMEL_GC_GROWTH_PERCENT pe
 of the block bytes the last sweep left in promoted values. The rolled-window case keeps `rows`
 arrays alive, so rows must survive the four minor collections that promote them and their blocks
 become the garbage that drives the major collections; without that path the high-water mark would
-grow with the number of steps. The training case is the shape of H40 section 8 (integer labels
+grow with the number of steps. One block is one block of pressure: a block reached through two
+views is counted once (the views case asserts that a 3 MB block shared by an array and its
+`reshape` view, both promoted, does not ask for a major against the 4 MB floor), and an array that
+was promoted while still inline registers the block at the takeover when it grows (the adopted
+case asserts that growing that block past the floor asks for a major; without the registration no
+promotion ever sees the block). The training case is the shape of H40 section 8 (integer labels
 cast inside the differentiated function, softmax cross entropy, grad, sgd): the batch and the
 model stay alive and the peak stays at the live set plus one window, at twice the steps too.
 
@@ -211,7 +216,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "gc_pacing.churn_mark_sweep"
-desc = "Mark-sweep collector: no young generation and no window of 3.6 MB, so the blocks are held until the elder budget asks for a major collection; the peak is 36 MB for the same 180 MB of garbage, and every collection is asked for by the elder-space budget (CAMEL_GC=mark-sweep). Pipeline: std::fvm."
+desc = "Mark-sweep collector: no young generation, so every array is born in the elder space and its block is registered at the takeover; the promoted-block floor (4 MB) asks for the major collections instead of the elder-space budget, and the peak is 7.2 MB (the 2.4 MB temporary block plus the floor) for the same 180 MB of garbage (CAMEL_GC=mark-sweep). Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/feat/mm/gc/gc_block_churn.cml"
 args = ["${case}", "--arg", "steps=600", "--arg", "temp=300000", "${run_fvm}"]
@@ -225,7 +230,7 @@ const m = /gc_block_churn base=([0-9]+) peak=([0-9]+) low=([0-9]+) dropped=([0-9
 assert(m !== null, `no result line: ${input.normalized.stdout}`)
 const [base, peak, low, dropped, released, total] = m.slice(1).map(Number)
 assert(base === 0 && total === 180000000, `base ${base}, total ${total}, expected 0 and 180000000`)
-assert(peak >= 12000000 && peak <= 40000000, `peak ${peak}, expected the elder budget to hold tens of MB (12 to 40 MB)`)
+assert(peak >= 6000000 && peak <= 8000000, `peak ${peak}, expected one temporary block plus the 4 MB floor (6 to 8 MB)`)
 assert(released >= 580, `${released} blocks released, expected almost all of them`)
 const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
 assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
@@ -237,7 +242,8 @@ const field = (name) => {
 const major = field('major')
 assert(field('minor') === 0, `this collector has no minor collections: ${line[0]}`)
 assert(major > 0, `no major collection under mark-sweep: ${line[0]}`)
-assert(major === field('by_elder_exhausted'), `every collection is asked for by the elder budget: ${line[0]}`)
+assert(major === field('by_elder_block_budget'), `every collection is asked for by the promoted-block budget: ${line[0]}`)
+assert(field('by_elder_exhausted') === 0, `the elder-space budget asked for a collection: ${line[0]}`)
 }
 """
 timeout_ms = 120000
@@ -367,6 +373,67 @@ assert(field('major') >= 10, `${field('major')} major collections, expected at l
 assert(field('major') === field('by_elder_block_budget'), `every collection is asked for by the promoted-block budget: ${line[0]}`)
 const budget = field('elder_block_budget_mb')
 assert(budget >= 15.9, `promoted-block budget ${budget} MB, expected the 16 MB floor in force`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.views_once"
+desc = "One 3 MB block reached through an array and its reshape view, both promoted: the block is counted once, so the promoted-block volume stays below the 4 MB floor and no major collection is asked for. Counting it per view would make 6 MB and ask for one. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_block_views.cml"
+args = ["${case}", "--arg", "steps=40", "--arg", "temp=100000", "${run_fvm}"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25"]
+expect_exit = 0
+expect_stdout_contains = ["gc_block_views peak="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_block_views peak=([0-9]+) total=([0-9]+) keep=([0-9]+) ([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [peak, total, keepA, keepB] = m.slice(1).map(Number)
+assert(total === 4000000, `total ${total}, expected 4000000 (40 x 100000)`)
+assert(keepA === 750000 && keepB === 750000, `kept ${keepA} and ${keepB}, expected both views of the same 750000-element array`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+assert(field('major') === 0, `a major collection was asked for although the 3 MB block is below the 4 MB floor: ${line[0]}`)
+assert(field('by_elder_block_budget') === 0, `the promoted-block budget asked for a collection: ${line[0]}`)
+}
+"""
+timeout_ms = 120000
+
+[[tests]]
+name = "gc_pacing.adopted_block"
+desc = "An array promoted while inline (CAMEL_GC_PROMOTION_AGE=1, small allocations fill the birth space first) then grows its own block to 8 MB: the takeover registers the block, the sweep counts 4.7 MB of elder block bytes, and one major collection is asked for. Without the takeover registration the block is never counted and the collection count is zero. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/feat/mm/gc/gc_block_adopted.cml"
+args = ["${case}", "--arg", "pause=20", "--arg", "rounds=3000", "--arg", "grow=450000", "${run_fvm}"]
+envs = ["CAMEL_GC_STATS=1", "CAMEL_GC_GROWTH_PERCENT=25", "CAMEL_GC_PROMOTION_AGE=1"]
+expect_exit = 0
+expect_stdout_contains = ["gc_block_adopted len=450000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const m = /gc_block_adopted len=([0-9]+) total=([0-9]+) bytes=([0-9]+)/.exec(input.normalized.stdout)
+assert(m !== null, `no result line: ${input.normalized.stdout}`)
+const [len, total, bytes] = m.slice(1).map(Number)
+assert(len === 450000, `length ${len}, expected 450000`)
+assert(total === 120000, `total ${total}, expected 120000 (20 x 3000 x 2 elements over 3000 rounds)`)
+assert(bytes >= 4194304, `the array's block is only ${bytes} bytes, expected it to grow past the 4 MB floor`)
+const line = /.camel. gc: major=.*/.exec(input.normalized.stderr)
+assert(line !== null, `no statistics line: ${input.normalized.stderr}`)
+const field = (name) => {
+  const f = new RegExp(name + '=([0-9.]+)').exec(line[0])
+  assert(f !== null, `no ${name} in: ${line[0]}`)
+  return Number(f[1])
+}
+assert(field('major') >= 1, `no major collection was asked for by the adopted block: ${line[0]}`)
+assert(field('elder_block_live_mb') >= 4.0, `the sweep did not count the adopted block in the elder live base: ${line[0]}`)
 }
 """
 timeout_ms = 120000

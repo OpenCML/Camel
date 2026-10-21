@@ -1,0 +1,29 @@
+/**
+ * An array that takes a block over after it was promoted must register the block then. The loop
+ * state starts as an empty inline array; the first `pause` rounds allocate small arrays that fill
+ * the birth space, so a minor collection promotes the state while it still has no block
+ * (CAMEL_GC_PROMOTION_AGE=1). The append then moves the promoted array's inline data into a
+ * block and grows it past the 4 MB floor. Without the takeover registration those bytes are never
+ * counted (the promotion that could have counted them already happened) and no major collection
+ * is asked for. The plan asserts the collection count, not a timing.
+ */
+module gc_block_adopted
+
+func churn(rounds: int, seed: int): int {
+    let (i, total) = loop i = 0, total = 0 while i < rounds do {
+        let junk = [i, seed] as int[]
+        (i + 1, total + len(junk))
+    }
+    return total
+}
+
+func main(pause: int, rounds: int, grow: int): int sync {
+    let start = std::mem::blocks()
+    let (jLeft, acc, total) = loop j = 0, acc = [] as int[], total = 0 while j < grow do {
+        let c = if j < pause then churn(rounds, j) else 0
+        (j + 1, acc->append<j>, total + c)
+    }
+    let now = std::mem::blocks()
+    println('gc_block_adopted len={} total={} bytes={}'->format<len(acc), total, now.bytes - start.bytes>)
+    return 0
+}
