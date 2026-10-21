@@ -161,6 +161,7 @@ class Builder {
     Value visitMatchTypeExpr(syntax::cst::MatchTypeExpr context);
     Value visitTypeCase(syntax::cst::TypeCase context);
     Value visitStaticForExpr(syntax::cst::StaticForExpr context);
+    Value visitStaticLoopExpr(syntax::cst::StaticLoopExpr context);
     TypeCaseKind typeCaseKindOf(syntax::cst::TypeCasePattern pattern);
     /// IfExpr, MatchExpr, MatchTypeExpr, TryExpr.
     Value visitCtrlExpr(syntax::Node context);

@@ -134,6 +134,21 @@ void Builder::walkStaticBodyNames(
         locals.pop_back();
         return;
     }
+    case GCT::NodeKind::SLOOP: {
+        // The first values are outside the names of the head; `n` and the state names are
+        // bound in the body only (as for a run-time loop).
+        for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
+            walkStaticBodyNames(node->staticLoopInitial(j), locals);
+        }
+        locals.emplace_back();
+        locals.back().insert(node->staticLoopValueName());
+        for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
+            locals.back().insert(node->staticLoopStateName(j));
+        }
+        walkStaticBodyNames(node->staticLoopBody(), locals);
+        locals.pop_back();
+        return;
+    }
     default:
         for (size_t i = 0; i < node->size(); ++i) {
             walkStaticBodyNames(node->at(i), locals);
@@ -345,6 +360,172 @@ node_handle_t Builder::visitStaticForNode(
     }
     LEAVE("SFOR");
     return lastEffect;
+}
+
+node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
+    ENTER("SLOOP");
+    // `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the fold the fields
+    // of `T` unroll into. The body is built once per field in the current graph; its value is
+    // the next state. No LOOP node, no region, and nothing of the state or the generator left
+    // in the graph: the first values are ordinary values and each round reads the previous
+    // round's node directly (a DREF to a state name resolves to that node).
+    Type *subject = boundType(gct->staticLoopType()->dataType());
+    if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
+        diags_->of(SemanticDiag::StaticTypeNotConcrete)
+            .atOrigin(gct->origin())
+            .commit(subject == nullptr ? std::string("unknown") : subject->toString());
+        throw BuildAbortException();
+    }
+    if (!tree::isInternal(subject)) {
+        diags_->of(SemanticDiag::StaticForNotComposite)
+            .atOrigin(gct->origin())
+            .commit(subject->toString());
+        throw BuildAbortException();
+    }
+
+    const size_t k              = gct->staticLoopStateCount();
+    const std::string valueName = gct->staticLoopValueName();
+    const std::string typeName  = gct->staticLoopTypeName();
+    const GCT::node_ptr_t body  = gct->staticLoopBody();
+
+    // The names of the head are declared once, together (as for a run-time loop). The field
+    // name `n` is one of them for this purpose: `static loop n = ..., ... for (n, F)` would
+    // read the state where it meant the field.
+    {
+        std::unordered_set<std::string> names;
+        names.insert(valueName);
+        for (size_t j = 0; j < k; ++j) {
+            if (!names.insert(gct->staticLoopStateName(j)).second) {
+                diags_->of(SemanticDiag::LoopNameRepeated)
+                    .atOrigin(gct->origin())
+                    .commit(gct->staticLoopStateName(j));
+                throw BuildAbortException();
+            }
+        }
+    }
+
+    // The first values are evaluated once, where the loop is, before the state names exist.
+    std::vector<node_handle_t> current;
+    std::vector<Type *> stateTypes;
+    current.reserve(k);
+    stateTypes.reserve(k);
+    for (size_t j = 0; j < k; ++j) {
+        const auto &initial = gct->staticLoopInitial(j);
+        node_handle_t node  = valueOf(functionValueOf(valueNodeOf(visit(initial)), initial));
+        Type *type          = valueTypeOf(nodeTypeOf(node));
+        if (type == nullptr || type->code() == TypeCode::Void) {
+            diags_->of(SemanticDiag::LoopStateWithoutType)
+                .atOrigin(initial->origin())
+                .commit(gct->staticLoopStateName(j), type ? type->toString() : std::string("void"));
+            throw BuildAbortException();
+        }
+        current.push_back(node);
+        stateTypes.push_back(type);
+    }
+    Type *stateType = k == 1 ? stateTypes.front() : TupleType::create(stateTypes);
+
+    const size_t count = tree::arity(subject);
+    for (size_t i = 0; i < count; ++i) {
+        typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
+        staticValueScopes_.emplace_back();
+        staticValueScopes_.back().push_back({valueName, tree::childName(subject, i)});
+        enterBlockScope();
+        for (size_t j = 0; j < k; ++j) {
+            // The state names read the previous round's value; each round has its own block
+            // scope, so the same name is bound afresh (not a redeclaration).
+            (void)insertNode(gct->staticLoopStateName(j), current[j]);
+        }
+        const GCT::Node *outerUnused = std::exchange(unusedStatement_, nullptr);
+        const GCT::Node *outerSyncedBlock =
+            std::exchange(syncedBlockOverride_, synced_ ? body : nullptr);
+        node_handle_t value{};
+        {
+            StaticExpansionScope expansion(staticExpansionDepth_);
+            try {
+                value = visitExecNode(body);
+            } catch (...) {
+                syncedBlockOverride_ = outerSyncedBlock;
+                unusedStatement_     = outerUnused;
+                leaveBlockScope();
+                staticValueScopes_.pop_back();
+                typeBindings_.erase(typeBindings_.begin());
+                throw;
+            }
+        }
+        syncedBlockOverride_ = outerSyncedBlock;
+        unusedStatement_     = outerUnused;
+
+        if (k == 1) {
+            if (value != nullptr) {
+                Type *bodyType = valueTypeOf(nodeTypeOf(value));
+                if (stateTypes.front()->assignableFrom(bodyType)) {
+                    current.front() = value;
+                } else if (bodyType != nullptr && entersImplicitly(stateTypes.front(), bodyType)) {
+                    node_handle_t coerced = coerceTo(value, stateTypes.front(), body);
+                    current.front()          = coerced != nullptr ? coerced : value;
+                } else {
+                    diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+                        .atOrigin(body->origin())
+                        .commit(
+                            bodyType ? bodyType->toString() : std::string("void"),
+                            stateType->toString());
+                    leaveBlockScope();
+                    staticValueScopes_.pop_back();
+                    typeBindings_.erase(typeBindings_.begin());
+                    throw BuildAbortException();
+                }
+            }
+            // A body that ends with `return` (or `throw`) leaves the function; the rounds after
+            // it are unreachable and keep the state as it was.
+        } else if (value != nullptr) {
+            Type *bodyType = valueTypeOf(nodeTypeOf(value));
+            TupleType *tuple = bodyType != nullptr && tree::isInternal(bodyType) &&
+                                       bodyType->code() == TypeCode::Tuple
+                                   ? tt::as_ptr<TupleType>(bodyType)
+                                   : nullptr;
+            bool fits = tuple != nullptr && tuple->size() == k;
+            for (size_t j = 0; fits && j < k; ++j) {
+                Type *componentType = tuple->typeAt(j);
+                fits = stateTypes[j]->assignableFrom(componentType) ||
+                       entersImplicitly(stateTypes[j], componentType);
+            }
+            if (!fits) {
+                diags_->of(SemanticDiag::LoopBodyTypeMismatch)
+                    .atOrigin(body->origin())
+                    .commit(
+                        bodyType ? bodyType->toString() : std::string("void"),
+                        stateType->toString());
+                leaveBlockScope();
+                staticValueScopes_.pop_back();
+                typeBindings_.erase(typeBindings_.begin());
+                throw BuildAbortException();
+            }
+            // One state per component of the body's tuple, in the order written. A state
+            // that takes a value implicitly (an `int` into an `int?`) keeps the state's
+            // type, so the next round reads the state's type and the same rule applies.
+            for (size_t j = 0; j < k; ++j) {
+                Type *componentType = tuple->typeAt(j);
+                node_handle_t component =
+                    currGraph_->addAccsNode(componentType, static_cast<uint32_t>(j));
+                linkNodes(LinkType::Norm, valueOf(value), component);
+                registerNodeOrigin(context_, component, body, "gir.static.loop.state");
+                node_handle_t stateValue = stateTypes[j]->assignableFrom(componentType)
+                                               ? component
+                                               : coerceTo(component, stateTypes[j], body);
+                current[j] = stateValue != nullptr ? stateValue : component;
+            }
+        }
+        leaveBlockScope();
+        staticValueScopes_.pop_back();
+        typeBindings_.erase(typeBindings_.begin());
+    }
+    LEAVE("SLOOP");
+    if (k == 1) {
+        return current.front();
+    }
+    // Several states are a tuple, as a run-time loop's several states are (design principles
+    // 3.10). The pack is the one a comprehension makes; the loop itself has no node.
+    return packStaticValues(false, nullptr, current, gct, "gir.static.loop.states");
 }
 
 node_handle_t Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {

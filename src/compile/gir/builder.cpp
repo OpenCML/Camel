@@ -444,6 +444,8 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
         return visitStaticForNode(node);
     case GCT::NodeKind::SCOMP:
         return visitStaticComprehensionNode(node);
+    case GCT::NodeKind::SLOOP:
+        return visitStaticLoopNode(node);
     case GCT::NodeKind::SACC:
         return visitStaticAccessNode(node);
     default:

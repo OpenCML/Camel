@@ -273,3 +273,102 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::GenericInstantiationCycle"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "static_loop"
+desc = "`static loop ... for (n, F) in fields T do body` walks the fields at instantiation and advances the state once per field: one state, several states as a tuple, the trip count coming from a type parameter of an enclosing generic, an empty struct, an ordinary tuple, `F` used as a type, and a loop nested in a `static for`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = [
+  "6",
+  "9",
+  "16 9",
+  "7",
+  "6",
+  "11",
+].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `static loop changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_graph_matches_unrolled"
+desc = "The graph of a `static loop` over three fields is the graph of the hand-written fold `((0 + t.a) + t.b) + t.c`: the same nodes and the same links, and no SLOOP, LOOP, SFOR, SACC, BRCH or CASE node."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_loop_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const attribute = (text, key) => {
+  const at = text.indexOf(key + '="')
+  if (at < 0) return null
+  const from = at + key.length + 2
+  return text.slice(from, text.indexOf('"', from))
+}
+const shapeOf = (name) => {
+  const at = lines.findIndex((line) => line.includes(`label="${name}"`))
+  assert(at > 0, `the graph of ${name} is missing`)
+  const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+  const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+  assert(end > at, `the graph of ${name} has no end`)
+  const shape = []
+  for (const line of lines.slice(at, end)) {
+    const label = attribute(line, 'label')
+    const type = attribute(line, 'type')
+    if (label === null || type === null) continue
+    shape.push(`${line.includes('->') ? 'edge' : 'node'} ${label.replace(name, 'fold')} ${type}`)
+  }
+  return shape
+}
+const loop = shapeOf("loopSum")
+const unrolled = shapeOf("unrolled")
+assert(loop.length > 0, "the static loop graph has no nodes")
+assert(loop.join(String.fromCharCode(10)) === unrolled.join(String.fromCharCode(10)),
+  `the static loop is not the hand-written fold: ${loop.join(String.fromCharCode(10))} --- ${unrolled.join(String.fromCharCode(10))}`)
+const left = lines.filter((line) => /type="(SLOOP|LOOP|SFOR|SACC|BRCH|CASE)"/.test(line))
+assert(left.length === 0, `a static or branch node was left in the graph: ${left[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_name_repeated"
+desc = "The field name `n` and the state names are one set: a state named like the field is a repeated name, not a shadow of it."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_name_repeated.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopNameRepeated"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_body_type"
+desc = "Each round's value is the next state: a string body for an int state is a loop body type mismatch."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_body_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopBodyTypeMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_loop_not_composite"
+desc = "`static loop` walks a struct or an ordinary tuple only; an int has no fields, so there is no count known at instantiation."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_loop_not_composite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticForNotComposite"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

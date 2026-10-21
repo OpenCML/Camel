@@ -1,0 +1,52 @@
+/**
+ * `static loop acc = 0 for (n, F) in fields T do body` (H51 step 5): the fields of T are
+ * walked at instantiation and the body advances the state once per field. The loop leaves no
+ * loop node and its value is the last state. The trip count is the arity of T, so a `T` that
+ * comes from an enclosing generic gives a count known only at instantiation.
+ */
+module static_loop
+
+func sumOf(t: typeas T): int {
+    return static loop acc = 0 for (n, F) in fields T do acc + t.[n]
+}
+
+func totalAndMax(t: {a: int, b: int, c: int}): (int, int) {
+    return static loop total = 0, best = 0
+        for (n, F) in fields {a: int, b: int, c: int} do {
+            let v: F = t.[n]
+            (total + v, if best < v then v else best)
+        }
+}
+
+func emptyStruct(t: {}): int {
+    return static loop acc = 7 for (n, F) in fields {} do acc + 1
+}
+
+func tupleFold(t: (int, int, int)): int {
+    return static loop acc = 0 for (n, F) in fields (int, int, int) do {
+        let v: F = t.[n]
+        acc + v
+    }
+}
+
+func nested(t: {p: {x: int, y: int}}): int {
+    var sum = 0
+    sync {
+        static for (n, F) in fields {p: {x: int, y: int}} => {
+            let sub = t.[n]
+            sum = sum + (static loop acc = 0 for (m, G) in fields F do acc + sub.[m])
+        }
+    }
+    return sum
+}
+
+func main(): int sync {
+    println(sumOf({a: 1, b: 2, c: 3}))
+    println(sumOf((4, 5)))
+    let (total, best) = totalAndMax({a: 3, b: 9, c: 4})
+    println(total, best)
+    println(emptyStruct({}))
+    println(tupleFold((1, 2, 3)))
+    println(nested({p: {x: 5, y: 6}}))
+    return 0
+}

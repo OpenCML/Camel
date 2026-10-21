@@ -1189,6 +1189,10 @@ class Builder {
     /// `{ static for ... }` / `( static for ... )`: the rounds' values are packed into a struct or
     /// tuple of the same fields with one FILL; the comprehension leaves no node of its own.
     node_handle_t visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
+    /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the body is built
+    /// once per field, in the current graph, with the state names bound to the previous round's
+    /// values; the value is the last state (a tuple FILL when there are several).
+    node_handle_t visitStaticLoopNode(const GCT::node_ptr_t &gct);
     /// The pack the C++ `tree_map` expansion makes: a static value of `values.size()` slots and a
     /// FILL whose type has the fields of `shape` (a tuple of the values' types when `shape` is not
     /// a struct). The origins are recorded against `origin` under `originKind`.

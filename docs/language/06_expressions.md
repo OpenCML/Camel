@@ -438,6 +438,7 @@ func first(t: (int, float)) {
 - 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
 - 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，最后每个结构体/元组一个 `FILL` 把各轮的值装回同形状，comprehension 本身没有节点。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
 - `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for (n, F) in fields T => 块`。
+- 要把各轮的值折成一个结果（而不是装回同一形状），用 [6.8.5](#685-static-loop) 的 `static loop`。
 
 ```cml
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
@@ -453,7 +454,34 @@ func rebuild(t: typeas T) {
 }
 ```
 
-### 6.8.5 `loop`
+### 6.8.5 `static loop`
+
+`static loop 状态 = 初值, ... for (n, F) in fields T do 表达式` 是 `static for` 的折叠形式：字段表在实例化时展开，每个字段把状态推进一轮，展开后没有循环节点。
+
+```
+static loop 名字 = 初值 (, 名字 = 初值)* for (n, F) in fields T do 表达式
+```
+
+- 状态头与 [6.8.6](#686-loop) 的 `loop` 相同：一个名字时循环的值就是这个值；几个名字时循环体给出按书写顺序的元组，循环的值也是这个元组。状态的名字只在循环体内可见；初值在循环所在处求值一次，其中看不到状态的名字。名字不能重复（`SemanticDiag::LoopNameRepeated`）。
+- 循环体每轮的值就是下一轮的状态，其类型必须是状态的类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。空结构体或空元组一轮也不展开，循环的值是初值。
+- 遍历**只有** `for (n, F) in fields T` 一种写法：没有 `while`，没有普通序列的 `for`，也没有 `break`/`continue`。`T` 必须是具体的结构体或普通元组（规则与 6.8.4 相同）。`T` 是外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
+- 展开成直线代码：每轮按字段顺序建出它读的 `ACCS`，上一轮的状态直接是下一轮读到的值，`static loop` 本身没有节点。块里的 `return` 与普通函数一样离开函数，不是“跳出循环”。
+- 效应就是直线代码的效应：循环体是不是同步块由它自己决定（3.2），每轮的效应按字段顺序执行。
+
+```cml
+func count(t: typeas T): int {
+    return static loop n = 0 for (name, F) in fields T do n + 1
+}
+
+func total_and_max(t: {a: int, b: int}): (int, int) {
+    return static loop total = 0, best = 0
+        for (n, F) in fields {a: int, b: int} do {
+            (total + t.[n], if best < t.[n] then t.[n] else best)
+        }
+}
+```
+
+### 6.8.6 `loop`
 
 循环是一个带状态的表达式（设计原则 3.10）。状态写在循环头上，每个名字只声明一次并给出初值；`do` 后面的表达式是循环体，它的值是下一轮的状态；整个循环的值是最后的状态。
 

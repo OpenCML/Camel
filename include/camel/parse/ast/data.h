@@ -34,6 +34,7 @@ enum class DataType {
     TypeMatch,
     TypeCase,
     StaticFor,
+    StaticLoop,
     StaticAccess,
     TryExpr,
     LoopExpr,
@@ -248,6 +249,28 @@ class StaticForLoad : public DataLoad {
     const std::string geneCode() const override { return "static for"; }
 
   private:
+    std::string valueName_;
+    std::string typeName_;
+};
+
+/// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: children [0] a
+/// Repeated Data of the first values, [1] the type, [2] the body (a block). The load holds the
+/// names of the state and the generator's two names; the rounds are the fields of `T`.
+class StaticLoopLoad : public DataLoad {
+  public:
+    StaticLoopLoad(
+        std::vector<Reference> state, std::string valueName, std::string typeName)
+        : DataLoad(DataType::StaticLoop), state_(std::move(state)),
+          valueName_(std::move(valueName)), typeName_(std::move(typeName)) {}
+
+    const std::vector<Reference> &state() const { return state_; }
+    const std::string &valueName() const { return valueName_; }
+    const std::string &typeName() const { return typeName_; }
+    const std::string toString() const override { return "StaticLoop" + this->status(); }
+    const std::string geneCode() const override { return "static loop"; }
+
+  private:
+    std::vector<Reference> state_;
     std::string valueName_;
     std::string typeName_;
 };

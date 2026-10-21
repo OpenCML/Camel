@@ -42,6 +42,8 @@ std::string to_string(DataType type) {
         return "TypeCase";
     case DataType::StaticFor:
         return "StaticFor";
+    case DataType::StaticLoop:
+        return "StaticLoop";
     case DataType::StaticAccess:
         return "StaticAccess";
     case DataType::TryExpr:

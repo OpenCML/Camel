@@ -1,0 +1,13 @@
+/**
+ * `static loop` walks a struct or an ordinary tuple only, as `static for` does: an int has no
+ * fields, so there is no count known at instantiation.
+ */
+module static_loop_not_composite
+
+func bad(t: int): int {
+    return static loop acc = 0 for (n, F) in fields int do acc + 1
+}
+
+func main(): int {
+    return bad(1)
+}

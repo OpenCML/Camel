@@ -46,6 +46,8 @@
  *     LOOP              payload: the names of the state, then the name of the element with
  *                       `for`; tag: camel::core::LoopKind
  *     SFOR              payload: the name of the field, then the name of its type
+ *     SLOOP             payload: the names of the state, then the name of the field and the
+ *                       name of its type
  *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`
  *     VARI, WAIT, ANNO, SACC  nothing
  *
@@ -361,6 +363,43 @@ class Node {
     node_ptr_t comprehensionGenerator() const {
         check(NodeKind::SCOMP);
         return at(0);
+    }
+
+    /// SLOOP: the number of names of the state (k).
+    size_t staticLoopStateCount() const {
+        check(NodeKind::SLOOP);
+        return payload_.names->count - 2;
+    }
+    /// SLOOP: the j-th name of the state.
+    const std::string &staticLoopStateName(size_t j) const {
+        check(NodeKind::SLOOP);
+        ASSERT(j < staticLoopStateCount(), "No state name at this index");
+        return *payload_.names->items[j];
+    }
+    /// SLOOP: the name bound to the field in the body (`n`).
+    const std::string &staticLoopValueName() const {
+        check(NodeKind::SLOOP);
+        return *payload_.names->items[payload_.names->count - 2];
+    }
+    /// SLOOP: the name bound to the field type in the body (`F`).
+    const std::string &staticLoopTypeName() const {
+        check(NodeKind::SLOOP);
+        return *payload_.names->items[payload_.names->count - 1];
+    }
+    /// SLOOP: the j-th first value of the state (children 1 ... k).
+    node_ptr_t staticLoopInitial(size_t j) const {
+        check(NodeKind::SLOOP);
+        return at(j + 1);
+    }
+    /// SLOOP: the type whose fields are walked (child 0).
+    node_ptr_t staticLoopType() const {
+        check(NodeKind::SLOOP);
+        return at(0);
+    }
+    /// SLOOP: the body, entered once per field (the last child).
+    node_ptr_t staticLoopBody() const {
+        check(NodeKind::SLOOP);
+        return back();
     }
 
     /// CAST: the target type.

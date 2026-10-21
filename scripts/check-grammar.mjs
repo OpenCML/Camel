@@ -51,6 +51,8 @@ const FOLDED = {
     ctrlExpr: 'parseExpr',
     matchTypeExpr: 'parseMatchType',
     staticForExpr: 'parseStaticFor',
+    staticLoopExpr: 'parseStaticLoop',
+    staticForHeader: 'parseStaticForHeader',
     loopExpr: 'parseLoop',
     namedTypeArgument: 'parseTypeArguments',
     loopState: 'parseLoop',

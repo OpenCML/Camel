@@ -2450,6 +2450,57 @@ Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
     return forNode;
 }
 
+/*
+staticLoopExpr
+    : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
+    ;
+The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
+the type whose fields are walked, and the body.
+*/
+Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
+    ENTER("StaticLoopExpr");
+    std::vector<Reference> state;
+    node_ptr_t inits = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(inits, context);
+    for (const auto entry : context->all<cst::LoopState>()) {
+        state.emplace_back(entry->get<cst::IdentDef>()->text());
+        *inits << any2node(visitExpr(entry->expr()));
+    }
+    const auto bindings = context->all<cst::IdentDef>();
+    const std::string valueName =
+        bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
+    const std::string typeName =
+        bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
+    node_ptr_t loopNode = createNodeAs<StaticLoopLoad>(state, valueName, typeName);
+    setNodeTokenRangeByContext(loopNode, context);
+    *loopNode << inits;
+    node_ptr_t typeNode = any2node(visitType(context->type()));
+    *loopNode << typeNode;
+    node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
+    *loopNode << bodyNode;
+    registerAstSemanticBundle(
+        loopNode,
+        {
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(loopNode, context->tok(TK::KwStatic), "ast.static.loop.strong"),
+                -1,
+                "static"),
+            semanticPart(
+                camel::source::SemanticRole::Keyword,
+                deriveAstAnchorOrigin(loopNode, context->tok(TK::KwLoop), "ast.static.loop"),
+                -1,
+                "loop"),
+            semanticPart(
+                camel::source::SemanticRole::BranchCondition,
+                nodeOrigin(typeNode),
+                -1,
+                "type"),
+        });
+    LEAVE("StaticLoopExpr");
+    return loopNode;
+}
+
 TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     const std::string text = pattern.text();
     if (text == "struct") {
@@ -4560,6 +4611,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitCtrlExpr(context);
     case NK::LoopExpr:
         return visitLoopExpr(cst::LoopExpr(context));
+    case NK::StaticLoopExpr:
+        return visitStaticLoopExpr(cst::StaticLoopExpr(context));
     case NK::AssignExpr:
         return visitAssignExpr(cst::AssignExpr(context));
     case NK::LogicalOrExpr:

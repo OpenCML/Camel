@@ -438,6 +438,7 @@ func first(t: (int, float)) {
 - An empty struct or tuple has no round; the value is `{}` / `()` (a `FILL` with no slot).
 - The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and one `FILL` per struct or tuple packs the rounds' values into the same shape; the comprehension leaves no node of its own. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
 - `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for (n, F) in fields T => block`.
+- To fold the rounds' values into one result (rather than pack them back into the same shape), use the `static loop` of [6.8.5](#685-static-loop).
 
 ```cml
 func doubled(t: {a: int, b: int}): {a: int, b: int} {
@@ -453,7 +454,34 @@ func rebuild(t: typeas T) {
 }
 ```
 
-### 6.8.5 `loop`
+### 6.8.5 `static loop`
+
+`static loop state = init, ... for (n, F) in fields T do expression` is the fold form of `static for`: the field list is expanded when the function is instantiated, each field advances the state one round, and the graph has no loop node.
+
+```
+static loop name = init (, name = init)* for (n, F) in fields T do expression
+```
+
+- The head is the same as the `loop` of [6.8.6](#686-loop): with one name the loop's value is that value; with several names the body gives a tuple in the order written and the loop's value is that tuple. The state names are visible in the body only; the first values are evaluated once where the loop is, and the state names are not visible in them. A name may not be repeated (`SemanticDiag::LoopNameRepeated`).
+- Each round's body value is the next state, and its type must be the state's type (except for the implicit conversions, an `int` into an `int?`); otherwise it is `SemanticDiag::LoopBodyTypeMismatch`. An empty struct or tuple has no rounds and the value is the first value.
+- The only walk is `for (n, F) in fields T`: there is no `while`, no `for` over an ordinary sequence, and no `break`/`continue`. `T` must be a concrete struct or ordinary tuple (the rules of 6.8.4). When `T` is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
+- It expands to straight-line code: each round builds the `ACCS` it reads, in field order, the previous round's state is directly the value the next round reads, and `static loop` has no node of its own. A `return` in the body leaves the function, as in an ordinary function; it does not leave the loop.
+- Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
+
+```cml
+func count(t: typeas T): int {
+    return static loop n = 0 for (name, F) in fields T do n + 1
+}
+
+func total_and_max(t: {a: int, b: int}): (int, int) {
+    return static loop total = 0, best = 0
+        for (n, F) in fields {a: int, b: int} do {
+            (total + t.[n], if best < t.[n] then t.[n] else best)
+        }
+}
+```
+
+### 6.8.6 `loop`
 
 A loop is an expression with a state (design principles 3.10). The state is written in the head of the loop: each name is declared once with its first value. The expression after `do` is the body; its value is the state of the next round, and the value of the whole loop is the last state.
 

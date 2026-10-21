@@ -195,7 +195,9 @@ tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
 funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
-staticForExpr      : 'static' 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr '=>'
+staticForExpr      : 'static' staticForHeader '=>' blockExpr
+staticForHeader    : 'for' '(' identDef ',' identDef ')' 'in' 'fields' typeExpr
+staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
 typeCasePattern    : 'struct' | 'tuple' | '#' 'leaf' | '_'
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
