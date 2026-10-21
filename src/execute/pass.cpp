@@ -293,6 +293,18 @@ class GcViewsPass final : public GraphIRPass {
     }
 };
 
+class GcViewsEscapePass final : public GraphIRPass {
+  public:
+    explicit GcViewsEscapePass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        // A debug build aborts inside the store; a release build prints why it did not.
+        os << camel::core::rtdata::debugRunViewEscapeSelfTest() << '\n';
+        return program;
+    }
+};
+
 std::vector<std::string> splitPath(const std::string &path) {
     std::vector<std::string> result;
     size_t start = 0;
@@ -620,6 +632,7 @@ PassScopePtr initPassScope() {
                          {"summary", def(PASS(GcSummaryPass))},
                           {"blocks", def(PASS(GcBlocksPass))},
                          {"views", def(PASS(GcViewsPass))},
+                         {"views_escape", def(PASS(GcViewsEscapePass))},
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
                          {"poison", def(PASS(GcPoisonPass))},
@@ -712,6 +725,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcsummary", "std::gc::summary"},
         {"std::gcblocks", "std::gc::blocks"},
     {"std::gcviews", "std::gc::views"},
+    {"std::gcviews_escape", "std::gc::views_escape"},
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::gcpoison", "std::gc::poison"},

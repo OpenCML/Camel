@@ -434,16 +434,19 @@ class Array : public rtdata::Object {
     /// write barrier (slot arrays only; a compact write never needs one) and may be null for a
     /// compact array, whose own element type is enough.
     void setSlot(uint64_t flatIndex, slot_t value, const camel::core::type::ArrayType *arrayType = nullptr) {
+        // `appendSlot` stores the new element at `numel_` before it increments the count, so the
+        // bound is inclusive here; the capacity has already been grown for that write. The bound
+        // used to be exclusive, which aborted every compact append in a Debug build (H30).
         if (isCompact() && slotShaped_ && value != NullSlot &&
             !camel::core::rtdata::isViewSlot(value, elemType_)) {
-            ASSERT(flatIndex < numel_, "Array flat index out of range");
+            ASSERT(flatIndex <= numel_, "Array flat index out of range");
             std::memcpy(
                 dataPtr_ + flatIndex * elementSize_,
                 camel::core::rtdata::aggregateSlots(value), elementSize_);
             return;
         }
         if (isCompact() && isSlotResidentElement() && elementSize_ == sizeof(slot_t)) {
-            ASSERT(flatIndex < numel_, "Array flat index out of range");
+            ASSERT(flatIndex <= numel_, "Array flat index out of range");
             reinterpret_cast<slot_t *>(dataPtr_)[flatIndex] = value;
             return;
         }
@@ -691,6 +694,22 @@ class Array : public rtdata::Object {
     /// be copied into its bytes without a field loop.
     bool slotShaped_    = false;
 };
+
+/**
+ * Stores the value a reduce keeps as its accumulator (H29): the one store after which the value
+ * is read again in a later round, so it must be a value and not a view of the element that round
+ * read. The caller materialises a view first (`materializeCallResult`), which is what the bytecode
+ * VM already did; the assertion is the check that it did. In a release build the assertion is
+ * compiled out, and `setSlot` would also materialise a view, so only a debug build can show that a
+ * caller forgot. Both the nvm reduce operator and the view self-test store through here.
+ */
+inline void storeReduceAccumulator(
+    Array *cell, slot_t value, const type::ArrayType *cellType) {
+    ASSERT(cell != nullptr, "The reduce accumulator cell is null.");
+    ASSERT(cellType != nullptr, "The reduce accumulator needs the array type of its cell.");
+    CAMEL_ASSERT_NOT_VIEW(value, cellType->elemType(), "the reduce accumulator");
+    cell->set<slot_t>(0, value, cellType);
+}
 
 // The one place that must stay in step with Array's element classes: a loop dispatches through
 // these instead of writing the switch itself, so adding a class is a change here and nowhere

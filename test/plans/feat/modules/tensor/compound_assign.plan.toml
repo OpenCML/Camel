@@ -1,6 +1,7 @@
 id = "modules.tensor.compound_assign"
 order = 364
 tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
 tags = ["feat", "modules", "tensor", "assignment"]
 desc = "t += u on a tensor computes a new tensor and rebinds the variable; nothing is changed in place (design principles 4.2)"
 

@@ -232,16 +232,27 @@ if (statusLines(tierSlow.output).join(', ') !== 'PASS tier.slow') {
 if (!tierAll.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
     problems.push(`--tier all (directory): unexpected summary (${summaryLine(tierAll.output)})`)
 }
+// `all` is the Release layers, fast and slow: the debug-layer test of the fixture must stay out
+// of it, because an aborting test would run against the Release binary and never abort.
+if (statusLines(tierAll.output).includes('PASS tier.debug')) {
+    problems.push('--tier all ran the debug test; the debug layer is opt-in')
+}
+// A debug layer runs on the Debug build; asking for it on the Release build is a contradiction
+// the runner refuses before it starts a test.
+const debugOnRelease = runRunner(['--tier', 'debug', '--build', 'release', tierDir])
+if (debugOnRelease.status === 0 || !debugOnRelease.output.includes('--tier debug runs on the Debug build')) {
+    problems.push(`--tier debug --build release: expected a refusal, got exit ${debugOnRelease.status}: ${debugOnRelease.output.slice(0, 200)}`)
+}
 for (const [label, run] of [
     ['default tier', runRunner([tierPlan])],
     ['--tier fast', runRunner(['--tier', 'fast', tierPlan])],
     ['--tier slow', runRunner(['--tier', 'slow', tierPlan])],
 ]) {
-    if (!run.output.includes('[SUMMARY] total: 3, pass: 3, fail: 0')) {
+    if (!run.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
         problems.push(`named plan (${label}): unexpected summary (${summaryLine(run.output)})`)
     }
     const ran = statusLines(run.output)
-    if (ran.join(', ') !== 'PASS tier.fast, PASS tier.default, PASS tier.slow') {
+    if (ran.join(', ') !== 'PASS tier.fast, PASS tier.default, PASS tier.slow, PASS tier.debug') {
         problems.push(`named plan (${label}) ran: ${ran.join(', ')}`)
     }
     if (!run.output.includes('named plan target(s) run in full')) {

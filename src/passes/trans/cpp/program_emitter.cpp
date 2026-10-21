@@ -329,12 +329,12 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
             value = std::format("static_cast<float>(args.number({}))", i);
             break;
         case TypeCode::Complex64:
-            kind  = "ComplexFloat";
-            value = std::format("args.complexFloat({})", i);
+            kind  = "C64";
+            value = std::format("args.c64({})", i);
             break;
         case TypeCode::Complex128:
-            kind  = "ComplexDouble";
-            value = std::format("args.complexDouble({})", i);
+            kind  = "C128";
+            value = std::format("args.c128({})", i);
             break;
         case TypeCode::Bool:
             kind  = "Bool";

@@ -137,9 +137,12 @@ the two kinds differently beyond their order.
   option for the entry export (the target is the default, `onnxruntime-cpu`).
 - The parameter `out` of the pass is the way to name the file (passes take parameters, design principles 9.3).
 - The result of `main` is neither printed nor written under `--timeit`.
-- `std::cpp` translates a `main` with parameters of type int, i32, float, f32, bool or string: the
-  generated program reads them from its command line as `--arg name=value`, with the same reports
-  as `camel` (design principles 10.6; `include/camel/standalone/entry.h`). A parameter of another
+- `std::cpp` translates a `main` with parameters of type int, i32, float, f32, c64, c128, bool or
+  string: the generated program reads them from its command line as `--arg name=value`, with the
+  same reports as `camel` (design principles 10.6; `include/camel/standalone/entry.h`). A float
+  and each part of a complex number are one whole number token by
+  `camel::utils::parseWholeFloat`; a complex parameter reads the language's complex text
+  (`1+2i`, `-2i`) or a real number as its real part (`1.5` is `1.5+0i`). A parameter of another
   type (a tensor, a struct) is refused with `TranslationRefused` at `main`.
 - An optimizer state (`nn` Adam state) is not accepted as a parameter type on the command line
   or as a declared model input.
