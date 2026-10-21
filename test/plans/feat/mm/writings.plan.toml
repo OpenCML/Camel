@@ -178,8 +178,8 @@ name = "saturate.budget"
 desc = "A budget of one round stops the saturation where it is, without an error: `saturated=0`, and what is extracted from the writings found so far still runs and prints what it printed."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "std::nvm"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1", "CAMEL_SATURATE_ROUNDS=1"]
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_one_round", "std::nvm"]
+envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 0
 expect_stdout_contains = ["SATURATE-INFO strict rounds=1", "saturated=0", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
