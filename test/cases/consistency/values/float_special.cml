@@ -3,9 +3,12 @@
  */
 module float_special
 
+import { nan } from math
+
 func mul(a: float, b: float): float { return a * b }
 func sub(a: float, b: float): float { return a - b }
 func div(a: float, b: float): float { return a / b }
+func negate(x: float): float { return -x }
 
 func main(): int sync {
     let inf = mul(1.0e308, 10.0)
@@ -30,5 +33,14 @@ func main(): int sync {
     println(100.0)
     println(mul(2.5, 2.0))
     println(mul(1.0e-200, 1.0e-200))
+
+    // A NaN has no sign in text (language reference 2.5.2): a computed negative NaN is `nan`
+    // without a specification, under a precision and under a width, and `+` is the sign flag
+    // applied to that text, not the NaN's sign.
+    let negativeNaN = negate(nan)
+    println(negativeNaN)
+    println<'{:.2f}'>(negativeNaN)
+    println<'{:>8}'>(negativeNaN)
+    println<'{:+}'>(negativeNaN)
     return 0
 }

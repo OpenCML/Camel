@@ -32,7 +32,9 @@
  * they are in Python.
  *
  * The parts are formatted by fmt as the floats of the value's width, so a specification that
- * is an error for a float (`{:s}`, `{:d}`) is an error for a complex number too.
+ * is an error for a float (`{:s}`, `{:d}`) is an error for a complex number too. A NaN part is
+ * written `nan`, never `-nan`, in both forms: the sign of a NaN is not part of the text (2.5.2
+ * of the language reference), and the value handed to fmt is made positive first.
  */
 
 #pragma once
@@ -67,10 +69,10 @@ std::string specText(const LanguageComplex<T> &value, const camel::utils::Number
     } else {
         magnitudeSpec = signedSpec;
     }
-    T real = value.real;
-    std::string text = fmt::vformat("{:" + signedSpec + "}", fmt::make_format_args(real));
+    T real              = camel::utils::withoutNaNSign(value.real);
+    std::string text    = fmt::vformat("{:" + signedSpec + "}", fmt::make_format_args(real));
     const bool negative = !std::isnan(value.imaginary) && std::signbit(value.imaginary);
-    T magnitude         = negative ? -value.imaginary : value.imaginary;
+    T magnitude = camel::utils::withoutNaNSign(negative ? -value.imaginary : value.imaginary);
     text += negative ? '-' : '+';
     text += fmt::vformat("{:" + magnitudeSpec + "}", fmt::make_format_args(magnitude));
     text += 'i';

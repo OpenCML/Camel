@@ -328,6 +328,14 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
             kind  = "Float";
             value = std::format("static_cast<float>(args.number({}))", i);
             break;
+        case TypeCode::Complex64:
+            kind  = "ComplexFloat";
+            value = std::format("args.complexFloat({})", i);
+            break;
+        case TypeCode::Complex128:
+            kind  = "ComplexDouble";
+            value = std::format("args.complexDouble({})", i);
+            break;
         case TypeCode::Bool:
             kind  = "Bool";
             value = std::format("args.boolean({})", i);
@@ -342,8 +350,8 @@ std::string ProgramEmitter::entryFunction(GCGraph *root, const Entry &entry) {
                 port,
                 std::format(
                     "the parameter '{}' of 'main' has type '{}', and std::cpp reads from the "
-                    "command line only the parameters of type int, i32, float, f32, bool and "
-                    "string (a tensor or a struct is read from files by camel only)",
+                    "command line only the parameters of type int, i32, float, f32, c64, c128, "
+                    "bool and string (a tensor or a struct is read from files by camel only)",
                     names[i],
                     type != nullptr ? type->toString() : std::string("void")),
                 false};

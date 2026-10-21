@@ -25,6 +25,7 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/module/module.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
@@ -157,13 +158,14 @@ bool parseInt(const std::string &text, int64_t &out) {
     return result.ec == std::errc() && result.ptr == last && first != last;
 }
 
-bool parseFloat(const std::string &text, double &out) {
+bool parseFloat(std::string_view text, double &out) {
     if (text.empty()) {
         return false;
     }
+    const std::string copy(text);
     char *end = nullptr;
-    out       = std::strtod(text.c_str(), &end);
-    return end == text.c_str() + text.size();
+    out       = std::strtod(copy.c_str(), &end);
+    return end == copy.c_str() + copy.size();
 }
 
 Loaded loadValue(const std::string &text, Type *declared, const std::string &what);
@@ -241,6 +243,27 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
             return rooted(rtdata::toSlot<float>(static_cast<float>(v)), declared);
         }
         return rooted(rtdata::toSlot<double>(v), declared);
+    }
+    case TypeCode::Complex64:
+    case TypeCode::Complex128: {
+        // The text of a complex number (language reference 2.5.3): a real part, the sign of the
+        // imaginary part and the imaginary part (`1+2i`, `0.5-0.25i`), or only the imaginary
+        // part with its sign (`-2i`). Each part is read by the same rule as a float parameter,
+        // so the parts of a complex value and a real value are read the same way. A real text
+        // is not a complex one: it has no imaginary part.
+        camel::utils::ComplexTextParts parts;
+        double real      = 0.0;
+        double imaginary = 0.0;
+        if (!camel::utils::splitComplexText(text, parts) ||
+            (!parts.real.empty() && !parseFloat(parts.real, real)) ||
+            !parseFloat(parts.imaginary, imaginary)) {
+            refuse(
+                std::format("'{}' is not a complex number (write 1+2i, -2i or 0.5-0.25i)", text));
+        }
+        return rooted(
+            rtdata::toSlot<rtdata::Complex *>(
+                rtdata::Complex::create(real, imaginary, declared->code(), mm::autoSpace())),
+            declared);
     }
     case TypeCode::Bool: {
         if (text != "true" && text != "false") {

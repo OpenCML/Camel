@@ -10,6 +10,8 @@ func square(z: c128): c128 {
     return z * z
 }
 
+func negate(x: float): float { return -x }
+
 func main(): int sync {
     let a = 3 + 4i
     let b = 1 - 2i
@@ -49,6 +51,15 @@ func main(): int sync {
     let notANumber = c128(nan) + 4i
     println(notANumber)
     println<'{:.2f}'>(notANumber)
+
+    // A NaN has no sign in text (language reference 2.5.2): a computed negative NaN, in the
+    // real part and in the imaginary part, is `nan` with and without a specification.
+    let negativeNaN = negate(nan)
+    println(c128(negativeNaN) + 4i)
+    println<'{:.2f}'>(c128(negativeNaN) + 4i)
+    println<'{:>12.2f}'>(c128(negativeNaN) + 4i)
+    println(c128(negativeNaN) * 1i)
+    println<'{:.2f}'>(c128(negativeNaN) * 1i)
 
     // A negative zero in the imaginary part: the plain text writes its magnitude, a format
     // writes its sign and its digits, as Python does.

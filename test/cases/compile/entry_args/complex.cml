@@ -1,0 +1,15 @@
+/// The parameters of `main` are complex numbers: `--arg z=1+2i` reads the complex text of the
+/// language (the real part, the sign of the imaginary part and the imaginary part), and
+/// `--arg z=-2i` only the imaginary part with its sign. A c64 and a c128 are read the same way,
+/// each part of the declared width (language reference 2.5.3, design principles 9.8).
+module entry_arg_complex
+
+import { im, re } from math
+
+func main(z: c128, w: c64): int sync {
+    println(z, w)
+    println(re(z), im(z))
+    println(re(w), im(w))
+    println(z + c128(w))
+    return 0
+}
