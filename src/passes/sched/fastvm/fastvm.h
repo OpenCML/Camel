@@ -268,6 +268,8 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     struct Stats;
     std::shared_ptr<Stats> stats_;
     bool nativeLoop_ = false;
+    bool loopsNative_ = false; // this run keeps its loops as LOOP nodes
+    std::unordered_map<camel::runtime::GCGraph *, camel::runtime::GCGraph *> loopFreeGraphs_;
     std::string statsPath_;
     uint64_t *opCounts_ = nullptr;
     size_t graphLengthOf(camel::runtime::GCGraph *graph) const; // in bytecode units; 0 unknown
@@ -314,6 +316,10 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     /// Compiles and links a graph that has no bytecode yet (see graphEntryPc).
     void compileLate(camel::runtime::GCGraph *graph);
     HigherOrderCallSite higherOrderCallSite(Function *func);
+    /// The graph a function value runs: its own, or, when it has a loop (a function made in a
+    /// program of its own, such as a gradient), the graph with its loops lowered the way the main
+    /// program's are.
+    camel::runtime::GCGraph *functionGraph(Function *function);
 
     void push(size_t pc, ctx::Frame *frame);
     std::pair<size_t, ctx::Frame *> pop();

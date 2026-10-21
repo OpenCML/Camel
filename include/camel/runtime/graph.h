@@ -71,6 +71,10 @@
 #include <unordered_set>
 #include <vector>
 
+namespace camel::core::type {
+class FunctionType;
+}
+
 namespace camel::runtime {
 
 class GraphDraft;
@@ -422,6 +426,9 @@ struct GCRegion {
     GraphId inlineOf     = kInvalidGraphId;  // Inline: the function whose body this is
     gc_node_ref_t callSite = kInvalidNodeRef; // Inline: the call it replaced; Arm: the call of the
                                               // graph that is the arm, until it is inlined
+    // The names and types of the form ports, in order, as the arguments of a function type (the
+    // loop parts; null where the ports are unnamed).
+    const ::camel::core::type::FunctionType *params = nullptr;
 };
 static_assert(std::is_trivially_copyable_v<GCRegion>);
 
@@ -532,6 +539,17 @@ class GCGraph : public camel::core::rtdata::Object {
         }
         const GCNodeChunk &c = chunkOf(ref);
         return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
+    }
+    /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
+    /// loop has no condition, and a loop in graph form has no regions.
+    uint32_t loopRegionOf(gc_node_ref_t ref, GCRegionKind part) const {
+        for (uint32_t r = 1; r < nativePayload_.regionCount; ++r) {
+            const GCRegion &region = nativePayload_.regionTable[r];
+            if (region.kind == part && region.owner == ref) {
+                return r;
+            }
+        }
+        return 0;
     }
     /// The form ports of region `id`, in order.
     std::span<const gc_node_ref_t> regionPorts(uint32_t id) const {

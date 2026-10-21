@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <unordered_map>
 #include <memory>
 #include <span>
 #include <vector>
@@ -45,6 +46,10 @@ class NodeVMSchedPass : public RuntimeGraphSchedulePass {
     // The programs whose graphs this run executes (a frozen graph names its callees by id).
     camel::execute::RunPrograms programs_;
     std::vector<runtime_data_idx_t> operIndices_;
+    /// The graph a function value runs: its own, or, when it has a loop (a function made in a
+    /// program of its own, such as a gradient), the graph with its loops as two graphs each.
+    camel::runtime::GCGraph *functionGraph(::Function *function);
+    std::unordered_map<camel::runtime::GCGraph *, camel::runtime::GCGraph *> loopGraphs_;
     std::vector<slot_t> callArgScratch_;
 
     // `program` is the program the graph belongs to, when the caller knows it (the callee of a

@@ -289,7 +289,9 @@ class Compiler {
         if (view.kind() != core::LoopKind::For || view.stateCount() == 0 ||
             !view.bodyEffects().pure())
             throw UnsupportedComputation("tiles requires a pure static For loop");
-        auto *body = view.bodyGraph();
+        // The body is a region of the graph that has the node, or a graph of its own (a program an
+        // interpreter made for itself, outlineLoopRegions).
+        auto *body = view.inRegions() ? frame.graph : view.bodyGraph();
         const rt::fact::Anchor anchors[]{
             {runtimeProgram, frame.graph, id},
             {runtimeProgram, body, *view.bodyElementParam()}};
@@ -317,7 +319,12 @@ class Compiler {
             initials.push_back(std::move(initial));
             states.push_back(std::move(state));
         }
-        for (auto ref : view.captures()) {
+        const std::vector<rt::gc_node_ref_t> outerRefs =
+            view.inRegions() ? view.externalInputs(true)
+                             : std::vector<rt::gc_node_ref_t>(
+                                   view.captures().begin(),
+                                   view.captures().end());
+        for (auto ref : outerRefs) {
             const auto outer = eval(frame, ref);
             inputs.push_back(materialize(outer));
             auto inner = nested.placeholder(outer.type);
@@ -333,10 +340,15 @@ class Compiler {
         for (size_t i = 0; i < states.size(); ++i)
             activation.values.emplace(view.bodyStateParam(i), states[i]);
         for (size_t c = 0; c < captures.size(); ++c)
-            activation.values.emplace(view.bodyCapturePort(c), captures[c]);
-        nested.active.insert(body);
-        if (body->exitNodeRef() != rt::kInvalidNodeRef)
-            nested.eval(activation, body->exitNodeRef());
+            activation.values.emplace(
+                view.inRegions() ? outerRefs[c] : view.bodyCapturePort(c),
+                captures[c]);
+        if (!view.inRegions()) {
+            nested.active.insert(body);
+        }
+        // Visit the statements of the body too: an unused println in a sync body must not
+        // disappear.
+        nested.eval(activation, view.bodyResult());
         auto result = nested.eval(activation, view.nextState());
         if (states.size() == 1)
             region->nextStates.push_back(nested.materialize(result));
@@ -890,7 +902,12 @@ std::string loopEligibility(
             const auto ref = view.initialState(i);
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         }
-        for (auto ref : view.captures())
+        const std::vector<rt::gc_node_ref_t> outerRefs =
+            view.inRegions() ? view.externalInputs(true)
+                             : std::vector<rt::gc_node_ref_t>(
+                                   view.captures().begin(),
+                                   view.captures().end());
+        for (auto ref : outerRefs)
             frame.values.emplace(ref, compiler.placeholder(graph.node(ref)->dataType()));
         (void)compiler.loop(frame, id);
         return {};

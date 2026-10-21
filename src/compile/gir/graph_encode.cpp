@@ -391,6 +391,7 @@ class EncodeSession {
         PreparedGraph prepared;
         prepared.source = graph;
         prepared.draft  = std::make_unique<GraphDraft>();
+        prepared.draft->setInheritsRegions(false);
         CAMEL_LOG_INFO_S("GIREncode", "Prepare compile graph '{}'.", graph->name());
         prepared.draft->setId(freshIds_ ? freshIds_->allocate() : graph->graphId());
         prepared.draft->setFuncType(graph->funcType());
@@ -449,6 +450,7 @@ class EncodeSession {
                 .origin       = header->origin,
                 .permissions  = header->permissions,
                 .attrs        = header->attrs,
+                .region       = header->region,
             };
             std::vector<std::byte> payloadStorage;
 
@@ -596,7 +598,27 @@ class EncodeSession {
         // Later statements may make an earlier control edge redundant. Clean up once before
         // freezing, with a smaller work cap than the explicit optimization stage.
         camel::runtime::reduceControlDependencies(*prepared.draft, 8192);
-        prepared.draft->regionizeArmCalls();
+        // The regions keep their ids; one whose owner is not reachable is dead.
+        const GraphDraft &built = graph->draft();
+        const auto mapped       = [&](runtime::gc_node_ref_t ref) {
+            return ref == runtime::kInvalidNodeRef ? ref : sourceToPrepared[ref];
+        };
+        for (uint32_t r = 1; r < built.regionCount(); ++r) {
+            const runtime::GCRegion &region = built.region(r);
+            const bool controls             = region.kind == runtime::GCRegionKind::Arm ||
+                                  region.kind == runtime::GCRegionKind::LoopCond ||
+                                  region.kind == runtime::GCRegionKind::LoopBody;
+            const runtime::gc_node_ref_t owner = mapped(region.owner);
+            const bool dead           = controls && owner == runtime::kInvalidNodeRef;
+            const uint32_t id         = prepared.draft->addRegion(
+                dead ? runtime::GCRegionKind::Dead : region.kind,
+                region.parent,
+                owner,
+                region.index);
+            prepared.draft->setRegionResult(id, mapped(region.result));
+            prepared.draft->setRegionOrigin(id, region.origin);
+            prepared.draft->setRegionAttrs(id, region.attrs);
+        }
         prepared.payloadShape = describeDraftNativePayload(*prepared.draft);
         CAMEL_LOG_INFO_S(
             "GIREncode",

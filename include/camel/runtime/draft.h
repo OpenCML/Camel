@@ -514,6 +514,7 @@ class GraphDraft {
     void setRegionOrigin(uint32_t id, uint32_t origin);
     void setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t callSite);
     void setRegionAttrs(uint32_t id, uint32_t attrs);
+    void setRegionParams(uint32_t id, const camel::core::type::FunctionType *params);
     /// The control regions that node `id` owns end with it: what they held is in the region
     /// around them, and the regions inside them are inside that one. (Done by eraseNode.)
     void dissolveRegionsOf(gc_node_ref_t id);
@@ -526,8 +527,24 @@ class GraphDraft {
     /// True when `id` is the call of the graph that is an arm (GCRegion::callSite): the arm is
     /// that call until lowerBranchArms inlines it.
     bool isArmCall(gc_node_ref_t id) const;
+    /// The region a node is put in when it is added without one (0: the body). The front end
+    /// sets it to the arm it is writing; passes leave it alone.
+    uint32_t insertRegion() const { return insertRegion_; }
+    void setInsertRegion(uint32_t region) { insertRegion_ = region; }
+    /// Whether a node that reads a node of a deeper control region moves into that region
+    /// (inheritRegion). The front end places every node itself, so a read across the border
+    /// of an arm is left for the validator to report.
+    void setInheritsRegions(bool inherits) { inheritsRegions_ = inherits; }
+    /// Sets the owner of a control region made before its BRCH or LOOP node was.
+    void setRegionOwner(uint32_t id, gc_node_ref_t owner, uint32_t index);
     /// The region of arm `index` of the BRCH `brch`; 0 when there is none.
     uint32_t armRegionOf(gc_node_ref_t brch, size_t index) const;
+    /// The LoopCond or LoopBody region (`part`) of the LOOP node `loop`; 0 when it has none.
+    uint32_t loopRegionOf(gc_node_ref_t loop, GCRegionKind part) const;
+    /// Makes the region `id` the body of the graph: its nodes are in region 0, the regions in it
+    /// are in region 0, and the regions around it end. For a draft that is only the content of
+    /// that region (outlining).
+    void flattenRegion(uint32_t id);
     /// Drops every region: all nodes are in the body.
     void clearRegions();
     /// True when `inner` is `outer` or lies in it.
@@ -593,7 +610,7 @@ class GraphDraft {
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, bool norm, bool with, bool ctrl);
     /// A node that reads a node of a control region (an arm, a loop part) is in that region, or in
     /// one inside it: it cannot run before what it reads. A JOIN reads the results of its arms and
-    /// stays where the branch is.
+    /// a LOOP those of its parts; they stay where the branch or the loop is.
     void inheritRegion(gc_node_ref_t input, gc_node_ref_t user);
     std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeKind kind) const;
     std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeKind kind);
@@ -629,6 +646,8 @@ class GraphDraft {
     std::vector<DraftNode *> nodesById_;
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<GCRegion> regions_; // empty, or region 0 (the body) then the others
+    uint32_t insertRegion_    = 0;
+    bool inheritsRegions_     = true;
     std::vector<gc_node_ref_t> regionPorts_;
     std::vector<WritingUnion> writings_;
     uint32_t writingScope_ = 0;

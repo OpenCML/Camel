@@ -453,10 +453,13 @@ void validateRuntimeGraphPayloadImpl(const GCGraph *graph) {
                        (graph->refRoles(index) & kGraphRefCallee) != 0;
             };
             const bool hasCond = camel::core::loopHasCondition(body->kind);
+            // A loop in region form names no graph; its parts are regions of this graph.
+            const bool regionForm = body->bodyRef == kNoLoopGraph && body->condRef == kNoLoopGraph;
             if (static_cast<uint8_t>(body->kind) >
                     static_cast<uint8_t>(camel::core::LoopKind::ForWhile) ||
-                !validLoop(body->bodyRef) ||
-                (hasCond ? !validLoop(body->condRef) : body->condRef != kNoLoopGraph)) {
+                (!regionForm &&
+                 (!validLoop(body->bodyRef) ||
+                  (hasCond ? !validLoop(body->condRef) : body->condRef != kNoLoopGraph)))) {
                 throw std::runtime_error(
                     std::format(
                         "Runtime graph '{}' has LOOP node {} without its condition or body graph.",

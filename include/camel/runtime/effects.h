@@ -58,5 +58,9 @@ struct EffectSummary {
 
 /// The effects of running `graph`, a graph of `program`, once (nullptr: none).
 EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph);
+/// The effects of running the nodes of `region` of `graph` (a LoopCond or LoopBody region, the
+/// regions inside it included) once.
+EffectSummary
+effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region);
 
 } // namespace camel::runtime

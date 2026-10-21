@@ -73,7 +73,23 @@ collection slots (section 3.1, zero for a loop written in source today). Decode,
 encoders, the session's graph enumeration and reachability know it. Every commit checks the
 payload (I12/I13) and `validateRuntimeLoopInterface` (op-semantics I18, I19).
 
-`std::rgir`:
+**Region form.** The graphs above are what the front end builds. Right after it
+(`Context::materializeRuntimeProgram`, `passes::opt::regionizeLoops`, `src/passes/opt/inline/loops.cpp`)
+the condition and the body are copied into the graph that has the LOOP node as its `LoopCond` and
+`LoopBody` regions (`GCRegion`): the state ports (the element first, for the body) are the ports
+of the region, named by `GCRegion::params`; the values the graphs captured are read where they
+are, so the node has no capture table; and the With inputs of the node are the results of the
+regions (the body's, then the condition's), which is how what the regions compute is reached
+from the node. The payload names no graph (`condRef` and `bodyRef` are none), the loop graphs
+leave the program, and a graph that has loops holds their nodes: the passes, the facts and the
+validator see them as nodes of one graph with regions. `LoopView` reads both forms
+(`inRegions()`); a loop in graph form only exists for the code that reads a loop as two graphs.
+`runtime::outlineLoopRegions` (`src/runtime/loop_outline.cpp`) makes that form from the region
+form, in a private program: NodeVM, the macro evaluator, FastVM (native loops under a debugger),
+the lowering to tail recursion and autodiff use it; autodiff regionizes its gradient again.
+`test::outline_loops` shows the result in a dump.
+
+`std::rgir` shows the node (`LOOP while`); in graph form it names the graphs:
 
 ```
 N2A [label="LOOP while cond=main.loop2.cond body=main.loop2.body", type="LOOP", ...];

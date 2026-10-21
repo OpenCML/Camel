@@ -188,7 +188,9 @@ std::string dumpJsonRuntimeGraph(
                 value["loop"] = {
                     {"kind", camel::core::loopKindName(g->loopKindOf(ref))},
                     {"condition", graphId(program.loopCondOf(*g, ref))},
-                    {"body", graphId(program.loopBodyOf(*g, ref))}};
+                    {"body", graphId(program.loopBodyOf(*g, ref))},
+                    {"conditionRegion", g->loopRegionOf(ref, camel::runtime::GCRegionKind::LoopCond)},
+                    {"bodyRegion", g->loopRegionOf(ref, camel::runtime::GCRegionKind::LoopBody)}};
             }
             const auto origin = g->nodeOrigin(ref);
             if (origin) {

@@ -101,6 +101,12 @@ class MacroEvaluator {
 
     camel::core::context::context_ptr_t context_;
     const camel::runtime::Program *program_;
+    /// `program_` with the loops of the graph that holds them as two graphs each (the evaluator
+    /// runs a loop as a call of its condition and of its body each round): the graphs reachable
+    /// from the root, and, for a graph that is not among them, its own.
+    const camel::runtime::Program *loopProgram_ = nullptr;
+    std::unordered_map<camel::runtime::GraphId, const camel::runtime::Program *> loopPrograms_;
+    const camel::runtime::Program *programWithLoopGraphs(camel::runtime::GCGraph *graph);
     camel::core::context::FramePool framePool_;
     std::unique_ptr<MacroStaticAreaStore> staticAreas_;
     size_t recursionDepth_ = 0;

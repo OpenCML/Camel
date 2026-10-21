@@ -2235,7 +2235,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 .commit(subject, "it takes a var argument");
         } else if (!capturedWrites.empty()) {
             unit_->pendingIgnoredWrites.push_back(
-                {{targetGraph.get()}, capturedWrites, gct->origin(), subject, "it writes"});
+                {{targetGraph.get()}, capturedWrites, {}, gct->origin(), subject, "it writes"});
         }
     }
     for (const Passed &arg : passed) {
@@ -2247,7 +2247,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         if (use.written) {
             recordWrite(use.variable, targetNode, targetNode, true);
         } else {
-            pendingUses_[use.variable].push_back({targetNode, false});
+            pendingUsesOf(use.variable).push_back({targetNode, false});
         }
     }
 

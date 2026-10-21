@@ -962,7 +962,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "graph.null_then"
-desc = "`a ?? b` on the graph: one OPER reading the tag, one BRCH/JOIN pair with two arms (regions of the graph, each feeding the JOIN and ordered after the BRCH), and the OPER that takes the value out inside an arm. No node kind of its own."
+desc = "`a ?? b` on the graph: one OPER reading the tag, one BRCH/JOIN pair with two arms (regions of the graph, each feeding the JOIN; an arm that only gives a value computed outside the branch has no node), and the OPER that takes the value out inside an arm. No node kind of its own."
 kind = "behavior"
 case = "../../../cases/compile/tagged/graph_null_then.cml"
 args = ["${case}", "std::gir"]
@@ -992,9 +992,9 @@ const after = (node, seen = new Set()) => {
 }
 const arms = lines.filter((l) => l.includes(' -> ' + join + ' ') && l.includes('type="WITH"')).map((l) => l.trim().split(' ')[0])
 assert(arms.length === 2, 'BRCH enters two arms')
-for (const node of arms) {
-  assert(after(node), 'an arm runs after the BRCH')
-}
+// The arm that takes the value out has code, ordered after the BRCH; the other gives `b`, which
+// is computed outside the branch, and has no node of its own.
+assert(arms.filter((node) => after(node)).length === 1, 'one arm has code, after the BRCH')
 // The value is taken out inside an arm: it runs after the BRCH.
 assert(after(idOf(':op/tag_null_value')), 'the value read is inside an arm')
 }

@@ -33,6 +33,7 @@
 #include "camel/runtime/loop_lowering.h"
 #include "camel/runtime/reachable.h"
 
+#include <algorithm>
 #include <format>
 #include <map>
 #include <unordered_map>
@@ -387,6 +388,16 @@ size_t tally(
             continue;
         }
         Tally &t = perGraph[anchors[0].graph->name()];
+        // A node the graph no longer has (a rewrite took it out) is a fact about nothing: stale.
+        const bool present = std::ranges::all_of(anchors, [](const Anchor &anchor) {
+            return anchor.node == kInvalidNodeRef ||
+                   (anchor.graph->containsNodeRef(anchor.node) &&
+                    anchor.graph->node(anchor.node) != nullptr);
+        });
+        if (!present) {
+            ++t.stale;
+            continue;
+        }
         switch (store.probe(fact.kind, anchors, fact.stamp.targetHash)) {
         case Status::Valid:
             ++t.valid;

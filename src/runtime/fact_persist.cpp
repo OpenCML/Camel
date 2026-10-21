@@ -145,8 +145,10 @@ uint64_t ownContentHash(const Program &program, const GCGraph &graph) {
             break;
         case GCNodeKind::Loop:
             h.u64(static_cast<uint64_t>(graph.loopKindOf(ref)));
+            // The parts of a loop are regions of this graph: their nodes are hashed with it. A
+            // loop in graph form names its graphs.
             h.str(program.loopCondOf(graph, ref) ? program.loopCondOf(graph, ref)->name() : "");
-            h.str(program.loopBodyOf(graph, ref)->name());
+            h.str(program.loopBodyOf(graph, ref) ? program.loopBodyOf(graph, ref)->name() : "");
             break;
         case GCNodeKind::Accs: {
             const auto *body = graph.nodeBodyAs<GCAccsBody>(ref);
