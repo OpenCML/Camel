@@ -479,7 +479,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         // not fit is refused at its element, and one that does not fit at all is described
         // below.
         if (compositeLiteralEntersIn(inputAt(i).node, wanted, inputAt(i).expr)) {
-            if (node_handle_t entered = coerceTo(inputAt(i).node, wanted, inputAt(i).expr)) {
+            if (node_handle_t entered = checkValue(inputAt(i).node, wanted, inputAt(i).expr)) {
                 inputAt(i).node = entered;
                 typeAt(i)       = wanted;
                 continue;

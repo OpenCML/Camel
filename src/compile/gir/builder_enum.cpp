@@ -291,7 +291,7 @@ Builder::visitEnumConstruction(const GCT::node_ptr_t &gct, EnumType *type, size_
         tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(tag)))));
     for (size_t i = 0; i < fields.size(); ++i) {
         Type *wanted          = instance->fieldType(tag, i);
-        node_handle_t coerced = coerceTo(fields[i], wanted, gct);
+        node_handle_t coerced = checkValue(fields[i], wanted, gct);
         if (coerced == nullptr) {
             diags_->of(SemanticDiag::EnumFieldTypeMismatch)
                 .atOrigin(gct->origin())

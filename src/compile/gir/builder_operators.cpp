@@ -1667,7 +1667,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     param->assignableFrom(types[i])) {
                     continue;
                 }
-                if (node_handle_t entered = coerceTo(inputs[i].node, param, inputs[i].expr)) {
+                if (node_handle_t entered = checkValue(inputs[i].node, param, inputs[i].expr)) {
                     inputs[i].node = entered;
                     types[i]       = param;
                 }
@@ -2297,7 +2297,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     types[i]->code() != TypeCode::Struct || param->equals(types[i])) {
                     continue;
                 }
-                if (node_handle_t entered = coerceTo(inputs[i].node, param, inputs[i].expr)) {
+                if (node_handle_t entered = checkValue(inputs[i].node, param, inputs[i].expr)) {
                     inputs[i].node = entered;
                     types[i]       = param;
                 }

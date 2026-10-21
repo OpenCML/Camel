@@ -649,7 +649,7 @@ void Builder::buildFuncBody(
 }
 
 
-node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
+node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpected) {
     ENTER("EXEC");
     // The tags written before the block hold for the nodes written in it (`#kernel { ... }`,
     // design principles 6.2): they join the attributes in force where the block is written.
@@ -728,8 +728,6 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
-        // The tail statement of an enclosing body, kept across a statement that fails.
-        const GCT::Node *outerTailStatement = tailStatement_;
         try {
             const auto &child = gct->at(i);
             // Every statement but the last is one whose value nothing takes, and the last one
@@ -739,14 +737,17 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
             const bool unused = !gct->operands() && (i + 1 < gct->size() || valueDropped);
             unusedStatement_  = unused ? child : nullptr;
             any result;
-            if (gct == tailExpectedFor_ && i + 1 == gct->size() && !gct->operands()) {
-                // The body's value, in the position of the body (see visitBodyNode). A literal
-                // written here takes that position's type (design principles 5.1), which is
-                // how an arm's value takes the type of the whole `if` / `match`.
-                tailStatement_ = child;
-                ExpectedValueScope tailScope(expectedValueType_, tailExpectedType_);
-                result         = visit(child);
-                tailStatement_ = outerTailStatement;
+            // The body's value, in the position of the body (see visitBodyNode): the same
+            // expected-type channel every other position uses, and checkValue converts a
+            // literal or empty array there (design principles 5.1).
+            // A function declaration is a statement, not a value: it leaves the block's value
+            // as it was (an empty-named FUNC is a lambda written in place, and is a value).
+            const bool declaration =
+                child->type() == GCT::NodeKind::FUNC && !child->name().empty();
+            const bool tailPosition = tailExpected != nullptr && !gct->operands() &&
+                                      i + 1 == gct->size() && !declaration;
+            if (tailPosition) {
+                result = visitInPosition(child, tailExpected);
             } else {
                 result = visit(child);
             }
@@ -766,7 +767,6 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
                 res = valueNodeOf(result);
             }
         } catch (const BuildAbortException &e) {
-            tailStatement_ = outerTailStatement;
             before.restore();
             unusedStatement_ = nullptr;
             failed           = true;

@@ -768,14 +768,11 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    // The type of the position the expression being built stands at: the value the expression
+    // produces must be of this type (design principles 5.1). Every syntax position that knows
+    // the type passes it down with an ExpectedValueScope or visitInPosition; checkValue applies
+    // it to the finished value.
     Type *expectedValueType_   = nullptr;
-    // The body statement whose last value is in a position (see tailPositionType), and the type
-    // that position expects.
-    const GCT::Node *tailExpectedFor_ = nullptr;
-    Type *tailExpectedType_           = nullptr;
-    // The last statement of such a body, the one whose value is in the position: a literal
-    // there takes the position's type (design principles 5.1; see visitDataNode).
-    const GCT::Node *tailStatement_ = nullptr;
     struct ExpectedValueScope {
         Type *&current;
         Type *outer;
@@ -1544,6 +1541,22 @@ class Builder {
     /// nullptr when the value does not enter (camel::core::type::entersImplicitly).
     node_handle_t
     coerceTo(node_handle_t node, camel::core::type::Type *target, const GCT::node_ptr_t &origin);
+    /// Applies the expected type of a position to the value built there, in the one place it is
+    /// done: a value that names a generic function is instantiated for `expected`, then the
+    /// value takes the type (coerceTo: literals, empty arrays, struct copies, `T?` / `T!`).
+    /// nullptr when the value does not enter the type; callers that can report it do.
+    node_handle_t checkValue(
+        node_handle_t node, camel::core::type::Type *expected, const GCT::node_ptr_t &origin);
+    /// Builds `gct` in a position that expects `expected`: the type is in force while the
+    /// expression is built (a generic function value reads it), and checkValue applies it to
+    /// the result. `expected` may be nullptr (no position).
+    node_handle_t
+    visitInPosition(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
+    /// The literal at `gct` built as `expected` while it is made, so that no literal of its own
+    /// type is left unused in the graph; nullptr when `gct` is not a literal that takes the
+    /// type or the literal already is of it. Used by visitInPosition.
+    node_handle_t
+    literalDataInType(const GCT::node_ptr_t &gct, camel::core::type::Type *expected);
     /// `value` as the struct type `target`, field by field and by name: a real copy, made when
     /// the fields are the same but not in the same order, or when a field type is refined. No
     /// copy is made when the layouts already agree (that conversion is a CAST, CastSafety).
@@ -1642,7 +1655,11 @@ class Builder {
     size_t tagTemporaries_ = 0;
     node_handle_t visitAnnoNode(const GCT::node_ptr_t &gct);
     node_handle_t visitExitNode(const GCT::node_ptr_t &gct);
-    node_handle_t visitExecNode(const GCT::node_ptr_t &gct);
+    /// Builds the statements of a block. `tailExpected` is the type of the position the block's
+    /// last value stands at (a body's value; see visitBodyNode), nullptr when nothing expects a
+    /// value.
+    node_handle_t
+    visitExecNode(const GCT::node_ptr_t &gct, camel::core::type::Type *tailExpected = nullptr);
     // The body of a graph (function, lambda, branch arm): a block of its own, whatever block
     // the function or arm is written in.
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
