@@ -948,7 +948,10 @@ name = "numeric_permissions_moving_gc"
 kind = "behavior"
 tool = "python"
 case = "../../cases/modules/tiles/numeric_permissions.py"
-args = ["--gc", "generational", "${case}"]
+# A python tool is the command, so a camel option in `args` would go to python. The script runs
+# camel itself; the default collector (generational) is the one this test wants, and the stress
+# switches below reach the script's environment.
+args = ["${case}"]
 envs = ["CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_ALLOC=3", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=major"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: numeric permission boundaries", "std::opt std::nvm: numeric permission boundaries"]
@@ -1150,7 +1153,10 @@ case = "../../cases/modules/tiles/loop_checks.py"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: LOOP CPU boundaries", "std::fvm: LOOP CPU boundaries", "std::jit: LOOP CPU boundaries", "std::prl: LOOP CPU boundaries", "neighboring GPU regions preserved PASS"]
-timeout_ms = 180000
+# Four CPU back ends, a GPU region beside every loop and the permission checks: the script runs
+# many subprocesses and takes about 50 s alone, more than three minutes with the other GPU tests
+# on eight cores. The same ceiling as multi_state_loop_boundaries (H75, section 5).
+timeout_ms = 360000
 
 [[tests]]
 name = "multi_state_loop_device"
