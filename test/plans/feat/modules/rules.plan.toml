@@ -99,3 +99,35 @@ expect_exit = 0
 expect_stdout_contains = ["FAIL wrong: the two sides differ at (", "FAIL sign: the two sides differ at (", "FAIL plus_zero: the two sides differ at (-0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "rules.library_passes_the_check"
+desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_library.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rules.library_simplify"
+desc = "rules::simplify, the library pass, folds x*3 + x*5 and ((x+0)*3)*2 as std::opt::algebra does, and the program prints what it printed."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "counts::report", "rules::simplify", "counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.library_saturate_all"
+desc = "rules::saturate_all saturates with every rule of the library, the rearranging ones included, and extracts the smallest writing: the same operators."
+kind = "behavior"
+case = "../../../cases/modules/rules/target.cml"
+args = ["${case}", "counts::report", "rules::saturate_all", "counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\n56 42\n"
+timeout_ms = 20000
