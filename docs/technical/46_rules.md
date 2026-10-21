@@ -49,19 +49,25 @@ The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refuse
 
 A rule may state the numeric permissions it needs with `#requires<...>` before the declaration
 (design principles 7.2): a rule that rewrites `x * c1 + x * c2` into `x * (c1 + c2)` is only
-correct where `reassociate` is allowed. `#requires<reassociate, contract>` names permissions (not
-tags of the program); the group `finite_math` names the four assumptions it groups, so
-`#requires<finite_math>` needs all four. The mask is the third argument of `__rule`
-(`__rule('name', twoWay, needs, consts, lhs, rhs)`); the fourth is the mask of `const`
-parameters, as before.
+correct where `reassociate` is allowed. `#requires<reassociate, contract>` names permissions; the
+core group `finite_math` names the four assumptions it groups, so `#requires<finite_math>` needs
+all four, and a module may declare its own group of permissions (`tag fast = [reassociate,
+contract]`) and require `#requires<fast>`: the AST pre-pass expands same-module groups
+recursively into a `sem::PermissionMask`. A program may not declare a tag with the name of a
+core permission (`SemanticDiag::TagShadowsPermission`), because that name always means the
+core's permission and the declaration would never be read. The mask is the third argument of
+`__rule` (`__rule('name', twoWay, needs, consts, lhs, rhs)`); the fourth is the mask of `const`
+parameters, as before. The mask is 16 bits (`PermissionMask`): the nine permissions of 7.2,
+`nondeterministic` included, and room for more without a second column.
 
 The check and the engines ask the numeric policy of the nodes for the mask: a rule whose `needs`
 the policy does not allow is skipped at that function (and a rule that needs nothing always
 applies). With the defaults of 7.3, a rule that needs `reassociate` or `contract` applies without
-any `@numeric`; one that needs `approx_math`, `change_precision` or an assumption of `finite_math`
-applies only where the program grants it, written `@numeric(...)` or as the tag `#approx_math`.
-A requirement that names no permission is a located error (`SemanticDiag::TagNotAPermission`), and
-so is a tag other than `#requires` before a rule (`SemanticDiag::RuleTagNotRequires`).
+any `@numeric`; one that needs `approx_math`, `change_precision`, `nondeterministic` or an
+assumption of `finite_math` applies only where the program grants it, written `@numeric(...)` or
+as the tag `#approx_math`. A requirement that names no permission is a located error
+(`SemanticDiag::TagNotAPermission`), and so is a tag other than `#requires` before a rule
+(`SemanticDiag::RuleTagNotRequires`).
 
 ## 2. From a rule to the engine
 

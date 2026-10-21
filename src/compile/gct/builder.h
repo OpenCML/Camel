@@ -135,7 +135,7 @@ class Builder {
     // The numeric permissions in force where the builder is (design principles 7.5): the
     // union of the `@numeric(...)` grants of the blocks and functions it is inside. Every EXEC
     // is made with them (makeExec).
-    uint8_t numericPermissions_ = 0;
+    camel::core::sem::PermissionMask numericPermissions_ = 0;
     node_ptr_t makeExec(bool synced = false, bool operands = false);
 
     bool funcDeclPending_ = false;
@@ -340,3 +340,4 @@ class Builder {
 };
 
 } // namespace camel::compile::gct
+

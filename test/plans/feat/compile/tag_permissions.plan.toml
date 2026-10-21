@@ -45,7 +45,7 @@ for (const line of out.split('\n')) {
   }
 }
 const of = (fn) => numeric[fn] || []
-for (const fn of ['plain', 'annotated', 'tagged', 'blockTagged', 'annotated2', 'tagged2', 'finite', 'grouped', 'main']) {
+for (const fn of ['plain', 'annotated', 'tagged', 'blockTagged', 'annotated2', 'tagged2', 'finite', 'grouped', 'drifting', 'main']) {
   assert(of(fn).length > 0, `no OPER nodes in ${fn}`)
 }
 for (const value of of('plain')) assert(value === '', `plain has no permission, got '${value}'`)
@@ -56,6 +56,7 @@ for (const value of of('annotated2')) assert(value === 'reassociate', `annotated
 for (const value of of('tagged2')) assert(value === 'reassociate', `tagged2: '${value}'`)
 for (const value of of('finite')) assert(value === 'finite_math', `finite: '${value}'`)
 for (const value of of('grouped')) assert(value === 'reassociate, contract', `grouped: '${value}'`)
+for (const value of of('drifting')) assert(value === 'nondeterministic', `drifting: '${value}'`)
 for (const value of of('main')) assert(value === '', `main: '${value}'`)
 assert(JSON.stringify(of('annotated')) === JSON.stringify(of('tagged')), 'the tag and @numeric must agree')
 assert(JSON.stringify(of('annotated2')) === JSON.stringify(of('tagged2')), 'the tag and @numeric must agree')

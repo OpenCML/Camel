@@ -72,10 +72,12 @@ std::string qualified(std::string_view module, std::string_view ident) {
     return std::string(module) + "::" + std::string(ident);
 }
 
-/// The passes modules and the core registered as readers of tag facts.
+/// The passes modules and the core registered as readers of tag facts, and, for a Camel pass
+/// that says which tags it reads (`#reads<...>`), the passes of each tag.
 struct Readers {
     std::shared_mutex mutex;
     std::set<std::string> passes;
+    std::map<std::string, std::set<std::string>> ofTag;
 };
 
 Readers &readers() {
@@ -100,7 +102,7 @@ ReaderCache &readerCache() {
 void declareStandardTags() {
     static std::once_flag once;
     std::call_once(once, [] {
-        const auto add = [](const char *name, uint8_t permission, Positions on) {
+        const auto add = [](const char *name, sem::PermissionMask permission, Positions on) {
             Decl decl;
             decl.name       = name;
             decl.ident      = name;
@@ -117,6 +119,7 @@ void declareStandardTags() {
         add("no_infs", sem::kNoInfs, on);
         add("no_signed_zeros", sem::kNoSignedZeros, on);
         add("flush_subnormals", sem::kFlushSubnormals, on);
+        add("nondeterministic", sem::kNonDeterministic, on);
         // `finite_math` is the group of the four assumptions (design principles 7.2), not a
         // permission of its own.
         Decl finite;
@@ -128,6 +131,16 @@ void declareStandardTags() {
             Reference("no_signed_zeros"),
             Reference("flush_subnormals")};
         declare(std::move(finite));
+        // `reads`, written on a Camel pass function: the tags the pass reads. Its arguments are
+        // tag names, not values, and there may be any number of them (`#reads<reassociate,
+        // contract>`); `registerCamelPass` records the pass as a reader of each.
+        Decl reads;
+        reads.name     = "reads";
+        reads.ident    = "reads";
+        reads.on       = Func;
+        reads.names    = true;
+        reads.variadic = true;
+        declare(std::move(reads));
     });
 }
 
@@ -186,12 +199,12 @@ std::optional<TagId> find(std::string_view module, std::string_view ident) {
     return find(qualified(module, ident));
 }
 
-uint8_t permissionOf(TagId id) {
+sem::PermissionMask permissionOf(TagId id) {
     const Decl *decl = get(id);
     return decl == nullptr ? 0 : decl->permission;
 }
 
-uint8_t permissionOfName(std::string_view name) {
+sem::PermissionMask permissionOfName(std::string_view name) {
     const auto id = find(std::string_view{}, name);
     if (!id.has_value()) {
         return 0;
@@ -205,12 +218,9 @@ uint8_t permissionOfName(std::string_view name) {
     }
     // `finite_math` stands for its four assumptions (design principles 7.2): a group grants
     // what its members grant.
-    uint8_t mask = 0;
+    sem::PermissionMask mask = 0;
     for (const Reference &member : decl->aliases) {
-        const auto memberId = find(std::string_view{}, member.toString());
-        if (memberId.has_value()) {
-            mask = static_cast<uint8_t>(mask | permissionOfName(member.toString()));
-        }
+        mask |= permissionOfName(member.toString());
     }
     return mask;
 }
@@ -265,6 +275,22 @@ bool isReader(std::string_view written) {
         }
     }
     return false;
+}
+
+void declareTagReader(std::string_view tag, std::string_view pass) {
+    Readers &r = readers();
+    std::unique_lock lock(r.mutex);
+    r.ofTag[std::string(tag)].emplace(pass);
+}
+
+std::vector<std::string> readersOfTag(std::string_view tag) {
+    Readers &r = readers();
+    std::shared_lock lock(r.mutex);
+    const auto it = r.ofTag.find(std::string(tag));
+    if (it == r.ofTag.end()) {
+        return {};
+    }
+    return std::vector<std::string>(it->second.begin(), it->second.end());
 }
 
 std::string_view positionName(Position position) {
@@ -363,7 +389,7 @@ void attachPermissionsToDeclaration(
     module::Module &module,
     const Reference &name,
     std::string_view signature,
-    uint8_t permissions) {
+    sem::PermissionMask permissions) {
     if (permissions == 0) {
         return;
     }
@@ -373,18 +399,18 @@ void attachPermissionsToDeclaration(
 namespace {
 
 /// The numeric permissions the tags of a declaration grant: each permission tag in the set.
-uint8_t permissionsOfTags(attr::AttrSetId tags) {
-    uint8_t mask = 0;
+sem::PermissionMask permissionsOfTags(attr::AttrSetId tags) {
+    sem::PermissionMask mask = 0;
     for (const attr::Attr &entry : attr::entries(tags)) {
-        mask = static_cast<uint8_t>(mask | permissionOfName(attr::keyName(entry.key)));
+        mask = static_cast<sem::PermissionMask>(mask | permissionOfName(attr::keyName(entry.key)));
     }
     return mask;
 }
 
-Facts factsOfSet(attr::AttrSetId tags, uint8_t permissions) {
+Facts factsOfSet(attr::AttrSetId tags, sem::PermissionMask permissions) {
     Facts facts;
     facts.tags        = tags;
-    facts.permissions = static_cast<uint8_t>(permissions | permissionsOfTags(tags));
+    facts.permissions = static_cast<sem::PermissionMask>(permissions | permissionsOfTags(tags));
     facts.readers     = readersOf(tags);
     return facts;
 }

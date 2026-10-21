@@ -244,7 +244,7 @@ uint64_t contentHash(const GCGraph &graph) {
         const size_t nodes       = chunk.nodeCount;
         bytes(chunk.nodes(), nodes * sizeof(runtime::GCNode));
         bytes(chunk.origins, nodes * sizeof(*chunk.origins));
-        bytes(chunk.permissions, chunk.permissions ? nodes : 0);
+        bytes(chunk.permissions, chunk.permissions ? nodes * sizeof(*chunk.permissions) : 0);
         bytes(chunk.attrs, chunk.attrs ? nodes * sizeof(*chunk.attrs) : 0);
         bytes(chunk.regions, chunk.regions ? nodes * sizeof(*chunk.regions) : 0);
         bytes(chunk.edges, chunk.edgeCount * sizeof(*chunk.edges));
@@ -325,3 +325,4 @@ const camel::runtime::Program *rewriteReachableGraphs(
 }
 
 } // namespace camel::passes::generic
+

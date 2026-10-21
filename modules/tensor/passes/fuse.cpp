@@ -194,7 +194,7 @@ void fuse(GraphDraft &draft, const Match &m) {
 /// The permissions a library GEMM needs: its own order and grouping of the accumulation
 /// (reassociate), and products that may be rounded separately or a different accumulation
 /// precision (change_precision). Design principles 7.1.
-constexpr uint8_t kLibraryGemmPermissions =
+constexpr camel::core::sem::PermissionMask kLibraryGemmPermissions =
     camel::core::sem::kReassociate | camel::core::sem::kChangePrecision;
 
 /// Replaces every tensor:matmul node granted kLibraryGemmPermissions by tensor:matmul_blas
@@ -318,3 +318,4 @@ void registerTensorPasses() {
 }
 
 } // namespace camel::tensor::passes
+

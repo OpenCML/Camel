@@ -1,0 +1,16 @@
+/**
+ * `f` carries `marked`, whose declaration names `reads_pass::apply` as its reader. With that
+ * pass in the pipeline the tag is read and no `TagHasNoReader` warning is emitted.
+ */
+module reads_target
+import { marked } from reads_pass
+
+#[marked]
+func f(x: int): int {
+    return x
+}
+
+func main(): int {
+    println(f(1))
+    return 0
+}

@@ -496,10 +496,10 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (!name.empty()) {
         // What the declaration grants: the permission tags written before it and the
         // `@numeric(...)` (or permission tags) of its body, which the GCT already summed.
-        uint8_t granted = tags.permissions;
+        camel::core::sem::PermissionMask granted = tags.permissions;
         if (gct->size() > 1 && gct->at(1) != nullptr &&
             gct->at(1)->type() == GCT::NodeKind::EXEC) {
-            granted = static_cast<uint8_t>(granted | gct->at(1)->numericPermissions());
+            granted = static_cast<camel::core::sem::PermissionMask>(granted | gct->at(1)->numericPermissions());
         }
         camel::core::tag::attachPermissionsToDeclaration(
             *module_, Reference(name), signature, granted);
@@ -558,7 +558,7 @@ void Builder::buildFuncBody(
     const GCT::node_ptr_t body = gct->size() > 1 ? gct->at(1) : nullptr;
     NumericPermissionScope permissions(
         numericPermissions_,
-        static_cast<uint8_t>(
+        static_cast<camel::core::sem::PermissionMask>(
             (body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0) |
             bodyTags.permissions));
     // The attributes its decorators grant join those in force where it is written (each key's
@@ -645,7 +645,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     // nodes through this one column.
     NumericPermissionScope permissions(
         numericPermissions_,
-        static_cast<uint8_t>(
+        static_cast<camel::core::sem::PermissionMask>(
             gct->numericPermissions() | numericPermissions_ | blockTags.permissions));
     AttrScope attrs(
         currentAttrs_,
@@ -792,3 +792,5 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
 }
 
 } // namespace camel::compile::gir
+
+

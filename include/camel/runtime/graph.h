@@ -37,9 +37,9 @@
  *    time anything asks for it and keeps it for the graph's lifetime.
  * 6. The source position of each node is a column parallel to the records (nodeOrigin): one
  *    32-bit origin id per node, 0 when the node has none. Beside it, only in a graph where some
- *    node has any, the numeric permissions the program granted with @numeric(...): one byte per
- *    node (nodePermissions; design principles 7.5, docs/design/op-semantics 6.3), and the
- *    attributes libraries attached to the nodes: one 32-bit interned set per node
+ *    node has any, the numeric permissions the program granted with the standard permission
+ *    tags: one mask per node (nodePermissions; design principles 7.5, docs/design/op-semantics
+ *    6.3), and the attributes libraries attached to the nodes: one 32-bit interned set per node
  *    (nodeAttrs; camel/core/node_attrs.h, language reference 7.6).
  * 7. A graph refers to other graphs only through its reference table (refs(), design 3.7), by
  *    GraphId; the Program a graph is read in (program.h) says which version of each it means.
@@ -53,6 +53,7 @@
 
 #include "camel/core/loop_kind.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/symbol.h"
@@ -203,7 +204,7 @@ struct WritingUnion {
     gc_node_ref_t a = kInvalidNodeRef;
     gc_node_ref_t b = kInvalidNodeRef;
     /// The numeric permissions the equivalence needs (0: it holds bit for bit).
-    uint8_t perms = 0;
+    camel::core::sem::PermissionMask perms = 0;
     uint8_t flags = 0;
     /// The rule that asserted it (0: none, congruence).
     uint16_t rule = 0;
@@ -432,7 +433,7 @@ struct GCNodeChunk {
     uint32_t payloadWordCount = 0;
     uint32_t *origins         = nullptr; // nodeCount source origins (0: none)
     uint32_t *regions         = nullptr; // nodeCount regions of the nodes; null when all are 0
-    uint8_t *permissions      = nullptr; // nodeCount numeric permissions; null when all are 0
+    camel::core::sem::PermissionMask *permissions = nullptr; // nodeCount numeric permissions
     uint32_t *attrs           = nullptr; // nodeCount attribute sets; null when all are 0
     gc_node_ref_t *edges      = nullptr; // edgeCount entries: the input runs of the nodes in order
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
@@ -513,7 +514,7 @@ class GCGraph : public camel::core::rtdata::Object {
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
     /// Numeric permissions (camel/core/operator_semantics.h, PermissionMask) the program granted
     /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
-    uint8_t nodePermissions(gc_node_ref_t ref) const;
+    camel::core::sem::PermissionMask nodePermissions(gc_node_ref_t ref) const;
     /// True when some node of the graph has numeric permissions.
     bool hasNodePermissions() const { return nativePayload_.hasPermissions; }
     /// The attributes (camel/core/node_attrs.h, AttrSetId) of node `ref`, 0 when none; the
@@ -942,3 +943,4 @@ class GCGraphManager {
 };
 
 } // namespace camel::runtime
+

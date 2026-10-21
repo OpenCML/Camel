@@ -391,11 +391,11 @@ export tag width<w: int> on type, field     // 带参数，参数是编译期值
 tag finite = [kernel, fast]                 // 标签组：成员一起生效
 ```
 
-位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告；只有声明自己读取标签事实的遍（内置的 GIR/JSON 输出遍与 `std::opt`，模块遍如 `tiles::compile`、`tensor::fuse`）才算读取者。
+位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告；只有声明自己读取标签事实的遍（内置的 GIR/JSON 输出遍与 `std::opt`，模块遍如 `tiles::compile`、`tensor::fuse`）才算读取者；用 Camel 写的遍也可以在函数上用 `#reads<标签, ...>` 声明自己读哪些标签，与 `read_by` 同样算数。程序不得声明与核心许可同名的标签（如 `tag reassociate`）：那样的名字始终指核心许可，声明永远读不到，`SemanticDiag::TagShadowsPermission` 在声明处拒绝。
 
-语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on func, nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`，以及把它们四项合在一起的组 `finite_math`。`#contract` 与 `@numeric(contract)` 授予的是同一件事，落在同一个许可列上（所以 dump 里的 `numeric="..."` 完全一样），默认值也不变（7.3）：`reassociate` 与 `contract` 本来就允许，标签只是把许可写明；其余的仍要写明才生效。`#finite_math` 与 `@numeric(finite_math)` 一样，表示四项假设全部成立。
+语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on func, nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`、`nondeterministic`（允许结果随调度变化，如浮点原子加），以及把它们前四项合在一起的组 `finite_math`。`#contract` 与 `@numeric(contract)` 授予的是同一件事，落在同一个许可列上（所以 dump 里的 `numeric="..."` 完全一样），默认值也不变（7.3）：`reassociate` 与 `contract` 本来就允许，标签只是把许可写明；其余的仍要写明才生效。`#finite_math` 与 `@numeric(finite_math)` 一样，表示四项假设全部成立。
 
-规则的声明之前可以写 `#requires<许可, ...>`（同样只有许可名，组 `finite_math` 展开为四项）：规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成别的名字、写成程序自己的标签，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
+规则的声明之前可以写 `#requires<许可, ...>`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
 
 `#` 有三种写法，可以写在函数、类型声明、结构体字段或块之前：
 

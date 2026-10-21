@@ -1188,13 +1188,23 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TagShadowsPermission,
+            {
+                "TagShadowsPermission",
+                "The tag '{0}' is declared with the name of a permission of the language.",
+                "A numeric permission (design principles 7.2) is a tag of the core and a program "
+                "may not declare a tag of that name: the core's permission would still be what "
+                "'#{0}' means, and the declaration would never be read. Rename the tag.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",
                 "The tag '{0}' grants no numeric permission.",
                 "A requirement names a permission of design principles 7.2: reassociate, "
-                "contract, approx_math, change_precision, finite_math, no_nans, no_infs, "
-                "no_signed_zeros or flush_subnormals.",
+                "contract, approx_math, change_precision, nondeterministic, finite_math, no_nans, "
+                "no_infs, no_signed_zeros or flush_subnormals.",
             },
         },
         {
