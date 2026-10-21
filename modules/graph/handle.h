@@ -32,13 +32,15 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/other.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/runtime/node_ref.h"
 
 #include <cstdint>
 #include <string>
 
 namespace camel::runtime {
 class Program;
-}
+class GraphDraft;
+} // namespace camel::runtime
 
 namespace camel::graphmod {
 
@@ -84,8 +86,15 @@ class Handle final : public rtdata::Object {
         HandleKind kind, const camel::runtime::Program *program, camel::runtime::GraphId graph,
         uint32_t index, type::Type *typeRef, mm::IAllocator &allocator);
 
+    /// A Node handle that names a node of the draft being rewritten (no Program: a draft is not
+    /// a published version). The node readers answer from the draft.
+    static Handle *createInDraft(
+        const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node,
+        mm::IAllocator &allocator);
+
     HandleKind kind() const { return kind_; }
     const camel::runtime::Program *program() const { return program_; }
+    const camel::runtime::GraphDraft *draft() const { return draft_; }
     camel::runtime::GraphId graph() const { return graph_; }
     uint32_t index() const { return index_; }
     type::Type *typeRef() const { return typeRef_; }
@@ -100,12 +109,15 @@ class Handle final : public rtdata::Object {
 
   private:
     Handle(
-        HandleKind kind, const camel::runtime::Program *program, camel::runtime::GraphId graph,
-        uint32_t index, type::Type *typeRef)
-        : kind_(kind), program_(program), graph_(graph), index_(index), typeRef_(typeRef) {}
+        HandleKind kind, const camel::runtime::Program *program,
+        const camel::runtime::GraphDraft *draft, camel::runtime::GraphId graph, uint32_t index,
+        type::Type *typeRef)
+        : kind_(kind), program_(program), draft_(draft), graph_(graph), index_(index),
+          typeRef_(typeRef) {}
 
     HandleKind kind_;
     const camel::runtime::Program *program_;
+    const camel::runtime::GraphDraft *draft_;
     camel::runtime::GraphId graph_;
     uint32_t index_;
     type::Type *typeRef_;

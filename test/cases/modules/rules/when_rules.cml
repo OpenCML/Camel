@@ -1,0 +1,85 @@
+/**
+ * Rules with a side condition (`when`), and the passes that use them (H38, rewrite design 2.1).
+ *
+ * The condition is a function of the rule's parameters seen as nodes of the draft being
+ * rewritten: it can test the shape of a node (`op`), the type of a node (`type_of`,
+ * `type_name`) and the facts of the store (`constant`, `is_constant`). The sides keep seeing the
+ * values of the matched subgraph. A condition is pure: it reads the draft and answers whether the
+ * rule applies to this match.
+ */
+module when_rules
+import { Program, Node, Graph, graphs, nodes, op, op_name, name, constant, type_of, type_name } from graph
+import { rewrite, saturate, extract } from rewrite
+
+/// Whether the node is the constant 0: a fact read of the draft.
+func isZeroConst(n: Node): bool {
+    return match constant(n, 0) {
+        case null => false
+        case v => v == 0
+    }
+}
+
+/// Whether the node is an addition: a shape test of the draft.
+func isAddNode(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':op/add_l'
+    }
+}
+
+/// The type of a node as a name, or '' when type_of does not know it.
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+rule add_zero_const(x: int, y: int) { x + y => x } when isZeroConst(y)
+
+/// The shape rule: only a product whose second factor is an addition is replaced.
+rule mul_sum_by_shape(x: int, y: int) { x * y => y } when isAddNode(y)
+
+rule int_double(x: int) { x + x => x * 2 } when typeText(x) == 'int'
+rule float_double(x: float) { x + x => x * 2.0 } when typeText(x) == 'float'
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [add_zero_const, mul_sum_by_shape, int_double, float_double])
+}
+
+export func saturated(p: Program): Program! {
+    let tabled = saturate(p, [add_zero_const, mul_sum_by_shape, int_double, float_double], 8)
+    return match tabled {
+        case error e => tabled
+        case q => extract(q, 'nodes')
+    }
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+/// Prints the add and product counts of the functions of the target, so the tests can see what a
+/// condition let through and what it refused. The int rules use the 64-bit operators, the float
+/// ones the double operators.
+export func report(p: Program): Program! sync {
+    println('byConst', countOf(p, 'byConst', ':op/add_l'))
+    println('notConst', countOf(p, 'notConst', ':op/add_l'))
+    println('mulSum', countOf(p, 'mulSum', ':op/mul_l'), countOf(p, 'mulSum', ':op/add_l'))
+    println('mulPlain', countOf(p, 'mulPlain', ':op/mul_l'))
+    println('intDouble', countOf(p, 'intDouble', ':op/add_l'), countOf(p, 'intDouble', ':op/mul_l'))
+    println('floatDouble', countOf(p, 'floatDouble', ':op/add_d'), countOf(p, 'floatDouble', ':op/mul_d'))
+    return p
+}

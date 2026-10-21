@@ -158,8 +158,9 @@ struct Pattern {
     bool constOnly   = false;
     camel::core::OperId oper = camel::core::kNoOper;
     // Constant: the bits and the type; Op, Compute: the type of the result (null: the type of the
-    // value the rule matched).
-    slot_t value                       = 0;
+    // value the rule matched). `value` is mutable because the patterns of a rule are compiled
+    // once and a collection during a rule condition (a safepoint) can move the constant it holds.
+    mutable slot_t value               = 0;
     camel::core::type::Type *type      = nullptr;
     std::vector<Pattern> args;
     // Compute (right side only): the constant it is, from the constants of its arguments.
@@ -204,6 +205,12 @@ struct Rule {
     /// The rule comes from a `<=>`: it holds both ways, which only a saturation can use.
     bool twoWay = false;
 };
+
+/// Relocates the constant values the patterns of `rules` hold. The objects themselves are kept
+/// alive by the rule's Program; a collection during a rule condition can move them, and the
+/// patterns hold copies of their slots.
+void traceRuleConstants(
+    std::span<const Rule> rules, const camel::core::rtdata::Object::RefRelocator &relocate);
 
 /// What a saturation may spend; the result does not depend on time. Rounds are passes over all
 /// the rules. The run stops, without an error, when a budget is used up.

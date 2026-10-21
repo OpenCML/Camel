@@ -17,7 +17,6 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-
 /*
  * The rewrite module: rules as values, and the engines that apply them to a program.
  *
@@ -29,7 +28,10 @@
 
 #include "rule.h"
 
+#include "../graph/handle.h"
+
 #include "camel/core/context/context.h"
+#include "camel/core/mm/root_handle.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
@@ -47,8 +49,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
 #include <format>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <random>
 
@@ -57,6 +61,9 @@ using namespace camel::core::module;
 using namespace camel::core::rtdata;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
+using camel::graphmod::Handle;
+using camel::graphmod::HandleKind;
+using camel::graphmod::HandleType;
 using camel::rewritemod::RuleObject;
 using camel::rewritemod::RuleType;
 
@@ -75,6 +82,20 @@ slot_t ruleKernel(ArgsView &, ArgsView &norm, Context &) {
         norm.get<::Function *>(4),
         norm.get<::Function *>(5),
         nullptr,
+        mm::autoSpace());
+    return toSlot(object);
+}
+
+slot_t ruleWhenKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto name = camel::core::internSymbol(norm.get<String *>(0)->view());
+    auto *object    = RuleObject::create(
+        name,
+        norm.get<rtdata::Bool>(1),
+        static_cast<uint8_t>(norm.get<rtdata::Int64>(2)),
+        static_cast<uint64_t>(norm.get<rtdata::Int64>(3)),
+        norm.get<::Function *>(4),
+        norm.get<::Function *>(5),
+        norm.get<::Function *>(6),
         mm::autoSpace());
     return toSlot(object);
 }
@@ -103,8 +124,52 @@ RuleObject *callRule(Context &ctx, ::Function *maker) {
     return static_cast<RuleObject *>(fromSlot<Object *>(made));
 }
 
-/// What a rule object says, as the compiler of rules takes it.
-camel::runtime::RuleSource sourceOf(const RuleObject &rule, uint16_t id) {
+/// The state a condition closure needs: the rule object, rooted so that the closure can read the
+/// condition function from it after every safepoint, and the node VM the conditions of one engine
+/// call share.
+struct WhenCall {
+    std::shared_ptr<mm::RootHandle> rule;
+    std::shared_ptr<NodeVMSchedPass> vm;
+};
+
+/// Whether a rule's condition holds at this match. Its parameters are Node handles of the draft
+/// being rewritten, one per parameter of the rule; a parameter the left side does not use names
+/// no node and faults when it is read.
+bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
+    const size_t arity = static_cast<size_t>(
+        call.rule->getAs<RuleObject>()->when()->graph()->funcType()->normTypesCount());
+    camel::runtime::GraphDraft &draft = match.writings.draft();
+    std::vector<std::unique_ptr<mm::RootHandle>> roots;
+    std::vector<slot_t> args;
+    roots.reserve(arity);
+    args.reserve(arity);
+    for (size_t i = 0; i < arity; ++i) {
+        const camel::runtime::gc_node_ref_t ref =
+            i < match.vars.size() ? match.vars[i] : camel::runtime::kInvalidNodeRef;
+        Handle *handle = Handle::createInDraft(draft, ref, mm::autoSpace());
+        roots.push_back(
+            std::make_unique<mm::RootHandle>(
+                mm::autoSpace(),
+                handle,
+                HandleType::get(HandleKind::Node),
+                "rewrite.whenArg"));
+    }
+    // Making a handle can collect: the arguments are read from the roots after the last one, so
+    // each slot names the handle where the collector put it.
+    for (const auto &root : roots) {
+        args.push_back(toSlot(root->getAs<Handle>()));
+    }
+    // A call can move the objects: the condition is read from the rooted rule after the last
+    // allocation and immediately before the call.
+    ::Function *when    = call.rule->getAs<RuleObject>()->when();
+    const slot_t result = call.vm->callGraph(when->program(), when->graph(), args);
+    return fromSlot<rtdata::Bool>(result);
+}
+
+/// What a rule object says, as the compiler of rules takes it. `call` is set when the rule has a
+/// condition; the closure shares it, and with it the rooted rule object.
+camel::runtime::RuleSource
+sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &call) {
     camel::runtime::RuleSource source;
     source.name          = std::string(rule.name());
     source.id            = id;
@@ -116,6 +181,11 @@ camel::runtime::RuleSource sourceOf(const RuleObject &rule, uint16_t id) {
     for (int bit = 0; bit < 64; ++bit) {
         source.constParams.push_back((rule.constParams() >> bit) & 1);
     }
+    if (rule.when() != nullptr) {
+        source.whenArity =
+            static_cast<uint32_t>(rule.when()->graph()->funcType()->normTypesCount());
+        source.when = [call](const camel::runtime::Match &match) { return callWhen(*call, match); };
+    }
     return source;
 }
 
@@ -125,12 +195,22 @@ camel::runtime::RuleSource sourceOf(const RuleObject &rule, uint16_t id) {
 /// again from the argument, which the collector keeps up to date, each time.
 std::vector<camel::runtime::Rule> engineRules(Context &ctx, ArgsView &norm, size_t argument) {
     std::vector<camel::runtime::Rule> out;
-    uint16_t next = 1;
+    auto vm            = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
+    uint16_t next      = 1;
     const size_t count = norm.get<Array *>(argument)->size();
     for (size_t i = 0; i < count; ++i) {
-        const RuleObject *rule =
-            callRule(ctx, norm.get<Array *>(argument)->get<::Function *>(i));
-        const camel::runtime::RuleSource source = sourceOf(*rule, next++);
+        RuleObject *rule = callRule(ctx, norm.get<Array *>(argument)->get<::Function *>(i));
+        std::shared_ptr<WhenCall> call;
+        if (rule->when() != nullptr) {
+            call       = std::make_shared<WhenCall>();
+            call->rule = std::make_shared<mm::RootHandle>(
+                mm::autoSpace(),
+                rule,
+                RuleType::get(),
+                "rewrite.rule");
+            call->vm = vm;
+        }
+        const camel::runtime::RuleSource source = sourceOf(*rule, next++, call);
         for (camel::runtime::Rule &compiled : camel::runtime::compileRule(ctx, source)) {
             out.push_back(std::move(compiled));
         }
@@ -142,7 +222,7 @@ std::vector<camel::runtime::Rule> engineRules(Context &ctx, ArgsView &norm, size
 /// rules are applied to.
 bool isRuleSide(const camel::runtime::GCGraph &graph) {
     const std::string &name = graph.name();
-    return name.ends_with("__lhs") || name.ends_with("__rhs");
+    return name.ends_with("__lhs") || name.ends_with("__rhs") || name.ends_with("__when");
 }
 
 /// `rewrite(p, rules)`: the program with the rules applied one way, in place, to a fixpoint
@@ -150,7 +230,7 @@ bool isRuleSide(const camel::runtime::GCGraph &graph) {
 /// result is not a program.
 slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const TupleType *resultType = TupleType::fallible(norm.type(0));
-    const auto *base = norm.get<const camel::runtime::Program *>(0);
+    const auto *base            = norm.get<const camel::runtime::Program *>(0);
     try {
         const auto compiled = engineRules(ctx, norm, 1);
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base);
@@ -160,7 +240,8 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             }
             camel::runtime::GraphDraft &draft = session.edit(graph);
             camel::runtime::DraftWritings writings(
-                draft, camel::core::sem::NumericPolicy::relaxed());
+                draft,
+                camel::core::sem::NumericPolicy::relaxed());
             writings.rewrite(compiled);
         }
         const camel::runtime::Program *committed = session.commitChecked();
@@ -196,7 +277,8 @@ slot_t saturateKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             }
             camel::runtime::GraphDraft &draft = session.edit(graph);
             camel::runtime::DraftWritings writings(
-                draft, camel::core::sem::NumericPolicy::relaxed());
+                draft,
+                camel::core::sem::NumericPolicy::relaxed());
             writings.build();
             writings.saturate(compiled, budget);
             writings.save();
@@ -219,7 +301,10 @@ slot_t extractKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const std::string cost(norm.get<String *>(1)->view());
     const auto model = camel::runtime::findCostModel(cost);
     if (!model) {
-        return makeError("NoCostModel", "There is no cost model '" + cost + "'.", "<rewrite::extract>");
+        return makeError(
+            "NoCostModel",
+            "There is no cost model '" + cost + "'.",
+            "<rewrite::extract>");
     }
     try {
         const camel::runtime::Program *extracted =
@@ -276,19 +361,20 @@ class Sampler {
 
   private:
     int64_t pickInt(bool constant) {
-        static const int64_t edges[] = {0,
-                                        1,
-                                        -1,
-                                        2,
-                                        3,
-                                        7,
-                                        -5,
-                                        100,
-                                        255,
-                                        1000,
-                                        -1000,
-                                        std::numeric_limits<int32_t>::max(),
-                                        std::numeric_limits<int32_t>::min()};
+        static const int64_t edges[] = {
+            0,
+            1,
+            -1,
+            2,
+            3,
+            7,
+            -5,
+            100,
+            255,
+            1000,
+            -1000,
+            std::numeric_limits<int32_t>::max(),
+            std::numeric_limits<int32_t>::min()};
         const uint64_t roll = rng_() % 8;
         if (roll < 4) {
             return edges[rng_() % (sizeof(edges) / sizeof(edges[0]))];
@@ -399,9 +485,25 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const size_t count = norm.get<Array *>(0)->size();
     for (size_t index = 0; index < count; ++index) {
         // The array moves when a function runs: it is read again each time.
-        const RuleObject *rule = callRule(ctx, norm.get<Array *>(0)->get<::Function *>(index));
+        RuleObject *made = callRule(ctx, norm.get<Array *>(0)->get<::Function *>(index));
+        // A condition is read again from the rule object after every call, so the object is
+        // rooted while the check runs.
+        std::shared_ptr<mm::RootHandle> ruleRoot;
+        std::shared_ptr<WhenCall> call;
+        if (made->when() != nullptr) {
+            ruleRoot = std::make_shared<mm::RootHandle>(
+                mm::autoSpace(),
+                made,
+                RuleType::get(),
+                "rewrite.checkRule");
+            call       = std::make_shared<WhenCall>();
+            call->rule = ruleRoot;
+            call->vm   = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
+        }
+        const RuleObject *rule = ruleRoot ? ruleRoot->getAs<RuleObject>() : made;
+        const bool conditional = rule->when() != nullptr;
         // The rule object is read now and not again: a function runs below, and objects move.
-        const camel::runtime::RuleSource source = sourceOf(*rule, 1);
+        const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
         const std::string name(rule->name());
         const uint8_t needs                     = rule->needs();
         const uint64_t constParams              = rule->constParams();
@@ -416,7 +518,10 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         Sampler sampler(seed * 1000003u + index, needs);
         NodeVMSchedPass vm(ctx.shared_from_this());
         std::string failure;
-        for (int64_t sample = 0; sample < samples && failure.empty(); ++sample) {
+        // A condition is part of the equation: the two sides need not agree on values the
+        // condition rejects, and the tool cannot ask the condition about sampled values. Such a
+        // rule is checked by the engine path below only.
+        for (int64_t sample = 0; !conditional && sample < samples && failure.empty(); ++sample) {
             std::vector<Sample> values;
             std::vector<slot_t> args;
             double scale = 1.0;
@@ -447,7 +552,7 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
         // parameters: it must fire, and the function it gives must agree too.
         size_t fired = 0, tried = 0;
         if (failure.empty()) {
-            auto compiled = camel::runtime::compileRule(ctx, source);
+            auto compiled            = camel::runtime::compileRule(ctx, source);
             camel::runtime::Rule one = std::move(compiled.front());
             one.twoWay               = false;
             const camel::core::sem::NumericPolicy policy{needs, true};
@@ -464,13 +569,14 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 camel::runtime::GraphDraft &draft =
                     session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
                 const std::vector<camel::runtime::gc_node_ref_t> ports(
-                    draft.normPorts().begin(), draft.normPorts().end());
+                    draft.normPorts().begin(),
+                    draft.normPorts().end());
                 std::vector<slot_t> args;
                 double scale = 1.0;
                 for (size_t i = 0; i < params; ++i) {
                     const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
-                    Type *type = lhsType->normTypeAt(i);
-                    Sample value = sampler.value(type->code(), isConst);
+                    Type *type         = lhsType->normTypeAt(i);
+                    Sample value       = sampler.value(type->code(), isConst);
                     args.push_back(value.slot);
                     scale = std::max(scale, std::abs(value.asDouble) + 1.0);
                     if (isConst) {
@@ -485,10 +591,10 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                 }
                 ++fired;
                 const camel::runtime::Program *rewritten = session.commitChecked();
-                const Sample before = resultOf(
-                    vm.callGraph(program, program->graph(lhsId), args), resultCode);
-                const Sample after = resultOf(
-                    vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultCode);
+                const Sample before =
+                    resultOf(vm.callGraph(program, program->graph(lhsId), args), resultCode);
+                const Sample after =
+                    resultOf(vm.callGraph(rewritten, rewritten->graph(lhsId), args), resultCode);
                 if (!agree(before, after, needs, scale * scale, steps)) {
                     failure = std::format(
                         "FAIL {}: the rewritten left side differs: {} and {}",
@@ -504,10 +610,21 @@ slot_t checkKernel(ArgsView &, ArgsView &norm, Context &ctx) {
                     tried);
             }
         }
-        report += failure.empty()
-                      ? std::format(
-                            "ok {}: {} samples agree, fired {} of {}\n", name, samples, fired, tried)
-                      : failure + "\n";
+        report +=
+            failure.empty()
+                ? (conditional ? std::format(
+                                     "ok {}: the condition selects the instances, fired {} of "
+                                     "{}\n",
+                                     name,
+                                     fired,
+                                     tried)
+                               : std::format(
+                                     "ok {}: {} samples agree, fired {} of {}\n",
+                                     name,
+                                     samples,
+                                     fired,
+                                     tried))
+                : failure + "\n";
     }
     return toSlot(String::from(report, mm::autoSpace()));
 }
@@ -520,6 +637,7 @@ class RewriteExecutor final : public Executor {
     static std::unordered_map<std::string, operator_t> kernels() {
         return {
             {"rule", ruleKernel},
+            {"rule_when", ruleWhenKernel},
             {"name", nameKernel},
             {"two_way", twoWayKernel},
             {"needs", needsKernel},
@@ -550,7 +668,8 @@ class RewriteModule final : public BuiltinModule {
                 {{"rewrite:rule",
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {6, {false, false, false, false, false, false}}},
-                      "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F) => Rule",
+                      "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F) => "
+                      "Rule",
                       [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
                           -> std::optional<Type *> {
                           if (norm[0]->code() != TypeCode::String ||
@@ -559,6 +678,31 @@ class RewriteModule final : public BuiltinModule {
                               norm[3]->code() != TypeCode::Int64 ||
                               norm[4]->code() != TypeCode::Function ||
                               norm[5]->code() != TypeCode::Function)
+                              return std::nullopt;
+                          return RuleType::get();
+                      })}}));
+        exportEntity(
+            "__rule_when",
+            OperatorGroup::create(
+                "__rule_when",
+                {{"rewrite:rule_when",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {7, {false, false, false, false, false, false, false}}},
+                      "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F, "
+                      "when: F) => Rule",
+                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (norm[0]->code() != TypeCode::String ||
+                              norm[1]->code() != TypeCode::Bool ||
+                              norm[2]->code() != TypeCode::Int64 ||
+                              norm[3]->code() != TypeCode::Int64 ||
+                              norm[4]->code() != TypeCode::Function ||
+                              norm[5]->code() != TypeCode::Function ||
+                              norm[6]->code() != TypeCode::Function)
+                              return std::nullopt;
+                          const auto *when = static_cast<const FunctionType *>(norm[6]);
+                          if (when->exitType() == nullptr ||
+                              when->exitType()->code() != TypeCode::Bool)
                               return std::nullopt;
                           return RuleType::get();
                       })}}));
@@ -652,6 +796,7 @@ class RewriteModule final : public BuiltinModule {
         camel::core::OperatorTable::instance().declare(
             "rewrite",
             {{"rule", false},
+             {"rule_when", false},
              {"name", true},
              {"two_way", true},
              {"needs", true},

@@ -57,6 +57,8 @@ struct RuleSource {
     std::vector<uint8_t> constParams;
     /// The condition, if the declaration has one.
     std::function<bool(const Match &)> when;
+    /// The condition's parameter count, when it has one; must equal the sides'.
+    uint32_t whenArity = 0;
 };
 
 /// The rule cannot be a rule: what is wrong with it.

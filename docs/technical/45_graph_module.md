@@ -12,9 +12,9 @@
 | `NodeKind` | `Data, Port, Cast, Copy, Fill, Accs, Brch, Join, Call, Func, Oper, Sync, Gate, Loop` | Camel 的 `enum`（`nodekind.cpp`）；`nodeKindTag` 对 `GCNodeKind` 做穷尽的 `switch`，图模型新增一种节点时这里编译不过，直到它被放进枚举或明确排除（`Bind`、`Dref`、`Dead` 不是程序里看得见的节点） |
 | `RegionKind` | `Root, Arm, LoopCond, LoopBody, Inline, Block, Dead` | Camel 的 `enum`（`regionkind.cpp`），与 `GCRegionKind` 一一对应；新增一种区域时 `regionKindTag` 编译不过 |
 
-句柄用 `==` / `!=` 比较（模块通过 `__eq__` / `__neq__` 算子组为自己的类型定义，设计原则 4.3）。两个句柄相等，当且仅当种类、`Program`、图与序号都相同。`id(h)` 给出图的 `GraphId`、节点的 `NodeId` 或算子的 `OperId`，在同一个 `Program` 里稳定，Map 的键用它。
+句柄用 `==` / `!=` 比较（模块通过 `__eq__` / `__neq__` 算子组为自己的类型定义，设计原则 4.3）。两个句柄相等，当且仅当种类、`Program`（或草稿）、图与序号都相同。`id(h)` 给出图的 `GraphId`、节点的 `NodeId` 或算子的 `OperId`，在同一个 `Program` 里稳定，Map 的键用它。
 
-一个句柄持有它读出时的 `Program`，所以经过它读到的永远是那个快照；`Handle::updateRefs` 追踪这个 `Program`，和函数值追踪它的 `Program` 一样。
+一个句柄持有它读出时的 `Program`，所以经过它读到的永远是那个快照；`Handle::updateRefs` 追踪这个 `Program`，和函数值追踪它的 `Program` 一样。指向草稿的句柄是唯一的例外：它持有草稿而不持有 `Program`，只在改写期间的 `when` 条件里出现（见“读取”）。
 
 ## 读取
 
@@ -23,6 +23,8 @@
 区域：`region_of(n)` 给出节点所在的最内层区域；只有体、没有区域表的图（`regionCount() == 0`）返回 `null`，有区域表的图里区域 0 是体，每个节点都有一个。`region_kind(r)` 给出 `RegionKind`，`region_parent(r)` 给出父区域（体没有父区域，返回 `null`）。区域列在 R2b 落地后由分支臂与内联共同写入；区域规则（2）（3）的边校验（节点只读自己区域或祖先区域的节点、JOIN 的 with 输入可读本 BRCH 的 Arm 区域的结果、加边的默认区域取最深的输入区域）还没有接进 `EdgeChecker`（`src/runtime/graph_edges.cpp`），见交接报告。
 
 事实（`docs/technical/40_graph_facts.md`）经上下文的事实库读取：`effects(g)`（`external`、`writes_variables`、`may_fault`、`may_not_terminate`）、`shape(n)`、`permissions(n)`。第一次问时计算，之后只要它读过的图没有变就不重算。
+
+句柄也可以指向**正在改写的草稿**（`Handle::createInDraft`，H38）：`when` 条件收到的 `Node` 就是匹配在当前草稿里的节点，不是冻结程序里的版本。读算子对两种来源给同样的答案（`NodeView`：冻结的 `GCNode` 或草稿的 `DraftNodeHeader`），包括 `inputs` / `with_inputs` / `ctrl_inputs`、`users` / `value_users`、`kind`、`op` / `op_name`、`is_pure`、`is_anchor`、`is_written_slot`、`is_constant` / `constant`、`type_of` / `type_name`、`tags`、`origin`、`show`。两处限制：`callee` 在草稿上返回 `null`（草稿不属于任何一个 `Program` 版本，没有函数值可读；今天也没有规则模式匹配 `CALL`）；`is_written_slot` 在草稿上每次现算（冻结的图按版本缓存，草稿按 `mutations()` 缓存是 H39 的事）。草稿句柄不持有 `Program`：草稿属于尚未提交的会话，它的静态值与编译进规则的常量由引擎在条件调用期间注册的根集重定位（`rewrite.engineRoots`）。
 
 ## 事务
 
