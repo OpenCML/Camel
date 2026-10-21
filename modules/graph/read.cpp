@@ -176,6 +176,32 @@ slot_t ctrlInputsKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// The nodes that read node `n` as an input of any of the three groups, once each, in NodeId
 /// order.
+/// The nodes that read the value of node `n` (as an ordinary or a with input), once each, in
+/// NodeId order.
+slot_t valueUsersKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle   = norm.get<Handle *>(0);
+    const GCGraph &graph = graphOf(handle, "graph.value_users");
+    nodeOf(handle, "graph.value_users");
+    std::vector<camel::runtime::gc_node_ref_t> users;
+    for (auto refs : {graph.normOutputsOf(handle->index()), graph.withOutputsOf(handle->index())}) {
+        users.insert(users.end(), refs.begin(), refs.end());
+    }
+    std::sort(users.begin(), users.end());
+    users.erase(std::unique(users.begin(), users.end()), users.end());
+    std::vector<Handle *> items;
+    for (auto ref : users) {
+        items.push_back(nodeHandle(handle->program(), handle->graph(), ref));
+    }
+    return handleArray(HandleKind::Node, items);
+}
+
+/// Whether the node is a constant: a DATA node whose value is a static slot of the graph.
+slot_t isConstantKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle = norm.get<Handle *>(0);
+    const GCNode &node = nodeOf(handle, "graph.is_constant");
+    return toSlot<Bool>(node.kind == GCNodeKind::Data && node.dataIndex < 0);
+}
+
 slot_t usersKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle   = norm.get<Handle *>(0);
     const GCGraph &graph = graphOf(handle, "graph.users");
@@ -268,6 +294,26 @@ slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(camel::core::attr::text(graph.nodeAttrs(handle->index())));
 }
 
+/// Whether the node anchors its graph: its exit, output or return node, or the head or tail of
+/// a branch arm. A rewrite keeps such a node; a transaction does not replace or erase it.
+slot_t isAnchorKernel(ArgsView &, ArgsView &norm, Context &) {
+    const auto *handle   = norm.get<Handle *>(0);
+    nodeOf(handle, "graph.is_anchor");
+    const GCGraph &graph = graphOf(handle, "graph.is_anchor");
+    const auto ref       = handle->index();
+    bool anchor = ref == graph.exitNodeRef() || ref == graph.outputNodeRef() ||
+                  ref == graph.returnNodeRef();
+    for (const GCNode *node : graph.nodes()) {
+        if (anchor || node->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        for (const auto &arm : graph.branchArmsOf(graph.nodeRef(node))) {
+            anchor = anchor || arm.head == ref || arm.tail == ref;
+        }
+    }
+    return toSlot<Bool>(anchor);
+}
+
 slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
     nodeOf(handle, "graph.origin");
@@ -355,6 +401,8 @@ const std::vector<ReadOp> &readOps() {
             {"with_inputs", withInputsKernel, node, array(HandleKind::Node)},
             {"ctrl_inputs", ctrlInputsKernel, node, array(HandleKind::Node)},
             {"users", usersKernel, node, array(HandleKind::Node)},
+            {"value_users", valueUsersKernel, node, array(HandleKind::Node)},
+            {"is_constant", isConstantKernel, node, Type::Bool()},
             {"kind", kindKernel, node, nodeKindType()},
             {"op", opKernel, node, maybe(HandleKind::Op)},
             {"op_name", opNameKernel, handle(HandleKind::Op), Type::String()},
@@ -363,6 +411,7 @@ const std::vector<ReadOp> &readOps() {
             {"type_name", typeNameKernel, handle(HandleKind::TypeRef), Type::String()},
             {"callee", calleeKernel, node, maybe(HandleKind::Graph)},
             {"tags", tagsKernel, node, Type::String()},
+            {"is_anchor", isAnchorKernel, node, Type::Bool()},
             {"origin", originKernel, node, Type::Int64()},
             {"show", showKernel, node, Type::String()},
         };

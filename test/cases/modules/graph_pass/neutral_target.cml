@@ -1,0 +1,27 @@
+module neutral_target
+
+func chain(x: int, y: int): int {
+    return (((x + 0) * 1 + 0) - 0) + (0 + y) * 1
+}
+
+func small(a: i32, b: i32): i32 {
+    let c = a * 1
+    let d = (0 + b) - 0
+    return c + d
+}
+
+func anchor(x: int): int {
+    return x + 0
+}
+
+func keep(x: int): int {
+    return (x + 1) * 2 - x
+}
+
+func main(): int sync {
+    println(chain(3, 4))
+    println(small(5, 6))
+    println(anchor(7))
+    println(keep(8))
+    return 0
+}

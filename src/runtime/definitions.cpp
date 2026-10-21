@@ -178,6 +178,7 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
         module = std::dynamic_pointer_cast<UserDefinedModule>(context_.importModule(name));
         if (!module) {
             problem = std::format("its library '{}' is not a module written in Camel", name);
+            absentLibraries_.insert(name);
         } else if (!module->compileAsLibrary()) {
             problem =
                 std::format("its library '{}' does not compile: {}", name, firstError(*module));
@@ -188,6 +189,10 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
             "its library '{}' cannot be loaded: {}",
             name,
             d.message.substr(0, d.message.find('\n')));
+        if (d.type == core::error::DiagType::SemanticDiag &&
+            d.specific == static_cast<uint32_t>(core::error::SemanticDiag::ModuleNotFound)) {
+            absentLibraries_.insert(name);
+        }
         module.reset();
     } catch (const std::exception &e) {
         problem = std::format("its library '{}' cannot be loaded: {}", name, e.what());
@@ -214,9 +219,7 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
     };
     const auto module = library(moduleName, problem);
     if (!module) {
-        // A module that is not there, or not written in Camel, is absent; one that does not
-        // compile is refused.
-        return remember(std::nullopt, problem.find("does not compile") == std::string::npos);
+        return remember(std::nullopt, absentLibraries_.contains(moduleName));
     }
     const auto entity = module->getExportedEntity(Reference(functionName));
     using Access      = core::module::detail::EntityAccess;
