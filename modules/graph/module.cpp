@@ -26,6 +26,7 @@
 #include "handle.h"
 #include "nodekind.h"
 #include "read.h"
+#include "txn.h"
 
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
@@ -47,6 +48,8 @@ using camel::graphmod::HandleType;
 using camel::graphmod::nodeKindType;
 using camel::graphmod::readGroups;
 using camel::graphmod::readKernels;
+using camel::graphmod::txnGroups;
+using camel::graphmod::txnKernels;
 
 namespace {
 
@@ -99,6 +102,7 @@ class GraphExecutor final : public Executor {
   private:
     static std::unordered_map<std::string, operator_t> kernels() {
         auto out = readKernels();
+        out.insert(txnKernels().begin(), txnKernels().end());
         out.emplace("current", currentKernel);
         out.emplace("eq", eqKernel);
         out.emplace("ne", neKernel);
@@ -115,6 +119,9 @@ class GraphModule final : public BuiltinModule {
         }
         exportType(Reference("NodeKind"), nodeKindType());
         for (const auto &group : readGroups()) {
+            exportEntity(group->name(), group);
+        }
+        for (const auto &group : txnGroups()) {
             exportEntity(group->name(), group);
         }
         exportEntity(
@@ -169,6 +176,10 @@ class GraphModule final : public BuiltinModule {
         table.declare("graph", {{"current", true}, {"eq", true}, {"ne", true}, {"id", true}});
         for (const auto &group : readGroups()) {
             table.declare("graph", {{group->name(), true}});
+        }
+        // A transaction is a state that edits change: none of its operators is pure.
+        for (const auto &group : txnGroups()) {
+            table.declare("graph", {{group->name(), false}});
         }
         loaded_ = true;
         return true;

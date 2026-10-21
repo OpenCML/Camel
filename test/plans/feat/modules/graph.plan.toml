@@ -77,3 +77,66 @@ args = ["${case}", "identity::nosuch", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["UnrecognizedGraphPass"]
 timeout_ms = 10000
+
+# A transaction edits the program being processed and commits a new Program (design 5.1).
+
+[[tests]]
+name = "txn_replace_and_commit"
+desc = "x + 0 is replaced by x in a transaction; the committed program no longer has the add and runs as before."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::count_adds", "probes::fold_zero_adds", "probes::count_adds", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n0\n126\ntext\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_commit_twice_is_an_error_value"
+desc = "The second commit of a transaction gives the error TxnUsed."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::commit_twice", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "TxnUsed\n126\ntext\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_invalid_edit_is_refused_at_commit"
+desc = "A string put where an int is passed: the commit names the graph, the node and the broken edge."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::break_types", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GraphInvalid", "passes a string as ordinary argument 0 of 'inc', which takes a int"]
+expect_output_not_contains = ["126"]
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_conflict"
+desc = "Two transactions edit one graph; the second commit gives the error GraphConflict."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::conflict", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "GraphConflict\n126\ntext\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_erase_of_a_read_value_is_a_fault"
+desc = "Erasing a node whose value is read is refused, naming the operator."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::erase_read", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["graph.erase", "the value of the node is still read"]
+timeout_ms = 10000
+
+[[tests]]
+name = "txn_abort"
+desc = "An aborted transaction changes nothing."
+kind = "behavior"
+case = "../../../cases/modules/graph_pass/edits.cml"
+args = ["${case}", "probes::abort_unused", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "126\ntext\n"
+timeout_ms = 10000
