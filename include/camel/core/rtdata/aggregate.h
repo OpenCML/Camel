@@ -47,6 +47,27 @@ inline slot_t *aggregateSlotsMut(slot_t value) {
 }
 
 /**
+ * Whether `value`, whose static type has code `code`, is a compact element view. Inline and
+ * reading the view flag of the header directly, because it is the test in front of every store
+ * that can carry a view: a store of a real Struct or Tuple pays two loads, a scalar slot never
+ * reaches it, and only a view reaches materializeIfView (H73 -- a frame slot is such a store).
+ */
+inline bool isViewValue(slot_t value, type::TypeCode code) {
+    if (value == NullSlot) {
+        return false;
+    }
+    if (code == type::TypeCode::Struct) {
+        const auto *object = fromSlot<const Struct *>(value);
+        return object != nullptr && object->isView();
+    }
+    if (code == type::TypeCode::Tuple) {
+        const auto *object = fromSlot<const Tuple *>(value);
+        return object != nullptr && object->isView();
+    }
+    return false;
+}
+
+/**
  * Materialises a view that is about to be stored where it outlives the element read that
  * produced it (H29). A view is tied to its read -- a slot-shaped element is read through one
  * reused thread-local cell, every other one through a ring -- so a value kept across the next

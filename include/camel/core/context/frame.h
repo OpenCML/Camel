@@ -21,6 +21,7 @@
 
 #include "camel/core/operator.h"
 #include "camel/core/rtdata.h"
+#include "camel/core/rtdata/aggregate.h"
 #include "camel/runtime/graph.h"
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
@@ -230,7 +231,21 @@ class Frame : public rtdata::Object {
                         idx,
                         dynamicAreaType_->size()));
             });
-            dynamicArea_[idx] = rtdata::toSlot(value);
+            slot_t slot = rtdata::toSlot(value);
+            // The frame is a GC root traced at every safepoint, so a slot of the dynamic area
+            // holds a managed object, never a compact element view: a view lives in the
+            // thread-local view ring (one reused cell per slot-wide element, a ring otherwise),
+            // which the next element read of the same loop overwrites, and it is not an
+            // allocated object (the verifier reports it as "outside managed object regions").
+            // The store is the boundary, as it is in Tuple::set and Struct::set; a higher-order
+            // operator hands an element of a compact array to its callback through this path
+            // (H73). A scalar slot pays one code comparison, a real aggregate two loads.
+            const type::TypeCode code = dynamicAreaType_->codes()[idx];
+            if ((code == type::TypeCode::Struct || code == type::TypeCode::Tuple) &&
+                rtdata::isViewValue(slot, code)) {
+                slot = rtdata::materializeIfView(slot, dynamicAreaType_->typeAt(idx));
+            }
+            dynamicArea_[idx] = slot;
         } else {
             size_t idx = static_cast<size_t>(-index);
             EXEC_WHEN_DEBUG({

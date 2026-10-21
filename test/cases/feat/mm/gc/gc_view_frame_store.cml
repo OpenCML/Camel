@@ -1,0 +1,37 @@
+module main
+
+// A higher-order operator hands each element of a compact array of pure-data aggregates to its
+// callback as a *view*: a Struct/Tuple header in the thread-local view store that points into the
+// array's block, not an object in the GC heap (rtdata/view.h, docs/technical/23_gc_runtime_lifetime.md).
+// Binding that element into the callback's frame is a store, and a frame is a GC root traced at
+// every safepoint, so the view has to be materialised at that boundary -- otherwise the collector
+// chases a pointer into the view store, which no heap region contains.
+//
+// The three shapes below cover the store boundary: a Tuple element into a leaf callback (nvm polls
+// a safepoint at every graph boundary, so its frame is traced before the callback reads it), the
+// same into a callback that calls out (fvm's call-boundary safepoint), and a Struct element (the
+// Struct branch of the store).
+
+func pair_sum(p: (int, int)): int {
+    return p.0 * 2 + p.1
+}
+
+func point_sum(p: {x: int, y: int}): int {
+    return p.x + p.y
+}
+
+func main(): int sync {
+    // items() of a map of (int, int) is a compact array of pure-data tuples: a read of an element
+    // is a view into the block.
+    let m = ([(0, 0), (1, 2), (2, 4), (3, 6)] as Map<int, int>)
+
+    let leaf = items(m)->map<(kv: (int, int)): int => kv.0 * 2 + kv.1>->reduce<(acc: int, x: int): int => acc + x, 0>
+
+    let nested = items(m)->map<(kv: (int, int)): int => pair_sum(kv)>->reduce<(acc: int, x: int): int => acc + x, 0>
+
+    let points = ([{x: 1, y: 2}, {x: 3, y: 4}] as {x: int, y: int}[])
+    let structs = points->map<(p: {x: int, y: int}): int => point_sum(p)>->reduce<(acc: int, x: int): int => acc + x, 0>
+
+    println(leaf, nested, structs)
+    return 0
+}
