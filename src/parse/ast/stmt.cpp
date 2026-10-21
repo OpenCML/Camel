@@ -162,18 +162,6 @@ const std::string FuncDeclLoad::geneCode() const {
     return "func " + (operatorSymbol_.empty() ? ref_.toString() : "operator " + operatorSymbol_);
 }
 
-const std::string RuleDeclLoad::geneCode() const {
-    std::string result = std::string(exported_ ? "export " : "") + "rule " + ref_.toString();
-    if (!context_.empty()) {
-        result += "<";
-        for (size_t i = 0; i < context_.size(); ++i) {
-            result += (i > 0 ? ", " : "") + context_[i];
-        }
-        result += ">";
-    }
-    return result;
-}
-
 const std::string TypeDeclLoad::geneCode() const {
     std::string result = "type ";
     if (implMark_ != ImplMark::Graph) {

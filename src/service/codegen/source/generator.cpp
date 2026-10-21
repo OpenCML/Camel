@@ -687,29 +687,6 @@ string Generator::generateTypeDeclLoad(const AST::node_ptr_t &node) {
     return code + ";\n";
 }
 
-string Generator::generateRuleDeclLoad(const AST::node_ptr_t &node) {
-    auto ruleLoad = dynamic_pointer_cast<AST::RuleDeclLoad>(node->load());
-    if (!ruleLoad || node->size() < 4) {
-        return "";
-    }
-    vector<string> params;
-    collectParamsFromNode(static_pointer_cast<AST::Node>(node->at(0)), params, this);
-    string paramsCode;
-    for (const auto &p : params) {
-        paramsCode += (paramsCode.empty() ? "" : ", ") + p;
-    }
-    const auto sideCode = [&](size_t index) {
-        return generateNode(static_pointer_cast<AST::Node>(node->at(index)));
-    };
-    string code = ruleLoad->geneCode() + "(" + paramsCode + ") { " + sideCode(1) +
-                  (ruleLoad->twoWay() ? " <=> " : " => ") + sideCode(2) + " }";
-    const auto whenNode = static_pointer_cast<AST::Node>(node->at(3));
-    if (whenNode && whenNode->size() > 0) {
-        code += " when " + generateNode(static_pointer_cast<AST::Node>(whenNode->at(0)));
-    }
-    return code + "\n";
-}
-
 string Generator::generateStmtLoad(const AST::node_ptr_t &node) {
     if (!node)
         return "";
@@ -725,8 +702,6 @@ string Generator::generateStmtLoad(const AST::node_ptr_t &node) {
         return generateFuncDeclLoad(node);
     case AST::StmtType::Type:
         return generateTypeDeclLoad(node);
-    case AST::StmtType::Rule:
-        return generateRuleDeclLoad(node);
     case AST::StmtType::Expr:
         return generateExprStmtLoad(node);
     case AST::StmtType::Exit:
