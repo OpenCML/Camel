@@ -17,14 +17,14 @@ Implementation map:
 - Core: `include/camel/core/derivative.h` (VjpBuilder, rule registry, tangent
   spaces, tangent types of aggregates). Scalar rules live in
   `src/builtin/operators/derivative.cpp`.
-- Engine: `modules/autodiff` (`grad`, `with_grad`, `vjp`,
-  `stop_gradient`; the pullback transform in `pullback.cpp`). It is an
-  ordinary package, not part of the core: grad is a macro operator like any
-  other, and third-party packages can ship their own.
+- Engine: `modules/autodiff` (`grad`, `with_grad`,
+  `stop_gradient`; the pullback transform in `pullback.cpp`, and the custom-rule
+  tag `vjp`). It is an ordinary package, not part of the core: grad is a macro
+  operator like any other, and third-party packages can ship their own.
 - Tensor and nn rules: `modules/tensor/ops/vjp.cpp` and the `vjp` entries of the
   op definitions; tree optimizers in `modules/nn/optim.cpp`.
 - Verification: `test/cases/modules/autodiff` (finite differences, branches,
-  recursion, `@vjp`), and `benchmarks/train.py --check`, which matches the
+  recursion, `#vjp<rule>`), and `benchmarks/train.py --check`, which matches the
   MLP, GRU and Transformer gradients against PyTorch weight by weight.
 
 Deviations from the proposal below:
@@ -33,7 +33,8 @@ Deviations from the proposal below:
   differentiated input are differentiated, so operators on static data
   (shape arithmetic, integer comparisons) need no rule.
 - `grad` is not restricted by the core; rules and engines are package
-  contributions, and `@vjp` is a decorator evaluated by `std::macro`.
+  contributions, and `#vjp<rule>` is a declaration tag the transform reads
+  (design principles 6.2), not a decorator evaluated by `std::macro`.
 - Generic simplification (`std::opt`) collapses pullback closures
   into straight-line code, and FastVM/JIT compile graphs created at run time
   (a gradient built while the program runs) on first call, so training steps
@@ -59,7 +60,9 @@ Deviations from the proposal below:
    unrolling, and branch selection belong to general passes.
 5. **Derivative rules are layered.** Builtin rules ship with operator
    definitions, packages may add rules for their operators, and users attach
-   rules to their own functions with the `@vjp` decorator at macro time.
+   rules to their own functions with the `#vjp<rule>` declaration tag: the tag's
+   argument is the rule's graph, kept in the function graph's reference table
+   (`kGraphRefRule`), so the transform reads the rule directly.
 
 ## 2. Pipeline Placement
 
@@ -344,10 +347,16 @@ macro operator over function values).
 
 Precedence, most specific first:
 
-1. **Function rules from `@vjp<rule>`.** Attached to a user function at macro
-   time. The contract is `rule(inputs..., dy) => tangents` (a tuple when there
-   are several differentiable inputs). When the transform meets a call to a
+1. **Function rules from `#vjp<rule>`.** A declaration tag on a user function
+   (`export tag vjp<rule: func> on func`, design principles 6.2). Its argument is
+   the rule's graph: the GIR builder keeps it in the function graph's reference
+   table (`kGraphRefRule`), so the frozen graph names the rule and the transform
+   reads it directly — no macro evaluation, no side table, no rewritten copy of
+   the function. The contract is `rule(inputs..., dy) => tangents` (a tuple when
+   there are several differentiable inputs). When the transform meets a call to a
    function that has a rule, it uses the rule instead of differentiating the body.
+   A rule must be a static function of the program: a graph reference cannot
+   carry a closure.
 2. **Operator rules registered by packages.** Keyed by operator URI, for
    operators defined outside `tensor`/`nn`.
 3. **Builtin operator rules.** `OpDef::vjp`, already in place, written against
@@ -620,8 +629,8 @@ What differs from the design above:
    optimize to straight-line code.
 3. Branch regions (§4.3); calls through function values (§4.4).
 4. Rule coverage (`layer_norm`, `gelu`, `permute`, `where`, `mean`, `slice`,
-   `concat`, `batch_norm`, ...), the finite-difference harness, and `@vjp`
-   function rules.
+   `concat`, `batch_norm`, ...), the finite-difference harness, and the
+   `#vjp<rule>` function rules.
 5. Tree optimizers, layer library, `stop_gradient`, and `apply_gradients`
    re-expressed on `grad`.
 6. Shape specialization and simplification passes; `onnx::export` reduced to

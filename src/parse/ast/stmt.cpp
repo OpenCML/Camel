@@ -276,13 +276,7 @@ const std::string ExitStmtLoad::geneCode() const {
     }
 }
 const std::string StmtBlockLoad::toString() const {
-    std::string text = std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
-    if (numeric_ != 0) {
-        // Only when granted, so that the dump of a program without @numeric is unchanged.
-        text += std::string(text.back() == ' ' ? "" : " ") + "numeric(" +
-                camel::core::sem::permissionsText(numeric_) + ")";
-    }
-    return text;
+    return std::string("StmtBlock: ") + (synced_ ? "sync" : "") + (waited_ ? " wait" : "");
 }
 
 const std::string StmtBlockLoad::geneCode() const {

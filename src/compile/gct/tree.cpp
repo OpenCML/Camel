@@ -617,14 +617,8 @@ std::string Node::toString() const {
         return "CAST: " + targetType()->toString();
     case NodeKind::EXIT:
         return "EXIT: " + to_string(exitType());
-    case NodeKind::EXEC: {
-        std::string text = synced() ? "SYNC" : "EXEC";
-        if (numericPermissions() != 0) {
-            // Only when granted, so that the dump of a program without @numeric is unchanged.
-            text += ": numeric(" + camel::core::sem::permissionsText(numericPermissions()) + ")";
-        }
-        return text;
-    }
+    case NodeKind::EXEC:
+        return synced() ? "SYNC" : "EXEC";
     case NodeKind::LOOP: {
         std::string text = std::string("LOOP: ") + camel::core::loopKindName(loopKind()) + " (";
         for (size_t j = 0; j < loopStateCount(); ++j) {

@@ -130,8 +130,9 @@ using FrameSlotTypes = std::optional<std::span<camel::core::type::Type *const>>;
 struct GCGraphBuildAccess {
     static size_t requiredBytes(
         std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-        std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payload,
-        std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots);
+        std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+        const GCGraphPayloadShape &payload, std::span<const slot_t> staticSlots,
+        const FrameSlotTypes &frameSlots);
 
     static GCGraph *constructInPlace(
         void *memory, size_t bytes, GraphId id, const GCGraphDerivation &derivation,
@@ -139,7 +140,8 @@ struct GCGraphBuildAccess {
         const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
         camel::core::type::TupleType *closureType, GraphId outerGraph,
         std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-        std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
+        std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+        const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
 
@@ -149,7 +151,7 @@ struct GCGraphBuildAccess {
         camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
         GraphId outerGraph, std::span<const GraphId> dependencies,
         std::span<const GraphId> subGraphs, std::span<const GraphId> staticGraphRefs,
-        const GCGraphPayloadShape &payloadShape,
+        std::span<const GraphId> ruleGraphs, const GCGraphPayloadShape &payloadShape,
         const std::function<void(GCGraphPayloadArena &)> &emitPayload,
         std::span<const slot_t> staticSlots);
 

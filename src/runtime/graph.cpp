@@ -154,18 +154,18 @@ struct GraphArenaLayout {
 
 GraphArenaLayout planGraphArenaLayout(
     std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-    std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payload,
-    std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots) {
+    std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+    const GCGraphPayloadShape &payload, std::span<const slot_t> staticSlots,
+    const FrameSlotTypes &frameSlots) {
+    const size_t refCount =
+        dependencies.size() + subGraphs.size() + staticGraphRefs.size() + ruleGraphs.size();
     GraphArenaLayout layout{
         .graphBytes = camel::core::mm::alignUp(sizeof(GCGraph), alignof(GCGraph)),
-        // Room for every graph the three lists name; a graph named twice takes one entry and
+        // Room for every graph the four lists name; a graph named twice takes one entry and
         // leaves its room unused.
         .refBytes = camel::core::mm::alignUp(
-            bytesForArray<GraphId>(dependencies.size() + subGraphs.size() + staticGraphRefs.size()),
-            alignof(GCGraph *)),
-        .refRoleBytes = camel::core::mm::alignUp(
-            dependencies.size() + subGraphs.size() + staticGraphRefs.size(),
-            alignof(GCGraph *)),
+            bytesForArray<GraphId>(refCount), alignof(GCGraph *)),
+        .refRoleBytes = camel::core::mm::alignUp(refCount, alignof(GCGraph *)),
         .tupleBytes = staticSlots.empty()
                           ? 0
                           : camel::core::mm::alignUp(
@@ -1264,13 +1264,15 @@ GCGraph *GCGraphBuildAccess::create(
     camel::core::type::FunctionType *funcType, const FrameSlotTypes &frameSlots,
     camel::core::type::TupleType *staticDataType, camel::core::type::TupleType *closureType,
     GraphId outerGraph, std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-    std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
+    std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+    const GCGraphPayloadShape &payloadShape,
     const std::function<void(GCGraphPayloadArena &)> &emitPayload,
     std::span<const slot_t> staticSlots) {
     const size_t bytes = requiredBytes(
         dependencies,
         subGraphs,
         staticGraphRefs,
+        ruleGraphs,
         payloadShape,
         staticSlots,
         frameSlots);
@@ -1290,6 +1292,7 @@ GCGraph *GCGraphBuildAccess::create(
         dependencies,
         subGraphs,
         staticGraphRefs,
+        ruleGraphs,
         payloadShape,
         emitPayload,
         staticSlots);
@@ -1297,12 +1300,14 @@ GCGraph *GCGraphBuildAccess::create(
 
 size_t GCGraphBuildAccess::requiredBytes(
     std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-    std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payload,
-    std::span<const slot_t> staticSlots, const FrameSlotTypes &frameSlots) {
+    std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+    const GCGraphPayloadShape &payload, std::span<const slot_t> staticSlots,
+    const FrameSlotTypes &frameSlots) {
     return planGraphArenaLayout(
                dependencies,
                subGraphs,
                staticGraphRefs,
+               ruleGraphs,
                payload,
                staticSlots,
                frameSlots)
@@ -1315,7 +1320,8 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     const FrameSlotTypes &frameSlots, camel::core::type::TupleType *staticDataType,
     camel::core::type::TupleType *closureType, GraphId outerGraph,
     std::span<const GraphId> dependencies, std::span<const GraphId> subGraphs,
-    std::span<const GraphId> staticGraphRefs, const GCGraphPayloadShape &payloadShape,
+    std::span<const GraphId> staticGraphRefs, std::span<const GraphId> ruleGraphs,
+    const GCGraphPayloadShape &payloadShape,
     const std::function<void(GCGraphPayloadArena &)> &emitPayload,
     std::span<const slot_t> staticSlots) {
     EXEC_WHEN_DEBUG(
@@ -1326,13 +1332,14 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     ASSERT(memory != nullptr, "GCGraph in-place construction requires valid memory.");
     CAMEL_LOG_INFO_S(
         "GCGraphBuild",
-        "constructInPlace begin: name='{}' bytes={} deps={} subs={} staticRefs={} staticSlots={} "
-        "nodes={} payloadWords={} edges={}.",
+        "constructInPlace begin: name='{}' bytes={} deps={} subs={} staticRefs={} ruleRefs={} "
+        "staticSlots={} nodes={} payloadWords={} edges={}.",
         debugRecord ? debugRecord->name : std::string{"<null>"},
         bytes,
         dependencies.size(),
         subGraphs.size(),
         staticGraphRefs.size(),
+        ruleGraphs.size(),
         staticSlots.size(),
         payloadShape.nodeCount,
         payloadShape.payloadWordCount,
@@ -1341,9 +1348,11 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     void *graphMem = arena.alloc(sizeof(GCGraph), alignof(GCGraph));
     ASSERT(graphMem == memory, "Graph arena must place GCGraph at the start of its owned block.");
 
-    // The reference table: the three lists merged, each graph once, with the roles it has in
-    // them (callees first, in their order, then nested graphs, then constants' graphs).
-    const size_t refCapacity = dependencies.size() + subGraphs.size() + staticGraphRefs.size();
+    // The reference table: the four lists merged, each graph once, with the roles it has in
+    // them (callees first, in their order, then nested graphs, then constants' graphs, then the
+    // graphs a declaration tag names).
+    const size_t refCapacity =
+        dependencies.size() + subGraphs.size() + staticGraphRefs.size() + ruleGraphs.size();
     auto *refStorage         = static_cast<GraphId *>(arena.alloc(
         camel::core::mm::alignUp(bytesForArray<GraphId>(refCapacity), alignof(GCGraph *)),
         alignof(GCGraph *)));
@@ -1370,7 +1379,7 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     // node chunks that hold them can be shared.
     if (payloadShape.base) {
         std::unordered_set<GraphId> named;
-        for (const auto list : {dependencies, subGraphs, staticGraphRefs}) {
+        for (const auto list : {dependencies, subGraphs, staticGraphRefs, ruleGraphs}) {
             named.insert(list.begin(), list.end());
         }
         for (GraphId ref : payloadShape.base->refs()) {
@@ -1387,6 +1396,7 @@ GCGraph *GCGraphBuildAccess::constructInPlace(
     addRefs(dependencies, kGraphRefCallee);
     addRefs(subGraphs, kGraphRefNested);
     addRefs(staticGraphRefs, kGraphRefStatic);
+    addRefs(ruleGraphs, kGraphRefRule);
     ::Tuple *staticArea               = buildStaticAreaInArena(arena, staticDataType, staticSlots);
     GCGraphNativePayload ownedPayload = allocPayloadInArena(arena, payloadShape);
     PayloadStaging staging;

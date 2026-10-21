@@ -3,7 +3,7 @@
 
 > **2026-10-15 已裁定**：第 15 节的 Q1–Q11 均按本稿建议（矩阵乘的规范算法取乙，按 k 递增的 FMA 链）；见设计原则 7.1。
 >
-> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 7 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`@numeric(...)` 标注（函数与块）、每节点一字节的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
+> **实施状态（第一阶段已实现，`lane/opsem-p1`）**：CPU 内核按 7 改正（`max`/`min` 用 IEEE `maximum`/`minimum`，`relu = maximum(x, +0)`，GEMM 是按 k 递增的显式 FMA 链，`softmax` 与定义逐位一致）；`OperatorSemantics` 记录与查询接口（`camel/core/operator_semantics.h`，`OperatorTable::declareSemantics`/`semantics`/`key`/`bind`/`declarationEpoch`），内建标量算术与第一批张量算子的数值声明；`#reassociate`、`#contract` 等许可标签（函数与块）与 `#strict`（7.4）、每节点 16 位的许可列、改写时的传播（内联、克隆、CSE、`tensor::fuse`）与在 `std::rgir`/`inspect` 里的显示。`LOOP` 的消费接口（第三阶段的 3a）已实现，见第 11 节开头的实施状态；事实库（3b）已实现，见第 10 节开头的实施状态；资源与定义图（第四阶段）已实现，见下面的第四阶段一段与第 8、9 节开头的实施状态。给 Tiles 的说明见 14.1 节。下文是设计稿原文，状态描述以这一段为准。
 >
 > **第二阶段已实现（`lane/opsem-p2`）**：下标语义的数据结构与查询（`camel/core/index_semantics.h`：准仿射表达式、迭代域、访问与写映射、四种越界策略、间接访问的形式、归约律与 `reorderFreedom`、`splitDims`、`rowMajorView`；`camel/runtime/operator_instance.h`：冻结图节点上的实例）；第一批声明（逐元素族连同广播、`transpose`/`permute`/`slice`/`reshape`/`flatten`/`unsqueeze`/`broadcast_like`/`expand_axis`、`sum`/`mean` 全量与按轴、`max`/`min` 按轴（张量模块没有全量的 `max`/`min`）、`sum_to`、`matmul`、`nn` 的两种池化作为窗口的例子、`unordered_reduce` 的律）；`camel inspect --instances`；声明求值器 `tensor::test_index_eval`（与 CPU 内核逐位比较，见第 12 节）。给 Tiles 的说明见 14.2 节。与本稿字面不同的几处（均为窄读，见 14.2 与各处注释）：实例只有一个 `law` 下标（`Write` 不另存）；`Domain::guard` 表示分块尾部不存在的点；`LawInit::Operand`（`unordered_reduce` 的 `initial`）；`LawEmpty::Fault` 指归约维为空即故障（`max_axis` 的内核在结果为空时也拒绝空轴）；声明附在张量算子的 `OpDef::index` 上，与 `infer` 并列。
 > **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变图的转储；程序的结果只有 `log_softmax` 的变了（内核改为照它的定义，Q10）；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
@@ -146,7 +146,7 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 
 图（每张冻结图）
  ├─ 节点、输入表、负载、图引用表、位置列 ……                                     ← 图模型第 3、4 节
- └─ 许可列（可选，每节点 1 字节：五项数值许可的位集；全为 0 时不存）              ← 新增，第 (i) 类信息
+ └─ 许可列（可选，每节点 16 位：许可标签的位集；全为 0 时不存）                    ← 新增，第 (i) 类信息
 
 快照（Program）
  └─ 事实库 FactStore：（事实种类，锚点）→ 值 + 印记                              ← 新增，第 (ii) 类信息
@@ -535,7 +535,7 @@ initial  base                                     // 输出从 base 开始；Com
 - **超越函数**（`exp`、`log`、`sin` 等）不要求跨设备逐位相同，只承诺一个写明的误差上界（以 ulp 计）。
 - **放宽必须显式授予，五项许可互不蕴含**：(a) 改变归约的顺序或结合方式；(b) 收缩为乘加融合；(c) 使用近似数学函数；(d) 降低输入或累加的精度（如 TF32、bf16）；(e) 对 NaN、无穷、负零、次正规数作额外假设。**模块只能声明算子本身做什么，不能替调用者扩大许可。**
 - **`unordered_reduce`** 只授予"这次归约的合并顺序可以改变"。
-- **许可写在哪段代码上就只对那段代码生效**：被调用的函数不继承；内联、展开定义图时许可随节点保留，并随缓存保存。授予的写法倾向于函数或块上的标注，如 `@numeric(reassociate, contract)`。
+- **许可写在哪段代码上就只对那段代码生效**：被调用的函数不继承；内联、展开定义图时许可随节点保留，并随缓存保存。授予写成函数或块上的标签，如 `#[reassociate, contract]`；`#strict`（设计原则 7.4）撤销默认许可与内层许可，有效许可为空集，读者统一通过 `tag::effectivePermissions` 取得。
 
 ### 6.2 算子的原始数值语义
 

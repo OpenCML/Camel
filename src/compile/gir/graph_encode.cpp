@@ -649,6 +649,7 @@ class EncodeSession {
             const auto &deps                          = prepared.source->dependencyGraphs();
             const auto &subs                          = prepared.source->subGraphs();
             const std::vector<graph_ptr_t> staticRefs = staticGraphRefsOf(prepared.source);
+            const std::vector<graph_ptr_t> ruleRefs   = prepared.source->ruleGraphs();
             std::vector<camel::runtime::GraphId> depPtrs(
                 deps.size(),
                 camel::runtime::kInvalidGraphId);
@@ -658,10 +659,14 @@ class EncodeSession {
             std::vector<camel::runtime::GraphId> staticGraphPtrs(
                 staticRefs.size(),
                 camel::runtime::kInvalidGraphId);
+            std::vector<camel::runtime::GraphId> ruleGraphPtrs(
+                ruleRefs.size(),
+                camel::runtime::kInvalidGraphId);
             prepared.bytes = GCGraphBuildAccess::requiredBytes(
                 depPtrs,
                 subPtrs,
                 staticGraphPtrs,
+                ruleGraphPtrs,
                 prepared.payloadShape,
                 prepared.staticSlots,
                 prepared.draft->frameSlotTypes());
@@ -950,6 +955,12 @@ class EncodeSession {
         for (const auto &graph : compileStaticRefs) {
             staticGraphRefs.push_back(resolvePreparedGraph(graph)->draft->id());
         }
+        std::vector<graph_ptr_t> compileRuleRefs = prepared.source->ruleGraphs();
+        std::vector<camel::runtime::GraphId> ruleGraphs;
+        ruleGraphs.reserve(compileRuleRefs.size());
+        for (const auto &graph : compileRuleRefs) {
+            ruleGraphs.push_back(resolvePreparedGraph(graph)->draft->id());
+        }
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Static graph-ref remap finished for graph '{}'.",
@@ -1005,6 +1016,7 @@ class EncodeSession {
             depPtrs,
             subPtrs,
             staticGraphRefs,
+            ruleGraphs,
             prepared.payloadShape,
             [&](camel::runtime::GCGraphPayloadArena &arena) {
                 CAMEL_LOG_INFO_S(

@@ -117,7 +117,7 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
             // (attr::merge), and a key that refuses keeps the nodes apart.
             if (operOf(draft, mm) != ops.matmul || draft.normInputsOf(mm).size() != 2 ||
                 !isPrivateIntermediate(draft, mm, id) ||
-                draft.nodePermissions(mm) != draft.nodePermissions(id)) {
+                camel::core::tag::permissionsOf(draft, mm) != camel::core::tag::permissionsOf(draft, id)) {
                 continue;
             }
             const auto attrs = camel::core::attr::merge(draft.nodeAttrs(mm), draft.nodeAttrs(id));
@@ -133,7 +133,7 @@ std::optional<Match> findMatch(const GraphDraft &draft) {
             const auto users = draft.normUsersOf(id);
             if (users.size() == 1 && operOf(draft, users[0]) == ops.relu &&
                 isPrivateIntermediate(draft, id, users[0]) &&
-                draft.nodePermissions(users[0]) == draft.nodePermissions(id)) {
+                camel::core::tag::permissionsOf(draft, users[0]) == camel::core::tag::permissionsOf(draft, id)) {
                 if (const auto withRelu =
                         camel::core::attr::merge(m.attrs, draft.nodeAttrs(users[0]))) {
                     m.relu  = users[0];
@@ -172,7 +172,7 @@ void fuse(GraphDraft &draft, const Match &m) {
     const gc_node_ref_t fused = draft.addOperNode(draft.header(root)->dataType, def->kernel, uri);
     draft.setNormInputs(fused, inputs);
     draft.setCtrlInputs(fused, ctrl);
-    draft.setNodePermissions(fused, draft.nodePermissions(m.add));
+    draft.setNodePermissions(fused, camel::core::tag::permissionsOf(draft, m.add));
     draft.setNodeAttrs(fused, m.attrs);
 
     draft.replaceAllValueUses(root, fused);
@@ -206,7 +206,7 @@ size_t useLibraryGemm(GraphDraft &draft) {
     const gc_node_ref_t slots   = draft.nodeSlotCount();
     for (gc_node_ref_t id = 0; id < slots; ++id) {
         if (operOf(draft, id) != ops.matmul ||
-            (draft.nodePermissions(id) & kLibraryGemmPermissions) != kLibraryGemmPermissions) {
+            (camel::core::tag::permissionsOf(draft, id) & kLibraryGemmPermissions) != kLibraryGemmPermissions) {
             continue;
         }
         const auto inputs = draft.normInputsOf(id);
@@ -217,7 +217,7 @@ size_t useLibraryGemm(GraphDraft &draft) {
             draft.addOperNode(draft.header(id)->dataType, def->kernel, "tensor:matmul_blas");
         draft.setNormInputs(blas, in);
         draft.setCtrlInputs(blas, ctl);
-        draft.setNodePermissions(blas, draft.nodePermissions(id));
+        draft.setNodePermissions(blas, camel::core::tag::permissionsOf(draft, id));
         draft.setNodeAttrs(blas, draft.nodeAttrs(id));
         draft.replaceAllValueUses(id, blas);
         draft.replaceAllCtrlUses(id, blas);

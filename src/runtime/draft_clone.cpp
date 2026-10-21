@@ -262,6 +262,9 @@ DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
     for (GraphId graph : sourceGraph->staticGraphRefs()) {
         owner.addStaticGraphRef(graph);
     }
+    for (GraphId graph : sourceGraph->ruleGraphs()) {
+        owner.addRuleGraphRef(graph);
+    }
     CAMEL_LOG_INFO_S("DraftClone", "Clone copied cross-graph registries.");
 
     DraftGraphCloneResult result;
@@ -440,6 +443,9 @@ DraftGraphCloneResult cloneDraftGraphIntoDraft(
     }
     for (GraphId graph : sourceDraft.staticGraphRefs()) {
         owner.addStaticGraphRef(graph);
+    }
+    for (GraphId graph : sourceDraft.ruleGraphs()) {
+        owner.addRuleGraphRef(graph);
     }
 
     DraftGraphCloneResult result;

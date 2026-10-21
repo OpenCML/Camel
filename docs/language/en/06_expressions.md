@@ -480,7 +480,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
 - **After `do`** comes an expression, read as after `then`: `{ x: 1 }` is a struct, `{ 5 }` and `sync { ... }` are blocks. A `return` in such a block ends the block with the next state; it does not leave the function.
 - **Effects.** Whether the body is a sync block is up to the body (3.2). Written `do sync { println(x); acc + x }`, its effects run in order every round. A loop in a block that is not a sync block, whose value nothing uses, does not run, with `EffectNotExecuted`, as for an unused call.
 - **Order and depth.** The rounds run strictly one after the other. A loop is not a recursion: no number of rounds takes call depth, `--max-recursion-depth` does not count them, and a loop that does not end runs on.
-- **Numeric permissions.** `@numeric(...)` on a function or a block covers the bodies and conditions of the loops written in it (7.5).
+- **Numeric permissions.** Permission tags (`#reassociate`, `#contract`, ...) on a function or a block cover the bodies and conditions of the loops written in it (7.2, 7.5); `#strict` covers them too.
 - `loop`, `while`, `do`, `for` and `in` are keywords.
 
 On the graph a loop is one `LOOP` node in the graph it is written in; the condition and the body are a subgraph each, sharing one table of captured values (design principles 3.10; `docs/design/graph-model` 3.5). A string, a map and a tensor are turned into their array of elements (the code points, the key-value pairs, the first-dimension sub-tensors) once, where the loop is; the `LOOP` node itself still iterates an array, which is the only form the back ends and the lowering handle.

@@ -109,10 +109,13 @@ class Builder {
     Value visitStmtBlock(syntax::cst::StmtBlock context);
     Value visitFuncData(syntax::cst::FuncData context);
     Value visitFuncAnno(syntax::cst::FuncAnno context);
-    /// The permissions of a `@numeric(...)` annotation; nullopt for a decorator (`@name`,
-    /// `@name<args>`). Any other annotation with names in parentheses, an unknown permission
-    /// and an empty list are reported (SemanticDiag::InvalidAnnotation) and grant nothing.
-    std::optional<camel::core::sem::PermissionMask> numericAnnotationOf(syntax::cst::FuncAnno context);
+    /// Rejects the removed `@name(args)` spelling at the annotation, naming the tag form that
+    /// replaced it (design principles 7.2: a numeric permission is a tag). Plain decorators
+    /// (`@name`, `@name<args>`) are not affected.
+    bool rejectParenthesizedName(syntax::cst::FuncAnno context);
+    /// Rejects the removed `@vjp<rule>` decorator at the annotation, naming the declaration tag
+    /// that replaced it (design principles 6.2, 8: a custom derivative rule is a tag).
+    bool rejectVjpAnnotation(syntax::cst::FuncAnno context);
     Value visitFuncDecl(syntax::cst::FuncDecl context);
     Value visitTagDecl(syntax::cst::TagDecl context);
     /// The permission groups the program declares (`tag fast = [reassociate, contract]`), by

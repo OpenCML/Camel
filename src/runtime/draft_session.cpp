@@ -476,6 +476,7 @@ GCGraph *encodeDraftGraph(
     const std::vector<GraphId> subGraphs(draft.subGraphs().begin(), draft.subGraphs().end());
     const std::vector<GraphId> staticGraphRefs =
         collectDraftStaticGraphRefs(context, draft, staticDataType);
+    const std::vector<GraphId> ruleGraphs(draft.ruleGraphs().begin(), draft.ruleGraphs().end());
 
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (auto *tupleType = staticDataType) {
@@ -517,6 +518,7 @@ GCGraph *encodeDraftGraph(
         dependencies,
         subGraphs,
         staticGraphRefs,
+        ruleGraphs,
         payloadShape,
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(draft, payload); },
         staticSlots);
@@ -540,6 +542,9 @@ size_t draftGraphBytes(
     const std::vector<GraphId> staticRefPlaceholders(
         collectDraftStaticGraphRefs(context, draft, staticDataType).size(),
         kInvalidGraphId);
+    const std::vector<GraphId> ruleGraphPlaceholders(
+        draft.ruleGraphs().size(),
+        kInvalidGraphId);
     std::vector<slot_t> staticSlots(draft.staticSlots().begin(), draft.staticSlots().end());
     if (staticDataType && staticSlots.size() < staticDataType->size()) {
         staticSlots.resize(staticDataType->size(), NullSlot);
@@ -548,6 +553,7 @@ size_t draftGraphBytes(
         dependencyPlaceholders,
         subGraphPlaceholders,
         staticRefPlaceholders,
+        ruleGraphPlaceholders,
         describeDraftNativePayload(draft),
         staticSlots,
         draft.frameSlotTypes());
@@ -1326,7 +1332,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         const auto indexOfId = [&](GraphId id) {
             return toValue(id) < indexOf.size() ? indexOf[toValue(id)] : kNone;
         };
-        constexpr uint8_t kRoles = kGraphRefCallee | kGraphRefStatic;
+        constexpr uint8_t kRoles = kGraphRefCallee | kGraphRefStatic | kGraphRefRule;
         std::vector<uint32_t> first(closure.size() + 1, 0), callers;
         for (GCGraph *graph : closure) {
             for (size_t r = 0; r < graph->refs().size(); ++r) {

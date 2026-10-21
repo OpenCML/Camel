@@ -208,7 +208,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagParameterType"
 expect_diagnostic_line = 6
 expect_diagnostic_column = 2
-expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared '(x: int) => int': a tag parameter is an int, a float, a bool or a string."]
+expect_output_contains = ["The parameter 'f' of the tag 'callback' is declared '(x: int) => int': a tag parameter is an int, a float, a bool, a string or a func."]
 
 [[tests]]
 name = "old_annotation_form"
@@ -220,7 +220,7 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::InvalidAnnotation"
 expect_diagnostic_line = 4
 expect_diagnostic_column = 1
-expect_output_contains = ["a tag is written '#name' or '#name<args>' (or '#[a, b]'), never '@name(args)'", "'#name', '#name<args>' or '#[a, b<v>]'"]
+expect_output_contains = ["an annotation takes '<...>' arguments, not '(...)'", "'#name', '#name<args>' or '#[a, b<v>]'"]
 [[tests]]
 name = "reads"
 desc = "`#reads<...>` names the tags a pass reads: the arguments are tag names, not values, any number of them are accepted, and the fact is the declaration's tuple, printed by `camel inspect --tags`."
@@ -284,5 +284,5 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TagShadowsPermission"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 1
-expect_output_contains = ["The tag 'reassociate' is declared with the name of a permission of the language."]
+expect_output_contains = ["The tag 'reassociate' is declared with the name of a tag of the language."]
 

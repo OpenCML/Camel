@@ -186,13 +186,6 @@ class StmtBlockLoad : public StmtLoad {
     void wait() { waited_ = true; }
     bool waited() const { return waited_; }
 
-    /// The numeric permissions (camel/core/operator_semantics.h, PermissionMask) granted by a
-    /// `@numeric(...)` written on this block or on the function whose body it is (design
-    /// principles 7.5). Only this block's own grant: the GCT builder adds those of the
-    /// enclosing blocks. 0 when none.
-    void grantNumeric(camel::core::sem::PermissionMask permissions) { numeric_ |= permissions; }
-    camel::core::sem::PermissionMask numeric() const { return numeric_; }
-
     // The children of a block, in this order (each only when it is there):
     //   [0] RepeatedLoad("Stmt")          the statements (always)
     //   [1] RepeatedLoad("FuncAnno")      the decorators after the statements' child, in the
@@ -206,7 +199,6 @@ class StmtBlockLoad : public StmtLoad {
   private:
     bool synced_     = false;
     bool waited_     = false;
-    camel::core::sem::PermissionMask numeric_ = 0;
 };
 
 /// One `#` form (design principles 6.2): `#name`, `#name<args>`, and each member of

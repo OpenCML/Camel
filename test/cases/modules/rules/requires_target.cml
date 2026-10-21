@@ -9,7 +9,7 @@ func scaled(x: float): float {
     return x * 1.0
 }
 
-@numeric(approx_math)
+#[approx_math]
 func kept(x: float): float {
     return x * 1.0
 }

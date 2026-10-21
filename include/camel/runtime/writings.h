@@ -266,7 +266,7 @@ class DraftWritings : private WritingObserver {
   public:
     explicit DraftWritings(
         GraphDraft &draft,
-        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::explicitOnly());
+        camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed());
     ~DraftWritings();
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;

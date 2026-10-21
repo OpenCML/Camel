@@ -1,0 +1,20 @@
+/**
+ * A library module whose function carries a custom derivative rule (design principles 6.2, 8).
+ *
+ * The rule deliberately differs from the derivative of the body (10 * dy instead of 2 * x * dy),
+ * so a caller can tell which one the gradient used. `scale_rule` is not exported: the rule is
+ * reached through the graph reference the declaration tag writes on `scale`, which is what the
+ * module cache has to keep.
+ */
+module vjp_lib
+
+import { vjp } from autodiff
+
+func scale_rule(x: float, dy: float): float {
+    return 10.0 * dy
+}
+
+#vjp<scale_rule>
+export func scale(x: float): float {
+    return x * x
+}

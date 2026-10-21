@@ -3,7 +3,7 @@
  * (docs/design/op-semantics, section 5): the shapes the types fix give instances, an extent a
  * type leaves open stays a parameter without a value, an unknown rank or a broadcast where an
  * extent may or may not be 1 gives none (design Q9). A reduction shows the freedom its law
- * leaves, with the node's @numeric permissions and the order unordered_reduce leaves open.
+ * leaves, with the node's permission tags and the order unordered_reduce leaves open.
  * The declaration evaluator (tensor::test_index_eval) runs on this program too: it needs the
  * tensor and nn modules loaded.
  */
@@ -37,7 +37,7 @@ func unknown(x: Tensor<f32>, y: Tensor<f32>): Tensor {
 }
 
 /// The program allows the sum to be regrouped.
-@numeric(reassociate)
+#[reassociate]
 func regrouped(x: Tensor<f32, const [4, 5]>): Tensor {
     return sum(x, 1)
 }

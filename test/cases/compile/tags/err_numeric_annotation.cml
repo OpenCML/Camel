@@ -1,0 +1,6 @@
+/// The removed `@numeric(...)` spelling: a located diagnostic points at the tag form that
+/// replaced it (design principles 7.2 made numeric permissions tags).
+module err_numeric_annotation
+
+@numeric(contract)
+func main(): int { return 0 }

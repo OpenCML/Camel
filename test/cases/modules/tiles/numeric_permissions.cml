@@ -3,22 +3,22 @@ import { Tensor, reshape, sum } from tensor
 import { run, source, inspect } from tiles
 
 func strict(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return a * b + c }
-@numeric(contract)
+#[contract]
 func allowed(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return a * b + c }
-@numeric(contract)
+#[contract]
 func reversed(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return c + a * b }
-@numeric(reassociate, approx_math, change_precision, finite_math)
+#[reassociate, approx_math, change_precision, finite_math]
 func other_permissions(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return a * b + c }
-@numeric(contract)
+#[contract]
 func caller(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return strict(a,b,c) }
 func add_only(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> {
     let product = a * b
-    @numeric(contract) { return product + c }
+    #[contract] { return product + c }
 }
-@numeric(contract)
+#[contract]
 func multiply(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a * b }
 func multiply_only(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): Tensor<f32> { return multiply(a,b) + c }
-@numeric(contract)
+#[contract]
 func shared_product(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>): (Tensor<f32>, Tensor<f32>) {
     let product = a * b
     return (product, product + c)

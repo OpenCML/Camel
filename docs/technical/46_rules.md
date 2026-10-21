@@ -63,9 +63,12 @@ parameters, as before. The mask is 16 bits (`PermissionMask`): the nine permissi
 The check and the engines ask the numeric policy of the nodes for the mask: a rule whose `needs`
 the policy does not allow is skipped at that function (and a rule that needs nothing always
 applies). With the defaults of 7.3, a rule that needs `reassociate` or `contract` applies without
-any `@numeric`; one that needs `approx_math`, `change_precision`, `nondeterministic` or an
-assumption of `finite_math` applies only where the program grants it, written `@numeric(...)` or
-as the tag `#approx_math`. A requirement that names no permission is a located error
+any tag; one that needs `approx_math`, `change_precision`, `nondeterministic` or an
+assumption of `finite_math` applies only where the program grants it, written as the tag
+`#approx_math` (or `#[finite_math]`). The engines read the permissions of a node through
+`tag::effectivePermissions`, which returns the empty set for `#strict` (7.4): no rule that needs a
+permission applies under it, and a rule that needs nothing still does. A requirement that names no
+permission is a located error
 (`SemanticDiag::TagNotAPermission`), and so is a tag other than `#requires` before a rule
 (`SemanticDiag::RuleTagNotRequires`).
 

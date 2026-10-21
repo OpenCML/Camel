@@ -15,7 +15,7 @@ func ordered(x: Tensor<f32, const [2,3]>): Tensor<f32, const [2,3]> sync {
     let y = wait (x + x)
     return y + y
 }
-@numeric(contract)
+#[contract]
 func shared_values(x: Tensor<f32, const [2,3]>): (Tensor<f32, const [2,3]>, Tensor<f32, const [2,3]>) {
     let y = x + x
     return (y, y * y)

@@ -751,9 +751,9 @@ void ParserImpl::parseNamespaceDecl() {
 }
 
 /// funcAnno : '@' identRef (angledValues | parentIdents)?
-/// `@name` and `@name<args>` are decorators; `@name(a, b)` is an annotation whose arguments are
-/// names, `@numeric(reassociate, contract)` (design principles 7.5). Which annotations exist,
-/// and where each may be written, is checked when the tree is built (AST builder).
+/// `@name` and `@name<args>` are decorators. `@name(a, b)` is the removed spelling of the
+/// numeric-permission annotation (design principles 7.2 made permissions tags); it is parsed so
+/// that the AST builder can report it where it is written, and grants nothing.
 void ParserImpl::parseFuncAnno() {
     const size_t m = mark();
     bump();
@@ -768,7 +768,8 @@ void ParserImpl::parseFuncAnno() {
 
 /// A statement that starts with annotations or tag uses: a function declaration, a type
 /// declaration, a rule declaration (`#requires<...> rule f(...)`), or an annotated/tagged block
-/// (blockStmt's second form; `@numeric(...)` on a block, design principles 7.5; `#tag { ... }` on
+/// (blockStmt's second form; an `@name(args)` annotation, the removed spelling of the numeric
+/// permission annotation; `#tag { ... }` on
 /// a block, 6.2). They are read first; a block follows when the next token is '{' or `sync {`, a
 /// type declaration when it is 'type', a rule when the tags are followed by `rule`, anything else
 /// continues the function declaration. After a tag use '{' is always a block, never a struct

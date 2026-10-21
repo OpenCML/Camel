@@ -1,0 +1,26 @@
+/**
+ * `#strict` (design principles 7.4) takes the default grants of 7.3 away: the algebra pass
+ * reassociates `x*0.1 + x*0.1` into `x*0.2` (rounding differs, the default policy allows it) but
+ * leaves the same expression alone inside a function or a block marked `#strict`.
+ */
+module strict_algebra
+
+func loose(x: float): float {
+    return x * 0.1 + x * 0.1
+}
+
+#strict
+func tight(x: float): float {
+    return x * 0.1 + x * 0.1
+}
+
+func tightBlock(x: float): float {
+    #strict {
+        return x * 0.1 + x * 0.1
+    }
+}
+
+func main(): int sync {
+    println(loose(3.0), tight(3.0), tightBlock(3.0))
+    return 0
+}

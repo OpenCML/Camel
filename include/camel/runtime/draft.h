@@ -362,6 +362,10 @@ class GraphDraft {
     /// spliced into this one).
     void dropUncalledGraphs(std::span<const GraphId> graphs);
     const std::vector<GraphId> &staticGraphRefs() const { return staticGraphRefs_; }
+    /// The graphs a declaration tag of the graph's declaration names (a derivative rule): kept
+    /// in the reference table so that they are part of the program, and read back by the pass
+    /// that owns the tag.
+    const std::vector<GraphId> &ruleGraphs() const { return ruleGraphs_; }
 
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t id) const;
     std::span<const gc_node_ref_t> normInputsOf(const DraftNode *node) const;
@@ -606,6 +610,7 @@ class GraphDraft {
     void addDependency(GraphId graph);
     void addSubGraph(GraphId graph);
     void addStaticGraphRef(GraphId graph);
+    void addRuleGraphRef(GraphId graph);
 
     GCGraph *encode(const std::string &mangledName, const std::string &name) const;
 
@@ -705,6 +710,7 @@ class GraphDraft {
     std::vector<GraphId> dependencies_;
     std::vector<GraphId> subGraphs_;
     std::vector<GraphId> staticGraphRefs_;
+    std::vector<GraphId> ruleGraphs_;
 };
 
 } // namespace camel::runtime

@@ -6,13 +6,13 @@ module typed_boundary_guards
 
 func f32_combine_over(x: f32): f32 { return x * 3.0e38 + x * 3.0e38 }
 
-@numeric(no_infs)
+#[no_infs]
 func f32_fold_zero(x: f32): f32 { return (x * 1.0e-30) * 1.0e-30 }
 
-@numeric(no_infs)
+#[no_infs]
 func f32_fold_over(x: f32): f32 { return (x * 1.0e30) * 1.0e30 }
 
-@numeric(finite_math)
+#[finite_math]
 func f32_mixed_zero(x: f32): f32 { return x * 3.0 + x * -3.0 }
 
 func main(): int sync {

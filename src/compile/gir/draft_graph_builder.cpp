@@ -336,6 +336,17 @@ void DraftGraphBuilder::eraseStaticGraphRef(const graph_ptr_t &graph) {
     std::erase(staticGraphRefs_, graph);
 }
 
+void DraftGraphBuilder::addRuleGraphRef(const graph_ptr_t &graph) {
+    if (graph && std::find(ruleGraphRefs_.begin(), ruleGraphRefs_.end(), graph) ==
+                     ruleGraphRefs_.end()) {
+        ruleGraphRefs_.push_back(graph);
+        // The draft keeps its own table of graph references: a graph built from it while the
+        // passes run (std::macro evaluates a gradient) must name its rule too, not only the
+        // program the graphs are encoded into at the end.
+        draft_->addRuleGraphRef(graph->graphId());
+    }
+}
+
 const std::string &DraftGraphBuilder::nodePortName(runtime::DraftNodeRef node) const {
     auto it = nodePortNames_.find(node.id);
     ASSERT(it != nodePortNames_.end(), "DraftGraphBuilder node port name not found.");

@@ -19,6 +19,7 @@
 
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
+#include "camel/core/tags.h"
 #include "camel/core/type/resolver.h"
 #include "core/module/entity_internal.h"
 
@@ -336,6 +337,25 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
         }
     }
     return inserted;
+}
+
+bool Module::exportTag(const std::string &qualifiedName) {
+    const auto id = camel::core::tag::find(qualifiedName);
+    if (!id.has_value()) {
+        return false;
+    }
+    const size_t sep         = qualifiedName.rfind("::");
+    const std::string ident  = sep == std::string::npos ? qualifiedName
+                                                       : qualifiedName.substr(sep + 2);
+    addDeclaredTag(ident, *id);
+    // Like an operator group, a tag is exported under its name: an import binds it by name,
+    // and a module prefix resolves to it through the module it names.
+    const bool exported = exportEntity(
+        Reference(ident), detail::EntityAccess::makeTag(static_cast<uint32_t>(*id)));
+    // A tag is written `#name`, not used as a value, so a program does not import it by name:
+    // it comes with the module that declares it, as the module's operator groups do.
+    exportDefaultImportRef(Reference(ident));
+    return exported;
 }
 
 oper_group_ptr_t Module::nativeOperatorGroup(OperId oper) const {

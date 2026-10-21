@@ -881,8 +881,8 @@ class Builder {
         camel::core::attr::AttrSetId declaration = camel::core::attr::kNoAttrs;
         camel::core::attr::AttrSetId nodes       = camel::core::attr::kNoAttrs;
         /// The numeric permissions the permission tags written here grant (design principles
-        /// 7.2: a permission is a tag). They go to the same column `@numeric(...)` uses, never
-        /// to the attribute set: one fact, one place.
+        /// 7.2: a permission is a tag). They go to the node's permission column, never to the
+        /// attribute set: one fact, one place.
         camel::core::sem::PermissionMask permissions = 0;
     };
     /// The facts of the tag uses written on `gct`, which is written at `at` (Func, Type or
@@ -907,6 +907,19 @@ class Builder {
     /// in the module with the declaration.
     void recordFieldTags(const GCT::node_ptr_t &decl);
     std::unordered_map<const GCT::Node *, TagFacts> tagFacts_;
+    /// The graph a `func`-valued tag argument names (design principles 6.2): a function of this
+    /// block or module, a decorated function, or one an import brings. nullopt when the name
+    /// does not name exactly one function (overloads, an operator group, a value, a name that is
+    /// not declared).
+    std::optional<compile_graph_ptr_t> functionGraphNamed(const std::string &written);
+    /// Makes the graphs the declaration facts `set` name (a tag with a `func` parameter) rule
+    /// references of `graph` (kGraphRefRule): the tag's fact is a graph reference, and the graph
+    /// must be part of the program so that the tag's reader finds it in the frozen graph
+    /// (GCGraph::ruleGraphs) without looking the name up again.
+    void attachRuleGraphs(const compile_graph_ptr_t &graph, camel::core::attr::AttrSetId set);
+    /// The graphs named by `func`-valued tag arguments, by GraphId: attachRuleGraphs needs the
+    /// graph, and the attribute value only keeps the id.
+    std::unordered_map<uint32_t, compile_graph_ptr_t> tagFunctionGraphs_;
 
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,

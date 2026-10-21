@@ -231,6 +231,10 @@ struct Facts {
     /// The numeric permissions granted (`sem::PermissionMask`): the permission tags written on
     /// the declaration, and for a function the permissions of its body.
     sem::PermissionMask permissions = 0;
+    /// `#strict` is one of the tags: the code it marks uses no permission at all, including the
+    /// default grants of 7.3 (7.4). A consumer that decides by permissions asks
+    /// `effectivePermissions`, which takes this into account.
+    bool strict = false;
     /// The `read_by` passes of the tags present, sorted and without repeats.
     std::vector<std::string> readers;
 };
@@ -246,6 +250,24 @@ Facts factsOfField(const module::Module &module, const Reference &typeName, size
 /// attributes and its numeric permissions.
 Facts factsOf(const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node);
 Facts factsOf(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node);
+
+/// The numeric permissions the tags written on `node` grant (`sem::PermissionMask`), without
+/// the consumer's policy and without `#strict`: the one place the permission tags of a node are
+/// turned into bits (design principles 7.2). A pass that only reports what a node carries reads
+/// this; a pass that decides what it may do reads `effectivePermissions`.
+sem::PermissionMask permissionsOf(const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node);
+sem::PermissionMask permissionsOf(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node);
+
+/// The permissions in effect on `node`: the tags it carries through `policy`, or none at all
+/// when `#strict` is among them (design principles 7.4: `#strict` revokes every permission,
+/// including the policy's default grants). Every reader that lets a permission decide what it
+/// may do asks this, so `#strict` has one meaning and one implementation.
+sem::PermissionMask effectivePermissions(
+    const camel::runtime::GraphDraft &draft, camel::runtime::gc_node_ref_t node,
+    const sem::NumericPolicy &policy);
+sem::PermissionMask effectivePermissions(
+    const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t node,
+    const sem::NumericPolicy &policy);
 
 /// The facts attached to the declaration `name` of `module` (`on func`, `on type`).
 attr::AttrSetId ofDeclaration(const module::Module &module, const Reference &name);

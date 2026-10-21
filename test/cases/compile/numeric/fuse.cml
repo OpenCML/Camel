@@ -6,7 +6,7 @@ module fuse
 
 import { Tensor, reshape, sum } from tensor
 
-@numeric(reassociate)
+#[reassociate]
 func product(x: Tensor, w: Tensor): Tensor {
     return x @ w
 }
@@ -17,7 +17,7 @@ func split(x: Tensor, w: Tensor, b: Tensor): Tensor {
 }
 
 /// Both reassociate: fused.
-@numeric(reassociate)
+#[reassociate]
 func whole(x: Tensor, w: Tensor, b: Tensor): Tensor {
     return x @ w + b
 }

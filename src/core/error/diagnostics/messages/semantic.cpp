@@ -288,8 +288,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The annotation '@{0}' is not accepted: {1}.",
                 "A line that starts with '@' annotates the function declaration or the block "
                 "that follows. '@name' and '@name<args>' are decorators of a function or of a "
-                "block; '@numeric(...)' grants numeric permissions to a function or a block "
-                "(design principles 7.5). A tag is written with '#': '#name', '#name<args>' or "
+                "block; '@name(args)' is no longer accepted (numeric permissions are tags, "
+                "design principles 7.2). A tag is written with '#': '#name', '#name<args>' or "
                 "'#[a, b<v>]' (design principles 6.2).",
             },
         },
@@ -1184,17 +1184,19 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "'{3}' ({4}).",
                 "A tag argument is a compile-time constant of the kind the parameter declares: "
                 "write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', "
-                "and a string for 'string'.",
+                "a string for 'string', and the name of a function for 'func' (the fact is the "
+                "graph reference of that function).",
             },
         },
         {
             SemanticDiag::TagShadowsPermission,
             {
                 "TagShadowsPermission",
-                "The tag '{0}' is declared with the name of a permission of the language.",
-                "A numeric permission (design principles 7.2) is a tag of the core and a program "
-                "may not declare a tag of that name: the core's permission would still be what "
-                "'#{0}' means, and the declaration would never be read. Rename the tag.",
+                "The tag '{0}' is declared with the name of a tag of the language.",
+                "A numeric permission (design principles 7.2) and its group and `strict` (7.4) "
+                "are tags of the core, and a program may not declare a tag of that name: the "
+                "core's tag would still be what '#{0}' means, and the declaration would never be "
+                "read. Rename the tag.",
             },
         },
         {
@@ -1359,9 +1361,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "TagParameterType",
                 "The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an "
-                "int, a float, a bool or a string.",
-                "Declare the parameter with the kind of the constant the tag is written with: "
-                "'tag {1}<{0}: int> on ...'.",
+                "int, a float, a bool, a string or a func.",
+                "Declare the parameter with the kind of the argument the tag is written with: "
+                "'tag {1}<{0}: int> on ...'; a 'func' parameter is written with the name of a "
+                "function ('#vjp<rule>').",
             },
         },
         {

@@ -342,41 +342,50 @@ func main(): int sync {
 
 库可以声明一种**授予属性**的标注：它不包装所写的代码，而是在建图时（实参是常量时）给那个函数或块的节点（连同其中写下的分支臂、循环体与 lambda，不含它们调用的函数）加上一个属性，供这个库的遍与后端读取。属性的值与合并规则由库为它的键声明（`camel/core/node_attrs.h`）。这样的标注不改变代码计算的结果。
 
-### 7.6.1 `@numeric`：数值许可
+### 7.6.1 数值许可标签
 
-`@numeric(许可, ...)` 写在函数声明或块之前，授予那段代码改变浮点结果的许可（设计原则 7.5）。它不是函数的标注：不改变函数的值，只放宽规范算法（[3.2.1](03_data_model.md#321-浮点的数值契约)）。
+数值许可是标签（设计原则 7.2、7.5）：写在函数声明或块之前的 `#reassociate`、`#contract` 等，授予那段代码改变浮点结果的许可。它们不是函数的标注：不改变函数的值，只放宽规范算法（[3.2.1](03_data_model.md#321-浮点的数值契约)）。
 
-| 许可 | 允许 |
-|---|---|
-| `reassociate` | 改变归约（一串加、乘，`sum`、矩阵乘的内积）的次序或结合方式 |
-| `contract` | 把一次乘与一次加收缩为一次乘加融合 |
-| `approx_math` | 使用近似的数学函数（包括近似的除法与开方） |
-| `change_precision` | 降低或提高输入或累加的精度（如 TF32、bf16，或用 f64 累加 f32） |
-| `finite_math` | 假设没有 NaN、没有无穷、不区分零的符号、次正规数可以当作零；四项也可以分开写：`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` |
+`reassociate` 与 `contract` 是 7.3 的默认许可，不写标签也允许，写出来只是把它写明；其余许可都要写标签才生效。`#strict`（7.4）相反：它让那段代码按规范算法逐位计算，不使用任何许可，默认许可也一并撤销。
+
+| 标签 | 授予 | 默认 |
+|---|---|---|
+| `#reassociate` | 改变归约（一串加、乘，`sum`、矩阵乘的内积）的次序或结合方式 | 允许 |
+| `#contract` | 把一次乘与一次加收缩为一次乘加融合 | 允许 |
+| `#approx_math` | 使用近似的数学函数（包括近似的除法与开方） | 不允许，要写明 |
+| `#change_precision` | 降低或提高输入或累加的精度（如 TF32、bf16，或用 f64 累加 f32） | 不允许，要写明 |
+| `#finite_math` | 假设没有 NaN、没有无穷、不区分零的符号、次正规数可以当作零；四项也可以分开写：`#no_nans`、`#no_infs`、`#no_signed_zeros`、`#flush_subnormals` | 不允许，要写明 |
+| `#nondeterministic` | 允许结果随调度变化的做法（如浮点原子加） | 不允许，要写明 |
 
 ```cml
 import { sqrt } from math
 
-@numeric(reassociate, contract)
+#[reassociate, contract]
 func dot(a: float, b: float, c: float, d: float): float {
     return a * b + c * d          // 可以求值为 fma(a, b, c * d)
 }
 
 func norm(x: float, y: float): float {
     let s = x * x
-    @numeric(approx_math)
+    #approx_math
     {
         return sqrt(s + y * y)    // 块里的代码可以用近似的开方
     }
 }
+
+#strict
+func canonical(x: float, y: float): float {
+    return x * y + 1.0            // 规范算法：没有默认许可，也不使用任何许可
+}
 ```
 
 - **作用范围是写下它的那段代码**：函数体或块，以及词法上嵌在其中的分支臂、循环体与 lambda。块上的许可与外面函数上的合起来。
-- **被调用的函数不继承**：`dot` 调用的函数仍按规范算法，除非它自己写了 `@numeric`。内联之后各节点仍带各自的许可。
-- **许可只是允许，不是要求**。CPU 后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::cpp`）总是给出规范结果；以后的后端（如 Tiles）可以在有许可的节点上用别的算法。
+- **被调用的函数不继承**：`dot` 调用的函数仍按规范算法，除非它自己写了许可标签。内联之后各节点仍带各自的许可。
+- **`#strict` 撤销一切**：它标记的函数或块（连同其中的分支臂、循环体与 lambda）的有效许可为空集——默认的 `reassociate`、`contract` 不再可用，内层写下的许可也不生效。外层与内层同时写着时，`#strict` 优先。
+- **许可只是允许，不是要求**。CPU 后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::cpp`）总是给出规范结果；以后的后端（如 Tiles）可以在有许可的节点上用别的算法。`std::opt` 默认使用 7.3 的默认许可，`std::opt(safe_fp=true)` 按 `#strict` 一样的策略工作。
 - 没有模块级的默认许可，也没有命令行或流水线开关；后端的入口（如 `tiles.run`）不接受许可。
-- 许可记在图的每个节点上，`std::rgir`、`std::gir` 在有许可的节点上显示 `numeric="..."`；`camel inspect -a`、`-c` 在块上显示。公共子表达式合并与张量的融合不把许可不同的节点合在一起。
-- 不认识的许可名、别的名字后面跟圆括号（`@foo(x)`）、空的 `@numeric()`，都是编译期错误 `SemanticDiag::InvalidAnnotation`。
+- 许可记在图的每个节点上，`std::rgir`、`std::gir` 在有许可的节点上显示 `numeric="..."`；`#strict` 是代码上的标签，出现在节点的 `attrs="strict"` 里。公共子表达式合并与张量的融合不把许可不同的节点合在一起。
+- **旧的 `@numeric(许可, ...)` 写法已删除**：它现在在标注处报 `SemanticDiag::InvalidAnnotation`，并指出应写成 `#[reassociate]` 这样的标签；空的 `@numeric()` 与任何 `@名字(参数)` 同样被拒绝。
 
 ### 7.6.2 标签：`#`
 
@@ -391,9 +400,9 @@ export tag width<w: int> on type, field     // 带参数，参数是编译期值
 tag finite = [kernel, fast]                 // 标签组：成员一起生效
 ```
 
-位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告；只有声明自己读取标签事实的遍（内置的 GIR/JSON 输出遍与 `std::opt`，模块遍如 `tiles::compile`、`tensor::fuse`）才算读取者；用 Camel 写的遍也可以在函数上用 `#reads<标签, ...>` 声明自己读哪些标签，与 `read_by` 同样算数。程序不得声明与核心许可同名的标签（如 `tag reassociate`）：那样的名字始终指核心许可，声明永远读不到，`SemanticDiag::TagShadowsPermission` 在声明处拒绝。
+位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告；只有声明自己读取标签事实的遍（内置的 GIR/JSON 输出遍与 `std::opt`，模块遍如 `tiles::compile`、`tensor::fuse`）才算读取者；用 Camel 写的遍也可以在函数上用 `#reads<标签, ...>` 声明自己读哪些标签，与 `read_by` 同样算数。程序不得声明与核心许可（以及 `finite_math`、`strict`）同名的标签（如 `tag reassociate`）：那样的名字始终指核心的标签，声明永远读不到，`SemanticDiag::TagShadowsPermission` 在声明处拒绝。
 
-语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on func, nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`、`nondeterministic`（允许结果随调度变化，如浮点原子加），以及把它们前四项合在一起的组 `finite_math`。`#contract` 与 `@numeric(contract)` 授予的是同一件事，落在同一个许可列上（所以 dump 里的 `numeric="..."` 完全一样），默认值也不变（7.3）：`reassociate` 与 `contract` 本来就允许，标签只是把许可写明；其余的仍要写明才生效。`#finite_math` 与 `@numeric(finite_math)` 一样，表示四项假设全部成立。
+语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`、`nondeterministic`（允许结果随调度变化，如浮点原子加），以及把它们前四项合在一起的组 `finite_math`；`strict`（7.4）也是核心的标签，写在 `on func, nodes`。`#contract` 落在节点的许可列上（dump 里的 `numeric="..."`），`#strict` 落在节点的属性集里（`attrs="strict"`），读者通过同一个查询（`camel/core/tags.h` 的 `permissionsOf` / `effectivePermissions`）取得许可：`effectivePermissions` 对 `#strict` 返回空集。默认值见 7.3：`reassociate` 与 `contract` 本来就允许，其余要写明才生效。
 
 规则的声明之前可以写 `#requires<许可, ...>`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
 
@@ -420,9 +429,11 @@ func main(): int {
 }
 ```
 
-`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。实参必须是声明的形参类型所指的那种常量——`int`、`float`、`bool` 或 `string`；浮点实参按位记为 real 属性，`1.5` 就打印为 `1.5`。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的种别与形参声明的类型不符（`SemanticDiag::TagArgumentType`）、形参的类型标签还载不了（`SemanticDiag::TagParameterType`），也都在标签上报告。
+`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。实参必须是声明的形参类型所指的那种常量——`int`、`float`、`bool`、`string`，或 `func` 的实参（函数名）；浮点实参按位记为 real 属性，`1.5` 就打印为 `1.5`。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的种别与形参声明的类型不符（`SemanticDiag::TagArgumentType`）、形参的类型标签还载不了（`SemanticDiag::TagParameterType`），也都在标签上报告。
 
 `on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
+
+形参类型还可以是 `func`：这时实参是一个函数名，标签的事实是那个函数的**图引用**（`attr::graphRef`），不是函数值。GIR 构建器把该图记进函数图的引用表（`kGraphRefRule`），于是冻结后的图直接指向这个函数，运行期不必再按名字解析，也不需要闭包捕获；因此 `func` 实参只能是程序里的静态函数，载不了捕获了外围值的闭包。自动微分模块就是这样声明 `export tag vjp<rule: func> on func` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。旧的 `@vjp<rule>` 标注已删除：在标注处报 `SemanticDiag::InvalidAnnotation`，并指出应写 `#vjp<rule>`。
 
 `@名字(实参)` 不是标签的写法：它按标注报告，并指出应写 `#名字`。
 

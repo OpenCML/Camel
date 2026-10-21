@@ -289,6 +289,11 @@ class Module : public std::enable_shared_from_this<Module> {
     bool exportValue(const Reference &ref, camel::core::data::data_ptr_t value) {
         return exportEntity(ref, entity(std::move(value)));
     }
+    /// Exports the tag `qualifiedName` (already declared with camel/core/tags.h) under its own
+    /// name, so that a program imports it like a function or a constant (design principles
+    /// 6.2, 10.1). A C++ module declares the tag and calls this; false when no tag of that
+    /// name was declared.
+    bool exportTag(const std::string &qualifiedName);
 
     /// Return true if this module imports the given module.
     bool imports(const std::shared_ptr<Module> &mod) const;

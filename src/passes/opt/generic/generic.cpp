@@ -34,6 +34,7 @@
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/tags.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/pass/warnings.h"
@@ -775,7 +776,7 @@ size_t cseDraft(GraphDraft &draft) {
             std::vector<gc_node_ref_t>(norm.begin(), norm.end()),
             std::vector<gc_node_ref_t>(with.begin(), with.end()),
             regions[id],
-            draft.nodePermissions(id)};
+            camel::core::tag::permissionsOf(draft, id)};
         std::vector<gc_node_ref_t> &candidates = seen[std::move(key)];
         bool replaced                          = false;
         if (isReplaceable(draft, id)) {

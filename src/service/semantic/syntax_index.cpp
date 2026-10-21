@@ -321,8 +321,8 @@ class Walker {
         case NK::FuncData:
             return funcData(cst::FuncData(node));
         case NK::FuncAnno:
-            // `@numeric(...)` names permissions, not values (design principles 7.5); only a
-            // decorator (`@name`, `@name<args>`) refers to a function.
+            // `@name(args)` is the removed spelling of the numeric-permission annotation; it names no
+            // value, and only a decorator (`@name`, `@name<args>`) refers to a function.
             if (node.get<cst::ParentIdents>()) {
                 return;
             }
