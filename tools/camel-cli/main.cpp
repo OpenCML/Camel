@@ -230,7 +230,8 @@ int runCommand(int argc, char *argv[]) {
     std::string entryDir = camel::utils::pathToUtf8(fs::absolute(entryPath).parent_path());
     auto searchPaths     = camel::utils::buildModuleSearchPaths(
         entryDir,
-        camel::utils::ModuleSearchPathOptions{.stdlibOverride = Run::stdLibPath});
+        camel::utils::ModuleSearchPathOptions{
+            .stdlibOverride = Run::stdLibPath, .includeDirs = Run::includeDirs});
     {
         auto installRoot = camel::utils::resolveInstallRoot();
         std::size_t n    = 0;
@@ -722,6 +723,11 @@ int main(int argc, char *argv[]) {
     // argv here, before the argument parser runs, so that the report covers the start of the
     // run as well. The file is joined to the option: a separate value would take the program
     // that follows for the file, and the report would be written over the program.
+    //
+    // `-I` / `--include` are taken out the same way. clipp's repeatable value parameter keeps
+    // consuming the non-option arguments that follow it, so `camel -I root prog.cml` handed
+    // `prog.cml` to `-I` as a second root and left the run without an input file. One root per
+    // occurrence, in command-line order, is the promised form (docs/cli.md).
     std::vector<char *> args;
     for (size_t i = 0; i < arguments.size(); ++i) {
         std::string &arg = arguments[i];
@@ -729,6 +735,21 @@ int main(int argc, char *argv[]) {
             phase::enable("-");
         } else if (i > 0 && arg.starts_with("--time-phases=")) {
             phase::enable(std::string(arg.substr(std::string_view("--time-phases=").size())));
+        } else if (i > 0 && (arg == "-I" || arg == "--include")) {
+            if (i + 1 >= arguments.size()) {
+                std::cerr << "Error: " << arg << " requires a directory." << std::endl;
+                return 1;
+            }
+            Run::includeDirs.push_back(arguments[++i]);
+        } else if (i > 0 && arg.starts_with("--include=")) {
+            std::string dir = arg.substr(std::string_view("--include=").size());
+            if (dir.empty()) {
+                std::cerr << "Error: --include requires a directory." << std::endl;
+                return 1;
+            }
+            Run::includeDirs.push_back(std::move(dir));
+        } else if (i > 0 && arg.size() > 2 && arg.starts_with("-I")) {
+            Run::includeDirs.push_back(arg.substr(2));
         } else {
             // The parser only reads an argument; the strings above outlive the call.
             args.push_back(arg.data());

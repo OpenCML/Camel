@@ -210,7 +210,8 @@ std::string resolveEntryDir(const std::string &inputPath) {
 std::vector<std::string> buildSearchPathsForEntry(const std::string &entryDir) {
     auto searchPaths = camel::utils::buildModuleSearchPaths(
         entryDir,
-        camel::utils::ModuleSearchPathOptions{.stdlibOverride = Run::stdLibPath});
+        camel::utils::ModuleSearchPathOptions{
+            .stdlibOverride = Run::stdLibPath, .includeDirs = Run::includeDirs});
     auto installRoot = camel::utils::resolveInstallRoot();
     std::size_t n    = 0;
     for (const auto &p : searchPaths) {

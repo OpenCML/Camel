@@ -63,6 +63,8 @@ namespace Run {
 extern std::string outputFile;
 extern std::string errorFormat;
 extern std::string stdLibPath;
+/// -I / --include: extra module search roots, in command-line order.
+extern std::vector<std::string> includeDirs;
 extern std::vector<std::string> scriptsDirs;
 extern std::vector<std::string> targetFiles;
 extern std::vector<std::string> passes; // from --passes (comma-separated) or positional
