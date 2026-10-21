@@ -23,6 +23,7 @@
 #include "alloc/free_list.h"
 #include "alloc/growable.h"
 #include "alloc/large_obj.h"
+#include "camel/core/mm/debug_hook.h"
 #include "camel/core/rtdata/base.h"
 
 #include <atomic>
@@ -763,8 +764,18 @@ inline bool autoSpaceSafepointSlowPathEnabled() noexcept {
 
 inline void safepoint(std::string_view reason = {}) {
     if (autoSpaceSafepointSlowPathEnabled()) {
+        // The allocator's safepoint observes the Debug-only safepoint hook itself, before it
+        // decides whether to collect.
         autoSpace().safepoint(reason);
     }
+#ifndef NDEBUG
+    else {
+        // A safepoint that does not have to enter the allocator still lets a Debug-only
+        // observer check invariants (the runtime draft-root check). Release has no hook and
+        // does not even call this branch.
+        observeSafepoint(reason);
+    }
+#endif
 }
 
 } // namespace camel::core::mm

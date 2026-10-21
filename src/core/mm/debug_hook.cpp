@@ -71,6 +71,25 @@ void invokePostAllocHook(const AllocEvent &evt) {
         h(&evt);
 }
 
+namespace {
+
+std::atomic<SafepointObserver> &getSafepointObserver() {
+    static std::atomic<SafepointObserver> observer{nullptr};
+    return observer;
+}
+
+} // namespace
+
+void setSafepointObserver(SafepointObserver observer) {
+    getSafepointObserver().store(observer, std::memory_order_release);
+}
+
+void observeSafepoint(std::string_view reason) {
+    SafepointObserver observer = getSafepointObserver().load(std::memory_order_acquire);
+    if (observer != nullptr)
+        observer(reason);
+}
+
 } // namespace camel::core::mm
 
 #else
