@@ -316,7 +316,6 @@ desc = "The runtime query tag::declaresIndependentElements reads the fact from t
 kind = "behavior"
 case = "../../../cases/compile/tags/independent.cml"
 args = ["${case}", "test::tags"]
-envs = ["CAMEL_ENABLE_TEST_PASSES=1"]
 expect_exit = 11
 verify_script = """
 ({ input, assert }) => {
