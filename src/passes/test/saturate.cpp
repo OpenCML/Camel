@@ -162,7 +162,7 @@ std::vector<Rule> corpusRules() {
 
 const Program *saturateProgram(
     const camel::core::context::context_ptr_t &ctx, const Program *program, std::ostream &os,
-    sem::NumericPolicy policy) {
+    sem::NumericPolicy policy, const char *extraTarget = nullptr, size_t rounds = Budget{}.rounds) {
     static const std::set<std::string> kTargets{
         "strict",
         "underflow_sensitive",
@@ -175,8 +175,8 @@ const Program *saturateProgram(
         "strict32",
         "integer32"};
     std::set<std::string> targets = kTargets;
-    if (const char *extra = std::getenv("CAMEL_SATURATE_TARGET")) {
-        targets.insert(extra);
+    if (extraTarget != nullptr) {
+        targets.insert(extraTarget);
     }
     const std::vector<Rule> rules = corpusRules();
     RuntimeGraphDraftSession session(ctx, program);
@@ -193,9 +193,7 @@ const Program *saturateProgram(
            << std::chrono::duration_cast<std::chrono::milliseconds>(
                   std::chrono::steady_clock::now() - t0).count() << "\n";
         Budget budget;
-        if (const char *rounds = std::getenv("CAMEL_SATURATE_ROUNDS")) {
-            budget.rounds = static_cast<size_t>(std::atoi(rounds));
-        }
+        budget.rounds = rounds;
         const auto began = std::chrono::steady_clock::now();
         const SaturateStats stats = writings.saturate(rules, budget);
         os << "SATURATE-TIME " << graph->name() << " ms="
@@ -244,4 +242,14 @@ SaturateTestPass::apply(const camel::runtime::Program *program, std::ostream &os
 const camel::runtime::Program *
 SaturateSafeTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     return saturateProgram(context_, program, os, sem::NumericPolicy::strict());
+}
+
+const camel::runtime::Program *
+SaturateWideTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    return saturateProgram(context_, program, os, sem::NumericPolicy::relaxed(), "wide");
+}
+
+const camel::runtime::Program *
+SaturateOneRoundTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    return saturateProgram(context_, program, os, sem::NumericPolicy::relaxed(), nullptr, 1);
 }

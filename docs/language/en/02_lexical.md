@@ -17,7 +17,7 @@ This chapter describes the lexical structure of source code. The token table is 
   A next line that starts with `-`, `+`, `!`, `~`, `@`, `(`, `[`, `{`, a name, a literal or a statement keyword is a **new statement**. To write an addition or a subtraction on two lines, leave the operator at the end of the first (`a +`, then `b`); a line that starts with `+` is not a statement and gives `SyntaxDiag::LineStartsWithOperator`.
 - A `;` still separates statements on one line. Two statements on one line may also have nothing between them (the first ends where its expression cannot go on), but `;` is clearer.
 - **A call, a subscript or angle-bracket arguments must directly follow the expression before them**, with no whitespace in between: `f(1)`, `xs[0]`, `scale<3>`. `f (1)` is the two expressions `f` and `(1)`.
-- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison. Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x: int): bool => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space.
+- **Angle brackets and comparisons.** A `<` that touches a name, a literal, `)`, `]`, `}` or `>` before it opens an angle-bracket argument list; every other `<` is less-than. So **the comparison `<` needs a space before it**: `i < n`. `i<n` is read as "`i` with angle-bracket arguments", the parse then fails, and the diagnostic is `SyntaxDiag::ComparisonNeedsSpace`. `<=` is always the comparison (`<=>` is the two-way arrow of a rule declaration, see [8](08_top_level_and_grammar.md)). Inside an angle-bracket list (not inside a bracket or a block within it), a `>` that touches the token before it, or starts its line, closes the list; a `>` after a space is greater-than. `xs->filter<(x: int): bool => x > 1>` therefore reads as written, and `a<b<c>>` closes two lists. A closing `>` written after a space (`f<a, b >`) gives `SyntaxDiag::AngleCloseAfterSpace`. Outside angle brackets `>` is the comparison with or without a space.
 - Source files are read as UTF-8.
 
 ```cml
@@ -157,7 +157,8 @@ The long form of the same call is still written `'{} + {} = {}'->format<1, 2, 1 
 | `..` `?..` | Function composition (see [6.5](06_expressions.md#65-pipes)) |
 | `.` | Field and tuple member access |
 | `::` | Qualified name |
-| `=>` | Lambda and function type, the arrow of `case` |
+| `=>` | Lambda and function type, the arrow of `case`, the one-way arrow of a rule |
+| `<=>` | The two-way arrow of a rule |
 | `?` `!` (after a type) | `T?` may be null, `T!` may fail |
 | `@` (before a function declaration) | Annotation, see [7.6](07_statements.md#76-annotations) |
 | `( )` `[ ]` `{ }` `< >` | Grouping, tuples and arguments; arrays and subscripts; structs and blocks; `with` arguments and type arguments |

@@ -24,6 +24,8 @@
 
 inline constexpr const char *kSaturateTestPass     = "test::saturate";
 inline constexpr const char *kSaturateSafeTestPass = "test::saturate_safe";
+inline constexpr const char *kSaturateWideTestPass = "test::saturate_wide";
+inline constexpr const char *kSaturateOneRoundTestPass = "test::saturate_one_round";
 class SaturateTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
@@ -32,6 +34,22 @@ class SaturateTestPass : public RuntimeGraphRewritePass {
     bool acceptsWritings() const override { return true; }
 };
 class SaturateSafeTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+    bool acceptsWritings() const override { return true; }
+};
+/* The default policy, and also the function `wide` of the scale tool (a program of any size). */
+class SaturateWideTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+    bool acceptsWritings() const override { return true; }
+};
+/* The default policy with a budget of one round. */
+class SaturateOneRoundTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

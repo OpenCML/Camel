@@ -187,6 +187,9 @@
 | H28 | 数据块：缓冲区提升为通用机制 | H17d | **已完成**（检查意见 reviews/H17-H22.md） |
 | H29 | fvm/jit 上元组数组的 `reduce` 结果错误 | 无 | **已完成**（检查意见 reviews/H17-H22.md） |
 | H15g | `i32`/`f32` 入口参数按声明类型读取；`let x: int = '42'` 的诊断改为类型不符 | 无 | 甲车道 |
+| H37 | **缺陷（最优先）**：库程序（Camel 写的遍所在的模块）中模块级 `let` 的值读成 0 | 无 | 丙车道交给施工方，最优先 |
+| H36 | Camel 图 API 的收尾（导入 Camel 库、遍参数、新值的根规则、区域读取等） | 无 | 丙车道（交给施工方） |
+| H35 | Windows 构建核对 `graph` 模块 C7–C9 新增的导出项（手写的修饰名，未在 Windows 上链接过） | 无 | 己车道，下次 Windows 构建时 |
 | H33 | ONNX 导出的分支调用拆分不再产生输入环 | 协调者一方的 R2c（前端直接产生分支区域）合入后 | 丁车道 |
 | H31 | 诊断并修复 Debug 层的 `Accessing uninitialized slot`（经 `materializeCallResult`，9 项） | 无 | 乙车道，优先 |
 | H30 | Debug 构建能链接，测试运行器增加 Debug 层，视图逃逸断言真正运行 | 无 | 己车道，优先 |
@@ -208,7 +211,7 @@
 | H4 | 已裁定未开工的小项 | 各小项另注 | **进行中**（H4a、H4c、H4e、H4f 与 H4d 第一步已合入；只剩 H4b 与 H4d 的反向重写） |
 | H6 | 地基遗留 | 无 | **队列第 5**（第 4 项已并入 H2，第 6 项已完成） |
 | H12 | 拆分建图器（纯搬移） | H11 之后 | **已完成**（10 个纯搬移提交；报告 reports/H12.md） |
-| H2 | 标签机制与数值许可改为标签 | 无 | **队列第 7** |
+| H2 | 标签机制与数值许可改为标签 | 无 | **丁车道最前**（2026-10-21 提前：协调者一方的规则引擎需要 `#requires<...>`） |
 | H7 | 资源与副作用 | H2 | **队列第 8** |
 | H5 | 命名类型 | H1 | 队列第 9 |
 | H13 | 官方示例第一批 | 无 | **进行中**（先做 C2，跑通目录与度量方式后停下等确认） |
@@ -590,3 +593,18 @@ nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examp
 协调者一方补齐了提交时的校验（边上的类型兼容、无环、冲突检测；`validate(graph, GraphState)`）。唯一产生非法图的是 ONNX 导出的分支调用拆分（`enableBranchedCallSplit`，`draft_inline.cpp` 的 `devirtualizeBranchedCallInDraft`）：数据依赖分支（如 `if s > 1 then y*2 else y`）的反向是对一个从分支 JOIN 中取出（ACCS）的闭包的间接调用；ONNX 没有闭包，拆分把它改写为每条臂一次 FUNC 调用、每个取出的值一个 JOIN，这些兄弟 JOIN 读同一个 BRCH。结果形如 `OPER x ← JOIN ← JOIN ← ACCS ← FUNC(每臂的 pullback 调用) ← 余切的 OPER 链 ← x`：喂给每臂调用的余切由读取这些调用的结果 JOIN 的节点算出——作为数据依赖图是一个环。现在以 `GraphState::NonExecutable` 临时放行，且这种会话永不安装进流水线的程序。
 
 要求：拆分为每个取出的值生成一个 If，其各臂的调用把余切作为**在分支之外、只依赖前向 JOIN 算出的捕获**传入，使没有任何分支之外的节点在余切算出之前读梯度 JOIN——即没有输入环。四个用例：`export_train_step_branch_tensor`、`export_train_step_branch_disjoint`、`export_gated_gru_step`、`export_loop_values`。**验收**：删除 `enableBranchedCallSplit` 会话上的 `GraphState::NonExecutable` 设置后，这四个用例与全部 ONNX 计划通过。在协调者一方的 R2c（分支臂成为区域）合入后做，届时分支的表示会变。
+
+### H36：Camel 图 API 的收尾（2026-10-21 指派，丙车道交给施工方）
+
+协调者一方已完成 `graph` 模块 C0–C9（读图、事务、`commitChecked`、Camel 写的遍在流水线上运行、函数到函数、事实、文档；见 `docs/technical/45_graph_module.md`）。交接说明：[graph-api.md](../design/graph-store/handover/graph-api.md)（剩余工作、入口、陷阱），方案：[graph-api-plan.md](../design/graph-store/handover/graph-api-plan.md)。
+
+1. **遍所在的模块能导入 Camel 库**（如 `array`）：交接说明给出两种做法与入口，选一种并说明理由。
+2. **命令行遍参数**：`mymod::p(k=v)` 映射到函数的 `with` 参数（配置，设计原则 4.4）。
+3. **事务中新建值的根规则**：编辑可以创建常量等新值（常量折叠类改写需要），草稿的静态槽在 NodeVM 安全点不得被移动或回收。
+4. **区域的读取**（`region_of`、种类、父区域）与校验器的区域规则（2）（3）：在协调者一方的 R2c/R2b 合入后。
+5. H19 落地后把 `constant(n, sample)` 改为 `constant::<T>(n)`。
+6. 测试：每项在 `modules.graph` 计划中加用例；差分测试（Camel 遍对 C++ 遍逐字节）保持通过。
+
+### H37：库程序中模块级 `let` 的值读成 0（2026-10-21 指派，最优先）
+
+协调者一方在规则引擎工作中发现：作为库编译的程序（`camel_pass` 运行 Camel 写的遍时所用的程序、`compileAsLibrary` 的路线）没有模块级的值——遍所在模块里写 `let two = 2`，遍中读到的是 `0`。这是**静默的错误值**，不是诊断。要求：找到根因（库程序的模块级 root 图是否被执行、模块级捕获端口如何绑定），修复使模块级 `let` 在库程序中取得正确的值；用一个 Camel 遍读模块级常量与由函数调用算出的模块级值的用例锁住；同时检查运算符定义程序（同一路线）是否受影响。详细复现见协调者一方的交接说明（`docs/design/graph-store/handover/` 中 identity 的报告，随后加入）。

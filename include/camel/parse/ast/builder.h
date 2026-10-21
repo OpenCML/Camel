@@ -93,6 +93,9 @@ class Builder {
     Value visitImportDecl(syntax::cst::ImportDecl context);
     Value visitExportDecl(syntax::cst::ExportDecl context);
     Value visitUsingNamespaceDecl(syntax::cst::UsingNamespaceDecl context);
+    Value visitRuleDecl(syntax::cst::RuleDecl context);
+    /// The import of the module `rewrite` that rule declarations need was made.
+    bool ruleImportAdded_ = false;
     Value visitBlockStmt(syntax::cst::BlockStmt context);
     Value visitStmtBlock(syntax::cst::StmtBlock context);
     Value visitFuncData(syntax::cst::FuncData context);

@@ -507,7 +507,8 @@ gc_node_ref_t DraftWritings::lookupOrAdd(
     std::span<const gc_node_ref_t> with) {
     auto &ix = *index_;
     std::optional<NodeKey> key;
-    if (shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload, 0) &&
+    if (!greedy_ &&
+        shapeTakesPart(draft_, init.kind, init.dataIndex, init.dataType, init.payload, 0) &&
         !(init.kind == GCNodeKind::Oper &&
           readsVariable(
               draft_, norm, with, [&](gc_node_ref_t in) { return writtenInPlace(in); }))) {
@@ -1086,6 +1087,188 @@ gc_node_ref_t DraftWritings::build(
     return kInvalidNodeRef;
 }
 
+RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds) {
+    for (const Rule &rule : rules) {
+        if (rule.twoWay) {
+            throw std::invalid_argument(
+                "Rule '" + rule.name +
+                "' holds both ways (<=>): rewriting applies a rule one way, saturation uses both.");
+        }
+    }
+    if (!draft_.writings().empty()) {
+        throw std::logic_error("A rewrite needs a draft with one writing per value.");
+    }
+    GraphDraft::WritingScope scope(draft_);
+    greedy_ = true;
+    RewriteStats stats;
+    auto &ix = *index_;
+    // The constants there are, so that a constant a rule needs is found, not made again.
+    for (gc_node_ref_t node = 0; node < draft_.nodeSlotCount(); ++node) {
+        if (draft_.alive(node) && draft_.header(node)->kind == GCNodeKind::Data && takesPart(node)) {
+            const auto *h = draft_.header(node);
+            NodeKey key;
+            key.kind   = static_cast<uint8_t>(GCNodeKind::Data);
+            key.perms  = h->permissions;
+            key.region = draft_.nodeRegion(node);
+            key.type   = h->dataType;
+            const auto slotIndex = static_cast<size_t>(-h->dataIndex);
+            const slot_t value   = draft_.staticSlots()[slotIndex];
+            if (const Type *ty = draft_.staticSlotTypes()[slotIndex]) {
+                key.type = ty;
+            }
+            key.payload.assign(reinterpret_cast<const char *>(&value), sizeof(value));
+            ix.byKey.try_emplace(key, node);
+            if (node >= ix.keyOf.size()) {
+                ix.keyOf.resize(draft_.nodeSlotCount());
+            }
+            ix.keyOf[node] = key;
+        }
+    }
+
+    size_t varCount = 0;
+    std::function<void(const Pattern &)> countVars = [&](const Pattern &p) {
+        if (p.kind == Pattern::Kind::Var) {
+            varCount = std::max<size_t>(varCount, p.var + 1);
+        }
+        for (const Pattern &arg : p.args) {
+            countVars(arg);
+        }
+    };
+    for (const Rule &rule : rules) {
+        countVars(rule.lhs);
+        countVars(rule.rhs);
+    }
+
+    // Nodes the graph keeps by name; they are never erased.
+    const auto kept = [&](gc_node_ref_t node) {
+        if (node == draft_.entryNode() || node == draft_.exitNode() || node == draft_.outputNode() ||
+            node == draft_.returnNode()) {
+            return true;
+        }
+        for (auto list : {draft_.normPorts(), draft_.withPorts(), draft_.closureNodes()}) {
+            if (std::find(list.begin(), list.end(), node) != list.end()) {
+                return true;
+            }
+        }
+        for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
+            if (draft_.region(r).result == node) {
+                return true;
+            }
+        }
+        return false;
+    };
+    const auto unused = [&](gc_node_ref_t node) {
+        return draft_.normUsersOf(node).empty() && draft_.withUsersOf(node).empty() &&
+               draft_.ctrlUsersOf(node).empty();
+    };
+    // Erases a node nothing reads, then what only it was reading (pure nodes only).
+    const auto eraseUnused = [&](gc_node_ref_t first) {
+        std::vector<gc_node_ref_t> work{first};
+        while (!work.empty()) {
+            const gc_node_ref_t node = work.back();
+            work.pop_back();
+            if (!draft_.alive(node) || kept(node) || !unused(node) || shapeOf(node) == 2) {
+                continue;
+            }
+            std::vector<gc_node_ref_t> inputs;
+            for (auto part :
+                 {draft_.normInputsOf(node), draft_.withInputsOf(node), draft_.ctrlInputsOf(node)}) {
+                inputs.insert(inputs.end(), part.begin(), part.end());
+            }
+            if (node < ix.keyOf.size() && ix.keyOf[node].has_value()) {
+                auto found = ix.byKey.find(*ix.keyOf[node]);
+                if (found != ix.byKey.end() && found->second == node) {
+                    ix.byKey.erase(found);
+                }
+                ix.keyOf[node].reset();
+            }
+            draft_.eraseNode(node);
+            ++stats.erased;
+            work.insert(work.end(), inputs.begin(), inputs.end());
+        }
+    };
+
+    for (; stats.rounds < maxRounds;) {
+        ++stats.rounds;
+        size_t appliedInRound = 0;
+        const size_t slots    = draft_.nodeSlotCount();
+        for (gc_node_ref_t node = 0; node < slots; ++node) {
+            if (!draft_.alive(node) || !canBeRoot(node)) {
+                continue;
+            }
+            const uint8_t context = contextOf(node);
+            matchPerms_           = draft_.header(node)->permissions;
+            for (const Rule &rule : rules) {
+                if ((rule.needs & ~context) != 0 || rule.lhs.kind != Pattern::Kind::Op) {
+                    continue;
+                }
+                // The first match of the rule whose condition holds.
+                std::vector<Item> work{{&rule.lhs, node}};
+                std::vector<gc_node_ref_t> bind(varCount, kInvalidNodeRef);
+                std::vector<uint8_t> bound(varCount, 0);
+                std::optional<std::vector<gc_node_ref_t>> chosen;
+                matchFrom(context, work, 0, bind, bound, [&] {
+                    if (!chosen && (!rule.when || rule.when(Match{*this, node, bind}))) {
+                        chosen = bind;
+                    }
+                });
+                if (!chosen) {
+                    continue;
+                }
+                const auto *h = draft_.header(node);
+                DraftNodeInit base;
+                base.dataType    = h->dataType;
+                base.permissions = h->permissions;
+                base.region      = draft_.nodeRegion(node);
+                base.origin      = draft_.nodeOrigin(node);
+                base.attrs       = draft_.nodeAttrs(node);
+                const size_t before = draft_.nodeSlotCount();
+                gc_node_ref_t made  = kInvalidNodeRef;
+                try {
+                    made = build(rule.rhs, Match{*this, node, *chosen}, base);
+                } catch (const RuleSkipped &) {
+                    continue;
+                }
+                if (made == node) {
+                    continue;
+                }
+                const std::vector<gc_node_ref_t> waits(
+                    draft_.ctrlInputsOf(node).begin(), draft_.ctrlInputsOf(node).end());
+                // A node that already existed cannot be made to wait without risking a cycle.
+                if (!waits.empty() && made < before) {
+                    continue;
+                }
+                draft_.replaceAllValueUses(node, made);
+                draft_.replaceAllCtrlUses(node, made);
+                for (gc_node_ref_t wait : waits) {
+                    if (wait != made) {
+                        draft_.appendInput(DraftEdgeKind::Ctrl, made, wait);
+                    }
+                }
+                if (draft_.entryNode() == node) draft_.setEntryNode(made);
+                if (draft_.exitNode() == node) draft_.setExitNode(made);
+                if (draft_.outputNode() == node) draft_.setOutputNode(made);
+                if (draft_.returnNode() == node) draft_.setReturnNode(made, draft_.returnKind());
+                for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
+                    if (draft_.region(r).result == node) {
+                        draft_.setRegionResult(r, made);
+                    }
+                }
+                ++appliedInRound;
+                ++stats.applied;
+                eraseUnused(node);
+                break;
+            }
+        }
+        if (appliedInRound == 0) {
+            stats.fixpoint = true;
+            break;
+        }
+    }
+    greedy_ = false;
+    return stats;
+}
+
 SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget &budget) {
     SaturateStats stats;
     GraphDraft::WritingScope scope(draft_);
@@ -1164,8 +1347,12 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
             base.origin         = draft_.nodeOrigin(match.root);
             base.attrs          = draft_.nodeAttrs(match.root);
             const size_t before = draft_.nodeSlotCount();
-            const gc_node_ref_t made =
-                build(rule.rhs, Match{*this, match.root, match.vars}, base);
+            gc_node_ref_t made = kInvalidNodeRef;
+            try {
+                made = build(rule.rhs, Match{*this, match.root, match.vars}, base);
+            } catch (const RuleSkipped &) {
+                continue;
+            }
             stats.newWritings += draft_.nodeSlotCount() - before;
             if (draft_.nodeSlotCount() != before) {
                 progress = true;
