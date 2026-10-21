@@ -877,17 +877,81 @@ void RuntimeGraphDraftSession::traceStaticSlots(
     }
 }
 
+bool RuntimeGraphDraftSession::specializationLivesInProgram(
+    const RuntimeSpecializationKey &key) const {
+    if (key.baseGraph == nullptr) {
+        return false;
+    }
+    for (const RuntimeSpecializationBindingKey &binding : key.bindings) {
+        // A type-only binding names a type (permanent, never moved); a value binding is a value
+        // in the language's sense only when the type does not hold a GC-managed object.
+        if (binding.value == NullSlot) {
+            continue;
+        }
+        if (binding.type == nullptr || binding.type->isGCTraced()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+ProgramSpecializationKey
+RuntimeGraphDraftSession::programKeyOf(const RuntimeSpecializationKey &key) const {
+    return ProgramSpecializationKey{
+        .baseGraph    = key.baseGraph->id(),
+        .baseRevision = key.baseGraph->revision(),
+        .bindings     = key.bindings,
+    };
+}
+
 GCGraph *RuntimeGraphDraftSession::findSpecialization(const RuntimeSpecializationKey &key) const {
     if (auto it = specializationCache_.find(key); it != specializationCache_.end()) {
         return it->second;
     }
-    return nullptr;
+    // What a session over the program the session before it produced already made (the export and
+    // std::opt simplify in rounds): the program keeps the specializations of its graphs.
+    if (!specializationLivesInProgram(key)) {
+        return nullptr;
+    }
+    const ProgramSpecializationKey programKey = programKeyOf(key);
+    GraphId specializedId                     = kInvalidGraphId;
+    if (!work_->specializations().find(programKey, specializedId)) {
+        return nullptr;
+    }
+    GCGraph *specialized = work_->graph(specializedId);
+    if (specialized == nullptr) {
+        return nullptr; // the program no longer holds that graph: make the specialization again
+    }
+    GCGraph *base = work_->graph(programKey.baseGraph);
+    if (base == nullptr || base != key.baseGraph || base->revision() != programKey.baseRevision) {
+        return nullptr; // the callee has another version now; the entry was made for that one
+    }
+    // The commit binds the graphs the edited graph reaches, so a specialization whose callees the
+    // program does not hold could not be used (and would make the commit fail its validation).
+    for (const GraphId ref : specialized->refs()) {
+        if (work_->graph(ref) == nullptr) {
+            return nullptr;
+        }
+    }
+
+    return specialized;
 }
 
 void RuntimeGraphDraftSession::rememberSpecialization(
     RuntimeSpecializationKey key, GCGraph *graph) {
     ASSERT(graph != nullptr, "Runtime specialization cache cannot store a null graph.");
+    if (specializationLivesInProgram(key)) {
+        work_->specializations().remember(programKeyOf(key), graph->id());
+    }
     specializationCache_.insert_or_assign(std::move(key), graph);
+}
+
+uint64_t RuntimeGraphDraftSession::nextSpecializationNonce() {
+    return work_->specializations().nextSpecializationNonce();
+}
+
+uint64_t RuntimeGraphDraftSession::nextLiftNonce() {
+    return work_->specializations().nextLiftNonce();
 }
 
 size_t RuntimeGraphDraftSession::typeSpecializationCount(GraphId root) {
@@ -1114,7 +1178,11 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         // They come along; for every id the context holds, its version is the one this commit
         // works on.
         const std::vector<GCGraph *> own = work_->graphs();
-        *work_                           = *current;
+        // The specializations made so far are keyed by graph identity and content, so they stay
+        // valid over the program that is there now, which holds the same versions (no conflict).
+        RuntimeSpecializationTable ownSpecializations = std::move(work_->specializations());
+        *work_                                        = *current;
+        work_->specializations().adoptMissingFrom(ownSpecializations);
         for (GCGraph *graph : own) {
             if (work_->graph(graph->id()) == nullptr) {
                 work_->bind(graph->id(), graph);
@@ -1161,6 +1229,9 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             committed->bind(graph->id(), graph);
         }
     }
+    // The program this commit produces carries the specializations the session made (and the ones
+    // it found in the program it started from), so the next session over it finds them again.
+    committed->specializations() = work_->specializations();
     std::unordered_map<GCGraph *, GCGraph *> fresh; // a graph -> the commit's encoding of it
     std::unordered_map<GCGraph *, size_t> allocatedBytes;
     std::vector<GCGraph *> order; // the graphs encoded, in the order they were allocated
@@ -1348,10 +1419,48 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
                 rebased->bind(graph->id(), copy);
             }
             rebased->setRoot(rebased->graph(committed->root()->id()));
-            committed = rebased;
+            rebased->specializations() = committed->specializations();
+            committed                  = rebased;
             expected  = now;
         }
     }
+    // The specializations the program keeps are part of it, and a later session over this program
+    // reuses them (specializations.h): a graph the table names stays in the program even when
+    // nothing the root reaches calls it, and so does every graph it refers to. The rounds of a
+    // simplification make a specialization, inline it the next round, and would otherwise drop
+    // it; the entry would name a graph the program no longer holds, so every round would make the
+    // same specialization again and never reach a fixpoint.
+    {
+        std::vector<GraphId> pending;
+        pending.reserve(committed->specializations().size());
+        for (const auto &[key, id] : committed->specializations().entries()) {
+            pending.push_back(id);
+        }
+        std::vector<uint8_t> seen(committed->tableSize(), 0);
+        for (size_t head = 0; head < pending.size(); ++head) {
+            const GraphId id   = pending[head];
+            const size_t index = toValue(id);
+            if (index >= seen.size()) {
+                seen.resize(index + 1, 0);
+            }
+            if (seen[index]) {
+                continue;
+            }
+            seen[index] = 1;
+            GCGraph *graph = committed->graph(id);
+            if (graph == nullptr) {
+                graph = work_->graph(id);
+                if (graph == nullptr) {
+                    continue; // the graph is gone: the entry names nothing, and is not used
+                }
+                committed->bind(id, graph);
+            }
+            for (const GraphId ref : graph->refs()) {
+                pending.push_back(ref);
+            }
+        }
+    }
+
     if (!published) {
         // A private copy of a program: tracking it keeps it alive for the caller and out of the
         // context's root until something installs it.

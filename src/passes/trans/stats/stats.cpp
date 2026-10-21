@@ -36,7 +36,8 @@ using camel::runtime::GCNodeKind;
 std::string GraphStats::toJson() const {
     return std::format(
         "{{\"graphs\":{},\"nodes\":{},\"edges\":{},\"opers\":{},\"direct_calls\":{},"
-        "\"indirect_calls\":{},\"closures\":{},\"branches\":{},\"loops\":{},\"bytes\":{}}}",
+        "\"indirect_calls\":{},\"closures\":{},\"branches\":{},\"loops\":{},\"bytes\":{},"
+        "\"specializations\":{}}}",
         graphs,
         nodes,
         edges,
@@ -46,7 +47,8 @@ std::string GraphStats::toJson() const {
         closures,
         branches,
         loops,
-        bytes);
+        bytes,
+        specializations);
 }
 
 GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context, GCGraph *root) {
@@ -57,6 +59,7 @@ GraphStats collectGraphStats(const camel::core::context::context_ptr_t &context,
 
 GraphStats collectGraphStats(const camel::runtime::Program &program, GCGraph *root) {
     GraphStats stats;
+    stats.specializations = program.specializations().size();
     if (!root) {
         return stats;
     }
