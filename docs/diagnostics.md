@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-200 diagnostics: 183 errors, 17 warnings.
+201 diagnostics: 184 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -168,6 +168,7 @@ prints one entry.
 | `0x0300017E` | [SemanticDiag::LambdaParameterWithoutType](#lambdaparameterwithouttype) | Error |
 | `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
 | `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
+| `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4333,6 +4334,36 @@ func main(): int sync {
     let b = bytes::encode('abc')
     println(size(b))
     return 0
+}
+```
+
+### StaticIndicesNotTuple
+
+`0x03000182` · Error · `SemanticDiag::StaticIndicesNotTuple`
+
+**Message**
+
+```text
+'indices' walks the positions of a tuple, but '{0}' has type '{1}'.
+```
+
+**Help**
+
+```text
+'indices ts' walks the positions of an ordinary tuple: it needs a value of tuple type (a tuple variable or a tuple literal). A struct has named fields; walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design principles 13.5).
+```
+
+**Example** (`test/cases/compile/static_expansion/indices_not_tuple.cml`, run as `camel test/cases/compile/static_expansion/indices_not_tuple.cml`)
+
+```camel
+module indices_not_tuple
+
+func bad(t: {a: int, b: int}): int {
+    return static loop acc = 0 for (j) in indices t do acc + 1
+}
+
+func main(): int {
+    return bad({a: 1, b: 2})
 }
 ```
 

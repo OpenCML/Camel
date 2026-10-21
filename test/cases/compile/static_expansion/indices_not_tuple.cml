@@ -1,0 +1,13 @@
+/**
+ * `indices` walks the positions of an ordinary tuple only. A struct has named fields, so it is
+ * walked with `fields T`; an `indices` over it has no positions to give.
+ */
+module indices_not_tuple
+
+func bad(t: {a: int, b: int}): int {
+    return static loop acc = 0 for (j) in indices t do acc + 1
+}
+
+func main(): int {
+    return bad({a: 1, b: 2})
+}

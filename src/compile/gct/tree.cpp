@@ -336,19 +336,23 @@ node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
     return node;
 }
 
-node_ptr_t Tree::makeStaticFor(const std::string &valueName, const std::string &typeName) {
+node_ptr_t Tree::makeStaticFor(
+    const std::string &valueName, const std::string &typeName, bool byIndices) {
     Node *node = makeNode(NodeKind::SFOR);
     auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(2)));
     list->count    = 2;
     list->items[0] = intern(valueName);
     list->items[1] = intern(typeName);
     node->payload_.names = list;
+    if (byIndices) {
+        node->flags_ |= Node::kFlagA;
+    }
     return node;
 }
 
 node_ptr_t Tree::makeStaticLoop(
     const std::vector<std::string> &state, const std::string &valueName,
-    const std::string &typeName) {
+    const std::string &typeName, bool byIndices) {
     Node *node = makeNode(NodeKind::SLOOP);
     const size_t count = state.size() + 2;
     auto *list = static_cast<Node::NameList *>(allocate(Node::NameList::bytesFor(count)));
@@ -359,6 +363,9 @@ node_ptr_t Tree::makeStaticLoop(
     list->items[count - 2] = intern(valueName);
     list->items[count - 1] = intern(typeName);
     node->payload_.names = list;
+    if (byIndices) {
+        node->flags_ |= Node::kFlagA;
+    }
     return node;
 }
 

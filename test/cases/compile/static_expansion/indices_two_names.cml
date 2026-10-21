@@ -1,0 +1,13 @@
+/**
+ * `indices` binds one name, the position; there is no second name for the element's type. The
+ * header of `fields` has two, so a second name after `indices` is a syntax error.
+ */
+module indices_two_names
+
+func bad(t: (int, int)): int {
+    return static loop acc = 0 for (j, F) in indices t do acc + t.[j]
+}
+
+func main(): int {
+    return bad((1, 2))
+}

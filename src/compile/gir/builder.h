@@ -651,10 +651,12 @@ class Builder {
     size_t staticDepth_ = 0;
     /// The `n` of the `static for` bodies being built, innermost scope last. `n` is a
     /// compile-time string; it is not put in nodeScope_, so a body that only uses it as a key
-    /// builds no node for it.
+    /// builds no node for it. For `indices`, the binding also carries the round's index as a
+    /// value node: `j` is an ordinary `int`, so reading it as a value yields that node.
     struct StaticValueBinding {
         std::string name;
         std::string value;
+        node_handle_t node{};
     };
     std::vector<std::vector<StaticValueBinding>> staticValueScopes_;
     std::optional<std::string> staticValueNamed(const std::string &name) const {
@@ -667,6 +669,20 @@ class Builder {
             }
         }
         return std::nullopt;
+    }
+    /// The node of the value bound to `name` by the nearest `indices` round, if that binding
+    /// has one. Stops at the same binding as staticValueNamed, so a nearer `n` without a node
+    /// hides an outer `j`.
+    node_handle_t staticValueNodeNamed(const std::string &name) const {
+        for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
+             ++scope) {
+            for (auto binding = scope->rbegin(); binding != scope->rend(); ++binding) {
+                if (binding->name == name) {
+                    return binding->node;
+                }
+            }
+        }
+        return nullptr;
     }
     /// The arm whose code the builder is writing now, if it is in one: not a function or a
     /// lambda written inside it.

@@ -434,6 +434,24 @@ func first(t: (int, float)) {
 }
 ```
 
+**`indices`: expanding by tuple position.** `static for (j) in indices ts => block` expands the **positions** of the tuple value `ts` when the function is instantiated: the block runs once per position, `j` is this round's position (an `int`), and the trip count is the tuple's arity.
+
+- `ts` must be a value of tuple type (an ordinary tuple; `T?`, `T!` and a mutable cell are leaves). A value that is not a tuple reports `SemanticDiag::StaticIndicesNotTuple`; a type that is not concrete reports `SemanticDiag::StaticTypeNotConcrete`. The count is decided by `ts`'s type at instantiation.
+- `j` may be used as a value (`print(j)`, or in arithmetic) and as the key of `t.[j]`: it is a compile-time constant in every round. A local of the same name still shadows it, and using that as a key reports `SemanticDiag::StaticAccessNotConstant` (the same rule as `n` of `fields`).
+- `indices` binds one name only (there is no `F`); the element types come from `ts`'s type and are not given a name yet. `static for (j, F) in indices ts` is a syntax error.
+- `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for (j) in indices ts => e }` has no field names to give and reports `SemanticDiag::ConstructNotSupported`; where a value is needed, write `( static for (j) in indices ts => e )`.
+- The graph is the hand-written expansion: the generator leaves no node of its own, and each round's `ts.[j]` builds one `ACCS`, the same one `ts.[0]`, `ts.[1]` build.
+
+```cml
+func sum(t: (int, int, int)): int {
+    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+}
+
+func positions(t: (int, string)): (int, int) {
+    return ( static for (j) in indices t => j )
+}
+```
+
 **Comprehensions: packing the rounds back into the same shape.** A `static for` may also be written where a value is needed: `{ static for (n, F) in fields T => e }` gives a struct and `( static for (n, F) in fields T => e )` gives a tuple, with the fields or elements of `T`, in the same names and order, each from one round's value.
 
 - The **value of the block is the round's value**: unlike the statement form, it is not dropped. The block may use `let`, and its last statement's value is the field's value; a block that gives none (an empty block, or one ending in a statement without a value) reports `SemanticDiag::StaticComprehensionVoidElement`.
@@ -462,12 +480,12 @@ func rebuild(t: typeas T) {
 `static loop state = init, ... for (n, F) in fields T do expression` is the fold form of `static for`: the field list is expanded when the function is instantiated, each field advances the state one round, and the graph has no loop node.
 
 ```
-static loop name = init (, name = init)* for (n, F) in fields T do expression
+static loop name = init (, name = init)* (for (n, F) in fields T | for (j) in indices ts) do expression
 ```
 
 - The head is the same as the `loop` of [6.8.6](#686-loop): with one name the loop's value is that value; with several names the body gives a tuple in the order written and the loop's value is that tuple. The state names are visible in the body only; the first values are evaluated once where the loop is, and the state names are not visible in them. A name may not be repeated (`SemanticDiag::LoopNameRepeated`).
 - Each round's body value is the next state, and its type must be the state's type (except for the implicit conversions, an `int` into an `int?`); otherwise it is `SemanticDiag::LoopBodyTypeMismatch`. An empty struct or tuple has no rounds and the value is the first value.
-- The only walk is `for (n, F) in fields T`: there is no `while`, no `for` over an ordinary sequence, and no `break`/`continue`. `T` must be a concrete struct or ordinary tuple (the rules of 6.8.4). When `T` is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
+- The walk is the header shared with `static for`: `for (n, F) in fields T` (by field) or `for (j) in indices ts` (by tuple position, with the rules of `indices` in 6.8.4). There is no `while`, no `for` over an ordinary sequence, and no `break`/`continue`. `T` / `ts` must be a concrete struct or ordinary tuple (the rules of 6.8.4). When it is a type parameter of an enclosing generic, the trip count is decided by the type at instantiation — that is the count known at instantiation.
 - It expands to straight-line code: each round builds the `ACCS` it reads, in field order, the previous round's state is directly the value the next round reads, and `static loop` has no node of its own. A `return` in the body leaves the function, as in an ordinary function; it does not leave the loop.
 - Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
 

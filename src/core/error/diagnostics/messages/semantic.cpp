@@ -1308,6 +1308,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StaticIndicesNotTuple,
+            {
+                "StaticIndicesNotTuple",
+                "'indices' walks the positions of a tuple, but '{0}' has type '{1}'.",
+                "'indices ts' walks the positions of an ordinary tuple: it needs a value of "
+                "tuple type (a tuple variable or a tuple literal). A struct has named fields; "
+                "walk it with 'fields T'. A 'T?' or 'T!' and a mutable cell are leaves (design "
+                "principles 13.5).",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",

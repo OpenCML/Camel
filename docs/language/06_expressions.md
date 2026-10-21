@@ -434,6 +434,24 @@ func first(t: (int, float)) {
 }
 ```
 
+**`indices`：按元组的位置展开。** `static for (j) in indices ts => 块` 把元组值 `ts` 的**位置**在实例化时展开：每个位置执行一次块，`j` 是这一轮的位置（`int`），轮数是元组的元数。
+
+- `ts` 必须是元组类型的值（普通元组；`T?`、`T!`、可变单元格是叶子）。不是元组时报 `SemanticDiag::StaticIndicesNotTuple`；类型还没具体化时报 `SemanticDiag::StaticTypeNotConcrete`。轮数在实例化时由 `ts` 的类型确定。
+- `j` 可以当值用（例如 `print(j)` 或参与计算），也可以当 `t.[j]` 的键：每轮它都是编译期常量。块里再声明同名变量仍会遮蔽它，此时当键报 `SemanticDiag::StaticAccessNotConstant`（与 `fields` 的 `n` 相同）。
+- `indices` 只绑定一个名字（没有 `F`）；元素的类型由 `ts` 的类型给出，目前不另给名字。写 `static for (j, F) in indices ts` 是语法错误。
+- `indices` 只遍历元组：结构体有字段名，用 `fields T`。`{ static for (j) in indices ts => e }` 没有字段名可给，报 `SemanticDiag::ConstructNotSupported`；需要值的位置写 `( static for (j) in indices ts => e )`。
+- 图与手写的展开相同：生成器本身没有节点，每轮的 `ts.[j]` 建一个 `ACCS`，与手写的 `ts.[0]`、`ts.[1]` 相同。
+
+```cml
+func sum(t: (int, int, int)): int {
+    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+}
+
+func positions(t: (int, string)): (int, int) {
+    return ( static for (j) in indices t => j )
+}
+```
+
 **Comprehension：把各轮的值装回同一形状。** `static for` 也可以写在需要值的位置：`{ static for (n, F) in fields T => e }` 得到一个结构体，`( static for (n, F) in fields T => e )` 得到一个元组，字段或元素与 `T` 同名、同序，每个来自一轮的值。
 
 - 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
@@ -462,12 +480,12 @@ func rebuild(t: typeas T) {
 `static loop 状态 = 初值, ... for (n, F) in fields T do 表达式` 是 `static for` 的折叠形式：字段表在实例化时展开，每个字段把状态推进一轮，展开后没有循环节点。
 
 ```
-static loop 名字 = 初值 (, 名字 = 初值)* for (n, F) in fields T do 表达式
+static loop 名字 = 初值 (, 名字 = 初值)* (for (n, F) in fields T | for (j) in indices ts) do 表达式
 ```
 
 - 状态头与 [6.8.6](#686-loop) 的 `loop` 相同：一个名字时循环的值就是这个值；几个名字时循环体给出按书写顺序的元组，循环的值也是这个元组。状态的名字只在循环体内可见；初值在循环所在处求值一次，其中看不到状态的名字。名字不能重复（`SemanticDiag::LoopNameRepeated`）。
 - 循环体每轮的值就是下一轮的状态，其类型必须是状态的类型（能自动装入的除外，如 `int` 进入 `int?`），否则是 `SemanticDiag::LoopBodyTypeMismatch`。空结构体或空元组一轮也不展开，循环的值是初值。
-- 遍历**只有** `for (n, F) in fields T` 一种写法：没有 `while`，没有普通序列的 `for`，也没有 `break`/`continue`。`T` 必须是具体的结构体或普通元组（规则与 6.8.4 相同）。`T` 是外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
+- 遍历由 `static for` 共用的头给出：`for (n, F) in fields T`（按字段）或 `for (j) in indices ts`（按元组的位置，规则与 6.8.4 的 `indices` 相同）。没有 `while`，没有普通序列的 `for`，也没有 `break`/`continue`。`T` / `ts` 的类型必须是具体的结构体或普通元组（规则与 6.8.4 相同）。遍历外层泛型的类型参数时，轮数由实例化时的类型决定——这就是“实例化时已知的轮数”。
 - 展开成直线代码：每轮按字段顺序建出它读的 `ACCS`，上一轮的状态直接是下一轮读到的值，`static loop` 本身没有节点。块里的 `return` 与普通函数一样离开函数，不是“跳出循环”。
 - 效应就是直线代码的效应：循环体是不是同步块由它自己决定（3.2），每轮的效应按字段顺序执行。
 

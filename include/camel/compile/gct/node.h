@@ -45,9 +45,10 @@
  *     EXPT              payload: the list of exported names
  *     LOOP              payload: the names of the state, then the name of the element with
  *                       `for`; tag: camel::core::LoopKind
- *     SFOR              payload: the name of the field, then the name of its type
- *     SLOOP             payload: the names of the state, then the name of the field and the
- *                       name of its type
+ *     SFOR              payload: the name of the walked entry, then the name of its type
+ *                       (empty for `indices`); flag A: the generator is `indices`
+ *     SLOOP             payload: the names of the state, then the name of the walked entry and
+ *                       the name of its type (empty for `indices`); flag A: `indices`
  *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`
  *     VARI, WAIT, ANNO, SACC  nothing
  *
@@ -322,22 +323,28 @@ class Node {
         return tag_;
     }
 
-    /// SFOR: the name bound to the field in the body (`n`).
+    /// SFOR: the name bound to the walked entry in the body (`n`, or `j` for `indices`).
     const std::string &staticForValueName() const {
         check(NodeKind::SFOR);
         return *payload_.names->items[0];
     }
-    /// SFOR: the name bound to the field type in the body (`F`).
+    /// SFOR: the name bound to the entry's type in the body (`F`; empty for `indices`).
     const std::string &staticForTypeName() const {
         check(NodeKind::SFOR);
         return *payload_.names->items[1];
     }
-    /// SFOR: the type whose fields are walked (child 0).
-    node_ptr_t staticForType() const {
+    /// SFOR: the generator walks the positions of a tuple value (`indices ts`) rather than the
+    /// fields of a type (`fields T`).
+    bool staticForIndices() const {
+        check(NodeKind::SFOR);
+        return (flags_ & kFlagA) != 0;
+    }
+    /// SFOR: the walked shape (child 0): a TYPE for `fields`, the operand value for `indices`.
+    node_ptr_t staticForOperand() const {
         check(NodeKind::SFOR);
         return at(0);
     }
-    /// SFOR: the body, entered once per field (child 1).
+    /// SFOR: the body, entered once per round (child 1).
     node_ptr_t staticForBody() const {
         check(NodeKind::SFOR);
         return at(1);
@@ -376,23 +383,29 @@ class Node {
         ASSERT(j < staticLoopStateCount(), "No state name at this index");
         return *payload_.names->items[j];
     }
-    /// SLOOP: the name bound to the field in the body (`n`).
+    /// SLOOP: the name bound to the walked entry in the body (`n`, or `j` for `indices`).
     const std::string &staticLoopValueName() const {
         check(NodeKind::SLOOP);
         return *payload_.names->items[payload_.names->count - 2];
     }
-    /// SLOOP: the name bound to the field type in the body (`F`).
+    /// SLOOP: the name bound to the entry's type in the body (`F`; empty for `indices`).
     const std::string &staticLoopTypeName() const {
         check(NodeKind::SLOOP);
         return *payload_.names->items[payload_.names->count - 1];
+    }
+    /// SLOOP: the fold walks the positions of a tuple value (`indices ts`) rather than the
+    /// fields of a type (`fields T`).
+    bool staticLoopIndices() const {
+        check(NodeKind::SLOOP);
+        return (flags_ & kFlagA) != 0;
     }
     /// SLOOP: the j-th first value of the state (children 1 ... k).
     node_ptr_t staticLoopInitial(size_t j) const {
         check(NodeKind::SLOOP);
         return at(j + 1);
     }
-    /// SLOOP: the type whose fields are walked (child 0).
-    node_ptr_t staticLoopType() const {
+    /// SLOOP: the walked shape (child 0): a TYPE for `fields`, the operand value for `indices`.
+    node_ptr_t staticLoopOperand() const {
         check(NodeKind::SLOOP);
         return at(0);
     }

@@ -234,38 +234,47 @@ class TypeCaseLoad : public DataLoad {
     std::vector<TypeCaseKind> patterns_;
 };
 
-/// `static for (n, F) in fields T => body`: children [0] the type, [1] the body (a block).
-/// The load holds the two names: `n` is the field name (a tuple's index in decimal) and `F` the
-/// field type. Neither is a declaration of the enclosing scope: both live in the body only.
+/// `static for (n, F) in fields T => body` or `static for (j) in indices ts => body`:
+/// children [0] the walked shape (a type for `fields`, a value for `indices`), [1] the body (a
+/// block). The load holds the names: for `fields`, `n` is the field name (a tuple's index in
+/// decimal) and `F` the field type; for `indices`, only `j` (the position as an integer) is
+/// bound. Neither is a declaration of the enclosing scope: they live in the body only.
 class StaticForLoad : public DataLoad {
   public:
-    StaticForLoad(std::string valueName, std::string typeName)
+    StaticForLoad(std::string valueName, std::string typeName, bool byIndices = false)
         : DataLoad(DataType::StaticFor), valueName_(std::move(valueName)),
-          typeName_(std::move(typeName)) {}
+          typeName_(std::move(typeName)), byIndices_(byIndices) {}
 
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
+    /// `indices ts` walks the positions of a tuple value; `fields T` walks the fields of a type.
+    bool byIndices() const { return byIndices_; }
     const std::string toString() const override { return "StaticFor" + this->status(); }
     const std::string geneCode() const override { return "static for"; }
 
   private:
     std::string valueName_;
     std::string typeName_;
+    bool byIndices_ = false;
 };
 
-/// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: children [0] a
-/// Repeated Data of the first values, [1] the type, [2] the body (a block). The load holds the
-/// names of the state and the generator's two names; the rounds are the fields of `T`.
+/// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body` (or `in indices ts`):
+/// children [0] a Repeated Data of the first values, [1] the walked shape (a type for `fields`,
+/// a value for `indices`), [2] the body (a block). The load holds the names of the state and the
+/// generator's bindings; the rounds are the fields of `T` or the positions of `ts`.
 class StaticLoopLoad : public DataLoad {
   public:
     StaticLoopLoad(
-        std::vector<Reference> state, std::string valueName, std::string typeName)
+        std::vector<Reference> state, std::string valueName, std::string typeName,
+        bool byIndices = false)
         : DataLoad(DataType::StaticLoop), state_(std::move(state)),
-          valueName_(std::move(valueName)), typeName_(std::move(typeName)) {}
+          valueName_(std::move(valueName)), typeName_(std::move(typeName)),
+          byIndices_(byIndices) {}
 
     const std::vector<Reference> &state() const { return state_; }
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
+    bool byIndices() const { return byIndices_; }
     const std::string toString() const override { return "StaticLoop" + this->status(); }
     const std::string geneCode() const override { return "static loop"; }
 
@@ -273,6 +282,7 @@ class StaticLoopLoad : public DataLoad {
     std::vector<Reference> state_;
     std::string valueName_;
     std::string typeName_;
+    bool byIndices_ = false;
 };
 
 /// `t.[key]`: children [0] the target, [1] the key expression. The key must be a compile-time

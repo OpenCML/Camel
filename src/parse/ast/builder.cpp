@@ -2422,8 +2422,13 @@ Value Builder::visitMatchTypeExpr(cst::MatchTypeExpr context) {
 
 /*
 staticForExpr
-    : STATIC FOR '(' identDef ',' identDef ')' IN 'fields' typeExpr '=>' blockExpr
+    : STATIC staticForHeader '=>' blockExpr
     ;
+staticForHeader
+    : FOR '(' identDef (',' identDef)? ')' IN ('fields' typeExpr | 'indices' dataExpr)
+    ;
+`indices` (H51 step 6) walks the positions of a tuple value; its operand is child 0 as an
+ordinary expression, where `fields` has a type there.
 */
 Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
     ENTER("StaticForExpr");
@@ -2432,10 +2437,13 @@ Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
         bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
     const std::string typeName =
         bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
-    node_ptr_t forNode = createNodeAs<StaticForLoad>(valueName, typeName);
+    const auto mode      = context->tok(TK::Identifier);
+    const bool byIndices = mode && mode.text() == "indices";
+    node_ptr_t forNode   = createNodeAs<StaticForLoad>(valueName, typeName, byIndices);
     setNodeTokenRangeByContext(forNode, context);
-    node_ptr_t typeNode = any2node(visitType(context->type()));
-    *forNode << typeNode;
+    node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
+                                     : any2node(visitType(context->type()));
+    *forNode << shapeNode;
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *forNode << bodyNode;
     registerAstSemanticBundle(
@@ -2453,9 +2461,9 @@ Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
                 "for"),
             semanticPart(
                 camel::source::SemanticRole::BranchCondition,
-                nodeOrigin(typeNode),
+                nodeOrigin(shapeNode),
                 -1,
-                "type"),
+                byIndices ? "indices" : "type"),
         });
     LEAVE("StaticForExpr");
     return forNode;
@@ -2466,7 +2474,7 @@ staticLoopExpr
     : STATIC LOOP loopState (',' loopState)* staticForHeader DO blockExpr
     ;
 The children of the node are described at StaticLoopLoad: a Repeated Data of the first values,
-the type whose fields are walked, and the body.
+the walked shape (a type for `fields`, a value for `indices`), and the body.
 */
 Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     ENTER("StaticLoopExpr");
@@ -2482,11 +2490,14 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
         bindings.size() > 0 ? std::string(bindings[0]->text()) : std::string("_");
     const std::string typeName =
         bindings.size() > 1 ? std::string(bindings[1]->text()) : std::string("_");
-    node_ptr_t loopNode = createNodeAs<StaticLoopLoad>(state, valueName, typeName);
+    const auto mode      = context->tok(TK::Identifier);
+    const bool byIndices = mode && mode.text() == "indices";
+    node_ptr_t loopNode  = createNodeAs<StaticLoopLoad>(state, valueName, typeName, byIndices);
     setNodeTokenRangeByContext(loopNode, context);
     *loopNode << inits;
-    node_ptr_t typeNode = any2node(visitType(context->type()));
-    *loopNode << typeNode;
+    node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
+                                     : any2node(visitType(context->type()));
+    *loopNode << shapeNode;
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *loopNode << bodyNode;
     registerAstSemanticBundle(
@@ -2504,9 +2515,9 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
                 "loop"),
             semanticPart(
                 camel::source::SemanticRole::BranchCondition,
-                nodeOrigin(typeNode),
+                nodeOrigin(shapeNode),
                 -1,
-                "type"),
+                byIndices ? "indices" : "type"),
         });
     LEAVE("StaticLoopExpr");
     return loopNode;

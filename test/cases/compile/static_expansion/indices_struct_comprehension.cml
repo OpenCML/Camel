@@ -1,0 +1,15 @@
+/**
+ * A struct comprehension takes its field names from `fields T`. `indices` has positions, not
+ * names, so `{ static for (j) in indices ts => e }` cannot name its fields and is refused; the
+ * tuple form is the one that says what to call the entries.
+ */
+module indices_struct_comprehension
+
+func bad(t: (int, int)): {a: int, b: int} {
+    return { static for (j) in indices t => t.[j] }
+}
+
+func main(): int {
+    let v = bad((1, 2))
+    return v.a
+}
