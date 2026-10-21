@@ -170,7 +170,10 @@ class Module : public std::enable_shared_from_this<Module> {
     // Tags (design principles 6.2): the declarations this module makes, and the facts written
     // on its declarations and on the fields of its type declarations.
     std::map<std::string, uint32_t> declaredTags_;
-    std::map<std::string, camel::core::attr::AttrSetId> declarationTags_;
+    // The declaration's name, then the signature of one overload (empty when the name cannot be
+    // overloaded), to the facts or the granted numeric permissions.
+    std::map<std::string, std::map<std::string, camel::core::attr::AttrSetId>> declarationTags_;
+    std::map<std::string, std::map<std::string, uint8_t>> declarationPermissions_;
     std::map<std::pair<std::string, size_t>, camel::core::attr::AttrSetId> fieldTags_;
 
     std::vector<ImportedRefBinding>
@@ -323,10 +326,24 @@ class Module : public std::enable_shared_from_this<Module> {
     std::optional<uint32_t> declaredTag(const std::string &ident) const;
     void addDeclaredTag(const std::string &ident, uint32_t tag);
 
-    /// The facts written on the declaration `name` of this module (`on func`, `on type`).
+    /// The facts written on the declaration `name` of this module (`on func`, `on type`), over
+    /// every overload of that name.
     camel::core::attr::AttrSetId declarationTags(const Reference &name) const;
-    /// Attaches `tags`, the inner facts winning as each key's combine rule says.
+    /// The facts written on one overload: `signature` is the declaration's function type as
+    /// written; empty for a declaration that cannot be overloaded. An operator's overloads have
+    /// one entry each.
+    camel::core::attr::AttrSetId
+    declarationTags(const Reference &name, std::string_view signature) const;
+    /// Attaches `tags` to the declaration (the name alone: one entry for every overload).
     void setDeclarationTags(const Reference &name, camel::core::attr::AttrSetId tags);
+    /// Attaches `tags`, the inner facts winning as each key's combine rule says.
+    void setDeclarationTags(
+        const Reference &name, std::string_view signature, camel::core::attr::AttrSetId tags);
+    /// The numeric permissions the declaration grants (its body's), over every overload.
+    uint8_t declarationPermissions(const Reference &name) const;
+    uint8_t declarationPermissions(const Reference &name, std::string_view signature) const;
+    void setDeclarationPermissions(
+        const Reference &name, std::string_view signature, uint8_t permissions);
     /// The facts written on field `index` of the type this module declares as `typeName`.
     camel::core::attr::AttrSetId fieldTags(const Reference &typeName, size_t index) const;
     void setFieldTags(
@@ -334,9 +351,11 @@ class Module : public std::enable_shared_from_this<Module> {
 
     /// Every tag this module declares, by the name it writes (`N::t`) and its id; the facts
     /// written on its declarations and on the fields of its type declarations. For a dump of
-    /// what the program declared (`camel inspect --tags`).
+    /// what the program declared (`camel inspect --tags`). A declaration appears once per
+    /// overload; the inner key is its signature, empty when it cannot be overloaded.
     const std::map<std::string, uint32_t> &declaredTags() const { return declaredTags_; }
-    const std::map<std::string, camel::core::attr::AttrSetId> &declarationTagSets() const {
+    const std::map<std::string, std::map<std::string, camel::core::attr::AttrSetId>> &
+    declarationTagSets() const {
         return declarationTags_;
     }
     const std::map<std::pair<std::string, size_t>, camel::core::attr::AttrSetId> &

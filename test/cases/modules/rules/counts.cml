@@ -26,3 +26,9 @@ export func report(p: Program): Program! sync {
     println('chain', countOf(p, 'chain', ':op/add_l'), countOf(p, 'chain', ':op/mul_l'))
     return p
 }
+
+/// The products of `scaled` and `kept`, for the rules whose requirement is a permission.
+export func report_requires(p: Program): Program! sync {
+    println('scaled', countOf(p, 'scaled', ':op/mul_d'), 'kept', countOf(p, 'kept', ':op/mul_d'))
+    return p
+}

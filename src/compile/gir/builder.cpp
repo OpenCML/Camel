@@ -485,8 +485,24 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     // body (`on nodes`). The body's are handed to buildFuncBody below; a tag on a lambda has no
     // declaration to belong to.
     const TagFacts tags = tagFactsOf(gct, camel::core::tag::Func);
+    // An operator is declared once per signature, and each overload has its own facts; every
+    // other declaration has one entry under its name.
+    const std::string signature =
+        camel::core::isOverloadableOperatorGroup(name) ? funcType->toString() : std::string{};
     if (!name.empty() && tags.declaration != camel::core::attr::kNoAttrs) {
-        camel::core::tag::attachToDeclaration(*module_, Reference(name), tags.declaration);
+        camel::core::tag::attachToDeclaration(
+            *module_, Reference(name), signature, tags.declaration);
+    }
+    if (!name.empty()) {
+        // What the declaration grants: the permission tags written before it and the
+        // `@numeric(...)` (or permission tags) of its body, which the GCT already summed.
+        uint8_t granted = tags.permissions;
+        if (gct->size() > 1 && gct->at(1) != nullptr &&
+            gct->at(1)->type() == GCT::NodeKind::EXEC) {
+            granted = static_cast<uint8_t>(granted | gct->at(1)->numericPermissions());
+        }
+        camel::core::tag::attachPermissionsToDeclaration(
+            *module_, Reference(name), signature, granted);
     }
     if (isGenericHere(type)) {
         // A generic function: registered as a template when its block was entered
@@ -504,7 +520,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
-    buildFuncBody(gct, graph, funcType, name, tags.nodes);
+    buildFuncBody(gct, graph, funcType, name, tags);
     if (name.empty()) {
         lambdaGraphs_[gct] = graph.get();
     }
@@ -534,21 +550,24 @@ void Builder::stampPermissions(node_handle_t operNode) const {
 
 void Builder::buildFuncBody(
     const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
-    const std::string &name, camel::core::attr::AttrSetId bodyTags) {
+    const std::string &name, const TagFacts &bodyTags) {
     // The function's graph has the permissions of its own body (which include those of the
     // code it is written in), not those of the place that asked for it to be built (a call
-    // that instantiates a generic function, a block that declares it).
+    // that instantiates a generic function, a block that declares it). The permission tags
+    // written before the declaration (`#[contract] func f`) grant to the body too.
     const GCT::node_ptr_t body = gct->size() > 1 ? gct->at(1) : nullptr;
     NumericPermissionScope permissions(
         numericPermissions_,
-        body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0);
+        static_cast<uint8_t>(
+            (body && body->type() == GCT::NodeKind::EXEC ? body->numericPermissions() : 0) |
+            bodyTags.permissions));
     // The attributes its decorators grant join those in force where it is written (each key's
     // combine rule, camel/core/node_attrs.h), for everything written in it; so do the facts of
     // the tags written before it, which hold for the nodes of its body (`on nodes`).
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(
-            camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first), bodyTags));
+            camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first), bodyTags.nodes));
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -617,12 +636,17 @@ void Builder::buildFuncBody(
 
 node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct) {
     ENTER("EXEC");
-    // The permissions of this scope (they include those of the enclosing ones) are in force
-    // for everything built in it, arms and lambdas included.
-    NumericPermissionScope permissions(numericPermissions_, gct->numericPermissions());
     // The tags written before the block hold for the nodes written in it (`#kernel { ... }`,
     // design principles 6.2): they join the attributes in force where the block is written.
     const TagFacts blockTags = tagFactsOf(gct, camel::core::tag::Nodes);
+    // The permissions of this scope (they include those of the enclosing ones) are in force
+    // for everything built in it, arms and lambdas included. A permission written as a tag
+    // (`#[contract] { ... }`) grants exactly what `@numeric(contract)` grants; both reach the
+    // nodes through this one column.
+    NumericPermissionScope permissions(
+        numericPermissions_,
+        static_cast<uint8_t>(
+            gct->numericPermissions() | numericPermissions_ | blockTags.permissions));
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(currentAttrs_, blockTags.nodes));

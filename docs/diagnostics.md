@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-177 diagnostics: 160 errors, 17 warnings.
+182 diagnostics: 164 errors, 18 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -145,11 +145,16 @@ prints one entry.
 | `0x03000167` | [SemanticDiag::TagOnUnnamedField](#tagonunnamedfield) | Error |
 | `0x03000168` | [SemanticDiag::TagArgumentNamed](#tagargumentnamed) | Error |
 | `0x03000169` | [SemanticDiag::TagArgumentUnsupported](#tagargumentunsupported) | Error |
+| `0x0300016A` | [SemanticDiag::TagArgumentType](#tagargumenttype) | Error |
+| `0x0300016B` | [SemanticDiag::TagNotAPermission](#tagnotapermission) | Error |
+| `0x0300016C` | [SemanticDiag::RuleTagNotRequires](#ruletagnotrequires) | Error |
+| `0x0300016D` | [SemanticDiag::TagParameterType](#tagparametertype) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
+| `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
 | `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn |
 | `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
@@ -256,25 +261,16 @@ func main(): int sync {
 **Message**
 
 ```text
-Invalid number format: '{0}'.
+Invalid number format: {0}.
 ```
 
 **Help**
 
 ```text
-A number is decimal digits without a leading zero, or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
+Check the syntax of the numeric literal.
 ```
 
-**Example** (`test/cases/parse/numbers/leading_zero.cml`, run as `camel -E short test/cases/parse/numbers/leading_zero.cml`)
-
-```camel
-module parse_numbers_leading_zero
-
-func main(): int sync {
-    let a = 077
-    return a
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### UnclosedStringLiteral
 
@@ -3632,7 +3628,25 @@ The argument '{0}' of the tag '{1}' has a type a tag cannot carry yet.
 **Help**
 
 ```text
-A tag carries an integer, a string, a boolean (as 0 or 1), a symbol or a graph reference; a floating-point argument comes with the real-valued tag attributes.
+A tag carries an integer, a floating-point number, a string, a boolean (as 0 or 1), a symbol or a graph reference; an argument of another type (a function, a composite) is not a tag value yet.
+```
+
+*No example: no test small enough to show raises it.*
+
+### TagArgumentType
+
+`0x0300016A` · Error · `SemanticDiag::TagArgumentType`
+
+**Message**
+
+```text
+The parameter '{0}' of the tag '{1}' is declared '{2}', but the argument is '{3}' ({4}).
+```
+
+**Help**
+
+```text
+A tag argument is a compile-time constant of the kind the parameter declares: write an integer for 'int', a real for 'float', 'true' or 'false' for 'bool', and a string for 'string'.
 ```
 
 **Example** (`test/cases/compile/tags/err_float.cml`, run as `camel test/cases/compile/tags/err_float.cml`)
@@ -3645,6 +3659,98 @@ export tag width<w: int> on type
 
 #width<1.5>
 type T = { a: int }
+
+func main(): int { return 0 }
+```
+
+### TagNotAPermission
+
+`0x0300016B` · Error · `SemanticDiag::TagNotAPermission`
+
+**Message**
+
+```text
+The tag '{0}' grants no numeric permission.
+```
+
+**Help**
+
+```text
+A requirement names a permission of design principles 7.2: reassociate, contract, approx_math, change_precision, finite_math, no_nans, no_infs, no_signed_zeros or flush_subnormals.
+```
+
+**Example** (`test/cases/modules/rules/err_requires_unknown.cml`, run as `camel test/cases/modules/rules/err_requires_unknown.cml`)
+
+```camel
+/// A requirement that names no permission: reported at the argument, where it is written.
+module err_requires_unknown
+import { Program } from graph
+import { rewrite } from rewrite
+
+#requires<reassociate2>
+rule r(x: int) { x + 0 => x }
+
+export func apply(p: Program): Program! {
+    return rewrite(p, [r])
+}
+```
+
+### RuleTagNotRequires
+
+`0x0300016C` · Error · `SemanticDiag::RuleTagNotRequires`
+
+**Message**
+
+```text
+A rule may be preceded only by '#requires<...>', not by the tag '{0}'.
+```
+
+**Help**
+
+```text
+State the permissions the rule needs as tag arguments: '#requires<reassociate>' (design principles 7.2).
+```
+
+**Example** (`test/cases/modules/rules/err_rule_tag.cml`, run as `camel test/cases/modules/rules/err_rule_tag.cml`)
+
+```camel
+/// A tag other than `#requires` before a rule: a rule states requirements, not facts.
+module err_rule_tag
+
+tag fast on nodes
+
+#fast
+rule r(x: int) { x + 0 => x }
+
+func main(): int { return 0 }
+```
+
+### TagParameterType
+
+`0x0300016D` · Error · `SemanticDiag::TagParameterType`
+
+**Message**
+
+```text
+The parameter '{0}' of the tag '{1}' is declared '{2}': a tag parameter is an int, a float, a bool or a string.
+```
+
+**Help**
+
+```text
+Declare the parameter with the kind of the constant the tag is written with: 'tag {1}<{0}: int> on ...'.
+```
+
+**Example** (`test/cases/compile/tags/err_param_type.cml`, run as `camel test/cases/compile/tags/err_param_type.cml`)
+
+```camel
+/// A parameter of a kind a tag cannot carry: reported where the tag is written, not carried.
+module err_param_type
+
+tag callback<f: (x: int) => int> on type
+
+#callback<1>
+type T = { x: int }
 
 func main(): int { return 0 }
 ```
@@ -3818,6 +3924,31 @@ func f(x: int): int sync {
 
 func main(): int sync {
     println(f(9))
+    return 0
+}
+```
+
+### IntegerLiteralTruncated
+
+`0x031000A0` · Warn · `SemanticDiag::IntegerLiteralTruncated`
+
+**Message**
+
+```text
+The integer literal '{0}' is not a whole number: its value is {1}, the fraction is dropped.
+```
+
+**Help**
+
+```text
+A number written without a decimal point is an 'int', with an exponent too. For the floating-point number write the decimal point: '{2}'.
+```
+
+**Example** (`test/cases/compile/literals/int_negative_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_negative_exponent.cml`)
+
+```camel
+func main(): int sync {
+    println(1e-2, 15e-1, 1500e-2)
     return 0
 }
 ```

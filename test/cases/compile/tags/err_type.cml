@@ -1,0 +1,9 @@
+/// A `bool` written for an `int` parameter: a located kind mismatch at the argument.
+module err_type
+
+tag width<w: int> on type
+
+#width<true>
+type T = { x: int }
+
+func main(): int { return 0 }

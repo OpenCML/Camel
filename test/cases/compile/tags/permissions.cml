@@ -1,0 +1,53 @@
+/**
+ * The numeric permissions of design principles 7.2 and 7.3, written as tags: `#contract` and
+ * `#reassociate` grant exactly what `@numeric(contract)` and `@numeric(reassociate)` grant, on a
+ * declaration or on a block; `#finite_math` is the group of the four assumptions. The facts reach
+ * the nodes through the permission column, not through the attribute set, so a dump shows the
+ * same `numeric=` either way.
+ */
+module permissions
+
+func plain(x: float): float {
+    return x * 1.0
+}
+
+@numeric(contract)
+func annotated(x: float): float {
+    return x * 1.0
+}
+
+#contract
+func tagged(x: float): float {
+    return x * 1.0
+}
+
+func blockTagged(x: float): float {
+    #contract {
+        return x * 1.0
+    }
+}
+
+@numeric(reassociate)
+func annotated2(x: float): float {
+    return x + 2.0
+}
+
+#reassociate
+func tagged2(x: float): float {
+    return x + 2.0
+}
+
+#finite_math
+func finite(x: float): float {
+    return x + 2.0
+}
+
+#[reassociate, contract]
+func grouped(x: float): float {
+    return x * 1.0 + 2.0
+}
+
+func main(): int sync {
+    println(plain(1.0), annotated(2.0), tagged(3.0), blockTagged(4.0), annotated2(5.0), tagged2(6.0), finite(7.0), grouped(8.0))
+    return 0
+}

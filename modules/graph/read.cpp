@@ -31,6 +31,7 @@
 #include "camel/core/error/runtime.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/tags.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
@@ -439,10 +440,12 @@ slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
 slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle   = norm.get<Handle *>(0);
     const NodeView node  = viewOf(handle, "graph.tags");
-    const uint32_t attrs = node.isDraft()
-                               ? node.draft->nodeAttrs(node.ref)
-                               : graphOf(handle, "graph.tags").nodeAttrs(handle->index());
-    return stringSlot(camel::core::attr::text(attrs));
+    // The one query for the facts of a node (camel/core/tags.h): the attributes of a node are its
+    // tags.
+    const auto facts = node.isDraft()
+                           ? camel::core::tag::factsOf(*node.draft, node.ref)
+                           : camel::core::tag::factsOf(graphOf(handle, "graph.tags"), handle->index());
+    return stringSlot(camel::core::attr::text(facts.tags));
 }
 
 /// Whether the node anchors its graph: its exit, output or return node. A rewrite keeps such a

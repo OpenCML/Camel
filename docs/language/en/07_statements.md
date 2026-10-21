@@ -391,7 +391,11 @@ export tag width<w: int> on type, field     // with parameters, which are compil
 tag finite = [kernel, fast]                 // a group: its members apply together
 ```
 
-The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written.
+The positions are `func` (a function declaration), `type` (a type declaration), `field` (a struct field), `nodes` (the nodes written in the region) and `param` (reserved). `read_by` says which passes read the tag; when none of them is in the pipeline a warning is reported where the tag is written. Only a pass that declares itself a reader of tag facts counts: the core dump passes and `std::opt`, and module passes such as `tiles::compile` and `tensor::fuse`.
+
+The core carries a set of **numeric permission tags** (design principles 7.2), written without an import and `on func, nodes`: `reassociate`, `contract`, `approx_math`, `change_precision`, `no_nans`, `no_infs`, `no_signed_zeros`, `flush_subnormals`, and the group `finite_math` that holds the last four. `#contract` and `@numeric(contract)` grant the same thing and land in the same permission column (so a dump shows the same `numeric="..."`), and the defaults do not change (7.3): `reassociate` and `contract` are allowed anyway, the tag only states the permission; the others still have to be written. `#finite_math` means all four assumptions, as `@numeric(finite_math)` does.
+
+A rule declaration may be preceded by `#requires<permission, ...>` (permission names only; the group `finite_math` expands to its four members): the engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../technical/46_rules.md)). A requirement that names something else, a tag of the program written there, or `#requires` outside a rule is a located error, never a silent pass.
 
 There are three forms of `#`, written before a function, a type declaration, a struct field or a block:
 
@@ -414,9 +418,9 @@ func main(): int {
 }
 ```
 
-`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, and an argument of a type a tag cannot carry yet (a floating-point one for now, see H2b).
+`#name`, `#name<arguments>` and `#[a, b<v>]` (a group). A tag's arguments are compile-time values: a literal, a top-level constant or a function name. Each argument must be a constant of the kind its parameter declares — `int`, `float`, `bool` or `string`; a real is carried as a real attribute by its bits and `1.5` prints as `1.5`. Writing a tag where its declaration does not list it is an error, located at the tag. So are a wrong number of arguments, an argument that is not a compile-time value, an argument whose kind is not the declared one (`SemanticDiag::TagArgumentType`), and a parameter of a kind a tag cannot carry yet (`SemanticDiag::TagParameterType`).
 
-A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it with `tag::ofDeclaration` / `tag::ofField`; reading it from Camel code waits for the first stage of generics.
+A tag of `on nodes` is a **node attribute** (`camel/core/node_attrs.h`): a tag written before a function body or a block holds for the nodes written in it, it accumulates with same-name tags outside by the attribute's combine rule, and an inner same-name tag with a parameter takes the inner value. A tag of `on func`, `on type` and `on field` belongs to the declaration itself: a C++ module reads it in one query, `tag::factsOf` (tags, permissions and readers; `tag::ofDeclaration` / `tag::ofField` remain); reading it from Camel code waits for the first stage of generics.
 
 `@name(arguments)` is not how a tag is written: it is reported as an annotation, and the message points at `#name`.
 

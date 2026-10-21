@@ -174,6 +174,10 @@ enum class SemanticDiag : uint32_t {
     TagOnUnnamedField      = 0x000167,
     TagArgumentNamed       = 0x000168,
     TagArgumentUnsupported = 0x000169,
+    TagArgumentType        = 0x00016A,
+    TagNotAPermission      = 0x00016B,
+    RuleTagNotRequires     = 0x00016C,
+    TagParameterType       = 0x00016D,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

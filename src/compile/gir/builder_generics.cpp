@@ -968,7 +968,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             graph,
             funcType,
             instanceName,
-            tagFactsOf(tmpl->func, camel::core::tag::Nodes).nodes);
+            tagFactsOf(tmpl->func, camel::core::tag::Nodes));
         leaveScope();
     } catch (...) {
         if (instanceIndex < tmpl->instances.size()) {

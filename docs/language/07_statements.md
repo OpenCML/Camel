@@ -391,7 +391,11 @@ export tag width<w: int> on type, field     // 带参数，参数是编译期值
 tag finite = [kernel, fast]                 // 标签组：成员一起生效
 ```
 
-位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告。
+位置有 `func`（函数声明）、`type`（类型声明）、`field`（结构体字段）、`nodes`（区域内写下的节点）与 `param`（保留）。`read_by` 说明哪些遍读取这个标签，流水线里一个都没有时，在写下标签的地方报告一条警告；只有声明自己读取标签事实的遍（内置的 GIR/JSON 输出遍与 `std::opt`，模块遍如 `tiles::compile`、`tensor::fuse`）才算读取者。
+
+语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on func, nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`，以及把它们四项合在一起的组 `finite_math`。`#contract` 与 `@numeric(contract)` 授予的是同一件事，落在同一个许可列上（所以 dump 里的 `numeric="..."` 完全一样），默认值也不变（7.3）：`reassociate` 与 `contract` 本来就允许，标签只是把许可写明；其余的仍要写明才生效。`#finite_math` 与 `@numeric(finite_math)` 一样，表示四项假设全部成立。
+
+规则的声明之前可以写 `#requires<许可, ...>`（同样只有许可名，组 `finite_math` 展开为四项）：规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成别的名字、写成程序自己的标签，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
 
 `#` 有三种写法，可以写在函数、类型声明、结构体字段或块之前：
 
@@ -416,9 +420,9 @@ func main(): int {
 }
 ```
 
-`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的类型标签还载不了（目前是浮点，见 H2b），也都在标签上报告。
+`#name`、`#name<实参>` 与 `#[a, b<v>]`（标签组）。标签的参数是编译期值：字面量、顶层常量或函数名。实参必须是声明的形参类型所指的那种常量——`int`、`float`、`bool` 或 `string`；浮点实参按位记为 real 属性，`1.5` 就打印为 `1.5`。写到声明没有列出的位置是错误，位置在标签上。参数个数与声明的参数不符、实参不是编译期值、实参的种别与形参声明的类型不符（`SemanticDiag::TagArgumentType`）、形参的类型标签还载不了（`SemanticDiag::TagParameterType`），也都在标签上报告。
 
-`on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::ofDeclaration` / `tag::ofField` 读取；在 Camel 代码里读它们要等泛型的第一阶段。
+`on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
 
 `@名字(实参)` 不是标签的写法：它按标注报告，并指出应写 `#名字`。
 

@@ -1,0 +1,63 @@
+id = "compile.tag_permissions"
+order = 227
+tier = "fast"
+tags = ["feat", "compile", "tags", "numeric", "permissions", "semantics"]
+desc = "Numeric permissions written as tags (design principles 7.2): `#reassociate`, `#contract`, `#approx_math`, `#change_precision`, the four finite-math assumptions and their group `finite_math` are standard tags of the core, written before a function or a block. They grant exactly what `@numeric(...)` grants, through the same permission column, so a dump shows the same `numeric=` and the attribute set is untouched; the defaults of 7.3 do not change (a permission that is allowed by default stays allowed with or without the tag)."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "permissions.results"
+desc = "Tags grant permissions only: the program prints the same values in the byte-code interpreter and the parallel scheduler, and the group `finite_math` is accepted."
+kind = "behavior"
+case = "../../../cases/compile/tags/permissions.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "1.0 2.0 3.0 4.0 7.0 8.0 9.0 10.0\n"
+
+[[tests]]
+name = "permissions.gir"
+desc = "std::gir shows the permission on the nodes, in the same `numeric=` column `@numeric(...)` writes: `annotated` and `tagged` agree byte for byte (as do `annotated2` and `tagged2`), a tag before a block grants inside it, `plain` has none, and `#finite_math` is printed as `finite_math` (the four assumptions grouped, as permissionsText always prints them). The tag is not written into `attrs=`: a permission is one fact in one place."
+kind = "behavior"
+case = "../../../cases/compile/tags/permissions.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stack = []
+const numeric = {}
+for (const line of out.split('\n')) {
+  const t = line.trim()
+  if (t.startsWith('subgraph cluster_')) { stack.push(''); continue }
+  if (t === '}') { if (stack.length) stack.pop(); continue }
+  const label = t.match(/^label="([^"]+)";$/)
+  if (label && stack.length) { stack[stack.length - 1] = label[1]; continue }
+  if (t.includes('type="OPER"')) {
+    const fn = stack.length ? stack[stack.length - 1] : ''
+    const m = t.match(/numeric="([^"]*)"/)
+    ;(numeric[fn] ||= []).push(m ? m[1] : '')
+    assert(!t.includes('attrs="'), `a permission tag must not be an attribute: ${t}`)
+  }
+}
+const of = (fn) => numeric[fn] || []
+for (const fn of ['plain', 'annotated', 'tagged', 'blockTagged', 'annotated2', 'tagged2', 'finite', 'grouped', 'main']) {
+  assert(of(fn).length > 0, `no OPER nodes in ${fn}`)
+}
+for (const value of of('plain')) assert(value === '', `plain has no permission, got '${value}'`)
+for (const value of of('annotated')) assert(value === 'contract', `annotated: '${value}'`)
+for (const value of of('tagged')) assert(value === 'contract', `tagged: '${value}'`)
+for (const value of of('blockTagged')) assert(value === 'contract', `blockTagged: '${value}'`)
+for (const value of of('annotated2')) assert(value === 'reassociate', `annotated2: '${value}'`)
+for (const value of of('tagged2')) assert(value === 'reassociate', `tagged2: '${value}'`)
+for (const value of of('finite')) assert(value === 'finite_math', `finite: '${value}'`)
+for (const value of of('grouped')) assert(value === 'reassociate, contract', `grouped: '${value}'`)
+for (const value of of('main')) assert(value === '', `main: '${value}'`)
+assert(JSON.stringify(of('annotated')) === JSON.stringify(of('tagged')), 'the tag and @numeric must agree')
+assert(JSON.stringify(of('annotated2')) === JSON.stringify(of('tagged2')), 'the tag and @numeric must agree')
+}
+"""
