@@ -1498,6 +1498,9 @@ Builder::buildEnumVariants(const AST::node_ptr_t &ast, const EnumType *instance)
         std::unordered_set<string> fieldNames;
         for (const auto &field : *fieldTypes) {
             variant.fieldTypes.push_back(visitType(field));
+            // Where the field's type is written: a field that cannot be a key is reported
+            // there (a map key of enum type, design principles 11.3).
+            variant.fieldOrigins.push_back(field->load()->origin());
         }
         if (variant.shape == VariantShape::Struct) {
             for (const string &fieldName : variant.fieldNames) {
@@ -4419,11 +4422,19 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     if (const CollectionType *coll = asCollectionTypeOrPrototype(base);
         coll != nullptr && !arguments.empty() && arguments.front().type != nullptr) {
         // The key of a map, the element of a set (DESIGN-QUESTION(map-key-types)).
-        Type *keyType = arguments.front().type;
-        if (std::string problem = collectionKeyProblem(keyType); !problem.empty()) {
-            diags_->of(SemanticDiag::CollectionKeyNotAllowed)
-                .at(ast->load()->tokenRange())
-                .commit(keyType->toString(), coll->toString(), problem);
+        Type *keyType                          = arguments.front().type;
+        camel::source::origin_id_t fieldOrigin = camel::source::kInvalidOriginId;
+        std::string fieldLabel;
+        if (std::string problem = collectionKeyProblem(keyType, &fieldOrigin, &fieldLabel);
+            !problem.empty()) {
+            auto diag = diags_->of(SemanticDiag::CollectionKeyNotAllowed)
+                            .at(ast->load()->tokenRange());
+            if (fieldOrigin != camel::source::kInvalidOriginId) {
+                // The enum is a key for what its fields are: say where the field that is not
+                // one is declared.
+                diag.relatedOrigin(fieldOrigin, fieldLabel + " is declared here");
+            }
+            diag.commit(keyType->toString(), coll->toString(), problem);
             throw BuildAbortException();
         }
     }

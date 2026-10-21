@@ -558,8 +558,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "CollectionKeyNotAllowed",
                 "The type '{0}' cannot be a key of '{1}': {2}.",
                 "A key of a Map and an element of a Set must have an order and an equality "
-                "that cannot change: 'int', 'i32', 'bool', 'string', and tuples of those. The "
-                "value type of a Map is not restricted.",
+                "that cannot change: 'int', 'i32', 'bool', 'string', tuples of those, and an "
+                "enum every field of which is one of those. The value type of a Map is not "
+                "restricted.",
             },
         },
         {

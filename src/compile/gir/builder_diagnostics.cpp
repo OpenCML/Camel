@@ -823,6 +823,12 @@ void Builder::rejectLiteralConversion(
 void Builder::rejectAmbiguousCall(
     const std::string &name, const std::string &argumentTypes,
     const std::vector<std::string> &candidates, const GCT::node_ptr_t &origin) {
+    rejectAmbiguousCallAt(name, argumentTypes, candidates, origin->origin());
+}
+
+void Builder::rejectAmbiguousCallAt(
+    const std::string &name, const std::string &argumentTypes,
+    const std::vector<std::string> &candidates, camel::source::origin_id_t origin) {
     // The one report for several candidates in the pass a call is making (design principles
     // 5.1, H27e): an ordinary call, an operator call and a partial application used as a
     // value all come here. Listing the candidates in declaration order lets a reader see
@@ -830,7 +836,7 @@ void Builder::rejectAmbiguousCall(
     // how to choose (annotate the literal, add a cast).
     ASSERT(!candidates.empty(), "An ambiguity has candidates.");
     diags_->of(SemanticDiag::AmbiguousCall)
-        .atOrigin(origin->origin())
+        .atOrigin(origin)
         .commit(
             name,
             argumentTypes,
@@ -863,6 +869,21 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
         callee != boundWithCallee_.end() && callee->second->type() == GCT::NodeKind::DREF) {
         name = callee->second->name();
     }
+    // Where the whole binding is: the `f<w>` expression (boundWithOrigin_), otherwise the position
+    // the caller gives. The expression is the union of the node's own span with its operands
+    // (design principles 5.1), as for a call; the destructive pass below runs after it is made.
+    const auto originIt = boundWithOrigin_.find(node);
+    const GCT::node_ptr_t where = originIt != boundWithOrigin_.end() ? originIt->second : origin;
+    const auto exprSpan         = callExpressionSpan(context_, where);
+    const auto exprOrigin       = deriveGirOrigin(
+        context_,
+        where,
+        camel::source::OriginKind::GirNode,
+        "gir.with.expr",
+        {},
+        exprSpan);
+    const camel::source::origin_id_t at =
+        exprOrigin != camel::source::kInvalidOriginId ? exprOrigin : where->origin();
     // Several candidates in the pass the binding could use: the same ambiguity an ordinary
     // call reports, with the same candidate list (H27e). No position chose one (`expected`),
     // which is why the binding is being refused now.
@@ -872,7 +893,12 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
         ambiguousBindings_.erase(ambiguous);
         boundWithArgs_.erase(node);
         boundWithCallee_.erase(node);
-        rejectAmbiguousCall(name, given, candidates, origin);
+        std::vector<std::string> signatures;
+        signatures.reserve(candidates.size());
+        for (FunctionType *candidate : candidates) {
+            signatures.push_back(candidate->toString());
+        }
+        rejectAmbiguousCallAt(name, given, signatures, at);
     }
     std::string why;
     if (genericDrefs_.contains(node)) {
@@ -911,8 +937,9 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     }
     boundWithArgs_.erase(node);
     boundWithCallee_.erase(node);
+    boundWithOrigin_.erase(node);
     diags_->of(SemanticDiag::PartialApplicationRefused)
-        .atOrigin(origin->origin())
+        .atOrigin(at)
         .commit(given, name, why);
     throw BuildAbortException();
 }
