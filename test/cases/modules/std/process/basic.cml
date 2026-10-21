@@ -19,6 +19,6 @@ func main(): int sync {
     println("\n[3] cpu_count()")
     println("  logical cpu count =", cpu_count())
 
-    println("\n=== OS tests completed ===")
+    println("\n=== Process tests completed ===")
     return 0
 }
