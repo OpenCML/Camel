@@ -4,7 +4,10 @@ import { write_bytes, read_bytes, read_chunk, file_size } from fs
 import { to_array, from_array } from bytes
 import { get_env } from sys
 func main(): int sync {
-    let path = get_env('TEMP') + '/camel-fs-binary-roundtrip.bin'
+    // The scratch directory the runner gives every test; see bytes_values.cml.
+    let scratch = get_env('CAMEL_TEST_TMPDIR')
+    let dir = if scratch == '' then get_env('TEMP') else scratch
+    let path = dir + '/camel-fs-binary-roundtrip.bin'
     let payload = from_array([0, 65, 0, 255, 13, 10, 128, 0])
     write_bytes(path, payload)
     let whole = to_array(read_bytes(path))

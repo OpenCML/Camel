@@ -30,12 +30,22 @@ function invoke(mode, target) {
     return result.stdout.trim()
 }
 
+// The account this process runs as, named by its SID. `USERDOMAIN\USERNAME` is not reliable on a
+// runner: the deny ACE is accepted for a name that resolves to an account the token does not
+// carry, so the deny has no effect and `icacls /remove:d` then cannot find the entry it made.
+function currentUserSid() {
+    const who = spawnSync('whoami', ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8' })
+    assert.equal(who.status, 0, who.stdout + who.stderr)
+    const fields = who.stdout.trim().split(',')
+    return fields[fields.length - 1].replace(/"/g, '').trim()
+}
+
 // Refuses the removal of `target` for this process. On Windows removing an entry needs DELETE
 // on the entry itself, so a deny ACE on it is refused even to an administrator. On POSIX
 // removing an entry needs write permission on its containing directory.
 function denyRemoval(target) {
     if (process.platform === 'win32') {
-        const user = `${process.env.USERDOMAIN}\\${process.env.USERNAME}`
+        const user = `*${currentUserSid()}`
         const denied = spawnSync('icacls', [target, '/deny', `${user}:(D)`], { encoding: 'utf8' })
         assert.equal(denied.status, 0, denied.stdout + denied.stderr)
         return () => {
