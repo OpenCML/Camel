@@ -691,9 +691,6 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
     const OptimizeRewriteConfig &config, size_t growthBudget, size_t &growthSpent,
     std::vector<InlineDeclined> &declinedOut) {
     camel::runtime::RuntimeGraphDraftSession session(context, program);
-    session.setGraphState(
-        config.enableBranchedCallSplit ? camel::runtime::GraphState::NonExecutable
-                                       : camel::runtime::GraphState::Executable);
     bool changed              = false;
     size_t appliedInlineCount = 0;
     std::vector<DeclinedCall> declined;
@@ -848,20 +845,13 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     if (!draft.alive(callNodeId)) {
                         continue;
                     }
-                    // A callee projected out of a branch JOIN needs the branch split first;
-                    // the plain static devirtualization handles the rest. The split shape is
-                    // export-only (see config), so it is attempted before, not instead of, the
-                    // VM-safe static path only when explicitly enabled.
-                    if ((config.enableBranchedCallSplit &&
-                         camel::runtime::devirtualizeBranchedCallInDraft(
-                             session,
-                             draft,
-                             callNodeId)) ||
-                        camel::runtime::devirtualizeStaticCallInDraft(
+                    // A callee projected out of a branch JOIN is devirtualized by the static
+                    // path once the branch arms are regions of this graph: the closure FILL and
+                    // the call are then in one graph, so no split across the branch is needed.
+                    if (camel::runtime::devirtualizeStaticCallInDraft(
                             session,
                             draft,
-                            callNodeId,
-                            config.enableBranchedCallSplit)) {
+                            callNodeId)) {
                         changed        = true;
                         roundChanged   = true;
                         graphRewritten = true;

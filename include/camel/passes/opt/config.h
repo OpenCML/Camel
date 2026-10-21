@@ -131,12 +131,6 @@ struct OptimizeRewriteConfig {
     /// The nodes already copied, for a driver that runs the engine several times against one
     /// budget (std::opt). Null: each run of the engine has the whole budget.
     size_t *growthSpentNodes = nullptr;
-    /// Splits an indirect call whose callee is projected out of a branch JOIN into one call
-    /// per arm plus one JOIN per projected value. The result deliberately violates the
-    /// scheduler invariant that a JOIN is the single cut between its BRCH and everything
-    /// downstream (several sibling JOINs read the same BRCH and their users merge), so it is
-    /// only valid for consumers that never build an execution topo — the ONNX exporter.
-    bool enableBranchedCallSplit = false;
     InlineRewriteConfig inlineConfig{};
     /// Restrict algebra to strictly equivalent floating-point rewrites. By default local
     /// reassociation is allowed; precision changes and approximate functions are not implied.

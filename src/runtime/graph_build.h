@@ -193,8 +193,6 @@ void validateRuntimeGraphCalls(
 /// The edge invariants (graph_edges.cpp): no cycle of inputs, and the types agree along the
 /// edges. Run with validateRuntimeGraphCalls, because the types of a call's callee are read.
 /// Throws std::runtime_error naming the graph, the nodes and what disagrees.
-/// `state` (graph.h, GraphState) says what to expect of the graph: only a NonExecutable graph may
-/// hold a cycle of inputs (the back ends refuse it when they build the execution plan).
 void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
