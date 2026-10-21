@@ -219,6 +219,42 @@ std::pair<T, T> complexFromText(
 
 Loaded loadValue(const std::string &text, Type *declared, const std::string &what);
 
+/// One integer parameter, read at the width it is declared with: `i32` is an int32 all the way,
+/// so a text outside that range is refused with the range of `i32` rather than read as an int64
+/// and narrowed (design principles 5.1: a value is never cut to fit a type). `target` is the
+/// declared type's name in the message.
+template <std::signed_integral T>
+Loaded loadInteger(const std::string &text, Type *declared, const char *target) {
+    T value{};
+    switch (camel::utils::parseWholeInteger<T>(text, value)) {
+    case camel::utils::NumberTextStatus::Ok:
+        break;
+    case camel::utils::NumberTextStatus::OutOfRange:
+        refuseOutOfRange(text, target, camel::core::integerRangeReason<T>(target));
+    default:
+        refuseNotANumber(text, target, "an integer");
+    }
+    return rooted(rtdata::toSlot<T>(value), declared);
+}
+
+/// One floating-point parameter, read at the width it is declared with: `f32` is a float all
+/// the way, so a text outside its range is refused with the range of `f32` rather than read as
+/// a double and narrowed (an underflow has no infinity to become). `target` is the declared
+/// type's name in the message.
+template <std::floating_point T>
+Loaded loadFloat(const std::string &text, Type *declared, const char *target) {
+    T value{};
+    switch (camel::utils::parseWholeFloat<T>(text, value)) {
+    case camel::utils::NumberTextStatus::Ok:
+        break;
+    case camel::utils::NumberTextStatus::OutOfRange:
+        refuseOutOfRange(text, target, camel::core::floatRangeReason<T>(target));
+    default:
+        refuseNotANumber(text, target, "a number");
+    }
+    return rooted(rtdata::toSlot<T>(value), declared);
+}
+
 /// A struct or tuple: `text` is a directory, the leaves are files named by their path in the
 /// aggregate (`fc1.w`), the layout nn.save_params writes.
 Loaded loadAggregate(
@@ -272,37 +308,13 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
     (void)what;
     switch (declared->code()) {
     case TypeCode::Int64:
-    case TypeCode::Int32: {
-        int64_t v = 0;
-        switch (camel::utils::parseWholeInteger<int64_t>(text, v)) {
-        case camel::utils::NumberTextStatus::Ok:
-            break;
-        case camel::utils::NumberTextStatus::OutOfRange:
-            refuseOutOfRange(text, "int", camel::core::integerRangeReason<int64_t>("int"));
-        default:
-            refuseNotANumber(text, "int", "an integer");
-        }
-        if (declared->code() == TypeCode::Int32) {
-            return rooted(rtdata::toSlot<int32_t>(static_cast<int32_t>(v)), declared);
-        }
-        return rooted(rtdata::toSlot<int64_t>(v), declared);
-    }
+        return loadInteger<int64_t>(text, declared, "int");
+    case TypeCode::Int32:
+        return loadInteger<int32_t>(text, declared, "i32");
     case TypeCode::Float64:
-    case TypeCode::Float32: {
-        double v = 0;
-        switch (camel::utils::parseWholeFloat<double>(text, v)) {
-        case camel::utils::NumberTextStatus::Ok:
-            break;
-        case camel::utils::NumberTextStatus::OutOfRange:
-            refuseOutOfRange(text, "float", camel::core::floatRangeReason<double>("float"));
-        default:
-            refuseNotANumber(text, "float", "a number");
-        }
-        if (declared->code() == TypeCode::Float32) {
-            return rooted(rtdata::toSlot<float>(static_cast<float>(v)), declared);
-        }
-        return rooted(rtdata::toSlot<double>(v), declared);
-    }
+        return loadFloat<double>(text, declared, "float");
+    case TypeCode::Float32:
+        return loadFloat<float>(text, declared, "f32");
     case TypeCode::Complex64:
     case TypeCode::Complex128: {
         // The text of a complex number (language reference 2.5.3): a real part, the sign of the

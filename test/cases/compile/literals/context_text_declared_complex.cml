@@ -1,0 +1,11 @@
+/**
+ * Handover H15g, item 2, neighbour: a text where a complex number is declared is the same type
+ * mismatch; `c128('1+2i')` is the explicit conversion.
+ */
+module literal_context_text_complex
+
+func main(): int sync {
+    let z: c128 = '1+2i'
+    println(z)
+    return 0
+}
