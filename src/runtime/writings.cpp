@@ -63,6 +63,7 @@ class EngineRootScope {
     std::span<const Rule> rules_;
 };
 
+
 } // namespace
 
 // ---------------------------------------------------------------- WritingStore
@@ -932,10 +933,11 @@ std::span<const gc_node_ref_t> DraftWritings::writingsOf(gc_node_ref_t node) {
 
 // ---------------------------------------------------------------- rules
 
-Pattern patVar(uint32_t var) {
+Pattern patVar(uint32_t var, camel::core::type::Type *type) {
     Pattern p;
     p.kind = Pattern::Kind::Var;
     p.var  = var;
+    p.type = type;
     return p;
 }
 
@@ -1067,6 +1069,20 @@ gc_node_ref_t DraftWritings::constantNode(
     return node;
 }
 
+/// Whether a pattern term of `patternType` may match a node of `nodeType`: the type the pattern
+/// was written for must accept the node's (a `Tensor<f32>` pattern reads a `Tensor<f32, [3]>`,
+/// a pattern for `Tensor<f32>` never reads a `Tensor<int>`). The scalar operators have one id per
+/// element type, so their id already says this; the tensor operators share one id for every
+/// element type, and without the check a tensor law would rewrite another dtype's arithmetic
+/// with an f32 rounding argument (rewrite design 2.2).
+namespace {
+bool acceptsType(
+    const camel::core::type::Type *patternType, const camel::core::type::Type *nodeType) {
+    return patternType == nullptr || nodeType == nullptr ||
+           patternType->assignableFrom(const_cast<camel::core::type::Type *>(nodeType));
+}
+} // namespace
+
 void DraftWritings::matchFrom(
     camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
     std::vector<uint8_t> &bound, const std::function<void()> &emit) {
@@ -1079,6 +1095,10 @@ void DraftWritings::matchFrom(
     switch (p.kind) {
     case Pattern::Kind::Var:
         if (p.constOnly && !constantOf(item.node).has_value()) {
+            return;
+        }
+        if (const auto *header = draft_.header(item.node);
+            header == nullptr || !acceptsType(p.type, header->dataType)) {
             return;
         }
         if (bound[p.var]) {
@@ -1122,7 +1142,7 @@ void DraftWritings::matchFrom(
         for (gc_node_ref_t candidate : candidates) {
             const auto *h = draft_.header(candidate);
             if (h == nullptr || !draft_.alive(candidate) || h->kind != GCNodeKind::Oper ||
-                h->permissions != matchPerms_ ||
+                h->permissions != matchPerms_ || !acceptsType(p.type, h->dataType) ||
                 !(at == 0 ? canBeRoot(candidate) : takesPart(candidate)) ||
                 reinterpret_cast<const GCOperBody *>(draft_.payloadOf(candidate).data())->oper !=
                     p.oper) {
@@ -1153,10 +1173,7 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
         return match.vars[pattern.var];
     case Pattern::Kind::Constant:
         return constantNode(
-            pattern.value,
-            pattern.type != nullptr ? pattern.type : base.dataType,
-            base.permissions,
-            base.region);
+            pattern.value, pattern.type != nullptr ? pattern.type : base.dataType, base.permissions, base.region);
     case Pattern::Kind::Compute: {
         std::vector<slot_t> values;
         for (const Pattern &arg : pattern.args) {
@@ -1169,9 +1186,7 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
             values.push_back(value->first);
         }
         return constantNode(
-            pattern.compute(values),
-            pattern.type != nullptr ? pattern.type : base.dataType,
-            base.permissions,
+            pattern.compute(values), pattern.type != nullptr ? pattern.type : base.dataType, base.permissions,
             base.region);
     }
     case Pattern::Kind::Op: {

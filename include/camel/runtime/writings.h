@@ -157,16 +157,16 @@ struct Pattern {
     uint32_t var     = 0;
     bool constOnly   = false;
     camel::core::OperId oper = camel::core::kNoOper;
-    // Constant: the bits and the type; Op, Compute: the type of the result (null: the type of the
-    // value the rule matched). `value` is mutable because the patterns of a rule are compiled
-    // once and a collection during a rule condition (a safepoint) can move the constant it holds.
+    // Constant: the bits and the type; Var, Op, Compute: the type of the value (null: any type).
+    // `value` is mutable because the patterns of a rule are compiled once and a collection during
+    // a rule condition (a safepoint) can move the constant it holds.
     mutable slot_t value               = 0;
     camel::core::type::Type *type      = nullptr;
     std::vector<Pattern> args;
     // Compute (right side only): the constant it is, from the constants of its arguments.
     std::function<slot_t(std::span<const slot_t>)> compute;
 };
-Pattern patVar(uint32_t var);
+Pattern patVar(uint32_t var, camel::core::type::Type *type = nullptr);
 Pattern patConst(uint32_t var);
 Pattern patLiteral(slot_t value, camel::core::type::Type *type);
 Pattern patOp(camel::core::OperId oper, std::vector<Pattern> args, camel::core::type::Type *type = nullptr);

@@ -130,7 +130,8 @@ class SideReader {
                 fail("reads a port that is not a parameter");
             }
             variables_.insert(*index);
-            return !right_ && isConstParam(*index) ? patConst(*index) : patVar(*index);
+            return !right_ && isConstParam(*index) ? patConst(*index)
+                                                   : patVar(*index, node->dataType());
         }
         case GCNodeKind::Data: {
             if (node->dataIndex >= 0) {
