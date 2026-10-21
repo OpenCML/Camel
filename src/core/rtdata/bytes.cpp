@@ -84,6 +84,9 @@ void BytesObject::finalize() noexcept {
         block_ = nullptr;
     }
 }
+size_t BytesObject::blockBytesHeld() const noexcept {
+    return block_ != nullptr ? block_->bytes() : 0;
+}
 std::optional<size_t> invalidUtf8Offset(std::string_view bytes) {
     const size_t at = camel::utf8::invalidOffset(bytes);
     if (at == camel::utf8::npos)

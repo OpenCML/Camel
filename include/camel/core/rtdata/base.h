@@ -92,6 +92,11 @@ class Object {
     virtual void print(std::ostream &os, const camel::core::type::Type *type) const = 0;
     virtual void onMoved()                                                          = 0;
     virtual void finalize() noexcept {}
+    /// Data-block bytes this value holds (core/mm/block.h). Zero for a value whose data is
+    /// inline or in the collected heap. The collector reads it when it promotes a value: a
+    /// block held by an elder value can be released only by a major collection, so those bytes
+    /// pace one (gen.cpp, sweepOldGen / forward).
+    virtual size_t blockBytesHeld() const noexcept { return 0; }
     virtual void updateRefs(const RefRelocator &relocate, const camel::core::type::Type *type) = 0;
 
     template <typename T>

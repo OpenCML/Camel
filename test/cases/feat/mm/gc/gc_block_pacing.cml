@@ -1,0 +1,23 @@
+/**
+ * Blocks pace the minor collections: an array of 40 MB stays alive while `steps` temporary
+ * arrays of `temp` elements each are allocated and dropped, one per step. The window of block
+ * bytes a minor collection lets through is 90 % of the birth space (3.6 MB by default), so the
+ * high-water mark is the live set plus one window plus one temporary, however many steps the
+ * program runs, and the number of collections is the volume divided by the window.
+ */
+module gc_block_pacing
+
+func main(steps: int, temp: int): int sync {
+    let keep = range(0, 5000000)
+    let start = std::mem::blocks()
+    let base = start.bytes
+    let (iLeft, peak, low, released, total) = loop i = steps, peak = 0, low = 1000000000000, released = 0, total = 0 while i > 0 do {
+        let tmp = range(0, temp)
+        let now = std::mem::blocks()
+        let bytes = now.bytes
+        let n = len(tmp)
+        (i - 1, if bytes > peak then bytes else peak, if bytes < low then bytes else low, now.frees - start.frees, total + n)
+    }
+    println('gc_block_pacing base={} peak={} low={} released={} total={}'->format<base, peak, low, released, total>)
+    return 0
+}

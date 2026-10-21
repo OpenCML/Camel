@@ -135,9 +135,10 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
   `argmax`/`sum` vs `no_grad` + `.item()`）、初始化（四个 `load_npy` vs 逐层 `copy_`）Camel
   都更短；`loss` 和 `model` 两段 PyTorch 更短，因为 `nn.Linear` 把偏置和形状藏起来了。总行数
   见 `RESULTS.md`。
-- **代价**：记录下来的 standard 运行里 Camel 的吞吐是 PyTorch 的 0.81 倍，峰值内存约为其
-  0.82 倍（单线程，见 `RESULTS.md`）。同日三次测得 0.83、1.30、0.81 倍（中间一次 PyTorch
-  被别的负载拖慢），所以墙钟比值随机器负载变化，稳定的是数值一致性。编译时间约 0.03 秒，
+- **代价**：记录下来的 standard 运行里 Camel 的吞吐是 PyTorch 的 0.83 倍，峰值内存为其
+  0.24 倍（74.7 vs 315.8 MiB，单线程，见 `RESULTS.md`）。同日三次测得 0.83、1.30、0.81 倍
+  （中间一次 PyTorch 被别的负载拖慢），所以墙钟比值随机器负载变化，稳定的是数值一致性。
+  编译时间约 0.03 秒，
   PyTorch 是 eager、没有这一项。性能不是这个示例要证明的东西，但数字照实报。
 
 ## 遇到的问题
@@ -170,9 +171,11 @@ python showcase\c2-mlp-mnist\baseline\train_torch.py `
    `losses->append<value>` 是已定的写法（设计原则 3.10），也能用；事后打印记录步需要
    `range(...)->filter<...>->foreach<sync ...>`，为一个 Python 里 `for` + `print` 的动作
    写六行和一个 `sync` 闭包。不是阻塞问题，记下来因为它正是示例要暴露的仪式感。
-5. **`take` 拷贝行。** 打乱后的采样器需要 gather；连续的批本可以是 `slice` 视图。拷贝在
-   实测峰值内存里看得见（曲线本身很小，但运行时要持有取出的批），标准配置的内存比用连续
-   切片时高。这是 `take` 的既定语义（5.4），不是缺陷，随其他数字一并报出。
+5. **`take` 拷贝行。** 打乱后的采样器需要 gather；连续的批本可以是 `slice` 视图。拷贝是每步
+   的成本，不是峰值的来源：**更正（H40b）** 本示例原先写“标准配置的内存比用连续切片时高”，
+   H40 查明那一轮 262 MiB 的峰值来自回收的节奏（数据块释放后取基线的顺序），与 `take` 无关；
+   修正后 `take` 与连续切片 `slice` 的峰值相同（H40 第 3 节），standard 运行的峰值内存是
+   74.7 MiB（`RESULTS.md`）。这是 `take` 的既定语义（5.4），不是缺陷，随其他数字一并报出。
 
 ## 测试
 

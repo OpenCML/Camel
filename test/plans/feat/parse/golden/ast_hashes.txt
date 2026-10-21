@@ -1131,13 +1131,14 @@ ece491c607145dbc ok test/cases/definitions/kernels.cml
 c68d2c55e0d4c83b ok test/cases/feat/mm/complex.cml
 827a89198ee2c0fa ok test/cases/feat/mm/mem_blocks.cml
 bec40d29daf6e639 ok test/cases/feat/mm/capacity/perm_query_types.cml
+2c1253bf822ca8d3 ok test/cases/feat/mm/gc/gc_block_churn.cml
+9fd78f3aa978e035 ok test/cases/feat/mm/gc/gc_block_pacing.cml
 272b762adea784ae ok test/cases/feat/mm/gc/gc_born_old.cml
 f8019d12cc56b4bf ok test/cases/feat/mm/gc/gc_collection_trees.cml
 b8a8760f9100df26 ok test/cases/feat/mm/gc/gc_collections.cml
 f6bb206c461e5bea ok test/cases/feat/mm/gc/gc_fib10.cml
 eb7f182cb371a58e ok test/cases/feat/mm/gc/gc_heap_workload.cml
 2beb03c35d6631dc ok test/cases/feat/mm/gc/gc_jit_constants.cml
-de48312fe5907d7c ok test/cases/feat/mm/gc/gc_large_pacing.cml
 4dd03da85fc7b0fa ok test/cases/feat/mm/gc/gc_live_large.cml
 9c97dc69edca2df1 ok test/cases/feat/mm/gc/gc_live_table.cml
 fb0cb297c3edc8be ok test/cases/feat/mm/gc/gc_macro_constants.cml
@@ -1147,7 +1148,9 @@ fb0cb297c3edc8be ok test/cases/feat/mm/gc/gc_macro_constants.cml
 09bda31fada0db36 ok test/cases/feat/mm/gc/gc_nested_reduce.cml
 bff6d6086a0c443f ok test/cases/feat/mm/gc/gc_prl_blocked_worker.cml
 a23ef073b2e65d89 ok test/cases/feat/mm/gc/gc_prl_scheduler.cml
+9f9eebad0e6023a8 ok test/cases/feat/mm/gc/gc_promoted_blocks.cml
 92d9356278f9e266 ok test/cases/feat/mm/gc/gc_soak.cml
+23839b704a65e865 ok test/cases/feat/mm/gc/gc_training_peak.cml
 a2c0dbfba95821fa ok test/cases/feat/mm/gc/graph_space_grad.cml
 9b26cef2a1aded97 ok test/cases/feat/mm/writings/apart.cml
 f282cfc489e0fc8f ok test/cases/feat/mm/writings/chains.cml

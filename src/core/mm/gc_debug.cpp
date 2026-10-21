@@ -66,12 +66,14 @@ GenerationalAllocatorWithGC::DebugConfig GenerationalAllocatorWithGC::debugConfi
 
 GenerationalAllocatorWithGC::RuntimeStats GenerationalAllocatorWithGC::stats() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    RuntimeStats result       = stats_;
-    result.largeLiveBytes     = largeLiveBytes_;
-    result.largeBudgetBytes   = largeObjBudget_;
-    result.largeGrowthPercent = largeObjGrowthPercent_;
-    result.elderLiveBytes     = elderLiveBytes_;
-    result.elderBudgetBytes   = elderBudget_;
+    RuntimeStats result          = stats_;
+    result.largeLiveBytes        = largeLiveBytes_;
+    result.largeBudgetBytes      = largeObjBudget_;
+    result.largeGrowthPercent    = largeObjGrowthPercent_;
+    result.elderLiveBytes        = elderLiveBytes_;
+    result.elderBudgetBytes      = elderBudget_;
+    result.elderBlockLiveBytes   = elderBlockLiveBytes_;
+    result.elderBlockBudgetBytes = elderBlockBudget_;
     {
         const SpaceUsage elder    = elderGenSpace_.usage();
         result.elderReservedBytes = elder.reservedBytes;
