@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-197 diagnostics: 180 errors, 17 warnings.
+199 diagnostics: 182 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -165,6 +165,8 @@ prints one entry.
 | `0x0300017B` | [SemanticDiag::NativeDeclarationIncomplete](#nativedeclarationincomplete) | Error |
 | `0x0300017C` | [SemanticDiag::NativeDeclarationNotLoaded](#nativedeclarationnotloaded) | Error |
 | `0x0300017D` | [SemanticDiag::DeclarationModuleHasBody](#declarationmodulehasbody) | Error |
+| `0x0300017E` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
+| `0x0300017F` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4230,6 +4232,70 @@ A Camel module found beside a C++ module of the same name declares that module's
 ```
 
 *No example: no test small enough to show raises it.*
+
+### NativeDeclarationOverlap
+
+`0x0300017E` · Error · `SemanticDiag::NativeDeclarationOverlap`
+
+**Message**
+
+```text
+Two declarations of '{0}' can take the same call: '{1}' and '{2}'.
+```
+
+**Help**
+
+```text
+An operator has one meaning for one call: which rule applies must be decided by the types of the arguments, never by the order the declarations are written in. Give the declarations parameter types that cannot both accept one argument list, or keep one of them.
+```
+
+**Example** (`test/cases/compile/native/overlap.cml`, run as `camel test/cases/compile/native/overlap.cml`)
+
+```camel
+module native_overlap
+
+#op<':op/idx_arr'>
+export func pick(xs: (typeas T)[], i: int): T
+
+// The same call: an array of some element type and an index. `T` and `U` are no help — every
+// call of one is a call of the other.
+#op<':op/idx_arr'>
+export func pick(xs: (typeas U)[], i: int): U
+
+func main(): int sync {
+    println(pick([10, 20, 30], 1))
+    return 0
+}
+```
+
+### NativeDeclarationForeignOperator
+
+`0x0300017F` · Error · `SemanticDiag::NativeDeclarationForeignOperator`
+
+**Message**
+
+```text
+The declaration '{0}' names the operator '{1}', which another module declares.
+```
+
+**Help**
+
+```text
+A module declares only the operators it implements: a body-less declaration stands for an operator of the module it is written in, and declares no other module's operator. Write the declaration beside the implementation, or call the operator through the module that declares it.
+```
+
+**Example** (`test/cases/compile/native/foreign_operator.cml`, run as `camel test/cases/compile/native/foreign_operator.cml`)
+
+```camel
+import bytes
+import { size } from bytes_tag
+
+func main(): int sync {
+    let b = bytes::encode('abc')
+    println(size(b))
+    return 0
+}
+```
 
 ### VarParamInAsyncFunction
 
