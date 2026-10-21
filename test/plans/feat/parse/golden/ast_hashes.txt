@@ -1802,7 +1802,7 @@ d7f09150b2048d4a ok test/cases/modules/tiles/branch_effect.cml
 d39356dc4df797d4 ok test/cases/modules/tiles/cast_like.cml
 fa8efa1b9430518e ok test/cases/modules/tiles/compiled_region.cml
 0f969d23938d7bac ok test/cases/modules/tiles/consistency.cml
-3f924524b970918f ok test/cases/modules/tiles/core_views.cml
+1a4ca01b56f85c2d ok test/cases/modules/tiles/core_views.cml
 0ca64fb565c45f70 ok test/cases/modules/tiles/device_tree.cml
 bfe4215f09f673d1 ok test/cases/modules/tiles/device_tree_invalid.cml
 13e7a52c1cafbb42 ok test/cases/modules/tiles/empty_mean.cml
@@ -1810,7 +1810,7 @@ bfe4215f09f673d1 ok test/cases/modules/tiles/device_tree_invalid.cml
 9ae156f97c9db48a ok test/cases/modules/tiles/fusion.cml
 4420a360e3f81c7f ok test/cases/modules/tiles/gpu_decorator.cml
 14ffb1b77803170c ok test/cases/modules/tiles/gpu_fallback.cml
-53c340dfa039a365 ok test/cases/modules/tiles/gpu_regions.cml
+a7d2799648316560 ok test/cases/modules/tiles/gpu_regions.cml
 d30b4b631a2f3236 ok test/cases/modules/tiles/gradients.cml
 ebbe809d47b9d2d5 ok test/cases/modules/tiles/graph_facts.cml
 d842a2d9932a41fa ok test/cases/modules/tiles/index_maps.cml
@@ -2114,6 +2114,7 @@ d0ff0c1893586f15 ok test/plans/feat/format/golden/type_params.cml
 2315461a1f5065f7 ok test/plans/feat/parse/golden/numbers_format.cml
 af9cae3548b41112 no test/plans/feat/parse/golden/rules_format.cml
 64ae4705339287e4 ok test/tools/jitcov/workloads.cml
+f5a4ae9c5b8cfcfd ok test/tools/selftest/benchmark_failure.cml
 382e4f4981ff7cd6 ok test/tools/selftest/sweep/probe.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
 5131da37189b4814 ok probes/probe_d001.cml

@@ -65,7 +65,7 @@ case = "../../../cases/compile/native/missing.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NativeDeclarationNotLoaded"
-expect_diagnostic_code = "0x03000176"
+expect_diagnostic_code = "0x0300017C"
 expect_output_contains = ["missing_module.cml:", "nowhere:absent", "which no loaded module implements"]
 
 # ---- The declaration is the signature a call is checked against ----

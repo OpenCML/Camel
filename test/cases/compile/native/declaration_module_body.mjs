@@ -69,7 +69,7 @@ const found = diagnostics.find((d) => d.data && d.data.name === 'SemanticDiag::D
 check('the body in the declaration module is a diagnostic', Boolean(found), JSON.stringify(diagnostics.map((d) => d.data && d.data.name)))
 if (found) {
     check('exit code is 1', proc.status === 1, String(proc.status))
-    check('code is the catalog code', found.code === '0x03000177', String(found.code))
+    check('code is the catalog code', found.code === '0x0300017D', String(found.code))
     check(
         'the diagnostic is located in the declaration module',
         path.basename(found.data.modulePath || '') === 'bytes.cml',
