@@ -352,8 +352,11 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                     }
                 }
             }
+            // What a part ends with (the last write it makes) is ordered by the region.
             for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
-                visit(input);
+                if (!inLoop(input)) {
+                    visit(input);
+                }
             }
             for (gc_node_ref_t input : graph->normInputsOf(index)) {
                 visit(input);

@@ -19,8 +19,7 @@
 
 /*
  * The loops of a program as graphs of their own, for the code that reads a loop as two graphs
- * (the lowering of a loop to tail recursion, Tiles, the interpreters that call a graph each
- * round).
+ * (autodiff).
  *
  * The condition and the body of a loop are regions of the graph that has the LOOP node. This
  * outlines each into a graph: the state ports of the region are the norm ports of the graph, the

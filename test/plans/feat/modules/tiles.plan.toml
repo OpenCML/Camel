@@ -182,7 +182,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
 args = ["${case}", "std::nvm"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
-expect_output_contains = ["node 3: tiles requires a pure static For loop"]
+expect_output_contains = ["tiles requires a pure static For loop"]
 timeout_ms = 10000
 
 [[tests]]
@@ -192,7 +192,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
 args = ["${case}", "std::fvm"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
-expect_output_contains = ["node 3: tiles requires a pure static For loop"]
+expect_output_contains = ["tiles requires a pure static For loop"]
 timeout_ms = 10000
 
 [[tests]]
@@ -202,7 +202,7 @@ case = "../../../cases/modules/tiles/loop_inspect_closure.cml"
 args = ["${case}", "std::prl"]
 envs = ["CAMEL_TILES_DEVICE=invalid"]
 expect_exit = 1
-expect_output_contains = ["node 3: tiles requires a pure static For loop"]
+expect_output_contains = ["tiles requires a pure static For loop"]
 timeout_ms = 10000
 
 [[tests]]

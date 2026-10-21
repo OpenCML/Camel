@@ -55,10 +55,9 @@
  * graphs of the loop are the ones the Program holds; nodes are named by their NodeIds
  * (gc_node_ref_t), types by Type pointers.
  *
- * Lowering. lowerLoopsToTailRecursion (camel/runtime/loop_lowering.h) rewrites every LOOP of a
- * program into the tail recursion it means. It is applied only by a back end, on a private copy
- * of the program it runs (op-semantics 11.4): a pass never commits a lowered loop to the shared
- * program, so a consumer such as Tiles sees structured loops wherever it is in the pipeline.
+ * Graph form. A consumer that needs the condition and the body as graphs of their own
+ * (autodiff) takes them out of the regions in a private copy of the program
+ * (outlineLoopRegions, camel/runtime/loop_outline.h), and puts them back (regionizeLoops).
  */
 
 #pragma once

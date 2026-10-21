@@ -18,7 +18,6 @@
  */
 
 #include "cpp_export.h"
-#include "camel/runtime/loop_lowering.h"
 
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/source/manager.h"

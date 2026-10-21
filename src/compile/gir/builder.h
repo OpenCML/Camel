@@ -573,6 +573,9 @@ class Builder {
         };
         std::unordered_map<node_handle_t, Touched> touched;
         std::vector<node_handle_t> touchedOrder; // in the order they were first changed
+        /// The ports of the region (a loop's condition or body), in order: the element, then the
+        /// values of the state.
+        std::vector<node_handle_t> ports;
         /// The variables the arm stores into itself, and the functions it calls: what else it
         /// writes is what those write (capturedWritesOf), known once every body is built.
         std::set<node_handle_t> directWrites;
@@ -1079,13 +1082,10 @@ class Builder {
     FunctionType *signatureForArgumentContext(node_handle_t target) const;
     node_handle_t visitAccsNode(const GCT::node_ptr_t &gct);
     node_handle_t visitBrchNode(const GCT::node_ptr_t &gct);
-    /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and
-    /// the array where the loop is, a graph for the condition and one for the body, and one
-    /// LOOP node calling them. The two graphs share one capture table (captureTwins_).
+    /// A loop (design principles 3.10; camel/runtime/loop.h): the first values and the array
+    /// where the loop is, its condition and its body as regions of the current graph (built where
+    /// they are written, like the arms of a branch), and one LOOP node that has them.
     node_handle_t visitLoopNode(const GCT::node_ptr_t &gct);
-    /// Builds `graph`, a loop's condition or body graph made with its ports, from `exec`: the
-    /// names of its Norm ports are declared in it, and its result is the value of the block.
-    void buildLoopGraph(const compile_graph_ptr_t &graph, const GCT::node_ptr_t &exec);
     /// Rewrites the body of a loop whose state values are handed back as `xs->append<v>`, when
     /// that state's first value is a fresh literal, to the form that may append to the state in
     /// place (design principles 10.5): the state's old value cannot be seen once the next round
@@ -1094,35 +1094,30 @@ class Builder {
     /// state the body hands the append call back directly, with several it returns a tuple whose
     /// j-th component is state j's next value.
     void markLoopStateInPlace(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-        std::vector<node_handle_t> &initial);
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial);
     /// The per-state half of markLoopStateInPlace: rewrites state `index` when its next value
     /// (`next`) is `state->append<v>` and the body uses that state's parameter nowhere else.
     void markLoopStateInPlaceOne(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-        std::vector<node_handle_t> &initial, size_t index, node_handle_t next);
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
+        size_t index, node_handle_t next);
     /// Recognises a state that starts as an empty array and whose only use is appending one
     /// value per round, and gives the loop a collection slot for the appended values
     /// (design principles 3.10). The state itself stays: it is the value the program sees and
     /// the channel its gradient uses. The slot is an extra, internal output; a FILL (or an
     /// access, for one state) projects the loop's value back to the states alone. Must run
-    /// before autodiff and before `std::opt`: both read the loop's shape.
+    /// before autodiff and before `std::opt`: both read the loop's shape. The body then gives
+    /// the tuple of the next states and the appended values.
     std::vector<Type *> collectLoopAppends(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
-        const std::vector<Type *> &stateTypes, const std::vector<bool> &emptyInitial);
+        const arm_ptr_t &body, const GCT::node_ptr_t &loop, const std::vector<Type *> &stateTypes,
+        const std::vector<bool> &emptyInitial);
     /// Rewrites an empty-array state's `void[]` type once the body's append has told us the
     /// element type it appends (design principles 5.1: `loop losses = [] for ...` infers from
-    /// the value appended). Returns false when the next value is not such an append.
+    /// the value appended), in the ports of the condition (when given) and of the body. Returns
+    /// false when the next value is not such an append.
     bool inferLoopStateFromAppend(
-        const compile_graph_ptr_t &bodyGraph, const GCT::node_ptr_t &loop,
+        const arm_ptr_t &body, const arm_ptr_t &cond, const GCT::node_ptr_t &loop,
         std::vector<node_handle_t> &initial, std::vector<Type *> &stateTypes, size_t index,
         node_handle_t next);
-    /// The condition and the body graph of a loop capture the same values in the same order
-    /// (design principles 3.10: one capture table): a capture made into one is made into the
-    /// other (captureInto).
-    std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> captureTwins_;
-    /// How many loops each graph has, for the names of their graphs (`f.loop2.body`).
-    std::unordered_map<DraftGraphBuilder *, size_t> loopCounts_;
     /// The BRCH/JOIN pair of a branch on `condNode`. The arms come from the CASE children of
     /// `gct`, or, when `arms` is given, are those arms in order (built by buildArm).
     /// No arm is added to those the program wrote (design principles 3.7).
@@ -1134,10 +1129,14 @@ class Builder {
     /// Refuses the `match` `gct` when it can meet a value none of its cases matches: it has
     /// no `case _` and does not list both values of a bool (MatchWithoutDefault, an error).
     void requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee);
-    /// One branch arm: a region of the current graph. Its body is the block `exec`, or what
-    /// `body` builds (called inside the arm's scope) when given; `exec` then only locates the
-    /// arm.
-    arm_ptr_t buildArm(const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {});
+    /// One branch arm, or the condition or the body of a loop (`kind`): a region of the current
+    /// graph. Its body is the block `exec`, or what `body` builds (called inside the region's
+    /// scope) when given; `exec` then only locates the region. `declare` is called first, inside
+    /// the scope: a loop part declares its ports there.
+    arm_ptr_t buildArm(
+        const GCT::node_ptr_t &exec, const std::function<node_handle_t()> &body = {},
+        runtime::GCRegionKind kind                  = runtime::GCRegionKind::Arm,
+        const std::function<void(ArmBuild &)> &declare = {});
     /// Gives the arm `arm` the value `result` (the last expression of its body) unless a
     /// `return` has given one.
     void setArmResult(ArmBuild &arm, node_handle_t result);
@@ -1145,9 +1144,6 @@ class Builder {
     void coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_ptr_t &origin);
     /// The nodes of each arm that read nothing the arm computes wait for the BRCH.
     void linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode);
-    /// The same at the exit of a graph already built (the body of a loop).
-    void coerceGraphExit(
-        const compile_graph_ptr_t &graph, Type *target, const GCT::node_ptr_t &origin);
     /// After the JOIN is there: the variables the arms changed are changed by the branch.
     void mergeArmVariables(
         const std::vector<arm_ptr_t> &arms, node_handle_t joinNode, node_handle_t brchNode,

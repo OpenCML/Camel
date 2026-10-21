@@ -130,8 +130,7 @@ enum class GCNodeKind : uint8_t {
     // collection slots (payload collectionCount): the body then returns (state…, v…) each round
     // and the value is (state…, array…), the arrays holding the v of every round (see
     // camel/runtime/loop.h). Consumers read it through camel/runtime/loop.h (LoopView); those
-    // that do not run it natively lower it to a tail recursion first
-    // (lowerLoopsToTailRecursion), never in the shared program.
+    // that need two graphs (autodiff) take them out of the regions first (outlineLoopRegions).
     Loop = 15,
     // The place of a node a rewrite removed. A graph keeps the NodeIds of the version it came
     // from, so a removed node leaves a record with this kind and no inputs, which every
@@ -179,12 +178,6 @@ enum GCNodeFlag : uint8_t {
     kGCNodeFlagMacro    = 1 << 0,
     kGCNodeFlagConstant = 1 << 1,
 };
-
-/// The operator a back end's private copy of the program applies to a function value before an
-/// operator that reads graphs gets it (Program::original, OperatorTraits::inspectsGraphs):
-/// the same function over the program's own graph. Implemented by the built-in executor
-/// (src/builtin/operators/graph.h); a program cannot name it.
-inline constexpr std::string_view kGraphOriginalUri = ":graph/original";
 
 /// Properties a graph has besides its nodes (GCGraph::flags).
 enum GCGraphFlag : uint8_t {
