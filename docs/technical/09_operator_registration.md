@@ -228,7 +228,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 5. 在 `load()` 中调用 `registerExecutorFactory("<name>", factory)`，factory 创建持有 suffix → `operator_t` 映射的 Executor；并在此登记纯算子的 `OperatorTraits`。
 6. 确保 opsMap 的 key 与算子组中 URI 的 suffix 一一对应。
 
-导入模块时，`Context` 先在模块搜索路径中查找 `<name>.cmo` 或同名源文件，找不到再查 libcamel 内部的模块工厂表。
+导入模块时，`Context` 在导入方是文件模块时先在它自己的目录里查找 `<name>.cmo` 或同名源文件（H112），再按模块搜索路径查找，找不到再查 libcamel 内部的模块工厂表。
 
 ## 6. 注意事项汇总
 

@@ -29,7 +29,7 @@ import { inc } from lib::Tools       // 引入模块里某个命名空间中的�
 - **模块导入自己是允许的，没有效果**（设计原则 10.1）：`module m` 里写 `import m`、`import { f } from m` 不绑定任何名字，它的名字本来就是它自己的（带不带 `m::` 都可以，[5.4](#54-命名空间)）。入口文件按文件名导入自己时也不会再加载一份。
 - **导入时可以改名**：`import { find as str_find } from str` 把模块里的 `find` 以 `str_find` 这个名字引入；改名的与不改名的可以写在同一条里（`import { find as str_find, trim } from str`），单个名字也可以（`import find as str_find from str`）。改名之后原名在本模块不可见。两个模块有同名函数时，给其中一个改名，或只导入一个、另一个用限定名（`import array` 后写 `array::find`）。整个模块的别名写 `import m as n`。
 - 两条按名字的导入带来同名、参数类型也相同的函数，是 `SemanticDiag::ImportNameConflict`，定位在后一条 `import`，并指出前一条；不会悄悄取其中一个。同名而参数类型不同的函数合成一组重载，按实参类型选择（同一层里的同名函数是一个重载集，[5.4](#54-命名空间)）。
-- **查找顺序**：与入口文件同目录的 `.cml` 文件、`-I <目录>` 给出的目录、环境变量 `CAMEL_PACKAGES` 列出的目录，以及随 Camel 安装的模块。
+- **查找顺序**：入口文件自己的 import 先看与它同目录的 `.cml` 文件，再依次看 `-I <目录>` 给出的目录、环境变量 `CAMEL_PACKAGES` 列出的目录，以及随 Camel 安装的模块。从文件加载的其他模块（如标准库的 `rules`）做 import 时，先在自己所在的目录里找同名模块（`xx.cmo` 优先于 `xx.*`），找不到再按上面这条顺序找；所以标准库自己的 `import graph` 取的是标准库的 `graph`，不会被入口目录里的同名文件顶替，而入口程序自己的 `import graph` 仍然取入口目录里的那个。
 
 ```cml
 import math
