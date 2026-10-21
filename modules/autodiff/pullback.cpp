@@ -24,7 +24,6 @@
 #include "pullback.h"
 
 #include "camel/passes/opt/inline.h"
-#include "camel/runtime/arm_raise.h"
 
 #include "rules.h"
 
@@ -47,7 +46,6 @@
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
-#include "camel/runtime/loop_outline.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
@@ -57,6 +55,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -340,8 +339,33 @@ gc_node_ref_t valueNode(const GraphDraft &draft) {
     return output;
 }
 
-/// Nodes the value of `root` depends on, inputs before users.
-std::vector<gc_node_ref_t> valueOrder(const GraphDraft &draft, gc_node_ref_t root) {
+/// Whether a node of region `r` belongs to the value graph of `region`: its own region, or an
+/// INLINE/BLOCK region nested in it (those only say where code came from; their values are read
+/// from outside, exactly like the code of the region itself). A control region (an arm, a loop
+/// part) is a graph of its own and is not followed here.
+bool regionMember(const GraphDraft &draft, uint32_t r, uint32_t region) {
+    while (true) {
+        if (r == region) {
+            return true;
+        }
+        if (r == 0 || r >= draft.regionCount()) {
+            return false;
+        }
+        const rt::GCRegionKind kind = draft.region(r).kind;
+        if (kind != rt::GCRegionKind::Inline && kind != rt::GCRegionKind::Block) {
+            return false;
+        }
+        r = draft.region(r).parent;
+    }
+}
+
+/// Nodes the value of `root` depends on, inputs before users. Only nodes of `region` are
+/// followed: a node of a nested region (a loop body, an arm) is run by that region, and the
+/// values it reads outside are handled where the region is. `extra` adds edges a rewrite made
+/// without a graph edge: the values a branch or a loop pullback returns gradients for.
+std::vector<gc_node_ref_t> valueOrder(
+    const GraphDraft &draft, gc_node_ref_t root, uint32_t region = 0,
+    const std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> *extra = nullptr) {
     std::vector<gc_node_ref_t> order;
     std::unordered_set<gc_node_ref_t> seen;
     std::vector<std::pair<gc_node_ref_t, bool>> stack{{root, false}};
@@ -355,19 +379,58 @@ std::vector<gc_node_ref_t> valueOrder(const GraphDraft &draft, gc_node_ref_t roo
         if (!seen.insert(node).second) {
             continue;
         }
+        if (!regionMember(draft, draft.nodeRegion(node), region)) {
+            continue;
+        }
         stack.emplace_back(node, true);
+        if (extra != nullptr) {
+            if (const auto it = extra->find(node); it != extra->end()) {
+                for (gc_node_ref_t input : it->second) {
+                    if (!seen.contains(input) &&
+                        regionMember(draft, draft.nodeRegion(input), region)) {
+                        stack.emplace_back(input, false);
+                    }
+                }
+            }
+        }
         for (gc_node_ref_t input : draft.withInputsOf(node)) {
-            if (!seen.contains(input)) {
+            if (!seen.contains(input) && regionMember(draft, draft.nodeRegion(input), region)) {
                 stack.emplace_back(input, false);
             }
         }
         for (gc_node_ref_t input : draft.normInputsOf(node)) {
-            if (!seen.contains(input)) {
+            if (!seen.contains(input) && regionMember(draft, draft.nodeRegion(input), region)) {
                 stack.emplace_back(input, false);
             }
         }
     }
     return order;
+}
+
+/// The nodes outside `region` that its nodes read, in the order they are first read. The
+/// constants are left out: a rule copies them, it does not capture them.
+std::vector<gc_node_ref_t> externalInputsOf(const GraphDraft &draft, uint32_t region) {
+    std::vector<gc_node_ref_t> nodes;
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), region)) {
+            nodes.push_back(id);
+        }
+    }
+    std::unordered_set<gc_node_ref_t> seen(nodes.begin(), nodes.end());
+    std::vector<gc_node_ref_t> externals;
+    std::unordered_set<gc_node_ref_t> found;
+    for (gc_node_ref_t id : nodes) {
+        for (auto inputs : {draft.normInputsOf(id), draft.withInputsOf(id)}) {
+            for (gc_node_ref_t input : inputs) {
+                if (!seen.contains(input) && draft.header(input)->kind != GCNodeKind::Data &&
+                    found.insert(input).second) {
+                    externals.push_back(input);
+                }
+            }
+        }
+    }
+    std::sort(externals.begin(), externals.end());
+    return externals;
 }
 
 /// Whether anything `node` runs after is ordered by a control edge (code with effects).
@@ -420,6 +483,13 @@ void pruneUnreachable(GraphDraft &draft) {
     std::unordered_set<gc_node_ref_t> kept(draft.withPorts().begin(), draft.withPorts().end());
     kept.insert(draft.normPorts().begin(), draft.normPorts().end());
     kept.insert(draft.closureNodes().begin(), draft.closureNodes().end());
+    // A region's ports belong to the region, not to the value graph around it: a state the
+    // body does not use this round is still a port the next round writes.
+    for (uint32_t r = 0; r < draft.regionCount(); ++r) {
+        for (gc_node_ref_t port : draft.regionPortsOf(r)) {
+            kept.insert(port);
+        }
+    }
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (draft.alive(id) && !live[id] && !kept.contains(id)) {
             draft.eraseNode(id);
@@ -582,6 +652,17 @@ struct CallSite {
     const LoopSite *loop = nullptr;
 };
 
+/// The edges a rewrite made without a graph edge: the values a call's pullback returns
+/// gradients for must be visited (their own pullbacks run) before the call's value.
+std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>>
+siteEdges(const std::unordered_map<gc_node_ref_t, CallSite> &sites) {
+    std::unordered_map<gc_node_ref_t, std::vector<gc_node_ref_t>> edges;
+    for (const auto &[value, site] : sites) {
+        edges.emplace(value, site.inputs);
+    }
+    return edges;
+}
+
 /// What a graph being differentiated is to the differentiated function: the reason a function
 /// value is not evident in it depends on that.
 enum class GraphRole { Differentiated, Callee, BranchArm, LoopBody };
@@ -648,15 +729,26 @@ struct LoopBodyPlan {
 /// Rewrites a graph so that each differentiable call also returns its pullback.
 class ForwardRewrite {
   public:
-    ForwardRewrite(Engine &engine, GraphDraft &draft, const GraphScope &scope)
-        : engine_(engine), draft_(draft), scope_(scope) {}
+    ForwardRewrite(Engine &engine, GraphDraft &draft, const GraphScope &scope, uint32_t part = 0)
+        : engine_(engine), draft_(draft), scope_(scope), part_(part) {}
 
     void run();
+
+    /// A loop left alone because its value has no gradient channel: a gradient that reaches what it
+    /// reads must be refused, not dropped.
+    const std::unordered_set<gc_node_ref_t> &untapedLoops() const { return untaped_; }
 
     /// Call sites keyed by the node carrying the call's value.
     const std::unordered_map<gc_node_ref_t, CallSite> &sites() const { return sites_; }
 
   private:
+    /// Whether `node` is a direct member of the region being rewritten. A nested region's nodes
+    /// are rewritten when the node that owns it is; an INLINE/BLOCK region is not a graph of its
+    /// own (it only records where the code came from), so its nodes belong to the region it is
+    /// nested in and are rewritten with it.
+    bool member(gc_node_ref_t node) const {
+        return regionMember(draft_, draft_.nodeRegion(node), part_);
+    }
     /// Brings the functions that function values stand for into this graph, so that the calls
     /// of those values become calls of closures built here (see the definition).
     void followFunctionValues();
@@ -689,7 +781,9 @@ class ForwardRewrite {
     Engine &engine_;
     GraphDraft &draft_;
     const GraphScope &scope_;
+    uint32_t part_;
     std::unordered_map<gc_node_ref_t, CallSite> sites_;
+    std::unordered_set<gc_node_ref_t> untaped_;
     std::deque<mm::RootHandle> roots_;
     std::deque<LoopSite> loopSites_;
 };
@@ -739,11 +833,13 @@ class Backward final : public VjpBuilder {
         GraphDraft &forward, GraphDraft &target,
         const std::unordered_map<gc_node_ref_t, CallSite> &sites, const GraphScope &scope,
         std::vector<Refusal> &refusals, std::vector<gc_node_ref_t> differentiated,
-        bool residualPorts = false)
+        bool residualPorts = false, std::unordered_set<gc_node_ref_t> boundary = {},
+        std::unordered_set<gc_node_ref_t> untaped = {})
         : forward_(forward), target_(target), sites_(sites), inPlace_(&forward == &target),
           scope_(scope), refusals_(refusals),
           differentiated_(differentiated.begin(), differentiated.end()),
-          residualPorts_(residualPorts) {}
+          residualPorts_(residualPorts), boundary_(std::move(boundary)),
+          untapedLoops_(std::move(untaped)) {}
 
     /// Target-graph node holding the primal value `primal`.
     gc_node_ref_t ref(gc_node_ref_t primal);
@@ -846,6 +942,12 @@ class Backward final : public VjpBuilder {
     std::vector<gc_node_ref_t> captures_;
     /// The target graph takes its residuals as parameters instead of capturing them.
     const bool residualPorts_;
+    /// Values of a region being differentiated that the region reads but does not compute
+    /// (its state and the values around it): they start activity and their gradient stops at
+    /// them, so they are never visited.
+    std::unordered_set<gc_node_ref_t> boundary_;
+    /// Loops whose value has no gradient channel and that were therefore left alone.
+    std::unordered_set<gc_node_ref_t> untapedLoops_;
 };
 
 // ---------------------------------------------------------------- engine
@@ -893,24 +995,42 @@ class Engine {
         std::unique_ptr<GraphDraft> source, const std::string &name, const PullbackPlan &types,
         GraphScope scope);
 
-    /// The functions whose bodies, brought into a graph, the branch arm `arm` came with.
+    /// The functions whose bodies, brought into an arm region, the arm came with.
+    const std::unordered_set<GCGraph *> &ownersOf(const GraphDraft *draft, uint32_t region) const {
+        static const std::unordered_set<GCGraph *> none;
+        auto it = regionOwners_.find({draft, region});
+        return it == regionOwners_.end() ? none : it->second;
+    }
+    void noteArmOwner(const GraphDraft *draft, uint32_t region, GCGraph *owner) {
+        regionOwners_[{draft, region}].insert(owner);
+    }
+    void noteArmOwner(GCGraph *arm, GCGraph *owner) { armOwners_[arm].insert(owner); }
     const std::unordered_set<GCGraph *> &ownersOf(GCGraph *arm) const {
         static const std::unordered_set<GCGraph *> none;
         auto it = armOwners_.find(arm);
         return it == armOwners_.end() ? none : it->second;
     }
-    void noteArmOwner(GCGraph *arm, GCGraph *owner) { armOwners_[arm].insert(owner); }
     /// `function` called itself from one of its own arms while it was being followed.
     void noteRecursion(GCGraph *function) { recursions_.insert(function); }
+    /// Whether `function` called itself from one of its own arms (see noteRecursion).
+    bool isRecursive(GCGraph *function) const { return recursions_.contains(function); }
     /// The plan for calls of a closure over `graph`: the graph with its captured values turned
     /// into trailing norm ports (memoized, so two calls of one lambda share the derivative).
     const PullbackPlan &planForClosure(GCGraph *graph);
-    /// The tape plan of a loop `body` (memoized by the body graph). Built at once, not left
-    /// pending: the loop's caller needs the shape of the tape to rewrite its node. `stateCount`
-    /// and `iterates` are what the LOOP node says the body's parameters are.
-    const LoopBodyPlan &loopBodyPlanFor(GCGraph *body, size_t stateCount, bool iterates);
+    /// The tape plan of a loop `body` region (memoized by the draft and the loop node). Built at
+    /// once, not left pending: the loop's caller needs the shape of the tape to rewrite its node.
+    /// `stateCount` and `iterates` are what the LOOP node says the body's ports are.
+    const LoopBodyPlan &loopBodyPlanFor(
+        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates);
     /// The group of graphs this transformation adds to the program.
     rt::GraphDraftGroup &group() { return group_; }
+    /// The refusals collected so far: a region differentiated in place reports its own.
+    std::vector<Refusal> &refusals() { return refusals_; }
+    /// Reserves a pullback graph for a region differentiated in place (its forward is the
+    /// region itself).
+    PullbackPlan reserveRegionPullback(const std::string &name, const PullbackPlan &types) {
+        return reservePullback(name, types);
+    }
 
   private:
     struct Pending {
@@ -922,19 +1042,23 @@ class Engine {
     [[noreturn]] void refuse();
 
     PullbackPlan reserve(const std::string &name, const PullbackPlan &types);
+    /// A plan whose only graph is the pullback (a region's forward is the region itself).
+    PullbackPlan reservePullback(const std::string &name, const PullbackPlan &types);
     void build(Pending &pending);
-    LoopBodyPlan buildLoopBody(GCGraph *body, size_t stateCount, bool iterates);
+    LoopBodyPlan
+    buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates);
 
     camel::core::context::context_ptr_t context_;
     rt::GraphDraftGroup group_;
     std::unordered_map<GCGraph *, PullbackPlan> plans_;
     std::unordered_map<GCGraph *, PullbackPlan> closurePlans_;
-    std::unordered_map<GCGraph *, LoopBodyPlan> loopBodyPlans_;
-    std::unordered_set<GCGraph *> loopBodiesBeingBuilt_;
+    std::map<std::pair<const GraphDraft *, gc_node_ref_t>, LoopBodyPlan> loopBodyPlans_;
+    std::set<std::pair<const GraphDraft *, gc_node_ref_t>> loopBodiesBeingBuilt_;
     std::deque<Pending> pending_;
     rt::RuntimeGraphDraftSession inlining_;
     size_t followed_ = 0;
     std::unordered_map<GCGraph *, std::unordered_set<GCGraph *>> armOwners_;
+    std::map<std::pair<const GraphDraft *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
     std::unordered_set<GCGraph *> recursions_;
     std::vector<Refusal> refusals_;
     camel::source::source_context_ptr_t outerSource_;
@@ -964,12 +1088,12 @@ void ForwardRewrite::followFunctionValues() {
         changed = false;
         std::unordered_set<gc_node_ref_t> arms;
         for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-            if (draft_.alive(id) && kindOf(draft_, id) == GCNodeKind::Join) {
+            if (draft_.alive(id) && member(id) && kindOf(draft_, id) == GCNodeKind::Join) {
                 arms.insert(draft_.withInputsOf(id).begin(), draft_.withInputsOf(id).end());
             }
         }
         for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-            if (!draft_.alive(id) || left.contains(id) || arms.contains(id)) {
+            if (!draft_.alive(id) || !member(id) || left.contains(id) || arms.contains(id)) {
                 continue;
             }
             const GCNodeKind kind = kindOf(draft_, id);
@@ -1007,8 +1131,18 @@ void ForwardRewrite::followFunctionValues() {
             // A closure call first becomes a direct call of the closure's graph with the
             // captured values as arguments. Should the inlining then fail, that direct call
             // is an ordinary call and is differentiated as one.
+            const uint32_t savedRegion = draft_.insertRegion();
+            if (part_ != 0) {
+                draft_.setInsertRegion(part_);
+            }
+            const auto restoreRegion = [&] {
+                if (part_ != 0) {
+                    draft_.setInsertRegion(savedRegion);
+                }
+            };
             if (kind == GCNodeKind::Call &&
                 !rt::devirtualizeStaticCallInDraft(engine_.inlining(), draft_, id, true)) {
+                restoreRegion();
                 left.insert(id);
                 continue;
             }
@@ -1019,9 +1153,15 @@ void ForwardRewrite::followFunctionValues() {
                         engine_.noteArmOwner(arm, function);
                     }
                 }
+                // The body came into this region; a function it calls from here that calls
+                // itself is this function's recursion.
+                if (part_ != 0 && draft_.region(part_).kind == rt::GCRegionKind::Arm) {
+                    engine_.noteArmOwner(&draft_, part_, function);
+                }
             } else {
                 left.insert(id);
             }
+            restoreRegion();
         }
     }
 }
@@ -1082,7 +1222,7 @@ void ForwardRewrite::run() {
     std::vector<gc_node_ref_t> loops;
     std::unordered_set<gc_node_ref_t> arms;
     for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
-        if (!draft_.alive(id)) {
+        if (!draft_.alive(id) || !member(id)) {
             continue;
         }
         switch (kindOf(draft_, id)) {
@@ -1159,14 +1299,27 @@ void ForwardRewrite::redirectValue(gc_node_ref_t node, gc_node_ref_t value) {
     if (draft_.returnNode() == node) {
         draft_.setReturnNode(value, draft_.returnKind());
     }
+    // A region that ended in this node now ends in its value: a call in a loop body or an arm
+    // that is the region's result returns the (value, pullback) pair after the rewrite.
+    for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
+        if (draft_.region(r).result == node) {
+            draft_.setRegionResult(r, value);
+        }
+    }
 }
 
 void ForwardRewrite::split(
     gc_node_ref_t node, const PullbackPlan &plan, std::vector<gc_node_ref_t> inputs) {
+    if (part_ != 0) {
+        draft_.setInsertRegion(part_);
+    }
     const gc_node_ref_t value = draft_.addAccsNode(plan.valueType, 0u);
     redirectValue(node, value);
     draft_.setNormInputs(value, std::span<const gc_node_ref_t>(&node, 1));
     const gc_node_ref_t pullback = addAccs(draft_, plan.pullbackType, node, 1);
+    if (part_ != 0) {
+        draft_.setInsertRegion(0);
+    }
     sites_.emplace(
         value,
         CallSite{.pullback = pullback, .inputs = std::move(inputs), .plan = plan});
@@ -1350,43 +1503,34 @@ gc_node_ref_t addTangentSum(GraphDraft &draft, Type *primal, gc_node_ref_t lhs, 
     return addOper(draft, tangentTypeOf(primal), space->addUri, inputs);
 }
 
-/// Whether the reverse loop goes on: one more round while the index is not negative.
-std::unique_ptr<GraphDraft> buildReverseCond(const ReverseLoop &loop) {
-    const std::vector<Type *> stateTypes = reverseStateTypes(loop);
-    const std::vector<Type *> tapes      = tapeTypes(loop);
-    auto draft                           = std::make_unique<GraphDraft>();
-    draft->setFuncType(loopSignature(tapes, stateTypes, Type::Bool()));
-    for (Type *type : tapes) {
-        addLoopPort(*draft, type, true);
-    }
+/// Whether the reverse loop goes on: one more round while the index is not negative. The
+/// condition is a region of the reverse pass's own graph, like every loop a program has.
+void buildReverseCond(const ReverseLoop &loop, GraphDraft &draft, uint32_t region) {
+    draft.setInsertRegion(region);
     std::vector<gc_node_ref_t> ports;
-    for (Type *type : stateTypes) {
-        ports.push_back(addLoopPort(*draft, type, false));
+    for (Type *type : reverseStateTypes(loop)) {
+        ports.push_back(addPort(draft, type));
     }
-    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(*draft, 0)};
-    setResult(*draft, addOper(*draft, Type::Bool(), ":op/ge_l", compare));
-    stampLoopOrigin(*draft, loop.origin);
-    return draft;
+    draft.setRegionPorts(region, ports);
+    const std::array<gc_node_ref_t, 2> compare{ports.front(), addLoopInt(draft, 0)};
+    draft.setRegionResult(region, addOper(draft, Type::Bool(), ":op/ge_l", compare));
+    draft.setInsertRegion(0);
 }
 
 /// One round of the reverse pass: read the round's residuals off the tape, run the body's
 /// pullback on the gradient of the state this round produced, and add what it sends back to the
 /// gradients the loop carries. A state's gradient is what the previous round gets; a capture's
 /// gradient accumulates over the rounds.
-std::unique_ptr<GraphDraft> buildReverseBody(const ReverseLoop &loop) {
+void buildReverseBody(
+    const ReverseLoop &loop, GraphDraft &draft, uint32_t region,
+    std::span<const gc_node_ref_t> tapePorts) {
     const std::vector<Type *> stateTypes = reverseStateTypes(loop);
-    const std::vector<Type *> tapes      = tapeTypes(loop);
-    auto draft                           = std::make_unique<GraphDraft>();
-    draft->setFuncType(
-        loopSignature(tapes, stateTypes, stateTypes.size() == 1 ? stateTypes.front() : TupleType::create(stateTypes)));
-    std::vector<gc_node_ref_t> tapePorts;
-    for (Type *type : tapes) {
-        tapePorts.push_back(addLoopPort(*draft, type, true));
-    }
+    draft.setInsertRegion(region);
     std::vector<gc_node_ref_t> ports;
     for (Type *type : stateTypes) {
-        ports.push_back(addLoopPort(*draft, type, false));
+        ports.push_back(addPort(draft, type));
     }
+    draft.setRegionPorts(region, ports);
     // The gradient of the state this round produced, taken out of the components that carry it.
     gc_node_ref_t dy = kInvalidNodeRef;
     if (loop.stateTypes.size() == 1) {
@@ -1398,38 +1542,36 @@ std::unique_ptr<GraphDraft> buildReverseBody(const ReverseLoop &loop) {
                 components.push_back(ports[loop.stateSlot[j]]);
             }
         }
-        dy = addAggregate(*draft, tangentTypeOf(loop.stateValueType), components);
+        dy = addAggregate(draft, tangentTypeOf(loop.stateValueType), components);
     }
     std::vector<gc_node_ref_t> args{dy};
     for (size_t c = 0; c < loop.residualTypes.size(); ++c) {
         const std::array<gc_node_ref_t, 2> at{tapePorts[c], ports.front()};
-        args.push_back(addOper(*draft, loop.residualTypes[c], ":op/idx_arr", at));
+        args.push_back(addOper(draft, loop.residualTypes[c], ":op/idx_arr", at));
     }
-    const gc_node_ref_t pullback = draft->addFuncNode(loop.bodyPullback, loop.tangentsType);
-    draft->setNormInputs(pullback, args);
-    draft->addDependency(loop.bodyPullback);
-    const std::array<gc_node_ref_t, 2> step{ports.front(), addLoopInt(*draft, 1)};
-    std::vector<gc_node_ref_t> next{addOper(*draft, Type::Int64(), ":op/sub_l", step)};
+    const gc_node_ref_t pullback = draft.addFuncNode(loop.bodyPullback, loop.tangentsType);
+    draft.setNormInputs(pullback, args);
+    const std::array<gc_node_ref_t, 2> step{ports.front(), addLoopInt(draft, 1)};
+    std::vector<gc_node_ref_t> next{addOper(draft, Type::Int64(), ":op/sub_l", step)};
     for (size_t j = 0; j < loop.stateTypes.size(); ++j) {
         if (loop.stateSlot[j] == kNoSlot) {
             continue;
         }
         next.push_back(
-            addAccs(*draft, loop.tangentsType->typeAt(*loop.stateTangent[j]), pullback, *loop.stateTangent[j]));
+            addAccs(draft, loop.tangentsType->typeAt(*loop.stateTangent[j]), pullback, *loop.stateTangent[j]));
     }
     for (size_t c = 0; c < loop.captureTypes.size(); ++c) {
         if (loop.captureSlot[c] == kNoSlot) {
             continue;
         }
         next.push_back(addTangentSum(
-            *draft,
+            draft,
             loop.captureTypes[c],
             ports[loop.captureSlot[c]],
-            addAccs(*draft, loop.tangentsType->typeAt(*loop.captureTangent[c]), pullback, *loop.captureTangent[c])));
+            addAccs(draft, loop.tangentsType->typeAt(*loop.captureTangent[c]), pullback, *loop.captureTangent[c])));
     }
-    setResult(*draft, packState(*draft, stateTypes, next));
-    stampLoopOrigin(*draft, loop.origin);
-    return draft;
+    draft.setRegionResult(region, packState(draft, stateTypes, next));
+    draft.setInsertRegion(0);
 }
 
 /// The reverse pass as one function: given the gradient of the loop's value, start at the last
@@ -1438,8 +1580,7 @@ std::unique_ptr<GraphDraft> buildReverseBody(const ReverseLoop &loop) {
 /// that ran no round leaves the state's gradient as it came and every capture's zero, which is
 /// what a sum over no round contributes.
 std::unique_ptr<GraphDraft> buildReverseClosure(
-    const ReverseLoop &loop, TupleType *closureType, rt::GraphId cond, rt::GraphId body,
-    std::vector<gc_node_ref_t> captures) {
+    const ReverseLoop &loop, TupleType *closureType, std::vector<gc_node_ref_t> captures) {
     const std::vector<Type *> stateTypes = reverseStateTypes(loop);
     auto draft                           = std::make_unique<GraphDraft>();
     ASSERT(
@@ -1448,7 +1589,8 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
     draft->setFuncType(
         FunctionType::create(param_vec_t{}, param_vec_t{{loop.dyType, false}}, loop.tangentsType));
     draft->setClosureType(closureType);
-    const gc_node_ref_t dy = addLoopPort(*draft, loop.dyType, false);
+    const gc_node_ref_t dy = addPort(*draft, loop.dyType);
+    draft->appendNormPort(dy);
     // What the reverse pass reads from outside: the tape, one array per collection slot, and the
     // captures whose gradient starts at zero (a tensor's zero is taken from the primal).
     std::vector<gc_node_ref_t> tapePorts;
@@ -1465,6 +1607,12 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
         capturePorts[c] = addPort(*draft, loop.captureTypes[c]);
         draft->appendClosureNode(capturePorts[c]);
     }
+    // The cond and the body are regions of this graph; the loop node names them by owning them,
+    // and its With inputs are their results and the round port.
+    const uint32_t condRegion = draft->addRegion(rt::GCRegionKind::LoopCond, 0);
+    const uint32_t bodyRegion = draft->addRegion(rt::GCRegionKind::LoopBody, 0);
+    buildReverseCond(loop, *draft, condRegion);
+    buildReverseBody(loop, *draft, bodyRegion, tapePorts);
     // The last round of the tape, and the gradients the first reverse round gets.
     const std::array<gc_node_ref_t, 1> tape{tapePorts.front()};
     const gc_node_ref_t count = addOper(*draft, Type::Int64(), ":struct/len_arr", tape);
@@ -1488,15 +1636,18 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
     const Type *valueType =
         stateTypes.size() == 1 ? stateTypes.front() : TupleType::create(stateTypes);
     const rt::GCLoopBody payload{
-        .condGraph       = cond,
-        .bodyGraph       = body,
+        .condGraph       = rt::kInvalidGraphId,
+        .bodyGraph       = rt::kInvalidGraphId,
         .kind            = camel::core::LoopKind::While,
         .collectionCount = 0};
+    const gc_node_ref_t round    = addPort(*draft, Type::Int64());
     const gc_node_ref_t loopNode = draft->addLoopNode(payload, const_cast<Type *>(valueType));
     draft->setNormInputs(loopNode, initial);
-    draft->setWithInputs(loopNode, std::span<const gc_node_ref_t>(tapePorts.data(), loop.residualTypes.size()));
-    draft->addDependency(cond);
-    draft->addDependency(body);
+    const std::array<gc_node_ref_t, 3> parts{
+        draft->region(bodyRegion).result, draft->region(condRegion).result, round};
+    draft->setWithInputs(loopNode, parts);
+    draft->setRegionOwner(condRegion, loopNode, 0);
+    draft->setRegionOwner(bodyRegion, loopNode, 1);
     draft->setNodeOrigin(loopNode, loop.origin);
     // The gradients the loop ends with, in the order the site's ports are in.
     std::vector<gc_node_ref_t> stateValues;
@@ -1518,7 +1669,6 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
             tangents.push_back(stateValues[loop.stateSlot[j]]);
         }
     }
-    ASSERT(captures.size() == closureType->size(), "autodiff: reverse loop capture count mismatch.");
     setResult(*draft, addAggregate(*draft, loop.tangentsType, tangents));
     stampLoopOrigin(*draft, loop.origin);
     return draft;
@@ -1531,7 +1681,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // before the tape, and are preserved here.
     const size_t existingCollections = view.collectionCount();
     const LoopBodyPlan &bodyPlan =
-        engine_.loopBodyPlanFor(view.bodyGraph(), view.stateCount(), view.iterable().has_value());
+        engine_.loopBodyPlanFor(draft_, loop, view.stateCount(), view.iterable().has_value());
     const size_t k               = bodyPlan.stateTypes.size();
     const size_t m               = bodyPlan.captureTypes.size();
     const size_t r               = bodyPlan.residualTypes.size();
@@ -1558,6 +1708,9 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // right: they cannot influence the value). Such a plan was not given a tape at all, so it
     // has no collection slots; the count is checked once there is a plan to run.
     if (bodyPlan.dyType == nullptr) {
+        // The value has no gradient channel: if anything the loop reads is differentiated, the
+        // backward pass refuses it at the loop (it cannot see the body region from here).
+        untaped_.insert(loop);
         return;
     }
     bool anyPort = false;
@@ -1574,9 +1727,10 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         bodyPlan.tapeCollectionTypes.size() == (r == 0 ? 1u : r),
         "autodiff: a loop body's tape slots do not match the values its round collects.");
     const PullbackPlan site = makePlanTypes(bodyPlan.portTypes, bodyPlan.stateValueType, carriesGradient);
-    // The site's inputs: the captures (the node's With inputs), then the first values of the
-    // state (its Norm inputs), the order visitCallSite reads them in.
-    std::vector<gc_node_ref_t> inputs(view.captures().begin(), view.captures().end());
+    // The site's inputs: the values the body reads from around it (the node's captures), then the
+    // first values of the state (its Norm inputs), the order visitCallSite reads them in.
+    const std::vector<gc_node_ref_t> captured = view.externalInputs(false);
+    std::vector<gc_node_ref_t> inputs(captured.begin(), captured.end());
     for (size_t j = 0; j < k; ++j) {
         inputs.push_back(view.initialState(j));
     }
@@ -1585,11 +1739,9 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     std::vector<Type *> valueTypes = bodyPlan.stateTypes;
     valueTypes.insert(valueTypes.end(), bodyPlan.collectionTypes.begin(), bodyPlan.collectionTypes.end());
     Type *const valueType = TupleType::create(valueTypes);
-    draft_.setLoopGraphs(loop, draft_.loopGraphsOf(loop).condGraph, bodyPlan.graphs.forward);
     draft_.setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
     draft_.setNodeDataType(loop, valueType);
     draft_.setNodeDataIndex(loop, draft_.allocateRuntimeSlot(valueType));
-    draft_.addDependency(bodyPlan.graphs.forward);
     // The loop's users see the state alone; the tape is read through the node below. The
     // builder already inserted that projection when it normalised the loop; reuse it rather
     // than redirect it to itself (a cycle), and add one only for a loop that has none.
@@ -1677,16 +1829,10 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
             reverse.captureSlot[c]    = slot++;
         }
     }
-    // The three graphs of the reverse loop, added to the program as the body's tape graphs are.
-    // They are reserved (not encoded) now; the group re-points the graph references their payloads
-    // hold when it encodes them, as it does for every member the transformation adds.
+    // The reverse pass's graph: its condition and body are regions of it, as a program's loops are.
+    // It is reserved (not encoded) now; the group re-points the graph references its payload holds
+    // when it encodes it, as it does for every member the transformation adds.
     const std::string key = bodyPlan.name + ".reverse";
-    const rt::GraphId condKey =
-        engine_.group().reserve("autodiff.loop/" + key + ".cond", key + ".cond");
-    engine_.group().define(condKey, buildReverseCond(reverse));
-    const rt::GraphId bodyKey =
-        engine_.group().reserve("autodiff.loop/" + key + ".body", key + ".body");
-    engine_.group().define(bodyKey, buildReverseBody(reverse));
     const rt::GraphId closureKey = engine_.group().reserve("autodiff.loop/" + key, key);
     // What the reverse pass captures, in order: the tape, then the captures whose gradient it
     // starts from zero.
@@ -1697,14 +1843,13 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     }
     for (size_t c = 0; c < m; ++c) {
         if (reverse.captureSlot[c] != kNoSlot) {
-            captures.push_back(view.captures()[c]);
+            captures.push_back(captured[c]);
             closureTypes.push_back(bodyPlan.captureTypes[c]);
         }
     }
     TupleType *const closureType = TupleType::create(closureTypes);
     engine_.group().define(
-        closureKey,
-        buildReverseClosure(reverse, closureType, condKey, bodyKey, captures));
+        closureKey, buildReverseClosure(reverse, closureType, captures));
     const gc_node_ref_t pullback =
         addClosure(engine_.group(), draft_, closureKey, site.pullbackType, closureType, captures);
     // The site: the loop's value is `state`; its gradient is the gradient of the loop's value.
@@ -1716,10 +1861,10 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     if (const auto iterable = view.iterable()) {
         loopSites_.back().arrays.push_back(LoopArray{.array = *iterable, .iterated = true});
     }
-    const auto withInputs = copyOf(draft_.withInputsOf(loop));
-    for (gc_node_ref_t captured : withInputs) {
-        if (typeOf(draft_, captured)->code() == TypeCode::Array) {
-            loopSites_.back().arrays.push_back(LoopArray{.array = captured, .iterated = false});
+    const auto withInputs = captured;
+    for (gc_node_ref_t value : withInputs) {
+        if (typeOf(draft_, value)->code() == TypeCode::Array) {
+            loopSites_.back().arrays.push_back(LoopArray{.array = value, .iterated = false});
         }
     }
     recorded.loop = &loopSites_.back();
@@ -1811,6 +1956,10 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         return std::nullopt; // a function computed at run time
     }
     // A static capture-free function: call its graph directly.
+    const uint32_t savedInsert = draft_.insertRegion();
+    if (part_ != 0) {
+        draft_.setInsertRegion(part_);
+    }
     const gc_node_ref_t direct = draft_.addFuncNode(graph->id(), typeOf(draft_, call));
     draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
     draft_.setNormInputs(direct, copyOf(draft_.normInputsOf(call)));
@@ -1836,6 +1985,16 @@ std::optional<gc_node_ref_t> ForwardRewrite::rewriteIndirectCall(gc_node_ref_t c
         draft_.setReturnNode(direct, draft_.returnKind());
     }
     draft_.eraseNode(call);
+    // The call may have been a region's result (an arm whose value is the call): the region now
+    // ends in the direct call.
+    for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
+        if (draft_.region(r).result == call) {
+            draft_.setRegionResult(r, direct);
+        }
+    }
+    if (part_ != 0) {
+        draft_.setInsertRegion(savedInsert);
+    }
     return direct;
 }
 
@@ -1866,6 +2025,12 @@ void ForwardRewrite::rewriteClosureCall(
     }
     const PullbackPlan &plan = engine_.planForClosure(graph);
 
+    // The call being replaced belongs to the region being rewritten; every node that replaces it
+    // must stay in that region (an arm's call must not end up between the BRCH and its JOIN).
+    const uint32_t savedInsert = draft_.insertRegion();
+    if (part_ != 0) {
+        draft_.setInsertRegion(part_);
+    }
     const gc_node_ref_t direct = draft_.addFuncNode(graph->id(), typeOf(draft_, call));
     draft_.setNodeOrigin(direct, draft_.nodeOrigin(call));
     draft_.setWithInputs(direct, std::span(withInputs).subspan(1));
@@ -1894,6 +2059,9 @@ void ForwardRewrite::rewriteClosureCall(
     draft_.eraseNode(call);
     retarget(direct, plan);
     split(direct, plan, std::move(inputs));
+    if (part_ != 0) {
+        draft_.setInsertRegion(savedInsert);
+    }
 }
 
 ::Function *ForwardRewrite::macroCallee(gc_node_ref_t callee) {
@@ -1987,112 +2155,172 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         return;
     }
     const std::vector<gc_node_ref_t> arms = copyOf(draft_.withInputsOf(join));
-
-    // All arms take the union of the values any arm reads, so their pullbacks share one type.
+    if (arms.empty()) {
+        return;
+    }
+    // The JOIN names the BRCH whose arms are regions of this graph.
+    const auto payload = draft_.payloadOf(join);
+    if (payload.size() < sizeof(rt::GCJoinBody)) {
+        fail("a branch JOIN has no BRCH");
+    }
+    const gc_node_ref_t brch = reinterpret_cast<const rt::GCJoinBody *>(payload.data())->brch;
+    const size_t armCount    = reinterpret_cast<const rt::GCJoinBody *>(payload.data())->armCount;
+    if (armCount != arms.size()) {
+        fail("a branch JOIN has a different number of arms than values");
+    }
+    // Each arm is a region of this graph; the values the arms read from outside them are the
+    // ports of the pullback the branch returns. An arm's rewrite can introduce new reads (a
+    // closure called inside the arm reads what it captured, which the arm did not read before),
+    // so the arms are rewritten first and the ports are collected afterwards.
+    std::vector<uint32_t> regions;
+    for (size_t i = 0; i < arms.size(); ++i) {
+        const uint32_t region = draft_.armRegionOf(brch, i);
+        if (region == 0) {
+            fail("a branch arm is not a region of the graph; differentiate before lowering it");
+        }
+        if (!draft_.regionPortsOf(region).empty()) {
+            fail("a branch arm with ports is not supported; differentiate before inlining it");
+        }
+        regions.push_back(region);
+    }
+    struct ArmRewrite {
+        GraphScope scope;
+        std::unique_ptr<ForwardRewrite> rewrite;
+        gc_node_ref_t value = kInvalidNodeRef;
+    };
+    std::vector<ArmRewrite> rewritten(regions.size());
+    for (size_t i = 0; i < regions.size(); ++i) {
+        const uint32_t region = regions[i];
+        ArmRewrite &arm       = rewritten[i];
+        arm.scope             = GraphScope{
+                        .role      = GraphRole::BranchArm,
+                        .enclosing = engine_.ownersOf(&draft_, region),
+                        .recursive = scope_.recursive,
+        };
+        // The function whose graph holds the arm: a call of it from the arm is its recursion.
+        arm.scope.enclosing.insert(scope_.enclosing.begin(), scope_.enclosing.end());
+        // An arm brought into this graph by inlining a function's body is still that function's
+        // arm: the INLINE regions around it name the functions it came from.
+        for (uint32_t r = draft_.region(region).parent;; r = draft_.region(r).parent) {
+            const auto &parent = draft_.region(r);
+            if (parent.kind == rt::GCRegionKind::Inline && parent.inlineOf != rt::kInvalidGraphId &&
+                draft_.program() != nullptr) {
+                if (GCGraph *function = draft_.program()->graph(parent.inlineOf)) {
+                    arm.scope.enclosing.insert(function);
+                }
+            }
+            if (r == 0) {
+                break;
+            }
+        }
+        arm.rewrite = std::make_unique<ForwardRewrite>(engine_, draft_, arm.scope, region);
+        arm.rewrite->run();
+        // A recursive call found while this arm was rewritten names the function the arm is
+        // inside of: a refusal in the arm then says the function is a parameter of it, rather
+        // than that the value comes from outside the arm.
+        if (arm.scope.recursive.empty()) {
+            for (GCGraph *function : arm.scope.enclosing) {
+                if (engine_.isRecursive(function)) {
+                    arm.scope.recursive = function->name();
+                    break;
+                }
+            }
+        }
+    }
+    // The JOIN may have been given new arm values by the rewrites.
+    const std::vector<gc_node_ref_t> armValues = copyOf(draft_.withInputsOf(join));
     std::vector<gc_node_ref_t> shared;
-    for (gc_node_ref_t arm : arms) {
-        if (kindOf(draft_, arm) != GCNodeKind::Func) {
-            fail("branch arms must be subgraph calls; differentiate before inlining them");
-        }
-        if (!draft_.normInputsOf(arm).empty()) {
-            fail("branch arm with positional inputs is not supported");
-        }
-        for (gc_node_ref_t input : draft_.withInputsOf(arm)) {
+    for (size_t i = 0; i < regions.size(); ++i) {
+        for (gc_node_ref_t input : externalInputsOf(draft_, regions[i])) {
             if (std::find(shared.begin(), shared.end(), input) == shared.end()) {
                 shared.push_back(input);
             }
         }
-    }
-    // A closure built in this graph that an arm reads is not evident inside the arm, where it
-    // is a port. The arm gets the values the closure captured as well and builds the closure
-    // again from them, in its own graph: what it then calls is a closure built there, and the
-    // gradient reaches the captured values through the arm like through any value it reads.
-    std::vector<std::pair<size_t, gc_node_ref_t>> closures; // (position in shared, FILL here)
-    for (size_t i = 0; i < shared.size(); ++i) {
-        const gc_node_ref_t closure = ungated(draft_, shared[i]);
-        if (evidentFunction(draft_, shared[i]) == nullptr ||
-            kindOf(draft_, closure) != GCNodeKind::Fill) {
-            continue;
+        gc_node_ref_t value = draft_.region(regions[i]).result;
+        if (value != kInvalidNodeRef && !draft_.alive(value)) {
+            value = kInvalidNodeRef;
         }
-        closures.emplace_back(i, closure);
-        for (gc_node_ref_t captured : copyOf(draft_.withInputsOf(closure))) {
-            if (std::find(shared.begin(), shared.end(), captured) == shared.end()) {
-                shared.push_back(captured);
+        if (value == kInvalidNodeRef) {
+            // The optimizer may hoist an arm's value out of the arm (a constant arm becomes a
+            // DATA node in the body), leaving the region without a result. The value the JOIN is
+            // passed is the arm's value all the same.
+            value = i < armValues.size() ? armValues[i] : kInvalidNodeRef;
+            if (value != kInvalidNodeRef && !draft_.alive(value)) {
+                value = kInvalidNodeRef;
             }
         }
+        if (value == kInvalidNodeRef) {
+            fail("a branch arm has no result");
+        }
+        rewritten[i].value = value;
     }
-    const auto sharedIndex = [&](gc_node_ref_t node) {
-        return static_cast<size_t>(std::find(shared.begin(), shared.end(), node) - shared.begin());
-    };
     std::vector<Type *> sharedTypes;
     for (gc_node_ref_t input : shared) {
         sharedTypes.push_back(typeOf(draft_, input));
     }
     const PullbackPlan types = makePlanTypes(sharedTypes, valueType);
+    const std::unordered_set<gc_node_ref_t> boundary(shared.begin(), shared.end());
+    std::vector<gc_node_ref_t> armResults;
 
-    PullbackPlan joined;
-    for (gc_node_ref_t arm : arms) {
-        GCGraph *armGraph                          = calleeOf(draft_, arm);
-        auto variant = GraphDraft::decode(engine_.inlining().work(), armGraph);
-        const std::vector<gc_node_ref_t> oldPorts  = copyOf(variant->withPorts());
-        const std::vector<gc_node_ref_t> oldInputs = copyOf(draft_.withInputsOf(arm));
-        for (gc_node_ref_t port : oldPorts) {
-            variant->removeWithPort(port);
+    for (size_t i = 0; i < regions.size(); ++i) {
+        const uint32_t region = regions[i];
+        ArmRewrite &arm       = rewritten[i];
+        const gc_node_ref_t value = arm.value;
+        auto pullback = std::make_unique<GraphDraft>();
+        pullback->setFuncType(types.pullbackType);
+        const gc_node_ref_t dy = addPort(*pullback, tangentTypeOf(valueType));
+        pullback->appendNormPort(dy);
+        std::vector<gc_node_ref_t> differentiated;
+        for (gc_node_ref_t input : shared) {
+            differentiated.push_back(input);
         }
-        param_vec_t withParams;
-        std::vector<gc_node_ref_t> ports;
-        for (size_t i = 0; i < shared.size(); ++i) {
-            auto it                  = std::find(oldInputs.begin(), oldInputs.end(), shared[i]);
-            const gc_node_ref_t port = it != oldInputs.end()
-                                           ? oldPorts[static_cast<size_t>(it - oldInputs.begin())]
-                                           : addPort(*variant, sharedTypes[i]);
-            variant->appendWithPort(port);
-            ports.push_back(port);
-            withParams.emplace_back(sharedTypes[i], false);
-        }
-        std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> rebuilt; // (port, closure)
-        for (const auto &[index, closure] : closures) {
-            const gc_node_ref_t constant = draft_.normInputsOf(closure).front();
-            const gc_node_ref_t base     = variant->materializeStaticValue(
-                *staticValue(draft_, constant),
-                typeOf(draft_, constant));
-            std::vector<gc_node_ref_t> captured;
-            for (gc_node_ref_t value : draft_.withInputsOf(closure)) {
-                captured.push_back(ports[sharedIndex(value)]);
+        Backward backward(
+            draft_, *pullback, arm.rewrite->sites(), arm.scope, engine_.refusals(),
+            std::move(differentiated),
+            /*residualPorts=*/false, boundary, arm.rewrite->untapedLoops());
+        backward.seed(value, dy);
+        std::vector<gc_node_ref_t> order = valueOrder(draft_, value, region);
+        order.insert(order.begin(), shared.begin(), shared.end());
+        backward.run(order);
+        std::vector<gc_node_ref_t> tangents;
+        for (size_t p = 0; p < shared.size(); ++p) {
+            if (types.tangentIndex(p)) {
+                tangents.push_back(backward.gradient(shared[p]));
             }
-            const gc_node_ref_t fill =
-                variant->addFillNode(typeOf(draft_, closure), draft_.payloadOf(closure));
-            variant->setNormInputs(fill, std::span<const gc_node_ref_t>(&base, 1));
-            variant->setWithInputs(fill, captured);
-            variant->setNodeOrigin(fill, draft_.nodeOrigin(closure));
-            rebuilt.emplace_back(ports[index], fill);
         }
-        // Afterwards, so that a closure capturing another one captures the one built here.
-        for (const auto &[port, fill] : rebuilt) {
-            variant->replaceAllValueUses(port, fill);
+        setResult(*pullback, addAggregate(*pullback, types.tangentsType, tangents));
+        pruneUnreachable(*pullback);
+        const std::vector<gc_node_ref_t> captured = backward.finishCaptures();
+        std::vector<Type *> captureTypes;
+        for (gc_node_ref_t capture : captured) {
+            captureTypes.push_back(typeOf(draft_, capture));
         }
-        FunctionType *armType = armGraph->funcType();
-        param_vec_t normParams;
-        for (size_t i = 0; i < armType->normTypesCount(); ++i) {
-            normParams.emplace_back(armType->normTypeAt(i), false);
+        TupleType *const closureType = TupleType::create(captureTypes);
+        pullback->setClosureType(closureType);
+        const PullbackPlan armPlan =
+            engine_.reserveRegionPullback(std::format("arm{}.{}", static_cast<size_t>(region), i), types);
+        const uint32_t savedRegion = draft_.insertRegion();
+        draft_.setInsertRegion(region);
+        const gc_node_ref_t closure =
+            addClosure(engine_.group(), draft_, armPlan.pullback, types.pullbackType, closureType, captured);
+        const std::array<gc_node_ref_t, 2> pair{value, closure};
+        const gc_node_ref_t result = addAggregate(draft_, types.forwardValueType, pair);
+        const gc_node_ref_t oldResult = draft_.region(region).result;
+        gc_node_ref_t armResult      = result;
+        if (oldResult != kInvalidNodeRef && oldResult != result) {
+            armResult = draft_.addGateNode(typeOf(draft_, result));
+            draft_.setNormInputs(armResult, std::span<const gc_node_ref_t>(&result, 1));
+            draft_.setCtrlInputs(armResult, std::span<const gc_node_ref_t>(&oldResult, 1));
         }
-        variant->setFuncType(
-            FunctionType::create(withParams, normParams, valueType, armType->modifiers()));
-
-        GraphScope scope{
-            .role      = GraphRole::BranchArm,
-            .enclosing = scope_.enclosing,
-            .recursive = scope_.recursive,
-        };
-        const auto &owners = engine_.ownersOf(armGraph);
-        scope.enclosing.insert(owners.begin(), owners.end());
-        joined = engine_.planForDraft(std::move(variant), armGraph->name(), types, scope);
-        retarget(arm, joined);
-        draft_.setWithInputs(arm, shared);
+        draft_.setRegionResult(region, armResult);
+        armResults.push_back(armResult);
+        draft_.setInsertRegion(savedRegion);
+        engine_.group().define(armPlan.pullback, std::move(pullback));
     }
+    draft_.setWithInputs(join, armResults);
     draft_.setNodeDataType(join, types.forwardValueType);
     draft_.setNodeDataIndex(join, draft_.allocateRuntimeSlot(types.forwardValueType));
-    split(join, joined, shared);
+    split(join, types, shared);
 }
 
 // ---------------------------------------------------------------- backward impl
@@ -2305,6 +2533,14 @@ void Backward::refuseWhenActive(
 
 void Backward::run(const std::vector<gc_node_ref_t> &order) {
     primals_.insert(order.begin(), order.end());
+    // The differentiated ports are active from the start: a port may be read after the node whose
+    // region reads it (a loop's body reads it outside the value order of the node), and it does
+    // not become differentiated by being visited.
+    for (gc_node_ref_t id : differentiated_) {
+        if (tangentTypeOf(typeOf(forward_, id)) != nullptr) {
+            active_.insert(id);
+        }
+    }
     // Activity analysis: a value is active when it has a tangent and depends on a port whose
     // gradient is being computed. An ordinary argument (a tensor of labels, a scale) can have a
     // tangent type and still be data: it is not in `differentiated_`, so nothing derived from it
@@ -2391,32 +2627,78 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 }
             }
         }
+        // A branch's arms are regions, not values the JOIN is passed: what the JOIN depends on is
+        // what its arms read from around them. Without this, a branch whose value is used after
+        // the branch would be taken for a constant, and the arm's gradient dropped silently.
+        if (kindOf(forward_, node) == GCNodeKind::Join) {
+            const auto readsActive = [&](uint32_t region, const auto &self) -> bool {
+                for (gc_node_ref_t read : externalInputsOf(forward_, region)) {
+                    if (active_.contains(read) || tainted_.contains(read)) {
+                        return true;
+                    }
+                    if (kindOf(forward_, read) != GCNodeKind::Join) {
+                        continue;
+                    }
+                    const auto payload = forward_.payloadOf(read);
+                    if (payload.size() < sizeof(rt::GCJoinBody)) {
+                        continue;
+                    }
+                    const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
+                    for (size_t i = 0; i < body->armCount; ++i) {
+                        const uint32_t sub = forward_.armRegionOf(body->brch, i);
+                        if (sub != 0 && self(sub, self)) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+            const auto payload = forward_.payloadOf(node);
+            if (payload.size() >= sizeof(rt::GCJoinBody)) {
+                const auto *body = reinterpret_cast<const rt::GCJoinBody *>(payload.data());
+                for (size_t i = 0; i < body->armCount; ++i) {
+                    const uint32_t region = forward_.armRegionOf(body->brch, i);
+                    if (region != 0 && readsActive(region, readsActive)) {
+                        inputActive = true;
+                        break;
+                    }
+                }
+            }
+        }
+        // A loop whose value has no gradient channel cannot be given a tape: no gradient can flow
+        // through the value. It must not be skipped silently when it reads a differentiated
+        // value, because that value's contribution would be dropped without a sign of it.
+        if (kindOf(forward_, node) == GCNodeKind::Loop && untapedLoops_.contains(node)) {
+            // The condition and the body are regions: what the loop depends on is what they read
+            // from around them, not only what the node itself is passed.
+            std::vector<gc_node_ref_t> reads{forward_.normInputsOf(node).begin(),
+                                             forward_.normInputsOf(node).end()};
+            reads.insert(
+                reads.end(), forward_.withInputsOf(node).begin(), forward_.withInputsOf(node).end());
+            for (gc_node_ref_t read :
+                 rt::LoopDraftView(*forward_.program(), forward_, node).externalInputs(false)) {
+                reads.push_back(read);
+            }
+            for (gc_node_ref_t input : reads) {
+                if (active_.contains(input) || tainted_.contains(input)) {
+                    failAt(
+                        forward_.nodeOrigin(node),
+                        std::format(
+                            "a 'loop' depends on a differentiated parameter, but its "
+                            "value of type '{}' has no gradient channel. Gradients cannot "
+                            "flow through a loop whose value has no tangent{}; make the "
+                            "loop's value, or the value it reads, something that can carry "
+                            "a gradient",
+                            type->toString(),
+                            whereIs(forward_.nodeOrigin(node))));
+                }
+            }
+        }
         // A variable is state, not a differentiable input: its cell is never active, and a
         // read of it (checked above) is a constant of the call.
         if ((tangentTypeOf(type) == nullptr && !carrier) || isCellType(type)) {
             refuseActiveCollection(node, type);
             refuseActiveEnum(node, type);
-            // A loop whose value has no tangent cannot be given a tape: no gradient can flow
-            // through the value. It must not be skipped silently when it reads a differentiated
-            // value, because that value's contribution would be dropped without a sign of it.
-            if (kindOf(forward_, node) == GCNodeKind::Loop) {
-                for (auto inputs : {forward_.normInputsOf(node), forward_.withInputsOf(node)}) {
-                    for (gc_node_ref_t input : inputs) {
-                        if (active_.contains(input) || tainted_.contains(input)) {
-                            failAt(
-                                forward_.nodeOrigin(node),
-                                std::format(
-                                    "a 'loop' depends on a differentiated parameter, but its "
-                                    "value of type '{}' has no gradient channel. Gradients cannot "
-                                    "flow through a loop whose value has no tangent{}; make the "
-                                    "loop's value, or the value it reads, something that can carry "
-                                    "a gradient",
-                                    type->toString(),
-                                    whereIs(forward_.nodeOrigin(node))));
-                        }
-                    }
-                }
-            }
             // A value that cannot carry a gradient but is computed from one is tainted: it may
             // still be stored, but using it as data is the silent loss design principles 9.9
             // forbids. An aggregate with a tangent is not tainted as a whole; its field read is.
@@ -2470,6 +2752,9 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         active_.insert(node);
     }
     for (auto it = order.rbegin(); it != order.rend(); ++it) {
+        if (boundary_.contains(*it)) {
+            continue; // its gradient stops here
+        }
         auto found = gradients_.find(*it);
         if (found != gradients_.end() && !found->second.empty()) {
             visit(*it);
@@ -3028,6 +3313,13 @@ PullbackPlan Engine::reserve(const std::string &name, const PullbackPlan &types)
     return plan;
 }
 
+PullbackPlan Engine::reservePullback(const std::string &name, const PullbackPlan &types) {
+    PullbackPlan plan = types;
+    const auto suffix = uniqueSuffix();
+    plan.pullback     = group_.reserve("autodiff.pb/" + name + suffix, name + ".pb");
+    return plan;
+}
+
 const PullbackPlan &Engine::planFor(GCGraph *callee) {
     if (auto it = plans_.find(callee); it != plans_.end()) {
         return it->second;
@@ -3143,8 +3435,18 @@ void Engine::build(Pending &pending) {
     if (pending.graph != nullptr && recursions_.contains(pending.graph)) {
         pending.scope.recursive = pending.graph->name();
     }
+    if (pending.graph != nullptr) {
+        // A call of the function from its own graph is its recursion: it is not followed.
+        pending.scope.enclosing.insert(pending.graph);
+    }
     ForwardRewrite rewrite(*this, forward, pending.scope);
     rewrite.run();
+    // The rewrite may have found that the function calls itself (a call left as it is): the
+    // refusals it records name the function as recursive.
+    if (pending.graph != nullptr && pending.scope.recursive.empty() &&
+        recursions_.contains(pending.graph)) {
+        pending.scope.recursive = pending.graph->name();
+    }
     const gc_node_ref_t value = valueNode(forward);
 
     auto pullback = std::make_unique<GraphDraft>();
@@ -3160,9 +3462,11 @@ void Engine::build(Pending &pending) {
         }
     }
     Backward backward(
-        forward, *pullback, rewrite.sites(), pending.scope, refusals_, std::move(differentiated));
+        forward, *pullback, rewrite.sites(), pending.scope, refusals_, std::move(differentiated),
+        /*residualPorts=*/false, {}, rewrite.untapedLoops());
     backward.seed(value, dy);
-    backward.run(valueOrder(forward, value));
+    const auto edges = siteEdges(rewrite.sites());
+    backward.run(valueOrder(forward, value, 0, &edges));
 
     std::vector<gc_node_ref_t> tangents;
     for (size_t i = 0; i < ports.size(); ++i) {
@@ -3206,44 +3510,48 @@ void Engine::build(Pending &pending) {
     group_.define(plan.pullback, std::move(pullback));
 }
 
-const LoopBodyPlan &Engine::loopBodyPlanFor(GCGraph *body, size_t stateCount, bool iterates) {
-    if (auto it = loopBodyPlans_.find(body); it != loopBodyPlans_.end()) {
+const LoopBodyPlan &Engine::loopBodyPlanFor(
+    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates) {
+    const auto key = std::make_pair(&draft, loop);
+    if (auto it = loopBodyPlans_.find(key); it != loopBodyPlans_.end()) {
         ASSERT(
             it->second.stateTypes.size() == stateCount,
-            "autodiff: one body graph used by two loops of different shapes.");
+            "autodiff: one loop body used by two loops of different shapes.");
         return it->second;
     }
-    if (!loopBodiesBeingBuilt_.insert(body).second) {
+    if (!loopBodiesBeingBuilt_.insert(key).second) {
         fail(
             "a 'loop' whose body needs its own tape (a loop nested in the body of the same loop) "
             "cannot be differentiated");
     }
-    LoopBodyPlan plan = buildLoopBody(body, stateCount, iterates);
-    loopBodiesBeingBuilt_.erase(body);
-    return loopBodyPlans_.emplace(body, std::move(plan)).first->second;
+    LoopBodyPlan plan = buildLoopBody(draft, loop, stateCount, iterates);
+    loopBodiesBeingBuilt_.erase(key);
+    return loopBodyPlans_.emplace(key, std::move(plan)).first->second;
 }
 
-// The tape of a loop body: the body as the loop runs it (value => (the next state, the residuals
-// its pullback reads)), and the body's pullback with those residuals as parameters. The
-// residuals are primal values of the body: the operands the round's rules read again (and, for a
-// call in the body, the pullback closure the round's call returned, which is a value like any
-// other). They are what the forward loop collects, so the tape is arrays of those types.
-LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterates) {
+// The tape of a loop body: the body region itself now returns (the next state, the residuals its
+// pullback reads), and the body's pullback takes those residuals as parameters. The residuals are
+// primal values of the body: the operands the round's rules read again (and, for a call in the
+// body, the pullback closure the round's call returned, which is a value like any other). They
+// are what the forward loop collects, so the tape is arrays of those types.
+LoopBodyPlan
+Engine::buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates) {
     LoopBodyPlan plan;
-    if (body == nullptr || body->funcType() == nullptr) {
-        fail("a 'loop' whose body has no graph cannot be differentiated");
-    }
-    const auto withPorts = body->withPorts();
-    const auto normPorts = body->normPorts();
+    const LoopDraftView view(*draft.program(), draft, loop);
+    const uint32_t bodyRegion = view.bodyRegion();
     ASSERT(
-        normPorts.size() == stateCount + (iterates ? 1u : 0u),
+        view.stateCount() == stateCount,
         "autodiff: a 'loop' body does not have the parameters the node says.");
-    for (gc_node_ref_t port : withPorts) {
-        plan.captureTypes.push_back(body->node(port)->dataType());
+    // The values the body reads from outside it: the loop's captures, which are also the site's
+    // inputs before the initial states.
+    const std::vector<gc_node_ref_t> external = view.externalInputs(false);
+    for (gc_node_ref_t value : external) {
+        plan.captureTypes.push_back(typeOf(draft, value));
     }
     const size_t firstState = iterates ? 1 : 0;
+    (void)firstState;
     for (size_t j = 0; j < stateCount; ++j) {
-        plan.stateTypes.push_back(body->node(normPorts[firstState + j])->dataType());
+        plan.stateTypes.push_back(view.stateType(j));
     }
     plan.stateValueType = stateCount == 1 ? plan.stateTypes.front() : TupleType::create(plan.stateTypes);
     plan.dyType = carriesGradient(plan.stateValueType) ? tangentTypeOf(plan.stateValueType) : nullptr;
@@ -3252,28 +3560,31 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     }
     plan.portTypes = plan.captureTypes;
     plan.portTypes.insert(plan.portTypes.end(), plan.stateTypes.begin(), plan.stateTypes.end());
-    plan.name   = body->name() + ".tape";
-    plan.graphs = reserve(plan.name, makePlanTypes(plan.portTypes, plan.stateValueType, carriesGradient));
+    plan.name   = std::format("loop{}.tape", static_cast<size_t>(loop));
+    plan.graphs = reservePullback(
+        plan.name, makePlanTypes(plan.portTypes, plan.stateValueType, carriesGradient));
 
-    auto source = GraphDraft::decode(inlining_.work(), body);
     // A loop that appends to its array state in place (Builder::markLoopStateInPlace) has one
     // array that every round writes into, so the tape this body is about to collect would hold
     // the same final array in every entry. The loop needs the tape, so its body copies instead:
     // a fallback, not a refusal — the program is legal either way, and the value and the
     // gradients do not change (test/cases/modules/autodiff/loop_grad_in_place.cml).
-    rt::fallBackToCopyingAppend(*source);
+    rt::fallBackToCopyingAppend(draft, bodyRegion);
+    // The calls and the nested loops of the body are differentiated in place, in the body
+    // region.
     const GraphScope scope{.role = GraphRole::LoopBody};
-    ForwardRewrite rewrite(*this, *source, scope);
+    ForwardRewrite rewrite(*this, draft, scope, bodyRegion);
     rewrite.run();
-    const gc_node_ref_t value = valueNode(*source);
-    // The builder may already have split this body's result into the states and one or more
-    // collection slots (Builder::collectLoopAppends). They come first, before the tape; the
-    // gradient still flows through the states alone, so the backward pass below is seeded with
-    // the state value, not with the whole tuple.
+
+    // The body's result: the next state, followed by the collections the builder already gave
+    // the loop (Builder::collectLoopAppends). They come first, before the tape; the gradient
+    // still flows through the states alone, so the backward pass below is seeded with the state
+    // value, not with the whole tuple.
+    const gc_node_ref_t value = view.nextState();
     size_t existingCollections = 0;
-    if (kindOf(*source, value) == GCNodeKind::Fill) {
-        const auto withIns = source->withInputsOf(value);
-        const auto payload = source->payloadOf(value);
+    if (kindOf(draft, value) == GCNodeKind::Fill) {
+        const auto withIns = draft.withInputsOf(value);
+        const auto payload = draft.payloadOf(value);
         if (payload.size() >= sizeof(rt::GCFillBody)) {
             const auto *fill = reinterpret_cast<const rt::GCFillBody *>(payload.data());
             if (fill->fillKind == rt::GCFillKind::Tuple &&
@@ -3282,18 +3593,20 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
             }
         }
     }
+    const uint32_t savedRegion = draft.insertRegion();
+    draft.setInsertRegion(bodyRegion);
     std::vector<gc_node_ref_t> stateNext(stateCount, kInvalidNodeRef);
     std::vector<gc_node_ref_t> existingValues;
     for (size_t j = 0; j < stateCount; ++j) {
         stateNext[j] = (stateCount == 1 && existingCollections == 0)
                            ? value
-                           : addAccs(*source, plan.stateTypes[j], value, j);
+                           : addAccs(draft, plan.stateTypes[j], value, j);
     }
-    const auto existingComponents = source->withInputsOf(value);
+    const auto existingComponents = draft.withInputsOf(value);
     for (size_t c = 0; c < existingCollections; ++c) {
         const gc_node_ref_t collection = existingComponents[stateCount + c];
         existingValues.push_back(collection);
-        Type *const elementType = typeOf(*source, collection);
+        Type *const elementType = typeOf(draft, collection);
         plan.existingCollectionElemTypes.push_back(elementType);
         plan.existingCollectionTypes.push_back(ArrayType::create(elementType));
     }
@@ -3301,26 +3614,35 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
         existingCollections == 0
             ? value
             : (stateCount == 1 ? stateNext.front()
-                               : addAggregate(*source, plan.stateValueType, stateNext));
+                               : addAggregate(draft, plan.stateValueType, stateNext));
 
+    // The body's pullback: everything the body computes that its rules read again is a residual;
+    // everything it reads from outside it (its state and the values around the loop) is a
+    // boundary value the pullback takes as a parameter too. The order is the order the backward
+    // pass first reads them, which is the order the tape collects them in.
     auto pullback = std::make_unique<GraphDraft>();
+    pullback->setFuncType(plan.graphs.pullbackType);
     const gc_node_ref_t dy = addPort(*pullback, plan.dyType);
     pullback->appendNormPort(dy);
-    std::vector<gc_node_ref_t> primalPorts(withPorts.begin(), withPorts.end());
+    std::vector<gc_node_ref_t> boundary(external.begin(), external.end());
     for (size_t j = 0; j < stateCount; ++j) {
-        primalPorts.push_back(normPorts[firstState + j]);
+        boundary.push_back(view.bodyStateParam(j));
     }
+    std::vector<gc_node_ref_t> primalPorts = boundary;
     std::vector<gc_node_ref_t> differentiated;
     for (size_t i = 0; i < primalPorts.size(); ++i) {
         if (plan.graphs.tangentIndex(i)) {
             differentiated.push_back(primalPorts[i]);
         }
     }
+    const std::unordered_set<gc_node_ref_t> boundarySet(boundary.begin(), boundary.end());
     Backward backward(
-        *source, *pullback, rewrite.sites(), scope, refusals_, std::move(differentiated),
-        /*residualPorts=*/true);
+        draft, *pullback, rewrite.sites(), scope, refusals_, std::move(differentiated),
+        /*residualPorts=*/true, boundarySet, rewrite.untapedLoops());
     backward.seed(stateValue, dy);
-    backward.run(valueOrder(*source, stateValue));
+    std::vector<gc_node_ref_t> order = valueOrder(draft, stateValue, bodyRegion);
+    order.insert(order.begin(), boundary.begin(), boundary.end());
+    backward.run(order);
 
     // A state with no tangent that the body computes from an active value would lose that
     // value's gradient at the round boundary. Record it for the caller, which knows the loop
@@ -3341,7 +3663,7 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     }
     const std::vector<gc_node_ref_t> residuals = backward.residuals();
     for (gc_node_ref_t residual : residuals) {
-        plan.residualTypes.push_back(typeOf(*source, residual));
+        plan.residualTypes.push_back(typeOf(draft, residual));
     }
     setResult(*pullback, addAggregate(*pullback, plan.graphs.tangentsType, tangents));
     pruneUnreachable(*pullback);
@@ -3360,14 +3682,14 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     plan.collectionElemTypes = plan.existingCollectionElemTypes;
     for (gc_node_ref_t residual : residuals) {
         components.push_back(residual);
-        plan.collectionElemTypes.push_back(typeOf(*source, residual));
+        plan.collectionElemTypes.push_back(typeOf(draft, residual));
     }
     if (residuals.empty()) {
         // Nothing to recollect: one slot counts the rounds, so the reverse pass knows how many
         // there were. It is a value the body produces, not a residual of the pullback.
         plan.roundCounter = true;
         plan.collectionElemTypes.push_back(Type::Int64());
-        components.push_back(addLoopInt(*source, 1));
+        components.push_back(addLoopInt(draft, 1));
     }
     plan.tapeCollectionTypes.clear();
     for (size_t c = plan.existingCollectionElemTypes.size(); c < plan.collectionElemTypes.size(); ++c) {
@@ -3384,20 +3706,23 @@ LoopBodyPlan Engine::buildLoopBody(GCGraph *body, size_t stateCount, bool iterat
     }
     std::vector<Type *> resultTypes = plan.stateTypes;
     resultTypes.insert(resultTypes.end(), plan.collectionElemTypes.begin(), plan.collectionElemTypes.end());
-    setResult(*source, addAggregate(*source, TupleType::create(resultTypes), components));
-    pruneUnreachable(*source);
-    FunctionType *const sourceType = source->funcType();
-    param_vec_t withParams, normParams;
-    for (size_t i = 0; i < sourceType->withTypesCount(); ++i) {
-        withParams.emplace_back(sourceType->withTypeAt(i), sourceType->withIsVarAt(i));
+    const gc_node_ref_t fill = addAggregate(draft, TupleType::create(resultTypes), components);
+    // Keep the order the body's own result had: the tape is written after the statements.
+    const gc_node_ref_t oldResult = draft.region(bodyRegion).result;
+    gc_node_ref_t bodyResult      = fill;
+    if (oldResult != kInvalidNodeRef && oldResult != fill) {
+        bodyResult = draft.addGateNode(typeOf(draft, fill));
+        draft.setNormInputs(bodyResult, std::span<const gc_node_ref_t>(&fill, 1));
+        draft.setCtrlInputs(bodyResult, std::span<const gc_node_ref_t>(&oldResult, 1));
     }
-    for (size_t i = 0; i < sourceType->normTypesCount(); ++i) {
-        normParams.emplace_back(sourceType->normTypeAt(i), sourceType->normIsVarAt(i));
+    draft.setRegionResult(bodyRegion, bodyResult);
+    std::vector<gc_node_ref_t> with = copyOf(draft.withInputsOf(loop));
+    if (!with.empty()) {
+        with[0] = bodyResult;
+        draft.setWithInputs(loop, with);
     }
-    source->setFuncType(
-        FunctionType::create(withParams, normParams, TupleType::create(resultTypes), sourceType->modifiers()));
+    draft.setInsertRegion(savedRegion);
 
-    group_.define(plan.graphs.forward, std::move(source));
     group_.define(plan.graphs.pullback, std::move(pullback));
     return plan;
 }
@@ -3416,8 +3741,9 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     auto draft = GraphDraft::decode(inlining_.work(), function);
     ForwardRewrite rewrite(*this, *draft, scope);
     rewrite.run();
-    const gc_node_ref_t value              = valueNode(*draft);
-    const std::vector<gc_node_ref_t> order = valueOrder(*draft, value);
+    const gc_node_ref_t value = valueNode(*draft);
+    const auto edges         = siteEdges(rewrite.sites());
+    const std::vector<gc_node_ref_t> order = valueOrder(*draft, value, 0, &edges);
 
     const auto withPorts = draft->withPorts();
     // `grad` and `with_grad` differentiate the first `with` parameter only. The other `with`
@@ -3425,7 +3751,8 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue) {
     Backward backward(
         *draft, *draft, rewrite.sites(), scope, refusals_,
         withPorts.empty() ? std::vector<gc_node_ref_t>{}
-                          : std::vector<gc_node_ref_t>{withPorts.front()});
+                          : std::vector<gc_node_ref_t>{withPorts.front()},
+        /*residualPorts=*/false, {}, rewrite.untapedLoops());
     const slot_t one = type->exitType()->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
                            : toSlot<camel::core::rtdata::Float64>(1.0);
@@ -3540,33 +3867,14 @@ std::optional<GradientSignature> gradientSignature(FunctionType *function, bool 
 GradientGraph buildGradientGraph(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     GCGraph *function, bool withValue) {
-    // The loops and the arms of the branches are graphs of their own for the differentiation.
-    const camel::runtime::Program *outlined =
-        camel::runtime::outlineLoopRegions(context, program, function);
-    if (outlined != program) {
-        function = outlined->graph(function->id());
-        program  = outlined;
-    }
-    const camel::runtime::Program *raised = camel::runtime::raiseBranchArms(context, program, function);
-    if (raised != program) {
-        function = raised->graph(function->id());
-        program  = raised;
-    }
+    // The gradient reads the function's own graph: its loops and its branch arms are regions
+    // there, and the transformation rewrites them where they are.
     Engine engine(context, program, function);
     GCGraph *graph = engine.gradient(function, withValue);
-    // The gradient reads like any program: its arms and its loops are regions.
-    GCGraph *root = graph;
-    const camel::runtime::Program *lowered =
-        camel::passes::opt::lowerBranchArms(context, engine.group().program(), root, true);
-    if (lowered != engine.group().program()) {
-        graph = lowered->graph(graph->id());
-    }
-    const camel::runtime::Program *regionized =
-        camel::passes::opt::regionizeLoops(context, lowered, graph, true);
-    if (regionized != lowered) {
-        graph = regionized->graph(graph->id());
-    }
-    return {regionized, graph};
+    // The gradient may be called long after this transformation: its program (the base program
+    // plus the graphs made here) must outlive the group.
+    context->trackDetachedRuntimeProgram(engine.group().program());
+    return {engine.group().program(), graph};
 }
 
 } // namespace camel::autodiff

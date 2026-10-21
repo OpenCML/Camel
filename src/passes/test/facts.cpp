@@ -30,7 +30,6 @@
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/fact_persist.h"
 #include "camel/runtime/facts.h"
-#include "camel/runtime/loop_outline.h"
 #include "camel/runtime/reachable.h"
 
 #include <algorithm>
@@ -461,14 +460,6 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
         }
     }
     os << std::format("FACTS verify equal={} differ={}\n", equal, differ);
-
-    // The program with its loops as graphs (what autodiff works on): a copy of every graph, new
-    // only where a loop was.
-    if (const Program *outlinedProgram = outlineLoopRegions(context_, program, graph);
-        outlinedProgram != program) {
-        GCGraph *outlined = outlinedProgram->root();
-        (void)tally(os, store, *outlinedProgram, outlined, "outlined");
-    }
     return program;
 }
 

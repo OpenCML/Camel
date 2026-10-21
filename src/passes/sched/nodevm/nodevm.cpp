@@ -950,26 +950,35 @@ slot_t NodeVMSchedPass::evalNativeOperator(
 
 void NodeVMSchedPass::evalLoop(
     camel::runtime::GCGraph *graph, gc_node_ref_t nodeRef, Frame &currFrame) {
-    const camel::runtime::LoopView loop(programs_.of(graph), *graph, nodeRef);
-    const size_t k           = loop.stateCount();
-    const size_t collections = loop.collectionCount();
-    const auto stateSlot     = dataIndexOf(graph, nodeRef);
-    const auto captures      = loop.captures();
-    const auto iterable      = loop.iterable();
-    GCGraph *const cond      = loop.condGraph();
-    GCGraph *const body      = loop.bodyGraph();
+    // A late-built graph that still carries a graph-form LOOP: the front end builds regions, so
+    // this is the interpreter's last resort, and the step that proves no such graph remains
+    // deletes it.
+    const camel::runtime::Program &program = programs_.of(graph);
+    const camel::core::LoopKind kind      = graph->loopKindOf(nodeRef);
+    const auto norm                       = graph->normInputsOf(nodeRef);
+    const size_t iterableAt               = camel::core::loopHasIterable(kind) ? 1 : 0;
+    const size_t k                        = norm.size() - iterableAt;
+    const size_t collections              = graph->loopCollectionCountOf(nodeRef);
+    const auto stateSlot                  = dataIndexOf(graph, nodeRef);
+    const auto captures                   = graph->withInputsOf(nodeRef);
+    const auto iterable                   = camel::core::loopHasIterable(kind)
+                                                 ? std::optional<gc_node_ref_t>(norm.front())
+                                                 : std::nullopt;
+    GCGraph *const cond                    = program.loopCondOf(*graph, nodeRef);
+    GCGraph *const body                    = program.loopBodyOf(*graph, nodeRef);
     // The value is a tuple when k > 1 or the loop collects; its components are the k state
     // values and, when it collects, the arrays (LoopView::valueType).
     const bool wraps = k > 1 || collections != 0;
     const auto *const valueType =
-        wraps ? static_cast<const TupleType *>(loop.valueType()) : nullptr;
+        wraps ? static_cast<const TupleType *>(graph->node(nodeRef)->dataType()) : nullptr;
     // The rounds and the state are the loop's (camel/execute/loop_driver.h); this interpreter
     // supplies a frame and a call for each.
     struct Host {
         NodeVMSchedPass &vm;
         GCGraph *graph;
         Frame &currFrame;
-        camel::runtime::LoopView loop;
+        std::span<const gc_node_ref_t> norm;
+        size_t iterableAt;
         camel::runtime::gc_data_idx_t stateSlot;
         size_t k;
         std::span<const gc_node_ref_t> captures;
@@ -977,7 +986,7 @@ void NodeVMSchedPass::evalLoop(
 
         void beforeRound(size_t) {}
         slot_t initialState(size_t j) {
-            return currFrame.get<slot_t>(dataIndexOf(graph, loop.initialState(j)));
+            return currFrame.get<slot_t>(dataIndexOf(graph, norm[j + iterableAt]));
         }
         slot_t stateValue() { return currFrame.get<slot_t>(stateSlot); }
         void setStateValue(slot_t value) { currFrame.set(stateSlot, value); }
@@ -998,7 +1007,7 @@ void NodeVMSchedPass::evalLoop(
             return vm.call(target, frame);
         }
         Array *iterable() { return currFrame.get<Array *>(dataIndexOf(graph, *iterableNode)); }
-    } host{*this, graph, currFrame, loop, stateSlot, k, captures, iterable};
+    } host{*this, graph, currFrame, norm, iterableAt, stateSlot, k, captures, iterable};
     camel::execute::driveLoopRounds(
         camel::execute::LoopShape{
             .cond            = cond,
