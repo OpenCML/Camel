@@ -140,6 +140,14 @@ inline void setFastVmJitFramedOf(camel::runtime::GCGraph *graph, bool framed) {
     flags           = framed ? (flags | kFastVmFlagJitFramed) : (flags & ~kFastVmFlagJitFramed);
     graph->execPlan().fastVm.flags = flags;
 }
+
+/// Whether the graph runs a loop of regions (`39_loops.md`, section 4; ExecPlan::loops). Such a
+/// graph is compiled at its first call even under the on-demand threshold: its cost is the
+/// rounds, which a call count cannot see, and the entry function of a program — entered once —
+/// can be where a ten-million-round loop is written.
+inline bool graphHasLoopRegions(const camel::runtime::GCGraph *graph) {
+    return graph != nullptr && !graph->execPlan().loops.empty();
+}
 #endif
 
 inline uint32_t incFastVmIndirectCallCountOf(camel::runtime::GCGraph *graph) {
@@ -1330,7 +1338,7 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
     }
     size_t targetPc = getFuncExtraTargetPc(bc);
     uint32_t count  = incFuncExtraCount(bc);
-    if (tierPolicy_.shouldJit(count)) {
+    if (tierPolicy_.shouldJit(count, graphHasLoopRegions(runtimeTarget))) {
         compileAndCacheGraph(runtimeTarget, targetPc);
         return &bytecodes_[pc];
     }
@@ -1409,7 +1417,7 @@ slot_t FastVMSchedPass::invokeCallOrJit(
         return invokeOwnedJitFrame(fn, frame, jitCtx);
     }
     const bool compileFailed = jitCompileFailedOf(runtimeGraph);
-    if (!compileFailed && tierPolicy_.shouldJit(callCount)) {
+    if (!compileFailed && tierPolicy_.shouldJit(callCount, graphHasLoopRegions(runtimeGraph))) {
         compileAndCacheGraph(runtimeGraph, pc);
         fn = jitFnOf(runtimeGraph);
         if (fn) {

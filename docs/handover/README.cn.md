@@ -651,7 +651,7 @@ nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examp
 协调者一方已完成：分支臂成为区域（前端直接建、各后端与调试器读区域、锚点删除、嵌套排布线性）；循环成为区域并在所有后端于函数的帧内原生执行（fvm 新指令 `LBEG`/`LTST`/`LEND`，`std::cpp` 写 `for (;;)`）。交接说明：[regions-and-loops.md](../design/graph-store/handover/regions-and-loops.md)；方案：[regions-plan.md](../design/graph-store/handover/regions-plan.md)。
 
 1. ~~前端直接建循环区域~~：已由协调者一方完成并合入（含 H22 的 `collectLoopAppends`/`inferLoopStateFromAppend` 移植到区域形式；`loop_lowering`、`:graph/original`、`native_loop` 已删除）。另：`failed_no_rule.error` 的宏诊断位置从 `grad` 调用处（15:13）移到 `f` 内部（10:12），疑与 develop 的求导活跃起点改动有关，请丁车道核对。
-2. **JIT 编译含循环的图**：x64 后端实现 `LBEG`/`LTST`/`LEND`（现在含循环的图解释执行，被调函数照常编译）。
+2. ~~JIT 编译含循环的图~~：x64 后端实现 `LBEG`/`LTST`/`LEND`（原先含循环的图解释执行，被调函数照常编译）。**已完成**（`48345984` 把三个循环事件编译成有帧代码；本分支在合并 develop 后的树上验证，并让含循环的图在默认阈值下第一次调用就编译，否则只进入一次的入口函数仍会被解释）：[H43-jit-loops.md](reports/H43-jit-loops.md)。
 3. **自动微分读区域**：删除 `outlineLoopRegions`/`regionizeLoops`/`raiseBranchArms`/`lowerBranchArms` 这些过渡层与 `LoopView` 的子图模式。
 4. **ONNX 导出循环**（读区域，映射到 `Loop`）。
 5. 删除 NodeVM 的 `evalLoop` 回退（`0e88d09d`）：前端已直接建循环区域，确认不再有子图形式的 `LOOP` 后删除。

@@ -310,6 +310,24 @@ move in the interpreter and one helper call in compiled code. A compiled graph t
 or `LMOD` runs that bytecode in the helper that the other runtime constructs use
 (`jitHelperBytecode`, and `collectRuntimeConstructs` keeps such a graph framed for it).
 
+H43 item 2 (`48345984`, merged into this branch) makes the JIT compile a loop of regions: `LBEG`,
+`LTST` and `LEND` run the interpreters' own `loop_frame.h` functions on the frame through helpers
+(`07_jit_architecture.md`, 17.9), and a graph with a loop is compiled at its first call under the
+default threshold (14.1). The same measurement on the merged tree (median of five interleaved runs,
+whole-process CPU time, load average 60 to 75):
+
+| | `std::nvm` | `std::fvm` | `std::jit` | tail recursion, `std::fvm` | tail recursion, `std::jit` |
+|---|---|---|---|---|---|
+| H43-perf build (loop interpreted) | 1.571 s | 0.436 s | 0.435 s | 0.310 s | — |
+| merged tree (loop compiled) | 1.611 s | 0.457 s | **0.363 s** | 0.309 s | 0.084 s |
+
+`std::jit` is 20% faster than the interpreter in the same batch (0.363 against 0.457 s) and 16%
+faster than its own H43-perf number; `std::jit(hot_threshold=0)` gives the same 0.363 s, and
+`std::jit` without a parameter now compiles the loop too — the entry function `main` is called once,
+which the call-count threshold used to leave interpreted. The compiled round is 36.3 ns against
+8.4 ns for the same work as a compiled tail recursion; the difference is the two helper calls and
+the frame traffic of every round. The target 0.155 s is therefore still 2.3 times away.
+
 What is left, and why the targets of H43 are not met yet:
 
 - `std::nvm` is at 152 ns a round against a target of 70. NodeVM runs a node at a time: 23 ns a
@@ -322,11 +340,15 @@ What is left, and why the targets of H43 are not met yet:
   fast as the same work written as a recursion over parameters, both being interpreted. Reaching
   24.5 ns needs fewer round trips through the dispatch loop: a compiled loop (next item), or a
   superinstruction that runs a round inside one bytecode.
-- `std::jit` is FastVM's number because a graph with a loop is not compiled yet: the interpreter
-  runs the rounds and only the functions it calls are compiled. The same work as a tail recursion
-  is 7.8 ns a round when `std::jit` compiles it, which is where the loop would land.
+- `std::jit` now runs the rounds of the loop in compiled code (36.3 ns a round against 45.7 in the
+  interpreter), but each round is still two calls of the helpers that run `loop_frame.h`, and the
+  state is read from and written to the frame on both sides of them. The same work as a tail
+  recursion is 8.4 ns a round when compiled; closing the gap needs the common shape lowered
+  natively (the test and the end of the round inline, the state in registers) rather than the
+  three events as calls, which is the next step, not item 2.
 
-Next steps: compiling a loop with the JIT; a superinstruction for the round (the condition, the
+Next steps: the native lowering of the common loop shape (LTST/LEND inline, state in registers);
+a superinstruction for the round (the condition, the
 test and the body of a loop whose regions are straight-line bytecode run by one instruction);
 the k values of the state passed as arguments to a compiled loop body; the translation of a loop to
 an ONNX Loop; autodiff on the regions.
