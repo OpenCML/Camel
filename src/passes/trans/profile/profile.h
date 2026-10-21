@@ -30,9 +30,13 @@
  * pipeline names this pass.
  *
  * Parameters:
- *   top     rows of the operator table (0: every operator that ran)
- *   hints   report the element-wise loops that run on the host
- *   json    also write the report as JSON to this file
+ *   top          rows of the operator table (0: every operator that ran)
+ *   hints        report the element-wise loops that run on the host
+ *   json         also write the report as JSON to this file
+ *   report       write the text report when the run ends (false: only the diagnostics below)
+ *   gc_stats     the allocator's statistics at exit: 1 one line, 2 also one line per collection
+ *   type_stats   the type storage's statistics at exit
+ *   effect_trace write the effect trace (camel/core/effect_trace.h) to this file
  */
 
 #pragma once
@@ -46,7 +50,7 @@ class ProfilePass : public RuntimeGraphRewritePass {
   public:
     ProfilePass(
         const camel::core::context::context_ptr_t &ctx, camel::profile::ReportOptions options,
-        std::string jsonPath);
+        std::string jsonPath, int gcStats, bool typeStats, std::string effectTracePath);
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
@@ -58,4 +62,7 @@ class ProfilePass : public RuntimeGraphRewritePass {
 
     camel::profile::ReportOptions options_;
     std::string jsonPath_;
+    int gcStats_;
+    bool typeStats_;
+    std::string effectTracePath_;
 };

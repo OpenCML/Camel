@@ -493,6 +493,7 @@ int runCommand(int argc, char *argv[]) {
                     config.enablePerfettoIntegration = true;
                     config.perfettoOutput            = "profile_reports/camel_trace.perfetto-trace";
                     config.outputFile                = "profile_reports/camel_trace.json";
+                    config.openPerfettoUI            = Run::profileModeOpt == "full";
                     profiler::start_advanced_tracing(config);
                 }
             });
@@ -628,7 +629,7 @@ int runCommand(int argc, char *argv[]) {
             // itself was started by the pass. The text form joins the program's output; under
             // `--output-format json` it goes to standard error, so the diagnostics array on the
             // standard output keeps its shape.
-            if (camel::profile::enabled()) {
+            if (camel::profile::enabled() && camel::profile::reportOptions().report) {
                 std::ostream &reportOut = useJsonFormat ? std::cerr : os;
                 camel::profile::reportText(reportOut, camel::profile::reportOptions());
             }

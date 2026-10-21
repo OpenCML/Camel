@@ -58,6 +58,8 @@ class AdvancedTracer {
         bool realTimeAnalysis = false;
         bool generateCallGraph = true;
         bool generateSummaryReport = true;
+        // Full mode (--profile-mode full): open the Perfetto UI when the report is written.
+        bool openPerfettoUI = false;
     };
 
     // Configuration initialization

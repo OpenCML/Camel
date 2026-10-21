@@ -63,20 +63,7 @@ void PerfettoIntegration::stopAndOpenPerfetto() {
 
     generatePerfettoFile();
 
-#ifdef _WIN32
-    char *profile_mode = nullptr;
-    size_t len         = 0;
-    errno_t err        = _dupenv_s(&profile_mode, &len, "CAMEL_PROFILE_MODE");
-    bool auto_open = (err == 0 && profile_mode != nullptr && std::string(profile_mode) == "FULL");
-    if (profile_mode) {
-        free(profile_mode);
-    }
-#else
-    const char *profile_mode = std::getenv("CAMEL_PROFILE_MODE");
-    bool auto_open           = (profile_mode && std::string(profile_mode) == "FULL");
-#endif
-
-    if (auto_open) {
+    if (autoOpen_) {
         std::thread([this]() {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             openPerfettoInBrowser();
