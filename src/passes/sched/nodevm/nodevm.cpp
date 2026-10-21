@@ -463,7 +463,7 @@ slot_t NodeVMSchedPass::call(
                     "BRCH ref {}: jumpIdx={}, branches={}, tillNode={}, skipNode={}, joinNode={}",
                     nodeRef,
                     jumpIdx,
-                    arms.size(),
+                    en.armCount,
                     tillNode,
                     skipNode,
                     joinNode));

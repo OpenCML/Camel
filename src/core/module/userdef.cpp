@@ -249,8 +249,15 @@ void UserDefinedModule::setProgramGraph(
         // compileAsProgram() builds a program of its own from this module: its root graph is
         // kept with that program's builder, and the graph this module was loaded as part of
         // (the program that uses it, or the library of compileAsLibrary) stays as it was.
-        stage_  = CompileStage::Done;
-        loaded_ = true;
+        // The exception is the entry module of the program being compiled when that program has
+        // not been built yet: a pass written in the same file as the program is compiled from
+        // that module first, and its own program graph is set by compile() afterwards. Marking
+        // it done here makes that compile a no-op, and the program is then materialized from a
+        // module with no graph (an empty root graph, or a null graph the encoder dereferences).
+        if (!isTheProgramBeingCompiled()) {
+            stage_  = CompileStage::Done;
+            loaded_ = true;
+        }
         return;
     }
     compileGraph_ = root;
@@ -360,9 +367,17 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     }
     // The builder owns what the graphs of the program refer to and lives as long as the module.
     programBuilders_.push_back(builder);
-    stage_  = CompileStage::Done;
-    loaded_ = true;
+    // A module that is also the program being compiled is marked done by that program's own
+    // build, which has not run yet: marking it done here would stop it from running at all.
+    if (!isTheProgramBeingCompiled()) {
+        stage_  = CompileStage::Done;
+        loaded_ = true;
+    }
     return ProgramStatus::Built;
+}
+
+bool UserDefinedModule::isTheProgramBeingCompiled() const {
+    return context_ != nullptr && context_->mainModule().get() == this;
 }
 
 void UserDefinedModule::declareTypes() { (void)compile(CompileStage::GCT); }

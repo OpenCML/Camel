@@ -133,6 +133,26 @@ expect_stdout_exact = "coefficients 1 2\nchain 1 2\ncoefficients 0 1\nchain 0 1\
 timeout_ms = 20000
 
 [[tests]]
+name = "rules.pass_in_the_program_module"
+desc = "A module that holds the rule, the target and the pass itself (`export func apply`) is a pass like any other: the rewritten program is installed and run. The rule turns x + 0 into x + 1 on purpose, so the output (8) shows that the pass produced and ran the program; the same file without the pass prints 7."
+kind = "behavior"
+case = "../../../cases/modules/rules/same_module_pass.cml"
+args = ["${case}", "same_module_pass::apply"]
+expect_exit = 0
+expect_stdout_exact = "8\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.pass_in_the_program_module_without_the_pass"
+desc = "The same file, run as a program: 7, the value before the rewrite. Together with rules.pass_in_the_program_module it says which program the pass produced."
+kind = "behavior"
+case = "../../../cases/modules/rules/same_module_pass.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n"
+timeout_ms = 10000
+
+[[tests]]
 name = "rules.when_condition_selects_matches"
 desc = "A rule with `when` fires only where its condition holds: the shapes and types of the draft tell the four pairs of functions apart. The report before and after the rewrite shows which products and additions were replaced, and the program still prints the values it should."
 kind = "behavior"

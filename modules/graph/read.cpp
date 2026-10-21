@@ -53,12 +53,16 @@ using namespace camel::core::context;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
 using camel::core::OperatorTable;
+using camel::runtime::DraftNodeHeader;
+using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::GCRegion;
+using camel::runtime::GraphDraft;
 using camel::runtime::GraphId;
+using camel::runtime::kInvalidNodeRef;
 using camel::runtime::Program;
 
 namespace camel::graphmod {
@@ -81,33 +85,81 @@ bool constantType(const Type *type) {
 
 namespace {
 
-namespace mm = camel::core::mm;
+namespace mm  = camel::core::mm;
 namespace err = camel::core::error;
 
 // ---- the arguments ----
 
-const Program *programArg(ArgsView &norm, size_t index) {
-    return norm.get<const Program *>(index);
-}
+const Program *programArg(ArgsView &norm, size_t index) { return norm.get<const Program *>(index); }
 
 /// The graph a Graph or Node handle names; a fault when the Program holds no such graph.
 const GCGraph &graphOf(const Handle *handle, const char *site) {
     const GCGraph *graph =
         handle->program() != nullptr ? handle->program()->graph(handle->graph()) : nullptr;
     if (graph == nullptr) {
-        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph is not in its program");
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the graph is not in its program");
     }
     return *graph;
 }
 
-/// The node a Node handle names; a fault when the graph has no such node or the node is dead.
-const GCNode &nodeOf(const Handle *handle, const char *site) {
+/// The node of a frozen graph; a fault when the graph has no such node or the node is dead.
+const GCNode &nodeOfFrozen(const Handle *handle, const char *site) {
     const GCGraph &graph = graphOf(handle, site);
-    const GCNode *node   = graph.containsNodeRef(handle->index()) ? graph.node(handle->index()) : nullptr;
+    const GCNode *node =
+        graph.containsNodeRef(handle->index()) ? graph.node(handle->index()) : nullptr;
     if (node == nullptr || node->kind == GCNodeKind::Dead) {
-        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the node is not in its graph");
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the node is not in its graph");
     }
     return *node;
+}
+
+/// Reads that belong to the frozen graphs only (a region, an operator, a transaction) go through
+/// this name, which is the frozen reader: there is nothing of them in a draft.
+const GCNode &nodeOf(const Handle *handle, const char *site) {
+    return nodeOfFrozen(handle, site);
+}
+
+/// A node of a frozen graph or of the draft being rewritten (a rule condition reads the draft).
+/// Everything the read operators ask about a node is here; the rest of the file picks the
+/// source.
+struct NodeView {
+    const GCNode *frozen               = nullptr;
+    const DraftNodeHeader *draftHeader = nullptr;
+    const GraphDraft *draft            = nullptr;
+    gc_node_ref_t ref                  = kInvalidNodeRef;
+
+    bool isDraft() const { return draft != nullptr; }
+    GCNodeKind kind() const { return isDraft() ? draftHeader->kind : frozen->kind; }
+    Type *dataType() const { return isDraft() ? draftHeader->dataType : frozen->dataType(); }
+    int64_t dataIndex() const { return isDraft() ? draftHeader->dataIndex : frozen->dataIndex; }
+    bool hasPayload() const {
+        return isDraft() ? !draft->payloadOf(ref).empty() : frozen->hasPayload();
+    }
+};
+
+NodeView viewOf(const Handle *handle, const char *site) {
+    NodeView view;
+    if (const GraphDraft *draft = handle->draft()) {
+        view.draft       = draft;
+        view.ref         = handle->index();
+        view.draftHeader = draft->header(view.ref);
+        if (view.draftHeader == nullptr || !draft->alive(view.ref) ||
+            view.draftHeader->kind == GCNodeKind::Dead) {
+            err::throwRuntimeFault(
+                err::RuntimeDiag::InvalidArgument,
+                site,
+                "the node is not in its graph");
+        }
+        return view;
+    }
+    view.frozen = &nodeOfFrozen(handle, site);
+    return view;
 }
 
 Handle *graphHandle(const Program *program, GraphId graph) {
@@ -116,6 +168,21 @@ Handle *graphHandle(const Program *program, GraphId graph) {
 
 Handle *nodeHandle(const Program *program, GraphId graph, uint32_t node) {
     return Handle::create(HandleKind::Node, program, graph, node, nullptr, mm::autoSpace());
+}
+
+/// The handle of a node read from `from`: the same draft when `from` names one, otherwise the
+/// same program and graph.
+Handle *nodeHandle(const Handle *from, gc_node_ref_t node) {
+    if (const GraphDraft *draft = from->draft()) {
+        return Handle::createInDraft(*draft, node, mm::autoSpace());
+    }
+    return Handle::create(
+        HandleKind::Node,
+        from->program(),
+        from->graph(),
+        node,
+        nullptr,
+        mm::autoSpace());
 }
 
 /// An array of the handles in `items`, of the array type of `kind`.
@@ -128,7 +195,9 @@ slot_t handleArray(HandleKind kind, const std::vector<Handle *> &items) {
     return toSlot(array);
 }
 
-slot_t stringSlot(std::string_view text) { return toSlot(String::from(std::string(text), mm::autoSpace())); }
+slot_t stringSlot(std::string_view text) {
+    return toSlot(String::from(std::string(text), mm::autoSpace()));
+}
 
 /// The result type `T?` for a handle type or a scalar.
 TupleType *nullableOf(Type *payload) { return TupleType::nullable(payload); }
@@ -148,7 +217,10 @@ slot_t rootKernel(ArgsView &, ArgsView &norm, Context &) {
     const Program *program = programArg(norm, 0);
     const GCGraph *root    = program->root();
     if (root == nullptr) {
-        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, "graph.root", "the program has no root");
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.root",
+            "the program has no root");
     }
     return toSlot(graphHandle(program, root->id()));
 }
@@ -175,21 +247,29 @@ slot_t nodesKernel(ArgsView &, ArgsView &norm, Context &) {
 // ---- a node ----
 
 slot_t inputsOf(ArgsView &norm, const char *site, int group) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCGraph &graph = graphOf(handle, site);
-    nodeOf(handle, site);
-    const std::span<const camel::runtime::gc_node_ref_t> refs =
-        group == 0   ? graph.normInputsOf(handle->index())
-        : group == 1 ? graph.withInputsOf(handle->index())
-                     : graph.ctrlInputsOf(handle->index());
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView view = viewOf(handle, site);
+    std::span<const gc_node_ref_t> refs;
+    if (view.isDraft()) {
+        refs = group == 0   ? view.draft->normInputsOf(view.ref)
+               : group == 1 ? view.draft->withInputsOf(view.ref)
+                            : view.draft->ctrlInputsOf(view.ref);
+    } else {
+        const GCGraph &graph = graphOf(handle, site);
+        refs                 = group == 0   ? graph.normInputsOf(handle->index())
+                               : group == 1 ? graph.withInputsOf(handle->index())
+                                            : graph.ctrlInputsOf(handle->index());
+    }
     std::vector<Handle *> items;
     for (auto ref : refs) {
-        items.push_back(nodeHandle(handle->program(), handle->graph(), ref));
+        items.push_back(nodeHandle(handle, ref));
     }
     return handleArray(HandleKind::Node, items);
 }
 
-slot_t inputsKernel(ArgsView &, ArgsView &norm, Context &) { return inputsOf(norm, "graph.inputs", 0); }
+slot_t inputsKernel(ArgsView &, ArgsView &norm, Context &) {
+    return inputsOf(norm, "graph.inputs", 0);
+}
 slot_t withInputsKernel(ArgsView &, ArgsView &norm, Context &) {
     return inputsOf(norm, "graph.with_inputs", 1);
 }
@@ -202,69 +282,97 @@ slot_t ctrlInputsKernel(ArgsView &, ArgsView &norm, Context &) {
 /// The nodes that read the value of node `n` (as an ordinary or a with input), once each, in
 /// NodeId order.
 slot_t valueUsersKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCGraph &graph = graphOf(handle, "graph.value_users");
-    nodeOf(handle, "graph.value_users");
-    std::vector<camel::runtime::gc_node_ref_t> users;
-    for (auto refs : {graph.normOutputsOf(handle->index()), graph.withOutputsOf(handle->index())}) {
-        users.insert(users.end(), refs.begin(), refs.end());
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView view = viewOf(handle, "graph.value_users");
+    std::vector<gc_node_ref_t> users;
+    if (view.isDraft()) {
+        for (auto refs : {view.draft->normUsersOf(view.ref), view.draft->withUsersOf(view.ref)}) {
+            users.insert(users.end(), refs.begin(), refs.end());
+        }
+    } else {
+        const GCGraph &graph = graphOf(handle, "graph.value_users");
+        for (auto refs :
+             {graph.normOutputsOf(handle->index()), graph.withOutputsOf(handle->index())}) {
+            users.insert(users.end(), refs.begin(), refs.end());
+        }
     }
     std::sort(users.begin(), users.end());
     users.erase(std::unique(users.begin(), users.end()), users.end());
     std::vector<Handle *> items;
     for (auto ref : users) {
-        items.push_back(nodeHandle(handle->program(), handle->graph(), ref));
+        items.push_back(nodeHandle(handle, ref));
     }
     return handleArray(HandleKind::Node, items);
 }
 
 /// Whether the node is a constant: a DATA node whose value is a static slot of the graph.
 slot_t isConstantKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle = norm.get<Handle *>(0);
-    const GCNode &node = nodeOf(handle, "graph.is_constant");
-    return toSlot<Bool>(node.kind == GCNodeKind::Data && node.dataIndex < 0);
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.is_constant");
+    return toSlot<Bool>(node.kind() == GCNodeKind::Data && node.dataIndex() < 0);
 }
 
 slot_t usersKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCGraph &graph = graphOf(handle, "graph.users");
-    nodeOf(handle, "graph.users");
-    std::vector<camel::runtime::gc_node_ref_t> users;
-    for (auto refs :
-         {graph.normOutputsOf(handle->index()),
-          graph.withOutputsOf(handle->index()),
-          graph.ctrlOutputsOf(handle->index())}) {
-        users.insert(users.end(), refs.begin(), refs.end());
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView view = viewOf(handle, "graph.users");
+    std::vector<gc_node_ref_t> users;
+    if (view.isDraft()) {
+        for (auto refs :
+             {view.draft->normUsersOf(view.ref),
+              view.draft->withUsersOf(view.ref),
+              view.draft->ctrlUsersOf(view.ref)}) {
+            users.insert(users.end(), refs.begin(), refs.end());
+        }
+    } else {
+        const GCGraph &graph = graphOf(handle, "graph.users");
+        for (auto refs :
+             {graph.normOutputsOf(handle->index()),
+              graph.withOutputsOf(handle->index()),
+              graph.ctrlOutputsOf(handle->index())}) {
+            users.insert(users.end(), refs.begin(), refs.end());
+        }
     }
     std::sort(users.begin(), users.end());
     users.erase(std::unique(users.begin(), users.end()), users.end());
     std::vector<Handle *> items;
     for (auto ref : users) {
-        items.push_back(nodeHandle(handle->program(), handle->graph(), ref));
+        items.push_back(nodeHandle(handle, ref));
     }
     return handleArray(HandleKind::Node, items);
 }
 
 slot_t kindKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle = norm.get<Handle *>(0);
-    const GCNode &node = nodeOf(handle, "graph.kind");
-    const auto tag     = nodeKindTag(node.kind);
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.kind");
+    const auto tag      = nodeKindTag(node.kind());
     if (!tag) {
-        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, "graph.kind", "the node has no kind a program shows");
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            "graph.kind",
+            "the node has no kind a program shows");
     }
     return toSlot(Variant::create(*tag, 0, mm::autoSpace()));
 }
 
 /// The operator of an OPER node, null for any other node.
 slot_t opKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCNode &node   = nodeOf(handle, "graph.op");
-    const GCGraph &graph = graphOf(handle, "graph.op");
-    if (node.kind != GCNodeKind::Oper || !node.hasPayload()) {
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.op");
+    if (node.kind() != GCNodeKind::Oper || !node.hasPayload()) {
         return NullSlot;
     }
-    const auto *body = graph.nodeBodyAs<GCOperBody>(handle->index());
-    Handle *op = Handle::create(HandleKind::Op, nullptr, GraphId::Invalid, body->oper, nullptr, mm::autoSpace());
+    camel::core::OperId oper = camel::core::kNoOper;
+    if (node.isDraft()) {
+        const auto bytes = node.draft->payloadOf(node.ref);
+        if (bytes.size() < sizeof(GCOperBody)) {
+            return NullSlot;
+        }
+        oper = reinterpret_cast<const GCOperBody *>(bytes.data())->oper;
+    } else {
+        oper = graphOf(handle, "graph.op").nodeBodyAs<GCOperBody>(handle->index())->oper;
+    }
+    Handle *op =
+        Handle::create(HandleKind::Op, nullptr, GraphId::Invalid, oper, nullptr, mm::autoSpace());
     return makeSome(toSlot(op), nullableOf(HandleType::get(HandleKind::Op)));
 }
 
@@ -273,21 +381,32 @@ slot_t opNameKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 slot_t isPureKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCNode &node   = nodeOf(handle, "graph.is_pure");
-    const GCGraph &graph = graphOf(handle, "graph.is_pure");
-    const bool pure      = node.kind == GCNodeKind::Oper && node.hasPayload() &&
-                      OperatorTable::instance().isPure(graph.nodeBodyAs<GCOperBody>(handle->index())->oper);
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.is_pure");
+    bool pure           = false;
+    if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
+        camel::core::OperId oper = camel::core::kNoOper;
+        if (node.isDraft()) {
+            const auto bytes = node.draft->payloadOf(node.ref);
+            if (bytes.size() >= sizeof(GCOperBody)) {
+                oper = reinterpret_cast<const GCOperBody *>(bytes.data())->oper;
+            }
+        } else {
+            oper = graphOf(handle, "graph.is_pure").nodeBodyAs<GCOperBody>(handle->index())->oper;
+        }
+        pure = OperatorTable::instance().isPure(oper);
+    }
     return toSlot<Bool>(pure);
 }
 
 slot_t typeOfKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle = norm.get<Handle *>(0);
-    Type *type         = nodeOf(handle, "graph.type_of").dataType();
+    Type *type         = viewOf(handle, "graph.type_of").dataType();
     if (type == nullptr) {
         return NullSlot;
     }
-    Handle *ref = Handle::create(HandleKind::TypeRef, nullptr, GraphId::Invalid, 0, type, mm::autoSpace());
+    Handle *ref =
+        Handle::create(HandleKind::TypeRef, nullptr, GraphId::Invalid, 0, type, mm::autoSpace());
     return makeSome(toSlot(ref), nullableOf(HandleType::get(HandleKind::TypeRef)));
 }
 
@@ -295,10 +414,15 @@ slot_t typeNameKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(norm.get<Handle *>(0)->typeRef()->toString());
 }
 
-/// The graph a CALL or FUNC node names, null for any other node.
+/// The graph a CALL or FUNC node names, null for any other node. A node of the draft being
+/// rewritten names no graph: a draft is not a published version, so a condition cannot follow a
+/// call (and a rule's pattern cannot match one).
 slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCNode &node   = nodeOf(handle, "graph.callee");
+    const auto *handle = norm.get<Handle *>(0);
+    if (handle->draft() != nullptr) {
+        return NullSlot;
+    }
+    const GCNode &node   = nodeOfFrozen(handle, "graph.callee");
     const GCGraph &graph = graphOf(handle, "graph.callee");
     if (node.kind != GCNodeKind::Call && node.kind != GCNodeKind::Func) {
         return NullSlot;
@@ -307,24 +431,34 @@ slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     if (!isValid(callee) || handle->program()->graph(callee) == nullptr) {
         return NullSlot;
     }
-    return makeSome(toSlot(graphHandle(handle->program(), callee)), nullableOf(HandleType::get(HandleKind::Graph)));
+    return makeSome(
+        toSlot(graphHandle(handle->program(), callee)),
+        nullableOf(HandleType::get(HandleKind::Graph)));
 }
 
 slot_t tagsKernel(ArgsView &, ArgsView &norm, Context &) {
     const auto *handle   = norm.get<Handle *>(0);
-    nodeOf(handle, "graph.tags");
-    const GCGraph &graph = graphOf(handle, "graph.tags");
-    return stringSlot(camel::core::attr::text(graph.nodeAttrs(handle->index())));
+    const NodeView node  = viewOf(handle, "graph.tags");
+    const uint32_t attrs = node.isDraft()
+                               ? node.draft->nodeAttrs(node.ref)
+                               : graphOf(handle, "graph.tags").nodeAttrs(handle->index());
+    return stringSlot(camel::core::attr::text(attrs));
 }
 
-/// Whether the node anchors its graph: its exit, output or return node. A rewrite keeps such a node; a transaction does not replace or erase it.
+/// Whether the node anchors its graph: its exit, output or return node. A rewrite keeps such a
+/// node; a transaction does not replace or erase it.
 slot_t isAnchorKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    nodeOf(handle, "graph.is_anchor");
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.is_anchor");
+    const auto ref      = handle->index();
+    if (node.isDraft()) {
+        const GraphDraft &draft = *node.draft;
+        return toSlot<Bool>(
+            ref == draft.exitNode() || ref == draft.outputNode() || ref == draft.returnNode());
+    }
     const GCGraph &graph = graphOf(handle, "graph.is_anchor");
-    const auto ref       = handle->index();
-    bool anchor = ref == graph.exitNodeRef() || ref == graph.outputNodeRef() ||
-                  ref == graph.returnNodeRef();
+    bool anchor =
+        ref == graph.exitNodeRef() || ref == graph.outputNodeRef() || ref == graph.returnNodeRef();
     return toSlot<Bool>(anchor);
 }
 
@@ -334,10 +468,15 @@ slot_t isAnchorKernel(ArgsView &, ArgsView &norm, Context &) {
 /// version is the same.
 slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
     static std::mutex mutex;
-    static std::map<std::pair<const GCGraph *, uint64_t>, std::shared_ptr<camel::runtime::WrittenSlots>>
-        cache;
-    const auto *handle = norm.get<Handle *>(0);
-    nodeOf(handle, "graph.is_written_slot");
+    static std::
+        map<std::pair<const GCGraph *, uint64_t>, std::shared_ptr<camel::runtime::WrittenSlots>>
+            cache;
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.is_written_slot");
+    if (node.isDraft()) {
+        // The draft changes in place, so there is no version to cache an answer under.
+        return toSlot<Bool>(camel::runtime::WrittenSlots(*node.draft)(node.ref));
+    }
     const GCGraph &graph = graphOf(handle, "graph.is_written_slot");
     std::shared_ptr<camel::runtime::WrittenSlots> written;
     {
@@ -349,7 +488,8 @@ slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
                 cache.clear();
             }
             const auto draft = camel::runtime::GraphDraft::decode(*handle->program(), &graph);
-            found = cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(*draft)).first;
+            found =
+                cache.emplace(key, std::make_shared<camel::runtime::WrittenSlots>(*draft)).first;
         }
         written = found->second;
     }
@@ -357,24 +497,44 @@ slot_t isWrittenSlotKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 slot_t originKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle = norm.get<Handle *>(0);
-    nodeOf(handle, "graph.origin");
-    return toSlot<Int64>(static_cast<int64_t>(graphOf(handle, "graph.origin").nodeOrigin(handle->index())));
+    const auto *handle    = norm.get<Handle *>(0);
+    const NodeView node   = viewOf(handle, "graph.origin");
+    const uint64_t origin = node.isDraft()
+                                ? node.draft->nodeOrigin(node.ref)
+                                : graphOf(handle, "graph.origin").nodeOrigin(handle->index());
+    return toSlot<Int64>(static_cast<int64_t>(origin));
 }
 
 /// The value of a node that holds a constant of the type of the second argument (a sample of the
 /// type; its value is not read), null for any other node.
 slot_t constantKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCNode &node   = nodeOf(handle, "graph.constant");
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.constant");
+    Type *wanted        = norm.type(1);
+    const Type *type    = node.dataType();
+    const auto index    = static_cast<int64_t>(-node.dataIndex());
+    if (node.kind() != GCNodeKind::Data || type == nullptr || type->code() != wanted->code() ||
+        node.dataIndex() >= 0 ||
+        !(node.isDraft()
+              ? node.draft->normInputsOf(node.ref).empty()
+              : graphOf(handle, "graph.constant").normInputsOf(handle->index()).empty()) ||
+        !(node.isDraft()
+              ? node.draft->withInputsOf(node.ref).empty()
+              : graphOf(handle, "graph.constant").withInputsOf(handle->index()).empty()) ||
+        !(node.isDraft()
+              ? node.draft->ctrlInputsOf(node.ref).empty()
+              : graphOf(handle, "graph.constant").ctrlInputsOf(handle->index()).empty())) {
+        return NullSlot;
+    }
+    if (node.isDraft()) {
+        const auto slots = node.draft->staticSlots();
+        if (static_cast<size_t>(index) >= slots.size()) {
+            return NullSlot;
+        }
+        return makeSome(slots[index], nullableOf(wanted));
+    }
     const GCGraph &graph = graphOf(handle, "graph.constant");
-    Type *wanted         = norm.type(1);
-    const Type *type     = node.dataType();
-    const auto index     = static_cast<int64_t>(-static_cast<int64_t>(node.dataIndex));
-    if (node.kind != GCNodeKind::Data || type == nullptr || type->code() != wanted->code() ||
-        node.dataIndex >= 0 || !graph.normInputsOf(handle->index()).empty() ||
-        !graph.withInputsOf(handle->index()).empty() || !graph.ctrlInputsOf(handle->index()).empty() ||
-        static_cast<size_t>(index) >= graph.staticSlots().size()) {
+    if (static_cast<size_t>(index) >= graph.staticSlots().size()) {
         return NullSlot;
     }
     return makeSome(graph.staticSlots()[index], nullableOf(wanted));
@@ -402,10 +562,13 @@ slot_t regionOfKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 const GCRegion &regionOf(const Handle *handle, const char *site) {
-    const GCGraph &graph = graphOf(handle, site);
+    const GCGraph &graph   = graphOf(handle, site);
     const GCRegion *region = graph.region(handle->index());
     if (region == nullptr) {
-        err::throwRuntimeFault(err::RuntimeDiag::InvalidArgument, site, "the graph has no such region");
+        err::throwRuntimeFault(
+            err::RuntimeDiag::InvalidArgument,
+            site,
+            "the graph has no such region");
     }
     return *region;
 }
@@ -444,21 +607,30 @@ slot_t regionParentKernel(ArgsView &, ArgsView &norm, Context &) {
 }
 
 slot_t showKernel(ArgsView &, ArgsView &norm, Context &) {
-    const auto *handle   = norm.get<Handle *>(0);
-    const GCNode &node   = nodeOf(handle, "graph.show");
-    const GCGraph &graph = graphOf(handle, "graph.show");
-    std::string text     = "%" + std::to_string(handle->index()) + " ";
-    const auto tag       = nodeKindTag(node.kind);
+    const auto *handle  = norm.get<Handle *>(0);
+    const NodeView node = viewOf(handle, "graph.show");
+    std::string text    = "%" + std::to_string(handle->index()) + " ";
+    const auto tag      = nodeKindTag(node.kind());
     text += tag ? nodeKindName(*tag) : "?";
-    if (node.kind == GCNodeKind::Oper && node.hasPayload()) {
-        text += " " + std::string(graph.nodeBodyAs<GCOperBody>(handle->index())->uri());
+    if (node.kind() == GCNodeKind::Oper && node.hasPayload()) {
+        if (node.isDraft()) {
+            const auto bytes = node.draft->payloadOf(node.ref);
+            if (bytes.size() >= sizeof(GCOperBody)) {
+                text +=
+                    " " + std::string(reinterpret_cast<const GCOperBody *>(bytes.data())->uri());
+            }
+        } else {
+            text +=
+                " " +
+                std::string(
+                    graphOf(handle, "graph.show").nodeBodyAs<GCOperBody>(handle->index())->uri());
+        }
     }
     if (const Type *type = node.dataType()) {
         text += " : " + type->toString();
     }
     return stringSlot(text);
 }
-
 
 // ---- the tables ----
 
@@ -472,7 +644,7 @@ struct ReadOp {
 const std::vector<ReadOp> &readOps() {
     static const std::vector<ReadOp> ops = [] {
         const auto handle = [](HandleKind kind) -> Type * { return HandleType::get(kind); };
-        const auto array  = [&](HandleKind kind) -> Type * {
+        const auto array  = [&](HandleKind kind) -> Type  *{
             return ArrayType::create(HandleType::get(kind));
         };
         const auto maybe = [&](HandleKind kind) -> Type * {
@@ -506,7 +678,10 @@ const std::vector<ReadOp> &readOps() {
             {"show", showKernel, node, Type::String()},
             {"region_of", regionOfKernel, node, maybe(HandleKind::Region)},
             {"region_kind", regionKindKernel, handle(HandleKind::Region), regionKindType()},
-            {"region_parent", regionParentKernel, handle(HandleKind::Region), maybe(HandleKind::Region)},
+            {"region_parent",
+             regionParentKernel,
+             handle(HandleKind::Region),
+             maybe(HandleKind::Region)},
         };
     }();
     return ops;
@@ -518,23 +693,25 @@ const std::vector<oper_group_ptr_t> &readGroups() {
     static const std::vector<oper_group_ptr_t> groups = [] {
         std::vector<oper_group_ptr_t> out;
         for (const ReadOp &op : readOps()) {
-            out.push_back(OperatorGroup::create(
-                op.name,
-                {{std::string("graph:") + op.name,
-                  StaticFuncTypeResolver::create({}, {{op.param, false}}, op.result)}}));
+            out.push_back(
+                OperatorGroup::create(
+                    op.name,
+                    {{std::string("graph:") + op.name,
+                      StaticFuncTypeResolver::create({}, {{op.param, false}}, op.result)}}));
         }
-        out.push_back(OperatorGroup::create(
-            "constant",
-            {{"graph:constant",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {2, {false, false}}},
-                  "(n: Node, sample: T) => T?, T a number, bool or string",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (!HandleType::is(norm[0], HandleKind::Node) || !constantType(norm[1]))
-                          return std::nullopt;
-                      return TupleType::nullable(norm[1]);
-                  })}}));
+        out.push_back(
+            OperatorGroup::create(
+                "constant",
+                {{"graph:constant",
+                  DynamicFuncTypeResolver::create(
+                      {{0, {}}, {2, {false, false}}},
+                      "(n: Node, sample: T) => T?, T a number, bool or string",
+                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                          -> std::optional<Type *> {
+                          if (!HandleType::is(norm[0], HandleKind::Node) || !constantType(norm[1]))
+                              return std::nullopt;
+                          return TupleType::nullable(norm[1]);
+                      })}}));
         return out;
     }();
     return groups;
@@ -553,4 +730,3 @@ const std::unordered_map<std::string, operator_t> &readKernels() {
 }
 
 } // namespace camel::graphmod
-

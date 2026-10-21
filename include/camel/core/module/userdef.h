@@ -73,6 +73,9 @@ class UserDefinedModule : public Module {
     // Set while compileAsProgram() builds: the graph of that program is not the graph the
     // module was loaded as part of, so setProgramGraph must not replace it.
     bool buildingProgramOfItsOwn_ = false;
+    // Whether this module is the context's entry module, whose own program compile() builds
+    // after any program of its own a pass needed.
+    bool isTheProgramBeingCompiled() const;
 
   public:
     UserDefinedModule(
