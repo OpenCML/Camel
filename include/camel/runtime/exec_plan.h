@@ -137,8 +137,9 @@ class ExecPlan {
     std::vector<uint32_t> directCallArgOffsets;
     std::vector<gc_data_idx_t> directCallArgSlots;
     /// For the BRCH at topo index i, branchArmEntries[branchArmEntryOffsets[i] + arm] is the node
-    /// where that arm starts executing: its first executable node in `topo`, or the JOIN when
-    /// the arm has nothing to execute.
+    /// where that arm starts executing: its first node in `topo` (whatever that node does; the
+    /// events of a loop that starts there run before it), or the JOIN when the arm has nothing to
+    /// execute.
     std::vector<uint32_t> branchArmEntryOffsets;
     std::vector<gc_node_ref_t> branchArmEntries;
     /// The same for where the arm ends: the last node of the arm in `topo`; the JOIN when the arm
