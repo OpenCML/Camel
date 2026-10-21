@@ -1,0 +1,12 @@
+/**
+ * The declaration of `re:test` takes two ordinary arguments: a single one is refused at the
+ * call, and the overload the message lists is the declaration's (handover H19, step 10).
+ */
+module re_arity
+
+import { test } from re
+
+func main(): int sync {
+    println(test('a'))
+    return 0
+}

@@ -1,0 +1,12 @@
+// The declarations of the operators of the C++ module `modules/re` (design principles 6.4;
+// handover H19, step 10). This file is the one source of their signatures; the C++ side keeps
+// the kernel, the executor and the operator traits. A declaration names `re:<function>` by
+// convention, so no `#op` tag is needed.
+
+module re
+
+/// Whether the regular expression (ECMAScript syntax) matches somewhere in text.
+/// @pure
+/// @fails fault `RegexInvalid` when pattern is not a regular expression
+/// @example test('[0-9]+', 'room 42')    // true
+export func test(pattern: string, text: string): bool
