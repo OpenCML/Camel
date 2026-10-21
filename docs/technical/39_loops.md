@@ -212,6 +212,9 @@ the first round sit at that position. An entry chosen past it would skip the eve
 round would run with unbound ports and the loop would lose it (the bug H45 fixed). Every back end
 that jumps to an arm entry — NodeVM, FastVM/JIT, Taskflow, the macro evaluator — starts at the
 range's first node, so a loop in an arm gives the value of the same loop in the function body.
+A loop inside another loop's body that is itself in an arm, and an arm that holds a loop and
+another `if`, are the same: each loop's condition and body are regions of where the loop is, and
+the commit refuses a graph where they are not (`17_graph_rewrite_api_contracts.md`, 4.1).
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
 function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
@@ -282,9 +285,11 @@ sync bodies with effects).
 (section 4): the whole `then` and `else` arm, a `while`, two values of state, statements after the
 loop in the arm, an `if` in the body, a `match` arm, two loops in two arms, a collecting loop, a
 loop in the root graph's arm, and the edges (no round, `for … while`, a loop inside a loop's body,
-a macro function's arm, a value computed in the arm) — every value the one the loop gives in the
-function body, on `std::nvm`, `std::fvm`, `std::jit` (compiled, also without inlining), `std::prl`
-(also `bytecode=false`) and `std::macro`.
+a loop of a loop in an arm, an arm holding a loop and another `if`, a macro function's arm, a
+value computed in the arm) — every value the one the loop gives in the function body, on
+`std::nvm`, `std::fvm`, `std::jit` (compiled, also without inlining), `std::prl`
+(also `bytecode=false`) and `std::macro`. `loops_in_arms.regions` is the commit-time check that a
+loop's condition and body are regions of where the loop is (section 4).
 
 `test/plans/feat/linear/loop_collect.plan.toml` covers collection slots through two test-only
 passes (`test::loop_collect`, `test::loop_collect_summary`, enabled by
