@@ -165,6 +165,7 @@
 
 | 编号 | 任务 | 前提 | 状态 |
 |---|---|---|---|
+| H107 | H2 第 6 项剩下的部分：删除关键字 `inner`、`outer`、`atomic`、`shared`，标准库签名里的 `inner func` 改为无函数体的声明 | 无 | **已完成**（报告 reports/H107.md；四个词都没有替代标签——原生实现是模块里无函数体的 `export func`，模块私有辅助函数是不导出的 `func`，外部实现由模块系统表达，“整体不展开”是 `#kernel` 一类标签、`atomic` 没有对应标签，数据共享由不可变数据取代；词法表 45→41，`ImplMark` 与 `Modifier::Atomic/Shared` 整个删除，产生式 121→120；`stdlib/signatures` 381 条 `inner func`（381 条带占位 URI 函数体、0 条真辅助函数）→ 381 条无函数体 `export func`，204 条 `#op`、177 条默认 URI、34 条 `with`，`inner` 计数 0；不新增诊断，旧写法就是 `SyntaxDiag::UnexpectedToken`；`feat/parse` 57/57、`feat/compile` 988/988、`feat/modules` 1040 通过 + 1 跳过、`feat/linear` 723/723、`smoke` 10/10、`stdlib-reference --verify-ops` 343 条一致；`math_functions.cml` 的 `std::jgir` 前后 SHA-256 相同） |
 | H99 | **同一规则用例在 Debug 与 Release 下重写计数不同**（H82 §6.2 的 `rules.typed_element_laws_fire`）：查清构建配置为何改变规则库落点，并让配置不再参与 | 无 | **已完成**（报告 reports/H99.md；根因是 f32 字面量只写 `slot_t` 低 4 字节、高 4 字节未初始化（Debug 残留 `0x00007382`，Release 为零），而模式常量、`constantOf` 与 `NodeKey` 按整槽比较；`float32_fold` 算出的 `1.0` 高位为零，`float32_mul_one` 只在 Release 触发。修复：`makeSlotFromPrimitiveData` 零初始化，并在重写边界按类型规范化常量位（保留 `-0.0`/NaN 位型）；不改规则库与期望。Debug/Release `feat/modules/rules` 均 67/67，同一用例完整输出 `diff` 为空；Release `smoke` 10/10、`feat/opt` 768/769，唯一失败 `fold_struct_cast.in_return_position` 在基线 Debug/Release 上同样失败，与本任务无关） |
 | H87 | 张量定律（H65 的下一步）：元素族定律的张量版、`c1*t + c2*t`、`(t*c1)*c2`、`t+t`、裸项 `t*c + t`，以及元素族补裸项；让 `algebra_tensor.cml` 的 merged、merged_explicit、shared_product 在 `rules::simplify` 下与 `std::opt::algebra` 等算符多重集；两个待定项（`x*c + x`、`safe_fp` 的严格策略）按作者裁定处理 | 无 | **已完成**（报告 reports/H87.md；规则库 64 → 92 条，`check` 92/92；新增 `rules.tensor_laws_counts` 等 12 条与 `algebra.plan.toml` 五条；三例多重集相同、四个后端值相同；`feat/modules/rules` 67/67、`feat/opt` + `feat/linear` 1403/1403、`smoke` 全绿。`algebra.cpp` 未删：只剩张量零定律一族与注册替代，见报告 §6） |
 | H75 | **H71 扫描的 16 个 GPU/Tiles 红灯**：逐个复现并按实际失败分组，判定回归／过期期望／未实现，修小回归、其余写进计划与待决 | 无 | **已完成**（报告 reports/H75.md；8 个真回归在 `modules/tiles/src/compiler.cpp`：结构体 `CAST`（`44137514` 名义结构体后匿名值落到命名位置会留下 `CAST`，Tiles 只认张量目标）与多状态 LOOP 把 `FILL` 模板常量当捕获（`60ab7619`/`c912ea15`，`externalInputs(true)`→`false`）；`core_view_maps` 改测试形态（`grad` 绑到 wrapper 外）、`static_regions`/`multi_state_loop_boundaries` 改期望并注计划、`resident_fallback_fault` 的计划期望与 `docs/cli.md` 冲突（运行期故障在标准输出，故障未被吞）已改计划、`extrema_canonical_bits` 是负载误红（单独 9 s）；全量 GPU/Tiles 135/135。第 3 项（核心的循环降低是否也把常量排除在捕获外）已由 H91 按"常量不是捕获"完成：`LoopView`/`LoopDraftView::externalInputs` 的默认写成"构建期已知的值不算"，并有用例钉住，见 reports/H91.md） |
@@ -247,7 +248,7 @@
 | H4 | 已裁定未开工的小项 | 各小项另注 | **已完成**（H4a `37e447a6`、H4b `0581d473`、H4c/H4f `e6d20306`、H4d `45bbdc14`+`638b6893`、H4e `1ad52472`；报告 reports/H4.md） |
 | H6 | 地基遗留 | 无 | **部分完成**（第 3、4、6、7 项已完成 `e954fe90`；第 5 项由 H80 完成，见 reports/H80.md；第 2 项由 H85 与 H95 完成（traits 与 `#independent` 已做；控制边约简已收到 `std::opt::ctrl`，H85 的“多一次复制”归因被 H95 的测量推翻，见 reports/H95.md），见 reports/H85.md；第 1 项未做；报告 reports/H6.md） |
 | H12 | 拆分建图器（纯搬移） | H11 之后 | **已完成**（10 个纯搬移提交；报告 reports/H12.md） |
-| H2 | 标签机制与数值许可改为标签 | 无 | **部分完成**（第 1–5、7、8 项完成：第 1–3、7、8 项在 `856af859`，第 4 项 `7b4147c1`（许可是标签、默认按 7.3、`#strict` 经 `effectivePermissions` 清空全部许可、删除 `@numeric(...)`），第 5 项在本分支（`@vjp` 改为 `#vjp<rule>` 声明标签、规则是图引用 `kGraphRefRule`、删除宏求值与 `attachRule`）；第 6 项 `#macro` 未做；报告 reports/H77.md） |
+| H2 | 标签机制与数值许可改为标签 | 无 | **已完成**（第 1–5、7、8 项完成：第 1–3、7、8 项在 `856af859`，第 4 项 `7b4147c1`（许可是标签、默认按 7.3、`#strict` 经 `effectivePermissions` 清空全部许可、删除 `@numeric(...)`），第 5 项在本分支（`@vjp` 改为 `#vjp<rule>` 声明标签、规则是图引用 `kGraphRefRule`、删除宏求值与 `attachRule`）；第 6 项已完成（`#macro` 见 reports/H97.md，删除 `inner`/`outer`/`atomic`/`shared` 见 reports/H107.md）；报告 reports/H77.md） |
 | H7 | 资源与副作用 | H2 | **未开始** |
 | H5 | 命名类型 | H1 | **已完成**（`afe8ab45` 检查通过；H5b `6e54035c`、H5c `ebb57244`、H5d `2e6dcb22`；报告 reports/H5.md） |
 | H13 | 官方示例第一批 | 无 | **部分完成**（C1、C2、C6、D5 已入 `40f46bda`、`707d8a12`；D4 未做；报告 reports/H13.md） |
@@ -326,11 +327,11 @@ let area = match b {
 3. **节点标签**（`on nodes`）用现有的节点属性实现：区域上的事实累积，同名带参的内层为准。**声明标签**（`on func`、`on type`、`on field`）存在声明上，C++ 查询接口可读；编译期代码中的读取（`match type`、`fields`）随泛型第一期接入，本任务只提供存储与 C++ 查询。
 4. **数值许可改为标签，默认值按设计原则 7.4**：`reassociate`、`contract` 默认授予，其余用标签授予；新增标签 `#strict`（不使用任何许可，含默认许可）；核心的 `NumericPolicy` 以 7.3 为默认策略，安全模式参数即严格策略。标准库把 `reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals` 声明为 `on nodes` 的标签，`finite_math` 为别名组。删除编译器前端的 `numeric` 分支与名单、`@name(...)` 写法（旧写法给出指向 `#[reassociate]` 的诊断）、一字节许可列；核心语义层通过节点标签读取许可（标签与含义的对应只在一处）；所有读者（算式优化、`tensor::fuse`、`inspect`、`std::jgir`、Tiles）改为同一个辅助函数。Tiles 只改到能编译。
 5. **`@vjp` 改为 `#vjp<rule>`**（声明标签，值为规则函数的图引用），自动微分直接读取，删除靠宏求值与 `attachRule` 的做法。
-6. **`macro` 改为标准标签 `#macro`**（不用导入）：`std::macro` 读标签，含义按设计原则第 8 节不变；求值失败按运行时故障处理，与任何遍运行中的故障相同；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。**已完成（`#macro` 部分，报告 `reports/H97.md`）**；**未做**：删除关键字 `inner`、`outer`、`atomic`、`shared`，见报告第 8 节。
+6. **`macro` 改为标准标签 `#macro`**（不用导入）：`std::macro` 读标签，含义按设计原则第 8 节不变；求值失败按运行时故障处理，与任何遍运行中的故障相同；删除函数类型中的 `Modifier::Macro`。删除关键字 `inner`、`outer`、`atomic`、`shared`（标准库签名中的 `inner func` 改为无函数体的声明）。**已完成**（`#macro` 见 reports/H97.md；关键字删除与签名迁移见 reports/H107.md）。
 8. **标签可声明读取它的遍**：`tag 名 ... read_by 遍名`（写法可调整，报告中说明）；流水线中没有该遍时给出"标签没有效果"的警告。
 7. 许可、宏、自定义导数的原有测试改为新写法后全部通过；语言参考、标准库参考、诊断目录同步更新。
 
-**剩下什么**：第 6 项的 `#macro` 已完成（报告 `reports/H97.md`）；同一行里的关键字删除 `inner`、`outer`、`atomic`、`shared` 仍未做，见该报告第 8 节。第 4 项由 `7b4147c1` 完成，第 5 项由本分支后续提交完成（报告 reports/H77.md）；第 1–3、7、8 项早已完成（`856af859`）。
+**剩下什么**：第 6 项已完成（`#macro` 见 reports/H97.md，关键字删除见 reports/H107.md）。第 4 项由 `7b4147c1` 完成，第 5 项由本分支后续提交完成（报告 reports/H77.md）；第 1–3、7、8 项早已完成（`856af859`）。
 
 ### H3：依赖节点属性的后续
 
