@@ -72,11 +72,6 @@ slot_t makeSlotFromPrimitiveData(const data_ptr_t &data) {
         return static_cast<slot_t>(boolData->data() ? 1 : 0);
     }
 
-    case TypeCode::Byte: {
-        auto byteData = tt::as_shared<camel::core::data::ByteData>(data);
-        return static_cast<slot_t>(byteData->data());
-    }
-
     case TypeCode::Void: {
         return 0;
     }

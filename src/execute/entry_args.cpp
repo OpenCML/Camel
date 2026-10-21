@@ -622,8 +622,7 @@ void writeEntryResultTo(
                 // (Context::captureProcessExitCode).
                 const bool exitCode = !none && (resultType->code() == TypeCode::Int32 ||
                                                 resultType->code() == TypeCode::Int64 ||
-                                                resultType->code() == TypeCode::Bool ||
-                                                resultType->code() == TypeCode::Byte);
+                                                resultType->code() == TypeCode::Bool);
                 if (path.empty()) {
                     if (!none && !exitCode) {
                         // One piece, like a println: the program's own output is complete by now.

@@ -74,8 +74,7 @@ inline slot_t readPureScalar(const std::byte *bytes, camel::core::type::TypeCode
         std::memcpy(&value, bytes, sizeof(value));
         return toSlot(value);
     }
-    case camel::core::type::TypeCode::Bool:
-    case camel::core::type::TypeCode::Byte: {
+    case camel::core::type::TypeCode::Bool: {
         const uint8_t value = *reinterpret_cast<const uint8_t *>(bytes);
         return toSlot(value);
     }

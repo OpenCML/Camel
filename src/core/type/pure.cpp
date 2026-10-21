@@ -37,7 +37,6 @@ const DataLayout kInt64{8, 8, false, TypeCode::Int64, 0, nullptr, true, false};
 const DataLayout kFloat32{4, 4, false, TypeCode::Float32, 0, nullptr, true, false};
 const DataLayout kFloat64{8, 8, false, TypeCode::Float64, 0, nullptr, true, false};
 const DataLayout kBool{1, 1, false, TypeCode::Bool, 0, nullptr, true, false};
-const DataLayout kByte{1, 1, false, TypeCode::Byte, 0, nullptr, true, false};
 // A complex number is pure data, but its compact bytes are two floating-point numbers, not the
 // bytes of a slot: it is not slot-resident. c64 is 8 bytes and would pass a size-only test;
 // the type-level flag is what keeps `{x: c64}` from taking the bulk-copy path.
@@ -81,7 +80,6 @@ bool computePure(const Type *type) {
     case TypeCode::Float32:
     case TypeCode::Float64:
     case TypeCode::Bool:
-    case TypeCode::Byte:
     case TypeCode::Complex64:
     case TypeCode::Complex128:
         return true;
@@ -176,8 +174,6 @@ const DataLayout *scalarDataLayout(TypeCode code) {
         return &kFloat64;
     case TypeCode::Bool:
         return &kBool;
-    case TypeCode::Byte:
-        return &kByte;
     case TypeCode::Complex64:
         return &kComplex64;
     case TypeCode::Complex128:

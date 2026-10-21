@@ -197,7 +197,6 @@ using Float32 = float;
 using Float64 = double;
 using Float   = Float64;
 using Bool    = bool;
-using Byte    = std::byte;
 
 /** Safe slot printing without dereferencing Object*; used by debug_trace and similar paths that
  * may
@@ -227,9 +226,6 @@ inline void printSlotSafe(std::ostream &os, const slot_t data, camel::core::type
         break;
     case camel::core::type::TypeCode::Bool:
         os << (fromSlot<Bool>(data) ? "true" : "false");
-        break;
-    case camel::core::type::TypeCode::Byte:
-        os << "0x" << std::hex << static_cast<uint64_t>(data) << std::dec;
         break;
     case camel::core::type::TypeCode::Void:
         os << "null";

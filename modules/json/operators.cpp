@@ -147,8 +147,6 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
         return json(fromSlot<Float64>(s));
     case TypeCode::Bool:
         return json(fromSlot<Bool>(s));
-    case TypeCode::Byte:
-        return json(static_cast<int>(static_cast<unsigned>(fromSlot<Byte>(s))));
     case TypeCode::Void:
         return json(nullptr);
     case TypeCode::String: {
@@ -538,7 +536,6 @@ bool jsonTypeEncodable(Type *type) {
     case TypeCode::Float32:
     case TypeCode::Float64:
     case TypeCode::Bool:
-    case TypeCode::Byte:
     case TypeCode::Void:
     case TypeCode::String:
         return true;
