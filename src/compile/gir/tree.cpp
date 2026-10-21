@@ -41,8 +41,8 @@ node_handle_t Builder::expandTreeCall(
     if (ops->resolvers().size() != 1)
         return nullptr;
     const std::string uri = ops->resolvers().front().first;
-    if (uri != "tree:tree_map" && uri != "tree:tree_reduce" && uri != "tree:tree_unzip" &&
-        uri != "tree:tree_paths" && uri != "tree:tree_leaves")
+    if (uri != "ckpt:tree_map" && uri != "ckpt:tree_reduce" && uri != "ckpt:tree_unzip" &&
+        uri != "ckpt:tree_paths" && uri != "ckpt:tree_leaves")
         return nullptr;
     const auto fail = [&](const std::string &path, const std::string &why) -> void {
         diags_->of(SemanticDiag::ArgumentsRejected)
@@ -50,8 +50,8 @@ node_handle_t Builder::expandTreeCall(
             .commit(ops->name(), "tree leaf '" + core::type::tree::displayPath(path) + "'", why);
         throw BuildAbortException();
     };
-    const bool map = uri == "tree:tree_map", reduce = uri == "tree:tree_reduce";
-    const bool unzip = uri == "tree:tree_unzip", paths = uri == "tree:tree_paths";
+    const bool map = uri == "ckpt:tree_map", reduce = uri == "ckpt:tree_reduce";
+    const bool unzip = uri == "ckpt:tree_unzip", paths = uri == "ckpt:tree_paths";
     if ((map && (with.size() != 1 || norm.empty())) ||
         (reduce && (with.size() != 1 || norm.size() != 2)) ||
         (unzip && (!with.empty() || norm.size() != 2)) ||

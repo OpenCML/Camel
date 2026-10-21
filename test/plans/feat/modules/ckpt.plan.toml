@@ -1,7 +1,7 @@
-id = "modules.tree"
+id = "modules.ckpt"
 order = 368
 tier = "fast"
-tags = ["feat", "modules", "tree"]
+tags = ["feat", "modules", "ckpt"]
 
 [[tests]]
 name = "type_directed_map_unzip_and_ordered_reduce"

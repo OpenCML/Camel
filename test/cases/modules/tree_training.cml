@@ -1,7 +1,7 @@
 module tree_training
 import { Tensor, reshape, zeros, sum, abs } from tensor
 import { with_grad } from autodiff
-import { tree_map, tree_reduce, tree_unzip } from tree
+import { tree_map, tree_reduce, tree_unzip } from ckpt
 import { Device, upload, download, run_device } from tiles
 type Model = { weight: Tensor<f32>, nested: (Tensor<f32>, Tensor<f32>) }
 func initialize(): Model {

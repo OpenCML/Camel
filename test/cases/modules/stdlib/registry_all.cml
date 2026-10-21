@@ -22,7 +22,7 @@ import str
 import sys
 import this
 import time
-import tree
+import ckpt
 import tensor
 import array
 

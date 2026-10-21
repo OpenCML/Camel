@@ -64,7 +64,7 @@ const MODULES = [
         source: 'bytes.cml',
         declaration: true,
     },
-    { name: 'tree', title: '`tree`: parameter trees and checkpoints', kind: 'cpp' },
+    { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp' },
     { name: 'tensor', title: '`tensor`: binary conversion', kind: 'cpp', only: ['from_bytes', 'to_bytes'] },
     { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
     { name: 'math', title: '`math`: numbers and bits', kind: 'cpp' },

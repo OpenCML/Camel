@@ -1,6 +1,6 @@
 # 原生训练状态检查点
 
-接口遵循训练设计稿 8.2：`tree::save_tree(dir, state)`、`tree::load_tree::<State>(dir): State!`（2026-10-19 起属于 `tree` 模块，原在 `nn`；设计原则 13.5）。载入目标也可由直接的期望类型推出，如 `let state: State! = load_tree(dir)`。类型参数在编译期解析，运行时没有类型值参数。
+接口遵循训练设计稿 8.2：`tree::save_tree(dir, state)`、`tree::load_tree::<State>(dir): State!`（2026-10-19 起属于 `ckpt` 模块（H108 改名），原在 `nn`；设计原则 13.5）。载入目标也可由直接的期望类型推出，如 `let state: State! = load_tree(dir)`。类型参数在编译期解析，运行时没有类型值参数。
 
 原生库的服务器验收已通过，尚未接替 DDPM 的旧检查点入口。
 
