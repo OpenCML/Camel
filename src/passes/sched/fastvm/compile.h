@@ -70,7 +70,8 @@ using KnownEntryPc = std::function<std::optional<size_t>(camel::runtime::GCGraph
  */
 LinkedBytecodeResult compileAndLinkFrom(
     ctx::context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,
-    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset);
+    const CompileStrategy &opt, const KnownEntryPc &known, size_t baseOffset,
+    bool registerOrigins = true);
 
 /**
  * The same for exactly the graphs listed (in that order), whatever else they reach: for a host
@@ -80,6 +81,6 @@ LinkedBytecodeResult compileAndLinkFrom(
 LinkedBytecodeResult compileAndLinkGraphs(
     ctx::context_ptr_t ctx, const camel::runtime::Program &program,
     std::span<camel::runtime::GCGraph *const> graphs, const CompileStrategy &opt,
-    const KnownEntryPc &known, size_t baseOffset);
+    const KnownEntryPc &known, size_t baseOffset, bool registerOrigins = true);
 
 std::string opCodeToString(const Bytecode &bc, const ctx::context_ptr_t &context);

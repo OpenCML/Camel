@@ -66,22 +66,22 @@ error ParseError: '1_000' is not an integer
 error ParseError: '1_000' is not a number
 [3000000000]
 3000000000
-error InvalidNumberText: Cannot convert the string '3000000000' to i32 (the number is outside its range).
+error ConversionOutOfRange: Cannot convert '3000000000' to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
 3000000000.0
 3000000000
 3000000000.0
 [99999999999999999999]
-error InvalidNumberText: Cannot convert the string '99999999999999999999' to int (the number is outside its range).
-error InvalidNumberText: Cannot convert the string '99999999999999999999' to i32 (the number is outside its range).
+error ConversionOutOfRange: Cannot convert '99999999999999999999' to int: the value is outside the range of int (-9223372036854775808 to 9223372036854775807).
+error ConversionOutOfRange: Cannot convert '99999999999999999999' to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
 1e+20
 error ParseError: '99999999999999999999' is out of the range of an integer
 1e+20
 [.5]
 error InvalidNumberText: Cannot convert the string '.5' to int.
 error InvalidNumberText: Cannot convert the string '.5' to i32.
-0.5
+error InvalidNumberText: Cannot convert the string '.5' to float.
 error ParseError: '.5' is not an integer
-0.5
+error ParseError: '.5' is not a number
 [inf]
 error InvalidNumberText: Cannot convert the string 'inf' to int.
 error InvalidNumberText: Cannot convert the string 'inf' to i32.
@@ -109,6 +109,12 @@ error ParseError: 'Infinity' is not a number
 [1e999]
 error InvalidNumberText: Cannot convert the string '1e999' to int.
 error InvalidNumberText: Cannot convert the string '1e999' to i32.
-error InvalidNumberText: Cannot convert the string '1e999' to float (the number is outside its range).
+error ConversionOutOfRange: Cannot convert '1e999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude).
 error ParseError: '1e999' is not an integer
 error ParseError: '1e999' is out of the range of a number
+[1e-9999]
+error InvalidNumberText: Cannot convert the string '1e-9999' to int.
+error InvalidNumberText: Cannot convert the string '1e-9999' to i32.
+error ConversionOutOfRange: Cannot convert '1e-9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude).
+error ParseError: '1e-9999' is not an integer
+error ParseError: '1e-9999' is out of the range of a number

@@ -24,14 +24,18 @@
  *     ./program --arg n=3 --arg name=hi
  *
  * Each value is read by the parameter's declared type exactly as src/execute/entry_args.cpp
- * reads it (an integer, a number, a complex number in the language's text (`1+2i`, `-2i`),
- * `true`/`false`, the text as it is), the arguments are checked in the order they are written
+ * reads it (an integer, a number token, a complex number in the language's text (`1+2i`, `-2i`;
+ * a real number such as `1.5` is its real part with an imaginary part of zero), `true`/`false`,
+ * the text as it is), the arguments are checked in the order they are written
  * and the first that is wrong is reported, then a parameter given no value is reported, all of
- * them in one report. The reports are those of `camel`, byte for byte (EntryArgumentInvalid,
- * EntryArgumentMissing at the entry function): the compiler renders them into two Sites with the
- * values left as marks (core.h), and they end the program as a fault does (exit code 1, the
- * report on standard output). The translated types are the scalars, the complex numbers
- * included; a parameter of another type is refused when the program is translated.
+ * them in one report. A number text that cannot be read is refused with the sentence of its
+ * cause, rendered from the catalogue (InvalidNumberText when it is not a number,
+ * ConversionOutOfRange when the type cannot hold it, with the range). The reports are those of
+ * `camel`, byte for byte (EntryArgumentInvalid, EntryArgumentMissing at the entry function): the
+ * compiler renders them into Sites with the values left as marks (core.h), and they end the
+ * program as a fault does (exit code 1, the report on standard output). The translated types are
+ * the scalars, the complex numbers included; a parameter of another type is refused when the
+ * program is translated.
  */
 
 #pragma once
@@ -42,8 +46,8 @@
 
 #include <charconv>
 #include <complex>
+#include <concepts>
 #include <cstdint>
-#include <cstdlib>
 #include <initializer_list>
 #include <string>
 #include <string_view>
@@ -54,11 +58,11 @@ namespace camel::standalone {
 /// How the value of a parameter of `main` is read from its text.
 enum class EntryKind {
     Int,   // an integer: an optional `+`, then the digits of an int64 (no range check for i32)
-    Float, // a number strtod reads entirely
-    ComplexFloat,  // a c64: the text of a complex number, its parts read as floats of that width
-    ComplexDouble, // a c128: the same text, its parts read as doubles
-    Bool,          // `true` or `false`
-    Text,          // the text as it is
+    Float, // one number token, read by camel::utils::parseWholeFloat
+    C64,   // a c64: the text of a complex number, its parts read as floats of that width
+    C128,  // a c128: the same text, its parts read as doubles
+    Bool,  // `true` or `false`
+    Text,  // the text as it is
 };
 
 /// A parameter of `main`: its name and how its value is read.
@@ -67,16 +71,31 @@ struct EntryParameter {
     EntryKind kind;
 };
 
+/// The sentences a number parameter's text is refused with, rendered by the compiler from the
+/// diagnostics catalogue with the text left as mark 0 (core.h): InvalidNumberText when the text
+/// is not a number, ConversionOutOfRange when it is a number the parameter's type cannot hold.
+/// A complex parameter has a second ConversionOutOfRange sentence for its imaginary part (the
+/// real part uses `outOfRange`); the other kinds leave these empty.
+struct EntryNumberText {
+    const char *notANumber          = nullptr;
+    const char *outOfRange          = nullptr;
+    const char *outOfRangeImaginary = nullptr;
+};
+
 /// The values the command line gives the parameters of `main` (see the file comment).
 class EntryArguments {
   public:
-    /// Reads `--arg name=value` (also `--arg=name=value`) from the command line. `invalid` and
-    /// `missing` are the reports of EntryArgumentInvalid (values: the argument, why it is
-    /// wrong) and EntryArgumentMissing (values: "parameter" or "parameters", their names).
+    /// Reads `--arg name=value` (also `--arg=name=value`) from the command line. `numberText`
+    /// gives, for each parameter in order, the sentences its number text is refused with (empty
+    /// for a parameter that is not a number; see EntryNumberText). `invalid` and `missing` are
+    /// the reports of EntryArgumentInvalid (values: the argument, why it is wrong) and
+    /// EntryArgumentMissing (values: "parameter" or "parameters", their names).
     EntryArguments(
         int argc, char **argv, std::initializer_list<EntryParameter> parameters,
-        const Site &invalid, const Site &missing)
-        : parameters_(parameters), values_(parameters.size()), given_(parameters.size(), false) {
+        std::initializer_list<EntryNumberText> numberText, const Site &invalid,
+        const Site &missing)
+        : parameters_(parameters), numberText_(numberText), values_(parameters.size()),
+          given_(parameters.size(), false) {
         std::vector<std::string> specs;
         for (int i = 1; i < argc; ++i) {
             const std::string_view arg(argv[i]);
@@ -117,8 +136,8 @@ class EntryArguments {
     /// The value of the parameter at `index`, read by its kind (the one it was declared with).
     int64_t integer(std::size_t index) const { return values_[index].integer; }
     double number(std::size_t index) const { return values_[index].number; }
-    std::complex<float> complexFloat(std::size_t index) const { return values_[index].complexF; }
-    std::complex<double> complexDouble(std::size_t index) const { return values_[index].complexD; }
+    std::complex<float> c64(std::size_t index) const { return values_[index].complexF; }
+    std::complex<double> c128(std::size_t index) const { return values_[index].complexD; }
     bool boolean(std::size_t index) const { return values_[index].boolean; }
     Str text(std::size_t index) const { return Str(values_[index].text); }
 
@@ -132,28 +151,85 @@ class EntryArguments {
         std::string text;
     };
 
-    /// One number as `camel` reads a float parameter: the whole text, by strtod.
-    static bool readNumber(std::string_view text, double &out) {
-        if (text.empty()) {
-            return false;
+    /// What reading a number text gave: the value, or which refusal it is. A complex text has
+    /// one more cause than a real one: its imaginary part.
+    enum class ReadStatus { Ok, NotANumber, OutOfRange, OutOfRangeImaginary };
+
+    /// One integer as `camel` reads one: the language's whole-token integer parser.
+    static ReadStatus readInteger(std::string_view text, int64_t &out) {
+        switch (camel::utils::parseWholeInteger<int64_t>(text, out)) {
+        case camel::utils::NumberTextStatus::Ok:
+            return ReadStatus::Ok;
+        case camel::utils::NumberTextStatus::OutOfRange:
+            return ReadStatus::OutOfRange;
+        default:
+            return ReadStatus::NotANumber;
         }
-        const std::string copy(text);
-        char *end = nullptr;
-        out       = std::strtod(copy.c_str(), &end);
-        return end == copy.c_str() + copy.size();
+    }
+
+    /// One number as `camel` reads one: the language's whole-token float parser (camel/utils/
+    /// number_text.h), not strtod's wider grammar. No hexadecimal form, no `Infinity`, no
+    /// blanks; an optional sign, digits with an optional fraction and exponent, `inf` or `nan`.
+    /// A number the width cannot hold is OutOfRange, not NotANumber.
+    template <std::floating_point T> static ReadStatus readNumber(std::string_view text, T &out) {
+        switch (camel::utils::parseWholeFloat<T>(text, out)) {
+        case camel::utils::NumberTextStatus::Ok:
+            return ReadStatus::Ok;
+        case camel::utils::NumberTextStatus::OutOfRange:
+            return ReadStatus::OutOfRange;
+        default:
+            return ReadStatus::NotANumber;
+        }
     }
 
     /// A complex number as `camel` reads one: the two parts are numbers (camel/utils/
-    /// number_text.h splits the text; the parts are read by readNumber). A real text is not a
-    /// complex number.
-    static bool readComplex(const std::string &text, double &real, double &imaginary) {
+    /// number_text.h splits the text; the parts are read by readNumber at the declared width).
+    /// A text that is not written as a complex number is read as a real one, whose imaginary
+    /// part is zero: a literal takes its type from context (design principles 5.1), so `1.5` is
+    /// `1.5+0i`.
+    template <std::floating_point T>
+    static ReadStatus readComplex(const std::string &text, T &real, T &imaginary) {
         camel::utils::ComplexTextParts parts;
+        real      = T{};
+        imaginary = T{};
         if (!camel::utils::splitComplexText(text, parts)) {
-            return false;
+            return readNumber(text, real);
         }
-        real = 0.0;
-        return (parts.real.empty() || readNumber(parts.real, real)) &&
-               readNumber(parts.imaginary, imaginary);
+        if (!parts.real.empty()) {
+            const ReadStatus status = readNumber(parts.real, real);
+            if (status != ReadStatus::Ok) {
+                return status;
+            }
+        }
+        const ReadStatus status = readNumber(parts.imaginary, imaginary);
+        return status == ReadStatus::OutOfRange ? ReadStatus::OutOfRangeImaginary : status;
+    }
+
+    /// The reason clause for a number text refused with `status`: the catalogued sentence the
+    /// compiler rendered into the parameter's EntryNumberText, with the text in place of the mark
+    /// and its final period dropped (EntryArgumentInvalid adds one).
+    std::string refusal(std::size_t index, ReadStatus status, const std::string &text) const {
+        static const EntryNumberText none;
+        const EntryNumberText &texts = index < numberText_.size() ? numberText_[index] : none;
+        const char *message          = nullptr;
+        switch (status) {
+        case ReadStatus::NotANumber:
+            message = texts.notANumber;
+            break;
+        case ReadStatus::OutOfRange:
+            message = texts.outOfRange;
+            break;
+        case ReadStatus::OutOfRangeImaginary:
+            message = texts.outOfRangeImaginary;
+            break;
+        case ReadStatus::Ok:
+            break;
+        }
+        std::string reason = withValues(message != nullptr ? message : "", {text});
+        if (!reason.empty() && reason.back() == '.') {
+            reason.pop_back();
+        }
+        return reason;
     }
 
     void bind(const std::string &name, const std::string &text, const Site &invalid) {
@@ -183,37 +259,35 @@ class EntryArguments {
         Value &value  = values_[index];
         switch (parameters_[index].kind) {
         case EntryKind::Int: {
-            const char *first = text.data();
-            const char *last  = text.data() + text.size();
-            if (first != last && *first == '+') {
-                ++first;
-            }
-            const auto result = std::from_chars(first, last, value.integer);
-            if (result.ec != std::errc() || result.ptr != last || first == last) {
-                fault(invalid, {name, "'" + text + "' is not an integer"});
+            const ReadStatus status = readInteger(text, value.integer);
+            if (status != ReadStatus::Ok) {
+                fault(invalid, {name, refusal(index, status, text)});
             }
             break;
         }
         case EntryKind::Float: {
-            if (!readNumber(text, value.number)) {
-                fault(invalid, {name, "'" + text + "' is not a number"});
+            const ReadStatus status = readNumber(text, value.number);
+            if (status != ReadStatus::Ok) {
+                fault(invalid, {name, refusal(index, status, text)});
             }
             break;
         }
-        case EntryKind::ComplexFloat:
-        case EntryKind::ComplexDouble: {
-            double real      = 0.0;
-            double imaginary = 0.0;
-            if (!readComplex(text, real, imaginary)) {
-                fault(
-                    invalid,
-                    {name,
-                     "'" + text + "' is not a complex number (write 1+2i, -2i or 0.5-0.25i)"});
-            }
-            if (parameters_[index].kind == EntryKind::ComplexFloat) {
-                value.complexF = {static_cast<float>(real), static_cast<float>(imaginary)};
+        case EntryKind::C64:
+        case EntryKind::C128: {
+            ReadStatus status = ReadStatus::Ok;
+            if (parameters_[index].kind == EntryKind::C64) {
+                float real      = 0.0f;
+                float imaginary = 0.0f;
+                status          = readComplex(text, real, imaginary);
+                value.complexF  = {real, imaginary};
             } else {
-                value.complexD = {real, imaginary};
+                double real      = 0.0;
+                double imaginary = 0.0;
+                status           = readComplex(text, real, imaginary);
+                value.complexD   = {real, imaginary};
+            }
+            if (status != ReadStatus::Ok) {
+                fault(invalid, {name, refusal(index, status, text)});
             }
             break;
         }
@@ -230,6 +304,7 @@ class EntryArguments {
     }
 
     std::vector<EntryParameter> parameters_;
+    std::vector<EntryNumberText> numberText_;
     std::vector<Value> values_;
     std::vector<bool> given_;
 };

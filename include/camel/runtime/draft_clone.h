@@ -48,7 +48,11 @@ struct DraftGraphCloneResult {
     GCReturnKind returnKind  = GCReturnKind::None;
 };
 
-DraftGraphCloneResult cloneRuntimeGraphIntoDraft(GraphDraft &owner, const GCGraph *sourceGraph);
-DraftGraphCloneResult cloneDraftGraphIntoDraft(GraphDraft &owner, const GraphDraft &sourceDraft);
+/// Clones the nodes of a graph into `owner`. The cloned nodes are in the region `intoRegion` of
+/// `owner` (0: the body); the regions the source graph has are made again inside it.
+DraftGraphCloneResult cloneRuntimeGraphIntoDraft(
+    GraphDraft &owner, const GCGraph *sourceGraph, uint32_t intoRegion = 0);
+DraftGraphCloneResult cloneDraftGraphIntoDraft(
+    GraphDraft &owner, const GraphDraft &sourceDraft, uint32_t intoRegion = 0);
 
 } // namespace camel::runtime

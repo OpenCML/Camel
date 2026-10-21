@@ -176,9 +176,147 @@ args = ["${case}", "--arg", "n=three", "--arg", "rate=0.5", "--arg", "name=hi", 
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
 expect_diagnostic_line = 7
-expect_output_contains = ["Cannot bind the argument 'n' of 'main': 'three' is not an integer"]
+expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert the string 'three' to int"]
 expect_output_not_contains = ["hi "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_hex_refused"
+desc = "A float parameter reads the language's whole number grammar, not strtod's: the hexadecimal float `0x1.8p1` is refused as a located error."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0x1.8p1", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '0x1.8p1' to float"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_trailing_dot_refused"
+desc = "`1.` has no digit after the decimal point and is not a number text of the language (reference 2.5.2), so a float parameter refuses it."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=1.", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '1.' to float"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_leading_dot_refused"
+desc = "`.5` has no digit before the decimal point and is not a number text of the language (reference 2.5.2), so a float parameter refuses it."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '.5' to float"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_leading_space_refused"
+desc = "A number text has no blanks: a leading space is refused by the whole-token parser (strtod used to skip it)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate= 0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string ' 0.5' to float"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_trailing_space_refused"
+desc = "A number text has no blanks: a trailing space is refused."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=0.5 ", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string '0.5 ' to float"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_overflow_refused"
+desc = "A number too large for the declared float is a value that does not fit, refused rather than read as infinity: the message says it is out of range and names the range, not that it is not a number."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=1e9999", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude)"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_underflow_refused"
+desc = "A number too small for the declared float is a value that does not fit, refused rather than read as zero: the message says it is out of range and names the range, not that it is not a number."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=1e-9999", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert '1e-9999' to float: the value is outside the range of float (at most about 1.8e308 in magnitude)"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.int_overflow_refused"
+desc = "An integer text that is a number but does not fit int is refused as out of range, with the range in the message; it is not 'not an integer'."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=99999999999999999999", "--arg", "rate=0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'n' of 'main': Cannot convert '99999999999999999999' to int: the value is outside the range of int (-9223372036854775808 to 9223372036854775807)"]
+expect_output_not_contains = ["hi "]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_leading_plus"
+desc = "A leading `+` is the number's sign in the language (reference 2.5.1) and is accepted: `+0.5` is `0.5`."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=+0.5", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 4
+expect_stdout_contains = ["hi 3 0.5 true"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.float_uppercase_inf_refused"
+desc = "The language writes an infinity as `inf` (reference 2.5.2); `INF`, which strtod also reads, is not a number text and is refused."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/scalars.cml"
+args = ["${case}", "--arg", "n=3", "--arg", "rate=INF", "--arg", "name=hi", "--arg", "loud=true"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 7
+expect_output_contains = ["Cannot bind the argument 'rate' of 'main': Cannot convert the string 'INF' to float"]
+expect_output_not_contains = ["hi 3"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
@@ -402,19 +540,93 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
-name = "entry_args.complex_real_refused"
-desc = "A real text for a complex parameter is refused: a complex number is not read from a real one (the value is not taken as the real part), and the error is EntryArgumentInvalid at the argument, located at main."
+name = "entry_args.complex_real_text"
+desc = "A real number is read as the real part with an imaginary part of zero, at both widths: a literal takes its type from context (design principles 5.1), so `z=1.5` is `1.5+0i` for the c128 and a negative `w=-2` is `-2+0i` for the c64."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
-args = ["${case}", "--arg", "z=1.5", "--arg", "w=4i"]
+args = ["${case}", "--arg", "z=1.5", "--arg", "w=-2"]
+expect_exit = 0
+expect_stdout_contains = ["1.5+0i -2+0i", "1.5 0.0", "-2.0 0.0", "-0.5+0i"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_exponent"
+desc = "A real text with an exponent and an infinity are read as the real part, with an imaginary part of zero (`1e-3` is `0.001+0i`, `inf` is `inf+0i`)."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1e-3", "--arg", "w=inf"]
+expect_exit = 0
+expect_stdout_contains = ["0.001+0i inf+0i", "0.001 0.0", "inf 0.0", "inf+0i"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_hex_refused"
+desc = "A hexadecimal floating text is not a number the language writes (reference 2.5.2 has no hexadecimal float), so it is refused as a complex number too. The real entry parser reads the language's number grammar, not strtod's."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=0x1.8p1", "--arg", "w=-2"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_code = "0x04000011"
-expect_diagnostic_line = 9
-expect_diagnostic_column = 1
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'1.5' is not a complex number (write 1+2i, -2i or 0.5-0.25i)"]
-expect_output_not_contains = ["4i", "0+4i", ":?:?:"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '0x1.8p1' to a complex number"]
+expect_output_not_contains = ["3+0i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_trailing_dot_refused"
+desc = "`1.` has no digit after the decimal point, which the language's number grammar requires (reference 2.5.2); it is not read as `1+0i`."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1.", "--arg", "w=-2"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1.' to a complex number"]
+expect_output_not_contains = ["1+0i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_leading_space_refused"
+desc = "A number text has no blanks: a leading space is refused, as it is for a float parameter."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z= 1.5", "--arg", "w=-2"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string ' 1.5' to a complex number"]
+expect_output_not_contains = ["1.5+0i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_signed"
+desc = "A leading `+` is the number's sign in the language (reference 2.5.1), so `+1.5` is read as `1.5+0i`."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=+1.5", "--arg", "w=-2"]
+expect_exit = 0
+expect_stdout_contains = ["1.5+0i -2+0i", "1.5 0.0", "-2.0 0.0", "-0.5+0i"]
+expect_output_not_contains = ["Error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_nan"
+desc = "A NaN real text is read as the real part (`nan` is `nan+0i`); it is a number, so it is not refused, and the NaN's sign is not written."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=nan", "--arg", "w=4i"]
+expect_exit = 0
+expect_stdout_contains = ["nan+0i 0+4i", "nan 0.0", "0.0 4.0", "nan+4i"]
+expect_output_not_contains = ["Error", "-nan"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
@@ -425,8 +637,8 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 9
-expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "'1+2' is not a complex number"]
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1+2' to a complex number"]
 expect_output_not_contains = ["0+4i", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -439,20 +651,76 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2j", "--arg", "w=4i"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
-expect_diagnostic_line = 9
-expect_output_contains = ["'1+2j' is not a complex number"]
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot convert the string '1+2j' to a complex number"]
 expect_output_not_contains = ["0+4i"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
+name = "entry_args.complex_not_a_number"
+desc = "Text that is not a number at all is refused, not read as a complex value: `abc` is the located EntryArgumentInvalid."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=abc", "--arg", "w=4i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string 'abc' to a complex number", "or a real number such as 1.5"]
+expect_output_not_contains = ["0+4i"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_incomplete"
+desc = "An incomplete complex text is refused: `1+` has no imaginary part, and it is not a number either."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+", "--arg", "w=4i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main'", "Cannot convert the string '1+' to a complex number"]
+expect_output_not_contains = ["0+4i"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_real_out_of_range"
+desc = "A complex text whose real part is a number c128 cannot hold is refused as out of range, naming the part and the range; it is not 'not a complex number'."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1e9999+2i", "--arg", "w=4i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'z' of 'main': Cannot convert '1e9999+2i' to c128: the real part is outside the range of c128 (each part at most about 1.8e308 in magnitude)"]
+expect_output_not_contains = ["0+4i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.complex_imaginary_out_of_range"
+desc = "A complex text whose imaginary part is a number c64 cannot hold is refused as out of range, naming the imaginary part and the range."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1+2i", "--arg", "w=1+1e-9999i"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::EntryArgumentInvalid"
+expect_diagnostic_line = 11
+expect_output_contains = ["Cannot bind the argument 'w' of 'main': Cannot convert '1+1e-9999i' to c64: the imaginary part is outside the range of c64 (each part at most about 3.4e38 in magnitude)"]
+expect_output_not_contains = ["1+2i"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "entry_args.cpp_complex_open"
-desc = "A c64 / c128 parameter left open is read by the generated program from its command line: std::cpp used to refuse a complex entry parameter (TranslationRefused) and now writes rt::EntryKind::ComplexFloat / ComplexDouble. That the two agree is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
+desc = "A c64 / c128 parameter left open is read by the generated program from its command line: std::cpp used to refuse a complex entry parameter (TranslationRefused) and now writes rt::EntryKind::C64 / C128. That the two agree is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
 kind = "behavior"
 case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "std::cpp"]
 expect_exit = 0
-expect_stdout_contains = ["{\"z\", rt::EntryKind::ComplexDouble}, {\"w\", rt::EntryKind::ComplexFloat}", "args.complexDouble(0), args.complexFloat(1)"]
+expect_stdout_contains = ["{\"z\", rt::EntryKind::C128}, {\"w\", rt::EntryKind::C64}", "args.c128(0), args.c64(1)"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
@@ -465,6 +733,18 @@ case = "../../../cases/compile/entry_args/complex.cml"
 args = ["${case}", "--arg", "z=1+2i", "--arg", "w=0.5-0.25i", "std::cpp"]
 expect_exit = 0
 expect_stdout_contains = ["std::complex<double>{1.0, 2.0}", "std::complex<float>{0.5f, -0.25f}"]
+expect_output_not_contains = ["TranslationRefused", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "entry_args.cpp_complex_real_bound"
+desc = "A real text bound to a complex parameter with --arg is the real part of the constant std::cpp writes, with an imaginary part of zero."
+kind = "behavior"
+case = "../../../cases/compile/entry_args/complex.cml"
+args = ["${case}", "--arg", "z=1.5", "--arg", "w=-2", "std::cpp"]
+expect_exit = 0
+expect_stdout_contains = ["std::complex<double>{1.5, 0.0}", "std::complex<float>{-2.0f, 0.0f}"]
 expect_output_not_contains = ["TranslationRefused", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

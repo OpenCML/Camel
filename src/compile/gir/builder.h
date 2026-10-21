@@ -502,7 +502,8 @@ class Builder {
     [[noreturn]] void rejectLiteralData(
         const camel::core::data::data_ptr_t &data, camel::core::type::Type *type,
         camel::source::origin_id_t where, const GCT::node_ptr_t &written = nullptr,
-        camel::source::origin_id_t writtenAt = camel::source::kInvalidOriginId);
+        camel::source::origin_id_t writtenAt = camel::source::kInvalidOriginId,
+        const std::string &reason = {});
 
     // ---- The value of a body (design principles 5.1: a return position) ----
     // The last statement of a body is the value the body hands on, so it is a position with an

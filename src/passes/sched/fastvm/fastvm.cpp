@@ -346,6 +346,7 @@ void FastVMSchedPass::precompile(
     const camel::runtime::Program &program, camel::runtime::GCGraph *runtimeRoot) {
     ASSERT(runtimeRoot != nullptr, "Runtime root graph is null.");
     auto linked = compileAndLink(context_, program, runtimeRoot, kFastVmCompileStrategy);
+    codeSpace_  = std::make_shared<CodeSpace>();
     bytecodes_  = std::move(linked.codes);
     bytecodes_.reserve(bytecodes_.size() + std::max(kLateBytecodeReserve, bytecodes_.size() * 4));
     offsetMap_ = std::move(linked.offsetMap);
@@ -355,20 +356,51 @@ void FastVMSchedPass::precompile(
         }
         setFastVmEntryPcOf(runtimeGraph, offset);
         setFastVmGraphLengthOf(runtimeGraph, length);
+        leaseCode(runtimeGraph, offset, length);
     }
+}
+
+void FastVMSchedPass::leaseCode(camel::runtime::GCGraph *graph, size_t start, size_t length) {
+    if (&bytecodes_ != &ownBytecodes_) {
+        return; // a host's image
+    }
+    graph->execPlan().fastVm.codeLease =
+        std::make_shared<CodeLease>(codeSpace_, start, length);
 }
 
 void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
     // What is compiled is read from the graphs themselves, not from a table keyed by address: a
     // graph created at run time can be collected and its address reused by a new one.
+    // Bytecode a freed graph version left is used first. The size is not known before the graph
+    // is compiled, so with a free range to try, it is compiled once to be measured (nothing
+    // registered), then again where it goes.
+    const bool own = &bytecodes_ == &ownBytecodes_;
+    size_t at      = bytecodes_.size();
+    bool inGap     = false;
+    if (own && codeSpace_->hasFree()) {
+        const auto probe = compileAndLinkFrom(
+            context_,
+            programs_.of(graph),
+            graph,
+            kFastVmCompileStrategy,
+            fastVmEntryPcOf,
+            at,
+            /*registerOrigins=*/false);
+        if (const auto start = codeSpace_->allocate(probe.codes.size())) {
+            at    = *start;
+            inGap = true;
+        }
+    }
     auto linked = compileAndLinkFrom(
         context_,
         programs_.of(graph),
         graph,
         kFastVmCompileStrategy,
         fastVmEntryPcOf,
-        bytecodes_.size());
-    if (bytecodes_.size() + linked.codes.size() > bytecodes_.capacity()) {
+        at);
+    if (inGap) {
+        std::copy(linked.codes.begin(), linked.codes.end(), bytecodes_.begin() + at);
+    } else if (bytecodes_.size() + linked.codes.size() > bytecodes_.capacity()) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             std::format(
@@ -377,10 +409,13 @@ void FastVMSchedPass::compileLate(camel::runtime::GCGraph *graph) {
                 graph->name(),
                 bytecodes_.size()));
     }
-    bytecodes_.insert(bytecodes_.end(), linked.codes.begin(), linked.codes.end());
+    if (!inGap) {
+        bytecodes_.insert(bytecodes_.end(), linked.codes.begin(), linked.codes.end());
+    }
     for (const auto &[offset, length, runtimeGraph] : linked.graphs) {
         setFastVmEntryPcOf(runtimeGraph, offset);
         setFastVmGraphLengthOf(runtimeGraph, length);
+        leaseCode(runtimeGraph, offset, length);
 #if ENABLE_FASTVM_JIT
         setJitCompileFailedOf(runtimeGraph, false, true);
 #endif
@@ -505,7 +540,7 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
         program = camel::runtime::lowerLoopsToTailRecursion(context_, program);
     }
     camel::runtime::GCGraph *runtimeRoot = program->root();
-    programs_.setMain(program);
+    camel::execute::RunScope runScope(programs_, *context_, program);
     precompile(*program, runtimeRoot);
 
     stackDepth_  = 0;
@@ -513,7 +548,12 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     // Written however the run ends (no-op unless std::fvm is given stats="file").
     struct StatsAtExit {
         FastVMSchedPass *vm;
-        ~StatsAtExit() { vm->statsWrite(); }
+        ~StatsAtExit() {
+            vm->statsWrite();
+            if (std::getenv("CAMEL_GC_STATS") != nullptr) {
+                std::cerr << "fvm_code_bytecodes=" << vm->bytecodes_.size() << '\n';
+            }
+        }
     } statsAtExit{this};
 
 #if ENABLE_FASTVM_JIT

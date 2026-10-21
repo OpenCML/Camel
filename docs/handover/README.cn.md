@@ -186,6 +186,9 @@
 | H17d | 查清 fvm/jit 上约 5% 的残留（按存储类别特化热循环）；H17c 评审第 1、2 项 | 无 | 乙车道，H28 之前 |
 | H28 | 数据块：缓冲区提升为通用机制 | H17d | **已完成**（检查意见 reviews/H17-H22.md） |
 | H29 | fvm/jit 上元组数组的 `reduce` 结果错误 | 无 | **已完成**（检查意见 reviews/H17-H22.md） |
+| H15g | `i32`/`f32` 入口参数按声明类型读取；`let x: int = '42'` 的诊断改为类型不符 | 无 | 甲车道 |
+| H33 | ONNX 导出的分支调用拆分不再产生输入环 | 协调者一方的 R2c（前端直接产生分支区域）合入后 | 丁车道 |
+| H31 | 诊断并修复 Debug 层的 `Accessing uninitialized slot`（经 `materializeCallResult`，9 项） | 无 | 乙车道，优先 |
 | H30 | Debug 构建能链接，测试运行器增加 Debug 层，视图逃逸断言真正运行 | 无 | 己车道，优先 |
 | H15d | 带符号 NaN 在格式说明下打印为 `nan`；复数入口参数 | 无 | 甲车道 |
 | H15c | 复数收尾：格式说明作用于两部分、数值契约条目、`^`、`std::cpp` 降低（或先定位拒绝）、DLPack 往返测试 | 无 | 甲车道 |
@@ -581,3 +584,9 @@ let area = match b {
 nvm、taskflow 得 `(1, 30)`（正确），fvm、jit 得 `(3, 20)`。`feat/examples` 的 `parallel_map.fvm/.jit` 与 exemplars 01/02/05/08 因此失败。
 
 可疑点：H28 的元素视图——`slotShaped` 视图复用同一个线程局部单元、普通视图走 128 格环；`reduce` 的累加器 `a` 若是一个元素视图，下一轮读取 `b` 时会覆盖同一个单元，`a` 与 `b` 指向同一处（视图逃逸进了累加器）。H17d 的按存储类别特化的循环也在这条路径上。要求：找到根因并修复；累加器、返回值、任何跨元素存活的值都不得是视图（这正是 H28 评审第 1 项要求的检查应当拦住的情形——一并核对开发构建的视图逃逸检查为什么没有发现它）；用上面的程序与 `reduce`/`foldl` 的多种元组、结构体形状在四个后端上锁住。
+
+### H33：ONNX 导出的分支调用拆分不再产生输入环（原误编为 H32，与 Debug 栈的报告重号）（2026-10-21 指派，丁车道，R2c 合入后）
+
+协调者一方补齐了提交时的校验（边上的类型兼容、无环、冲突检测；`validate(graph, GraphState)`）。唯一产生非法图的是 ONNX 导出的分支调用拆分（`enableBranchedCallSplit`，`draft_inline.cpp` 的 `devirtualizeBranchedCallInDraft`）：数据依赖分支（如 `if s > 1 then y*2 else y`）的反向是对一个从分支 JOIN 中取出（ACCS）的闭包的间接调用；ONNX 没有闭包，拆分把它改写为每条臂一次 FUNC 调用、每个取出的值一个 JOIN，这些兄弟 JOIN 读同一个 BRCH。结果形如 `OPER x ← JOIN ← JOIN ← ACCS ← FUNC(每臂的 pullback 调用) ← 余切的 OPER 链 ← x`：喂给每臂调用的余切由读取这些调用的结果 JOIN 的节点算出——作为数据依赖图是一个环。现在以 `GraphState::NonExecutable` 临时放行，且这种会话永不安装进流水线的程序。
+
+要求：拆分为每个取出的值生成一个 If，其各臂的调用把余切作为**在分支之外、只依赖前向 JOIN 算出的捕获**传入，使没有任何分支之外的节点在余切算出之前读梯度 JOIN——即没有输入环。四个用例：`export_train_step_branch_tensor`、`export_train_step_branch_disjoint`、`export_gated_gru_step`、`export_loop_values`。**验收**：删除 `enableBranchedCallSplit` 会话上的 `GraphState::NonExecutable` 设置后，这四个用例与全部 ONNX 计划通过。在协调者一方的 R2c（分支臂成为区域）合入后做，届时分支的表示会变。

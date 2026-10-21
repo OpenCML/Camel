@@ -59,6 +59,10 @@ struct GCGraphPayloadShape {
     bool permissions = false;
     // Whether some node has attributes: only then the graph has an attribute column.
     bool attrs = false;
+    // Whether some node is in a region but the body: only then the graph has a region column.
+    bool regions = false;
+    gc_cnt_t regionCount     = 0;
+    gc_cnt_t regionPortCount = 0;
     // The graph the draft was decoded from: a chunk of the new graph that has all the content of
     // the same chunk of this one is that chunk (GCNodeChunk::shares). nullptr: none.
     const GCGraph *base = nullptr;
@@ -74,6 +78,11 @@ struct GCGraphPayloadArena {
     uint32_t *origins          = nullptr; // nodeCount source origins
     uint8_t *permissions       = nullptr; // nodeCount numeric permissions, or null
     uint32_t *attrs            = nullptr; // nodeCount attribute sets, or null
+    uint32_t *regions          = nullptr; // nodeCount regions, or null
+    GCRegion *regionTable      = nullptr; // regionCount regions
+    gc_node_ref_t *regionPorts = nullptr; // regionPortCount form ports
+    gc_cnt_t regionCount       = 0;
+    gc_cnt_t regionPortCount   = 0;
     gc_node_ref_t *inputs      = nullptr;
     gc_payload_word_t *payload = nullptr;
     gc_node_ref_t *normPorts   = nullptr;
@@ -174,7 +183,17 @@ void validateRuntimeGraphTypes(const GCGraph *graph);
 /// callee has ports, and every graph a function constant of the static area points to is in
 /// the reference table (graphs refer to graphs only through it; the FUNC payload is an index
 /// into it by construction, checked by validateRuntimeGraphPayload). Run on each graph once the
-/// whole set of a commit is encoded.
-void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph);
+/// whole set of a commit is encoded. `state` is the graph's (GraphState): the state-dependent
+/// rules are applied here, with the edge invariants, so that every state is checked by this one
+/// validator.
+void validateRuntimeGraphCalls(
+    const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
+/// The edge invariants (graph_edges.cpp): no cycle of inputs, and the types agree along the
+/// edges. Run with validateRuntimeGraphCalls, because the types of a call's callee are read.
+/// Throws std::runtime_error naming the graph, the nodes and what disagrees.
+/// `state` (graph.h, GraphState) says what to expect of the graph: only a NonExecutable graph may
+/// hold a cycle of inputs (the back ends refuse it when they build the execution plan).
+void validateRuntimeGraphEdges(
+    const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
 } // namespace camel::runtime

@@ -233,6 +233,34 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "context.text_out_of_range"
+desc = "`int('99999999999999999999')` is `LiteralNotRepresentable` with the reason out of range and the range, not 'the text is not a number' (H15f)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_text_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 16
+expect_output_contains = ["99999999999999999999", "type 'int'", "out of range (-9223372036854775808 to 9223372036854775807)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "context.text_float_out_of_range"
+desc = "`float('1e999')` is `LiteralNotRepresentable` with the reason out of range and the float range, not 'the text is not a number' (H15f)."
+kind = "negative"
+case = "../../../cases/compile/literals/context_text_float_out_of_range.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 18
+expect_output_contains = ["1e999", "type 'float'", "out of range (at most about 1.8e308 in magnitude)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "context.conversion_out_of_range"
 desc = "A conversion written by the program with a literal argument (`i32(5000000000)`) is the same diagnostic, saying the value is out of the range."
 kind = "negative"

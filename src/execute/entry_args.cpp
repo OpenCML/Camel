@@ -24,6 +24,7 @@
 #include "camel/core/mm.h"
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/module/module.h"
+#include "camel/core/numeric_convert.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/complex.h"
 #include "camel/core/rtdata/string.h"
@@ -42,7 +43,7 @@
 #include "camel/utils/utf8.h"
 
 #include <charconv>
-#include <cstdlib>
+#include <concepts>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -51,6 +52,7 @@
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -148,24 +150,71 @@ Loaded rooted(slot_t value, Type *valueType) {
 
 [[noreturn]] void refuse(std::string message) { throw std::runtime_error(std::move(message)); }
 
-bool parseInt(const std::string &text, int64_t &out) {
-    const char *first = text.data();
-    const char *last  = text.data() + text.size();
-    if (first != last && *first == '+') {
-        ++first;
+/// The catalogued sentence for a text that could not be read as a number, without its final
+/// period: the reason clause EntryArgumentInvalid puts after its colon. `InvalidNumberText`
+/// says the text is not a number; `ConversionOutOfRange` says it is one the type cannot hold and
+/// gives the range (both are the sentences the conversion functions raise).
+std::string numberTextRefusal(
+    camel::core::error::RuntimeDiag diag, std::vector<std::string> args) {
+    std::string message = camel::core::error::runtimeDiagMessage(diag, std::move(args));
+    if (!message.empty() && message.back() == '.') {
+        message.pop_back();
     }
-    const auto result = std::from_chars(first, last, out);
-    return result.ec == std::errc() && result.ptr == last && first != last;
+    return message;
 }
 
-bool parseFloat(std::string_view text, double &out) {
-    if (text.empty()) {
-        return false;
+/// A text that is not a number at all (wrong form, trailing junk, an empty text).
+[[noreturn]] void refuseNotANumber(
+    const std::string &text, const std::string &target, const std::string &what) {
+    refuse(numberTextRefusal(
+        camel::core::error::RuntimeDiag::InvalidNumberText, {text, target, what}));
+}
+
+/// A number the declared type cannot hold (overflow or underflow): the text is quoted as a
+/// written value is, and the reason names the type and its range.
+[[noreturn]] void refuseOutOfRange(
+    const std::string &text, const std::string &target, const std::string &reason) {
+    refuse(numberTextRefusal(
+        camel::core::error::RuntimeDiag::ConversionOutOfRange,
+        {"'" + text + "'", target, reason}));
+}
+
+/// The two parts of a complex text, read at the declared width (camel/utils/number_text.h). A
+/// part that is not a number, or is a number that width cannot hold, is refused: the reason
+/// names the part and its range.
+template <std::floating_point T>
+std::pair<T, T> complexFromText(
+    const std::string &text, const char *target, bool complexText,
+    const camel::utils::ComplexTextParts &parts) {
+    const std::string range = camel::utils::complexRangeText<T>();
+    const auto check       = [&](std::string_view partText, const char *part, T &out) {
+        switch (camel::utils::parseWholeFloat<T>(partText, out)) {
+        case camel::utils::NumberTextStatus::Ok:
+            return;
+        case camel::utils::NumberTextStatus::OutOfRange:
+            refuseOutOfRange(
+                text,
+                target,
+                std::format("the {} part is outside the range of {} ({})", part, target, range));
+        default:
+            refuseNotANumber(
+                text,
+                std::string(camel::utils::complexNumberTextHelp),
+                "a complex number");
+        }
+    };
+    T real{};
+    T imaginary{};
+    if (!complexText) {
+        // A text that is a real number is the real part, with an imaginary part of zero.
+        check(text, "real", real);
+        return {real, imaginary};
     }
-    const std::string copy(text);
-    char *end = nullptr;
-    out       = std::strtod(copy.c_str(), &end);
-    return end == copy.c_str() + copy.size();
+    if (!parts.real.empty()) {
+        check(parts.real, "real", real);
+    }
+    check(parts.imaginary, "imaginary", imaginary);
+    return {real, imaginary};
 }
 
 Loaded loadValue(const std::string &text, Type *declared, const std::string &what);
@@ -225,8 +274,13 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
     case TypeCode::Int64:
     case TypeCode::Int32: {
         int64_t v = 0;
-        if (!parseInt(text, v)) {
-            refuse(std::format("'{}' is not an integer", text));
+        switch (camel::utils::parseWholeInteger<int64_t>(text, v)) {
+        case camel::utils::NumberTextStatus::Ok:
+            break;
+        case camel::utils::NumberTextStatus::OutOfRange:
+            refuseOutOfRange(text, "int", camel::core::integerRangeReason<int64_t>("int"));
+        default:
+            refuseNotANumber(text, "int", "an integer");
         }
         if (declared->code() == TypeCode::Int32) {
             return rooted(rtdata::toSlot<int32_t>(static_cast<int32_t>(v)), declared);
@@ -236,8 +290,13 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
     case TypeCode::Float64:
     case TypeCode::Float32: {
         double v = 0;
-        if (!parseFloat(text, v)) {
-            refuse(std::format("'{}' is not a number", text));
+        switch (camel::utils::parseWholeFloat<double>(text, v)) {
+        case camel::utils::NumberTextStatus::Ok:
+            break;
+        case camel::utils::NumberTextStatus::OutOfRange:
+            refuseOutOfRange(text, "float", camel::core::floatRangeReason<double>("float"));
+        default:
+            refuseNotANumber(text, "float", "a number");
         }
         if (declared->code() == TypeCode::Float32) {
             return rooted(rtdata::toSlot<float>(static_cast<float>(v)), declared);
@@ -248,21 +307,31 @@ Loaded loadValue(const std::string &text, Type *declared, const std::string &wha
     case TypeCode::Complex128: {
         // The text of a complex number (language reference 2.5.3): a real part, the sign of the
         // imaginary part and the imaginary part (`1+2i`, `0.5-0.25i`), or only the imaginary
-        // part with its sign (`-2i`). Each part is read by the same rule as a float parameter,
-        // so the parts of a complex value and a real value are read the same way. A real text
-        // is not a complex one: it has no imaginary part.
+        // part with its sign (`-2i`). A text that is not written as a complex number but is a
+        // number is its real part with an imaginary part of zero: a literal takes its type from
+        // context (design principles 5.1), so `1.5` is `1.5+0i`, as `let z: c128 = 1.5` takes
+        // it. Each part is read by the language's whole-token float parser at the declared width
+        // (number_text.h), the same rule a float parameter follows, so the parts of a complex
+        // value and a real value are read the same way.
         camel::utils::ComplexTextParts parts;
-        double real      = 0.0;
-        double imaginary = 0.0;
-        if (!camel::utils::splitComplexText(text, parts) ||
-            (!parts.real.empty() && !parseFloat(parts.real, real)) ||
-            !parseFloat(parts.imaginary, imaginary)) {
-            refuse(
-                std::format("'{}' is not a complex number (write 1+2i, -2i or 0.5-0.25i)", text));
+        const bool complexText = camel::utils::splitComplexText(text, parts);
+        const bool single      = declared->code() == TypeCode::Complex64;
+        double real            = 0.0;
+        double imaginary       = 0.0;
+        if (single) {
+            const auto [realF, imaginaryF] =
+                complexFromText<float>(text, "c64", complexText, parts);
+            real      = static_cast<double>(realF);
+            imaginary = static_cast<double>(imaginaryF);
+        } else {
+            std::tie(real, imaginary) = complexFromText<double>(text, "c128", complexText, parts);
         }
         return rooted(
-            rtdata::toSlot<rtdata::Complex *>(
-                rtdata::Complex::create(real, imaginary, declared->code(), mm::autoSpace())),
+            rtdata::toSlot<rtdata::Complex *>(rtdata::Complex::create(
+                real,
+                imaginary,
+                declared->code(),
+                mm::autoSpace())),
             declared);
     }
     case TypeCode::Bool: {

@@ -129,6 +129,7 @@ const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName, const std::function<size_t(GraphDraft &)> &rewrite,
     size_t *rewrites = nullptr, RewriteMemo *memo = nullptr,
-    bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false);
+    bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false,
+    bool allowNonExecutable = false);
 
 } // namespace camel::passes::generic

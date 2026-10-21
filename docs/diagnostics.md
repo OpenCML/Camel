@@ -4247,7 +4247,7 @@ No value was given for the {0} {1} of 'main'.
 **Help**
 
 ```text
-The parameters of 'main' are the inputs of the program. To run it, give each one a value on the command line: --arg name=value (a number, a complex number written as the language writes one such as 1+2i, true/false or text for a scalar, a .npy file for a tensor, a directory of .npy files for a struct of tensors). No default is assumed.
+The parameters of 'main' are the inputs of the program. To run it, give each one a value on the command line: --arg name=value (a number; a complex number written as the language writes one, such as 1+2i or 0.5-0.25i, or a real number such as 1.5 for its real part; true/false or text for a scalar; a .npy file for a tensor; a directory of .npy files for a struct of tensors). No default is assumed.
 ```
 
 **Example** (`test/cases/compile/entry_args/scalars.cml`, run as `camel test/cases/compile/entry_args/scalars.cml --arg n=3`)
@@ -4574,7 +4574,7 @@ Cannot convert {0} to {1}: {2}.
 **Help**
 
 ```text
-A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, or an integer beyond the range of a narrower integer type. Check the value before converting it, or clamp it (min, max) to the range of the target.
+A conversion whose value does not fit the target type is a fault (design principles 5.1): a float that is NaN, infinite or beyond the integer's range, an integer beyond the range of a narrower integer type, or a text that is a number the type cannot hold (out of range, which is not the same as text that is not a number: that is InvalidNumberText). Check the value before converting it, or clamp it (min, max) to the range of the target.
 ```
 
 **Example** (`test/cases/consistency/faults/float_to_int_range.cml`, run as `camel `)
