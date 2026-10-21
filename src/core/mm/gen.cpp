@@ -130,6 +130,16 @@ void GenerationalAllocatorWithGC::setObjectRootSet(std::vector<rtdata::Object *>
     rootObjectSet_ = rootSet;
 }
 
+void GenerationalAllocatorWithGC::setGraphSweeper(std::function<void()> sweeper) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    graphSweeper_ = std::move(sweeper);
+}
+
+void GenerationalAllocatorWithGC::requestMajorCollection(std::string_view reason) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    requestCollectionAtSafepointUnlocked(CollectionKind::Major, reason);
+}
+
 void GenerationalAllocatorWithGC::registerExternalRootTracer(
     const void *owner, std::string name, ExternalRootTracer tracer) {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -922,6 +932,11 @@ void GenerationalAllocatorWithGC::majorGCUnlocked() {
     // Mark all reachable objects in their final locations for this major cycle.
     markPhase();
 
+    // The graph space holds Programs and graph versions: the unmarked ones are freed.
+    if (graphSweeper_) {
+        graphSweeper_();
+    }
+
     // Sweep old generation (mark-sweep; no compaction here).
     sweepOldGen();
 
@@ -1176,7 +1191,8 @@ rtdata::Object *GenerationalAllocatorWithGC::relocateForMinor(
     if (!ref) {
         return nullptr;
     }
-    if (refType == nullptr && (info.slotName == "graph" || info.slotName == "graph-edge")) {
+    if (refType == nullptr &&
+        (info.slotName == "graph" || info.slotName == "graph-edge" || info.slotName == "program")) {
         // A graph carrier (graph space, never moved). Program graphs are roots and were
         // traced at the start; a graph created while the program runs (an autodiff gradient
         // graph, an attached rule) is reached only here, through the Function that owns it or

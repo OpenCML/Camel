@@ -845,7 +845,7 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     (void)os;
     ASSERT(graph != nullptr, "NodeVM requires a non-null runtime root graph.");
     graphCaches_.clear();
-    programs_.setMain(program);
+    camel::execute::RunScope runScope(programs_, *context_, program);
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);

@@ -40,10 +40,11 @@ Invariants:
   mutex, looks again at the segments added while it waited, and only then reserves one.
   Allocation inside a segment keeps the segment's own synchronization (a mutex for the free
   lists, compare-and-swap for the bump pointer).
-- **The cross-space contract is unchanged.** Objects of these spaces are not collected: the
-  collector reaches auto-space objects through the graph roots (`GCGraphManager::gcRoots()`),
-  wherever the graph lies, and never frees or moves anything in these spaces. Graphs are
-  released one by one by `GCGraphManager`, into the segment they came from.
+- **The cross-space contract.** The collector reaches auto-space objects through the roots
+  (`GCGraphManager::gcRoots()`: the `Program`s that are roots, see "Graph space lifetime"),
+  wherever the graph lies, and never moves anything in these spaces. The graph space holds the
+  `Program`s and graph versions, which `GCGraphManager` frees one by one, into the segment they
+  came from, when nothing reaches them.
 - **Allocation never returns null.** At the limit, or when the host has no memory for a
   segment, the space throws `mm::MemoryExhausted` (a `std::bad_alloc`) with the space, the
   request, the usage, the limit and the variable that raises it. The first caller that knows
@@ -128,13 +129,48 @@ The important consequences are:
 - Module object types such as `TensorType`, `PyObjectType`, and `ParameterType` must be allocated in
   `permSpace`, because they are `Type` descriptors, not collectable runtime objects.
 
+## Graph space lifetime
+
+The graph space holds the `Program`s of a context and the graph versions they hold, both objects
+of the graph space (`include/camel/runtime/program.h`, `GCGraphManager` in `graph.h`). A graph
+version lives as long as a live `Program` holds it, a `Program` as long as something reaches it:
+
+- **Roots** (the `Program`s in `GCGraphManager::gcRoots()`): the installed program, the detached
+  programs a back end runs (`trackDetached`), the pinned programs of the operator definitions,
+  the programs the pipeline made since the last `settle()` (`reserve`; the pass driver settles
+  after each pass, keeping the program the pass handed on), and the program of a running back end
+  (`RunPrograms::begin`).
+- **Edges**: `Program::updateRefs` traces its graphs and the program it copies (`original`),
+  `GCGraph::updateRefs` its static values, `Function::updateRefs` the `Program` it was made in
+  (slot `program`) and its graph. A frame keeps the graph it runs (`FramePool` tracer).
+- **Two collections.** While a program runs, a major collection of run-time values marks through
+  the heap and `GCGraphManager::sweepMarked()` (installed with `setGraphSweeper`, called after
+  `markPhase`) frees the unmarked `Program`s and graph versions; the graph space also asks for a
+  major collection when it holds a megabyte (`CAMEL_GRAPH_GC_MB`, default 64) and as much again
+  as it held after the last sweep (`requestMajorCollection`). Between passes (nothing runs, and
+  a pass keeps no function value of a replaced program) `collect()` marks from the roots over the
+  `Program`s and the static values of their graphs; it runs when a program is installed or
+  detached programs are released, once the space has grown by a quarter and a megabyte since the
+  last sweep, and is off while a back end runs (`enterRun`).
+- **Commits** share what they did not change, so versions are shared by programs; a graph that
+  was left as it was gets its function values retargeted to the new program
+  (`retargetFunctions`), so that the programs before the commit are not reached through them.
+- **Node chunks** (`GCNodeChunk`, shared by graph versions) are plain blocks of the graph space, not
+  objects: they have no virtual table to trace through, and a chunk is reachable exactly when some
+  live graph version holds it. Freeing a graph gives up its share (`releaseNodeChunks`); the last
+  share frees the block. The count therefore stays: it is the reachability of a block that no
+  tracer visits, not a second lifetime.
+- A graph that is in no `Program` (one a session encoded and a commit did not bind) is not
+  registered and not freed before the context ends.
+
 ## Root Sources
 
 The GC reaches live objects through these roots:
 
-- `Context` installs `GCGraphManager::gcRoots()` as the process root set while runtime graphs are
-  alive.
-- `GCGraph::updateRefs` traces the graph static tuple using the graph's static tuple type.
+- `Context` installs `GCGraphManager::gcRoots()` (`Program`s) as the process root set while runtime
+  graphs are alive.
+- `Program::updateRefs` traces the graphs of its table; `GCGraph::updateRefs` traces the graph static
+  tuple using the graph's static tuple type; `Function::updateRefs` traces its `Program`.
 - `FramePool` and `TaskflowFramePool` register external root tracers while schedulers are alive.
 - Macro evaluation registers typed value roots for temporary compile-time/runtime bridge values.
 

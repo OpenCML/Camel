@@ -1295,6 +1295,8 @@ PassApplyResult applyPassesDetailed(
             camel::core::mm::autoSpace().safepoint(std::format("after pass {}", p));
             // What the pass had to say about the program, before the next pass runs it.
             deliverPassWarnings(*ctx, p);
+            // The programs the pass made and nothing holds are no longer needed.
+            ctx->settleRuntimeGraphs(program);
             if (ctx->rtmDiags()->hasErrors()) {
                 CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (see diagnostics)", p);
                 return {nullptr, PassApplyStatus::Failed};

@@ -505,7 +505,7 @@ FastVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
         program = camel::runtime::lowerLoopsToTailRecursion(context_, program);
     }
     camel::runtime::GCGraph *runtimeRoot = program->root();
-    programs_.setMain(program);
+    camel::execute::RunScope runScope(programs_, *context_, program);
     precompile(*program, runtimeRoot);
 
     stackDepth_  = 0;

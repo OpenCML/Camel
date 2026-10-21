@@ -27,6 +27,7 @@
 
 #include "camel/execute/graph_runtime_support.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/struct.h"
@@ -48,6 +49,48 @@
 using namespace camel::core::context;
 
 namespace camel::execute {
+
+void RunPrograms::begin(
+    camel::core::context::Context &context, const camel::runtime::Program *main) {
+    end();
+    std::lock_guard lock(mutex_);
+    context_ = &context;
+    main_    = main;
+    others_.clear();
+    context.enterRun();
+    active_ = true;
+    if (main != nullptr) {
+        context.rootProgramForRun(main);
+    }
+}
+
+void RunPrograms::end() {
+    std::lock_guard lock(mutex_);
+    if (context_ != nullptr) {
+        if (main_ != nullptr) {
+            context_->unrootProgramForRun(main_);
+        }
+        if (active_) {
+            context_->leaveRun();
+        }
+    }
+    active_ = false;
+    others_.clear();
+    main_    = nullptr;
+    context_ = nullptr;
+}
+
+void RunPrograms::note(const camel::runtime::Program *program) {
+    if (program == main_ || program == nullptr) {
+        return;
+    }
+    std::lock_guard lock(mutex_);
+    if (std::find(others_.begin(), others_.end(), program) == others_.end()) {
+        // Not rooted: the function value the program came with is in a frame while its graph
+        // runs, and the collector of run-time values keeps what that value reaches.
+        others_.push_back(program);
+    }
+}
 
 namespace {
 

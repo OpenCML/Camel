@@ -1042,7 +1042,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         if (graph->staticGraphRefs().empty() && sameContent(*graph, *copy)) {
             committed->bind(graph->id(), graph);
             fresh.erase(graph);
-            GCGraphManager::release(copy);
+            context_->releaseRuntimeGraph(copy);
             edited_.erase(graph);
             continue;
         }
@@ -1147,6 +1147,13 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
+    // A graph left as it was names, in its function values, the program before: they name the
+    // new one, which holds the same versions of everything they reach.
+    for (GCGraph *graph : closure) {
+        if (!fresh.contains(graph) && graph->hasStaticGraphRefs()) {
+            retargetFunctions(graph, *committed);
+        }
+    }
 
     // A session over the program's root replaces it. A session over another root (a detached
     // program, e.g. a function being exported) only returns the rewritten root: the running
@@ -1214,12 +1221,10 @@ void GraphDraftGroup::encode() {
     ASSERT(!encoded_, "Graph draft group was already encoded.");
     std::unordered_map<GraphId, GCGraph *> graphs;
     std::unordered_map<GraphId, size_t> bytes;
-    std::vector<GCGraph *> members;
     for (GraphId id : order_) {
         Member &m = member(id);
         bytes.emplace(id, draftGraphBytes(context_, *m.draft, nullptr));
         graphs.emplace(id, allocateGraph(context_, m.identity, *m.draft, bytes.at(id)));
-        members.push_back(graphs.at(id));
     }
     // The members form a program with the graphs of the one the group is made over.
     for (GraphId id : order_) {
@@ -1240,8 +1245,6 @@ void GraphDraftGroup::encode() {
     for (GraphId id : order_) {
         member(id).encoded = graphs.at(id);
     }
-    // Nothing else keeps the members alive: the context's program does not hold them.
-    context_->retainRuntimeGraphs(members);
     encoded_ = true;
 }
 

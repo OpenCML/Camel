@@ -29,6 +29,7 @@
 #pragma once
 
 #include "camel/core/context/frame.h"
+#include "camel/core/mm.h"
 #include "camel/core/mm/alloc/allocator.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
@@ -39,6 +40,10 @@
 #include <mutex>
 #include <stdexcept>
 #include <vector>
+
+namespace camel::core::context {
+class Context;
+}
 
 namespace camel::execute {
 
@@ -51,13 +56,15 @@ namespace camel::execute {
 class RunPrograms {
   public:
     RunPrograms() = default;
-    explicit RunPrograms(const camel::runtime::Program *main) : main_(main) {}
+    ~RunPrograms() { end(); }
+    RunPrograms(const RunPrograms &)            = delete;
+    RunPrograms &operator=(const RunPrograms &) = delete;
 
-    void setMain(const camel::runtime::Program *main) {
-        std::lock_guard lock(mutex_);
-        main_ = main;
-        others_.clear();
-    }
+    /// Starts running `main` in `context`: the program is rooted, and so is every program a
+    /// function value brings in (note), until end(); the context does not collect the graphs
+    /// itself meanwhile (the collector of run-time values does, through the heap).
+    void begin(camel::core::context::Context &context, const camel::runtime::Program *main);
+    void end();
     const camel::runtime::Program *main() const { return main_; }
 
     /// The graph of `function`, whose program is noted.
@@ -65,15 +72,7 @@ class RunPrograms {
         note(function->program());
         return function->graph();
     }
-    void note(const camel::runtime::Program *program) {
-        if (program == main_ || program == nullptr) {
-            return;
-        }
-        std::lock_guard lock(mutex_);
-        if (std::find(others_.begin(), others_.end(), program) == others_.end()) {
-            others_.push_back(program);
-        }
-    }
+    void note(const camel::runtime::Program *program);
     /// The program that holds this version of `graph`.
     const camel::runtime::Program &of(const camel::runtime::GCGraph *graph) const {
         if (main_ != nullptr && main_->contains(graph)) {
@@ -81,7 +80,10 @@ class RunPrograms {
         }
         std::lock_guard lock(mutex_);
         for (const camel::runtime::Program *program : others_) {
-            if (program->contains(graph)) {
+            // A program the collector freed since it was noted holds nothing that runs.
+            if (camel::core::mm::graphSpace().isAllocated(
+                    const_cast<camel::runtime::Program *>(program)) &&
+                program->contains(graph)) {
                 return *program;
             }
         }
@@ -90,9 +92,28 @@ class RunPrograms {
     }
 
   private:
-    const camel::runtime::Program *main_ = nullptr;
+    camel::core::context::Context *context_ = nullptr;
+    bool active_                            = false;
+    const camel::runtime::Program *main_    = nullptr;
     mutable std::vector<const camel::runtime::Program *> others_;
     mutable std::mutex mutex_;
+};
+
+/// A run of `main` in `context`, ended when the scope is.
+class RunScope {
+  public:
+    RunScope(
+        RunPrograms &programs, camel::core::context::Context &context,
+        const camel::runtime::Program *main)
+        : programs_(programs) {
+        programs_.begin(context, main);
+    }
+    ~RunScope() { programs_.end(); }
+    RunScope(const RunScope &)            = delete;
+    RunScope &operator=(const RunScope &) = delete;
+
+  private:
+    RunPrograms &programs_;
 };
 
 struct RuntimeBranchArmRegion {
