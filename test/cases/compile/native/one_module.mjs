@@ -8,7 +8,9 @@
  *   - a type the `.cml` exports (`Tag`) is a name of the module: an importer reads it as
  *     `json::Tag`, beside the C++ module's `json::Json`;
  *   - a value the `.cml` exports (`tau`) is a name of the module too (`math::tau`);
- *   - a declaration of the `.cml` (`kind_of`) is what an importer's call reaches.
+ *   - a declaration of the `.cml` (`kind_of`, and `decode`, whose kernel the C++ module keeps)
+ *     is what an importer's call reaches, and a name the declaration module does not write
+ *     (`encode`, a computed signature) still answers from C++.
  *
  * The pair is made in the test's own scratch directory out of the stdlib `json` and `math`
  * modules, because the repository has no C++ module still written twice.
@@ -42,6 +44,10 @@ fs.writeFileSync(
 /// The type the C++ module exports is this module's own type, written without an import.
 #op<'json:kind'>
 export func kind_of(value: Json): string
+
+/// A name the C++ module implements, declared here because the declaration module is the
+/// module's signature: the C++ resolver is the kernel, not a second set of names.
+export func decode(text: string): Json!
 
 /// A type this file adds to the module, beside the C++ module's types.
 export type Tag = { level: int, text: string }

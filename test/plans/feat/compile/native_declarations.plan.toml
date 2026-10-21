@@ -117,6 +117,35 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "str_type.cml:11:17", "argument types: <> (int)", "<str:trim>: (s: string) => string"]
 
+# ---- The declarations of `json`: the accessors as one rule per tagged form (handover H115) ----
+
+[[tests]]
+name = "native.json_declaration_import"
+desc = "`json`'s declarations are the module's signature: an importer reads `decode`'s `Json!`, calls `get<key>` and `get<index>` with their with-parameters and chains the nullable and two-layer `Json?`/`Json?!` results of the accessors, and every call reaches the C++ operator."
+kind = "behavior"
+case = "../../../cases/compile/native/json_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "object\n2\nhi\n2\n"
+
+[[tests]]
+name = "native.json_wrong_arity"
+desc = "`json:decode` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/json_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_arity.cml:10:19", "argument types: <> (string, int)", "<json:decode>: (text: string) => Json!"]
+
+[[tests]]
+name = "native.json_wrong_type"
+desc = "An `int` where the declaration says `Json`: refused at the call, and the signature in the message has the parameter name the declaration gave it — `stdlib/json.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/json_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:11:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
+
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
 [[tests]]

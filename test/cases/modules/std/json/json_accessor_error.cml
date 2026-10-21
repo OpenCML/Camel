@@ -1,6 +1,6 @@
 /**
  * A Json accessor takes a `Json!` and passes its error on unchanged (design principles 11.2):
- * the value it returns is a `Json?!` (or `int?!`, ...), a null when there is nothing to take,
+ * the value it returns is a `Json!?` (or `int!?`, ...), a null when there is nothing to take,
  * and the error of the document when it had failed. A document nested deeper than the limit is
  * the error kind JsonTooDeep, with the line and column of the bracket that goes too deep. The
  * accessors on a document that has a value work as before, and chain over the two layers.
@@ -81,7 +81,7 @@ func main(): int sync {
     println(good->get<'s'>->as_string)
     println(good->get<'b'>->as_bool)
     println(good->get<'n'>->as_float)
-    // A `Json?!` that holds a value; `??` takes the nullable layer off. Printing it gives back
+    // A `Json!?` that holds a value; `??` takes the nullable layer off. Printing it gives back
     // a `Json!`; the result of println is dropped on purpose, as it is only there for the text.
     let _ = println(good->get<'a'> ?? decode('null'))
     // Nothing to take: null, not an error.
