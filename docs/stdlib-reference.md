@@ -39,7 +39,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [built-in](#built-in-functions) | none | C++ | 51 |
 | [str](#str) | `import { ... } from str` | C++ | 16 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
-| [tree](#tree) | `import { ... } from tree` | C++ | 7 |
+| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 48 |
@@ -1045,9 +1045,9 @@ Concatenates two binary values without decoding either one.
 - Pure.
 - Example: `concat(encode('header'), from_array([0, 255]))`
 
-<a id="tree"></a>
+<a id="ckpt"></a>
 
-## `tree`: parameter trees and checkpoints
+## `ckpt`: parameter trees and checkpoints
 
 #### `tree_map`
 

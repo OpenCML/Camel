@@ -1,5 +1,5 @@
 module checkpoint_unsupported_leaf
-import { save_tree } from tree
+import { save_tree } from ckpt
 
 func main(): int sync {
     save_tree('out/never', { weights: [1.0, 2.0], step: 3 })
