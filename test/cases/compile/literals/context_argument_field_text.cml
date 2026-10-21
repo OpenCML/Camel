@@ -1,0 +1,16 @@
+/**
+ * A struct literal written as an argument takes the parameter's type field by field (design
+ * principles 5.1): a text field is the type mismatch of that field, reported where it is
+ * written. The fields are written out of name order, as in the declaration case, so the
+ * position follows the field and not its slot in the data.
+ */
+module literal_context_argument_field_text
+
+type Point = { x: float, y: float }
+
+func px(p: Point): float { return p.x }
+
+func main(): int sync {
+    println(px({ y: 2.0, x: '1.5' }))
+    return 0
+}

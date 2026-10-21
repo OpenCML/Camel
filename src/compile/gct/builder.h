@@ -278,6 +278,14 @@ class Builder {
     /// would be truncated is reported at `at`); the same node when it is not a literal, or
     /// when the type is not one a literal can be given this way. Null-safe.
     node_ptr_t literalNodeInType(const node_ptr_t &node, Type *type, const AST::node_ptr_t &at);
+    /// A text element of the composite literal `data` where the type of its position expects
+    /// something else, reported as the type mismatch it is (design principles 5.1) at the
+    /// element itself, as H27c reports an element whose value does not fit. Recurses through
+    /// nested composites; false when there is no such element, and the caller reports the
+    /// literal the way it did before. `where` is the position to use for an element whose own
+    /// position was not kept.
+    bool rejectTextInLiteral(
+        const data_ptr_t &data, Type *type, camel::source::origin_id_t where);
     /// The initializer `value` of a declaration written with the type `type` (`let x: T = e`,
     /// lowered from `ast`). A literal is converted to the type here; any other expression is
     /// put under an annotation CAST, which the GIR builder resolves once the type of the value

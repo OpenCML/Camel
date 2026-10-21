@@ -1,6 +1,7 @@
 // Converting a value to its own type is legal and does nothing (design principles 5.1, Q11 of
 // docs/design/graph-model): `xs as int[]` for `xs: int[]` passes exactly as a conversion
-// through an alias does, for arrays, tuples and structs, literals included.
+// through an alias does — for a primitive, a text, a complex number, an array, a tuple and a
+// struct, literals included; a cast that would convert something is still refused.
 type A = int[]
 type S = { a: int, b: string }
 
@@ -19,5 +20,20 @@ func main(): int sync {
     println(through([4]))
     println([5, 6] as int[])
     println(len(ys as A))
+    println('x' as string)
+    let text: string = 'y'
+    println(text as string)
+    let n: int = 3
+    println(n as int)
+    let b: bool = true
+    println(b as bool)
+    let f: float = 1.5
+    println(f as float)
+    let z: c128 = 1+2i
+    println(z as c128)
+    let w: c64 = 1-2i
+    println(w as c64)
+    println(3 as int)
+    println(1.5 as float)
     return 0
 }

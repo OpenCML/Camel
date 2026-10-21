@@ -1,0 +1,17 @@
+/**
+ * The number tokens a literal and an entry argument share (H15h): an integer token is decimal,
+ * hexadecimal (`0x`), binary (`0b`) or octal (a leading `0`), and a real token too small to tell
+ * from zero is zero. A float position takes an integer token and converts it to its width, as a
+ * command-line argument of that type is read.
+ */
+module number_token_forms
+
+func main(): int sync {
+    let h: float = 0xFF
+    let b: f32 = 0b1010
+    let o: float = 077
+    let z: float = 1e-9999
+    println(h, b, o, z)
+    println(0xFF, 0b1010, 077)
+    return 0
+}

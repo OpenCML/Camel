@@ -87,6 +87,9 @@ struct EntryNumberText {
     const char *notANumber          = nullptr;
     const char *outOfRange          = nullptr;
     const char *outOfRangeImaginary = nullptr;
+    /// A number written as an integer token whose value does not fit an int64: the sentence
+    /// names the integer's range, not the float's, which would be false about the text.
+    const char *outOfRangeInteger = nullptr;
 };
 
 /// The values the command line gives the parameters of `main` (see the file comment).
@@ -164,31 +167,36 @@ class EntryArguments {
 
     /// What reading a number text gave: the value, or which refusal it is. A complex text has
     /// one more cause than a real one: its imaginary part.
-    enum class ReadStatus { Ok, NotANumber, OutOfRange, OutOfRangeImaginary };
+    enum class ReadStatus { Ok, NotANumber, OutOfRange, OutOfRangeImaginary, OutOfRangeInteger };
 
     /// One integer as `camel` reads one: the language's whole-token integer parser, at the width
     /// the parameter is declared with (`i32` reads an int32, so its range is the range checked).
     template <std::signed_integral T> static ReadStatus readInteger(std::string_view text, T &out) {
-        switch (camel::utils::parseWholeInteger<T>(text, out)) {
+        switch (camel::utils::parseNumberToken<T>(text, out)) {
         case camel::utils::NumberTextStatus::Ok:
             return ReadStatus::Ok;
         case camel::utils::NumberTextStatus::OutOfRange:
+        case camel::utils::NumberTextStatus::OutOfRangeInteger:
             return ReadStatus::OutOfRange;
         default:
             return ReadStatus::NotANumber;
         }
     }
 
-    /// One number as `camel` reads one: the language's whole-token float parser (camel/utils/
-    /// number_text.h), not strtod's wider grammar. No hexadecimal form, no `Infinity`, no
-    /// blanks; an optional sign, digits with an optional fraction and exponent, `inf` or `nan`.
-    /// A number the width cannot hold is OutOfRange, not NotANumber.
+    /// One number as `camel` reads one: one whole number token of the language (camel/utils/
+    /// number_text.h), not strtod's wider grammar: an optional sign, an integer token (`0xFF`,
+    /// `0b1010`, `077`) or a real token (digits with an optional fraction and exponent), `inf`
+    /// or `nan`. A real token too small to tell from zero is zero, as a source literal is. A
+    /// number the width cannot hold is OutOfRange, not NotANumber; an integer token whose value
+    /// does not fit an int64 is OutOfRangeInteger.
     template <std::floating_point T> static ReadStatus readNumber(std::string_view text, T &out) {
-        switch (camel::utils::parseWholeFloat<T>(text, out)) {
+        switch (camel::utils::parseNumberToken<T>(text, out)) {
         case camel::utils::NumberTextStatus::Ok:
             return ReadStatus::Ok;
         case camel::utils::NumberTextStatus::OutOfRange:
             return ReadStatus::OutOfRange;
+        case camel::utils::NumberTextStatus::OutOfRangeInteger:
+            return ReadStatus::OutOfRangeInteger;
         default:
             return ReadStatus::NotANumber;
         }
@@ -233,6 +241,9 @@ class EntryArguments {
             break;
         case ReadStatus::OutOfRangeImaginary:
             message = texts.outOfRangeImaginary;
+            break;
+        case ReadStatus::OutOfRangeInteger:
+            message = texts.outOfRangeInteger;
             break;
         case ReadStatus::Ok:
             break;

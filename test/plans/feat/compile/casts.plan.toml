@@ -6,7 +6,7 @@ desc = "Conversions with `as` that the type system decides by itself."
 
 [[tests]]
 name = "same_type.nvm"
-desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (nvm)"
+desc = "Converting a value to its own type is legal and does nothing, for a primitive, a text, a complex number, an array, a tuple or a struct, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (nvm)"
 kind = "behavior"
 case = "../../../cases/compile/casts/same_type.cml"
 args = ["${case}", "${run_nvm}"]
@@ -22,6 +22,15 @@ const want = [
   "[4]",
   "[5, 6]",
   "2",
+  "x",
+  "y",
+  "3",
+  "true",
+  "1.5",
+  "1+2i",
+  "1-2i",
+  "3",
+  "1.5",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -30,7 +39,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "same_type.fvm"
-desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (fvm)"
+desc = "Converting a value to its own type is legal and does nothing, for a primitive, a text, a complex number, an array, a tuple or a struct, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (fvm)"
 kind = "behavior"
 case = "../../../cases/compile/casts/same_type.cml"
 args = ["${case}", "${run_fvm}"]
@@ -46,6 +55,15 @@ const want = [
   "[4]",
   "[5, 6]",
   "2",
+  "x",
+  "y",
+  "3",
+  "true",
+  "1.5",
+  "1+2i",
+  "1-2i",
+  "3",
+  "1.5",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -54,7 +72,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "same_type.jit"
-desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (jit)"
+desc = "Converting a value to its own type is legal and does nothing, for a primitive, a text, a complex number, an array, a tuple or a struct, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (jit)"
 kind = "behavior"
 case = "../../../cases/compile/casts/same_type.cml"
 args = ["${case}", "${run_jit}"]
@@ -70,6 +88,15 @@ const want = [
   "[4]",
   "[5, 6]",
   "2",
+  "x",
+  "y",
+  "3",
+  "true",
+  "1.5",
+  "1+2i",
+  "1-2i",
+  "3",
+  "1.5",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
@@ -78,7 +105,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "same_type.prl"
-desc = "Converting an array, a tuple or a struct to its own type is legal and does nothing, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (prl)"
+desc = "Converting a value to its own type is legal and does nothing, for a primitive, a text, a complex number, an array, a tuple or a struct, written directly or through an alias, of a variable or of a literal; it used to be DynamicCastForbidden unless both sides were one type object (prl)"
 kind = "behavior"
 case = "../../../cases/compile/casts/same_type.cml"
 args = ["${case}", "${run_prl}"]
@@ -94,6 +121,15 @@ const want = [
   "[4]",
   "[5, 6]",
   "2",
+  "x",
+  "y",
+  "3",
+  "true",
+  "1.5",
+  "1+2i",
+  "1-2i",
+  "3",
+  "1.5",
 ].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
