@@ -723,7 +723,8 @@ const camel::runtime::Program *Context::materializeRuntimeProgram() {
     runtimeGraphMgr_->adoptRoot(program);
     registerRuntimeGraphDebugInfo(program);
     // The arms the front end built as graphs of their own become regions of the graphs that have
-    // the branches. The debugger shows the arms as the frames they were (tools/debugger).
+    // the branches. The debugger shows the arms as the frames they were (tools/debugger): they
+    // stay graphs there.
     if (GlobalConfig::IsInspectionMode()) {
         return program;
     }

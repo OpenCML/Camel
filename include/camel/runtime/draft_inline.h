@@ -42,8 +42,12 @@ struct DraftInlineResult {
     explicit operator bool() const { return valueExit != kInvalidNodeRef; }
 };
 
+/// With `asArm`, `funcNodeId` is the call of a branch arm the front end built as a graph: its body
+/// becomes the Arm region of that arm (an arm index of the BRCH that orders the call), not an Inline
+/// region.
 DraftInlineResult inlineCallableInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId);
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId,
+    bool asArm = false);
 /// Bound on the type-only specializations of one recursive function that a program may hold.
 ///
 /// A specialization that only refines parameter types (a tensor argument whose type carries its

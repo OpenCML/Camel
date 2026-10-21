@@ -63,109 +63,25 @@ namespace {
 // ---------------------------------------------------------------- branch regions
 
 /**
- * For every node, the branch arms it lies in (token = brch << 16 | arm, sorted). Two nodes may
- * only be merged when they lie in exactly the same arms, so the survivor runs whenever the
+ * For every node, the control regions it lies in (the Arm regions around it, sorted). Two nodes
+ * may only be merged when they lie in exactly the same ones, so the survivor runs whenever the
  * replaced node would have.
- *
- * Arms are inline regions. An arm's nodes are those forward-reachable from its head up to the
- * branch's JOIN, and also the nodes of the branch (what runs after the BRCH and before the
- * JOIN) that its tail depends on: inlining an arm whose body is a bare constant leaves that
- * DATA node waiting on the BRCH directly, *before* the bridge GATE that is the arm's head, so
- * the head alone does not find it (branchArmNodes() below relies on the same shape). A node of
- * the branch that belongs to no arm by either rule gets a token of its own and is never merged.
  */
 std::vector<std::vector<uint64_t>> armRegions(const GraphDraft &draft) {
-    constexpr uint64_t kUnattributed = uint64_t{1} << 63;
     std::vector<std::vector<uint64_t>> regions(draft.nodeSlotCount());
-    for (gc_node_ref_t brch = 0; brch < draft.nodeSlotCount(); ++brch) {
-        const auto *h = draft.header(brch);
-        if (!h || h->kind != GCNodeKind::Brch) {
+    for (gc_node_ref_t n = 0; n < regions.size(); ++n) {
+        if (!draft.alive(n)) {
             continue;
         }
-        const auto join =
-            reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(brch).data())->join;
-        const auto arms = draft.branchArmsOf(brch);
-
-        // What runs in this branch: forward from the BRCH, stopping at the JOIN.
-        std::vector<bool> inBranch(draft.nodeSlotCount(), false);
-        std::vector<gc_node_ref_t> stack;
-        for (auto users :
-             {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
-            stack.insert(stack.end(), users.begin(), users.end());
-        }
-        while (!stack.empty()) {
-            const gc_node_ref_t n = stack.back();
-            stack.pop_back();
-            if (n == join || n == brch || inBranch[n] || !draft.header(n)) {
-                continue;
-            }
-            inBranch[n] = true;
-            for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
-                stack.insert(stack.end(), users.begin(), users.end());
+        for (uint32_t r = draft.nodeRegion(n); r != 0; r = draft.region(r).parent) {
+            const auto kind = draft.region(r).kind;
+            if (kind == camel::runtime::GCRegionKind::Arm ||
+                kind == camel::runtime::GCRegionKind::LoopCond ||
+                kind == camel::runtime::GCRegionKind::LoopBody) {
+                regions[n].push_back(r);
             }
         }
-        std::vector<bool> attributed(draft.nodeSlotCount(), false);
-        const auto tails = join != kInvalidNodeRef && draft.header(join)
-                               ? draft.withInputsOf(join)
-                               : std::span<const gc_node_ref_t>{};
-
-        for (size_t arm = 0; arm < arms.size(); ++arm) {
-            const uint64_t token = (static_cast<uint64_t>(brch) << 16) | arm;
-            std::vector<bool> seen(draft.nodeSlotCount(), false);
-            std::queue<gc_node_ref_t> work;
-            if (arms[arm].head != kInvalidNodeRef) {
-                work.push(arms[arm].head);
-            }
-            while (!work.empty()) {
-                const gc_node_ref_t n = work.front();
-                work.pop();
-                if (n == join || n == brch || seen[n] || !draft.header(n)) {
-                    continue;
-                }
-                seen[n]       = true;
-                attributed[n] = true;
-                regions[n].push_back(token);
-                for (auto users :
-                     {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
-                    for (gc_node_ref_t u : users) {
-                        work.push(u);
-                    }
-                }
-            }
-            // The nodes of the branch this arm's result depends on.
-            if (tails.size() == arms.size() && tails[arm] < inBranch.size() &&
-                inBranch[tails[arm]]) {
-                if (!seen[tails[arm]]) {
-                    seen[tails[arm]]       = true;
-                    attributed[tails[arm]] = true;
-                    regions[tails[arm]].push_back(token);
-                }
-                stack.push_back(tails[arm]);
-            }
-            while (!stack.empty()) {
-                const gc_node_ref_t n = stack.back();
-                stack.pop_back();
-                for (auto inputs :
-                     {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
-                    for (gc_node_ref_t in : inputs) {
-                        if (in < inBranch.size() && inBranch[in] && !seen[in]) {
-                            seen[in]       = true;
-                            attributed[in] = true;
-                            regions[in].push_back(token);
-                            stack.push_back(in);
-                        }
-                    }
-                }
-            }
-        }
-        for (gc_node_ref_t n = 0; n < inBranch.size(); ++n) {
-            if (inBranch[n] && !attributed[n]) {
-                regions[n].push_back(kUnattributed | n);
-            }
-        }
-    }
-    for (auto &r : regions) {
-        std::ranges::sort(r);
+        std::ranges::sort(regions[n]);
     }
     return regions;
 }
@@ -293,65 +209,37 @@ std::optional<size_t> staticArmOf(const GraphDraft &draft, gc_node_ref_t brch) {
 }
 
 /**
- * The nodes of each arm of `brch`, or nullopt when they cannot be told apart. A branch's code is
- * what runs after the BRCH and before its JOIN (forward-reachable from the BRCH, stopping at the
- * JOIN); an arm's part of it is what its tail depends on. Inlining can leave several nodes of an
- * arm waiting on the BRCH directly, so arms are not identified by their heads alone. Every node of
- * the branch must belong to exactly one arm; otherwise the branch is left alone.
+ * The nodes of each arm of `brch`: those in the region of the arm (the branches inside the arm
+ * included), or nullopt when an arm has no region.
  */
-std::optional<std::vector<std::vector<gc_node_ref_t>>> branchArmNodes(
-    const GraphDraft &draft, gc_node_ref_t brch, gc_node_ref_t join,
-    std::span<const gc_node_ref_t> tails) {
-    std::vector<bool> inBranch(draft.nodeSlotCount(), false);
-    std::vector<gc_node_ref_t> work;
-    for (auto users : {draft.normUsersOf(brch), draft.withUsersOf(brch), draft.ctrlUsersOf(brch)}) {
-        work.insert(work.end(), users.begin(), users.end());
+std::optional<std::vector<std::vector<gc_node_ref_t>>>
+branchArmNodes(const GraphDraft &draft, gc_node_ref_t brch, size_t armCount) {
+    std::vector<uint32_t> armRegion(armCount, 0);
+    for (uint32_t r = 1; r < draft.regionCount(); ++r) {
+        const auto &region = draft.region(r);
+        if (region.kind == camel::runtime::GCRegionKind::Arm && region.owner == brch &&
+            region.index < armCount) {
+            armRegion[region.index] = r;
+        }
     }
-    while (!work.empty()) {
-        const gc_node_ref_t n = work.back();
-        work.pop_back();
-        if (n == join || n == brch || inBranch[n] || !draft.header(n)) {
+    if (std::ranges::find(armRegion, 0u) != armRegion.end()) {
+        return std::nullopt;
+    }
+    std::vector<std::vector<gc_node_ref_t>> arms(armCount);
+    for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
+        if (!draft.alive(n)) {
             continue;
         }
-        inBranch[n] = true;
-        for (auto users : {draft.normUsersOf(n), draft.withUsersOf(n), draft.ctrlUsersOf(n)}) {
-            work.insert(work.end(), users.begin(), users.end());
-        }
-    }
-    std::vector<int> owner(draft.nodeSlotCount(), -1);
-    std::vector<std::vector<gc_node_ref_t>> regions(tails.size());
-    for (size_t arm = 0; arm < tails.size(); ++arm) {
-        std::vector<gc_node_ref_t> stack;
-        if (tails[arm] < inBranch.size() && inBranch[tails[arm]]) {
-            stack.push_back(tails[arm]);
-        }
-        while (!stack.empty()) {
-            const gc_node_ref_t n = stack.back();
-            stack.pop_back();
-            if (owner[n] == static_cast<int>(arm)) {
-                continue;
-            }
-            if (owner[n] != -1) {
-                return std::nullopt; // shared by two arms
-            }
-            owner[n] = static_cast<int>(arm);
-            regions[arm].push_back(n);
-            for (auto inputs :
-                 {draft.normInputsOf(n), draft.withInputsOf(n), draft.ctrlInputsOf(n)}) {
-                for (gc_node_ref_t in : inputs) {
-                    if (in < inBranch.size() && inBranch[in]) {
-                        stack.push_back(in);
-                    }
-                }
+        for (uint32_t r = draft.nodeRegion(n); r != 0; r = draft.region(r).parent) {
+            const auto &region = draft.region(r);
+            if (region.kind == camel::runtime::GCRegionKind::Arm && region.owner == brch &&
+                region.index < armCount) {
+                arms[region.index].push_back(n);
+                break;
             }
         }
     }
-    for (gc_node_ref_t n = 0; n < inBranch.size(); ++n) {
-        if (inBranch[n] && owner[n] == -1) {
-            return std::nullopt; // runs in the branch but feeds no arm's result
-        }
-    }
-    return regions;
+    return arms;
 }
 
 /**
@@ -376,8 +264,7 @@ bool pruneBranch(GraphDraft &draft, gc_node_ref_t brch) {
     }
     const gc_node_ref_t result = draft.withInputsOf(join)[*arm];
 
-    const auto tails = draft.withInputsOf(join);
-    auto found       = branchArmNodes(draft, brch, join, tails);
+    auto found = branchArmNodes(draft, brch, arms.size());
     if (!found) {
         return false;
     }

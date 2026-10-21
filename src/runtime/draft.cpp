@@ -878,6 +878,7 @@ void GraphDraft::appendUserRef(
     if (node(id) == nullptr) {
         return;
     }
+    inheritRegion(id, userId);
     const auto appendUnique = [&](DraftEdgeKind kind) {
         auto &items = userListOf(id, kind);
         DraftUserLists &lists = *users_[id];
@@ -1025,7 +1026,9 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     ++mutations_;
     DraftNode *draftNode = node(id);
     ASSERT(draftNode != nullptr, "Cannot erase a missing draft node.");
-    dissolveRegionsOf(id);
+    if (draftNode->header.kind == GCNodeKind::Brch || draftNode->header.kind == GCNodeKind::Loop) {
+        dissolveRegionsOf(id);
+    }
 
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());

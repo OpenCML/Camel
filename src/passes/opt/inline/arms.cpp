@@ -86,7 +86,7 @@ const camel::runtime::Program *lowerBranchArms(
         for (gc_node_ref_t call = findArmCall(draft, spliced); call != kInvalidNodeRef;
              call               = findArmCall(draft, spliced)) {
             armGraphs.push_back(draft.calleeIdOf(call));
-            const auto inlined = inlineCallInOrder(session, draft, call);
+            const auto inlined = inlineCallInOrder(session, draft, call, true);
             if (!inlined) {
                 break;
             }

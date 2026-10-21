@@ -198,6 +198,8 @@ bool raiseArm(
     }
     // A gate that waited on what the arm does not hold waits on nothing.
     body.dissolveUnorderedGates();
+    // The branches inside the arm have their arms as calls (they were raised before).
+    body.regionizeArmCalls();
     body.setFuncType(FunctionType::create()->withExitType(exitType));
 
     // The call that takes the place of the arm.
@@ -240,8 +242,10 @@ bool raiseArm(
             draft.eraseNode(id);
         }
     }
-    draft.setNodeRegion(call, arm.parent);
-    draft.retireRegion(region);
+    // The arm is its call now: the region holds the call alone.
+    draft.retireRegion(region, /*keepRegion=*/true);
+    draft.setNodeRegion(call, region);
+    draft.setRegionResult(region, call);
     return true;
 }
 

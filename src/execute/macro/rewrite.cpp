@@ -54,6 +54,7 @@ gc_node_ref_t bridgeMacroRewriteControl(
         .dataType     = valueHeader->dataType,
         .kind         = GCNodeKind::Gate,
         .runtimeFlags = 0,
+        .region       = draft.nodeRegion(replacedNodeId),
         .normInputs   = std::span<const gc_node_ref_t>(&valueNodeId, 1),
         .ctrlInputs   = ctrlPreds,
     };

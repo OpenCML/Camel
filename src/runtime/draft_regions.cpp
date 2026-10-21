@@ -20,6 +20,7 @@
 /* The regions of a graph under construction (camel/runtime/graph.h, GCRegion). */
 #include "camel/runtime/draft.h"
 
+
 #include <stdexcept>
 
 namespace camel::runtime {
@@ -83,6 +84,35 @@ void GraphDraft::setRegionInline(uint32_t id, GraphId callee, gc_node_ref_t call
     regions_[id].callSite = callSite;
 }
 
+void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
+    if (regions_.size() <= 1) {
+        return;
+    }
+    DraftNode *reader = node(user);
+    const DraftNode *read = node(input);
+    if (reader == nullptr || read == nullptr || reader->header.kind == GCNodeKind::Join) {
+        return;
+    }
+    // Inline and Block regions only say where code came from: their values are read from outside.
+    const auto controlOf = [&](uint32_t region) {
+        while (region != 0 && region < regions_.size() &&
+               (regions_[region].kind == GCRegionKind::Inline ||
+                regions_[region].kind == GCRegionKind::Block ||
+                regions_[region].kind == GCRegionKind::Dead)) {
+            region = regions_[region].parent;
+        }
+        return region;
+    };
+    const uint32_t readControl   = controlOf(read->header.region);
+    const uint32_t readerControl = controlOf(reader->header.region);
+    if (readControl == 0 || readControl == readerControl || regionWithin(readerControl, readControl)) {
+        return;
+    }
+    if (regionWithin(readControl, readerControl)) {
+        reader->header.region = readControl;
+    }
+}
+
 void GraphDraft::dissolveRegionsOf(gc_node_ref_t id) {
     for (uint32_t r = 1; r < regions_.size(); ++r) {
         GCRegion &region = regions_[r];
@@ -110,12 +140,13 @@ void GraphDraft::dissolveRegionsOf(gc_node_ref_t id) {
     }
 }
 
-void GraphDraft::retireRegion(uint32_t id) {
+void GraphDraft::retireRegion(uint32_t id, bool keepRegion) {
     ++mutations_;
     ASSERT(id > 0 && id < regions_.size(), "No such region.");
     const uint32_t around = regions_[id].parent;
     for (uint32_t r = 1; r < regions_.size(); ++r) {
-        if (regions_[r].kind == GCRegionKind::Dead || !regionWithin(r, id)) {
+        if (regions_[r].kind == GCRegionKind::Dead || !regionWithin(r, id) ||
+            (keepRegion && r == id)) {
             continue;
         }
         for (DraftNode *held : nodesById_) {
@@ -127,6 +158,16 @@ void GraphDraft::retireRegion(uint32_t id) {
         regions_[r].owner  = kInvalidNodeRef;
         regions_[r].result = kInvalidNodeRef;
     }
+}
+
+uint32_t GraphDraft::armRegionOf(gc_node_ref_t brch, size_t index) const {
+    for (uint32_t r = 1; r < regions_.size(); ++r) {
+        if (regions_[r].kind == GCRegionKind::Arm && regions_[r].owner == brch &&
+            regions_[r].index == index) {
+            return r;
+        }
+    }
+    return 0;
 }
 
 void GraphDraft::clearRegions() {
@@ -168,6 +209,26 @@ bool GraphDraft::regionWithin(uint32_t inner, uint32_t outer) const {
         inner = regions_[inner].parent;
     }
     return true;
+}
+
+void GraphDraft::regionizeArmCalls() {
+    for (gc_node_ref_t brch : brchIds_) {
+        const DraftNodeHeader *h = header(brch);
+        if (!h || h->kind != GCNodeKind::Brch) {
+            continue;
+        }
+        const std::vector<GCBranchArm> arms(branchArmsOf(brch).begin(), branchArmsOf(brch).end());
+        for (uint32_t k = 0; k < arms.size(); ++k) {
+            const gc_node_ref_t call = arms[k].head;
+            if (call != arms[k].tail || !alive(call) || header(call)->kind != GCNodeKind::Func ||
+                nodeRegion(call) != 0) {
+                continue;
+            }
+            const uint32_t region = addRegion(GCRegionKind::Arm, nodeRegion(brch), brch, k);
+            setNodeRegion(call, region);
+            setRegionResult(region, call);
+        }
+    }
 }
 
 } // namespace camel::runtime

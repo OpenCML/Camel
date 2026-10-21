@@ -38,10 +38,11 @@ namespace camel::passes::opt {
 /// Inlines the direct call `funcNodeId` (a FUNC node) of `draft`, keeping the order the program
 /// gave its statements: the inlined body, when it may have an effect, waits for the ordered
 /// sources of all the call's arguments, and the call's users wait for them and for the call's
-/// control predecessors. False (and no splice) when the callee cannot be inlined.
+/// control predecessors. False (and no splice) when the callee cannot be inlined. See
+/// inlineCallableInDraft for `asArm`.
 camel::runtime::DraftInlineResult inlineCallInOrder(
     camel::runtime::RuntimeGraphDraftSession &session, camel::runtime::GraphDraft &draft,
-    camel::runtime::gc_node_ref_t funcNodeId);
+    camel::runtime::gc_node_ref_t funcNodeId, bool asArm = false);
 
 /// Inlines the call of every arm of every branch of `program` (the front end builds each arm as
 /// a graph called after the BRCH), so the arms are regions of the graphs that hold the branches.

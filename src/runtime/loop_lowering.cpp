@@ -359,6 +359,11 @@ std::unique_ptr<GraphDraft> buildRec(const LoopShape &loop, GraphId next, GraphI
     draft->setNormInputs(join, std::span<const gc_node_ref_t>(&brch, 1));
     const std::array<gc_node_ref_t, 2> armValues{goOn, stop};
     draft->setWithInputs(join, armValues);
+    for (uint32_t arm = 0; arm < armValues.size(); ++arm) {
+        const uint32_t region = draft->addRegion(GCRegionKind::Arm, 0, brch, arm);
+        draft->setNodeRegion(armValues[arm], region);
+        draft->setRegionResult(region, armValues[arm]);
+    }
     setResult(*draft, join);
     stampOrigin(*draft, loop.origin);
     return draft;

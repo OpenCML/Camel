@@ -216,10 +216,10 @@ static bytecode_vec_t compileRuntimeGraph(
     unordered_map<camel::runtime::gc_node_ref_t, vector<pair<size_t, size_t>>> joinTargetMap;
     unordered_map<camel::runtime::gc_node_ref_t, size_t> valueProducerMap;
 
-    // An arm runs from its head to its tail and then must leave for the JOIN rather than fall
+    // An arm runs from its entry to its tail and then must leave for the JOIN rather than fall
     // into the next arm: every arm tail laid out between its BRCH and JOIN gets a JUMP to the
-    // JOIN after it (the one before the JOIN itself is folded away by the optimizer). A tail
-    // outside that range is a value computed before the branch; that arm is empty.
+    // JOIN after it (the one before the JOIN itself is folded away by the optimizer). An arm with
+    // nothing to run has the JOIN for its tail.
     unordered_map<camel::runtime::gc_node_ref_t, vector<camel::runtime::gc_node_ref_t>>
         armExitJoins;
     {
@@ -237,13 +237,13 @@ static bytecode_vec_t compileRuntimeGraph(
             if (joinPos == position.end()) {
                 continue;
             }
-            for (const auto &arm : graph->branchArmsOf(brch)) {
-                auto tailPos = position.find(arm.tail);
+            for (const auto tail : plan.branchArmTailsOfNode(brch)) {
+                auto tailPos = position.find(tail);
                 if (tailPos == position.end() || tailPos->second <= position.at(brch) ||
                     tailPos->second >= joinPos->second) {
                     continue;
                 }
-                auto &joins = armExitJoins[arm.tail];
+                auto &joins = armExitJoins[tail];
                 if (std::find(joins.begin(), joins.end(), join) == joins.end()) {
                     joins.push_back(join);
                 }

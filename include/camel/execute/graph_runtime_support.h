@@ -129,17 +129,31 @@ std::vector<camel::runtime::gc_node_ref_t> collectRuntimeTailJoinArmValues(
 bool hasOnlyTrivialRuntimeTailSuffixAfter(
     const camel::runtime::GCGraph *graph, std::span<const camel::runtime::gc_node_ref_t> topoOrder,
     size_t anchorIndex);
+/// The nodes of the arm `armIndex` of the BRCH `brchIndex`: those of its region, in the order they
+/// depend on one another (the region of the arm names them; see GCRegion).
 RuntimeBranchArmRegion collectRuntimeBranchArmRegion(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchIndex, size_t armIndex);
-camel::runtime::gc_node_ref_t resolveRuntimeBranchArmEntry(
-    camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef, size_t armIndex,
-    std::span<const camel::runtime::gc_node_ref_t> topoOrder);
-// Checks that the Arm regions of `graph` hold what the arms of its branches hold by the older
-// reckoning (camel/runtime arm_members.h over the frozen graph): the same nodes, for every arm of
-// every branch the execution order reaches. Throws std::runtime_error naming the branch and the
-// arm. Kept while the back ends move from reckoning the arms to reading the regions.
-void verifyBranchArmRegions(
-    camel::runtime::GCGraph *graph, std::span<const camel::runtime::gc_node_ref_t> topoOrder);
+/// Where each arm of each BRCH of `graph` starts in the execution order `topoOrder`: the first node
+/// of the arm region that runs something, the JOIN when none does.
+class BranchArmEntries {
+  public:
+    BranchArmEntries(
+        const camel::runtime::GCGraph &graph,
+        std::span<const camel::runtime::gc_node_ref_t> topoOrder);
+    camel::runtime::gc_node_ref_t entry(camel::runtime::gc_node_ref_t brch, size_t arm) const {
+        return entries_.at(brch)[arm];
+    }
+    /// The last node of the arm in the order; the JOIN when the arm has none.
+    camel::runtime::gc_node_ref_t tail(camel::runtime::gc_node_ref_t brch, size_t arm) const {
+        return tails_.at(brch)[arm];
+    }
+
+  private:
+    std::unordered_map<camel::runtime::gc_node_ref_t, std::vector<camel::runtime::gc_node_ref_t>>
+        entries_;
+    std::unordered_map<camel::runtime::gc_node_ref_t, std::vector<camel::runtime::gc_node_ref_t>>
+        tails_;
+};
 size_t selectRuntimeBranchArm(
     camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t brchRef,
     camel::core::context::Frame *frame);

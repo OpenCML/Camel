@@ -1830,7 +1830,7 @@ std::vector<gc_node_ref_t> armPlacingArguments(const GraphDraft &draft, gc_node_
 } // namespace
 
 DraftInlineResult inlineCallableInDraft(
-    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId) {
+    RuntimeGraphDraftSession &session, GraphDraft &draft, gc_node_ref_t funcNodeId, bool asArm) {
     DraftInlineResult result{.callNode = funcNodeId};
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice begin for draft node {}.", funcNodeId);
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);
@@ -1904,7 +1904,7 @@ DraftInlineResult inlineCallableInDraft(
     uint32_t armIndex   = 0;
     for (gc_node_ref_t ctrlPred : draft.ctrlInputsOf(funcNodeId)) {
         const DraftNodeHeader *predHeader = draft.header(ctrlPred);
-        if (!predHeader || predHeader->kind != GCNodeKind::Brch) {
+        if (!asArm || !predHeader || predHeader->kind != GCNodeKind::Brch) {
             continue;
         }
         const auto arms = draft.branchArmsOf(ctrlPred);
@@ -1916,9 +1916,20 @@ DraftInlineResult inlineCallableInDraft(
         }
     }
     const size_t slotsBefore = draft.nodeSlotCount();
-    const uint32_t inlineRegion =
-        draft.addInlineRegion(draft.nodeRegion(funcNodeId), calleeGraph->id(), kInvalidNodeRef);
+    // The call is the whole of its arm, which already has its region: the body goes into it.
+    uint32_t armRegion = 0;
     if (armOf != kInvalidNodeRef) {
+        const uint32_t around = draft.nodeRegion(funcNodeId);
+        if (around != 0 && draft.region(around).kind == GCRegionKind::Arm &&
+            draft.region(around).owner == armOf && draft.region(around).index == armIndex) {
+            armRegion = around;
+        }
+    }
+    const uint32_t inlineRegion =
+        armRegion != 0
+            ? armRegion
+            : draft.addInlineRegion(draft.nodeRegion(funcNodeId), calleeGraph->id(), kInvalidNodeRef);
+    if (armOf != kInvalidNodeRef && armRegion == 0) {
         draft.setRegionArm(inlineRegion, armOf, armIndex);
     }
     draft.setRegionOrigin(inlineRegion, static_cast<uint32_t>(draft.nodeOrigin(funcNodeId)));
@@ -2128,7 +2139,8 @@ DraftInlineResult inlineCallableInDraft(
     const uint32_t spliceRegion = armOf != kInvalidNodeRef ? inlineRegion : draft.nodeRegion(funcNodeId);
     for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
          ++id) {
-        if (spliceRegion != 0 && draft.alive(id) && draft.nodeRegion(id) == 0) {
+        if (spliceRegion != 0 && draft.alive(id) &&
+            !draft.regionWithin(draft.nodeRegion(id), spliceRegion)) {
             draft.setNodeRegion(id, spliceRegion);
         }
     }

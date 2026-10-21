@@ -263,7 +263,7 @@ std::optional<gc_node_ref_t> runtimeBranchOver(GCGraph *g, gc_node_ref_t node) {
         if (!cond.empty() && constantOf(g, cond.front())) {
             continue;
         }
-        const size_t arms = g->ctrlOutputsOf(it.ref()).size();
+        const size_t arms = g->branchArmsOf(it.ref()).size();
         for (size_t arm = 0; arm < arms; ++arm) {
             const auto region = camel::execute::collectRuntimeBranchArmRegion(g, it.ref(), arm);
             const auto &nodes = region.topoIndices;
