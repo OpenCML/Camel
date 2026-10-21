@@ -328,6 +328,11 @@ struct BytecodeHeader {                  // 16 bytes
 
     bool hasExtraWord() const { return extraWordCount() != 0; }
 
+    /// The loop an LBEG, LTST or LEND belongs to (their one extra word). The handlers know these
+    /// three carry exactly that word, which extra() would work out from the opcode again; a round
+    /// asks for it at each of its two events.
+    inline const camel::runtime::ExecLoop *loopPayload() const;
+
     inline BytecodeExtra *extra() {
         const size_t extraWords = extraWordCount();
         ASSERT(extraWords != 0, "Bytecode has no extra payload.");
@@ -421,6 +426,14 @@ union BytecodeExtra {                           // 8 bytes
 
     std::string toString(OpCode opcode) const;
 };
+
+inline const camel::runtime::ExecLoop *BytecodeHeader::loopPayload() const {
+    ASSERT(
+        opcode == OpCode::LBEG || opcode == OpCode::LTST || opcode == OpCode::LEND,
+        "Bytecode is not a loop event.");
+    return reinterpret_cast<const BytecodeExtra *>(reinterpret_cast<const uint64_t *>(this + opsize) - 1)
+        ->loop;
+}
 
 // FUNC/TAIL:
 // - extra()  : runtime callee graph pointer
