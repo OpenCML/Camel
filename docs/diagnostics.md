@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-182 diagnostics: 164 errors, 18 warnings.
+181 diagnostics: 164 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -154,7 +154,6 @@ prints one entry.
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn |
-| `0x031000A0` | [SemanticDiag::IntegerLiteralTruncated](#integerliteraltruncated) | Warn |
 | `0x031000C0` | [SemanticDiag::UnusedFallibleValue](#unusedfalliblevalue) | Warn |
 | `0x03100110` | [SemanticDiag::NullTestNeverNull](#nulltestnevernull) | Warn |
 | `0x03100111` | [SemanticDiag::KnownNotNull](#knownnotnull) | Warn |
@@ -261,16 +260,25 @@ func main(): int sync {
 **Message**
 
 ```text
-Invalid number format: {0}.
+Invalid number format: '{0}'.
 ```
 
 **Help**
 
 ```text
-Check the syntax of the numeric literal.
+A number is decimal digits without a leading zero, or '0x', '0b' or '0o' followed by digits of that base: octal 63 is '0o77', not '077'; '09' and '077' are not number tokens. In an entry argument and a conversion text a leading zero is decimal ('077' is 77).
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/parse/numbers/leading_zero.cml`, run as `camel -E short test/cases/parse/numbers/leading_zero.cml`)
+
+```camel
+module parse_numbers_leading_zero
+
+func main(): int sync {
+    let a = 077
+    return a
+}
+```
 
 ### UnclosedStringLiteral
 
@@ -3924,31 +3932,6 @@ func f(x: int): int sync {
 
 func main(): int sync {
     println(f(9))
-    return 0
-}
-```
-
-### IntegerLiteralTruncated
-
-`0x031000A0` · Warn · `SemanticDiag::IntegerLiteralTruncated`
-
-**Message**
-
-```text
-The integer literal '{0}' is not a whole number: its value is {1}, the fraction is dropped.
-```
-
-**Help**
-
-```text
-A number written without a decimal point is an 'int', with an exponent too. For the floating-point number write the decimal point: '{2}'.
-```
-
-**Example** (`test/cases/compile/literals/int_negative_exponent.cml`, run as `camel -E short test/cases/compile/literals/int_negative_exponent.cml`)
-
-```camel
-func main(): int sync {
-    println(1e-2, 15e-1, 1500e-2)
     return 0
 }
 ```
