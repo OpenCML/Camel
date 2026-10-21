@@ -1047,7 +1047,15 @@ void DraftWritings::matchFrom(
             return;
         }
         if (bound[p.var]) {
-            if (store_.same(context, bind[p.var], item.node)) {
+            bool same = store_.same(context, bind[p.var], item.node);
+            if (!same && p.constOnly) {
+                // A repeated `const c` is a repeated constant value, not a repeated node: source
+                // `x * 3.0 + x * 3.0` has two DATA nodes of the same value.
+                const auto a = constantOf(bind[p.var]);
+                const auto b = constantOf(item.node);
+                same         = a && b && a->first == b->first && a->second == b->second;
+            }
+            if (same) {
                 matchFrom(context, work, at + 1, bind, bound, emit);
             }
             return;

@@ -207,7 +207,7 @@
 | H42 | 模块导出表改为每个程序一份，不再修改进程级的共享表（`clearExportedNamespaces`） | 无 | **已完成**（`a7d621ee`；报告 reports/H42.md） |
 | H41 | **缺陷**：`ort_loop_values`、`ort_grad_loop_values`、`lsp.editing`、`examples.ml.export_onnx_translate` 在 fsh-dev 上失败（H5 名义结构体之后） | 无 | **已完成**（`1f53d368`；报告 reports/H41.md） |
 | H40 | C2 峰值内存因每步 `take` 升高 150 MB：查清数据块回收是否及时触发并修复 | 无 | **已完成**（`90163c82`；报告 reports/H40-memory.md；后续 H40b、H40c） |
-| H38 | 规则引擎的其余部分（`when`、`#requires`、分析、替换 `algebra.cpp`；先交计划） | H2（`#requires` 部分） | **部分完成**（第 1、2、3、6 项已完成：`when` `50954d05`、误差界与许可门控、`analysis` v1、`extract` 不再保留死写法的修复；第 4 项 `algebra.cpp` 因规则库未达等价而未删（int32/float32/tensor 法则与 `safe_fp` 缺）；第 5 项等 `where`；报告 reports/H38.md、reports/H38b.md） |
+| H38 | 规则引擎的其余部分（`when`、`#requires`、分析、替换 `algebra.cpp`；先交计划） | H2（`#requires` 部分） | **部分完成**（第 1、2、3、6 项已完成：`when` `50954d05`、误差界与许可门控、`analysis` v1、`extract` 不再保留死写法的修复；第 4 项 `algebra.cpp` 因规则库未达等价而未删。H65 已补 int32/float32 元素定律与 f64 系数守卫（规则库 64 条，元素语料与 `std::opt::algebra` 等算符多重集），张量定律与 `safe_fp` 策略接口仍未做，故 `algebra.cpp` 保留；第 5 项等 `where`；报告 reports/H38.md、reports/H38b.md、reports/H65.md） |
 | H39 | 图存储的技术债（过期提交合并进最新快照、未绑定的编码图、`jitFnToGraph_`、节点级事实标记、草稿改为块存储） | 无 | **已完成**（复核报告 reports/H39.md；第 5 项按剖析结论不做） |
 | H37 | **缺陷（最优先）**：库程序（Camel 写的遍所在的模块）中模块级 `let` 的值读成 0 | 无 | **已完成**（修复 `5c40c184`；检查意见 reviews/H17-H22.md；报告 reports/H37.md） |
 | H36 | Camel 图 API 的收尾（导入 Camel 库、遍参数、新值的根规则、区域读取等） | 无 | **部分完成**（第 1–4、6 项已合入 `134c522f`、`d33376fe`；第 5 项等 H19；报告 reports/H36.md、reports/H36b.md） |

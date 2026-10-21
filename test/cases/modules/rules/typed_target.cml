@@ -1,0 +1,77 @@
+/** The typed element laws: one function per law, at the values the counts and the answers use. */
+module typed_target
+
+// ---- i32: wrapping arithmetic, every law exact ----
+
+func i32_neutral(x: i32): i32 { return (x + 0) - 0 }
+func i32_mul_one(x: i32): i32 { return x * 1 }
+func i32_mul_zero(x: i32): i32 { return x * 0 }
+func i32_div_one(x: i32): i32 { return x / 1 }
+func i32_neg(x: i32): i32 { return -(-x) }
+func i32_sub_self(x: i32): i32 { return x - x }
+func i32_add_self(x: i32): i32 { return x + x }
+func i32_combine(x: i32): i32 { return x * 3 + x * 5 }
+func i32_combine_wrap(x: i32): i32 { return x * 2147483647 + x * 3 }
+func i32_fold(x: i32): i32 { return (x * 3) * 5 }
+func i32_fold_wrap(x: i32): i32 { return (x * 65536) * 65536 }
+func i32_fold_add_wrap(x: i32): i32 { return (x + 2147483647) + 1 }
+func i64_combine(x: int): int { return x * 3 + x * 5 }
+func i64_add_self(x: int): int { return x + x }
+
+// ---- f32: the exact laws, and the laws a permission allows ----
+
+func f32_neutral(x: f32): f32 { return (x + -0.0) - 0.0 }
+func f32_mul_one(x: f32): f32 { return x * 1.0 }
+func f32_div_one(x: f32): f32 { return x / 1.0 }
+func f32_neg(x: f32): f32 { return -(-x) }
+func f32_add_self(x: f32): f32 { return x + x }
+func f32_combine(x: f32): f32 { return x * 3.0 + x * 5.0 }
+func f32_combine_over(x: f32): f32 { return x * 3.0e38 + x * 3.0e38 }
+func f32_fold(x: f32): f32 { return (x * 3.0) * 5.0 }
+
+@numeric(no_infs)
+func f32_fold_granted(x: f32): f32 { return (x * 1.0e30) * 1.0e-30 }
+
+func f32_double(x: f32): f32 { return x * 3.0 + x * 3.0 }
+func f32_double_big(x: f32): f32 { return x * 8388609.0 + x * 8388609.0 }
+func f32_double_frac(x: f32): f32 { return x * 0.1 + x * 0.1 }
+
+@numeric(finite_math)
+func f32_mixed_ok(x: f32): f32 { return x * 3.0 + x * -5.0 }
+
+@numeric(finite_math)
+func f32_mixed_zero(x: f32): f32 { return x * 3.0 + x * -3.0 }
+
+func f32_mixed_ungranted(x: f32): f32 { return x * 3.0 + x * -5.0 }
+
+// ---- float: the same laws, and the guards the coefficient laws were missing ----
+
+func f64_combine(x: float): float { return x * 3.0 + x * 5.0 }
+func f64_add_self(x: float): float { return x + x }
+func f64_combine_over(x: float): float { return x * 1.0e308 + x * 1.0e308 }
+
+@numeric(no_infs)
+func f64_fold_zero(x: float): float { return (x * 1.0e-200) * 1.0e-200 }
+
+@numeric(no_infs)
+func f64_fold_over(x: float): float { return (x * 1.0e200) * 1.0e200 }
+
+@numeric(finite_math)
+func f64_mixed_zero(x: float): float { return x * 3.0 + x * -3.0 }
+
+@numeric(finite_math)
+func f64_mixed_ok(x: float): float { return x * 3.0 + x * -5.0 }
+
+func main(): int sync {
+    println(i32_neutral(-2147483648), i32_mul_one(-2147483648), i32_mul_zero(-2147483648))
+    println(i32_div_one(-2147483648), i32_neg(-2147483648), i32_sub_self(-2147483648))
+    println(i32_combine(2), i32_combine_wrap(1), i32_fold(200000000), i32_fold_wrap(1), i32_fold_add_wrap(1))
+    println(i64_combine(3))
+    println(i32_add_self(-2147483648), i64_add_self(3), f32_add_self(3.0e38), f64_add_self(1.0e308))
+    println(f32_neutral(2.0), f32_mul_one(2.0), f32_div_one(2.0), f32_neg(2.0))
+    println(f32_combine(2.0), f32_combine_over(0.0), f32_fold(2.0), f32_fold_granted(0.0))
+    println(f32_double(3.0), f32_double_big(1.0), f32_double_frac(1.0), f32_mixed_ok(2.0), f32_mixed_zero(-1.0), f32_mixed_ungranted(2.0))
+    println(f64_combine(2.0), f64_combine_over(0.0), f64_fold_zero(1.0e300), f64_fold_over(1.0e-200))
+    println(f64_mixed_zero(-1.0), f64_mixed_ok(2.0))
+    return 0
+}

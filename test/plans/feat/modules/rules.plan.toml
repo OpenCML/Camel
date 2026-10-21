@@ -102,12 +102,12 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.library_passes_the_check"
-desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the float laws a permission allows, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
+desc = "Every rule of the standard rules (stdlib/rules.cml: the integer and float laws that hold bit for bit, the i32 and f32 forms of the same laws, the float laws a permission allows, with commutation, association and distribution both ways) passes the check: 200 random instances agree and the engine fires the rule on its own left side."
 kind = "behavior"
 case = "../../../cases/modules/rules/check_library.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
+expect_stdout_contains = ["ok int_add_zero: 200 samples agree, fired 8 of 8", "ok int32_add_zero: 200 samples agree, fired 8 of 8", "ok int32_combine: the condition selects the instances", "ok int_distribute: 200 samples agree, fired 8 of 8", "ok float_add_minus_zero: 200 samples agree, fired 8 of 8", "ok float_mul_comm: 200 samples agree, fired 8 of 8", "ok float32_mul_one: 200 samples agree, fired 8 of 8", "ok float32_combine: the condition selects the instances", "ok float32_double: the condition selects the instances", "ok float_combine: the condition selects the instances", "ok float_fold: the condition selects the instances", "ok float_double: the condition selects the instances"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
@@ -355,4 +355,138 @@ const expected = ['scaled 1 kept 1', 'scaled 1 kept 0', '3.0 4.0', ''].join(Stri
 assert(input.normalized.stdout === expected, `stdout was: ${JSON.stringify(input.normalized.stdout)}`)
 }
 """
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_element_laws_fire"
+desc = "The i32 and f32 laws fire on their own operators and leave the expression a smaller one: every neutral law removes its operator, the combines turn two products and an addition into one product (the i32 constants wrap: 2147483647 + 3 is INT_MIN + 2), the fold chain becomes one product, the granted fold cancels its coefficients, and the f64 guards keep the overflow, underflow and zero-sum coefficients from folding. The values are unchanged."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_target.cml"
+args = ["${case}", "typed_counts::report", "rules::simplify", "typed_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["f i32_neutral 0 0 0 0 0\nf i32_mul_one 0 0 0 0 0\nf i32_mul_zero 0 0 0 0 0\nf i32_div_one 0 0 0 0 0\nf i32_neg 0 0 0 0 0\nf i32_sub_self 0 0 0 0 0\nf i32_add_self 0 0 1 0 0\nf i32_combine 0 0 1 0 0\nf i32_combine_wrap 0 0 1 0 0\nf i32_fold 0 0 1 0 0\nf i32_fold_wrap 0 0 0 0 0\nf i32_fold_add_wrap 1 0 0 0 0\nf i64_combine 0 0 1 0 0\nf i64_add_self 0 0 1 0 0\nf f32_neutral 0 0 0 0 0\nf f32_mul_one 0 0 0 0 0\nf f32_div_one 0 0 0 0 0\nf f32_neg 0 0 0 0 0\nf f32_add_self 0 0 1 0 0\nf f32_combine 0 0 1 0 0\nf f32_combine_over 1 0 2 0 0\nf f32_fold 0 0 2 0 0\nf f32_fold_granted 0 0 0 0 0\nf f32_double 0 0 1 0 0\nf f32_double_big 0 0 1 0 0\nf f32_double_frac 0 0 1 0 0\nf f32_mixed_ok 0 0 1 0 0\nf f32_mixed_zero 1 0 2 0 0\nf f32_mixed_ungranted 1 0 2 0 0\nf f64_combine 0 0 1 0 0\nf f64_add_self 0 0 1 0 0\nf f64_combine_over 1 0 2 0 0\nf f64_fold_zero 0 0 2 0 0\nf f64_fold_over 0 0 2 0 0\nf f64_mixed_zero 1 0 2 0 0\nf f64_mixed_ok 0 0 1 0 0\n-2147483648 -2147483648 0\n-2147483648 -2147483648 0\n16 -2147483646 -1294967296 0 -2147483647\n24\n0 6 inf inf\n2.0 2.0 2.0 2.0\n16.0 0.0 30.0 0.0\n18.0 16777218.0 0.2 -4.0 0.0 -4.0\n16.0 0.0 1e-100 1e+200\n0.0 -4.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.typed_element_laws_prefer_their_type"
+desc = "The same combine law on four element types, selected by the type of the operator: the i32 rules rewrite only `i32_c`, and the other types keep both operators. A rule that fired on the wrong element type would change one of the other lines."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_cross.cml"
+args = ["${case}", "typed_cross_counts::report", "typed_pass::apply_i32", "typed_cross_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["i32_c 0 1\ni64_c 1 2\nf32_c 1 2\nf64_c 1 2\n16 16 16.0 16.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_element_laws_prefer_their_type_f32"
+desc = "The f32 half of the type selection: the f32 rules rewrite only `f32_c`, and the i32, i64 and f64 combines keep both operators."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_cross.cml"
+args = ["${case}", "typed_cross_counts::report", "typed_pass::apply_f32", "typed_cross_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["i32_c 1 2\ni64_c 1 2\nf32_c 0 1\nf64_c 1 2\n16 16 16.0 16.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_laws_keep_the_answer"
+desc = "The typed laws change the writings, not the answers: the target prints the same nine lines before and after `rules::simplify`, on the interpreter, the byte-code VM and the parallel scheduler. The values include INT_MIN through the neutral and negation laws, the wrapping combines and folds, a NaN and an infinity as inputs to the guard-rejected laws, and a subnormal double that the exact-doubling guard rejects."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_target.cml"
+args = ["${case}", "rules::simplify", "${backend}"]
+backends = ["nvm", "fvm", "prl"]
+expect_exit = 0
+expect_stdout_contains = ["-2147483648 -2147483648 0\n-2147483648 -2147483648 0\n16 -2147483646 -1294967296 0 -2147483647\n24\n0 6 inf inf\n2.0 2.0 2.0 2.0\n16.0 0.0 30.0 0.0\n18.0 16777218.0 0.2 -4.0 0.0 -4.0\n16.0 0.0 1e-100 1e+200\n0.0 -4.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.typed_library_also_covers_int64"
+desc = "`rules::simplify` is the whole library, so on the same four-type target it rewrites all four combines, including the `int` and `float` ones; the typed passes above then show that the new laws are the missing element types, not a replacement."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_cross.cml"
+args = ["${case}", "typed_cross_counts::report", "rules::simplify", "typed_cross_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["i32_c 0 1\ni64_c 0 1\nf32_c 0 1\nf64_c 0 1\n16 16 16.0 16.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_boundaries_not_crossed"
+desc = "The boundaries of the typed laws, computed and then computed through `rules::simplify`: (x*2)/2 at INT_MAX is -1, not INT_MAX; (x + 1e30) - 1e30 at 1.0 is 0.0, not 1.0; (x*3)/3 at 7.7 is 7.6999993, not 7.7; x*0 at an infinity is NaN, not 0.0; x/x at an infinity is NaN, not 1.0. The output is identical before and after, on the interpreter and the byte-code VM."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_boundary.cml"
+args = ["${case}", "rules::simplify", "${backend}"]
+backends = ["nvm", "fvm"]
+expect_exit = 0
+expect_stdout_contains = ["-1 2147483647\n0.0 1.0\n7.6999993 7.7\nnan 0.0\nnan 1.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_boundaries_are_real"
+desc = "The same boundary program under five deliberately wrong laws: each line collapses to the tempting answer, so the boundary test above would have caught a law that fired. (x*2)/2 at INT_MAX becomes INT_MAX, (x + 1e30) - 1e30 becomes 1.0, (x*3)/3 becomes 7.7, x*0 at an infinity becomes 0.0, and x/x becomes 1.0."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_boundary.cml"
+args = ["${case}", "typed_pass::apply_all_boundary_wrong", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["2147483647 2147483647\n1.0 1.0\n7.7 7.7\n0.0 0.0\n1.0 1.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_exact_doubling_guard"
+desc = "The exact-doubling law on its own (`typed_pass::apply_double_only`), so the combine rule cannot take the same instances first: it fires for the integral coefficient 3, and does not fire for 8388609 (past the conservative 2^23 bound) or for 0.1 (not an integer). Source `x*3.0 + x*3.0` has two constant nodes; the matcher compares their values, not their identity."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_target.cml"
+args = ["${case}", "typed_counts::report", "typed_pass::apply_double_only", "typed_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["f f32_double 0 0 1 0 0\nf f32_double_big 1 0 2 0 0\nf f32_double_frac 1 0 2 0 0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_exact_doubling_boundary"
+desc = "The exact-doubling guard at the subnormal: (x*0.1) + (x*0.1) for x = 7*min is 2*min, and the law does not fire."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_boundary_double.cml"
+args = ["${case}", "typed_pass::apply_double_only", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3e-45 9.80908925027372e-45\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_exact_doubling_boundary_is_real"
+desc = "The same subnormal under the wrong doubling law: it fires and gives min, not 2*min, so the boundary test above is not vacuous."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_boundary_double.cml"
+args = ["${case}", "typed_pass::apply_double_wrong", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["1e-45 9.80908925027372e-45\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_guards_hold"
+desc = "The coefficient laws' value guards at the values they are about: an overflowing coefficient sum (x*3e38 + x*3e38 at 0), a product that underflows to zero ((x*1e-30)*1e-30 at 1e30), a product that overflows ((x*1e30)*1e30 at 1e-30), and a mixed pair whose sum is zero (x*3 + x*-3 at -1). The granted rules do not fire, and `rules::simplify` leaves the values alone."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_boundary_guards.cml"
+args = ["${case}", "rules::simplify", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["0.0\n1e-30\n1e+30\n0.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.typed_guards_are_real"
+desc = "The same guard program under the three unguarded coefficient laws: the overflowing sum becomes NaN, the underflowing product 0.0, the overflowing product infinity, and the zero-sum mix -0.0."
+kind = "behavior"
+case = "../../../cases/modules/rules/typed_boundary_guards.cml"
+args = ["${case}", "typed_pass::apply_all_guard_wrong", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["nan\n0.0\ninf\n-0.0\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
