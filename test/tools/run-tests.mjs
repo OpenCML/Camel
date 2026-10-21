@@ -638,7 +638,9 @@ function benchmarkSampleCount(benchmark) {
 }
 
 function formatMetric(result) {
-    if (result.benchmark) {
+    // A failed `--timeit` iteration reports the diagnosis, not a mean (H66): the failure is the
+    // test's result, so the status line carries no number.
+    if (result.benchmark && Number.isFinite(result.benchmark.mean_ms)) {
         const samples = benchmarkSampleCount(result.benchmark)
         const sampleSuffix = samples === null ? '' : ` (n=${samples})`
         if (samples !== null && samples < 2) {
@@ -1162,6 +1164,23 @@ async function validateTest(test, result, context) {
     if (test.kind === 'benchmark') {
         if (!result.benchmark) {
             failures.push('missing benchmark payload')
+        } else if (result.benchmark.failed) {
+            // `--timeit` reports the iteration that failed, its diagnostics and no mean (H66).
+            // That is the test's result; it is reported here instead of the runner throwing on
+            // the missing metric.
+            const reasons = (result.benchmark.diagnostics || []).map(
+                (diagnostic) =>
+                    `${diagnostic.data?.name || diagnostic.code || 'diagnostic'}: ${diagnostic.message}`
+            )
+            const reason =
+                reasons.length > 0
+                    ? reasons.join('; ')
+                    : result.benchmark.failure || 'no reason given'
+            failures.push(
+                `the timed pass failed in iteration ${result.benchmark.iteration ?? '?'}: ${reason}`
+            )
+        } else if (!Number.isFinite(result.benchmark.mean_ms)) {
+            failures.push('benchmark payload has no mean_ms')
         } else if (typeof test.perf_budget_mean_ms === 'number') {
             const tolerance = Number(test.perf_budget_tolerance_pct || 0)
             const ceiling = test.perf_budget_mean_ms * (1 + tolerance / 100)

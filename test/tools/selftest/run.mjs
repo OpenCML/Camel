@@ -16,6 +16,8 @@
 //     is the target, and run in full when its FILE is the target;
 //   * the risk-based fast sample of a `[[sweeps]]` entry: three copies for a plan tagged
 //     collections, one for the rest, every copy under `--tier all`;
+//   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
+//     mean (H66), and the runner reports that failure instead of throwing on the missing metric;
 //   * the `--changed` mapping: directory rule first, file rules second, the base branch and its
 //     CAMEL_TEST_BASE override.
 import fs from 'fs'
@@ -394,6 +396,27 @@ if (changedBase() !== 'origin/release') {
 }
 if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
 else process.env.CAMEL_TEST_BASE = savedBase
+
+// --- a benchmark whose timed pass fails --------------------------------------------------------
+// H66 gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the
+// payload crashed the runner while it formatted the metric. The test must fail, with the
+// diagnostic, and the summary must still be printed.
+const benchPlan = path.join(here, 'benchmark_failure.plan.toml')
+const bench = runRunner([benchPlan])
+if (bench.status !== 1) problems.push(`benchmark failure: exit ${bench.status}, expected 1`)
+if (/runner error/.test(bench.output)) problems.push('benchmark failure: a runner error was reported')
+if (!/\[FAIL\] failing_pass/.test(bench.output)) {
+    problems.push(`benchmark failure: the test was not reported as failing:\n${bench.output}`)
+}
+if (!/the timed pass failed/.test(bench.output)) {
+    problems.push('benchmark failure: the payload failure reason is missing')
+}
+if (!/RuntimeDiag::DivisionByZero/.test(bench.output)) {
+    problems.push('benchmark failure: the diagnostic of the failed iteration is missing')
+}
+if (!/\[SUMMARY\].*fail: 1/.test(bench.output)) {
+    problems.push(`benchmark failure: ${summaryLine(bench.output)}`)
+}
 
 if (problems.length > 0) {
     console.error(problems.join('\n'))
