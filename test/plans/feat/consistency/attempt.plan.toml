@@ -370,7 +370,7 @@ expect_output_not_contains = ["Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "attempt.refuse.grad"
-desc = "autodiff: a function whose value flows through a boundary is refused where the value passes, at the operator with no derivative rule, in the message and at its own position -- not at the `grad` that asked for it."
+desc = "autodiff: a function whose value flows through a boundary is refused where the value passes, at the operator with no derivative rule, in the message and at its own position -- not at the `grad` that asked for it. The arm pullback is built first, so the operator named is the one the error arm's own pullback meets (`:op/tag_error_value`); the boundary operator the value passes through is still refused when the outer pullback reaches it."
 kind = "negative"
 backends = false
 case = "../../../cases/consistency/attempt/refuse_grad.cml"
@@ -378,7 +378,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
 expect_diagnostic_line = 14
-expect_output_contains = ["no derivative rule for operator ':mark/isolate'"]
+expect_output_contains = ["no derivative rule for operator ':op/tag_error_value'"]
 expect_output_not_contains = ["Segmentation fault", "dumped core"]
 
 [[tests]]
