@@ -955,7 +955,14 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             graph,
             sharedName ? std::format("{}@{:p}", instanceName, static_cast<void *>(tmpl.get()))
                        : instanceName);
-        buildFuncBody(tmpl->func, graph, funcType, instanceName);
+        // The body keeps the `on nodes` tags of the generic declaration: they are the same for
+        // every instance, and they were resolved once (tagFactsOf remembers by node).
+        buildFuncBody(
+            tmpl->func,
+            graph,
+            funcType,
+            instanceName,
+            tagFactsOf(tmpl->func, camel::core::tag::Nodes).nodes);
         leaveScope();
     } catch (...) {
         if (instanceIndex < tmpl->instances.size()) {

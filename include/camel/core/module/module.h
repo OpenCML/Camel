@@ -21,9 +21,11 @@
 
 #include "camel/core/source/ids.h"
 
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -31,6 +33,7 @@
 #include "camel/common/ns.h"
 #include "camel/core/context/context.h"
 #include "camel/core/data/base.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
 
 namespace camel::compile::gir {
@@ -60,10 +63,18 @@ class Entity {
     const camel::core::data::data_ptr_t &value() const {
         return std::get<camel::core::data::data_ptr_t>(storage_);
     }
+    /// A tag declared by a module (`tag kernel on nodes`, design principles 6.2): its id in
+    /// camel/core/tags.h. A tag shares the namespace of functions and types, so it is
+    /// imported and qualified like them.
+    bool isTag() const { return std::holds_alternative<tag_payload_t>(storage_); }
+    uint32_t tagId() const { return std::get<tag_payload_t>(storage_); }
 
   private:
     friend class detail::EntityAccess;
 
+    /// A tag id: camel::core::tag::TagId, kept as a plain number so that this header does not
+    /// depend on camel/core/tags.h (which depends on this one).
+    using tag_payload_t       = uint32_t;
     using node_payload_t      = void *;
     using graph_payload_t     = std::shared_ptr<camel::compile::gir::DraftGraphBuilder>;
     using graph_set_payload_t = std::vector<graph_payload_t>;
@@ -76,9 +87,10 @@ class Entity {
     };
     using storage_t = std::variant<
         node_payload_t, graph_set_ptr_t, oper_group_ptr_t, graph_payload_t, generic_payload_t,
-        camel::core::data::data_ptr_t>;
+        camel::core::data::data_ptr_t, tag_payload_t>;
 
     explicit Entity(node_payload_t node) : storage_(node) {}
+    explicit Entity(tag_payload_t tag) : storage_(tag) {}
     explicit Entity(graph_set_ptr_t graphs) : storage_(std::move(graphs)) {}
     explicit Entity(graph_payload_t graph) : storage_(std::move(graph)) {}
     explicit Entity(generic_payload_t generic) : storage_(std::move(generic)) {}
@@ -154,6 +166,12 @@ class Module : public std::enable_shared_from_this<Module> {
     std::vector<std::pair<Reference, NamedImport>> namedImports_;
     /// Every import of a module, in the order they were written (see noteImport).
     std::vector<ImportSite> importSites_;
+
+    // Tags (design principles 6.2): the declarations this module makes, and the facts written
+    // on its declarations and on the fields of its type declarations.
+    std::map<std::string, uint32_t> declaredTags_;
+    std::map<std::string, camel::core::attr::AttrSetId> declarationTags_;
+    std::map<std::pair<std::string, size_t>, camel::core::attr::AttrSetId> fieldTags_;
 
     std::vector<ImportedRefBinding>
     importedBindingsForRef(const Reference &ref, ImportLayer layer = ImportLayer::All) const;
@@ -291,6 +309,34 @@ class Module : public std::enable_shared_from_this<Module> {
     std::vector<std::pair<std::string, std::shared_ptr<Module>>> importedNamespaces() const;
     type_ns_ptr_t exportedTypeNS() const;
     entity_ns_ptr_t exportedEntityNS() const;
+
+    // ---- Tags (design principles 6.2; camel/core/tags.h) -----------------------------------
+
+    /// The tags declared in this module under `ident` (locally), for resolving `#ident` while
+    /// the module is compiled.
+    std::optional<uint32_t> declaredTag(const std::string &ident) const;
+    void addDeclaredTag(const std::string &ident, uint32_t tag);
+
+    /// The facts written on the declaration `name` of this module (`on func`, `on type`).
+    camel::core::attr::AttrSetId declarationTags(const Reference &name) const;
+    /// Attaches `tags`, the inner facts winning as each key's combine rule says.
+    void setDeclarationTags(const Reference &name, camel::core::attr::AttrSetId tags);
+    /// The facts written on field `index` of the type this module declares as `typeName`.
+    camel::core::attr::AttrSetId fieldTags(const Reference &typeName, size_t index) const;
+    void setFieldTags(
+        const Reference &typeName, size_t index, camel::core::attr::AttrSetId tags);
+
+    /// Every tag this module declares, by the name it writes (`N::t`) and its id; the facts
+    /// written on its declarations and on the fields of its type declarations. For a dump of
+    /// what the program declared (`camel inspect --tags`).
+    const std::map<std::string, uint32_t> &declaredTags() const { return declaredTags_; }
+    const std::map<std::string, camel::core::attr::AttrSetId> &declarationTagSets() const {
+        return declarationTags_;
+    }
+    const std::map<std::pair<std::string, size_t>, camel::core::attr::AttrSetId> &
+    fieldTagSets() const {
+        return fieldTags_;
+    }
 };
 
 using module_ptr_t = std::shared_ptr<Module>;

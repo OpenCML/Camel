@@ -340,6 +340,7 @@ bool dumpTNS       = false; // Whether to dump Topological Node Sequence
 bool dumpOps       = false; // Whether to dump the operators of the imported modules
 bool dumpInstances = false; // Whether to dump the index semantics of every operator node
 bool dumpFacts     = false; // Whether to compute and dump the graph facts of the program
+bool dumpTags      = false; // Whether to dump the tags the program declares
 bool geneCode      = false; // Whether to generate code from GIR
 int passUntil      = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -711,6 +712,9 @@ bool parseArgs(int argc, char *argv[]) {
          option("--instances").set(dumpInstances) %
              "print the index semantics (iteration domain, access maps, reduction law) of every "
              "operator node whose operator declares them",
+         option("--tags").set(dumpTags) %
+             "print the tags the program declares, with the positions each allows and the passes "
+             "it names (read_by), and the facts written on its declarations and struct fields",
          option("--facts").set(dumpFacts) %
              "compute the graph facts of every kind the core and the loaded modules register "
              "(tensor shapes, index instances, effect summaries, ...) and print each with its "

@@ -527,4 +527,45 @@ type_ns_ptr_t Module::exportedTypeNS() const { return exportedTypeNS_; }
 
 entity_ns_ptr_t Module::exportedEntityNS() const { return exportedEntityNS_; }
 
+// ---- Tags (design principles 6.2; camel/core/tags.h) -------------------------------------
+
+std::optional<uint32_t> Module::declaredTag(const std::string &ident) const {
+    const auto it = declaredTags_.find(ident);
+    if (it == declaredTags_.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+void Module::addDeclaredTag(const std::string &ident, uint32_t tag) {
+    declaredTags_[ident] = tag;
+}
+
+camel::core::attr::AttrSetId Module::declarationTags(const Reference &name) const {
+    const auto it = declarationTags_.find(name.toString());
+    return it == declarationTags_.end() ? camel::core::attr::kNoAttrs : it->second;
+}
+
+void Module::setDeclarationTags(
+    const Reference &name, camel::core::attr::AttrSetId tags) {
+    const std::string key = name.toString();
+    const auto it         = declarationTags_.find(key);
+    declarationTags_[key] = it == declarationTags_.end()
+                                ? tags
+                                : camel::core::attr::unite(it->second, tags);
+}
+
+camel::core::attr::AttrSetId Module::fieldTags(const Reference &typeName, size_t index) const {
+    const auto it = fieldTags_.find({typeName.toString(), index});
+    return it == fieldTags_.end() ? camel::core::attr::kNoAttrs : it->second;
+}
+
+void Module::setFieldTags(
+    const Reference &typeName, size_t index, camel::core::attr::AttrSetId tags) {
+    const auto key = std::make_pair(typeName.toString(), index);
+    const auto it  = fieldTags_.find(key);
+    fieldTags_[key] =
+        it == fieldTags_.end() ? tags : camel::core::attr::unite(it->second, tags);
+}
+
 } // namespace camel::core::module

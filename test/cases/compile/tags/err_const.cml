@@ -1,0 +1,12 @@
+/// A tag argument that is not a compile-time value.
+module err_const
+
+export tag width<w: int> on type
+
+func f(n: int): int {
+    #width<n>
+    type T = { a: int }
+    return 0
+}
+
+func main(): int { return f(1) }

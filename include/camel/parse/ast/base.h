@@ -51,6 +51,10 @@ enum class LoadType {
 
     Repeated,
     Optional,
+
+    /// A tag use (`#name`, `#name<args>`, design principles 6.2), attached to the declaration or
+    /// block it is written on.
+    TagUse,
 };
 
 std::string to_string(LoadType type);
@@ -283,6 +287,8 @@ class RepeatedLoad : public Load {
   public:
     RepeatedLoad(const std::string &nodeName) : Load(LoadType::Repeated), nodeName_(nodeName) {}
     const std::string toString() const override { return nodeName_ + "*"; }
+    /// The kind of the children in the dump (`Stmt`, `FuncAnno`, `TagUse`, ...).
+    const std::string &nodeName() const { return nodeName_; }
 
   private:
     std::string nodeName_;

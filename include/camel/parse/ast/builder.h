@@ -105,6 +105,13 @@ class Builder {
     /// and an empty list are reported (SemanticDiag::InvalidAnnotation) and grant nothing.
     std::optional<uint8_t> numericAnnotationOf(syntax::cst::FuncAnno context);
     Value visitFuncDecl(syntax::cst::FuncDecl context);
+    Value visitTagDecl(syntax::cst::TagDecl context);
+    /// The tag uses of one `#` form, one node each (a `#[a, b]` group makes one for each
+    /// member). An argument list is attached to the use as a RepeatedLoad("Data").
+    std::vector<node_ptr_t> tagUsesOf(syntax::cst::TagUse context);
+    /// The tag uses written before `context`, attached to `owner` as its next child, a
+    /// RepeatedLoad("TagUse"); nothing when it has none.
+    void addTagUses(const node_ptr_t &owner, const syntax::Node &context);
     Value visitNamespaceDecl(syntax::cst::NamespaceDecl context);
     /// `topLevel`: a declaration of the module or of a namespace block, whose names take the
     /// path of the enclosing namespaces (`namespace Config { let limit = 10 }` declares
