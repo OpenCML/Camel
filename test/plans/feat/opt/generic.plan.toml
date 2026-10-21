@@ -1371,6 +1371,36 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "fold_struct_cast.in_return_position"
+desc = "A Safe conversion of a constant struct in return position is folded after std::opt: the function graph's returned value is also its exit and output value, and folding it moves those anchors to the constant (design principles 5.1, 5.2: the conversion only names the type the value is used as and moves nothing). Folding used to treat the graph's returned value as a pinned anchor, so `mk` kept a CAST over its folded constant, and every inlining of `mk` copied the unfolded conversion. The final graph must hold no CAST, and the folded constant must keep the declared type P."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_struct_cast.cml"
+args = ["${case}", "std::opt", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (label) => (out.match(new RegExp(`label="${label}"`, 'g')) || []).length
+assert(count('CAST') === 0, `a struct conversion of a constant in return position was not folded: ${count('CAST')} CAST nodes left`)
+assert(out.includes('value_type="P"'), 'the folded constant must keep the declared result type P')
+assert(out.includes('label="{ a: 3, b: 1.5 }"'), 'the returned struct must be folded to its value')
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_struct_cast.results"
+desc = "The folded conversion leaves the result unchanged: with and without std::opt the program prints the same fields."
+kind = "behavior"
+case = "../../../cases/opt/generic/fold_struct_cast.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_contains = ["3", "1.5"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "simplify_growth_budget.table_is_not_an_owner"
 desc = "A specialization belongs to the program, not to the session that made it, but the table is a cache, not an owner. std::opt simplifies in rounds, each a session over the program the round before produced; a copy made in one round is found in the next while the program still reaches it, instead of being made again. A commit binds the graphs the root reaches and drops the entries whose copy nothing reachable calls any more (the author's ruling: the cache does not keep a graph alive, and a later round that needs the binding makes the copy again). fib(10) and fib(18) inline the copies they specialize into the model, so those copies become unreachable immediately: the numbers the four surviving copies carry are the ones a program that made every copy again would give them (fib$spec123..fib$spec130), and the table that H44b measured at 20 entries (it pinned every copy it had made) now holds the four the root reaches. The reachable program itself is unchanged: 7 graphs, 425 nodes."
 kind = "behavior"
