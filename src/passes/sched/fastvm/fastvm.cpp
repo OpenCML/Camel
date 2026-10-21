@@ -1316,11 +1316,37 @@ void FastVMSchedPass::compileAndCacheGraph(camel::runtime::GCGraph *graph, size_
             }
             pc += bc.opsize;
         }
+        // What the rounds of the graph's loops became: native code where the shape allowed it,
+        // the loop helpers where it did not (and why). The statistics carry the same detail.
+        std::string loopSummary;
+        {
+            std::vector<std::pair<std::string, size_t>> byDetail;
+            for (const auto &construct : jitBackend_->runtimeConstructs(unit)) {
+                if (construct.kind != "LOOP")
+                    continue;
+                auto it = std::find_if(
+                    byDetail.begin(),
+                    byDetail.end(),
+                    [&](const auto &entry) { return entry.first == construct.detail; });
+                if (it == byDetail.end())
+                    byDetail.emplace_back(construct.detail, 1);
+                else
+                    ++it->second;
+            }
+            for (const auto &[detail, count] : byDetail) {
+                if (!loopSummary.empty())
+                    loopSummary += ", ";
+                loopSummary += detail == "native" ? "native rounds" : detail;
+                if (count > 1)
+                    loopSummary += std::format(" ({} loops)", count);
+            }
+        }
         CAMEL_LOG_INFO_S(
             "JIT",
-            "OnDemand: compiled & cached graph '{}' as {} code",
+            "OnDemand: compiled & cached graph '{}' as {} code{}",
             graph->name(),
-            framed ? "framed" : "frameless");
+            framed ? "framed" : "frameless",
+            loopSummary.empty() ? std::string() : "; loop rounds: " + loopSummary);
     } else {
         setJitCompileFailedOf(graph, true);
         if (!jitFailureReportedOf(graph)) {

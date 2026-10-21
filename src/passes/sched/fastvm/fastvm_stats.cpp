@@ -139,7 +139,11 @@ void FastVMSchedPass::statsNoteGraph(camel::runtime::GCGraph *graph, size_t pc) 
             std::map<std::pair<std::string, std::string>, size_t> byKind;
             for (const jit::JitBlocker &blocker : list) {
                 std::string detail;
-                if (blocker.kind == "OPER") {
+                if (!blocker.detail.empty()) {
+                    // The construct itself says how it was compiled (a loop's rounds: native
+                    // code, or the helper and why).
+                    detail = blocker.detail;
+                } else if (blocker.kind == "OPER") {
                     detail = context_->execMgr().getNameOfAnOperator(
                         bytecodes_[blocker.pc].extra()->func);
                 } else if (blocker.kind == "SCHD") {

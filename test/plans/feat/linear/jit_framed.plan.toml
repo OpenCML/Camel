@@ -202,6 +202,19 @@ expect_output_contains = ["compiled & cached graph 'main' as framed code", "comp
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
 
 [[tests]]
+name = "framed.loops.regions.lowered"
+desc = "Which rounds of a compiled loop are native code and which go through the loop helpers (H55), from the compile line of `-vv`, which reports the lowering of every loop of the graph: a `while` loop whose state is several components the body writes in place is native (the test a compare and branch, the back edge a jump, no round count kept), and every shape that cannot be lowered says so and why. No loop of this program that takes the helpers is reported native."
+case = "../../../cases/loops/compiled.cml"
+backends = false
+skip_unless = ["node", "test/tools/have-native-jit.mjs"]
+sweep = false
+args = ["-vv", "${case}", "std::jit(hot_threshold=0)"]
+envs = ["CAMEL_GC=mark-sweep", "CAMEL_GC_ENABLE_YOUNG_COPYING=0", "CAMEL_GC_POISON=0"]
+expect_exit = 0
+expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round makes the state tuple anew every round"]
+expect_output_not_contains = ["'countdown' as framed code; loop rounds: helper", "'sum_to' as framed code; loop rounds: helper", "'sum_squares' as framed code; loop rounds: native", "'until_above' as framed code; loop rounds: native", "'nested' as framed code; loop rounds: native", "'collects' as framed code; loop rounds: native", "'ticks' as framed code; loop rounds: native", "compile skipped", "Segmentation fault", "dumped core"]
+
+[[tests]]
 name = "framed.loops.regions.compiled.inline"
 desc = "The same program after std::opt::inline: every function is inlined into main, so the graph compiled as framed code is main, with all the loops of the program in it."
 case = "../../../cases/loops/compiled.cml"
@@ -210,7 +223,7 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
 args = ["-vv", "${case}", "std::opt::inline", "std::jit(hot_threshold=0)"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'main' as framed code", "30", "21", "29"]
+expect_output_contains = ["compiled & cached graph 'main' as framed code", "'main' as framed code; loop rounds:", "native rounds (2 loops)", "30", "21", "29"]
 expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
 
 [[tests]]

@@ -611,6 +611,22 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "loops.compiled.native"
+desc = "The shapes of a compiled loop whose rounds are native code, not calls of the loop helpers (H55, jit_framed.plan.toml asserts which is which): three state components under a `while` (the condition reads one, the body writes all three), a loop the test stops before its first round (its value is the first state), a condition over one component while the body writes both, the same loop called twice with a frame each, and a division in the body that faults on the third round. The values and the located diagnostic are the interpreters' on every back end."
+kind = "negative"
+case = "../../../cases/loops/compiled_native.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit_hot_threshold0", "inline_jit_hot_threshold0"]
+backends_agree = ["exit_code", "diagnostics"]
+sweep = false
+expect_exit = 1
+expect_output_contains = ["4 6 16", "5 0", "4 12", "40"]
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+expect_diagnostic_line = 27
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
 name = "loops.compiled.fault"
 desc = "A division by zero in the body of a compiled loop, after two rounds: the located diagnostic of the interpreters (line 4, column 53), and the same one under std::fvm."
 kind = "negative"

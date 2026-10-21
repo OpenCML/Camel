@@ -32,7 +32,7 @@ class FallbackBackend : public IJitBackend {
         return nullptr;
     }
     std::vector<JitBlocker> blockers(const CompilationUnit &) const override {
-        return {{0, "no-backend", "JIT disabled (fallback backend)"}};
+        return {{0, "no-backend", "JIT disabled (fallback backend)", {}}};
     }
     std::vector<JitBlocker> runtimeConstructs(const CompilationUnit &) const override {
         return {};
