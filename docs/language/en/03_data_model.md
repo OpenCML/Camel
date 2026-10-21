@@ -19,7 +19,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | String | `string` | Sequence of bytes, immutable |
 | Array | `T[]` | Elements of the same type; length determined at run time |
 | Tuple | `(T1, T2, ...)` | By position, accessed with `.0`, `.1` |
-| Struct | `{ x: T1, y: T2 }` | By name, accessed with `.x` |
+| Struct | `{ x: T1, y: T2 }`, or the name a `type` declares | By name, accessed with `.x`; `type Name = { ... }` declares a named type, see 3.3.3 |
 | Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
 | May be null | `T?` | See 3.4 |
 | May fail | `T!` | See 3.4 |
@@ -147,7 +147,19 @@ println(p, q.x)
 { x: 3, y: 4 } 4
 ```
 
-Struct types are compared by the names and types of their fields; `type` only gives a name. A literal must give all the fields the type requires.
+A struct type is written in one of two ways, and they are two different kinds of type (design principles 5.2):
+
+- **An anonymous struct type** writes its fields, as in `{ x: int, y: int }`. Its identity is exactly what is written: the field names, their types and their **written order** are all part of the type, so `{ x: int, y: int }` and `{ y: int, x: int }` are two different types (`==`, overloads and `Map` keys follow this identity).
+- **A named struct type** is declared by `type Point = { x: int, y: int }`. Its identity is **the declaration itself** (the module that declares it plus the name, plus the type arguments for a generic type). `Point` and another `type Spot = { x: int, y: int }` with exactly the same fields are two different types; printing, diagnostics and graphs show the name, `Point`. `type P = Other` is not such a declaration — it is only another name for `Other`.
+
+A literal must give all the fields the type requires. The fields of a declared type are in the order the declaration writes them: they are accessed by name, printed in declaration order, and that is the order of the value's layout. An anonymous struct type keeps its written order.
+
+A value of an anonymous struct type may be used directly where a named struct type is expected (the shapes match):
+
+- when the field names and types correspond one to one (the order may differ) it *enters* that type: it is copied field by field when a copy is needed, and the resulting value has the named type;
+- when the field sets do not correspond (a field is missing, extra, or has the wrong type) it is a compile-time error — `SemanticDiag::DeclaredTypeMismatch` at a declaration, `SemanticDiag::NoMatchingFunction` at a call.
+
+Nothing converts between two named types implicitly, even when their fields are identical: `let q: Spot = p` is a compile-time error, and `p as Spot` is required. `as` matches the fields by name; when the field sets do not correspond it is `SemanticDiag::DynamicCastForbidden`, and when they correspond but in another order the value is copied into the new order (no copy is made when the order is the same). A generic parameter does not become more permissive because of this: `Box<Point>` and `Box<{ x: int, y: int }>` are different types (design principles 5.8).
 
 ### 3.3.4 Strings
 

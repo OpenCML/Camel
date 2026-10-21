@@ -197,8 +197,16 @@ TupleType *findRepeatedMark(Type *type) {
         }
         return among(tuple->types());
     }
-    case TypeCode::Struct:
-        return among(static_cast<StructType *>(type)->types());
+    case TypeCode::Struct: {
+        auto *record = static_cast<StructType *>(type);
+        // A named type is its declaration and type arguments; its fields are derived from
+        // them, so looking at the arguments is enough (and cannot walk a declared type's
+        // fields, which a named type prints but does not expose).
+        if (record->named()) {
+            return among(record->typeArgs());
+        }
+        return among(record->types());
+    }
     case TypeCode::Function: {
         auto *func = static_cast<FunctionType *>(type);
         if (TupleType *found = among(func->withTypesSpan())) {
@@ -234,7 +242,8 @@ bool containsTypeVar(Type *type) {
         return std::any_of(types.begin(), types.end(), containsTypeVar);
     }
     case TypeCode::Struct: {
-        const auto types = static_cast<StructType *>(type)->types();
+        auto *record = static_cast<StructType *>(type);
+        const auto types = record->named() ? record->typeArgs() : record->types();
         return std::any_of(types.begin(), types.end(), containsTypeVar);
     }
     case TypeCode::Function: {
@@ -292,6 +301,19 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     case TypeCode::Struct: {
         auto *record = static_cast<StructType *>(type);
         bool changed = false;
+        if (record->named()) {
+            // A named instance is its declaration with its arguments: substitute in the
+            // arguments, and the type is the same declaration instantiated anew
+            // (`Entry<K, V>` with K, V bound is `Entry<int, string>`), never an anonymous
+            // struct with the fields written out.
+            std::vector<Type *> args;
+            args.reserve(record->typeArgCount());
+            for (Type *arg : record->typeArgs()) {
+                args.push_back(substituteTypeVars(arg, bindings));
+                changed |= args.back() != arg;
+            }
+            return changed ? StructType::get(record->decl(), args) : type;
+        }
         StructTypeFactory factory;
         for (size_t i = 0; i < record->size(); ++i) {
             Type *field = substituteTypeVars(record->typeAt(i), bindings);
@@ -376,6 +398,22 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
     case TypeCode::Struct: {
         auto *want = static_cast<StructType *>(pattern);
         auto *have = static_cast<StructType *>(actual);
+        if (want->named() && have->named()) {
+            // Two instances of the same declaration: the arguments are the whole story. An
+            // instance of another declaration is another type, and binds nothing.
+            if (want->decl() != have->decl() ||
+                want->typeArgCount() != have->typeArgCount()) {
+                return false;
+            }
+            for (size_t i = 0; i < want->typeArgCount(); ++i) {
+                if (!bindTypeVars(want->typeArgAt(i), have->typeArgAt(i), bindings)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        // A generic named type met by an unnamed value: the fields are matched by name, as
+        // they are when such a value enters the type (design principles 5.2).
         for (size_t i = 0; i < want->size(); ++i) {
             const auto field = have->findField(want->fieldName(i));
             if (!field.has_value()) {
@@ -451,9 +489,15 @@ void collectTypeVars(Type *type, std::vector<std::string> &names) {
     case TypeCode::Tuple:
         among(static_cast<TupleType *>(type)->types());
         return;
-    case TypeCode::Struct:
-        among(static_cast<StructType *>(type)->types());
+    case TypeCode::Struct: {
+        auto *record = static_cast<StructType *>(type);
+        if (record->named()) {
+            among(record->typeArgs());
+        } else {
+            among(record->types());
+        }
         return;
+    }
     case TypeCode::Function: {
         auto *func = static_cast<FunctionType *>(type);
         among(func->withTypesSpan());
@@ -528,6 +572,16 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         auto *want = static_cast<StructType *>(pattern);
         auto *have = static_cast<StructType *>(actual);
         bool ok    = true;
+        if (want->named() && have->named()) {
+            if (want->decl() != have->decl() ||
+                want->typeArgCount() != have->typeArgCount()) {
+                return false;
+            }
+            for (size_t i = 0; i < want->typeArgCount(); ++i) {
+                ok = unifyTypeVars(want->typeArgAt(i), have->typeArgAt(i), bindings) && ok;
+            }
+            return ok;
+        }
         for (size_t i = 0; i < want->size(); ++i) {
             const auto field = have->findField(want->fieldName(i));
             if (!field.has_value()) {
@@ -593,11 +647,19 @@ void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names) {
             collectBindableTypeVars(elem, names);
         }
         return;
-    case TypeCode::Struct:
-        for (Type *field : static_cast<StructType *>(pattern)->types()) {
-            collectBindableTypeVars(field, names);
+    case TypeCode::Struct: {
+        auto *record = static_cast<StructType *>(pattern);
+        if (record->named()) {
+            for (Type *arg : record->typeArgs()) {
+                collectBindableTypeVars(arg, names);
+            }
+        } else {
+            for (Type *field : record->types()) {
+                collectBindableTypeVars(field, names);
+            }
         }
         return;
+    }
     case TypeCode::Function: {
         auto *func = static_cast<FunctionType *>(pattern);
         for (Type *param : func->withTypesSpan()) {
