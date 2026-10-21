@@ -926,7 +926,7 @@ d4494a3a1dc2f143 ok test/cases/consistency/if_without_else/statement.cml
 ade606a8ca7efaf8 ok test/cases/consistency/limits/depth_isolated.cml
 8d3a48a31570143b ok test/cases/consistency/limits/depth_map.cml
 f7f7aac9d4b95e96 ok test/cases/consistency/limits/depth_value.cml
-d2c992afbc6bd1ab ok test/cases/consistency/limits/macro_depth.cml
+9fd8e58dc2322090 ok test/cases/consistency/limits/macro_depth.cml
 0aa895cca196c8a9 ok test/cases/consistency/limits/tail_under_limit.cml
 dca5f75663f160b8 ok test/cases/consistency/logical/graph.cml
 1b7816da9b4c105a ok test/cases/consistency/logical/graph_if.cml
@@ -1391,7 +1391,7 @@ ecc2e2f433981665 ok test/cases/modules/onnx/refusals/bad_output.cml
 187395bbda449503 ok test/cases/modules/onnx/refusals/bad_path.cml
 d43015f57a9ea7f7 ok test/cases/modules/onnx/refusals/bad_target.cml
 2179cd1655ad8207 ok test/cases/modules/onnx/refusals/example_mismatch.cml
-e0c0f0b220a84bcd ok test/cases/modules/onnx/refusals/function_branch.cml
+0839b5dacfbb3209 ok test/cases/modules/onnx/refusals/function_branch.cml
 2a8ef24aea1e20c4 ok test/cases/modules/onnx/refusals/growth_budget.cml
 a8fa3e15cf5ea732 ok test/cases/modules/onnx/refusals/main_reaches_loop.cml
 85d036a6ff79405b ok test/cases/modules/onnx/refusals/no_request.cml
@@ -1832,7 +1832,7 @@ b4c8a24177615791 ok test/cases/tools/lsp/fixtures/main.cml
 28f37dfaef9070c7 ok test/cases/tools/lsp/fixtures/shapes.cml
 31b32eb1342bb683 ok test/cases/trans/jgir_duplicate.cml
 4a6ec3390176ac3a ok test/cases/trans/library_module.cml
-f3875ddc8d0d6b42 ok test/cases/trans/port_fill_metadata.cml
+200e7c8118ba5688 ok test/cases/trans/port_fill_metadata.cml
 060c9e37e16da8fb ok test/cases/trans/annotated/boundaries.cml
 197f06d3dac30f20 ok test/cases/trans/cpp/complex_scalar.cml
 1235cae4c47855a2 ok test/cases/trans/cpp/exec_mod_scalar.cml
@@ -1863,7 +1863,7 @@ e62998983c4b023c ok test/cases/trans/macro/chain.cml
 6660d169f5b1237b ok test/cases/trans/macro/closure_isolation.cml
 2bc7122e6095dbe5 ok test/cases/trans/macro/closure_runtime_call.cml
 7b7ee644377c2536 ok test/cases/trans/macro/deep_chain.cml
-7f4e61136192f7ad ok test/cases/trans/macro/failed_depth.cml
+33064237557429cb ok test/cases/trans/macro/failed_depth.cml
 47ce403f74ee1534 ok test/cases/trans/macro/failed_evaluation.cml
 3754c14ae5d51155 ok test/cases/trans/macro/failed_no_rule.cml
 b1027dce101308d5 ok test/cases/trans/macro/failed_unreached.cml
