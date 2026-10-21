@@ -490,3 +490,10 @@ EXPORTS
     ?segmentOf@GrowableFreeListAllocator@mm@core@camel@@AEBAPEAVFreeListAllocator@234@PEAX@Z
     ?text@attr@core@camel@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@I@Z
     ?updateRefs@Variant@rtdata@core@camel@@UEAAXAEBV?$function@$$A6APEAVObject@rtdata@core@camel@@PEAV1234@PEBVType@type@34@AEBURefTraceInfo@234@@Z@std@@PEBVType@type@34@@Z
+
+    ; Imported by a target built after this list was derived; regenerate the list when this repeats.
+    ?commitChecked@RuntimeGraphDraftSession@runtime@camel@@QEAAPEBVProgram@23@XZ
+    ?isReplaceable@generic@passes@camel@@YA_NAEBVGraphDraft@runtime@3@I@Z
+    ?reaches@generic@passes@camel@@YA_NAEBVGraphDraft@runtime@3@II@Z
+    ?replaceNode@generic@passes@camel@@YAXAEAVGraphDraft@runtime@3@II@Z
+    ?returnNodeRef@GCGraph@runtime@camel@@QEBAIXZ
