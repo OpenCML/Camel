@@ -165,6 +165,52 @@ case = "../../../cases/compile/native/json_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "json_type.cml:11:17", "argument types: <> (int)", "<json:kind>: (j: Json) => string"]
+# ---- The declarations of `math`: per-type overloads and computed signatures (handover H113) ----
+
+[[tests]]
+name = "native.math_declaration_import"
+desc = "`math`'s declarations are the module's signature: the per-type overloads (`abs`, `min`, `clamp`) and the computed-signature operator that stayed in C++ (`sqrt`) are read from `stdlib/math.cml`, every call reaches the C++ operator, and the C++ module's constant `pi` is visible through the same declaration module."
+kind = "behavior"
+case = "../../../cases/compile/native/math_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n2.5\n3\n10\n3.0\n16\n3.141592653589793\n"
+
+[[tests]]
+name = "native.math_wrong_arity"
+desc = "`math:abs` is declared with one ordinary argument: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/math_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "math_arity.cml:10:16", "(int, int)", "<math:abs_l>: (x: int) => int"]
+
+[[tests]]
+name = "native.math_wrong_type"
+desc = "A string where the declarations of `math:abs` take a number: refused at the declarations' type, and the signature in the message has their own parameter name (`x`) — `stdlib/math.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/math_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "math_type.cml:11:16", "argument types: <> (string)", "<math:abs_l>: (x: int) => int"]
+
+[[tests]]
+name = "native.math_on_the_graph"
+desc = "A call of a per-type declaration of `math` is an OPER of the concrete URI (`math:abs_l`, `math:min_l`), not a CALL of the name and not a graph of the declaration; the computed-signature `sqrt` and `shl` are OPERs of their C++ groups too. This is the H19 trap-2 answer: the declarations are per-type overloads, not a generic family, so nothing is instantiated into a CALL."
+kind = "behavior"
+case = "../../../cases/compile/native/math_declaration_import.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const lines = input.normalized.stdout.split('\n')
+  for (const uri of ['math:abs_l', 'math:abs_f', 'math:min_l', 'math:clamp_l', 'math:sqrt', 'math:shl']) {
+    assert(lines.some((l) => l.includes(`label="${uri}"`) && l.includes('type="OPER"')), `expected an OPER of ${uri}`)
+  }
+  const calls = lines.filter((l) => l.includes('type="CALL"') && /label="(abs|min|clamp|sqrt|shl)"/.test(l))
+  assert(calls.length === 0, `math calls became CALLs: ${calls.join('; ')}`)
+}
+"""
 
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 

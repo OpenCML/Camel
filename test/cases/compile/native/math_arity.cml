@@ -1,0 +1,12 @@
+/**
+ * The declaration of `abs` takes one ordinary argument: a second one is refused at the call,
+ * and the overloads the message lists are the declarations' (handover H113).
+ */
+module math_arity
+
+import { abs } from math
+
+func main(): int sync {
+    println(abs(-3, 4))
+    return 0
+}

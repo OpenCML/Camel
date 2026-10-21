@@ -13,16 +13,15 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 18, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #include "module.h"
-#include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/data/primary.h"
 #include "camel/core/derivative.h"
-#include "camel/core/operator_traits.h"
+#include "camel/core/operator.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 #include "executor.h"
@@ -62,138 +61,36 @@ void sqrtVjp(camel::core::VjpBuilder &builder, const camel::core::VjpCall &call)
     }
 }
 
+// The square root's result type is computed from its argument (i32 gives f32, int gives float):
+// a `DynamicFuncTypeResolver` stays the one source of its type and cannot be a declaration
+// (design principles 6.4; handover H94, ruling 1 and H113). Every other group of this file is
+// now a declaration of `stdlib/math.cml`; the shifts of numeric.cpp are the only other exception.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
-            "abs",
-            {
-                {"math:abs_i",
-                 StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::Int32())},
-                {"math:abs_l",
-                 StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::Int64())},
-                {"math:abs_f",
-                 StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32())},
-                {"math:abs_d",
-                 StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64())},
-                {"math:abs_c",
-                 StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Float32())},
-                {"math:abs_z",
-                 StaticFuncTypeResolver::create(
-                     {}, {{Type::Complex128(), false}}, Type::Float64())},
-            }),
-        OperatorGroup::create(
-            "re",
-            {
-                {"math:re_c",
-                 StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Float32())},
-                {"math:re_z",
-                 StaticFuncTypeResolver::create(
-                     {}, {{Type::Complex128(), false}}, Type::Float64())},
-            }),
-        OperatorGroup::create(
-            "im",
-            {
-                {"math:im_c",
-                 StaticFuncTypeResolver::create({}, {{Type::Complex64(), false}}, Type::Float32())},
-                {"math:im_z",
-                 StaticFuncTypeResolver::create(
-                     {}, {{Type::Complex128(), false}}, Type::Float64())},
-            }),
-        OperatorGroup::create(
-            "conj",
-            {
-                {"math:conj_c",
-                 StaticFuncTypeResolver::create(
-                     {}, {{Type::Complex64(), false}}, Type::Complex64())},
-                {"math:conj_z",
-                 StaticFuncTypeResolver::create(
-                     {}, {{Type::Complex128(), false}}, Type::Complex128())},
-            }),
-        OperatorGroup::create(
-            "exp",
-            {
-                {"math:exp_f",
-                 StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32())},
-                {"math:exp_d",
-                 StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64())},
-                {"math:exp_c",
-                 StaticFuncTypeResolver::create(
-                     {}, {{Type::Complex64(), false}}, Type::Complex64())},
-                {"math:exp_z",
-                 StaticFuncTypeResolver::create(
-                     {}, {{Type::Complex128(), false}}, Type::Complex128())},
-            }),
-        OperatorGroup::create(
-            "round",
-            {
-                {"math:round_f",
-                 StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32())},
-                {"math:round_d",
-                 StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64())},
-            }),
-        OperatorGroup::create(
-            "ceil",
-            {
-                {"math:ceil_f",
-                 StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32())},
-                {"math:ceil_d",
-                 StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64())},
-            }),
-        OperatorGroup::create(
-            "floor",
-            {
-                {"math:floor_f",
-                 StaticFuncTypeResolver::create({}, {{Type::Float32(), false}}, Type::Float32())},
-                {"math:floor_d",
-                 StaticFuncTypeResolver::create({}, {{Type::Float64(), false}}, Type::Float64())},
-            }),
-        OperatorGroup::create(
-            "bin",
-            {
-                {"math:bin_i",
-                 StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String())},
-                {"math:bin_l",
-                 StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String())},
-            }),
-        OperatorGroup::create(
-            "oct",
-            {
-                {"math:oct_i",
-                 StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String())},
-                {"math:oct_l",
-                 StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String())},
-            }),
-        OperatorGroup::create(
-            "hex",
-            {
-                {"math:hex_i",
-                 StaticFuncTypeResolver::create({}, {{Type::Int32(), false}}, Type::String())},
-                {"math:hex_l",
-                 StaticFuncTypeResolver::create({}, {{Type::Int64(), false}}, Type::String())},
-            }),
-        OperatorGroup::create(
             "sqrt",
-            {
-                {"math:sqrt",
-                 DynamicFuncTypeResolver::create(
-                     {{0, {}}, {1, {false}}},
-                     "(val: float | double) => float | double",
-                     [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                         -> std::optional<Type *> {
-                         TypeCode tp = norm[0]->code();
-                         if (tp == TypeCode::Float32 || tp == TypeCode::Int32)
-                             return Type::Float32();
-                         if (tp == TypeCode::Float64 || tp == TypeCode::Int64)
-                             return Type::Float64();
-                         return std::nullopt;
-                     })},
-            }),
+            {{"math:sqrt",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {1, {false}}},
+                  "(val: float | double) => float | double",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      TypeCode tp = norm[0]->code();
+                      if (tp == TypeCode::Float32 || tp == TypeCode::Int32)
+                          return Type::Float32();
+                      if (tp == TypeCode::Float64 || tp == TypeCode::Int64)
+                          return Type::Float64();
+                      return std::nullopt;
+                  })},
+        }),
     };
     return groups;
 }
 } // namespace
 
 MathModule::MathModule(context_ptr_t ctx) : BuiltinModule("math", ctx) {
+    // The fixed signatures are the declarations of `stdlib/math.cml`. These two loops are the
+    // operators whose signature the C++ resolver computes, and no declaration may replace it.
     for (const auto &group : getOperatorGroups())
         exportEntity(group->name(), group);
     for (const auto &group : getMathNumericGroups())

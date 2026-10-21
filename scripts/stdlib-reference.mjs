@@ -16,12 +16,16 @@
 //   with <a: A>                                     `*` stands for any text, for a group of
 //   export func name(x: X): R                       overloads that differ by type)
 //
-// A value a module exports (`math::pi`; design principles 10.1) is declared with its type and
-// a doc comment, and needs neither @pure nor a URI (it is not an operator):
+// A value a module exports (`math::pi`; design principles 10.1) needs neither @pure nor a URI
+// (it is not an operator). A declaration module cannot write it — a `let` needs an initializer —
+// so the value's entry is recorded in a comment, and the C++ module remains the one source of
+// the value itself:
 //
 //   /// What it is.
 //   /// @example <code>    // <result>
-//   export let name: T = <its value>
+//   // value name: T
+//
+// (A signature file that is not compiled may write the value itself as `export let name: T = ...`.)
 //
 // A library module written in Camel (stdlib/<module>.cml) is its own signature file: its
 // `export func` declarations and their `///` comments are read the same way.
@@ -73,7 +77,14 @@ const MODULES = [
     { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp' },
     { name: 'tensor', title: '`tensor`: binary conversion', kind: 'cpp', only: ['from_bytes', 'to_bytes'] },
     { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
-    { name: 'math', title: '`math`: numbers and bits', kind: 'cpp' },
+    {
+        name: 'math',
+        title: '`math`: numbers and bits',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19).
+        source: 'math.cml',
+        declaration: true,
+    },
     { name: 'statistics', title: '`statistics`', kind: 'cpp' },
     { name: 'algo', title: '`algo`: sorting and array primitives', kind: 'cpp' },
     { name: 'random', title: '`random`', kind: 'cpp' },
@@ -199,6 +210,77 @@ function readDeclarations(file, module) {
         }
         if (trimmed.startsWith('with <')) {
             withText = bracketed(trimmed, trimmed.indexOf('<')).inner
+            continue
+        }
+        // An operator whose result type C++ computes from its arguments cannot be a declaration
+        // (a `DynamicFuncTypeResolver` stays the one source of its type; handover H113). The
+        // declaration file records its reference entry in a comment, with the doc comment above
+        // it, so the reference page still documents it without inventing a declaration.
+        const dynamicMatch =
+            module.kind === 'cpp' && trimmed.match(/^\/\/ dynamic func (\w+)\(/)
+        if (dynamicMatch) {
+            const args = bracketed(trimmed, trimmed.indexOf('('))
+            const result = trimmed.slice(args.end + 1).replace(/^\s*:\s*/, '').trim()
+            const entry = {
+                module: module.name,
+                name: dynamicMatch[1],
+                section,
+                line: i + 1,
+                with: [],
+                norm: splitParams(args.inner),
+                result,
+                doc: [],
+                purity: null,
+                effect: '',
+                fails: [],
+                examples: [],
+                uri: `${module.name}:${dynamicMatch[1]}`,
+            }
+            for (const text of doc) {
+                if (text.startsWith('@pure')) entry.purity = 'pure'
+                else if (text.startsWith('@effect')) {
+                    entry.purity = 'effect'
+                    entry.effect = text.slice('@effect'.length).trim()
+                } else if (text.startsWith('@fails')) entry.fails.push(text.slice('@fails'.length).trim())
+                else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
+                else entry.doc.push(text)
+            }
+            entries.push(entry)
+            doc = []
+            withText = ''
+            pendingUri = null
+            continue
+        }
+        // A C++ module's value has no declaration to write: the declaration file records its
+        // reference entry in a comment, and the C++ module stays the one source of the value
+        // (math's pi, e, inf and nan; handover H113). It carries the same doc comment as an
+        // operator, above the `// value` line.
+        const docValue = module.kind === 'cpp' && trimmed.match(/^\/\/ value (\w+)\s*:\s*(.+)$/)
+        if (docValue) {
+            const entry = {
+                module: module.name,
+                name: docValue[1],
+                section,
+                line: i + 1,
+                value: true,
+                with: [],
+                norm: [],
+                result: docValue[2],
+                doc: [],
+                purity: 'value',
+                effect: '',
+                fails: [],
+                examples: [],
+                uri: null,
+            }
+            for (const text of doc) {
+                if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
+                else if (!text.startsWith('@')) entry.doc.push(text)
+            }
+            entries.push(entry)
+            doc = []
+            withText = ''
+            pendingUri = null
             continue
         }
         const valueMatch = module.kind === 'cpp' && trimmed.match(/^export let (\w+)\s*:\s*([^=]+?)\s*=/)
