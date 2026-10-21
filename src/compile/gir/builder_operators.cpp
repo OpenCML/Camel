@@ -1546,16 +1546,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 entered[i] = param;
                 continue;
             }
-            // An unnamed struct value whose fields are a named parameter's fields, by name,
-            // enters it (design principles 5.2): the field-by-field copy is made once the
-            // callee is known (enterParameters, coerceTo), as for a literal.
-            if (param->code() == TypeCode::Struct && entered[i] != nullptr &&
-                entered[i]->code() == TypeCode::Struct &&
-                structFieldsMatchByName(
-                    tt::as_ptr<StructType>(param), tt::as_ptr<StructType>(entered[i]))) {
-                entered[i] = param;
-                continue;
-            }
             // A literal takes the parameter's type when its value can be one of it (design
             // principles 5.1); whether the value fits is checked when the CAST is made.
             std::optional<literal::Value> value;

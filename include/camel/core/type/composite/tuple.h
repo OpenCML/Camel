@@ -230,10 +230,12 @@ inline TupleType *asFallible(Type *type) {
 }
 
 /// Whether a value of type `source` enters a position of type `target` by itself (design
-/// principles 3.8): it is assignable; or `target` is `T?` / `T!` and the value enters `T`
+/// principles 3.8, 5.2): it is assignable; or `target` is `T?` / `T!` and the value enters `T`
 /// (so it is put into the form, one level at a time: an `int` enters `int?!`); or `source`
 /// is the type of `null` and `target` is a `T?`; or `source` is the type of the empty array
-/// literal `[]` and `target` is an array type. Never the other way: a `T?` is not a `T`.
+/// literal `[]` and `target` is an array type; or `target` is a named struct and `source` is an
+/// unnamed struct with its fields, by name (in another order the entrance copies field by
+/// field). Never the other way: a `T?` is not a `T`, a named type is not an unnamed one.
 bool entersImplicitly(Type *target, Type *source);
 /// The type two branch arms (or two elements of an array literal) have in common: the type
 /// they unify to, or the tagged form one of them enters (`int` and `null` give `int?`, `int`

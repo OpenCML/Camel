@@ -1,0 +1,94 @@
+// A struct as a loop's state (H44 item 3): the state is one value, the struct, and each round
+// gives the next struct instead of assigning its fields. A loop's state is an expression, not a
+// `var` (design principles 3.10): `p.x = ...` inside the body is refused where it is written.
+//
+// A named struct state also takes an unnamed struct body whose fields are the same ones in
+// another written order, and a nested named struct field the same (design principles 5.2): the
+// entrance copies field by field. The bodies of `named`, `nested`, `sync_body`, `arm_body` and
+// `arm_mixed` are the shapes the loop body used to refuse with LoopBodyTypeMismatch (or, for
+// `arm_mixed`'s mixed arms, BranchReturnTypeMismatch); `sync_value` is the same entrance in a
+// `sync` function's return position. An *unnamed* struct
+// state's written order is its type (5.2, "字段顺序"), so a body that writes another order starts
+// from a named value; `both` and `one` keep the state's own order.
+module struct_state
+
+type Point = { x: int, y: int }
+type Inner = { u: int, v: int }
+type Outer = { left: Inner, right: int }
+
+// Both fields change every round: (0, 1) -> (1, 2) -> (3, 4) -> (6, 8).
+func both(ds: int[]): Point {
+    return loop p = { x: 0, y: 1 } for d in ds do { x: p.x + d, y: p.y * 2 }
+}
+
+// Only one field changes: (0, 1) -> (0, 2) -> (0, 4) -> (0, 7).
+func one(ds: int[]): Point {
+    return loop p = { x: 0, y: 1 } for d in ds do { x: p.x, y: p.y + d }
+}
+
+// The state's type is named in the initial value; the body writes the fields in another order:
+// (0, 100) -> (1, 101) -> (2, 103) -> (3, 106).
+func named(ds: int[]): Point {
+    let start: Point = { x: 0, y: 100 }
+    return loop p = start for d in ds do { y: p.y + d, x: p.x + 1 }
+}
+
+// A nested named struct field in another order: (1, 11, 1) -> (2, 13, 2) -> (3, 16, 3).
+func nested(ds: int[]): Outer {
+    let start: Outer = { left: { u: 0, v: 10 }, right: 0 }
+    return loop o = start for d in ds do {
+        right: o.right + 1,
+        left: { v: o.left.v + d, u: o.left.u + 1 }
+    }
+}
+
+// A `sync` body: its effects run every round in order, and the struct it ends with is the next
+// state (0, 0) -> (1, 1) -> (2, 3).
+func sync_body(ds: int[]): Point {
+    let start: Point = { x: 0, y: 0 }
+    return loop p = start for d in ds do sync {
+        println('round', d)
+        { y: p.y + d, x: p.x + 1 }
+    }
+}
+
+// A `sync` function whose value is a struct, in another order than the named type's declaration.
+func sync_value(): Point sync {
+    return { y: 1, x: 2 }
+}
+
+// The body is an `if` whose arms are both unnamed and in the same order: d = 1 takes the then
+// arm, 2 the else one, 3 the then one: (1, 1) -> (11, 1) -> (12, 4).
+func arm_body(ds: int[]): Point {
+    let start: Point = { x: 0, y: 0 }
+    return loop p = start for d in ds do if d % 2 == 1 then { y: p.y + d, x: p.x + 1 } else { y: p.y, x: p.x + 10 }
+}
+
+// One arm is the named state itself and the other an unnamed struct in another order: the
+// branch joins them at the named type and copies the unnamed one: (0, 0) -> (1, 1) -> (1, 1) ->
+// (2, 4).
+func arm_mixed(ds: int[]): Point {
+    let start: Point = { x: 0, y: 0 }
+    return loop p = start for d in ds do if d % 2 == 1 then { y: p.y + d, x: p.x + 1 } else p
+}
+
+func main(): int sync {
+    let ds = [1, 2, 3]
+    let a = both(ds)
+    println(a.x, a.y)
+    let b = one(ds)
+    println(b.x, b.y)
+    let c = named(ds)
+    println(c.x, c.y)
+    let d = nested(ds)
+    println(d.left.u, d.left.v, d.right)
+    let e = sync_body([1, 2])
+    println(e.x, e.y)
+    let f = arm_body(ds)
+    println(f.x, f.y)
+    let g = arm_mixed(ds)
+    println(g.x, g.y)
+    let h = sync_value()
+    println(h.x, h.y)
+    return 0
+}
