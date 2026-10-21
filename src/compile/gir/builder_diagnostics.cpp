@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -637,10 +637,7 @@ void Builder::markNonRetainingReads() {
         }
         return unchainedWriter[draft] = found;
     };
-    const auto peekGroup = context_->importModule("")->getNativeEntity(Reference("__var_peek__"));
-    ASSERT(
-        peekGroup.has_value() && peekGroup->isOperGroup(),
-        "The built-in __var_peek__ is missing.");
+    const oper_group_ptr_t peekGroup = internalOperatorGroup(camel::core::oper::VarPeek);
     const std::vector<StaticArg> statics(1);
 
     for (node_handle_t read : syncedReads_) {
@@ -676,7 +673,7 @@ void Builder::markNonRetainingReads() {
         }
         node_handle_t cell = draft->ref(normInputsOf(read).front());
         const auto peek =
-            peekGroup->operGroup()->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
+            peekGroup->resolve({}, {nodeTypeOf(cell)}, statics, Modifier::None);
         ASSERT(peek.has_value(), "__var_peek__ rejected a variable.");
         nodeGraphOf(read)->retargetOperNode(read, *peek);
     }

@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -710,7 +710,8 @@ node_handle_t Builder::adaptExitValue(const GCT::node_ptr_t &gct, node_handle_t 
             diags_->of(SemanticDiag::ThrowNotAnError).atOrigin(where).commit(valueType->toString());
             throw BuildAbortException();
         }
-        node_handle_t thrown = applyTagOperator("__throw__", bindTemporary(value), gct->at(0));
+        node_handle_t thrown =
+            applyTagOperator(camel::core::oper::TagThrow, bindTemporary(value), gct->at(0));
         return fallible->equals(nodeTypeOf(thrown)) ? thrown
                                                     : castNodeTo(thrown, fallible, gct->at(0));
     }
@@ -883,8 +884,10 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     }
     Type *payload          = tagged->payloadType();
     const std::string name = bindTemporary(subject);
-    node_handle_t tagNode  = applyTagOperator(onNull ? "__is_null__" : "__is_error__", name, gct);
-    const char *valueOp    = onNull ? "__null_value__" : "__error_value__";
+    node_handle_t tagNode      = applyTagOperator(
+        onNull ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError, name, gct);
+    const camel::core::OperId valueOp =
+        onNull ? camel::core::oper::TagNullValue : camel::core::oper::TagErrorValue;
     const GCT::node_ptr_t exec = gct->at(1)->at(0);
     std::vector<arm_ptr_t> arms(2);
 
@@ -1000,14 +1003,19 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
     }
 
     const std::string name = bindTemporary(scrutinee);
-    node_handle_t tagNode =
-        applyTagOperator(type->isNullable() ? "__is_null__" : "__is_error__", name, gct);
+    node_handle_t tagNode = applyTagOperator(
+        type->isNullable() ? camel::core::oper::TagIsNull : camel::core::oper::TagIsError,
+        name,
+        gct);
     const GCT::node_ptr_t taggedExec = taggedCase->at(taggedCase->size() - 1);
     const GCT::node_ptr_t restExec   = restCase->at(0);
     std::vector<arm_ptr_t> arms(2);
     arms[0] = buildArm(taggedExec, [&] {
         if (type->isFallible()) {
-            insertNode(taggedCase->binding(), applyTagOperator("__error_info__", name, taggedCase));
+            insertNode(
+                taggedCase->binding(),
+                applyTagOperator(
+                    camel::core::oper::TagErrorInfo, name, taggedCase));
         }
         return visitBodyNode(taggedExec);
     });
@@ -1016,7 +1024,8 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
             insertNode(
                 restCase->binding(),
                 applyTagOperator(
-                    type->isNullable() ? "__null_value__" : "__error_value__",
+                    type->isNullable() ? camel::core::oper::TagNullValue
+                                       : camel::core::oper::TagErrorValue,
                     name,
                     restCase));
         }
@@ -1159,8 +1168,8 @@ node_handle_t Builder::nullComparison(
         literal->setOrigin(gct->origin());
         return visitDataNode(literal);
     }
-    node_handle_t isNull =
-        applyTagOperator("__is_null__", bindTemporary(valueOf(operands[subject].node)), gct);
+    node_handle_t isNull = applyTagOperator(
+        camel::core::oper::TagIsNull, bindTemporary(valueOf(operands[subject].node)), gct);
     return group == "__eq__" ? isNull : applyTagOperator("__not__", bindTemporary(isNull), gct);
 }
 
@@ -1291,7 +1300,7 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
     }
     node_handle_t condNode =
         byTag ? applyTagOperator(
-                    "__is_null__",
+                    camel::core::oper::TagIsNull,
                     (thenArm.opened.empty() ? elseArm : thenArm).opened.front().temporary,
                     cond)
               : valueNodeOf(visit(cond));
@@ -1325,8 +1334,8 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
                     // written where no DREF shows it (the elements of an array literal are
                     // names kept in the constant), and an unused node costs nothing at run
                     // time, as nothing depends on it.
-                    node_handle_t value =
-                        applyTagOperator("__null_value__", opened.temporary, opened.subject);
+                    node_handle_t value = applyTagOperator(
+                        camel::core::oper::TagNullValue, opened.temporary, opened.subject);
                     [[maybe_unused]] const bool bound = insertNode(opened.name, value);
                     ASSERT(bound, "A narrowed name is the first name of its arm.");
                     narrowedValues_.insert(value);
@@ -1890,6 +1899,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (type != nullptr && type->code() != TypeCode::Array) {
             const std::vector<StaticArg> statics(1);
             std::optional<oper_idx_ptr_t> elements;
+            // `__iter__` is a group of several overloads (`:struct/iter_str`, `:coll/map_items`,
+            // one for a tensor), one per iterable type: no one OperId names it, so it is still
+            // looked up by the group's name.
             if (const auto group = importedEntity("__iter__");
                 group.has_value() && group->isOperGroup()) {
                 elements = group->operGroup()->resolve({}, {type}, statics, Modifier::None);
@@ -2534,25 +2546,27 @@ void Builder::markLoopStateInPlaceOne(
     if (valueType == nullptr) {
         return;
     }
-    const auto group = importedEntity("__append_owned__");
-    if (!group.has_value() || !group->isOperGroup()) {
+    const oper_group_ptr_t group =
+        context_->importModule("")->nativeOperatorGroup(camel::core::oper::AppendOwned);
+    if (group == nullptr) {
         return;
     }
     const std::vector<StaticArg> statics(1);
     const auto owned =
-        group->operGroup()->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
+        group->resolve({valueType}, {nodeTypeOf(port)}, statics, Modifier::None);
     if (!owned.has_value()) {
         return;
     }
     // The loop starts from a private copy of its first value. A literal is a constant of the
     // graph: the same array object on every evaluation of the loop's site, so appending to it
     // in place would edit the program's own literal. One copy per loop entry buys every round.
-    const auto copyGroup = importedEntity("__copy_arr__");
-    if (!copyGroup.has_value() || !copyGroup->isOperGroup()) {
+    const oper_group_ptr_t copyGroup =
+        context_->importModule("")->nativeOperatorGroup(camel::core::oper::CopyArray);
+    if (copyGroup == nullptr) {
         return;
     }
     const auto copyOp =
-        copyGroup->operGroup()->resolve({}, {nodeTypeOf(initial[index])}, statics, Modifier::None);
+        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics, Modifier::None);
     if (!copyOp.has_value()) {
         return;
     }
