@@ -12,7 +12,7 @@ digraph GraphIR {
                 N00 -> N01 [label="0|0", type="NORM"];
             }
             subgraph cluster_F04 {
-                label="__g_6__";
+                label="__g_5__";
                 O04 [label="EXIT", type="EXIT"];
                 N02 [label="[3, 2]", type="DATA", origin=164, span="13:48-13:54", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int[]"];
                 N03 [label="tensor:ones", type="OPER", origin=165, span="13:43-13:47", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 2]>"];
@@ -25,7 +25,7 @@ digraph GraphIR {
             N05 [label="JOIN", type="JOIN", role="branch-contract", origin=157, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [?, ?]>"];
             N06 [label="BRCH", type="BRCH", origin=156, span="13:11-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
             N07 [label="__g_4__", type="FUNC", origin=158, span="13:24-13:37", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [2, 3]>"];
-            N08 [label="__g_6__", type="FUNC", origin=162, span="13:43-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 2]>"];
+            N08 [label="__g_5__", type="FUNC", origin=162, span="13:43-13:55", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="Tensor<float32, [3, 2]>"];
             F02 -> N04 [label="0", type="NORM_PORT"];
             N05 -> O02 [label="0", type="EXIT"];
             N07 -> N05 [label="0|0", type="WITH"];

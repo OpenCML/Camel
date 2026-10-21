@@ -1,6 +1,8 @@
 module complex_case
 
-import { abs, conj, exp, im, re } from math
+import { abs, conj, exp, im, nan, re } from math
+
+func negate(x: float): float { return -x }
 
 // Complex numbers: imaginary literals, the two types, arithmetic, printing and the accessors
 // (design principles 5.1 and 10.5).
@@ -43,5 +45,16 @@ func main(): int sync {
     println(im(3 + 4i))
     println(conj(3 + 4i))
     println(exp(0 + 1i))
+
+    // A NaN part has no sign in text (language reference 2.5.2, 2.5.3), with or without a
+    // specification: a computed negative NaN in the real part, and one in the imaginary part.
+    let bad = negate(nan)
+    let mixed = c128(bad) + 4i
+    println(mixed)
+    println<'{:.2f}'>(mixed)
+    println<'{:>12.2f}'>(mixed)
+    let twisted = c128(bad) * 1i
+    println(twisted)
+    println<'{:.2f}'>(twisted)
     return 0
 }

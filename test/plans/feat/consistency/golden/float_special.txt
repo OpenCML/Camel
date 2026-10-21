@@ -1,0 +1,23 @@
+inf
+-inf
+nan
+nan
+-0.0
+-0.0
+false
+true
+false
+false
+true
+true
+0.3
+0.3333333333333333
+1e+21
+1e-07
+100.0
+5.0
+0.0
+nan
+nan
+     nan
++nan

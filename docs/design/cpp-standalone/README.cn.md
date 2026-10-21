@@ -179,7 +179,7 @@ int main(int argc, char **argv) { return camel::standalone::run(argc, argv, a01_
 | `int`、`i32` | `int64_t`、`int32_t` | 加减乘、取负、`+=` 等用 `rt::add` 一类的内联函数：经无符号运算回绕，编译出来与 `+` 相同；比较直接写 `<` 等 |
 | `float`、`f32` | `double`、`float` | 直接写 `+ - *`；`/` 除以零是故障（与运行时一致【读码 `src/builtin/operators/ops.cpp` 的 `__builtin__div__`】），所以写成 `rt::div(a, b, site)` |
 | `bool` | `bool` | `&`、`\|` 两边都已求值，写 `&&`、`\|\|` 不改变语义；`&&`、`\|\|` 运算符在图上本来就是分支（4.2） |
-| `c64`、`c128` | `std::complex<float>`、`std::complex<double>` | 两个部分就是 `std::complex` 的两个 `float`/`double`：`+`、`-`、`*`、一元 `-`、`==`、`!=` 直接写，`/` 是 `rt::complexDiv`（复数的零是故障），整数指数的 `^` 是 `rt::pow`（反复平方，与运行时同一个算法）；`abs`、`re`、`im`、`conj`、`exp` 是 `rt::complexAbs`、`rt::complexReal`、`rt::complexImag`、`std::conj`、`std::exp`；文字是 `camel::utils::complexText`，格式说明按两个部分写（`camel/standalone/format.h`，与解释器同一条规则） |\r\n| `string` | `rt::Str` | 一个指针大小的句柄，指向 `{计数, 长度, 容量, 字节}`；空串是空指针。字面量是静态存储的“永生”对象（计数从一个不会减到零的值开始），不分配 |
+| `c64`、`c128` | `std::complex<float>`、`std::complex<double>` | 两个部分就是 `std::complex` 的两个 `float`/`double`：`+`、`-`、`*`、一元 `-`、`==`、`!=` 直接写，`/` 是 `rt::complexDiv`（复数的零是故障），整数指数的 `^` 是 `rt::pow`（反复平方，与运行时同一个算法）；`abs`、`re`、`im`、`conj`、`exp` 是 `rt::complexAbs`、`rt::complexReal`、`rt::complexImag`、`std::conj`、`std::exp`；文字是 `camel::utils::complexText`，格式说明按两个部分写（`camel/standalone/format.h`，与解释器同一条规则，NaN 的部分不写符号）；`main` 的这类参数从 `--arg` 读语言里的复数文字（`rt::EntryKind::ComplexFloat` / `ComplexDouble`） |\r\n| `string` | `rt::Str` | 一个指针大小的句柄，指向 `{计数, 长度, 容量, 字节}`；空串是空指针。字面量是静态存储的“永生”对象（计数从一个不会减到零的值开始），不分配 |
 | `T[]` | `rt::Array<T>` | 句柄，指向 `{计数, 长度, 容量, T 元素}`；元素是 `T` 的 C++ 表示，`int[]` 是连续的 `int64_t`。计数为 1 时“返回新值”的算子在原处改（5.2） |
 | 元组 `(A, B)` | 生成的 `struct`（`Tuple_i64_str { int64_t _0; rt::Str _1; }`） | 按值。带 `==`（逐个元素，4.2）与打印 |
 | 结构体 `{ x: A }` | 生成的 `struct`，字段同名 | 按值。类型有别名时用别名作类型名 |
@@ -336,7 +336,7 @@ rt::Fallible<int64_t> v7 = rt::attempt([&] { return risky(rt::call(depth, site_5
 - `main` 声明了别的返回类型：值按 `println` 的写法打印到标准输出，退出码 0【实测：返回 `'hi'` 打印 `hi`；返回 `0.1 + 0.2` 打印 `0.30000000000000004`】。
 - 没有声明返回类型：不打印，退出码 0（D9 的第二半）。
 - `exit(n)`（`:exit`、`os:exit`）：刷新输出，退出码 n（D9 的第一半；今天被 `catch (...)` 吞成 `Unknown error`）。
-- 带参数的 `main`（9.8：值来自命令行）：生成的程序接受与命令行工具相同的 `--arg 名字=值`，缺少时给出带位置的错误（13 的 Q7）。
+- 带参数的 `main`（9.8：值来自命令行）：生成的程序接受与命令行工具相同的 `--arg 名字=值`，按形参声明的类型读取（整数、浮点数、复数、`bool`、`string`；复数是语言里的复数文字，如 `1+2i`、`-2i`），缺少时给出带位置的错误（13 的 Q7）。
 - root 上算出来的顶层值（10.1：在 `main` 开始之前求值）：root 图本身也译成一个函数 `entry_`，它算出顶层值再调用 `main`；今天这种程序被拒绝（调研 1.3 的 `r12`）。
 
 ### 7.4 递归上限

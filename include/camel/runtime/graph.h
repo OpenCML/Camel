@@ -474,8 +474,6 @@ class GCGraph;
 
 class GCGraph : public camel::core::rtdata::Object {
   public:
-    static constexpr size_t kExtraSlotCount = 8;
-
     // These accessors expose cold compile/debug metadata only. Runtime passes
     // should derive execution semantics from the native payload instead.
     /// The graph's identity within its program, the same for every version of the graph
@@ -544,9 +542,6 @@ class GCGraph : public camel::core::rtdata::Object {
     uint8_t flags() const { return flags_; }
     bool isRoot() const;
     ::Tuple *staticArea() const { return staticArea_; }
-    uintptr_t extraSlot(size_t index) const;
-    void setExtraSlot(size_t index, uintptr_t value);
-    void clearExtraSlots();
 
     /// The reference table: every graph this one refers to, once each (see the file comment).
     /// Program::resolve turns it into graphs.
@@ -643,6 +638,9 @@ class GCGraph : public camel::core::rtdata::Object {
     /// The users of every node, built the first time it is asked for and kept with the graph
     /// (the frozen block stores each edge once, as an input). Thread-safe.
     const GCUseIndex &uses() const;
+    /// How to run this version: the order of its nodes, its branches and calls (exec_plan.h).
+    /// Built the first time it is asked for and kept with the graph. Thread-safe.
+    const class ExecPlan &execPlan() const;
     std::span<const gc_node_ref_t> normOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> withOutputsOf(gc_node_ref_t ref) const;
     std::span<const gc_node_ref_t> ctrlOutputsOf(gc_node_ref_t ref) const;
@@ -747,7 +745,8 @@ class GCGraph : public camel::core::rtdata::Object {
     ::Tuple *staticArea_ = nullptr;
     // Built by uses() on first demand, owned by the graph.
     mutable std::atomic<GCUseIndex *> uses_{nullptr};
-    uintptr_t extraSlots_[kExtraSlotCount]{};
+    // Built by execPlan() on first demand, owned by the graph.
+    mutable std::atomic<class ExecPlan *> execPlan_{nullptr};
 };
 
 /// The draft payload of the LOOP node `ref` of a frozen graph: the graphs its GCLoopRef names.

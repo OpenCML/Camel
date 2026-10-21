@@ -69,7 +69,9 @@ slot_t __map_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context
     mm::RootHandle result(mm::autoSpace(), created, type, "map result");
     for (size_t i = 0; i < n; ++i) {
         const slot_t element = useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i);
-        const slot_t value   = invokeFunction(ctx, functionOf(with), {}, std::span(&element, 1));
+        // The result goes straight into the output array, whose store copies the element bytes;
+        // a view here does not outlive the element (H29).
+        const slot_t value = invokeFunction(ctx, functionOf(with), {}, std::span(&element, 1));
         result.getAs<Array>()->set<slot_t>(i, value, type);
     }
     return toSlot<Array *>(result.getAs<Array>());
@@ -89,7 +91,9 @@ slot_t __filter_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
     mm::RootHandle kept(mm::autoSpace(), Array::create(mm::autoSpace(), type, 0), type, "filter result");
     for (size_t i = 0; i < n; ++i) {
         const slot_t element = useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i);
-        const slot_t answer  = invokeFunction(ctx, functionOf(with), {}, std::span(&element, 1));
+        // The predicate result is a boolean and the kept element is copied by append: nothing
+        // here outlives the element read (H29).
+        const slot_t answer = invokeFunction(ctx, functionOf(with), {}, std::span(&element, 1));
         if (fromSlot<bool>(answer)) {
             kept.getAs<Array>()->append(useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i), type);
         }
@@ -117,6 +121,10 @@ slot_t __reduce_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Cont
     for (size_t i = 0; i < n; ++i) {
         const slot_t args[] = {cell.getAs<Array>()->get<slot_t>(0), useViews ? arrayOf(norm)->getElementView(i, viewLayout) : arrayOf(norm)->getSlot(i)};
         const slot_t next   = invokeFunction(ctx, functionOf(with), {}, args);
+        // The accumulator is the value the next round reads; a view here would name the element
+        // this round read (H29). The cell store is the boundary: setSlot excludes a view from its
+        // byte-copy fast path and materialises it. The assertion checks that invariant in Debug.
+        CAMEL_ASSERT_NOT_VIEW(next, cellType->elemType(), "the reduce accumulator");
         cell.getAs<Array>()->set<slot_t>(0, next, cellType);
     }
     return cell.getAs<Array>()->get<slot_t>(0);
