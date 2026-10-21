@@ -79,7 +79,20 @@ must fire, and the rewritten function must agree too. The report has a line per 
 n samples agree, fired k of m`, or `FAIL name: ...` with the arguments where it fails
 (`x + 0.0 => x` fails at `-0.0`).
 
-## 5. Open
+## 5. The standard rules
+
+`stdlib/rules.cml` (`import ... from rules`) holds the laws that hold bit for bit: for the
+integers (wrapping arithmetic) the neutral elements, `x * 0`, `x - x`, double negation, folding
+of constants, commutation, association and distribution; for the floats the ones rounding does
+not touch (`x * 1.0`, `x + -0.0`, `x - 0.0`, `x / 1.0`, double negation, commutation). Two passes:
+`rules::simplify` (the rules that make an expression smaller, one way, to a fixpoint) and
+`rules::saturate_all` (every rule, both ways where it holds both ways, then the smallest writing
+of each value). No rule enters the file before `check` passes it: `check_library.cml` runs the
+check over every rule of it (the plan `modules.rules`). The float laws that depend on a
+permission (`x*c1 + x*c2`, `(x*c1)*c2`) and the ones that need a condition (`x*c + x*c` for a
+whole `c`) wait for `#requires` and `when`; `std::opt::algebra` keeps doing them.
+
+## 6. Open
 
 - `when` and the context of a rule; the permissions of a rule are not written yet (`#requires`
   needs the tag mechanism); analyses.
