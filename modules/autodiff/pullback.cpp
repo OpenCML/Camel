@@ -1719,9 +1719,13 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // The loop's users see the state alone; the tape is read through the node below. The
     // builder already inserted that projection when it normalised the loop; reuse it rather
     // than redirect it to itself (a cycle), and add one only for a loop that has none.
+    // The projection is the user whose type is the state's value; with one struct state the
+    // programme's own field reads (`q.a`) are ACCS users of the loop node too, and one of them
+    // is a float, not the state (H71: the state is the struct, not its fields).
     gc_node_ref_t state = kInvalidNodeRef;
     for (gc_node_ref_t user : draft_.normUsersOf(loop)) {
-        if (k == 1 && kindOf(draft_, user) == GCNodeKind::Accs) {
+        if (k == 1 && kindOf(draft_, user) == GCNodeKind::Accs &&
+            typeOf(draft_, user) == bodyPlan.stateValueType) {
             state = user;
             break;
         }

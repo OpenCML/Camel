@@ -1427,6 +1427,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 [[tests]]
+name = "loop_grad_struct_state"
+desc = "A struct loop state is differentiable: the state is one struct, its tangent is the same struct, and the reverse pass reads the fields it needs. Before this, the forward rewrite took the programme's field read (`q.a`) for the loop's state projection, and the graph crashed while being scheduled (SIGSEGV: a struct access on a tuple). The shapes: a struct state the body also uses as a whole (`sumP(q)`, so H71's split into fields does not apply), a nested struct state, a struct state with an int field (its tangent is `{a}`), a one-field struct state, and a state whose struct part stays whole beside a counter. Every gradient is 24 (a·(1 + d) over d = 1, 2, 3), the same as the tuple-state reference; `mixedPart` adds b·d with b = 1, so its gradient is 1; a struct state whose array field is appended gives 2 in place and 6 when the round must be taped; a struct parameter tree differentiates to `{p: {a: 4, b: 4}, c: 4}`."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_struct_state.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "loop_grad_struct_state grads=24.0 24.0 24.0 24.0 1.0 24.0 2.0 6.0 { p: { a: 4.0, b: 4.0 }, c: 4.0 }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
 name = "loop_grad_zero_rounds"
 desc = "A loop over an empty array runs no round: the tape is empty, the reverse pass does not run, and the gradient of the parameter the body would have used is zero, not the seed."
 kind = "behavior"
