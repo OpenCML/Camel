@@ -1,0 +1,11 @@
+// A pass whose module imports a module written in Camel cannot be compiled on its own yet (a
+// library compiled on its own imports modules written in C++ only; task H36 joins the two). The
+// diagnostic says so: it is refused, not run with the imported value reading 0 (task H37).
+module camel_import_values
+import { Program } from graph
+import { two } from values
+
+export func show(p: Program): Program! sync {
+    println(two)
+    return p
+}

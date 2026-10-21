@@ -64,10 +64,14 @@ void Builder::ensureRootGraph() {
 }
 
 void Builder::buildEntryCall() {
+    // A program is entered at `main`; a library built as a program of its own (buildLibraryEntry)
+    // at the function the caller runs, which is an ordinary top-level function of the module.
+    const std::string entryName =
+        libraryEntryFunction_.empty() ? std::string("main") : libraryEntryFunction_;
     compile_graph_ptr_t entryGraph = nullptr;
-    if (auto decoratedMain = decoratedGraphAt("main")) {
+    if (auto decoratedMain = decoratedGraphAt(entryName)) {
         entryGraph = *decoratedMain;
-    } else if (auto gv = graphsAt("main"); gv.has_value() && !gv.value()->empty()) {
+    } else if (auto gv = graphsAt(entryName); gv.has_value() && !gv.value()->empty()) {
         entryGraph = gv.value()->front();
     }
     if (entryGraph) {
@@ -116,6 +120,16 @@ void Builder::buildEntryCall() {
                     rootGraph_
                         ->addPortNode(isVar ? TupleType::cell(type) : type, name, false));
             }
+            if (!libraryEntryFunction_.empty()) {
+                // A library built as a program of its own has the signature of the function it
+                // runs: whoever calls its root (the pass runner) supplies the same arguments and
+                // reads the same result as from a call of that function.
+                rootTypeFactory.setExitType(entryType->exitType());
+            }
+            rootGraph_->setFuncType(rootTypeFactory.build());
+        } else if (!libraryEntryFunction_.empty()) {
+            FunctionTypeFactory rootTypeFactory;
+            rootTypeFactory.setExitType(entryType->exitType());
             rootGraph_->setFuncType(rootTypeFactory.build());
         }
         auto entryFuncValue = createFuncDataNode(entryGraph, true, false);
@@ -132,6 +146,10 @@ void Builder::buildEntryCall() {
             nodeIdOf(entryCall),
             nodeIdOf(entryCall),
             entryGraph->funcType()->exitType());
+    } else if (!libraryEntryFunction_.empty()) {
+        // The caller checked that the module exports this function before asking for the build;
+        // its body is in error if it has no graph.
+        throw BuildAbortException();
     } else if (context_->requireEntry()) {
         diags_->of(SemanticDiag::EntryModuleMissingMain).commit(module_->name());
         throw BuildAbortException();

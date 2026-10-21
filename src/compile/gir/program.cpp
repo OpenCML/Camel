@@ -533,6 +533,20 @@ bool Builder::buildLibrary(const module_ptr_t &module) {
     return buildFrom(*it->second, false);
 }
 
+bool Builder::buildLibraryEntry(const module_ptr_t &module, const std::string &entryFunction) {
+    ensureRootGraph();
+    const auto it = units_.find(module.get());
+    if (it == units_.end()) {
+        return false;
+    }
+    libraryEntryFunction_ = entryFunction;
+    struct ClearEntryFunction {
+        std::string &name;
+        ~ClearEntryFunction() { name.clear(); }
+    } clearEntryFunction{libraryEntryFunction_};
+    return buildFrom(*it->second, true);
+}
+
 bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
 
     // The modules in the order of their imports: a module after those it imports, except
