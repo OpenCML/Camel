@@ -435,7 +435,7 @@
         },
         {
           "name": "storage.modifier.camel",
-          "match": "\\b(?:macro|inner|outer|atomic|shared|const)\\b"
+          "match": "\\b(?:macro|inner|outer|atomic|shared|const|static)\\b"
         },
         {
           "name": "keyword.operator.expression.camel",
