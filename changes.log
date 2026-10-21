@@ -1,3 +1,5 @@
+[0.2.21]
+
 [0.2.20]
 Changes:
 - 区域成为图的一列，内联器把被内联的函数体放进 Inline 区域；新增 std::gir_regions 与 std::rgir_regions。
