@@ -456,12 +456,12 @@ struct ReorderFreedom {
  *   contract         FmaChain (it is the canonical algorithm), or MulAdd with contract in g
  *   changePrecision  a float accumulator and change_precision in g
  */
-ReorderFreedom reorderFreedom(const ReductionLaw &law, uint8_t granted);
+ReorderFreedom reorderFreedom(const ReductionLaw &law, uint16_t granted);
 /// The freedom under a policy (camel/core/operator_semantics.h): `nodePermissions` are the
 /// node's own, the policy adds its defaults or, when strict, ignores them.
 struct NumericPolicy;
 ReorderFreedom
-reorderFreedom(const ReductionLaw &law, uint8_t nodePermissions, const NumericPolicy &policy);
+reorderFreedom(const ReductionLaw &law, uint16_t nodePermissions, const NumericPolicy &policy);
 
 /// The text form of a law: "sum_f32: add f32 -> f64 -> f32, init 0x0, ascending, empty
 /// initial, commutative, identity 0x8000000000000000".
@@ -573,3 +573,5 @@ bool holds(
     const IndexedInstance &instance, const Predicate &predicate, std::span<const int64_t> point);
 
 } // namespace camel::core::sem
+
+

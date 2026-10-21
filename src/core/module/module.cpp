@@ -588,19 +588,19 @@ void Module::setDeclarationTags(
         it == bySignature.end() ? tags : camel::core::attr::unite(it->second, tags);
 }
 
-uint8_t Module::declarationPermissions(const Reference &name) const {
+sem::PermissionMask Module::declarationPermissions(const Reference &name) const {
     const auto it = declarationPermissions_.find(name.toString());
     if (it == declarationPermissions_.end()) {
         return 0;
     }
-    uint8_t all = 0;
+    sem::PermissionMask all = 0;
     for (const auto &[signature, permissions] : it->second) {
-        all = static_cast<uint8_t>(all | permissions);
+        all = static_cast<sem::PermissionMask>(all | permissions);
     }
     return all;
 }
 
-uint8_t Module::declarationPermissions(const Reference &name, std::string_view signature) const {
+sem::PermissionMask Module::declarationPermissions(const Reference &name, std::string_view signature) const {
     const auto outer = declarationPermissions_.find(name.toString());
     if (outer == declarationPermissions_.end()) {
         return 0;
@@ -610,11 +610,11 @@ uint8_t Module::declarationPermissions(const Reference &name, std::string_view s
 }
 
 void Module::setDeclarationPermissions(
-    const Reference &name, std::string_view signature, uint8_t permissions) {
+    const Reference &name, std::string_view signature, sem::PermissionMask permissions) {
     // The permissions of a declaration are the union of everything written on it; a second
     // record (an instance built after the template) must not lose the first.
-    uint8_t &slot = declarationPermissions_[name.toString()][std::string(signature)];
-    slot          = static_cast<uint8_t>(slot | permissions);
+    sem::PermissionMask &slot = declarationPermissions_[name.toString()][std::string(signature)];
+    slot          = static_cast<sem::PermissionMask>(slot | permissions);
 }
 
 camel::core::attr::AttrSetId Module::fieldTags(const Reference &typeName, size_t index) const {
@@ -631,3 +631,6 @@ void Module::setFieldTags(
 }
 
 } // namespace camel::core::module
+
+
+

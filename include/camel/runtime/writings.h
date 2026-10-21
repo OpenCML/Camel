@@ -64,7 +64,7 @@ namespace camel::runtime {
 class WritingObserver {
   public:
     virtual ~WritingObserver()                                                    = default;
-    virtual void joined(uint8_t context, std::span<const gc_node_ref_t> moved) = 0;
+    virtual void joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) = 0;
 };
 
 class WritingStore {
@@ -78,30 +78,30 @@ class WritingStore {
     /// Asserts that `a` and `b` are the same value in every context that has `perms`. Returns
     /// true when that changed the classes of the context `perms`.
     bool merge(
-        gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0, uint8_t flags = 0,
+        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0, uint8_t flags = 0,
         WritingObserver *observer = nullptr);
 
     /// The smallest node of the class of `node` in the context `context`.
-    gc_node_ref_t find(uint8_t context, gc_node_ref_t node);
+    gc_node_ref_t find(camel::core::sem::PermissionMask context, gc_node_ref_t node);
     /// A node of the class that stays the same until the class joins another: for keys that
     /// name a class (find gives the smallest node, which changes less often but costs a lookup).
-    gc_node_ref_t canon(uint8_t context, gc_node_ref_t node);
+    gc_node_ref_t canon(camel::core::sem::PermissionMask context, gc_node_ref_t node);
     /// The nodes of the class ascending; empty for a node alone in its class.
-    std::span<const gc_node_ref_t> members(uint8_t context, gc_node_ref_t node);
-    bool same(uint8_t context, gc_node_ref_t a, gc_node_ref_t b) {
+    std::span<const gc_node_ref_t> members(camel::core::sem::PermissionMask context, gc_node_ref_t node);
+    bool same(camel::core::sem::PermissionMask context, gc_node_ref_t a, gc_node_ref_t b) {
         return find(context, a) == find(context, b);
     }
     /// True when no equivalence was asserted.
     bool empty() const { return log_.empty(); }
     std::span<const WritingUnion> log() const { return log_; }
     /// The contexts that have a layer, ascending.
-    std::vector<uint8_t> contexts() const;
+    std::vector<camel::core::sem::PermissionMask> contexts() const;
     /// The roots of the classes of more than one node in the context, ascending.
-    std::vector<gc_node_ref_t> classRoots(uint8_t context);
+    std::vector<gc_node_ref_t> classRoots(camel::core::sem::PermissionMask context);
 
   private:
     struct Layer {
-        uint8_t context = 0;
+        camel::core::sem::PermissionMask context = 0;
         // Union by size; `smallest` is read at the root of a class.
         std::vector<gc_node_ref_t> parent;
         std::vector<gc_node_ref_t> size;
@@ -114,7 +114,7 @@ class WritingStore {
         };
         std::unordered_map<gc_node_ref_t, Members> members;
     };
-    Layer &layer(uint8_t context);
+    Layer &layer(camel::core::sem::PermissionMask context);
     static gc_node_ref_t findIn(Layer &layer, gc_node_ref_t node);
     static void ensure(Layer &layer, gc_node_ref_t node);
     static bool unionIn(Layer &layer, gc_node_ref_t a, gc_node_ref_t b, WritingObserver *observer);
@@ -281,11 +281,11 @@ class DraftWritings : private WritingObserver {
     void build();
     /// Asserts that `a` and `b` are the same value under `perms`, then closes over congruence.
     /// Returns true when that changed the classes.
-    bool assertEqual(gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0);
+    bool assertEqual(gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0);
     /// The same without the closure over congruence, which the caller does with rebuild() once
     /// it has made all its merges (a saturation round).
     bool assertEqualDeferred(
-        gc_node_ref_t a, gc_node_ref_t b, uint8_t perms = 0, uint16_t rule = 0);
+        gc_node_ref_t a, gc_node_ref_t b, camel::core::sem::PermissionMask perms = 0, uint16_t rule = 0);
     /// The node that computes this, in the class it belongs to: an existing one, or a new one
     /// with the inputs `norm` and `with` (any members of their classes). A node that does not
     /// take part in congruence is always new.
@@ -305,7 +305,7 @@ class DraftWritings : private WritingObserver {
     RewriteStats rewrite(std::span<const Rule> rules, size_t maxRounds = 16);
     /// The constant node `value` of `type` in this region with these permissions: the one there
     /// is, or a new one.
-    gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, uint8_t perms, uint32_t region);
+    gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region);
     /// The constant (bits and type) a writing of the value of `node` is, if any is.
     std::optional<std::pair<slot_t, camel::core::type::Type *>> constantOf(gc_node_ref_t node);
     /// Closes the classes over congruence: nodes whose inputs changed class are looked up again.
@@ -332,22 +332,22 @@ class DraftWritings : private WritingObserver {
     bool writtenInPlace(gc_node_ref_t node);
     bool takesPart(gc_node_ref_t node);
     bool canBeRoot(gc_node_ref_t node);
-    uint8_t contextOf(gc_node_ref_t node) const;
+    camel::core::sem::PermissionMask contextOf(gc_node_ref_t node) const;
     struct Item {
         const Pattern *pattern;
         gc_node_ref_t node;
     };
     void matchFrom(
-        uint8_t context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
+        camel::core::sem::PermissionMask context, std::vector<Item> &work, size_t at, std::vector<gc_node_ref_t> &bind,
         std::vector<uint8_t> &bound, const std::function<void()> &emit);
     gc_node_ref_t build(
         const Pattern &pattern, const Match &match, const DraftNodeInit &base);
     void enqueue(gc_node_ref_t node);
-    void joined(uint8_t context, std::span<const gc_node_ref_t> moved) override;
+    void joined(camel::core::sem::PermissionMask context, std::span<const gc_node_ref_t> moved) override;
     void index(gc_node_ref_t node);
 
     GraphDraft &draft_;
-    uint8_t matchPerms_ = 0;
+    camel::core::sem::PermissionMask matchPerms_ = 0;
     bool greedy_        = false; // rewrite(): nodes are replaced, so nothing is looked up by key
     camel::core::sem::NumericPolicy policy_;
     WritingStore store_;
@@ -374,3 +374,4 @@ Fact classFact(DraftWritings &writings, gc_node_ref_t node, On &&on, Join &&join
 }
 
 } // namespace camel::runtime
+

@@ -35,8 +35,8 @@
  *                      canonical algorithm, within a declared error bound, or not declared;
  *                      the special values; which program-granted permissions can change it
  *   FaultSpec          the faults it can raise (optional)
- *   Permission         the five permissions a program grants with @numeric(...), the fifth
- *                      (finite_math) split into its four assumptions: one byte
+ *   Permission         the relaxations a program grants with the standard permission tags,
+ *                      `finite_math` split into its four assumptions: one mask
  *
  * Phase 2 adds the index semantics (design section 5, camel/core/index_semantics.h):
  *
@@ -54,7 +54,7 @@
  *                      normative definition (design section 9, camel/runtime/definitions.h)
  *
  * An operator's declaration says only what the operator does. Permissions are never part of
- * it: they are written by the program on its own code and stored on the graph, one byte per
+ * it: they are written by the program on its own code and stored on the graph, one mask per
  * node (camel/runtime/graph.h, the permission column). A module cannot widen them.
  */
 
@@ -109,27 +109,30 @@ struct OperatorKey {
 // ---- Permissions (design principles 7.5) --------------------------------------------------
 
 /**
- * One relaxation of the canonical algorithm, granted by the program with @numeric(...) on a
- * function or a block. The permissions do not imply each other. `finite_math` in the source is
- * the four assumptions kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals together.
+ * One relaxation of the canonical algorithm, granted by the program with a tag on a function
+ * or a block (`#[approx_math]`). The permissions do not imply each other. `finite_math` in the
+ * source is the four assumptions kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals
+ * together.
  */
-enum Permission : uint8_t {
-    kReassociate     = 1 << 0, // reassociate:      reorder or regroup a reduction
-    kContract        = 1 << 1, // contract:         a multiply and an add as one fused multiply-add
-    kApproxMath      = 1 << 2, // approx_math:      approximate math functions
-    kChangePrecision = 1 << 3, // change_precision: lower or raise input or accumulation precision
-    kNoNans          = 1 << 4, // finite_math:      assume no NaN
-    kNoInfs          = 1 << 5, //                   assume no infinity
-    kNoSignedZeros   = 1 << 6, //                   the sign of a zero does not matter
-    kFlushSubnormals = 1 << 7, //                   subnormal inputs and results may become zero
+enum Permission : uint16_t {
+    kReassociate      = 1 << 0, // reassociate:      reorder or regroup a reduction
+    kContract         = 1 << 1, // contract:         a multiply and an add as one fused multiply-add
+    kApproxMath       = 1 << 2, // approx_math:      approximate math functions
+    kChangePrecision  = 1 << 3, // change_precision: lower or raise input or accumulation precision
+    kNoNans           = 1 << 4, // finite_math:      assume no NaN
+    kNoInfs           = 1 << 5, //                   assume no infinity
+    kNoSignedZeros    = 1 << 6, //                   the sign of a zero does not matter
+    kFlushSubnormals  = 1 << 7, //                   subnormal inputs and results may become zero
+    kNonDeterministic = 1 << 8, // nondeterministic: the result may change with the schedule
 };
 
-/// A set of permissions: one byte, 0 when none is granted.
-using PermissionMask = uint8_t;
+/// A set of permissions: 0 when none is granted. Two bytes since `nondeterministic` (review of
+/// H2b: the mask grows; there is no second column).
+using PermissionMask = uint16_t;
 
 inline constexpr PermissionMask kNoPermissions = 0;
 inline constexpr PermissionMask kFiniteMath = kNoNans | kNoInfs | kNoSignedZeros | kFlushSubnormals;
-inline constexpr PermissionMask kAllPermissions = 0xFF;
+inline constexpr PermissionMask kAllPermissions = 0xFFFF;
 
 /// The source name of a single permission bit ("reassociate", ..., "no_nans", ...).
 std::string_view permissionName(Permission permission);
@@ -192,14 +195,14 @@ struct NumericSemantics {
 
 /**
  * Which relaxations a consumer applies on top of what the program grants. The permissions of a
- * node are the program's own (@numeric); a policy is the consumer's: the algebra pass of
+ * node are the program's own (permission tags); a policy is the consumer's: the algebra pass of
  * 7.3 relaxes by default and takes `safe_fp=true` to be strict, a back end relaxes
  * the accumulation order by default and has a safe mode. They are the same question, so the
  * code asks it here: a rewrite or a schedule asks `permits(nodePermissions, required)`, and
  * reorderFreedom (camel/core/index_semantics.h) takes the policy with the node's permissions.
  */
 struct NumericPolicy {
-    /// Permissions every node has under this policy, with or without @numeric.
+    /// Permissions every node has under this policy, with or without a tag.
     PermissionMask defaultGrants = kNoPermissions;
     /// Whether the permissions a node carries count. A strict policy ignores them: even a node
     /// with wider permissions keeps its canonical rounding path (7.4, safe mode).

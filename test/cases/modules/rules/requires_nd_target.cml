@@ -1,0 +1,19 @@
+/**
+ * `kept` grants `nondeterministic`; `scaled` grants nothing, so the rule that requires the
+ * permission is applied to one body and not the other.
+ */
+module requires_nd_target
+
+func scaled(x: float): float {
+    return x * 1.0
+}
+
+#nondeterministic
+func kept(x: float): float {
+    return x * 1.0
+}
+
+func main(): int sync {
+    println(scaled(3.0), kept(4.0))
+    return 0
+}

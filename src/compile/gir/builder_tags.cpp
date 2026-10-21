@@ -39,6 +39,7 @@
 
 #include "builder.h"
 
+#include <algorithm>
 #include <cctype>
 #include <format>
 #include <string>
@@ -161,7 +162,14 @@ std::optional<camel::core::tag::TagId> Builder::tagNamed(const std::string &writ
 
 camel::core::attr::AttrValueId Builder::tagValueOf(
     const camel::core::tag::Decl &decl, const GCT::TagUse &use) {
-    if (static_cast<size_t>(decl.params.size()) != use.args.size()) {
+    if (decl.variadic) {
+        if (use.args.empty()) {
+            diags_->of(SemanticDiag::TagArgumentCount)
+                .atOrigin(use.origin)
+                .commit(use.name, "1 or more", "0");
+            throw BuildAbortException();
+        }
+    } else if (static_cast<size_t>(decl.params.size()) != use.args.size()) {
         diags_->of(SemanticDiag::TagArgumentCount)
             .atOrigin(use.origin)
             .commit(use.name, std::to_string(decl.params.size()), std::to_string(use.args.size()));
@@ -177,6 +185,29 @@ camel::core::attr::AttrValueId Builder::tagValueOf(
             throw BuildAbortException();
         }
         args.push_back(arg->data());
+    }
+    if (decl.names) {
+        // The arguments are names, not values (`#reads<reassociate, contract>`): the fact is
+        // the tuple of them, one item per argument, always a tuple however many there are.
+        std::vector<camel::core::attr::AttrValueId> items;
+        items.reserve(args.size());
+        for (const auto &arg : args) {
+            if (arg->type()->code() != camel::core::type::TypeCode::String) {
+                diags_->of(SemanticDiag::TagArgumentType)
+                    .atOrigin(use.origin)
+                    .commit("", use.name, "string", arg->toString(), "another kind");
+                throw BuildAbortException();
+            }
+            const auto name =
+                std::static_pointer_cast<camel::core::data::StringData>(arg)->data();
+            // A reader names tags, so a name that is not a declared one is a typo, not a fact.
+            if (!tagNamed(name).has_value()) {
+                diags_->of(SemanticDiag::TagUndeclared).atOrigin(use.origin).commit(name);
+                throw BuildAbortException();
+            }
+            items.push_back(camel::core::attr::symbol(name));
+        }
+        return camel::core::attr::tuple(items);
     }
     if (decl.value) {
         if (auto value = decl.value(args); value.has_value()) {
@@ -308,7 +339,7 @@ void Builder::addTagFacts(
         // permission column, not an attribute: the nodes get it through the permission scope
         // of the body or block (see visitExecNode and buildFuncBody). On a declaration the tag
         // is recorded too, so the facts query reports what the declaration grants.
-        facts.permissions = static_cast<uint8_t>(facts.permissions | decl->permission);
+        facts.permissions = static_cast<camel::core::sem::PermissionMask>(facts.permissions | decl->permission);
         if (declaration) {
             facts.declaration = camel::core::attr::unite(
                 facts.declaration, camel::core::attr::single(decl->key, value));
@@ -327,7 +358,8 @@ void Builder::addTagFacts(
             camel::core::attr::unite(facts.nodes, camel::core::attr::single(decl->key, value));
     }
     // The pipeline can tell the programmer when nothing reads the tag: the declaration names
-    // the passes, the use is where the tag was written.
+    // the passes, and a Camel pass names the tags it reads with `#reads<...>`. The use is where
+    // the tag was written.
     if (context_ != nullptr && !decl->readBy.empty()) {
         context_->noteTagUse({decl->name, decl->readBy, use.origin});
     }

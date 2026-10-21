@@ -78,7 +78,7 @@ struct GCGraphPayloadArena {
 
     GCNode *nodes              = nullptr; // nodeCount + 1 records
     uint32_t *origins          = nullptr; // nodeCount source origins
-    uint8_t *permissions       = nullptr; // nodeCount numeric permissions, or null
+    camel::core::sem::PermissionMask *permissions = nullptr; // nodeCount permissions, or null
     uint32_t *attrs            = nullptr; // nodeCount attribute sets, or null
     uint32_t *regions          = nullptr; // nodeCount regions, or null
     GCRegion *regionTable      = nullptr; // regionCount regions
@@ -199,3 +199,4 @@ void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
 } // namespace camel::runtime
+

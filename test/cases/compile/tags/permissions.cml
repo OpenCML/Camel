@@ -47,6 +47,11 @@ func grouped(x: float): float {
     return x * 1.0 + 2.0
 }
 
+#nondeterministic
+func drifting(x: float): float {
+    return x + 2.0
+}
+
 func main(): int sync {
     println(plain(1.0), annotated(2.0), tagged(3.0), blockTagged(4.0), annotated2(5.0), tagged2(6.0), finite(7.0), grouped(8.0))
     return 0

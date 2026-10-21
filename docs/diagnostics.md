@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-181 diagnostics: 164 errors, 17 warnings.
+182 diagnostics: 165 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -149,6 +149,7 @@ prints one entry.
 | `0x0300016B` | [SemanticDiag::TagNotAPermission](#tagnotapermission) | Error |
 | `0x0300016C` | [SemanticDiag::RuleTagNotRequires](#ruletagnotrequires) | Error |
 | `0x0300016D` | [SemanticDiag::TagParameterType](#tagparametertype) | Error |
+| `0x0300016E` | [SemanticDiag::TagShadowsPermission](#tagshadowspermission) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -3684,7 +3685,7 @@ The tag '{0}' grants no numeric permission.
 **Help**
 
 ```text
-A requirement names a permission of design principles 7.2: reassociate, contract, approx_math, change_precision, finite_math, no_nans, no_infs, no_signed_zeros or flush_subnormals.
+A requirement names a permission of design principles 7.2: reassociate, contract, approx_math, change_precision, nondeterministic, finite_math, no_nans, no_infs, no_signed_zeros or flush_subnormals.
 ```
 
 **Example** (`test/cases/modules/rules/err_requires_unknown.cml`, run as `camel test/cases/modules/rules/err_requires_unknown.cml`)
@@ -3761,6 +3762,34 @@ tag callback<f: (x: int) => int> on type
 type T = { x: int }
 
 func main(): int { return 0 }
+```
+
+### TagShadowsPermission
+
+`0x0300016E` · Error · `SemanticDiag::TagShadowsPermission`
+
+**Message**
+
+```text
+The tag '{0}' is declared with the name of a permission of the language.
+```
+
+**Help**
+
+```text
+A numeric permission (design principles 7.2) is a tag of the core and a program may not declare a tag of that name: the core's permission would still be what '#{0}' means, and the declaration would never be read. Rename the tag.
+```
+
+**Example** (`test/cases/compile/tags/err_tag_shadows_permission.cml`, run as `camel test/cases/compile/tags/err_tag_shadows_permission.cml`)
+
+```camel
+module err_tag_shadows_permission
+
+tag reassociate on func
+
+func main(): int {
+    return 0
+}
 ```
 
 ### VarParamInAsyncFunction
@@ -4157,7 +4186,22 @@ The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeli
 A tag only allows a pass to do something; with no such pass in the pipeline the tag has no effect. Add the pass it names ('read_by'), or remove the tag.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/rules/reads_target.cml`, run as `camel test/cases/modules/rules/reads_target.cml reads_pass::apply std::nvm`)
+
+```camel
+module reads_target
+import { marked } from reads_pass
+
+#[marked]
+func f(x: int): int {
+    return x
+}
+
+func main(): int {
+    println(f(1))
+    return 0
+}
+```
 
 ## Run time and passes (`RuntimeDiag`)
 

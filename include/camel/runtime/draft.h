@@ -92,12 +92,12 @@ struct DraftNodeHeader {
     GCNodeKind kind                  = GCNodeKind::Data;
     uint8_t runtimeFlags             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
-    // The numeric permissions the program granted to the node with @numeric(...)
-    // (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
+    // The numeric permissions the program granted to the node with the standard permission
+    // tags (camel/core/operator_semantics.h, PermissionMask; design principles 7.5), 0 when none.
     // Graph content, not a derived fact: rewrites keep it as they keep the origin (a node that
     // replaces another inherits it, inlined and cloned nodes keep their own), and the encoder
     // writes it to the frozen graph's permission column (GCGraph::nodePermissions).
-    uint8_t permissions = 0;
+    camel::core::sem::PermissionMask permissions = 0;
     // The node's attributes (camel/core/node_attrs.h, AttrSetId), 0 when none. Graph content,
     // kept by rewrites like the permissions above; the encoder writes it to the frozen graph's
     // attribute column (GCGraph::nodeAttrs).
@@ -127,7 +127,7 @@ struct DraftNodeInit {
     GCNodeKind kind                   = GCNodeKind::Data;
     uint8_t runtimeFlags              = 0;
     uint64_t origin                   = 0;
-    uint8_t permissions               = 0; // see DraftNodeHeader::permissions
+    camel::core::sem::PermissionMask permissions = 0; // see DraftNodeHeader::permissions
     uint32_t attrs                    = 0; // see DraftNodeHeader::attrs
     uint32_t region                   = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
     std::span<const std::byte> payload{};
@@ -567,8 +567,8 @@ class GraphDraft {
     uint64_t firstNodeOrigin() const;
     void setNodeOrigin(gc_node_ref_t id, uint64_t origin);
     /// Numeric permissions of node `id` (see DraftNodeHeader::permissions).
-    uint8_t nodePermissions(gc_node_ref_t id) const;
-    void setNodePermissions(gc_node_ref_t id, uint8_t permissions);
+    camel::core::sem::PermissionMask nodePermissions(gc_node_ref_t id) const;
+    void setNodePermissions(gc_node_ref_t id, camel::core::sem::PermissionMask permissions);
     /// Attributes of node `id` (camel/core/node_attrs.h; see DraftNodeHeader::attrs).
     uint32_t nodeAttrs(gc_node_ref_t id) const;
     void setNodeAttrs(gc_node_ref_t id, uint32_t attrs);
@@ -706,3 +706,4 @@ class GraphDraft {
 };
 
 } // namespace camel::runtime
+

@@ -178,6 +178,7 @@ enum class SemanticDiag : uint32_t {
     TagNotAPermission      = 0x00016B,
     RuleTagNotRequires     = 0x00016C,
     TagParameterType       = 0x00016D,
+    TagShadowsPermission   = 0x00016E,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

@@ -902,12 +902,12 @@ void GraphDraft::refuseWithWritings(const char *what) const {
         "extracted.");
 }
 
-uint8_t GraphDraft::nodePermissions(gc_node_ref_t id) const {
+camel::core::sem::PermissionMask GraphDraft::nodePermissions(gc_node_ref_t id) const {
     const DraftNodeHeader *h = header(id);
     return h ? h->permissions : 0;
 }
 
-void GraphDraft::setNodePermissions(gc_node_ref_t id, uint8_t permissions) {
+void GraphDraft::setNodePermissions(gc_node_ref_t id, camel::core::sem::PermissionMask permissions) {
     requireOneWriting("setNodePermissions");
     ++mutations_;
     DraftNode *draftNode = node(id);
@@ -1501,3 +1501,4 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
 }
 
 } // namespace camel::runtime
+

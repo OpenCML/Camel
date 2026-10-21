@@ -435,7 +435,7 @@ ExpandResult expandDefinition(
 
     // The call of the definition, in the node's place: its value, its control edges, its
     // source position.
-    const uint8_t permissions = draft.nodePermissions(node);
+    const camel::core::sem::PermissionMask permissions = draft.nodePermissions(node);
     const uint32_t attrs      = draft.nodeAttrs(node);
     const uint64_t origin     = draft.nodeOrigin(node);
     const std::vector<gc_node_ref_t> ctrl(
@@ -483,3 +483,4 @@ ExpandResult expandDefinition(
 }
 
 } // namespace camel::runtime
+

@@ -30,10 +30,13 @@
 
 #pragma once
 
+#include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "camel/core/error/diagnostics.h"
+#include "camel/core/operator_semantics.h"
 #include "camel/core/source/manager.h"
 #include "camel/parse/ast.h"
 #include "camel/parse/ast/value.h"
@@ -61,6 +64,7 @@ class Builder {
         }
         root_ = nullptr;
         namespaceStack_.clear();
+        programPermissions_.clear();
         visitProgram(syntax::cst::Program(tree.root()));
         return root_;
     }
@@ -105,9 +109,19 @@ class Builder {
     /// The permissions of a `@numeric(...)` annotation; nullopt for a decorator (`@name`,
     /// `@name<args>`). Any other annotation with names in parentheses, an unknown permission
     /// and an empty list are reported (SemanticDiag::InvalidAnnotation) and grant nothing.
-    std::optional<uint8_t> numericAnnotationOf(syntax::cst::FuncAnno context);
+    std::optional<camel::core::sem::PermissionMask> numericAnnotationOf(syntax::cst::FuncAnno context);
     Value visitFuncDecl(syntax::cst::FuncDecl context);
     Value visitTagDecl(syntax::cst::TagDecl context);
+    /// The permission groups the program declares (`tag fast = [reassociate, contract]`), by
+    /// the name they are declared with, expanded to the permissions their members grant. A
+    /// `#requires<fast>` written in the same program can name one of them (design principles
+    /// 7.2: a permission is a tag, and a group of permissions is a tag too). Built before the
+    /// declarations are visited, because a rule's requirement is read while it is parsed.
+    void collectProgramPermissionGroups(syntax::cst::Program program);
+    /// The permissions the program's group `name` grants; 0 when `name` is not a group of
+    /// permissions (including a name the program does not declare).
+    camel::core::sem::PermissionMask programPermissionOf(std::string_view name) const;
+    std::map<std::string, camel::core::sem::PermissionMask> programPermissions_;
     /// The tag uses of one `#` form, one node each (a `#[a, b]` group makes one for each
     /// member). An argument list is attached to the use as a RepeatedLoad("Data").
     std::vector<node_ptr_t> tagUsesOf(syntax::cst::TagUse context);
@@ -193,3 +207,4 @@ class Builder {
 };
 
 } // namespace camel::parse::ast
+

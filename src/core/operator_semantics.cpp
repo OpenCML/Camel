@@ -35,8 +35,8 @@ namespace camel::core::sem {
 
 namespace {
 
-/// The source names of the eight permission bits, in bit order.
-constexpr std::array<std::pair<Permission, std::string_view>, 8> kPermissionNames = {{
+/// The source names of the nine permission bits, in bit order.
+constexpr std::array<std::pair<Permission, std::string_view>, 9> kPermissionNames = {{
     {kReassociate, "reassociate"},
     {kContract, "contract"},
     {kApproxMath, "approx_math"},
@@ -45,6 +45,7 @@ constexpr std::array<std::pair<Permission, std::string_view>, 8> kPermissionName
     {kNoInfs, "no_infs"},
     {kNoSignedZeros, "no_signed_zeros"},
     {kFlushSubnormals, "flush_subnormals"},
+    {kNonDeterministic, "nondeterministic"},
 }};
 
 /// Parses a decimal uint16_t that is the whole of `text`.

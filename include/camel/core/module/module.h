@@ -35,6 +35,7 @@
 #include "camel/core/data/base.h"
 #include "camel/core/node_attrs.h"
 #include "camel/core/operator.h"
+#include "camel/core/operator_semantics.h"
 
 namespace camel::compile::gir {
 class DraftGraphBuilder;
@@ -173,7 +174,7 @@ class Module : public std::enable_shared_from_this<Module> {
     // The declaration's name, then the signature of one overload (empty when the name cannot be
     // overloaded), to the facts or the granted numeric permissions.
     std::map<std::string, std::map<std::string, camel::core::attr::AttrSetId>> declarationTags_;
-    std::map<std::string, std::map<std::string, uint8_t>> declarationPermissions_;
+    std::map<std::string, std::map<std::string, sem::PermissionMask>> declarationPermissions_;
     std::map<std::pair<std::string, size_t>, camel::core::attr::AttrSetId> fieldTags_;
 
     std::vector<ImportedRefBinding>
@@ -340,10 +341,10 @@ class Module : public std::enable_shared_from_this<Module> {
     void setDeclarationTags(
         const Reference &name, std::string_view signature, camel::core::attr::AttrSetId tags);
     /// The numeric permissions the declaration grants (its body's), over every overload.
-    uint8_t declarationPermissions(const Reference &name) const;
-    uint8_t declarationPermissions(const Reference &name, std::string_view signature) const;
+    sem::PermissionMask declarationPermissions(const Reference &name) const;
+    sem::PermissionMask declarationPermissions(const Reference &name, std::string_view signature) const;
     void setDeclarationPermissions(
-        const Reference &name, std::string_view signature, uint8_t permissions);
+        const Reference &name, std::string_view signature, sem::PermissionMask permissions);
     /// The facts written on field `index` of the type this module declares as `typeName`.
     camel::core::attr::AttrSetId fieldTags(const Reference &typeName, size_t index) const;
     void setFieldTags(
@@ -367,3 +368,4 @@ class Module : public std::enable_shared_from_this<Module> {
 using module_ptr_t = std::shared_ptr<Module>;
 
 } // namespace camel::core::module
+

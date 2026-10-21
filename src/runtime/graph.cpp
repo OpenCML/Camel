@@ -1046,7 +1046,7 @@ allocPayloadInArena(FixedBufferAllocator &arena, const GCGraphPayloadShape &shap
 struct PayloadStaging {
     std::vector<GCNode> nodes; // nodeCount + 1 records; the last is a sentinel
     std::vector<uint32_t> origins;
-    std::vector<uint8_t> permissions;
+    std::vector<camel::core::sem::PermissionMask> permissions;
     std::vector<uint32_t> attrs;
     std::vector<uint32_t> regions;
     std::vector<gc_node_ref_t> inputs;
@@ -1170,7 +1170,7 @@ void buildNodeChunks(
             const size_t recordsAt = sizeof(GCNodeChunk);
             const size_t originsAt = align8(recordsAt + count * sizeof(GCNode));
             const size_t permsAt   = originsAt + align8(count * sizeof(uint32_t));
-            const size_t attrsAt   = permsAt + (shape.permissions ? align8(count) : 0);
+            const size_t attrsAt   = permsAt + (shape.permissions ? align8(count * sizeof(camel::core::sem::PermissionMask)) : 0);
             const size_t regionsAt = attrsAt + (shape.attrs ? align8(count * sizeof(uint32_t)) : 0);
             const size_t edgesAt = regionsAt + (shape.regions ? align8(count * sizeof(uint32_t)) : 0);
             const size_t payloadAt = edgesAt + align8(edges * sizeof(gc_node_ref_t));
@@ -1183,7 +1183,7 @@ void buildNodeChunks(
             chunk->payloadWordCount = static_cast<uint32_t>(words);
             chunk->origins          = reinterpret_cast<uint32_t *>(base + originsAt);
             chunk->permissions =
-                shape.permissions ? reinterpret_cast<uint8_t *>(base + permsAt) : nullptr;
+                shape.permissions ? reinterpret_cast<camel::core::sem::PermissionMask *>(base + permsAt) : nullptr;
             chunk->attrs   = shape.attrs ? reinterpret_cast<uint32_t *>(base + attrsAt) : nullptr;
             chunk->regions = shape.regions ? reinterpret_cast<uint32_t *>(base + regionsAt) : nullptr;
             chunk->edges   = reinterpret_cast<gc_node_ref_t *>(base + edgesAt);
@@ -1202,7 +1202,10 @@ void buildNodeChunks(
             }
             std::memcpy(chunk->origins, staging.origins.data() + first, count * sizeof(uint32_t));
             if (chunk->permissions) {
-                std::memcpy(chunk->permissions, staging.permissions.data() + first, count);
+                std::memcpy(
+                    chunk->permissions,
+                    staging.permissions.data() + first,
+                    count * sizeof(camel::core::sem::PermissionMask));
             }
             if (chunk->attrs) {
                 std::memcpy(chunk->attrs, staging.attrs.data() + first, count * sizeof(uint32_t));
@@ -1591,7 +1594,7 @@ uint32_t GCGraph::nodeAttrs(gc_node_ref_t ref) const {
     return containsNodeRef(ref) && chunkOf(ref).attrs ? chunkOf(ref).attrs[ref & (kNodeChunkNodes - 1)] : 0;
 }
 
-uint8_t GCGraph::nodePermissions(gc_node_ref_t ref) const {
+camel::core::sem::PermissionMask GCGraph::nodePermissions(gc_node_ref_t ref) const {
     return containsNodeRef(ref) && chunkOf(ref).permissions
                ? chunkOf(ref).permissions[ref & (kNodeChunkNodes - 1)]
                : 0;
@@ -2089,3 +2092,4 @@ void collectStaticGraphRefsRecursive(
 }
 
 } // namespace camel::runtime
+

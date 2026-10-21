@@ -1,0 +1,12 @@
+/**
+ * A program may not declare a tag with the name of a core permission (design principles 6.2,
+ * log 2026-10-21): `#reassociate` in a program still means the core's permission, so the
+ * declaration would never be read. The declaration is refused where it is written.
+ */
+module err_tag_shadows_permission
+
+tag reassociate on func
+
+func main(): int {
+    return 0
+}

@@ -29,6 +29,7 @@
 
 #pragma once
 
+#include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/symbol.h"
@@ -67,14 +68,14 @@ class RuleObject final : public rtdata::Object {
 
     /// `when` may be null (a rule without a condition).
     static RuleObject *create(
-        camel::core::SymId name, bool twoWay, uint8_t needs, uint64_t constParams,
+        camel::core::SymId name, bool twoWay, camel::core::sem::PermissionMask needs, uint64_t constParams,
         ::Function *lhs, ::Function *rhs, ::Function *when, mm::IAllocator &allocator);
 
     std::string_view name() const { return camel::core::symbolText(name_); }
     /// `<=>`: both sides are the same value.
     bool twoWay() const { return twoWay_; }
     /// The numeric permissions the rule needs (camel/core/operator_semantics.h).
-    uint8_t needs() const { return needs_; }
+    camel::core::sem::PermissionMask needs() const { return needs_; }
     /// Bit i: parameter i is `const`.
     uint64_t constParams() const { return constParams_; }
     ::Function *lhs() const { return lhs_; }
@@ -91,14 +92,14 @@ class RuleObject final : public rtdata::Object {
 
   private:
     RuleObject(
-        camel::core::SymId name, bool twoWay, uint8_t needs, uint64_t constParams,
+        camel::core::SymId name, bool twoWay, camel::core::sem::PermissionMask needs, uint64_t constParams,
         ::Function *lhs, ::Function *rhs, ::Function *when)
         : name_(name), twoWay_(twoWay), needs_(needs), constParams_(constParams), lhs_(lhs),
           rhs_(rhs), when_(when) {}
 
     camel::core::SymId name_;
     bool twoWay_;
-    uint8_t needs_;
+    camel::core::sem::PermissionMask needs_;
     uint64_t constParams_;
     ::Function *lhs_;
     ::Function *rhs_;
@@ -106,3 +107,4 @@ class RuleObject final : public rtdata::Object {
 };
 
 } // namespace camel::rewritemod
+
