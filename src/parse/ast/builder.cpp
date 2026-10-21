@@ -770,15 +770,17 @@ ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody 
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
-and the right one what it becomes (rewrite design 2.1, graph store 5.2), and the value that
-holds them:
+and the right one what it becomes (rewrite design 2.1, graph store 5.2), and of the function that
+makes the rule from them:
 
     func name__lhs(params) => left
     func name__rhs(params) => right
-    let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+    func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
 
-`__rule` is an operator of the module `rewrite`, imported by the declaration itself. The
-declaration is three statements; `consts` has bit i set when the parameter i is `const`.
+`__rule` is an operator of the module `rewrite`, imported by the declaration itself. The rule is
+the function `name`: it is exported, imported and listed like any function (a library function
+has no module-level values), and the engines of the module call the functions of a list to get
+the rules. `consts` has bit i set when the parameter i is `const`.
 */
 Value Builder::visitRuleDecl(cst::RuleDecl context) {
     ENTER("RuleDecl");
@@ -849,7 +851,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     node_ptr_t lhsFunc = side("__lhs", sides[0]);
     node_ptr_t rhsFunc = side("__rhs", sides[1]);
 
-    // let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+    // func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
     const auto literal = [&](LiteralType type, const std::string &text) {
         node_ptr_t literalNode = createNodeAs<LiteralLoad>(Literal(type, text));
         setNodeTokenRangeByContext(literalNode, context);
@@ -870,20 +872,34 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     *args << reference(name + "__rhs");
     node_ptr_t call = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
     setNodeTokenRangeByContext(call, context);
-    node_ptr_t named = createNodeAs<RepeatedLoad>("NamedData");
-    *call << reference("__rule") << args << named;
+    *call << reference("__rule") << args << createNodeAs<RepeatedLoad>("NamedData");
 
-    node_ptr_t dataDeclNode = createNodeAs<DataDeclLoad>(false, UnpackType::Tuple, std::vector{ref});
-    setNodeTokenRangeByContext(dataDeclNode, context);
-    unwrapNodeAs<DataDeclLoad>(dataDeclNode)->setDoc(docOf(context));
-    *dataDeclNode << createNodeAs<RepeatedLoad>("Type");
-    node_ptr_t initializer = createNodeAs<RepeatedLoad>("Data");
-    setNodeTokenRangeByContext(initializer, context);
-    *initializer << call;
-    *dataDeclNode << initializer;
+    node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
+    setNodeTokenRangeByContext(exprStmt, context);
+    *exprStmt << call;
+    node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
+    setNodeTokenRangeByContext(stmts, context);
+    *stmts << exprStmt;
+    node_ptr_t block = createNodeAs<StmtBlockLoad>();
+    setNodeTokenRangeByContext(block, context);
+    *block << stmts;
+
+    node_ptr_t makerType = createNodeAs<FuncTypeLoad>();
+    setNodeTokenRangeByContext(makerType, context);
+    *makerType << createNodeAs<RepeatedLoad>("NamedPair") << createNodeAs<RepeatedLoad>("NamedPair");
+    node_ptr_t makerTypeOpt = createNodeAs<OptionalLoad>("Type");
+    setNodeTokenRangeByContext(makerTypeOpt, context);
+    *makerType << makerTypeOpt;
+    node_ptr_t makerNode = createNodeAs<FuncDataLoad>(ref);
+    setNodeTokenRangeByContext(makerNode, context);
+    *makerNode << makerType << block;
+    node_ptr_t makerDecl = createNodeAs<FuncDeclLoad>(ref);
+    unwrapNodeAs<FuncDeclLoad>(makerDecl)->setDoc(docOf(context));
+    *makerDecl << makerNode;
+    setNodeTokenRangeByContext(makerDecl, context);
 
     LEAVE("RuleDecl");
-    return std::vector<node_ptr_t>{lhsFunc, rhsFunc, dataDeclNode};
+    return std::vector<node_ptr_t>{lhsFunc, rhsFunc, makerDecl};
 }
 
 Value Builder::visitFuncDecl(cst::FuncDecl context) {
