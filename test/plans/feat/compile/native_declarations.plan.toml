@@ -88,26 +88,6 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "bytes_type.cml:8:23", "argument types: <> (int)", "<bytes:size>: (content: Bytes) => int"]
 
-# ---- The exception tag ----
-
-[[tests]]
-name = "native.tag_exception"
-desc = "`#op<'bytes:size'>` binds a name of another module to an operator of `bytes`: the name imported from the declaration and the operator's own name both reach it."
-kind = "behavior"
-case = "../../../cases/compile/native/bytes_tag_use.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "3\n3\n"
-
-[[tests]]
-name = "native.tag_exception_qualified"
-desc = "The group a declaration makes is the module's own entity, so naming the module reaches it as `bytes::size` reaches a C++ module's operator."
-kind = "behavior"
-case = "../../../cases/compile/native/bytes_tag_qualified.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "4\n"
-
 # ---- A declaration the module does not export is private (handover H94, ruling 3) ----
 
 [[tests]]
@@ -140,6 +120,28 @@ case = "../../../cases/compile/native/entry_uri.cml"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "3\n"
+
+# ---- A declaration may name only its own module's operator (handover H94, ruling 5) ----
+
+[[tests]]
+name = "native.foreign_operator_refused"
+desc = "`#op<'bytes:size'>` in a module other than `bytes` names another module's operator: refused at the declaration, in the file that wrote it, before any call."
+kind = "negative"
+case = "../../../cases/compile/native/foreign_operator.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeDeclarationForeignOperator"
+expect_diagnostic_code = "0x0300017F"
+expect_output_contains = ["bytes_tag.cml:11", "'size'", "bytes:size"]
+
+[[tests]]
+name = "native.declaration_qualified"
+desc = "A declaration is the module's own entity still: `generic_module::at` reaches the group the declaration made, as a C++ module's operator is reached."
+kind = "behavior"
+case = "../../../cases/compile/native/generic_qualified.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "9\n"
 
 # ---- A `.cml` beside a `.cmo` is that module's declarations, and has no bodies ----
 

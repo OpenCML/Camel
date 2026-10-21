@@ -200,6 +200,8 @@ enum class SemanticDiag : uint32_t {
     // Handover H94 (the author's rulings on body-less declarations): 0x17E and up.
     /// Two generic declarations of one name can take the same call (ruling 2).
     NativeDeclarationOverlap = 0x00017E,
+    /// A declaration names an operator of another module (ruling 5).
+    NativeDeclarationForeignOperator = 0x00017F,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

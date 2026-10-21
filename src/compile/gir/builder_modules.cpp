@@ -357,8 +357,13 @@ std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct
 void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     const std::string name = gct->name();
     FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
-    const std::string where  = unit_->module->name();
-    std::string uri          = where + ":" + name;
+    // The URI's prefix is the name the module declares (`module bytes`), not the name the
+    // runtime gave the file: the entry module is `main` to the runtime, but a declaration in it
+    // stands for an operator of the module it writes itself to be (design principles 10.1;
+    // handover H94, ruling 4).
+    const std::string &declared = unit_->module->declaredName();
+    const std::string where     = declared.empty() ? unit_->module->name() : declared;
+    std::string uri             = where + ":" + name;
     if (auto tagged = nativeOperatorUri(gct); tagged.has_value()) {
         uri = std::move(*tagged);
     }

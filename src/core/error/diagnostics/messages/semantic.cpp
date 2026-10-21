@@ -1349,6 +1349,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::NativeDeclarationForeignOperator,
+            {
+                "NativeDeclarationForeignOperator",
+                "The declaration '{0}' names the operator '{1}', which another module declares.",
+                "A module declares only the operators it implements: a body-less declaration "
+                "stands for an operator of the module it is written in, and declares no other "
+                "module's operator. Write the declaration beside the implementation, or call "
+                "the operator through the module that declares it.",
+            },
+        },
+        {
             SemanticDiag::TagNotAPermission,
             {
                 "TagNotAPermission",
