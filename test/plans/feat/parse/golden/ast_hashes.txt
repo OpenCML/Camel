@@ -310,7 +310,7 @@ f193836847b14eeb ok exemplars/06_loop_carried_state/program.cml
 b320d56b95f91c24 ok exemplars/07_export_integrity/program.cml
 18da615b13dfd8aa ok exemplars/08_structured_control_flow/program.cml
 08be7c0b09652bc6 ok showcase/c1-linear-logistic/train.cml
-e161ae730c757b4e ok showcase/c2-mlp-mnist/train.cml
+bab3430dab252a98 ok showcase/c2-mlp-mnist/train.cml
 99a1aa3bfd6baad7 ok showcase/c6-vae/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
@@ -319,6 +319,7 @@ f8a426c8e96936da ok stdlib/bytes.cml
 dc425a313698f684 ok stdlib/rules.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 0539c1402fbe163c ok stdlib/signatures/algo.cml
+d40599b5d4a963b9 ok stdlib/signatures/ckpt.cml
 ba50ff52809dea87 ok stdlib/signatures/crypto.cml
 651e80439e059f51 ok stdlib/signatures/fs.cml
 c56e790b4495860b no stdlib/signatures/globals.cml
@@ -335,7 +336,6 @@ f8689d2103eb80fb ok stdlib/signatures/sys.cml
 de04079c592499f2 ok stdlib/signatures/tensor.cml
 add801d463271a35 ok stdlib/signatures/this.cml
 6a55ba468ecb6a13 ok stdlib/signatures/time.cml
-2046e62688f0748a ok stdlib/signatures/tree.cml
 c2aadab066717442 ok test/cases/compile/format_string_bad_spec.cml
 482fb68058e35e2e ok test/cases/compile/format_string_checked.cml
 609c32d88d7854ba ok test/cases/compile/generic_explicit_arity_error.cml
@@ -1401,7 +1401,7 @@ f350a6371bce7def ok test/cases/loops/state_in_place_multi.cml
 63e444a96478d95f ok test/cases/loops/tuple_destructure.cml
 1d1931ddf83c2747 ok test/cases/macro/hof_calls.cml
 c96746199ab07fa4 ok test/cases/modules/bytes_text_reject.cml
-14de4ac15fcb6436 ok test/cases/modules/bytes_values.cml
+996ebdfdc21e21f4 ok test/cases/modules/bytes_values.cml
 f5599ee347287b8f ok test/cases/modules/fs_binary_roundtrip.cml
 2dddeba382c1e7c6 ok test/cases/modules/graph_facts.cml
 e3c3e7a58fd7dfbd ok test/cases/modules/graph_function.cml
@@ -1409,9 +1409,9 @@ e3c3e7a58fd7dfbd ok test/cases/modules/graph_function.cml
 6b32f6500be795d4 ok test/cases/modules/graph_program.cml
 2bf16e790a51c832 ok test/cases/modules/graph_read.cml
 3ecd593045740867 ok test/cases/modules/graph_types.cml
-e8977b1396aaf490 ok test/cases/modules/tree_operations.cml
-2252760d979eae0b ok test/cases/modules/tree_shape_error.cml
-b278f7020d0b496e ok test/cases/modules/tree_training.cml
+2d96fa0fb6052722 ok test/cases/modules/tree_operations.cml
+15aafa10ab0faaa1 ok test/cases/modules/tree_shape_error.cml
+cd92343b44b5acb8 ok test/cases/modules/tree_training.cml
 e92fc4ef8814a696 ok test/cases/modules/autodiff/collapse.cml
 cbe56823a0defb16 ok test/cases/modules/autodiff/collapse_random.cml
 706d8b780cd5a6d2 ok test/cases/modules/autodiff/collapse_runtime.cml
@@ -1511,11 +1511,11 @@ a621dfdd89784f98 no test/cases/modules/graph_pass/unparsable_pass.cml
 51d3348fd398d51c ok test/cases/modules/nn/autoencoder.cml
 f32ff1e512b4f4cf ok test/cases/modules/nn/autograd_linear_demo.cml
 560c44bb32cdc19b ok test/cases/modules/nn/bn_train_grad_sanity.cml
-5ac7f213be993c87 ok test/cases/modules/nn/checkpoint_interrupted.cml
-93d7ea90d1a10266 ok test/cases/modules/nn/checkpoint_roundtrip.cml
-769b9fa3f8ebe6e5 ok test/cases/modules/nn/checkpoint_tensor.cml
-4c5c4ac526fe1f10 ok test/cases/modules/nn/checkpoint_unsupported_leaf.cml
-b913117fdb307669 ok test/cases/modules/nn/checkpoint_unsupported_load.cml
+9ef6a407325fefd9 ok test/cases/modules/nn/checkpoint_interrupted.cml
+32c842a7bd076fe0 ok test/cases/modules/nn/checkpoint_roundtrip.cml
+e3b51c663167fa77 ok test/cases/modules/nn/checkpoint_tensor.cml
+44f101f5a9e51c42 ok test/cases/modules/nn/checkpoint_unsupported_leaf.cml
+0e19151110a2cc1b ok test/cases/modules/nn/checkpoint_unsupported_load.cml
 77a633e111382f07 ok test/cases/modules/nn/conv2d_grad_sanity.cml
 fe4a6435989f7ed5 ok test/cases/modules/nn/conv2d_shape_error.cml
 ada3abc9a1b2c4f1 ok test/cases/modules/nn/embedding_grad_sanity.cml
@@ -1739,7 +1739,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-3f28469678d9fa41 ok test/cases/modules/stdlib/registry_all.cml
+ad1654e5df6a3bfb ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 bc5627b4036b601d ok test/cases/modules/stdlib/str_bytes.cml
