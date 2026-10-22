@@ -1,0 +1,197 @@
+# H124：模块解析冲突——H112 的核心修复与本批补的两条性质
+
+- 分支：`handover/H124-module-resolution`，自 `origin/develop` 的 `d418daf2c`（H112 的
+  `dd3314984` 与 H113 的合并都在其中）。
+- 任务板：H124。
+- 结论：H124 最初要选的“解析优先级是 (a) 还是 (b)”已经由 H112 的 `2dafce471` 在核心层回答：
+  **一个从文件加载的模块，自己的 import 先在它自己的目录里解析；入口程序自己的 import 仍按入口
+  目录优先。** H124 不重复实现、不改优先级，只做三件事：核实最初那四条用例、把这条规则的两侧
+  写成可验证的用例、把 H113 为绕开遮蔽而做的夹具改名还原。H124 的完成方式是“已被 H112 覆盖 +
+  补了性质”，不是独立修复。`permissions.strict_algebra` 仍红，但红在 H112 §6.1 的 CSE 形状
+  断言，不在本批（H125 的范围）。
+
+## 1. 原始现象与 H119 的测量
+
+`stdlib/rules.cml` 做 `import { Program, Node, constant } from graph`。`std::opt` 的代数阶段
+按需编译 `rules` 时，模块搜索把**入口目录**放在最前，于是用例目录里的 `graph.cml` 被当成
+`graph` 模块；它没有导出 `Program`/`Node`/`constant`，`rules` 编译失败，`std::opt` 退出 1，
+stdout/stderr 为空。
+
+H119 测到四条：
+
+- `consistency/logical_branch.short_circuit.passes`
+- `consistency/logical_branch.short_circuit.simplify`
+- `compile/tags.read_by.present`
+- `tag_permissions.permissions.strict_algebra`
+
+同一程序移到没有 `graph.cml` 的目录即通过。H51 注只回答“同一目录里 `.cmo` 优先于 `.cml`”，
+没有回答“模块自己的相对 import 与入口目录谁优先”；设计原则 §10 的模块部分也没有这条优先级，
+§15 的未决问题里没有它。H112 §5 因此把这条规则标为**待语言作者复核**。
+
+## 2. 基线里的 H112：规则是什么，为什么本批不再改
+
+`2dafce471 core: a module resolves its imports next to itself first`：
+
+- `Context::importModule`（`src/core/context/context.cpp:379`）在全局搜索之前，先取**导入方模块
+  自己的路径所在的目录**，用新拆出的 `findModuleUnder` 找同名模块；找不到再走原来的
+  `entryConfig_.searchPaths`（入口目录、`CAMEL_PACKAGES`、`CAMEL_MODULE_PATH`、`CAMEL_STD_LIB`、
+  可执行文件目录、安装根），最后回退到入口目录。
+- 导入方目录来自 `modules_[currentModuleName]->path()`。入口模块 `main` 不在 `modules_` 里，所以
+  入口自己的 import 没有“导入方目录”这一步，仍按原来的顺序从入口目录开始：**程序自己的遮蔽
+  不变**。
+- 同一批的 `5499a8e0d` 把 entry origin 限定为程序自己的构建，修的是 H112 的另一条（规则库按需
+  编译覆盖 `main` 的位置），与解析顺序无关。
+
+H112 在 `feat/modules/onnx` 130/130、`feat/opt` 等计划上验证了这条规则，并在报告 §5 请作者复核。
+H124 的立场是：**不在这条已经落地的规则上再改一次**；把它写成两侧都可验证的性质，并把文档从
+“入口目录优先”更新为实际行为。设计原则本身没有改；作者问题留在本报告 §9。
+
+H113 的 `fa3cccc50` 在 H112 之前遇到同一个遮蔽，用了粗粒度办法：把
+`test/cases/compile/tags/graph.cml` 改名为 `tags_nodes.cml`（H113 报告 §8）。H112 落地后这个
+改名不再必要，见 §5。
+
+## 3. 四条用例在当前树上的真实状态
+
+在 Linux 主机上用 `camel-remote.ps1` 构建（Release，`-Jobs 8`），跑四个相关计划：
+
+| 用例 | 计划 | 结果 |
+|---|---|---|
+| `logical_branch.short_circuit.passes` | `feat/consistency/logical_branch` | **PASS**（15/15） |
+| `logical_branch.short_circuit.simplify` | 同上 | **PASS** |
+| `tags.read_by.present` | `feat/compile/tags` | **PASS**（30/30） |
+| `tag_permissions.permissions.strict_algebra` | `feat/compile/tag_permissions` | **FAIL**，但不再是遮蔽：跑到断言 `tight keeps the product CSE left, got ["mul_d","mul_d"]` |
+
+前三条的通过原因就是 H112：`rules` 的 `graph` 在 `stdlib` 目录里找到 `graph.cmo`，不再被用例目录
+的同名文件顶替。`strict_algebra` 的遮蔽也已消失（它能跑到 `std::gir` 的形状断言），剩下的是
+H112 §6.1 已经记录的问题：`std::opt` 的顺序是 fold → cse → algebra → dce，CSE 先把
+`x*0.1 + x*0.1` 合成 `p + p`，随后规则库的 `float_add_self` 把它改写成 `p * 2.0`；用例仍期望
+strict 保留那个和。这条不是 H124 的解析问题，`handover/H125-strict-algebra` 已另开；本批不擅自
+改断言或改 `std::opt` 的顺序。
+
+## 4. 新增的两条性质
+
+两条性质放在**同一个目录**里，因为要验证的正是“同一个 `graph.cml` 对程序可见、对库不可见”：
+
+`test/cases/compile/module_imports/importer_scope/`
+
+- `graph.cml`：`module graph`，只导出 `answer(): int`（41）。它故意与标准库模块同名。
+- `main.cml`：`import graph`，打印 `graph::answer()`。
+- `opt.cml`：不导入 `graph`，用 `std::opt std::nvm` 跑 `twice(21)`。
+
+计划 `test/plans/feat/compile/module_imports.plan.toml` 新增：
+
+| 用例 | 证明什么 | 期望 |
+|---|---|---|
+| `imports.entry_dir_wins` | 程序自己的 `import graph` 取同目录的 `graph.cml`，不是 `stdlib/graph.cmo`（后者没有 `answer`） | 退出 0，stdout `41` |
+| `imports.library_dir_wins` | 同一目录里 `std::opt` 按需编译 `stdlib/rules.cml`，`rules` 的 `import graph` 取 `stdlib/graph.cmo`，不是程序的 `graph.cml`；否则 `rules` 会在 `Program` 上失败 | 退出 0，stdout `42` |
+
+`feat/compile/module_imports` 25/25（含这两条）。这两条同时锁住了 H112 的两侧：①入口程序自己
+的遮蔽仍然有效；②库自己的 import 不再被入口目录顶替。如果 ② 不成立，说明 H112 改过头了；本次
+实测成立，没有发现过头的证据。
+
+## 5. H113 的改名：还原为 `graph.cml`
+
+选择**还原**，理由按重要性排序：
+
+1. H112 修的是根因。H113 当时改名是因为“改核心解析优先级超出本批范围”；现在核心已经改了，
+   改名不再必要。
+2. 保留同名夹具才是真实场景，而且它让 `feat/compile/tags` 成为 H112 的回归护栏：如果以后有人把
+   “库自己的 import 先在自身目录解析”改回去，`read_by.present` 和 `strict_algebra` 会立刻变红，
+   不需要额外的合成用例。
+3. 改名会让语料失去这个覆盖，而 H113 的报告 §8 也把改名写成临时绕开，不是语义结论。
+
+改动：
+
+- `git mv test/cases/compile/tags/tags_nodes.cml test/cases/compile/tags/graph.cml`；文件内容一字
+  未改，仍声明 `module tags_nodes`（与 H113 改名前完全相同）。
+- `test/plans/feat/compile/tags.plan.toml` 的 `graph.attrs`、`graph.run` 两条 `case` 路径改回
+  `graph.cml`。
+- `test/plans/feat/parse/golden/ast_hashes.txt` 的 `f4c1ab05bea62ebf` 一行路径改回
+  `.../tags/graph.cml`，哈希不变（内容没变）。
+
+这不会改变任何编译器行为；H113 报告 §8 关于改名的描述由本批取代。如果协调者更愿意保留
+`tags_nodes.cml`，只需丢掉本提交里的 rename 三段（夹具、plan 两行、AST 一行），§4 的两条性质
+仍然独立成立；但那样 `feat/compile/tags` 就不再覆盖“同名夹具”这个场景。
+
+## 6. 静默退出与诊断：实测
+
+四条用例不再出现 H119 的“退出 1 且无输出”。另外在主机上做了四个同类探针（临时目录，未入库）：
+
+| 探针 | 结果 |
+|---|---|
+| A：pass 模块 `badpass.cml` 从 `helper` 导入一个不存在的名字 | `Pass <badpass::run> not found` + 可用 pass 列表；**没有**显示 `badpass` 自己的导入错误 |
+| B：用户 pass 模块 `lib.cml` 与程序的 `graph.cml` 同目录，`lib` 导入 `Program` | `error[RuntimeDiag::InvalidPassParameter]: ... its library 'lib' does not compile.`，note 指向 `lib.cml:5` 的 `UnresolvedTypeReference: 'Program'` |
+| C：入口目录的 `rules.cml` 不含 `simplify`，遮蔽 `std::opt` 要加载的 pass 库 | `Pass <rules::simplify> not found` + 列表；没有说“你目录里的 rules.cml 被用了” |
+| D：入口目录的 `rules.cml` 编译失败，遮蔽 pass 库 | `InvalidPassParameter: ... its library 'rules' does not compile.`，note 给出 `ModuleNotFound: 'missing'` 及搜索路径，定位到 `rules.cml:4` |
+
+结论：
+
+- H119 那条**静默**退出在本次树上已不能复现；B/D 说明 pass 库编译失败时会带原因和位置报告。
+- A/C 是另一类**诊断质量**问题：一个“存在但不可用”的 pass 模块被报成 “pass not found”，它自己
+  的编译诊断没有显示。这个不在 H124 的解析问题里，建议另开一行处理；本批没有改它，也没有把它写成
+  “已修”。
+- 因此“静默退出 1 不可接受”这条要求对 H124 的碰撞路径已经满足（不会再静默）；没有发现新的静默
+  路径。
+
+## 7. 计划数字
+
+全部在 Linux 主机上，Release，`-Jobs 8`，`camel-remote.ps1`：
+
+| 计划 | total | pass | fail | 说明 |
+|---|---:|---:|---:|---|
+| `feat/compile/module_imports` | 25 | 25 | 0 | 含新增两条性质 |
+| `feat/compile/tags` | 30 | 30 | 0 | `read_by.present` 绿 |
+| `feat/consistency/logical_branch` | 15 | 15 | 0 | 两条 `short_circuit` 绿 |
+| `feat/compile/tag_permissions` | 6 | 5 | 1 | `strict_algebra`：H112 §6.1 的形状断言 |
+| `smoke` | 10 | 10 | 0 | |
+| `feat/compile` | 1010 | 1009 | 1 | 唯一红是 `strict_algebra` |
+| `feat/consistency` | 988 | 988 | 0 | |
+| `feat/opt` | 710 | 710 | 0 | |
+| `feat/linear` | 723 | 723 | 0 | |
+| `feat/parse` | 57 | 56 | 1 | 额外跑，因本批动了 `ast_hashes.txt` |
+| **合计（上述后六个）** | **3498** | **3496** | **2** | |
+
+两条红都不是 H124：
+
+1. `permissions.strict_algebra`：H112 §6.1，H125 的范围。
+2. `frontend.ast_snapshot`：`python3 test/tools/parsecheck/check.py snapshot` 报 17 个与 H124 无关
+   的基线哈希漂移（`compile/numeric/fuse.cml`、`library_gemm.cml`、`modules/tree_*`、
+   `modules/nn/checkpoint_*` 等）。本批改的 `tags/graph.cml` 一行**没有**出现在差异里，说明改名
+   还原与快照一致。这 17 个是基线已有的漂移，H113 也明确留给一次单独的刷新，本批不并入。
+
+## 8. 改动与提交
+
+```
+ffb16f246 test: pin whose directory a module's imports resolve in
+```
+
+- `test/cases/compile/module_imports/importer_scope/{graph,main,opt}.cml`（新增）。
+- `test/plans/feat/compile/module_imports.plan.toml`（两条性质）。
+- `test/cases/compile/tags/graph.cml`（由 H113 的 `tags_nodes.cml` 还原）、
+  `test/plans/feat/compile/tags.plan.toml`（两条路径）、
+  `test/plans/feat/parse/golden/ast_hashes.txt`（一行路径）。
+- `docs/language/05_modules.md`、`docs/language/en/05_modules.md`：查找顺序写明“入口自己的 import
+  按入口目录优先；从文件加载的其他模块先在自己目录里找同名模块，再回退全局顺序”。
+- `docs/technical/09_operator_registration.md`：导入模块时先看导入方目录（H112）。
+
+没有改编译器、标准库或解析优先级。
+
+## 9. 作者问题与遗留
+
+1. **作者问题（必须复核）**：设计原则没有规定“模块自己的相对 import 与入口目录谁优先”。H112 选择
+   “模块自己的目录先”，理由见 §2。请作者确认这条语义。两种后果：
+   - 确认：本报告 §4 的两条性质、§5 的还原、§8 的文档都保持；H112 的规则成为语言的一部分。
+   - 不确认，要求入口目录对所有 import 都优先：H112 的 `2dafce471` 需要回退，最初四条用例会回到
+     红，语料必须避免在用到 `std::opt` 的目录里放 `graph.cml`（H113 的改名会重新变得必要）；
+     §4 的 ② 也不再成立，只能保留 ①。
+   H124 不替作者做这个决定；本批只是把现状写成可验证的性质。
+2. **H113 的改名**：建议保留本批的还原（`tags/graph.cml`），理由见 §5；如果合并时与 H113 的分支
+   冲突，按“保留 `graph.cml`、丢弃 `tags_nodes.cml`”解，并把 H113 报告 §8 视为被本批取代。
+3. **`-I/--include` 未生效**：`tools/camel-cli/config.cpp:320,681` 把 `-I` 解析进 `includeDirs`，
+   但之后没有任何地方把它加入模块搜索路径；而语言参考的查找顺序里写着 `-I <目录>`。这是与
+   H124 相邻的另一个缺陷，本批没有改，也没有用例覆盖。建议另开一行。
+4. **A/C 的诊断质量**：见 §6，pass 模块“存在但不可用”时只报 “pass not found”，模块自己的诊断
+   不显示；建议另开一行。
+5. `permissions.strict_algebra`：H112 §6.1，`handover/H125-strict-algebra` 处理。
+6. `frontend.ast_snapshot` 的 17 个基线哈希漂移、H121 的 facts 回归：都不是本批，分别留给快照
+   刷新和 H121。
