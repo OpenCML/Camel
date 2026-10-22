@@ -199,12 +199,13 @@ is the plan that reads it.
 
 A tracked file that matches no rule used to be invisible in a mixed change: another file's rule
 kept the fallback away, and this file contributed nothing (H182). Two things now make that
-visible. `--changed` prints a `[WARN]` naming every changed file no rule matched. And the
-self-test `test/tools/selftest/run.mjs` walks every tracked file and fails on a class that
-neither a directory rule nor a file rule selects, unless the class is on its allowlist with a
-reason. The allowlist names only the deliberately unselectable layers (perf, GC stress, progen,
-the PyTorch comparisons) and files no plan reads (vendored code, packaging, CI configuration,
-repository metadata). A new kind of file therefore cannot appear without a rule or a reason: add
+visible. `--changed` prints a `[WARN]` naming every changed file no rule matched (the plan files
+the policy excludes are not called holes). And the self-test `test/tools/selftest/run.mjs` walks
+every file in the index plus the untracked, not ignored files, and fails on a class that neither
+a directory rule nor a file rule selects, unless the class is on its allowlist with a reason. The
+allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
+comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
+metadata). A new kind of file therefore cannot appear without a rule or a reason: add
 the rule, or add the class and its reason to the self-test.
 
 That check is why the file rules now cover the classes H161 could not have known about: the
