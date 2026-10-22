@@ -104,9 +104,9 @@
             "plans": ["smoke", "feat/parse", "feat/compile", "feat/consistency"]
         },
         {
-            "comment": "Values, types, the collector and the runtime shell.",
+            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too.",
             "paths": ["src/core/", "src/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
         },
         {
             "comment": "Execution, entry arguments and the standalone bridge.",
@@ -134,9 +134,9 @@
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
         },
         {
-            "comment": "The core value/type headers and the runtime headers.",
+            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too.",
             "paths": ["include/camel/core/", "include/camel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",

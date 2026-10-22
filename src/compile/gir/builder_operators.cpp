@@ -1583,6 +1583,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // The dimension names a call binds (design principles 5.4), remembered for the checked
     // conversion of the returned value below.
     ExtentValues dimValues;
+    ExtentPacks dimPacks;
     const auto enterParameters = [&](FunctionType *funcType) {
         // The parameter types may write their extents over names the signature binds, e.g.
         // `func f(x: Tensor<f32, const [constas n]>, y: Tensor<f32, const [n]>)`. Bind each name
@@ -1607,37 +1608,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (isVar || param == nullptr || types[i] == nullptr) {
                         continue;
                     }
-                    const auto *named = dynamic_cast<const OtherType *>(param);
+                    // Whether the parameter states dimension names (or a pack name) is the
+                    // type's answer, not a module type's: the core array type and a module
+                    // type are both bound the same way here.
                     std::vector<ExtentForm> forms;
-                    if (named == nullptr || !named->extentForms(forms)) {
+                    if (!param->extentForms(forms)) {
                         continue;
                     }
-                    bool hasNames = false;
+                    bool hasNames = !param->packName().empty();
                     for (const ExtentForm &form : forms) {
                         hasNames |= form.hasNames();
                     }
-                    if (!hasNames || types[i]->code() != param->code()) {
-                        continue;
-                    }
-                    const auto *actual = dynamic_cast<const OtherType *>(types[i]);
-                    std::vector<ExtentForm> actualForms;
-                    if (actual == nullptr || !actual->extentForms(actualForms)) {
+                    if (!hasNames) {
                         continue;
                     }
                     const size_t nameIndex  = (with ? 0 : funcType->withTypesCount()) + i;
                     const std::string label = nameIndex < funcType->argNamesCount()
                                                   ? std::string(funcType->argNameAt(nameIndex))
                                                   : std::to_string(i + 1);
-                    for (size_t j = 0; j < forms.size() && j < actualForms.size(); ++j) {
-                        if (!actualForms[j].isConstant()) {
-                            continue;
-                        }
-                        if (!forms[j].bind(actualForms[j].constant(), dimValues)) {
-                            diags_->of(SemanticDiag::DimensionMismatch)
-                                .atOrigin(inputs[i].expr->origin())
-                                .commit(label, actualForms[j].toString());
-                            throw BuildAbortException();
-                        }
+                    std::string mismatch;
+                    const ExtentBinding binding =
+                        bindExtents(param, types[i], dimValues, dimPacks, mismatch);
+                    if (binding == ExtentBinding::NotDimensioned) {
+                        continue;
+                    }
+                    if (binding == ExtentBinding::Mismatch) {
+                        diags_->of(SemanticDiag::DimensionMismatch)
+                            .atOrigin(inputs[i].expr->origin())
+                            .commit(label, mismatch);
+                        throw BuildAbortException();
                     }
                     namedArgs.push_back({&inputs[i], &types, i, param, types[i]});
                 }
@@ -1645,12 +1644,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         bindNamedExtents(withInputs, withInputTypes, true);
         bindNamedExtents(normInputs, normInputTypes, false);
         for (const NamedExtentArg &arg : namedArgs) {
-            const auto *named = dynamic_cast<const OtherType *>(arg.param);
-            if (named == nullptr) {
-                continue;
-            }
-            OtherType *refined = named->withExtentValues(dimValues);
-            if (refined == nullptr || refined->equals(arg.param)) {
+            Type *refined = const_cast<Type *>(arg.param->withExtentValues(dimValues, dimPacks));
+            if (refined == nullptr || refined == arg.param || refined->equals(arg.param)) {
                 continue;
             }
             if (refined->assignableFrom(arg.actual)) {
@@ -2478,22 +2473,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
     }
-    if (targetOperator == nullptr && !dimValues.empty() && targetFuncType != nullptr &&
-        targetFuncType->hasExitType()) {
+    if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
+        targetFuncType != nullptr && targetFuncType->hasExitType()) {
         // The return type may speak about the names the parameters bound (`: Tensor<[n, k]>`).
         // The function still has one graph: what varies with the call is only the static type,
         // and the value is passed through the checked conversion to it (the same check `as`
         // makes), so a body that breaks the relation is caught where the call runs.
-        const auto *namedExit = dynamic_cast<const OtherType *>(targetFuncType->exitType());
+        Type *namedExit = targetFuncType->exitType();
         std::vector<ExtentForm> forms;
         if (namedExit != nullptr && namedExit->extentForms(forms)) {
-            bool hasNames = false;
+            bool hasNames = !namedExit->packName().empty();
             for (const ExtentForm &form : forms) {
                 hasNames |= form.hasNames();
             }
-            Type *actualExit   = valueTypeOf(nodeTypeOf(targetNode));
-            OtherType *refined = hasNames ? namedExit->withExtentValues(dimValues) : nullptr;
-            if (refined != nullptr && actualExit != nullptr && !refined->equals(actualExit) &&
+            Type *actualExit = valueTypeOf(nodeTypeOf(targetNode));
+            Type *refined    = hasNames
+                                   ? const_cast<Type *>(
+                                         namedExit->withExtentValues(dimValues, dimPacks))
+                                   : nullptr;
+            if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
+                !refined->equals(actualExit) &&
                 refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {
                 targetNode = castNodeTo(targetNode, refined, gct);
             }

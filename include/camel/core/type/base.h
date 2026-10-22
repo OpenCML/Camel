@@ -20,10 +20,13 @@
 #pragma once
 
 #include "camel/core/slot.h"
+#include "camel/core/type/extent.h"
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::core::type {
@@ -156,6 +159,11 @@ extern const signed char primitiveTypeConvMatrix[6][6];
 class Type;
 using type_vec_t = std::vector<Type *>;
 
+/// One argument of a parameterised type (camel/core/type/other.h): a type, a compile-time
+/// constant, or a list of extents over dimension names. Declared here because `Type` routes
+/// `Name<args...>` to the type itself (`applyArguments`), and defined with the module types.
+struct TypeArgument;
+
 /// Index of a type in the TypeTable (camel/core/type/intern.h). Equal non-zero ids mean the
 /// same type object.
 using TypeId = uint32_t;
@@ -215,6 +223,36 @@ class Type {
     virtual slot_t castSlotFrom(slot_t value, Type *sourceType) const;
     bool assignableFrom(Type *sourceType) const;
 
+    /**
+     * The dimensions this type states, in declaration order, as compile-time extents (design
+     * principles 5.4): a constant, unknown, or a linear form over dimension names. Returns
+     * false when the type has no dimensions to state (the default). A type with a trailing
+     * pack (`T[n, ..rest]`) reports its prefix here and the pack name through packName();
+     * `openRank()` says whether the prefix covers the whole shape.
+     */
+    virtual bool extentForms(std::vector<ExtentForm> &out) const;
+    /// The name of the trailing pack (`T[..rest]`), empty for an anonymous pack or none.
+    virtual std::string_view packName() const;
+    /**
+     * True when the rank is not fixed by this type (`T[..]`, `T[3, ..]`): extents() is then a
+     * prefix that any rank at least that long satisfies. The call site relies on it to tell
+     * an argument whose trailing dimensions are unknown, where it binds no pack.
+     */
+    virtual bool openRank() const;
+    /**
+     * This type with the extent names in `values` replaced by their bound extents and the pack
+     * names in `packs` replaced by the dimensions they stood for at a call. Returns `this`
+     * when nothing was bound. A type that loses its last dimension this way (a bare pack
+     * `T[..rest]` bound to no dimensions) denotes its element type, which is a scalar.
+     */
+    virtual const Type *withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const;
+    /**
+     * `Name<args...>`: the type these arguments denote. The default refuses every argument
+     * (`this type takes no arguments`). A type whose arguments carry meaning overrides it.
+     */
+    virtual const Type *
+    applyArguments(std::span<const TypeArgument> arguments, std::string &error) const;
+
     bool operator==(Type *other) const = delete;
     bool operator!=(Type *other) const = delete;
 
@@ -232,5 +270,31 @@ class Type {
     static Type *Complex128();
     static Type *Ref();
 };
+
+/// What binding the dimension names of one argument did (design principles 5.4).
+enum class ExtentBinding {
+    /// The parameter states no dimension names (or the actual type carries none the parameter
+    /// can be bound from): the ordinary argument check decides, as it did before.
+    NotDimensioned,
+    /// Every name the actual type fixes has been bound into `values`/`packs`.
+    Bound,
+    /// A name was already bound to a different extent: `mismatch` holds the actual extent.
+    Mismatch,
+};
+
+/**
+ * Binds the dimension names a parameter type states from one argument type (`T[n, ..rest]`
+ * against `f32[3, 4, 5]` binds `n = 3` and `rest = [4, 5]`). `values` and `packs` accumulate
+ * over the arguments of one call, so a dimension can be fixed by a later argument than the one
+ * that mentions it (`f(a: f32[?, n], b: f32[n])`). Extents the argument leaves unknown bind
+ * nothing; the checked conversion at the call then enforces them when it runs.
+ *
+ * The rules are those of design principles 5.4 as the compiler already applied them to tensor
+ * types: a constant argument extent binds, an unknown one does not, a contradiction is a
+ * mismatch, and a pack is bound only when the argument's rank is fixed.
+ */
+ExtentBinding bindExtents(
+    const Type *parameter, const Type *actual, ExtentValues &values, ExtentPacks &packs,
+    std::string &mismatch);
 
 } // namespace camel::core::type

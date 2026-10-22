@@ -29,6 +29,8 @@
 #include "camel/utils/log.h"
 #include "camel/utils/type.h"
 
+#include <string_view>
+
 using namespace std;
 using namespace camel::core::type;
 using namespace camel::core::rtdata;
@@ -184,6 +186,84 @@ bool Type::equals(Type *type) const {
 Type *Type::unify(Type *other) const { return equals(other) ? const_cast<Type *>(this) : nullptr; }
 
 Type *Type::widened() const { return const_cast<Type *>(this); }
+
+bool Type::extentForms(std::vector<ExtentForm> &out) const {
+    (void)out;
+    return false;
+}
+
+std::string_view Type::packName() const { return {}; }
+
+bool Type::openRank() const { return false; }
+
+const Type *
+Type::withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const {
+    (void)values;
+    (void)packs;
+    return this;
+}
+
+const Type *
+Type::applyArguments(std::span<const TypeArgument> arguments, std::string &error) const {
+    (void)arguments;
+    error = "this type takes no arguments";
+    return nullptr;
+}
+
+ExtentBinding bindExtents(
+    const Type *parameter, const Type *actual, ExtentValues &values, ExtentPacks &packs,
+    std::string &mismatch) {
+    if (parameter == nullptr || actual == nullptr) {
+        return ExtentBinding::NotDimensioned;
+    }
+    std::vector<ExtentForm> forms;
+    if (!parameter->extentForms(forms)) {
+        return ExtentBinding::NotDimensioned;
+    }
+    const std::string_view pack = parameter->packName();
+    bool hasNames               = !pack.empty();
+    for (const ExtentForm &form : forms) {
+        hasNames = hasNames || form.hasNames();
+    }
+    if (!hasNames) {
+        return ExtentBinding::NotDimensioned;
+    }
+    // The type object decides what its extents mean; another kind of type at the argument is
+    // left to the ordinary argument check, which reports the mismatch it always did.
+    if (actual->code() != parameter->code()) {
+        return ExtentBinding::NotDimensioned;
+    }
+    std::vector<ExtentForm> actualForms;
+    if (!actual->extentForms(actualForms)) {
+        return ExtentBinding::NotDimensioned;
+    }
+    for (size_t i = 0; i < forms.size() && i < actualForms.size(); ++i) {
+        // Only a dimension the argument fixes statically binds a name; an unknown one is
+        // checked by the conversion at the call when it runs (design principles 5.4).
+        if (!actualForms[i].isConstant()) {
+            continue;
+        }
+        if (!forms[i].bind(actualForms[i].constant(), values)) {
+            mismatch = actualForms[i].toString();
+            return ExtentBinding::Mismatch;
+        }
+    }
+    if (!pack.empty()) {
+        // The pack stands for the argument's dimensions after the parameter's prefix. When the
+        // argument's own rank is open (`T[3, ..]`, `T[..s]`), those dimensions are not known
+        // here; the declaration stays and the conversion checks it at the call.
+        const bool actualOpen =
+            actual->openRank() || !actual->packName().empty() || actualForms.empty();
+        // A pack bound to no dimensions is recorded as an empty list, not left absent: that is
+        // what lets a return type consisting of the pack alone fold to the element type (an
+        // argument of exactly the prefix's rank). An absent pack means "no call bound it".
+        if (!actualOpen && actualForms.size() >= forms.size()) {
+            packs[std::string(pack)] =
+                std::vector<ExtentForm>(actualForms.begin() + forms.size(), actualForms.end());
+        }
+    }
+    return ExtentBinding::Bound;
+}
 
 CastSafety Type::castSafetyFrom(Type *sourceType) const {
     ASSERT(

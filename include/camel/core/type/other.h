@@ -39,6 +39,9 @@ namespace camel::core::type {
 /// One argument of a parameterised type as it is written between `<` and `>`: a type
 /// (`Tensor<f32>`), a compile-time constant (`Tensor<const [3, 4]>`), or a list of extents over
 /// dimension names (`Tensor<f32, const [constas n, 3]>`). Exactly one member is set.
+///
+/// The core array type and the module types both take arguments; this is the one shape of an
+/// argument, so `Type::applyArguments` can be the only entry point a type expression uses.
 struct TypeArgument {
     Type *type = nullptr;
     std::shared_ptr<data::Data> data;
@@ -123,22 +126,22 @@ class OtherType : public Type {
     /// toString() is the default; a type whose printed form is not its source form overrides.
     virtual std::string spelling() const { return toString(); }
 
-    /// The extents of this type in the order the type declares them, when the type can state
-    /// them as compile-time extents (design principles 5.4): a constant, unknown, or a linear
-    /// form over dimension names. Returns false when the type has no such dimensions (the
-    /// default). At a call the compiler binds the names from the argument types and checks
-    /// the relations; the type itself keeps deciding what its extents mean.
-    virtual bool extentForms(std::vector<ExtentForm> &out) const {
+    /// A module type states no extents of its own unless it overrides this (`TensorType`
+    /// does); the core array type carries its dimensions on `ArrayType`.
+    bool extentForms(std::vector<ExtentForm> &out) const override {
         (void)out;
         return false;
     }
-    /// This type with the named extents whose names `values` binds replaced by the bound value (a
-    /// type whose named extents are then concrete). Returns `this` when no name is bound, and
-    /// nullptr when the type does not support extents (the default).
-    virtual OtherType *withExtentValues(const ExtentValues &values) const {
+    /// No extents, so nothing to substitute. A type that carries extents overrides this.
+    const Type *withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const override {
         (void)values;
+        (void)packs;
         return nullptr;
     }
+    /// `Name<args...>` for a module type: what its arguments mean is the type's business, and
+    /// `cloneWithArguments` is where each kind of module type states it.
+    const Type *
+    applyArguments(std::span<const TypeArgument> arguments, std::string &error) const override;
 
     virtual std::string toString() const override                      = 0;
     virtual std::string mangle() const override                        = 0;

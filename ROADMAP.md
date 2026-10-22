@@ -14,7 +14,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 ## 2. 当前基线
 
 - 集成分支 `develop`（`main` 只用于发布）；默认测试集（`smoke` 加全部 `feat` 计划）**5,167 条**：5,156 条通过、11 条因环境前提跳过（Windows 路径语义、Python 预置、VS Code 扩展依赖），没有遗留失败（2026-10-22 在 `68ee3a899` 上实测）。
-- 核心（`src/` 与 `include/`）约 9.8 万行，库（`modules/` 与 `stdlib/`）约 3.8 万行，工具（`tools/`）另有约 1.6 万行；42 个内建遍（另有 37 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
+- 核心（`src/` 与 `include/`）约 9.8 万行，库（`modules/` 与 `stdlib/`）约 3.8 万行，工具（`tools/`）另有约 1.6 万行；43 个内建遍（另有 38 个别名）加 2 个由模块提供的遍（`tensor::fuse`、`onnx::export`）；四种执行后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`）以及到 C++ 的转译。
 - 持续集成在推送发布标签（`v*`）或手动触发时构建并运行默认测试集：Linux x64 与 Windows x64 必须通过，macOS arm64 是手动选择的试验项，失败不阻断；打标签时另外构建发布包。
 
 下面各项前的记号：`[定]` 语义已裁定，可以直接做；`[稿]` 要先出设计稿，经语言作者过目；`[问]` 还有未决的问题（见设计原则第 15 节）。没有记号的不涉及语义。
@@ -74,7 +74,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 
 - 一次报告多个错误（构建器里已有继续机制，但命令行把错误上限设成了 0）。（状态：部分完成——一次运行报告全部互相独立的编译错误，上限为 `--max-errors`（默认 20，`test/plans/feat/compile/diag_options.plan.toml`）；一个文件只报第一个语法错误，标为 `DESIGN-QUESTION(diagnostics)`，待裁定）
 - 带代码片段、下划线和次要位置的呈现。（状态：已完成，见 `--error-format text`，`test/plans/feat/compile/diag_render.plan.toml`）
-- 运行期的诊断码细分：兜底码原本被引用 147 次，消息应带上下标、长度、实际值。（状态：部分完成——内建算子与 `fs`、`json`、`re`、`time`、`math` 等模块的故障已有各自的码并带上实际值；兜底码 `RuntimeDiag::RuntimeError` 仍被引用 89 次，其中 `python` 模块 53 次）
+- 运行期的诊断码细分：兜底码原本被引用 147 次，消息应带上下标、长度、实际值。（状态：部分完成——内建算子与 `fs`、`json`、`re`、`time`、`math` 等模块的故障已有各自的码并带上实际值；兜底码 `RuntimeDiag::RuntimeError` 仍被引用 90 次，其中 `python` 模块 53 次）
 - 语法错误专门化（原本只有一个码，正文是解析器的原文）。（状态：已完成，见 `include/camel/core/error/diagnostics/messages/syntax.h` 中的 16 个错误码）
 - 调用栈回溯与内联链；警告的按码开关与升级为错误；错误码目录与 `--explain`。（状态：部分完成——警告的按码开关与升级为错误（`-Wno-<name>`、`-Werror`、`-Werror=<name>`）、错误码目录（`docs/diagnostics.md`）与 `--explain` 已做；调用栈回溯与内联链未做）
 - 把用户可触发的 C++ 异常与断言转成带位置的诊断。（状态：部分完成——内存耗尽、图超限、转译拒绝、遍内部的异常已是诊断（`MemoryExhausted`、`GraphTooLarge`、`TranslationRefused`、`PassInternalError`）；其余异常仍由命令行兜底为不带位置的文本，发布构建下的断言不生效）
