@@ -1812,6 +1812,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // A decorated overload is what its decorators return: it is chosen by that
             // function's parameters and called through it.
             compile_graph_ptr_t chosenDecorated = nullptr;
+            // Candidates that took the arguments but whose `when` condition is false: if no
+            // other candidate applies, the call is reported as one whose conditions are unmet
+            // (design principles 5.13), not as an ordinary mismatch.
+            std::vector<std::pair<std::string, std::string>> unmetConditions;
             const auto signatureOf = [&](const compile_graph_ptr_t &g) -> FunctionType * {
                 if (auto it = decoratedOf_.find(g.get()); it != decoratedOf_.end()) {
                     return tt::as_ptr<FunctionType>(it->second->funcType()->exitType());
@@ -1843,6 +1847,29 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     // may come from its body, its decorated form exists once it is built (step
                     // two of loading builds on demand).
                     ensureFunctionBuilt(g);
+                    if (auto when = whenClauses_.find(g.get()); when != whenClauses_.end()) {
+                        // The condition is checked at selection, before the candidate is
+                        // called: a false one makes it inapplicable, not erroneous.
+                        std::unordered_map<std::string, data_ptr_t> withValues;
+                        for (size_t i = 0;
+                             i < g->funcType()->withTypesCount() && i < withInputs.size();
+                             ++i) {
+                            data_ptr_t value = constantOfNode(withInputs[i].node);
+                            if (value != nullptr) {
+                                withValues.emplace(
+                                    std::string(g->funcType()->argNameAt(i)), value);
+                            }
+                        }
+                        const WhenResult verdict = evaluateWhenCondition(
+                            when->second.condition, g->funcType(), {}, withValues);
+                        if (verdict.fails()) {
+                            unmetConditions.emplace_back(g->name(), when->second.text);
+                            continue;
+                        }
+                        if (!verdict.holds()) {
+                            reportWhenProblem(verdict, g->name(), when->second.condition);
+                        }
+                    }
                     fitted.push_back(g);
                 }
                 if (fitted.empty()) {
@@ -1879,6 +1906,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 targetGraph = g;
             }
             if (!targetGraph && !chosenDecorated) {
+                if (!unmetConditions.empty()) {
+                    // Every candidate that took the arguments was made inapplicable by its
+                    // condition. The report names each candidate and the condition it wrote
+                    // (design principles 5.13: the call-site error lists the unmet conditions).
+                    std::map<std::string, std::string> listed;
+                    for (const auto &[name, text] : unmetConditions) {
+                        listed.emplace(name, text);
+                    }
+                    std::string conditions;
+                    for (const auto &[name, text] : listed) {
+                        conditions +=
+                            (conditions.empty() ? "" : "; ") + name + " — when " + text;
+                    }
+                    diags_->of(SemanticDiag::WhenConditionUnmet)
+                        .atOrigin(gct->origin())
+                        .commit(graphs->front()->name(), argumentTypes, conditions);
+                    throw BuildAbortException();
+                }
                 std::vector<std::pair<std::string, FunctionType *>> candidates;
                 for (const auto &g : *graphs) {
                     candidates.emplace_back(g->name(), signatureOf(g));

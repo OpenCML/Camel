@@ -118,7 +118,7 @@ funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
                      'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
-                     resourceClause? stmtBlock?
+                     resourceClause? whenClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -126,6 +126,7 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef angledValues?
+whenClause         : IDENTIFIER logicalOrExpr
 typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
