@@ -1,0 +1,167 @@
+# H17b：性能红线、旧名删除、`std::mem::buffers()`、循环状态原地写
+
+分支 `handover/H17b-buffers`（从 `develop` 的 `d25b3982` 开出，H17 已在其上）。所有改动留在工作树，未提交、未建分支、未推送。
+
+本报告对应 `docs/handover/reviews/H17-H22.md` 的"H17：现在就要做的"五条：第 1–4 条完成；第 5 条（计划第 5–8 步）**未做**，理由与依赖见第 6 节。没有改动任何既有测试期望；新增的期望值都是新用例（第 5 节）。
+
+## 1. 性能红线（先做，先测）
+
+### 1.1 方法
+
+- 脚本：`python test/tools/perfbaseline/baseline.py --rounds 5 --only fib.deep,alloc_small,map_chain --json ... --markdown ...`。一次调用内部对每个指标取 5 轮中位数；本报告再取 **3 次调用**（`before1..3` / `after1..3`）的中位数。JSON 留在 `D:\Temp\h17b\`。
+- "before" = 本分支改动前的 HEAD（= `develop` = `d25b3982`，H17 已并入）；"after" = 本分支改动后的构建。两者都是 `npm run build` 的 Release 产物。
+- 测量窗口内确认机器空闲（`clang++`/`ninja` 不在跑，`\Processor(_Total)` 0–1%）。**第一次 before 测量作废**：当时另一个 agent 的构建在跑（16 个 `clang++`，总 CPU 68%），三个程序比文档基线慢 44–69%，与代码无关；作废的数字不进本报告。
+- 机器：Windows 11 (AMD64)，Intel64 Family 6 Model 183 Stepping 1（i7-14700K），28 个逻辑核，Python 3.12.1（脚本自报）。
+
+### 1.2 结果（3 次调用 × 5 轮的中位数）
+
+| 程序 | 指标 | before | after | 变化 |
+|---|---|---|---|---|
+| fib.deep | 编译 | 17.56 ms | 17.38 ms | −1.0% |
+| | 执行 nvm | 224.88 ms | 227.69 ms | **+1.3%** |
+| | 执行 fvm | 58.99 ms | 56.75 ms | −3.8% |
+| | 执行 jit | 85.34 ms | 85.89 ms | +0.6% |
+| | 峰值 编译/优化/nvm/fvm/jit | 11.56 / 11.71 / 11.71 / 11.82 / 12.04 MB | 11.60 / 11.74 / 11.74 / 11.85 / 12.10 MB | +0.3% … +0.5% |
+| alloc_small | 编译 | 15.74 ms | 15.89 ms | +1.0% |
+| | 执行 nvm | 171.59 ms | 173.29 ms | +1.0% |
+| | 执行 fvm | 108.66 ms | 106.89 ms | −1.6% |
+| | 执行 jit | 114.68 ms | 112.91 ms | −1.5% |
+| | 峰值 编译/优化/nvm/fvm/jit | 11.63 / 11.73 / 15.61 / 15.77 / 16.02 MB | 11.64 / 11.73 / 15.62 / 15.81 / 16.09 MB | ≤ +0.5% |
+| map_chain | 编译 | 16.18 ms | 16.63 ms | **+2.8%** |
+| | 执行 nvm | 17.63 ms | 18.00 ms | +2.1% |
+| | 执行 fvm | 11.77 ms | 11.72 ms | −0.4% |
+| | 执行 jit | 11.68 ms | 11.94 ms | +2.2% |
+| | 峰值 编译/优化/nvm/fvm/jit | 11.54 / 11.65 / 16.76 / 15.88 / 16.15 MB | 11.61 / 11.71 / 16.79 / 15.95 / 16.24 MB | ≤ +0.6% |
+
+结论：**红线通过**。所有时间中位数在 −3.8% … +2.8% 之间，峰值内存全部 ≤ +0.6%。最大的一项（map_chain 编译 +2.8%）小于单次调用的抖动——同一批 6 次调用里编译时间本身在 15.87–20.44 ms 之间（约 ±13%），所以 +2.8% 不是可归因的变化。改动本身都很小：一个新算子、一段只在特定循环形状上触发的建图改写、以及 `Buffer::releaseNow` 里一次计数自增（该函数本来就有一次 `fetch_sub`，多的是同一缓存行上的第二次原子操作，量级与测到的 ≤ +1% 一致）。
+
+### 1.3 与文档基线的对比（只作观察，不下结论）
+
+`docs/performance/graph-store-baseline.md`（构建 `e8abfc30`，同型号机器，2026-10-20 01:28）的数字，与本节的 before（H17 之后、本分支之前）相比：
+
+| 程序 | nvm | fvm | jit | 峰值 nvm |
+|---|---|---|---|---|
+| fib.deep | 219.0 → 224.9（+2.7%） | 55.8 → 59.0（+5.7%） | 84.7 → 85.3（+0.7%） | 11.6 → 11.7 MB |
+| alloc_small | 156.0 → 171.6（+10.0%） | 106.1 → 108.7（+2.5%） | 107.7 → 114.7（+6.5%） | 15.3 → 15.6 MB |
+| map_chain | 14.8 → 17.6（**+19%**） | 10.4 → 11.8（+13%） | 10.4 → 11.7（+12%） | 15.9 → 16.8 MB（+5.4%） |
+
+这些差异**在本分支改动之前就存在**，所以不是这四条改动造成的。但 `map_chain`（映射链，即循环 + 数组 + 闭包）的 +19% 落在 H17 的循环驱动/数组表示上，值得在 H18 用同一个构建复测 `e8abfc30`，分清是 H17 的代价还是机器状态。文档自己写明"机器不是空闲的……跨调用只应比较字节/节点这类与时间无关的列"，所以上表只能当线索。
+
+## 2. 旧名删除
+
+`modules/tensor/interop.h` / `interop.cpp`：删除 `tensorToDLPackCopy`、`tensorFromDLPackCopy`。它们名字说 copy、实际零拷贝，且没有调用方；现在是 `camel::core::array::toDLPack` / `fromDLPack` 一层。设计原则 §1"旧写法直接删除：不留别名、过渡层"。
+
+## 3. `std::mem::buffers()`：可调用的函数
+
+- 形式：`std::mem::buffers()`，**不需要 import**，返回结构体 `{ allocs: int, frees: int, live: int, bytes: int }`，任何构建都有（不是 debug-only）。
+- 实现：`src/builtin/operators/mem.{h,cpp}` 的 `__builtin__mem_buffers__`；类型由 `memBuffersStructType()` 建一次（`StructTypeFactory`，四个 `int` 字段），算子组 `std::mem::buffers` 在 `globals.cpp` 注册（URI `:op/mem_buffers`，静态函数类型 `() => {allocs,frees,live,bytes}`），执行器映射在 `builtin.cpp`。值用 `Struct::create` + `Struct::set` 按 `norm.resultType()` 写字段。
+- 计数：`Buffer` 侧新增 `frees` 计数（`releaseNow` 里自增）与 `bufferFrees()`；`allocs` = 既有的 `bufferCreations()`，`live` = `bufferLiveCount()`，`bytes` = `bufferBytesLive()`。恒等式 `allocs − frees == live` 成立（`grow` 换掉的是同一个 `Buffer` 的块，不是一次 alloc/free，所以不破坏恒等式）。
+- 纯度：算子显式声明 `pure = false`——两个调用的结果可以不同（环境状态），不能被折叠、合并或删除。这靠 `registerBuiltinOperatorTraits` 之后的一次 `registry.set(":op/mem_buffers", {.pure = false})`。
+- 用例 `test/cases/feat/mm/mem_buffers.cml` + `test/plans/feat/mm/mem_buffers.plan.toml`：读两次计数器、一次增长循环，断言恒等式、一次循环只多一个 buffer、`bytes` 变大，并在 nvm/fvm/jit/prl 与 `std::opt::inline std::fvm` 上都一样。
+
+## 4. 循环状态的原地写
+
+### 4.1 判定条件（与 `t = t->relu` 同一个判据）
+
+`Builder::markLoopStateInPlace`（`src/compile/gir/builder_control.cpp`，在 `visitLoopNode` 里、循环节点建好前调用）在下列条件**全部**成立时改写：
+
+1. 循环只有一个状态（多状态时 body 返回元组，不在本次范围）；
+2. 首值是字面量（GIR 的 `DATA` 或 `FILL` 节点）且类型是数组——名字、调用、投影都可能指向别人也能看见的数组；
+3. body 的返回值就是这个 `:struct/append_arr` 调用本身（`returnKind == Self`）；
+4. 该调用的数组实参正好是**状态形参**（按端口名匹配 `loopStateName(0)`），且这个形参在 body 里**只有这一处使用**——下一轮开始时旧的绑定已经不存在（驱动每轮绑定当轮的 state），所以没人能看见它原来的样子；
+5. `__append_owned__` 能以相同实参类型解析。
+
+改写动作：
+
+- body 里那个 `:struct/append_arr` 节点重定向为 `:struct/append_arr_owned`（`DraftGraphBuilder::retargetOperNode`，与 `__var_peek__` 的重定向同一机制）；
+- 首值外面插入一次私有拷贝 `:struct/copy_arr`（新内部算子 `__copy_arr__`），拷贝后的节点成为循环的首值实参。
+
+`__append_owned_arr__` 在 `Array::canWriteInPlace()`（compact、Camel 所有、buffer 唯一、offset 0、非 view）时直接 `append` 到自己的 buffer；否则原样转调 `__append_arr__`，结果相同。**slots 数组**（元素是引用）没有对象引用计数，`canWriteInPlace()` 为 false，所以走复制，语义不变、没有收益。
+
+### 4.2 为什么必须有那次拷贝
+
+`loop xs = [0]` 的字面量在 GIR 里是 **DATA 常量**：同一个数组对象在循环所在图的每次求值中都一样（`std::gir` 里 `N09 [label="[0]", type="DATA"]`）。直接原地 append 会改写程序自己的字面量，第二次调用同一个循环就会看到被改过的值。因此编译器为每次进入循环做一次私有拷贝：**一次拷贝换掉每轮一次拷贝**。用例里专门验证了第二次调用 `grow(3)` 仍然看到 `[0, 7, 7]`。
+
+顺带说明：`let empty: float[] = []` 这类写法里，`empty` 在 GIR 里就是字面量节点本身（变量是别名），所以 `loop acc = empty ... do acc->append<…>` 也会被改写；拷贝保证 `empty` 不被循环改动。
+
+### 4.3 分配计数断言
+
+`test/cases/loops/state_in_place.cml` + `test/plans/feat/linear/loops.plan.toml` 的 `loops.state_in_place`（nvm/fvm/jit/prl 四后端一致）：
+
+```
+200 200 1 199
+0 7 0 7 3 0 7
+6 1 0 5
+```
+
+- `grow(200)`：`loop xs = [0] while len(xs) < 200 do xs->append<7>`，199 轮，`std::mem::buffers()` 在前后各读一次，`allocs` 只增加 **1**（内联数组第一次长成 buffer；此后是同一个 `Buffer` 内部扩容）。
+- 对照 `growFrom([0], 200)`：首值是形参（循环不拥有），同样的 199 轮，`allocs` 增加 **199**（每轮一次复制）。
+- `gather([1, 2, 3, 4, 5])`：`loop acc = [0] for x in xs do acc->append<x>`，同样只增加 **1**（`for` 形状按端口名匹配，元素端口在前不影响判定）。
+- 第二行验证字面量没有被改写（`xs[0] == 0`、`xs[199] == 7`），以及第二次调用 `grow(3)` 仍从 `[0]` 开始。
+
+写法说明：本树上 append 的写法是 `xs->append<v>`（plain-parameter 形式是 H19 的迁移），用例用的就是这个能编译的形式。
+
+### 4.4 连带改动
+
+- 属性声明按枚举表自动完成：`:struct/append_arr_owned` 与 `:struct/copy_arr` 都不是 pure（前者写实参，后者返回有身份的新数组）。`copy_arr` **故意不声明为 pure**：若被 CSE 合并，两个循环会共享同一个"私有"拷贝，原地写就会互相污染。
+- 自微分：`:struct/append_arr_owned` 注册与 `:struct/append_arr` 相同的 VJP 规则（`appendArrayVjp` 只读输出的梯度，不读数组值）。没有它，`grad_array_loop`/`grad_array_loop_lowered` 会报"no derivative rule"。
+- C++ 转译后端：`:struct/append_arr_owned` 映射到既有的 `append`（这个后端只有复制形式，值相同）。
+- `std::gir`/`std::rgir`/`std::jgir`/`std::stats` 都能正常处理新节点（没有专门的枚举表需要改）。
+
+## 5. 验证
+
+只跑改动触及的 plan，一次一个，`--jobs 8`；没有跑全量、GC stress、poison sweep、progen、PyTorch 对比，也没有跑这三个程序之外的计划：
+
+| plan | 结果 |
+|---|---|
+| `test/plans/feat/linear/loops.plan.toml` | 94 / 94 |
+| `test/plans/feat/mm/mem_buffers.plan.toml`（新） | 5 / 5 |
+| `test/plans/feat/mm/buffers.plan.toml` | 2 / 2 |
+| `test/plans/feat/mm/capacity.plan.toml` | 13 / 13 |
+| `test/plans/feat/linear/loop_collect.plan.toml` | 19 / 19 |
+| `test/plans/feat/modules/autodiff.plan.toml` | 150 / 150 |
+| `test/plans/feat/trans/cpp.plan.toml` | 7 / 7 |
+| `test/plans/smoke` | 10 / 10 |
+
+合计 **300 个用例通过，0 失败**。新用例在四个后端上要求 `backends_agree = ["exit_code", "stdout_normalized"]`。
+
+**改动的既有期望：无。** 新用例的期望值来源：4.3 的 1 / 199 与恒等式 `allocs − frees == live` 是实现的直接读数（三种执行器一致），不是为了让测试通过而调整的值；`200 200 1 199\n0 7 0 7 3 0 7\n6 1 0 5` 在 nvm/fvm/jit/prl 以及 `std::fvm(native_loop=true)`、`std::jit(native_loop=true)` 上手工核过。
+
+手工核对还包括：`std::gir` 里被改写的 body 是 `:struct/append_arr_owned`、循环前多一个 `:struct/copy_arr`；`std::opt::inline` 之后 `mem_buffers` 的读数不变（优化 pass 不折叠有副作用的调用）。
+
+## 6. 计划第 5–8 步：未做，理由与依赖
+
+本分支的时间预算花在第 1–4 条与它们的测试/报告上，下面三步**没有动代码**；这里写清现状和依赖，避免下一个人重复调研。
+
+1. **形状类型（计划第 5 步）**：要把 rank/extents/strides 放进类型（`ArrayType`/`TensorType` 与 GCT/GIR/运行时三层）、加 `T[dims]` 语法与 `Tensor<T,[dims]>` 别名，并同步 §5.4/§11.1 的文档。它会影响所有张量算子的重载解析、`std::gir`/JSON 输出与 `.npy` 入口——跨层重构。半做会让"类型里的形状"和"运行时 `Array` 的 extents"两套真相并存，比不做更糟，所以没有开工。
+2. **打印统一（计划第 6 步）**：今天 `Array::print` 对张量值仍走 `printTensor`（`tensor([...], dtype=float32)`、元素 `%7.4g`）；数组值已经走 `[...]`。删除旧格式没有过渡形态，意味着**一次**改完代码 + 所有受影响的期望输出：`test/plans` 里十几个相关文件（tiles、onnx、tensor、autodiff、tutorial 等）与教程/文档里的示例。元素格式本身还是 H17-plan 的 Q3（建议 `[1.0, 2.0]`），属于要语言作者裁决的问题。这次没有足够预算把所有受影响的 plan 逐个跑通，只改代码会把主干弄红，所以没做。
+3. **入口参数（计划第 7 步）**：`--arg` 的 `.npy` 读取走 `entry_args` 注册表；数组的 dtype/shape 校验依赖第 5 步的类型。未动。
+4. 结论：第 5–8 步建议按 5 → 6 → 7 的顺序在 H18 做，并先由作者裁决第 7 节第 2、3 条语义问题。
+
+## 7. 未决问题（请作者裁决；没有把裁决写进任何文档）
+
+1. **文档冲突（缺陷）**：`docs/design-principles-log.cn.md` 第 742–747 行的"续七"标题说第 3 条改为可调用函数，正文第 746 行仍写"`std::mem::buffers()` 维持为 pass，不改语言内建函数"。`docs/handover/reviews/H17-H22.md` 与设计原则 §10.5 要求可调用函数，本次按 review 实现（pass `std::gc::buffers` 自检保留）。裁决文本没有改，请作者修 log 的这一行。
+2. **字面量首值的所有权**：`loop xs = [0]` 的首值是图常量（整个进程共享同一数组对象），所以满足 §10.5 需要编译器插入一次私有拷贝（4.2）。问：语言是否应该让循环首值每次求值都新建（例如把数组字面量建成 FILL 而不是 DATA 常量）？若答案为是，这次拷贝可以省掉；若为否，"`[{…}]` 字面量可被原地改写"就需要一条明确的裁决。
+3. **同一轮内先读后写**：`loop xs = [0] while len(xs) < n do xs->append<len(xs)>` 不重写，因为分析只接受"状态形参在 body 里只有一处使用"。其实 append 的 with 实参在调用前求值，读到的必然是旧值，可以安全放宽（像 `t = t->relu` 那样读旧值再产生新值）。这是保守实现的已知限制。
+4. **多状态循环**：`loop (xs, i) = ([0], 0) … do (xs->append<i>, i + 1)` 不在范围内（body 返回元组）。同样的判据可以推广到"元组的第 j 个分量是 append 且第 j 个状态形参只有这一处使用"，需要按分量拆解 body 的返回值。
+5. **`for` 形状**：同一机制按端口名匹配，`for` 循环（元素端口在前、状态端口在后）同样适用；`loops.state_in_place` 里 `gather` 那条断言覆盖了它（五个轮次一个 buffer）。
+6. **slots 数组**：元素是引用的数组没有对象引用计数，`canWriteInPlace()` 恒为 false，`append_owned` 走复制。若以后要求"引用数组也原地"，需要先有 `Array` 层的所有者判定（与 H17-plan §2.12 的"引用元素不可原地"一致，这里只是记录后果）。
+7. **测试仪器 `test::loop_collect` 与原地写**：采集槽（`camel/runtime/loop.h` 的 collection slots）在每轮结束时把状态值收进磁带。原地写之后，若一个被改写的循环同时带采集槽，磁带里的数组会别名同一个对象（每项都显示最终值）——采集槽是建图之后由测试 pass 加上的，`markLoopStateInPlace` 看不见它们（实测：`loop xs = [0] while len(xs) < 4 do xs->append<7>` 原来的磁带是三个 `[0, 7, 7, 7]`，正确的应当是 `[0,7]`、`[0,7,7]`、`[0,7,7,7]`）。这不是语言能观察到的行为（采集槽没有源码语法），但会让那个测试 pass 记录不存在的值，所以 `test::loop_collect` 现在**明确拒绝**在带 `:struct/append_arr_owned` 的循环上运行（"cannot collect a loop whose state is written in place: every tape entry would be the same final array"），而不是悄悄记录错的磁带。现有用例的状态都是标量，不受影响（`loop_collect` 19/19 通过）。如果以后要采集这类循环，正确的做法是采集时复制每个状态（每轮一次分配，只在测试 pass 里），而不是放宽这个拒绝。
+
+## 8. 文件清单
+
+改动（工作树，未提交）：
+
+- `include/camel/core/array/buffer.h`、`src/core/array/buffer.cpp`：`bufferFrees()` 与 `frees` 计数。
+- `src/builtin/operators/mem.{h,cpp}`（新）：`std::mem::buffers()` 的算子实现与结构体类型。
+- `src/builtin/modules/globals.cpp`：`std::mem::buffers`、`__copy_arr__`、`__append_owned__` 三个算子组。
+- `src/builtin/executors/builtin.cpp`：执行器映射与纯度声明。
+- `src/builtin/operators/struct.{h,cpp}`：`__copy_arr__`、`__append_owned_arr__`。
+- `src/builtin/operators/derivative.cpp`：`append_arr_owned` 的 VJP 规则。
+- `src/compile/gir/builder.h`、`builder_control.cpp`：`Builder::markLoopStateInPlace` 与调用点。
+- `src/passes/trans/cpp/operator_rules.cpp`：`append_arr_owned` 的 C++ 转译规则。
+- `src/passes/test/loop_collect.cpp`：采集 pass 拒绝带原地写的循环（第 7 节第 7 条）。
+- `modules/tensor/interop.{h,cpp}`：删除 `tensorToDLPackCopy` / `tensorFromDLPackCopy`。
+- 测试：`test/cases/loops/state_in_place.cml`（新）、`test/cases/feat/mm/mem_buffers.cml`（新）、`test/plans/feat/mm/mem_buffers.plan.toml`（新）、`test/plans/feat/linear/loops.plan.toml`（追加一条）。
+
+未提交的构建产物与 python SDK 副本不进版本库。
