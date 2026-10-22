@@ -44,6 +44,17 @@
 //      shows the calls; this check resolves the loops over `get*Groups()` so it also sees the
 //      groups exported by `exportEntity(group->name(), group)`.
 //
+// And one check for the registry as a whole:
+//
+//   5. Every C++ module of `modules/` that registers operators is either imported by
+//      `registry_all.cml` — the program `--verify-ops` reads — and listed in MODULES, or named
+//      in UNCHECKED_MODULES with a reason and a probe that imports it. A module that registers
+//      operators and is in neither place is a hole: `--verify-ops` never sees it and every check
+//      stays green (handover H166 found `python`/`pyplot` that way; H173 found `sim`, which
+//      registry_all imported while MODULES did not list it, and the four modules no program
+//      imported at all). A module imported but absent from MODULES is the same hole and is
+//      reported too.
+//
 // The reserved group `__neq__` is the one exception to (1) and (4): `!=` cannot be declared
 // (design principles 4.3 — an overload of `==` gives it, and `operator !=` is
 // OperatorNotOverloadable), and the compiler negates a *Camel* overload of `==`, not a native
@@ -92,6 +103,29 @@ const relative = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
 
 // The one group a migrated module may keep outside its declarations: see the note above.
 const UNDERIVABLE_OPERATORS = new Set(['__neq__'])
+
+// Modules that register operators but are deliberately not verified, each with the fact that
+// makes the exclusion true. `registry_all.cml` is the program `--verify-ops` reads, so a module
+// it does not import is not verified; an entry here must (a) have no declaration file
+// `stdlib/<module>.cml` and no `stdlib/signatures/<module>.cml`, so there is no signature source
+// being ignored, and (b) name a `covered_by` program that imports it, so `inspect --ops` still
+// lists its operators and another plan still checks their purity.
+//
+// `nn`, `autodiff` and `onnx` are the tensor stack's layers. Their signatures are computed by
+// the tensor OpRegistry and the C++ resolvers (H157 inventories them name by name); the
+// reference page excludes the tensor stack by design, and writing a signature file for them
+// would be the declaration migration the H19 ledger assigns, not coverage. Their purity is
+// checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
+const UNCHECKED_MODULES = [
+    {
+        name: 'onnx',
+        covered_by: 'test/cases/modules/stdlib/registry_tensor.cml',
+        reason:
+            'tensor-stack layer outside the reference: export_model takes optional parameters and ' +
+            'a union argument, supported_operators has no declaration yet (H157), and the module ' +
+            'has no declaration or signature file',
+    },
+]
 
 function read(file) {
     return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
@@ -263,6 +297,7 @@ function readReferenceModules() {
             name: field(object, 'name'),
             kind: field(object, 'kind'),
             source: field(object, 'source'),
+            registered: field(object, 'registered'),
             declaration: /\bdeclaration\s*:\s*true\b/.test(object),
             computed: field(object, 'computed'),
         }))
@@ -271,24 +306,175 @@ function readReferenceModules() {
 
 // ---- the tree's declaration modules ---------------------------------------------------------
 
-function escapeRegExp(text) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+// The name a module directory registers itself with, or null when its C++ side has no
+// `BuiltinModule` (a plain Camel module). Only `module.cpp` and `src/module.cpp` are read: a
+// `BuiltinModule` in some other file is not the module's registration.
+function builtinModuleName(dir) {
+    const pattern = /\bBuiltinModule\s*\(\s*"([^"]+)"/
+    for (const candidate of [path.join(dir, 'module.cpp'), path.join(dir, 'src', 'module.cpp')]) {
+        if (!fs.existsSync(candidate)) continue
+        const match = stripComments(read(candidate)).match(pattern)
+        if (match) return match[1]
+    }
+    return null
 }
 
 // A C++ module registers itself with `BuiltinModule("<name>", ...)` in its module.cpp (the
 // files at the top of a module directory or in its src/). A module whose C++ side has gone
 // away is a plain Camel module, not a declaration module.
 function cppModuleDir(name) {
-    const pattern = new RegExp(`\\bBuiltinModule\\s*\\(\\s*"${escapeRegExp(name)}"`)
     for (const entry of fs.readdirSync(MODULES_DIR, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue
         const dir = path.join(MODULES_DIR, entry.name)
-        for (const candidate of [path.join(dir, 'module.cpp'), path.join(dir, 'src', 'module.cpp')]) {
-            if (!fs.existsSync(candidate)) continue
-            if (pattern.test(stripComments(read(candidate)))) return dir
-        }
+        if (builtinModuleName(dir) === name) return dir
     }
     return null
+}
+
+// Every module of `modules/` that registers operators: a declaration module registers them
+// through `stdlib/<module>.cml`, and any other module through the operator groups its C++
+// exports (including the registry loop `tensor` writes). `io` is the shape that used to look
+// empty: it has no `exportEntity` but five declarations, so it is an operator module too.
+function operatorModules() {
+    const found = new Map()
+    for (const module of declarationModules()) {
+        const declared = readDeclarations(module.source, module.name).declarations
+        if (declared.length > 0) found.set(module.name, module.cppDir)
+    }
+    for (const entry of fs.readdirSync(MODULES_DIR, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue
+        const dir = path.join(MODULES_DIR, entry.name)
+        const name = builtinModuleName(dir)
+        if (!name || found.has(name)) continue
+        const analysis = analyseCpp(dir)
+        if (analysis.exports.length === 0 && analysis.registryLoops.length === 0) continue
+        found.set(name, dir)
+    }
+    return [...found.entries()].map(([name, dir]) => ({ name, dir }))
+}
+
+// The modules a Camel program imports. The reference probe is the only caller that matters, but
+// an exclusion names its own probe, so this takes the file.
+const IMPORT_RE =
+    /^[ \t]*import[ \t]+(?:[A-Za-z_]\w*[ \t]+as[ \t]+[A-Za-z_]\w*[ \t]+from[ \t]+|\{[^}]*\}[ \t]+from[ \t]+|\*[ \t]+as[ \t]+[A-Za-z_]\w*[ \t]+from[ \t]+)?([A-Za-z_]\w*)/gm
+
+function probeImportsOf(file) {
+    const names = new Set()
+    for (const match of stripComments(read(file)).matchAll(IMPORT_RE)) names.add(match[1])
+    return names
+}
+
+// (5) The registry is complete: every module that registers operators is either verified (the
+// reference probe imports it and MODULES lists it) or excluded with a reason that this check
+// proves. Read from the tree, so a new module cannot join the build without naming itself.
+function coverageProblems(reference) {
+    const problems = []
+    const probe = path.join(REPO_ROOT, 'test', 'cases', 'modules', 'stdlib', 'registry_all.cml')
+    const imported = probeImportsOf(probe)
+    const operators = operatorModules()
+    const operatorNames = new Set(operators.map((module) => module.name))
+    const excluded = new Map(UNCHECKED_MODULES.map((entry) => [entry.name, entry]))
+    const inReference = (name) => reference.find((module) => module.name === name && module.kind === 'cpp')
+    const where = (module) => `modules/${path.basename(module.dir)}`
+
+    for (const module of operators) {
+        const entry = inReference(module.name)
+        const exclusion = excluded.get(module.name)
+        const inProbe = imported.has(module.name)
+        if (inProbe && !entry) {
+            problems.push(
+                `${where(module)}: '${module.name}' registers operators and registry_all.cml imports it, ` +
+                    `but MODULES in scripts/stdlib-reference.mjs does not list it, so --verify-ops never ` +
+                    `checks it (add the module to the reference, or drop the import and exclude it)`,
+            )
+        }
+        if (inProbe && exclusion) {
+            problems.push(
+                `${where(module)}: '${module.name}' is in UNCHECKED_MODULES but registry_all.cml imports it; ` +
+                    `a module that is in the probe must be verified, not excluded`,
+            )
+        }
+        if (!inProbe && !exclusion) {
+            problems.push(
+                `${where(module)}: '${module.name}' registers operators but registry_all.cml does not import ` +
+                    `it and UNCHECKED_MODULES in scripts/stdlib-declarations.mjs does not exclude it with a ` +
+                    `reason; --verify-ops never sees it`,
+            )
+        }
+        if (entry && !inProbe) {
+            problems.push(
+                `${where(module)}: MODULES lists '${module.name}' but registry_all.cml does not import it, so ` +
+                    `--verify-ops cannot see the module it is supposed to check`,
+            )
+        }
+    }
+
+    for (const module of reference) {
+        if (module.kind !== 'cpp' || module.registered === '<builtin>') continue
+        if (!operatorNames.has(module.name)) {
+            problems.push(
+                `scripts/stdlib-reference.mjs: MODULES lists '${module.name}', but no module of modules/ ` +
+                    `registers operators under that name`,
+            )
+        }
+    }
+
+    for (const entry of UNCHECKED_MODULES) {
+        if (!entry.reason || entry.reason.trim().length < 40) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: UNCHECKED_MODULES names '${entry.name}' without a reason`,
+            )
+        }
+        if (!operatorNames.has(entry.name)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: UNCHECKED_MODULES names '${entry.name}', which registers no ` +
+                    `operators`,
+            )
+        }
+        if (inReference(entry.name)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: '${entry.name}' is excluded but MODULES lists it; checked ` +
+                    `modules must not stay in the exclusion list`,
+            )
+        }
+        if (imported.has(entry.name)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: '${entry.name}' is excluded but registry_all.cml imports it`,
+            )
+        }
+        for (const file of [
+            path.join(STDLIB_DIR, `${entry.name}.cml`),
+            path.join(SIGNATURE_DIR, `${entry.name}.cml`),
+        ]) {
+            if (fs.existsSync(file)) {
+                problems.push(
+                    `${relative(file)}: '${entry.name}' is excluded, but this signature source exists; check ` +
+                        `the module instead of excluding it`,
+                )
+            }
+        }
+        if (!entry.covered_by) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: UNCHECKED_MODULES names '${entry.name}' without covered_by; ` +
+                    `an exclusion must say which probe still imports and lists the module`,
+            )
+            continue
+        }
+        const coveredBy = path.join(REPO_ROOT, entry.covered_by)
+        if (!fs.existsSync(coveredBy)) {
+            problems.push(
+                `scripts/stdlib-declarations.mjs: the covered_by program '${entry.covered_by}' of '${entry.name}' ` +
+                    `does not exist`,
+            )
+        } else if (!probeImportsOf(coveredBy).has(entry.name)) {
+            problems.push(
+                `${entry.covered_by}: it does not import '${entry.name}', so the exclusion of '${entry.name}' ` +
+                    `names a probe that does not cover it`,
+            )
+        }
+    }
+
+    return problems
 }
 
 function declarationModules() {
@@ -728,7 +914,9 @@ function staticChecks() {
         }
     }
 
-    return { problems, modules, computedCount }
+    problems.push(...coverageProblems(reference))
+
+    return { problems, modules, computedCount, excludedCount: UNCHECKED_MODULES.length }
 }
 
 // (3) Reused, not reimplemented: --verify-ops already checks both directions between the
@@ -756,7 +944,7 @@ function main() {
         process.exit(2)
     }
 
-    const { problems, modules, computedCount } = staticChecks()
+    const { problems, modules, computedCount, excludedCount } = staticChecks()
     const ops = verifyOps()
     if (!ops.ok) problems.push(...ops.lines)
     for (const problem of problems) console.log(problem)
@@ -769,7 +957,7 @@ function main() {
     }
     console.log(
         `migrated modules stay migrated: ${modules.length} declaration module(s), ${computedCount} computed signature(s) ` +
-            `left in C++, 0 problem(s)`,
+            `left in C++, ${excludedCount} excluded module(s), 0 problem(s)`,
     )
     if (ops.summary) console.log(`every declaration is behind a registered operator (${ops.summary})`)
 }
