@@ -77,13 +77,13 @@ typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (type | const data), ... '>')?
 primaryType : name | '(' type ')' | '(' type, ... ')' | '{' name: type, ... '}'
-            | modifier* '(' parameters ')' '=>' type | typeas name
+            | modifier* '(' parameters ')' '=>' type
 enumBody  : 'enum' '{' variant, ... '}'
 variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 ```
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
-- `typeas T`: [7.5](07_statements.md#75-generic-functions).
+- `::<T>`: a function, `rule` or `fact` declares its type parameters after its name ([7.5](07_statements.md#75-generic-functions)).
 - `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key. A dimension name in a shape no longer writes `constas`: the name binds where it first appears in a parameter type and is written as plain `n` afterwards (see the array row of [3.1](03_data_model.md)).
 - `enum`: [3.5](03_data_model.md#35-enums).
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
@@ -117,8 +117,8 @@ namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDec
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
-                     stmtBlock?
+                     'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+                     resourceClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -126,6 +126,7 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef angledValues?
+typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
@@ -225,7 +226,7 @@ arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-                     | 'typeof' dataExpr | 'typeas' identDef
+                     | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
@@ -235,8 +236,8 @@ typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
-ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
-                     '}' (IDENTIFIER dataExpr)?
+ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
+                     '{' ruleBody '}' (IDENTIFIER dataExpr)?
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr

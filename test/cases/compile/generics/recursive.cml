@@ -4,19 +4,19 @@
  */
 module recursive
 
-func count(xs: (typeas T)[], i: int): int {
+func count::<T>(xs: T[], i: int): int {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 
-func last_of(xs: (typeas T)[], i: int): T {
+func last_of::<T>(xs: T[], i: int): T {
     return if i + 1 >= len(xs) then xs[i] else last_of(xs, i + 1)
 }
 
-func is_even(xs: (typeas T)[], i: int): bool {
+func is_even::<T>(xs: T[], i: int): bool {
     return if i >= len(xs) then true else is_odd(xs, i + 1)
 }
 
-func is_odd(xs: (typeas T)[], i: int): bool {
+func is_odd::<T>(xs: T[], i: int): bool {
     return if i >= len(xs) then false else is_even(xs, i + 1)
 }
 

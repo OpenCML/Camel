@@ -21,7 +21,7 @@
 // module answers on `rand:` rather than on the module's name, so each declaration carries the
 // `#op` tag that names its operator. Every name is declared and no computed signature is left
 // (handover H202): `choice`, `sample` and `shuffle` take the element type of their array
-// argument, which a `(typeas T)` declaration states exactly.
+// argument, which `func choice::<T>(xs: T[])` states exactly.
 
 module random
 
@@ -55,20 +55,20 @@ export func randint(low: int, high: int): int
 /// @fails fault `InvalidArgument` when xs is empty
 /// @example choice(['a', 'b', 'c'])    // 'b'
 #op<'rand:choice'>
-export func choice(xs: (typeas T)[]): T
+export func choice::<T>(xs: T[]): T
 
 /// n elements of xs drawn without replacement, as a new array.
 /// @effect advances the generator
 /// @fails fault `InvalidArgument` when n is negative or above the number of elements
 /// @example sample([1, 2, 3, 4], 2)    // [3, 1]
 #op<'rand:sample'>
-export func sample(xs: (typeas T)[], n: int): T[]
+export func sample::<T>(xs: T[], n: int): T[]
 
 /// The elements of xs in a random order, as a new array; xs is not changed.
 /// @effect advances the generator
 /// @example shuffle([1, 2, 3])    // [2, 3, 1]
 #op<'rand:shuffle'>
-export func shuffle(xs: (typeas T)[]): T[]
+export func shuffle::<T>(xs: T[]): T[]
 
 /// A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
 /// half, as signed int64 bits). Pure: it reads no generator and the same seed gives the same key
@@ -76,14 +76,14 @@ export func shuffle(xs: (typeas T)[]): T[]
 /// @pure
 /// @example key(42)    // { hi: 1350887118657991639, lo: -7139630017956984517 }
 #op<'rand:key'>
-export func key(seed: int): Key
+export func key(seed: int): { hi: int, lo: int }
 
 /// Two independent keys derived from key: split(key) gives the same pair every time, and does
 /// not change key.
 /// @pure
 /// @example let (a, b) = split(key(42))
 #op<'rand:split'>
-export func split(key: Key): (Key, Key)
+export func split(key: { hi: int, lo: int }): ({ hi: int, lo: int }, { hi: int, lo: int })
 
 /// A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
 /// stream. Pure: the same key and n give the same permutation everywhere, it reads no generator
@@ -92,4 +92,4 @@ export func split(key: Key): (Key, Key)
 /// @fails fault `InvalidArgument` when n is negative
 /// @example permutation(key(42), 4)    // [1, 0, 2, 3]
 #op<'rand:permutation'>
-export func permutation(key: Key, n: int): int[]
+export func permutation(key: { hi: int, lo: int }, n: int): int[]

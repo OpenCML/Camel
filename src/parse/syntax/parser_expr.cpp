@@ -528,6 +528,58 @@ bool ParserImpl::lambdaAhead() const {
         const TK t2 = peek(2);
         return t2 == TK::FatArrow || t2 == TK::Colon;
     }
+    if (t1 == TK::LParen) {
+        // A parameter destructured as a tuple (`((a, b)) => ...`): the list starts with a
+        // parenthesised parameter, so the first `)` is not the end of the list. Only a list of
+        // names can be a tuple parameter, so the head decides at once: a `(` that opens anything
+        // else is the parenthesised expression (or tuple) it looks like, and is not scanned.
+        if (peek(2) != TK::Identifier) {
+            return false;
+        }
+        uint32_t i = 2;
+        while (true) {
+            if (peek(i) != TK::Identifier) {
+                return false;
+            }
+            ++i;
+            if (peek(i) == TK::Comma) {
+                ++i;
+                continue;
+            }
+            break;
+        }
+        if (peek(i) != TK::RParen) {
+            return false;
+        }
+        ++i;
+        if (peek(i) == TK::RParen) {
+            const TK after = peek(i + 1);
+            return after == TK::FatArrow || after == TK::Colon;
+        }
+        // More parameters after the tuple: find the end of the list, which the names keep
+        // short, so counting parentheses stays cheap.
+        if (peek(i) != TK::Comma) {
+            return false;
+        }
+        uint32_t depth = 1;
+        for (; ; ++i) {
+            switch (peek(i)) {
+            case TK::Eof:
+                return false;
+            case TK::LParen:
+                ++depth;
+                break;
+            case TK::RParen:
+                if (--depth == 0) {
+                    const TK after = peek(i + 1);
+                    return after == TK::FatArrow || after == TK::Colon;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+    }
     if (t1 == TK::Comma && peek(2) == TK::RParen) {
         const TK t3 = peek(3);
         return t3 == TK::FatArrow || t3 == TK::Colon;
@@ -721,15 +773,26 @@ void ParserImpl::parseIndices() {
 /// the step.
 void ParserImpl::parseSliceIndices() {
     const size_t m = mark();
-    if (cur_ != TK::Colon) {
+    if (cur_ != TK::Colon && cur_ != TK::ColonColon) {
         parseExpr();
-        if (cur_ != TK::Colon) {
+        if (cur_ != TK::Colon && cur_ != TK::ColonColon) {
             return; // an element index: the expression is the whole dimension
         }
     }
+    if (cur_ == TK::ColonColon) {
+        // Two colons written together (`xs[:: -1]`, `xs[a:: s]`): the lexer keeps `::` as one
+        // token (a qualified name), so a slice reads it as the two colons it is.
+        bump();
+        parseSlicePart();
+        close(m, NK::SliceIndices);
+        return;
+    }
     bump(); // ':'
     parseSlicePart();
-    if (eat(TK::Colon)) {
+    if (cur_ == TK::ColonColon) {
+        bump();
+        parseSlicePart();
+    } else if (eat(TK::Colon)) {
         parseSlicePart();
     }
     close(m, NK::SliceIndices);
@@ -738,7 +801,8 @@ void ParserImpl::parseSliceIndices() {
 /// One part of a slice: nothing at all when the next token is a colon or the end of the
 /// subscript, which leaves the part out of the tree.
 void ParserImpl::parseSlicePart() {
-    if (cur_ == TK::Colon || cur_ == TK::Comma || cur_ == TK::RBracket) {
+    if (cur_ == TK::Colon || cur_ == TK::ColonColon || cur_ == TK::Comma ||
+        cur_ == TK::RBracket) {
         return;
     }
     parseExpr();

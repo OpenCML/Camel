@@ -67,7 +67,7 @@ export func save_npy(t: Tensor, path: string): void
 /// @effect writes the console
 /// @example show(new([[1.0, 2.0]]))
 export func show(t: Tensor): void
-export func show(t: (typeas A)[]): void
+export func show::<A>(t: A[]): void
 
 // ---- module state ----
 

@@ -453,6 +453,7 @@ class Formatter {
     std::any visitAnalysisDecl(cst::AnalysisDecl context);
     std::any visitAnalysisClause(cst::AnalysisClause context);
     std::any visitRuleContext(cst::RuleContext context);
+    std::any visitTypeParams(cst::TypeParams context);
     std::any visitRuleBody(cst::RuleBody context);
 
     std::any visitNamespaceDecl(cst::NamespaceDecl context);
@@ -483,6 +484,7 @@ class Formatter {
     std::any visitKeyValuePair(cst::KeyValuePair context);
 
     std::any visitKeyParamPair(cst::KeyParamPair context);
+    std::any visitTupleParam(cst::TupleParam context);
 
     std::any visitDataList(cst::DataList context);
 

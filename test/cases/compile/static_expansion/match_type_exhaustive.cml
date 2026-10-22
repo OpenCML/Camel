@@ -1,7 +1,7 @@
 /** No `#leaf` or `_`: matching an `int` selects no case. */
 module match_type_exhaustive
 
-func only_composite(t: typeas T): int {
+func only_composite::<T>(t: T): int {
     return match type T {
         case struct => 1
         case tuple => 2

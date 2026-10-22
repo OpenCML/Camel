@@ -444,7 +444,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":op/assn",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {2, {true, false}}},
-                        "(var self: typeas T, other: T) => T",
+                        "(var self: T, other: T) => T",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             // The target keeps its declared type; the value only has to fit it.
@@ -1690,7 +1690,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     ":struct/zip",
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {-1, {}}},
-                        "(...args: (typeas T)[]) => (T, T, ...)[]",
+                        "(...args: T[]) => (T, T, ...)[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm.size() < 2)
@@ -1804,12 +1804,13 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                 {
                     ":op/slice_sub",
                     // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first
-                    // dimension a subscript writes (design principles 5.4). `endWritten` says
-                    // whether the end was written at all: `t[a:]` runs to the end, and the end
-                    // argument stands for nothing when it is 0.
+                    // dimension a subscript writes (design principles 5.4). The last argument is
+                    // a two-bit mask: bit 0 says whether the end was written (`t[a:]` runs to
+                    // the end), bit 1 whether the start was (`xs[:: -1]` starts at the last
+                    // element).
                     DynamicFuncTypeResolver::create(
                         {{0, {}}, {5, {false, false, false, false, false}}},
-                        "(arr: T[], start: int, end: int, step: int, endWritten: int) => T[]",
+                        "(arr: T[], start: int, end: int, step: int, written: int) => T[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
                             -> optional<Type *> {
                             if (norm[0]->code() != TypeCode::Array)

@@ -1,7 +1,7 @@
 # Generic Functions and Type Functions
 
-This note describes how generic functions (`typeas`) and type functions (type declarations
-with parameters) are compiled. The normative text is `docs/design-principles.cn.md` sections
+This note describes how generic functions (a declaration with `::<T>` after its name) and type
+functions (type declarations with parameters) are compiled. The normative text is `docs/design-principles.cn.md` sections
 5.5 and 5.6, "泛型" and "类型函数与原语"; the user-facing description is in `docs/language/` (3.1, 7.5,
 7.7). Everything here happens while a module is compiled: no pass, backend or runtime
 structure knows about either construct.
@@ -10,7 +10,7 @@ structure knows about either construct.
 
 | Construct | On the graph |
 |---|---|
-| generic function `func first(xs: (typeas T)[]): T` | nothing by itself: a subgraph template |
+| generic function `func first::<T>(xs: T[]): T` | nothing by itself: a subgraph template |
 | a call `first([1, 2])` | a call of the subgraph `first<int>`, built once for `T = int` |
 | type function `type Pair<T> = (T, T)` | nothing: applied where a type is written |
 
@@ -26,7 +26,8 @@ do not use it.
 Two compile-time types, both flagged auxiliary:
 
 - `TypeVarType` (`TypeCode::TypeVar`): a named hole. `binder()` is true for the occurrence
-  written `typeas T`; every other occurrence is a use. Occurrences of one name are `equals`.
+  declared at the function's head and for every signature occurrence that names it; a name
+  that no head declares is not a `TypeVarType` at all. Occurrences of one name are `equals`.
 - `TypeFunctionType` (`TypeCode::TypeFunc`): parameter names and a body, which is an ordinary
   type in which the parameters are `TypeVarType`s.
 
@@ -37,7 +38,7 @@ and the operations over them:
 | `containsTypeVar(type)` | a variable occurs somewhere in `type` |
 | `substituteTypeVars(type, bindings)` | replace bound variables; returns the same object when nothing changed |
 | `instantiateFunctionType(type, bindings)` | the same for a function type, always a new open signature (`OpenFunctionType`): the type of an instance about to be built, whose body may still decide the result type |
-| `bindTypeVars(pattern, actual, bindings)` | bind the `typeas` occurrences of `pattern` from the type at the same position of `actual` |
+| `bindTypeVars(pattern, actual, bindings)` | bind the head-declared variables of `pattern` from the type at the same position of `actual` |
 | `collectBindableTypeVars(pattern, names)` | the variables `bindTypeVars` can reach |
 | `TypeFunctionType::apply(arguments)` | the body with the parameters replaced |
 
@@ -47,8 +48,8 @@ arguments mean is defined by the type's C++ code, which sees concrete types only
 variable among the arguments of a module type is rejected where it is written. The exception
 is a type that declares its arguments to be plain types (`OtherType::typeArguments()`, the
 built-in `Map<K, V>` and `Set<T>`): binding and substitution descend through its arguments
-as they do through an array's element type, and `Map<typeas K, typeas V>` binds both
-(`docs/technical/31_map_and_set.md`).
+as they do through an array's element type, and `Map<K, V>` binds both from the head declared
+for the declaration (`docs/technical/31_map_and_set.md`).
 
 That `substituteTypeVars` returns its argument unchanged when there is nothing to replace
 matters: the builders compare types by pointer in places, and code without type variables
@@ -58,18 +59,19 @@ must not see new objects.
 
 The GCT builder only resolves names; it types nothing.
 
-- `visitFuncData` opens a type scope around a function's signature and body. `typeas T`
-  (`visitTypeExpr`) inserts `T` into that scope and yields the binding occurrence; later
-  mentions of `T` resolve through the scope like any type name. So `T` is visible in the rest
-  of the signature and in the body, and nowhere else.
-- `typeas` is allowed only among the parameters of a function *declaration*
-  (`funcDeclPending_` / `declSignature_` / `typeasAllowed_`): not in its return type, not in a
-  lambda, not in a `let`. A function type written inside such a parameter may bind in both
-  positions (`f: (x: T) => typeas U`). To let the return type name the variables, the
-  parameters are now visited before the return type.
-- After the signature is built, every bound variable must be reachable by `bindTypeVars`
-  (`TypeVariableNotBindable` otherwise: a `typeas` inside a union, or passed to a type
-  function that drops its parameter).
+- `visitFuncData` opens a type scope around a function's signature and body. `visitFuncType`
+  first declares each name of the head `::<…>` in that scope (a duplicate is
+  `TypeVariableRedeclared`), so later mentions of the name resolve through the scope like any
+  type name. The head names are visible in the rest of the signature and in the body, and
+  nowhere else; a name declared at the head wins over a type of the same name.
+- A plain name in a parameter type that no head declares is resolved like any other type name:
+  if it denotes nothing it is `UnresolvedTypeReference`, not an automatically bound variable.
+  Dimension names are the exception: a dimension name in a shape still binds in place (5.4).
+- After the signature is built, a head-declared name that is written nowhere in it is reported
+  (`TypeVariableUnused`, a warning: the declaration stays usable) and must be reachable by
+  `bindTypeVars`
+  (`TypeVariableNotBindable` otherwise: it occurs only inside a union, or as the argument of a
+  type function that drops its parameter).
 - `visitTypeDecl` with parameters builds a `TypeFunctionType`; `visitSpecType` applies one
   (`Name<args>`), checking the number of arguments and that all are types. `visitType`
   rejects a type function that is not the base of an application.
@@ -100,8 +102,9 @@ wherever it stands. For a call, `resolveGenericCall` collects what all arguments
 variables and then solves, at the call and nowhere else:
 
 1. it checks the argument counts;
-2. each variable takes the type of the argument at its `typeas` position (`bindTypeVars`; an
-   argument that is not of the form of a `T?`/`T!` parameter enters it and binds the payload);
+2. each variable takes the type of the argument at the first position where the signature
+   writes it (`bindTypeVars`; an argument that is not of the form of a `T?`/`T!` parameter
+   enters it and binds the payload);
 3. a variable that position left open takes the type found at any other occurrence
    (`unifyTypeVars`): `or_zero(null, 4)` binds `T` from the second argument;
 4. the arguments that name a generic function themselves wait for this. For each, the
@@ -215,7 +218,8 @@ it could take; a lambda with written types always works.
 
 **Functions written in place.** A `FUNC` node without a name whose type still holds a
 variable is registered where it stands (`anonymousTemplateOf`) and yields the same marker.
-Programs cannot write one (`typeas` is refused in a lambda); the list comprehension does:
+Programs cannot write one (a lambda cannot declare type parameters); the list comprehension
+does:
 `[e for x in xs if c]` is lowered by the GCT builder (`visitComprehension`) to
 `xs->filter<F>->map<G>` with `F`, `G` taking `x` of a fresh type variable, which the two
 operators fix as above. The graph is the one the two calls written out have. The two
@@ -230,7 +234,8 @@ program called `map` or `filter` does not change what a comprehension means.
 - One name is either a generic function or ordinary functions; two generic functions with
   one name are a `Redeclaration`.
 - A generic function that is never called is never instantiated, so its body is never typed.
-- Type arguments cannot be written at a call; they always come from the arguments.
+- Type arguments at a call are optional (`f::<int>(x)`); the omitted ones come from the
+  arguments.
 - Type functions take types only (no `const` arguments), and their right-hand side is an
   ordinary type expression; they cannot refer to themselves.
 - Composite types are still not canonical: two instantiations of `T[]` are distinct objects

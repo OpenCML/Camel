@@ -163,7 +163,7 @@ namespace {
 /// One object per payload type and form, as for cells.
 TupleType *internTagged(
     std::vector<TupleType *> &known, Type *payloadType, const std::function<TupleType *()> &make) {
-    // Occurrences of one type variable are equal whether or not they bind (`typeas T` and
+    // Occurrences of one type variable are equal whether or not they bind (`T` in a signature and
     // `T`), so a type written with variables is never shared: sharing would drop the mark.
     if (containsTypeVar(payloadType)) {
         return make();

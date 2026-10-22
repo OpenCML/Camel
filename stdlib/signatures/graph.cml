@@ -4,7 +4,7 @@
 /**
  * The computed signatures of the `graph` module: the four operators whose type C++ computes from
  * a function value's type (`program_of`, `graph_of`, `open_function` and `to_function`). A
- * declaration cannot state it: `(typeas F)` accepts every type, and a call the operator must
+ * declaration cannot state it: a declaration generic over `F` accepts every type, and a call the operator must
  * refuse would pass the check. The C++ operators in `modules/graph` are the one source of these
  * types; this file is for reference only (it is not compiled) and feeds
  * `docs/stdlib-reference.md` and the `--verify-ops` check. The fixed signatures are declared in

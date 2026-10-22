@@ -27,7 +27,7 @@ enum class TypeType {
     Enum
 };
 
-enum class TypeOp { Inter, Diff, KeyUnion, KeyInter, KeyDiff, Specialize, TypeOf, TypeAs };
+enum class TypeOp { Inter, Diff, KeyUnion, KeyInter, KeyDiff, Specialize, TypeOf };
 
 std::string to_string(TypeType type);
 std::string to_string(TypeOp op);
@@ -145,11 +145,19 @@ class FuncTypeLoad : public TypeLoad {
     void setUri(const std::string &uri) { uri_ = uri; }
     const ModifierSet &modifiers() const { return modifiers_; }
     void setModifiers(const ModifierSet &modifiers) { modifiers_ = modifiers; }
+    /// The type parameters a declaration declares at its head (design principles 5.5):
+    /// `T` and `U` in `func first::<T, U>(xs: T[]): U`. Empty for an ordinary function type
+    /// and for a declaration that is not generic.
+    const std::vector<std::string> &typeParams() const { return typeParams_; }
+    void setTypeParams(std::vector<std::string> typeParams) {
+        typeParams_ = std::move(typeParams);
+    }
     const std::string geneCode() const override;
 
   private:
     ModifierSet modifiers_;
     std::string uri_;
+    std::vector<std::string> typeParams_;
 };
 
 /// The resources a function type publishes (design effects plan 3.1): `pure` says a call

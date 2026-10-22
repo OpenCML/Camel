@@ -21,7 +21,7 @@ using namespace camel::core::type;
 
 // Every operator of this module is declared in `stdlib/random.cml`, `choice`, `sample` and
 // `shuffle` included: their result type is the element type of their array argument, which a
-// `(typeas T)` declaration states exactly (design principles 6.4; handover H19, step 10, H202).
+// head declaration `::<T>` states exactly (design principles 6.4; handover H19, step 10, H202).
 // The C++ side keeps the kernels, the executor, the operator traits and the resources. The
 // module answers on `rand:`, not on its name, so the declaration module reads `rand:` from
 // `operatorProtocols()` (module.h) now that no group is exported to read it from.

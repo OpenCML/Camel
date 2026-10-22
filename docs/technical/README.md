@@ -29,7 +29,7 @@
 | [25_tensor_stack_and_onnx_export.md](25_tensor_stack_and_onnx_export.md) | Tensor stack design: typed kernels, single operator registry (OpDef), refined TensorType, graph optimization, ONNX export, benchmark harness |
 | [26_autodiff_as_graph_rewrite.md](26_autodiff_as_graph_rewrite.md) | Automatic differentiation as graph rewriting: pullback transform, derivative registry, tree models and optimizers |
 | [27_entry_parameters_and_pure_export.md](27_entry_parameters_and_pure_export.md) | 带参数的 `main`：入口图的参数、从外部绑定实参、未导入模块的遍，以及对纯程序执行 `onnx::export` |
-| [28_generic_functions_and_type_functions.md](28_generic_functions_and_type_functions.md) | Generic functions (`typeas`) as subgraph templates instantiated per set of argument types; type declarations with parameters as type functions |
+| [28_generic_functions_and_type_functions.md](28_generic_functions_and_type_functions.md) | Generic functions (`::<T>`) as subgraph templates instantiated per set of argument types; type declarations with parameters as type functions |
 | [29_nullable_and_fallible_values.md](29_nullable_and_fallible_values.md) | `T?` and `T!`: where the one-bit tag lives, `??` / `!!` / `?->` / `match` patterns as branches, `throw` as an exit, and the questions left to the language author |
 | [30_diagnostics_reporting.md](30_diagnostics_reporting.md) | 诊断报告：诊断携带的字段、文本形式、一次编译报告多个错误、运行期故障、警告、诊断目录，以及留给语言作者的问题 |
 | [31_map_and_set.md](31_map_and_set.md) | The built-in `Map<K, V>` and `Set<T>`: the two implementation routes and the one taken, key types, key order, the run-time table and how the collector traces it, the operators, typed JSON decoding, measurements, and the questions left to the language author |

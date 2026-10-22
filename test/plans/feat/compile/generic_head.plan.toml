@@ -1,0 +1,104 @@
+id = "compile.generic_head"
+order = 342
+tier = "fast"
+tags = ["feat", "compile", "generics", "types"]
+desc = "A generic declaration declares its type parameters at its head (`func first::<T>(xs: T[]): T`, design principles 5.5); a plain name in a signature that no head declares is an unknown type, and the head names win over a type of the same name."
+
+# The declaration and a call write the type parameters the same way: `::<...>`. Without it a
+# declaration is not generic. Named dimensions still bind automatically in a shape (5.4); type
+# variables do not.
+
+[[tests]]
+name = "head_parameters"
+desc = "Head parameters used in an ordinary parameter, in a `with` parameter, in a function type written inside either, and in the result type; a second occurrence refers to the same variable."
+kind = "behavior"
+case = "../../../cases/compile/generic_head/parameters.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n42\n21\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_calls_generic"
+desc = "A generic function calling generic functions: each instance is fixed by the types the chain gives it, with every declaration writing its head parameters."
+kind = "behavior"
+case = "../../../cases/compile/generic_head/chain.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "7\ns\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "head_name_wins_over_type"
+desc = "A head name that also denotes a type is the type parameter inside its declaration: a name declared at the head wins (design principles 5.5), and a call still instantiates it."
+kind = "behavior"
+case = "../../../cases/compile/generics/type_param_collision.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "unused_head_parameter"
+desc = "A type parameter declared at the head and written nowhere in the signature cannot be given a type: it is reported as a warning and the declaration is still usable."
+kind = "behavior"
+case = "../../../cases/compile/generic_head/err_unused_head_param.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stderr_contains = ["SemanticDiag::TypeVariableUnused", "The type parameter 'T' is declared at the head but never written"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "plain_name_is_an_unknown_type"
+desc = "A plain name in a parameter type that denotes nothing is an unknown type, not an automatically bound type variable (design principles 5.5)."
+kind = "negative"
+case = "../../../cases/compile/generic_head/err_unknown_type_in_signature.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_code = "0x0300000A"
+expect_output_contains = ["T"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "duplicate_head_parameter"
+desc = "One name declared twice at the head."
+kind = "negative"
+case = "../../../cases/compile/generic_head/err_duplicate_head_param.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
+expect_diagnostic_code = "0x03000051"
+expect_output_contains = ["The type parameter 'T' is declared twice"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "explicit_argument_on_non_generic"
+desc = "A declaration without a head is not generic, so an explicit type argument at a call means nothing (design principles 5.5, 5.9)."
+kind = "negative"
+case = "../../../cases/compile/generic_head/err_non_generic_explicit.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
+expect_diagnostic_code = "0x03000020"
+expect_output_contains = ["the callee does not declare type parameters"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "return_only_head_parameter_needs_context"
+desc = "A head parameter written only in the result type is valid, but a call with neither an expected result nor an explicit type argument cannot determine it."
+kind = "negative"
+case = "../../../cases/compile/generic_head/err_head_return_only.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+expect_output_contains = ["cannot be determined", "make::<"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

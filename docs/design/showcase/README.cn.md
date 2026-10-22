@@ -72,3 +72,35 @@
 4. **第四批（切分、调度注入、导出完善后）**：I1、I3、I4。
 
 每一批开始前，协调者检查前一批示例的写法是否体现了设计原则，再决定是否调整语言或示例。
+
+## 6. 旗舰示例的当前状态：朴素写法进，专家写法出
+
+设计稿：`docs/design/showcase/naive-in-expert-out.cn.md`（已定；在 `fsh-dev` 上，本分支从 `develop` 切出时还没有这个文件）。示例在
+`examples/models/naive-in-expert-out/`；本节的"现在能跑"指这个目录今天的代码，不是设计稿里的全部目标。
+
+**今天能跑**
+
+- `train_step.cml`：一个小 Transformer 的一个训练步——两段 pre-LN、4 头注意力、RMSNorm、
+  GELU MLP、逐位置的朴素 softmax 交叉熵、Adam——在 `std::nvm`、`std::fvm`、`std::jit` 上输出
+  相同的固定种子损失，16 步内从 3.4656 降到 1.5680。朴素写法就是教科书写法：`exp(s)/sum(exp(s))`、
+  `log(softmax)`、Q/K/V 三个独立投影，没有减最大值、没有 `log_softmax`、没有融合 QKV。
+- `torch_impl.py`：同一模型、同一份初始权重与数据的 PyTorch 朴素、专家（`F.scaled_dot_product_attention`、
+  `F.log_softmax`、融合 QKV）与 `torch.compile(朴素)` 三个实现，外加一个 float64 参考；四个实现由
+  `measure.py` 一条命令驱动。
+- `measure.py`：每个实现每步耗时（去掉预热后的中位数）、整进程峰值常驻内存、最终损失与逐参数相对
+  float64 参考的最大绝对差；机器、线程数、版本写进同一个 JSON，并打印一张人看的表。
+- `accuracy.py` 与 `accuracy.cml`：softmax、log_softmax、交叉熵、矩阵乘归约在 bf16/f32/f64 下的
+  首个非有限输入、朴素与专家形式在同一输入上的行为，以及矩阵乘归约的 fp64 误差。Camel 侧跑的是
+  f32 的可测部分。
+
+**Camel 侧还缺什么**
+
+- **数值类型**：`Tensor` 的公开元素类型实际上只有 f32、i64、bool；没有 bf16、f16，也没有真正的
+  f64 张量（`modules/tensor/dtype.cpp` 的 `normalizeTensorDType` 把 f64、i32 归一为 f32、i64）。
+  因此 bf16 溢出与 fp64 误差的测量只能在 PyTorch 里做；Camel 的 f32 阈值与 PyTorch 的 f32 阈值逐项一致。
+- **算子与规则**：没有融合 QKV/注意力算子，也没有 `rules::accuracy`、`rules::fusion` 的规则流水线，
+  所以朴素源码不会自动变成专家写法；`softmax`、`log_softmax` 与融合交叉熵作为普通算子已经存在，
+  但示例刻意不调用它们。融合 QKV 可以手写成 `concat` 后切片，但还没有规则替用户做这件事。
+- **自动微分**：`one_hot` 没有 VJP；标签经过它时必须显式 `stop_gradient`，否则求导直接报错。
+- **解释与对照**：`explain` 的改写链依赖规则语言第二版；PyTorch 侧没有做设计的第 5 节
+  "杀死搜索"（Inductor 的模式匹配实测），因此"别人做不到"这一句还不能写。

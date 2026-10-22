@@ -1,6 +1,6 @@
 module err_literal
 
-func zero_of(x: typeas T): T {
+func zero_of::<T>(x: T): T {
     let z: T = 0.5
     return z
 }

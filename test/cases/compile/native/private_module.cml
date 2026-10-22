@@ -6,9 +6,9 @@
 module native_private
 
 #op<':op/idx_arr'>
-func at(xs: (typeas T)[], i: int): T
+func at::<T>(xs: T[], i: int): T
 
 /// The module's own wrapper around its private operator.
-export func second(xs: (typeas T)[]): T {
+export func second::<T>(xs: T[]): T {
     return at(xs, 1)
 }

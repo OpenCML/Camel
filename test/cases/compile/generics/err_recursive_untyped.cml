@@ -1,6 +1,6 @@
 module err_recursive_untyped
 
-func count(xs: (typeas T)[], i: int) {
+func count::<T>(xs: T[], i: int) {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 

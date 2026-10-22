@@ -60,7 +60,7 @@ signatures and examples in the [standard library reference](../docs/stdlib-refer
 | File | What it shows | Run |
 |------|------|------|
 | [`closures.cml`](functions/closures.cml) | Functions as values: closures, composition, `with` parameters, a counter with its own state | `camel examples/functions/closures.cml` |
-| [`generic_helpers.cml`](functions/generic_helpers.cml) | Generic helper functions with `typeas`, built on the generic functions of `array` | `camel examples/functions/generic_helpers.cml` |
+| [`generic_helpers.cml`](functions/generic_helpers.cml) | Generic helper functions with head type parameters (`::<T>`), built on the generic functions of `array` | `camel examples/functions/generic_helpers.cml` |
 
 ### Command-line tools: `cli/`
 

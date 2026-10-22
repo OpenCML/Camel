@@ -555,15 +555,15 @@ module generics
 
 type Pair<T> = (T, T)
 
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func swap(p: Pair<typeas T>): Pair<T> {
+func swap::<T>(p: Pair<T>): Pair<T> {
     return (p.1, p.0)
 }
 
-func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
     return xs->map<f>
 }
 
@@ -583,7 +583,7 @@ a
 [1!, 2!, 3!]
 ```
 
-- There is no separate type parameter list. At **the place where a type variable first appears** in the signature, write `typeas T`; this binds the type at that place as `T`, and after that you use `T` directly.
+- There is no separate type parameter list: type parameters are declared after the function's name in `::<…>`, and a function with it is generic, one without is not. The signature (parameters and return type) and the body then write `T` directly. A name declared at the head takes precedence over a type of the same name inside the function.
 - `type Pair<T> = (T, T)` is a type declaration with a parameter: `Pair<int>` is `(int, int)`.
 - In the graph, a generic function is a **subgraph template**. Each time it is called with a set of concrete types, a subgraph whose types are all concrete is instantiated: the program above has the two subgraphs `first<int>` and `first<string>` (you can see them with `camel docs/tutorial/examples/08_generics.cml std::rgir`). The graph contains only concrete types, and no type information is needed at run time.
 - A generic function may also be passed wherever a function is expected (`apply(id, 3)`, `xss->map<reverse>`, `let f: (x: int) => int = id`): the compiler builds the instance once the position fixes its types. Where nothing does (`let g = id`), it is a compile-time error that says to write the type.

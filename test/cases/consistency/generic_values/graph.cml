@@ -1,6 +1,6 @@
-func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
-func id(x: typeas A): A { return x }
-func pair(x: typeas A): (A, A) { return (x, x) }
+func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
+func id::<A>(x: A): A { return x }
+func pair::<A>(x: A): (A, A) { return (x, x) }
 func main(): int sync {
     println(apply(id, 3), [1, 2]->map<pair>)
     return 0

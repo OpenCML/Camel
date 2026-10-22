@@ -1,0 +1,2 @@
+# Tolerated unanchored citations, one per line: <citing file>|<cited path>  # reason.
+notes.md|src/thing.c  # the sentence quotes no text; cites 4

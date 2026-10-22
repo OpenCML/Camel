@@ -255,7 +255,7 @@ Rules:
 - **Never the other way.** A `T?` or `T!` used as a `T` must be opened; an `int?` does not become a `float?` either, and numbers are still not converted implicitly. The arguments of built-in operators (`append`, `println`, ...) are not such a position: their parameter types are computed from the arguments by C++ type rules, so there is no target type to enter; write `as` there.
 - **The empty array literal `[]` takes its element type from where it stands**: a declared type (`let xs: int[] = []`), a parameter (`count([])`), the other arm of a branch, the left side of `??`/`!!` (`attempt(f) !! []`), a declared return type, `as` (`[] as Map<string, int>`). Binding `[]` to a name without a type (`let xs = []`) is the compile-time error `SemanticDiag::EmptyArrayWithoutType`, which says to write the type.
 - The two tags can be combined: `T?!`, `T!?`. The marks are written from the innermost outwards: `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)); a `match` opens the outer form only. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
-- With generics: `(typeas T)?` binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
+- With generics: after `T` is declared at the head, a `T?` parameter binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
 - Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
