@@ -332,7 +332,13 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
 assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
-assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+// The count of initializers was a proxy for "no weight was folded into a constant", and the
+// constants themselves are numbers: two of them are 2.0 because the loss multiplies by 2.0 in
+// the double its mean now computes in while the mean's gradient divides by two in the
+// parameter's float32. A folded weight keeps the name of its field (export_fold.cml's model has
+// `w` and `b` as initializers), so the names are the property the count only approximated.
+const weights = ['w1', 'b1', 'w2', 'b2']
+assert(!model.initializers.some((n) => weights.includes(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000
