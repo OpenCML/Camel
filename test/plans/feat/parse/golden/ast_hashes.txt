@@ -349,6 +349,8 @@ a6332d59a0e18fb4 ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
 71655c7c19844d68 no stdlib/signatures/python.cml
 82c91a732389ed7e ok stdlib/signatures/random.cml
+5003e0aae8768d14 ok stdlib/signatures/rewrite.cml
+79b05b48e56c2c1c ok stdlib/signatures/sim.cml
 5f79aa6028c4e548 no stdlib/signatures/tensor.cml
 c4e42b3e18cc655d ok stdlib/signatures/tiles.cml
 c2aadab066717442 ok test/cases/compile/format_string_bad_spec.cml
@@ -1869,7 +1871,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-25ea5511b8d74b97 ok test/cases/modules/stdlib/registry_all.cml
+20fc4a33fb470123 ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml
