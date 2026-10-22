@@ -1,0 +1,229 @@
+# H99 报告
+
+分支：`handover/H99-debug-release-laws`（起点 `origin/develop` `1c995a0a7`）。代码提交 `cb4a72222`；本文件所在的提交记录本报告与看板。
+
+任务：H82 的 §6.2 记下同一规则用例在 Debug 与 Release 下得到不同的重写计数。本任务查清原因，并保证**构建配置不再决定规则库的落点**；不修改 `stdlib/rules.cml`，不放宽测试期望。
+
+## 1 结论
+
+- 根因：**f32 字面量只写 64 位槽的低 4 字节，高 4 字节未初始化**（`src/core/rtdata/conv.cpp` 的 `makeSlotFromPrimitiveData`，修复前是 `slot_t result;` 后只 `memcpy` 一个 `float`）。规则库把模式里的常量从静态槽读成 `Pattern::value`，`constantOf` 也读整槽，模式匹配与 `NodeKey` 都按整槽的 64 位比较/做键。Debug 下栈残留把高 32 位填成 `0x00007382`，Release 下恰好是零；于是同为 f32 `1.0` 的两个常量，一个能匹配规则模式，另一个不能。
+- 具体落点：`float32_fold` 把 `(x * 1e30) * 1e-30` 折成 `x * 1.0`，这个新常量由 `toSlot<float>` 生成、高 32 位为零；规则模式里的 `1.0`（和源码里原来的 `1.0`）高 32 位带残留。Debug 下 `float32_mul_one` 因此不触发，`f32_fold_granted` 最后多一个 `mul_f`。Release 下残留恰好为零，规则触发，乘法被删掉。
+- 修复分两层：
+  1. `makeSlotFromPrimitiveData` 的 f32 分支把 `slot_t` 初始化为零（`slot_t result{};`），与 `toSlot` 对“窄于一个槽的值”的既有约定一致：槽里不属于值的字节必须为零。
+  2. `DraftWritings` 在常量进入比较/建键之前按**类型**把它规范化：f32 和 i32 只取低 32 位并零扩展，bool 只取低 8 位（`canonicalConstant` / `constantPayload`）。用在模式常量、`constantOf`、重复 `const` 的比较、规则新建的常量，以及 `NodeKey` 的 Data 载荷（建索引、重写前预置常量、`constantNode`）。
+- 为什么构建配置不再能决定规则：常量的相等与同一性现在只由**该类型的值位**决定，填充位不参与；新字面量从源头就是零填充，历史静态槽（包括 Debug 构建出的 `.cmo`）即使带残留，也会在 `constantOf` / 模式 / `NodeKey` 三处被规范化。Debug 与 Release 给规则库的输入相同，规则选择和落点因此相同。
+- 验收（实际跑过的，见 §5）：Debug `feat/modules/rules` **67/67**；Release 同一计划 **67/67**、`smoke` **10/10**；同一用例在 Debug 与 Release 下的完整输出（两次 `typed_counts::report` 加最终值）`diff` 为空。Release `feat/opt` **768/769**，唯一失败 `fold_struct_cast.in_return_position` 在基线 `1c995a0a7` 的 Debug 和 Release 上都失败，与 H99 无关（§5.4）。
+
+## 2 测量
+
+### 2.1 修复前
+
+构建与计划一律在 Linux 主机上通过 `camel-remote.ps1` 执行（`-Jobs 8`）：
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h99-debug-laws `
+  -Config Debug -Plan test/plans/feat/modules/rules.plan.toml -Jobs 8 -Tier debug
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h99-debug-laws `
+  -Config Release -Plan test/plans/feat/modules/rules.plan.toml -Jobs 8
+```
+
+- Debug：**66/67**，唯一失败 `rules.typed_element_laws_fire`。
+- Release：**67/67**，同一用例通过。
+
+直接跑该用例，看两次 `typed_counts::report` 的差：
+
+```text
+camel test/cases/modules/rules/typed_target.cml \
+      typed_counts::report rules::simplify typed_counts::report std::nvm
+```
+
+修复前 Debug 的第二次报告里：
+
+| 函数 | 计划期望（Release 修复前） | Debug 修复前 | Debug 修复后 | Release 修复后 |
+|---|---|---|---|---|
+| `f32_fold_granted` | `0 0 0 0 0` | `0 0 1 0 0` | `0 0 0 0 0` | `0 0 0 0 0` |
+| `f32_fold` | `0 0 2 0 0` | `0 0 2 0 0` | `0 0 2 0 0` | `0 0 2 0 0` |
+| `f32_double` | `0 0 1 0 0` | `0 0 1 0 0` | `0 0 1 0 0` | `0 0 1 0 0` |
+| `f32_double_big` | `0 0 1 0 0` | `0 0 1 0 0` | `0 0 1 0 0` | `0 0 1 0 0` |
+| `f32_double_frac` | `0 0 1 0 0` | `0 0 1 0 0` | `0 0 1 0 0` | `0 0 1 0 0` |
+
+五个数依次是 add、sub、mul、div、neg 的算子数（`test/cases/modules/rules/typed_counts.cml:21-28`）。修复前**只有** `f32_fold_granted` 的 mul 数不同；其余 typed 行在 Debug 下已经与计划一致。
+
+**与 H82 §6.2 的差异**：H82 的表把 `f32_double`、`f32_double_big`、`f32_double_frac` 的“计划期望”写成 `1 0 2`。那是 `rules.typed_exact_doubling_guard` 的期望块（`typed_pass::apply_double_only`）；`rules.typed_element_laws_fire` 的计划期望是三条各 `0 0 1`（`test/plans/feat/modules/rules.plan.toml:376`）。H99 按计划实际的两块分别核对，避免把两个用例混在一起。
+
+### 2.2 修复前的跟踪
+
+在 `DraftWritings::rewrite` 里临时加过 `CAMEL_H99_TRACE` 跟踪（**未提交，已删除**）。对 Debug 下残留的 `:op/mul_f`，跟踪给出：
+
+- 节点 `perms=32`（`#requires<no_infs>` 的 `no_infs`），`context=35`，`type=f32`；两个输入分别是 `kind=Port, type=f32` 和 `kind=Data, type=f32, takes=1, written=0`。
+- 常量输入的 `constantOf` 是 `0x000073823f800000`：低 32 位 `0x3f800000` 正好是 f32 `1.0`，高 32 位是 `0x00007382`；类型 `f32`。
+- `float32_mul_one` 对这个节点报 `nomatch`；它前面的 `float32_one_mul`、`add_minus_zero`、`sub_zero`、`div_one`、`neg_neg`、`combine` 也都是 `nomatch`，`combine_mixed` 与 `fold` 是 `skipped needs=...`（权限不满足），`float32_double` 是 `nomatch`。
+- 把 `rules::simplify` 连跑两次，`f32_fold_granted` 仍是 `0 0 1`，排除轮数上限。
+
+跟踪还显示，`float32_fold` 生成的常量是 `0x000000003f800000`：低 32 位同样是 `1.0`，高 32 位为零。两者类型相同、权限相同、值相同，只差填充位。
+
+### 2.3 修复后
+
+Debug 与 Release 用同一对（分别由 `camel-remote.ps1` 构建的）二进制各跑一次上面的直接命令，保存完整输出后：
+
+```text
+diff -u /tmp/h99_debug.txt /tmp/h99_release.txt
+```
+
+退出码 0，**没有任何差异**：两次计数报告和九行最终值逐字相同。
+
+## 3 原因
+
+### 3.1 槽里 f32 的表示
+
+`slot_t` 是 64 位。f32 只有 4 字节，`makeSlotFromPrimitiveData` 修复前是：
+
+```cpp
+case TypeCode::Float32: {
+    auto floatData = tt::as_shared<camel::core::data::FloatData>(data);
+    float f        = floatData->data();
+    slot_t result;                              // 高 4 字节未初始化
+    std::memcpy(&result, &f, sizeof(float));     // 只写低 4 字节
+    return result;
+}
+```
+
+`toSlot<float>`（`include/camel/core/rtdata/base.h:151-169`）对窄于槽的值是“先 `slot_t tmp{}`，再只拷贝 `sizeof(T)` 字节”，所以它生成的值高位为零。两条路径对同一个 f32 给出不同的 64 位表示，这不是值的差异，是表示的差异。
+
+### 3.2 谁把整槽当作值
+
+- 规则程序把模式里的常量编译成 `Pattern::value`（`patLiteral`，`src/runtime/writings.cpp:1007-1012`），值来自静态槽。
+- `constantOf` 返回静态槽的原始 `slot_t`（`:1080-1093`）。
+- 模式匹配比较 `found->first == p.value`（`:1184-1188`），即整 64 位。
+- `NodeKey` 的 Data 载荷是整槽字节（`makeKey`，`:487-494`；重写前预置常量，`:1300-1306`；`constantNode`，`:1108-1114`），既用于查重也用于同余合并。
+
+因此“两个 f32 常量是否相同”在四处依赖了不属于值的填充位。
+
+### 3.3 为什么恰好是 `f32_fold_granted`
+
+`f32_fold_granted` 的源码是 `(x * 1.0e30) * 1.0e-30`，`#requires<reassociate, no_infs>`。`float32_fold` 把两个系数乘成 `1.0`，图上出现 `x * 1.0`。这个新 `1.0` 是算子折叠算出来的，走 `toSlot<float>`，高 32 位为零；规则模式里的 `1.0` 来自规则程序的静态槽，与源码字面量走同一条 `makeSlotFromPrimitiveData` 路径，高 32 位带着相同的残留 `0x00007382`。于是：
+
+- 源码里原来的 `x * c` 能匹配（两边的残留恰好相同）；
+- 折叠后的 `x * 1.0` 不能匹配（一边零、一边 `0x00007382`）；
+- `float32_mul_one` 不触发，Debug 最后剩一个 `mul_f`；Release 的残留为零，能匹配，乘法被删掉。
+
+这也解释了为什么 `f32_double` 等行在 Debug 下没有差异：它们的最后形态不是“算出来的常量去匹配一个同值模式常量”。
+
+### 3.4 排除的其他候选
+
+- **`#ifndef NDEBUG` 的守卫/诊断/断言**：跟踪里 `float32_mul_one` 没有被 `needs` 或 `context` 跳过，而是走到了常量比较才 `nomatch`；两侧 `perms`/`context`/类型都一致。
+- **类型同一性**：两侧都是 f32，`acceptsType` 与 `writingType` 都通过。
+- **权限上下文**：残留节点 `perms=32`、`context=35`，`float32_mul_one` 的 `needs` 为 0；`float32_fold` 已按 `no_infs` 正常触发。权限不是这里的变量。
+- **轮数/大小限制**：连跑两次 `rules::simplify` 落点不变。
+- **规则库本身**：`x * 1.0 => x` 对 f32 是保值的，规则没有错；错的是引擎识别“1.0”的方式。
+
+## 4 修复
+
+### 4.1 从源头去掉未初始化的字节
+
+`src/core/rtdata/conv.cpp:61`：
+
+```cpp
+slot_t result{};
+```
+
+注释说明了为什么：f32 只占低 4 字节，其余不是值；规则会把常量从槽里读出来比较，若这半个槽保留栈上的内容，两个同值 f32 常量就可能不相等，而是否相等会取决于构建（H99）。
+
+### 4.2 在重写边界按类型规范化
+
+`src/runtime/writings.cpp` 新增两个辅助函数（`:96-121`）：
+
+- `canonicalConstant(value, type)`：f32/i32 返回 `static_cast<uint32_t>(value)` 的零扩展；bool 返回低 8 位；其他类型原样返回。
+- `constantPayload(value, type)`：把规范化后的 `slot_t` 的 8 字节作为 `NodeKey` 的载荷。
+
+使用点：
+
+| 位置 | 作用 |
+|---|---|
+| `patLiteral`（`:1007-1012`） | 规则模式里的常量先规范化，模式值只含值位 |
+| `constantOf`（`:1080-1093`） | 所有模式匹配、`when` 里的 `constant`、`Compute` 读到的常量都从这里来；旧静态槽的残留在这里被清掉 |
+| 重复 `const` 比较（`:1163-1173`） | `x * 3.0 + x * 3.0` 的两个常量按值比较，不再按节点身份或填充位 |
+| `Pattern::Kind::Constant`（`:1184-1188`） | 模式常量与节点常量按规范化后的值比较 |
+| `constantNode`（`:1106-1120`） | 规则新建常量时，槽里存规范化值，`NodeKey` 也按规范化值建 |
+| `makeKey` 的 Data 分支（`:487-494`） | 建索引/同余合并时，Data 的键只含值位 |
+| 重写前预置常量（`:1300-1306`） | 预置的已有常量与新建常量使用同一种键 |
+
+### 4.3 没有改变的东西
+
+- **`-0.0` 与 NaN**：规范化只清掉低 32 位以外的字节，保留低 32 位的精确位型；`-0.0` 与 `+0.0` 仍然不同（没有改用浮点 `==`），NaN 的载荷位也保留。`float32_add_minus_zero` 这类“只对 `-0.0` 生效”的定律不会误触发。
+- **f64、i64、指针、GC 追踪值**：`canonicalConstant` 对它们原样返回，载荷与比较不变。
+- **i32 与 bool**：i32 的负值此前可能被符号扩展、计算值可能被零扩展，现在统一为低 32 位；bool 清掉低 8 位以外的字节。两者都只是把“同一个值的不同表示”归一，不改变值。
+- **规则库与期望**：`stdlib/rules.cml` 与所有计划期望均未修改。
+
+### 4.4 为什么构建配置不再参与
+
+设一个常量的类型为 `T`，其值为 `v`。现在所有进入重写判断的表示都是 `canonical(v, T)`：
+
+- 新字面量在 `makeSlotFromPrimitiveData` 里就零填充；
+- 旧字面量/旧 `.cmo` 的静态槽即使带残留，`constantOf` 与 `patLiteral` 在读到时规范化；
+- 规则新建的常量在 `constantNode` 里存规范化值；
+- `NodeKey` 的 Data 载荷用规范化字节。
+
+`canonical(v, T)` 只依赖 `v` 在 `T` 中的值位，不依赖槽里剩下的字节，也不依赖分配顺序、栈内容或优化级别。模式匹配的真假、常量的查重与同余合并因此只由程序的值决定。Debug 与 Release 可以有不同的栈残留，但残留已经不在任何判断里。
+
+## 5 测试
+
+### 5.1 Debug 构建配方
+
+任务要求的 Debug 验收用：
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h99-debug-laws `
+  -Config Debug -Plan test/plans/feat/modules/rules.plan.toml -Jobs 8 -Tier debug
+```
+
+`-Config Debug` 走 `npm run debug`，产物收集到主机上的 `out/debug`；`-Tier debug` 让计划跑 Debug 层。直接跑用例时要设：
+
+```bash
+export CAMEL_HOME=$PWD/out/debug
+export PATH=$CAMEL_HOME/bin:$PATH
+export LD_LIBRARY_PATH=/home/zjwei/camel-eval/conda/envs/clang/lib
+```
+
+### 5.2 Debug
+
+- `BUILD_EXIT=0`。
+- `feat/modules/rules`：**67/67**，墙钟 4.2 s；`rules.typed_element_laws_fire` 通过。
+- 修复后第二次报告：`f32_fold_granted 0 0 0 0 0`、`f32_double/_big/_frac 0 0 1 0 0`、`f32_fold 0 0 2 0 0`。
+
+### 5.3 Release
+
+```powershell
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h99-debug-laws `
+  -Config Release -Plan smoke,test/plans/feat/modules/rules.plan.toml,test/plans/feat/opt -Jobs 8
+```
+
+- `BUILD_EXIT=0`。
+- `smoke`：**10/10**。
+- `feat/modules/rules`：**67/67**，`rules.typed_element_laws_fire` 通过。
+- `feat/opt`：**768/769**；唯一失败是 §5.4 的既有项。
+
+### 5.4 一致性，以及 Release `feat/opt` 的既有失败
+
+- Debug 与 Release 的 `typed_target.cml` 完整输出（修复后）`diff` 为空；两次计数的每一行都相同。
+- `feat/opt/generic.plan.toml` 的 `fold_struct_cast.in_return_position` 失败：断言要求折叠出的常量类型是 `value_type="P"`，实际得到匿名的 `{ a: int, b: float }`；同一用例的 `fold_struct_cast.results` 通过（值仍是 3 和 1.5），CAST 数也为 0。
+- **这是基线就有的失败，不是 H99 引入的**：把本分支的两处源码改动临时保存成补丁、`git checkout --` 回到 `1c995a0a7`，分别重建 Release 与 Debug，再跑 `test/plans/feat/opt/generic.plan.toml`，两边都同样失败；随后恢复补丁。H82 的验收没有跑 `feat/opt`；H60 加这条用例时它是绿的，所以这是 H60 之后在 develop 上出现的一个独立回归，应由单独任务处理。H99 的改动只涉及常量的表示与比较，不碰 CAST/FILL 的折叠或结构体类型，基线对照也把它排除在 H99 之外。
+
+### 5.5 没有跑的
+
+- `feat/opt` 的慢层与 GC 压力、progen、PyTorch 对照等计划：按任务约定不跑。
+- 除 `feat/modules/rules`、`smoke`、`feat/opt` 外的 Release 计划：本任务没有点名的未跑。
+
+## 6 自查
+
+- 只改本工作树；没有新建工作树、没有 `git stash`、没有在 `develop`/`main` 上提交、没有 `git push`。
+- 临时跟踪代码已全部删除；提交里没有 `CAMEL_H99_TRACE`、`H99 node` 等字样。
+- 没有改 `stdlib/rules.cml`，没有改任何计划期望。
+- 改动文件：`src/core/rtdata/conv.cpp`、`src/runtime/writings.cpp`、`docs/handover/reports/H99.md`、`docs/handover/README.cn.md`。
+- 提交：
+  - `cb4a72222` `runtime: identify constants by their typed value bits, not slot padding`
+  - 本文件所在的提交：`docs: report H99 and record it on the board`
