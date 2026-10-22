@@ -23,21 +23,24 @@ const CASES = {
     env: {
         old: 'sys',
         now: 'env',
-        expected: '31e343f49b0e3b1a985bd49d034d2b53e609bfe822c08bd13792ffaf92b807d4',
+        expected: '1b500e775e5fdc48104cadab337706bd796a1d0313a0da1cc6d8477da682b067',
     },
     process: {
         old: 'os',
         now: 'process',
-        expected: 'ef0d12bcfa08cb37d4586b9783068818724ed2857faf4a71386929571bb7049f',
+        expected: '383d9bb7631069f57da46121e0cb59335e72bf9d17ca2f3413fdfa3d477af97e',
     },
     hash: {
         old: 'crypto',
         now: 'hash',
-        expected: 'e24d1896575924d33fec0d21de336dda49114dc1cadc8f05575e8a94bef57bd8',
+        expected: '12413456bca0e1bd6addac79b386d168757f05386aa0188d00ea1ba5f6ae69cf',
     },
 }
 
-const key = input.test_name.split('.')[1].split('_')[0]
+// A sweep copy is named `<sweep>:<source plan>:<test name>` (H120), so the last dot-segment is
+// the test name whether this runs from its own plan (`rename.env_graph_identity`) or from a copy
+// of it (`poison:modules.rename_identity:rename.env_graph_identity`).
+const key = input.test_name.split('.').pop().split('_')[0]
 const kase = CASES[key]
 if (!kase) throw new Error(`no identity case for test ${input.test_name}`)
 
@@ -60,7 +63,14 @@ const rewrite = (value) => {
     }
     if (Array.isArray(value)) return value.map(rewrite)
     if (value && typeof value === 'object') {
-        return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, rewrite(v)]))
+        // origin is an opaque per-build identifier for a source position, not part of the graph:
+        // it is renumbered whenever any other source file changes, which would make this digest a
+        // snapshot of the whole tree instead of a check on the rename.
+        return Object.fromEntries(
+            Object.entries(value)
+                .filter(([k]) => k !== 'origin')
+                .map(([k, v]) => [k, rewrite(v)]),
+        )
     }
     return value
 }
