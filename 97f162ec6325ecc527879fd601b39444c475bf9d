@@ -1,0 +1,342 @@
+# H45 报告
+
+分支：`handover/H45-loop-in-arm`，最后提交：本文件所在的提交（前面是 `0f56e65b`、`eddf5ace`、
+`38e7a9cf`、`97f162ec`）。
+
+## 做了什么
+
+- **`0f56e65b` fix(runtime): an arm starts at the first node of its range** — `ExecPlan` 里分支臂的入口
+  不再按节点种类过滤，改成"这条臂的区域在执行顺序里的第一个位置"。只动
+  `src/execute/graph_runtime_support.cpp` 的 `BranchArmEntries`（`first` 数组的填法），
+  `last`/末尾、BRCH 之前的守卫、`loop.begin` 的算法都没动；`include/camel/runtime/exec_plan.h` 的注释
+  同步说明"入口可能只是臂里的一个端口或常量，循环的事件在这个位置上先跑"。技术文档
+  `docs/technical/17_graph_rewrite_api_contracts.md` 4.1 与 `docs/technical/39_loops.md` 第 4 节写进
+  同一个规则。
+- **`eddf5ace` test(loops): a loop in a branch arm gives the function-body value** — 新计划
+  `test/plans/feat/linear/loops_in_arms.plan.toml` 与两个用例 `test/cases/loops/arm_loops.cml`、
+  `arm_loops_edges.cml`；每个期望值先手算、再手动在四个后端上跑过才写进计划。同时删掉
+  `compiled.cml` 头注释里"a loop in the arm of a branch"这一句——它声称的形状那个用例里并没有。
+- **`38e7a9cf` test(cpp): the loops-in-arms cases also agree as generated C++** — 把两个新用例加进
+  `test/tools/cppexec/expect.txt`，`feat.trans.cpp.agree_with_fvm` 会用系统 C++ 编译器把
+  `std::cpp` 生成的程序编译并跑，和 `std::fvm` 比。
+- **`97f162ec` docs(handover): H45 report** — 本报告的第一版（修复的因果链与矩阵）。
+- **本提交**，补上 H45 要求里还差的三项：
+  1. **提交时的区域检查**（要求 3 的后半）：循环的 cond/body 区域必须是循环所在区域的子区域，
+     否则提交被拒绝（`src/runtime/branch_arms.cpp`，与臂不变量同一处）。只有用 draft API 手工
+     构造才可能违反，所以另加一个只测试用的遍 `test::arm_loop_regions` 造出这种图并验证提交被拒。
+  2. **修复前的值**（要求 1）：只把 `BranchArmEntries` 里 `first` 的算法临时改回修复前，重新构建，
+     记下两个用例每个形状的值，再恢复、重新构建。数据在"修复前的值"一节。
+  3. **两个新形状**：一条臂里"循环的循环"（`nested_loops`，18）与"一条臂里既有循环又有另一个
+     `if`"（`three_deep`，区域三层深：42 / 12 / -1），加进 `arm_loops_edges.cml`，四个后端 +
+     `std::cpp` 都对过。
+
+  同时：`docs/technical/17_graph_rewrite_api_contracts.md` 4.1 写进这条区域规则与它的一条报错示例。
+
+## 根因（因果链）
+
+**症状**（develop `a0b92060` 上，四个后端都一样）：任务里的 `maybe(true, [1, 2, 3])` 打印 5。
+手动探到的更多情况：`[1,2,3,4]`→9、`[10,20,30]`→50、`[7]`→0、`[1,1,1]`→2；else 的值改成
+`0`/`10`/`100` 仍是 5。H43a 报告里另外两种：同一个表达式前面多几个节点时打印 3；同一个程序里连续
+调用三次打印 `5 -1 -1`（后两次"走了 else"）。可见不是"少算一轮"这么整齐，而是第一轮读到了别的槽。
+
+1. **前端是对的。** 臂被建成 `Arm` 区域（`Builder::buildArm`，`src/compile/gir/builder_control.cpp:762`），
+   循环的 cond/body 是 `LOOP` 自己的 `LoopCond`/`LoopBody` 区域（`visitLoopNode`）。`std::gir_regions`
+   与 `std::jgir` 的转储确认：循环体的端口（状态、元素）在 `LoopBody` 区域里，常量 `0`、`-1`
+   在区域 0。区域本身没有错。
+2. **排布也对。** `computeExecutionOrder`（`src/execute/graph_runtime_support.cpp`）把每条臂排成
+   BRCH 之后、JOIN 之前的一段连续区间；循环的 cond、body、`LOOP` 节点都在这一段里。
+   `buildLoopTables`（`src/execute/exec_plan.cpp:150-167`）把一段里属于 cond/body 区域的位置收集起来，
+   `loop.begin` 取 **cond 区域的第一个位置，没有 cond 时取 body 区域的第一个位置**——对 `for`，
+   那就是循环体区域的第一个节点。循环体第一个节点通常是**端口**（`for x in xs` 的 `x`、状态 `acc`），
+   因为 `do` 的表达式在端口之后。
+3. **错在"臂从哪个位置开始执行"。** `BranchArmEntries`（`src/execute/graph_runtime_support.cpp:651`
+   附近）为每条臂算入口时用的是另一套规则：跳过 `Data`/`Port`/`Sync`/`Gate`，取"第一个真正干事的
+   节点"（旧代码里的 `runs` 过滤）。臂里是循环时，臂区域里最先出现的位置全是循环体区域的端口，
+   于是臂入口落到端口之后的第一个算子——`maybe` 这个例子里是 `:op/add_l`，而 `loop.begin` 是
+   状态端口。两个地方各算了一次"区域从哪开始"，而臂入口这一份多了"什么算执行"的知识，两份不一致。
+4. **解释器按入口跳，跳过位置上的循环事件。** NodeVM 在 BRCH 处把 `tillNode` 设成
+   `branchArmEntriesOf(i)[arm]`（`src/passes/sched/nodevm/nodevm.cpp:457`），入口之前的节点走
+   `continue`（:300-318），而 `stepLoops` 在这之后才调用（:322-334）。于是 `loop.begin` 位置上的
+   `Begin` 与第一轮的 `Test` 没发生：body 的端口没绑值，`add` 读的是槽里原有的东西（同一帧里
+   上一个算子的结果或未初始化值），`loopEnd` 用这个垃圾值当第一轮的结果，真正的第一轮被丢掉。
+   这解释了所有观察：丢掉的是"第一轮读到什么"，所以结果等于"总和减去第一轮的正确值再加上槽里的
+   垃圾"，随排布而变（5、3、`-1 -1`）。
+5. **四个后端同一原因。** FastVM/JIT 在 BRCH 处生成到 `branchArmEntries[arm]` 的 JUMP
+   （`src/passes/sched/fastvm/compile.cpp:416-423`），循环事件是排布位置上的 `LBEG`/`LTST`/`LEND`
+   三条指令，跳过位置就跳过事件；Taskflow 的 `runLinearBody`（`src/passes/sched/taskflow/taskflow.cpp:1368-1403`）
+   与 NodeVM 同构；宏求值器（`src/execute/macro/eval.cpp:1041`）读同一张表。所以它们一致地错，
+   而不是"JIT 比解释器更错"。
+6. **为什么 `std::cpp` 本来就对**：`FunctionEmitter::lowerBranch`（`src/passes/trans/cpp/function_emitter.cpp:1145`）
+   按区域切臂，`lowerSequenceBody`/`lowerLoop` 按区域归属把循环自己的节点放回循环里，不看臂入口。
+
+**修复**：臂入口取"这条臂的区域在执行顺序里的第一个位置"，不管那个位置的节点是什么。执行一个端口
+或常量在四个执行器里都没有语义作用（`Data` 在解释器里什么都不做），但**位置上的循环事件必须发生**：
+"什么是执行"的知识留在执行器里（`stepLoops` 在每个位置上一律处理循环事件），计划只回答"臂从哪开始"。
+修复后 `first` 与 `buildLoopTables` 用的是同一条规则（区域里的位置，不看种类），"区域从哪开始"
+只剩一个事实。
+
+**验证修复确实打在这一点上**：修复前 `std::gir`/`std::jgir` 转储里 `maybe` 的执行顺序是
+`… N08(flag) BRCH, N0E(状态端口), N0F(元素端口), N10(add), N11(LOOP), N12(JOIN)`，
+`loop.begin = N0E`、旧臂入口 = `N10`；修复后入口 = `N0E`。任务里的例子在
+`std::nvm`、`std::fvm`、`std::prl`、`std::jit`、`std::jit(hot_threshold=0)`、
+`std::opt::inline std::fvm`、`std::prl(bytecode=false)`、`std::macro` 上都打印 6。
+
+## 提交时的区域检查
+
+修复让"臂从哪开始"只剩一个算法，但还有一个相关的事实此前没有任何检查：**循环的两块区域必须在
+循环所在的地方**。如果一次改写把循环留在臂里、把它的 body 区域挪到图的主体（或另一个区域），排布与
+臂区间就会不一致，而图看上去仍然完好。
+
+- 位置：`src/runtime/branch_arms.cpp` 的 `validateRuntimeBranchArms`（臂不变量同一处，每次提交都跑；
+  前端编码、`RuntimeGraphDraftSession::commit`、`GraphDraftGroup::encode` 都经过它）。
+- 规则：对每个活的 `LOOP`，它的 `LoopCond`/`LoopBody` 区域（`ControlRegions::loopPartsOf`）的
+  `parentControl` 必须等于循环的 `controlOf`，并且 `within(part, 循环所在区域)`。也就是说循环在臂里，
+  两块区域就是那条臂的区域（或臂里更内层区域的子区域）；循环在另一个循环的体里，就在那个体里。
+- 报错同时给出循环、它所在的区域和那块区域实际所在的区域，例：
+
+  ```
+  Runtime graph 'then_for' breaks the branch-arm invariant: LOOP 8 is in arm 0 of BRCH 3 (region 1) but
+  its body region 4 is a region of the body (region 0): the condition and the body of a loop are regions
+  of where the loop is (see docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+  ```
+
+- **从源码建不出违反的图**（前端在写循环的地方直接建出这两块区域，`visitLoopNode`），所以这个检查
+  不能用 `.cml` 用例覆盖。按任务允许的方式，另加一个只测试用的遍 `test::arm_loop_regions`
+  （`src/passes/test/arm_loop_regions.cpp`，`CAMEL_ENABLE_TEST_PASSES=1` 时存在）：找到第一条跑在臂里
+  的循环，用 draft API 给它加一个父区域是图主体的第二个 `LoopBody` 区域，提交，打印
+  `ARM_LOOP_REGIONS refused: …`；提交被拒绝后程序照旧运行。计划里以 `loops_in_arms.regions` 固定住
+  这条消息、退出码与"程序仍然打印矩阵"。
+- 这条检查只是把执行器早已假定的结构写成提交时的不变量：四个执行器和 `std::cpp` 都按区域切循环，
+  没有一处能处理"循环在臂里、body 在主体"的图。没有新增语义，也没有开关。
+
+## 修复前的值
+
+做法：把 `BranchArmEntries` 里 `first` 的算法临时改回修复前（`runs` 过滤 + `runs &&` 判断），
+`camel-build.ps1` 重新构建 Release，跑下面这些程序，记下输出；然后 `git checkout --` 恢复该文件、
+重新构建（这一步之后的所有数字都来自修复后的构建）。矩阵里的 `two_states` 在修复前会直接崩溃
+（`0xC0000005`，access violation），所以其余形状另写成只跑一个形状的小程序
+（`D:\Temp\h45\pre\*.cml`，每个函数体取自 `arm_loops.cml`，没有提交）。
+
+**`arm_loops.cml`（`std::nvm`，修复前；四个后端都失败）**
+
+| 行 | 修复前 | 修复后 |
+|---|---|---|
+| `then` | 5 | 6 |
+| `then.false` | -1 | -1 |
+| `else` | 5 | 6 |
+| `else.false` | -1 | -1 |
+| `while` | -1 | 3 |
+| `two` | **崩溃**（`0xC0000005`，矩阵在这里中断，后面的行都没有打印） | `(5, 10)` |
+
+**逐形状（各自单独一个程序，`std::nvm`）**
+
+| 形状 | 修复前 | 修复后 |
+|---|---|---|
+| `two_states(true, 4)` | 崩溃（`0xC0000005`） | `(5, 10)` |
+| `then_more(true, [1,2,3])`（`s * 10 + 1`） | 51 | 61 |
+| `body_if([1,2,3,4])` | 6 | 6 |
+| `match_arm(1, [1,2,3])` / `(2, …)` | `5 -1` | `6 -1` |
+| `two_arms(true, …)` / `(false, …)` | `5 5` | `6 106` |
+| `collecting(true, 4)` / `(false, 4)` | `[0, 7, 7, 7] [9]` | `[0, 7, 7, 7] [9]` |
+| `then_for(true, [1,2,3])` 调两次 | `5 5` | `6 6` |
+| 根图的臂（`[4, 5]`） | 5 | 9 |
+
+`body_if` 与 `collecting` 修复前就是对的：`body_if` 的循环体第一轮只有一个端口读 `x`，`if` 在它
+之后；`collecting` 的循环在第一轮之前没有依赖上一轮状态的算子。这也说明缺陷不是"少算一轮"，而是
+"第一轮读到什么"。
+
+**`arm_loops_edges.cml`（`std::nvm`，修复前整跑）**
+
+```
+empty 0
+for-while 0 0
+nested 0
+nested-loops 15 -1
+three-deep 195 10 -1
+macro 2270512406193 -1
+four -4
+sum -1
+sync 0
+const-body 5 -1
+two-loops 11
+initial 26 -1
+feeds 46 46 0
+```
+
+修复后：
+
+```
+empty 0
+for-while 3 -1
+nested 150
+nested-loops 18 -1
+three-deep 42 12 -1
+macro 6 -1
+four 24
+sum 6
+sync 7
+const-body 5 -1
+two-loops 18
+initial 26 -1
+feeds 12 1 0
+```
+
+`macro` 那一行的修复前数字每次运行都不同（读取未初始化的槽），1900 亿到 2600 亿之间；这里记的是
+其中一次。`const-body` 与 `initial` 修复前就是对的（循环体没有算子；初值在臂里算但循环的状态端口
+在区域开头）。
+
+**计划层面**：修复前的构建上 `loops_in_arms.plan.toml` 是 23 个测试 **0 通过、23 失败**（矩阵的每个
+测试都因为崩溃或值不同失败，`edges.macro` 也失败，`regions` 因为 `then 6` 不再打印而失败）；
+修复后 23 / 23。
+
+## 设计上的选择
+
+1. **入口 = 区间的第一个位置，不再按节点种类过滤。** 考虑过的其他做法：
+   (a) 保留过滤，另加"这个位置上有循环事件就用它"——那要把循环的排布知识再抄一份进
+   `BranchArmEntries`（同一位置可能有多条事件、有嵌套循环、循环可能没有 body 节点），正是缺陷 3 的
+   同一种错误；
+   (b) 把 `loop.begin` 改成"body 的第一个算子"——不行，第一轮的 `Begin`/`Test` 必须在 body 端口
+   绑定之前发生，而且 body 可以没有算子（常量体，见 `arm_loops_edges.cml` 的 `const-body`）。
+   选 (1)：一个事实（区域从哪开始）只有一个算法。
+2. **只改入口，不改末尾。** 末尾仍是区间里最后一个节点（"末尾之后跳到 JOIN"），语义没变；
+   加注释说明入口为什么必须是区间开头。
+3. **当作缺陷修，不新增语义。** 臂里的循环本来就该等于函数体里的同一个循环：臂不变量
+   （`docs/technical/17_graph_rewrite_api_contracts.md` 4.1）说臂是 BRCH 与 JOIN 之间的一段，
+   循环是这一段里的一段（`docs/technical/39_loops.md` 第 4 节）；"循环是一段连续的排布"这一点在
+   臂里没有例外。没有开关、没有旧行为、没有兼容层。
+4. **区域检查放在臂不变量所在的地方，而不是 `ControlRegions` 的构造里。** 它和臂不变量是同一种
+   事实（"区域说的运行时机与排布一致"），失败方式也相同（提交时的 `PassInternalError`，带图名、
+   节点、区域）；`ControlRegions` 只是区域的索引，不该抛错。检查只看活节点，与实际执行的图一致。
+5. **违反的图用只测试用的遍造，不用 `.cml`。** 源码建不出这种图（见上），而任务允许"只能手工构造
+   时用 ASSERT/专门测试"；这里没有用 `ASSERT`（Debug 才有），而是保留成所有构建都有的提交检查，
+   另用 `test::arm_loop_regions` 在 Release 与 Debug 上都能验证它真的拒绝。这与 `test::leak_branch_arm`
+   验证条款 6 的方式一致。
+6. **测试放在新计划 `loops_in_arms.plan.toml`，不追加到 `loops.plan.toml`。** 这个缺陷是"区域 ×
+   循环"的一类交互，新计划可以单独跑（`-Plan test/plans/feat/linear/loops_in_arms.plan.toml`），
+   也在 Debug 层跑（`debug_tier = true`）。
+7. **文档写在技术文档（17 的 4.1、39 的第 4 节），没改设计原则。** 语义没有变化（修复前是缺陷），
+   设计原则不需要为它加一条；协调者也确认了这一归属（见"待决问题"Q1）。
+8. **`expect.txt` 加两个用例**：`std::cpp` 的切臂方式不受这次修复影响，但把新用例纳入
+   "生成的 C++ 与 fvm 逐字节一致"的检查，成本是每次多编译两个程序（约 1.7 s）。
+
+## 用户可见的变化
+
+修复前后（同一程序，`std::nvm` 与其余三个后端一致）：
+
+```camel
+func maybe(flag: bool, xs: int[]): int {
+    if flag then loop acc = 0 for x in xs do acc + x else -1
+}
+func main(): int sync {
+    println(maybe(true, [1, 2, 3]))     // 修复前 5，修复后 6
+    return 0
+}
+```
+
+| 程序 | 修复前 | 修复后 |
+|---|---|---|
+| `maybe(true, [1,2,3])` | 5 | 6 |
+| `maybe(true, [1,2,3,4])` | 9 | 10 |
+| `maybe(true, [10,20,30])` | 50 | 60 |
+| `maybe(true, [7])` | 0 | 7 |
+| `maybe(true, [1,1,1])` | 2 | 3 |
+| H43a：前面多几个节点再调用 | 3 | 6 |
+| H43a：同一程序调用三次 | `5 -1 -1` | `6 6 6` |
+| 臂里两层循环（`nested_loops`） | 15 | 18 |
+| 臂里"循环 + 另一个 `if`"（`three_deep`） | `195 10 -1` | `42 12 -1` |
+
+既有期望输出没有任何一处改动（`loops.plan.toml` 的 110 个测试的期望值一字未动）；新增测试的期望
+是新写的，先手算、再手动跑过四个后端。`loops.compiled` 的注释删掉了一句不成立的描述，输出不变。
+
+## 测试
+
+**新计划 `loops_in_arms.plan.toml`（23 个测试）**。期望值全部先手算：
+
+| 名称 | 形状 | 手算 | 覆盖 |
+|---|---|---|---|
+| `loops_in_arms` | 整条 `then` 臂 / 整条 `else` 臂 / 臂里的 `while` / 两状态循环 / 循环后还有语句 / body 里的 `if` / `match` 臂里的循环 / 两条臂各一个循环 / 收集循环 / 同一函数调用两次 / 根图的臂 | `6 -1 / 6 -1 / 3 / (5,10) / 61 / 6 / 6 -1 / 6 106 / [0,7,7,7] [9] / 6 6 / 9` | nvm, fvm, jit, prl（`backends_agree`） |
+| `loops_in_arms.compiled` | 同上 | 同上 | nvm, fvm, jit_hot_threshold0, inline_jit_hot_threshold0 |
+| `loops_in_arms.inline` | 同上 | 同上 | nvm, inline_nvm, inline_fvm, prl_no_bytecode |
+| `loops_in_arms.edges` | 空数组 / `for … while` / 循环体里的臂再套循环 / **循环的循环在臂里** / **臂里循环 + 另一个 `if`（区域三层）** / 宏函数的臂 / 一个表达式里四次调用 / `sync` 臂里循环后有效应 / body 忽略状态 / 一条臂里两个循环 / 初值在臂里算 / 循环的值喂给条件 | `0 / 3 -1 / 150 / 18 -1 / 42 12 -1 / 6 -1 / 24 / sum 6, 7 / 5 -1 / 18 / 26 -1 / 12 1 0` | nvm, fvm, jit, prl |
+| `loops_in_arms.edges.compiled` | 同上 | 同上 | nvm, fvm, jit_hot_threshold0, inline_jit_hot_threshold0, prl_no_bytecode |
+| `loops_in_arms.edges.macro` | 宏求值器跑宏函数臂里的循环 | 同上（`macro 6 -1`） | `std::macro std::fvm` |
+| `loops_in_arms.regions` | `test::arm_loop_regions` 把循环的 body 区域挪出臂，提交必须被拒绝 | `ARM_LOOP_REGIONS refused: … is in arm 0 of BRCH … but its body region … is a region of the body (region 0)`，程序仍然打印 `then 6` | `test::arm_loop_regions` + `std::nvm` |
+
+新形状的手算：
+`nested_loops` 外层 `i = 1, 2, 3`，内层 `1 + 2 = 3`、`2 + 4 = 6`、`3 + 6 = 9`，合计 18；
+`three_deep(true, true, [1,2,3])` 是 `s = 6`、`u = 10 + 20 = 30`、`t = 30 + 6 = 36`、`6 + 36 = 42`；
+`(true, false)` 是 `6 + 6 = 12`；`(false, …)` 是 -1。
+
+**回归与全套**
+
+| 运行 | 结果 |
+|---|---|
+| `loops_in_arms.plan.toml`（Release） | 23 / 23 |
+| `loops_in_arms.plan.toml` + `loops.plan.toml`（`-Tier debug`，Debug 构建） | 23 + 110 全过 |
+| `loops.plan.toml`（Release） | 110 / 110 |
+| `parse/frontend.plan.toml`（`ast_hashes.txt` 只改 `arm_loops_edges.cml` 一行） | 4 / 4 |
+| `opt/regions.plan.toml`、`opt/edges.plan.toml`（区域与提交检查的邻居） | 7 / 7、4 / 4 |
+| `modules/autodiff.plan.toml`（臂提成子图、循环提成图，走 `raiseBranchArms`/`outlineLoopRegions`） | 150 通过，5 跳过（缺 torch），0 失败 |
+| `jit_framed.plan.toml` | 56 / 56 |
+| `jit_native.plan.toml`、`control_flow_and_ops.plan.toml`、`consistency/match.plan.toml`、`compile/branch_exit.plan.toml` | 全过 |
+| 快层：`-Plan "smoke,test/plans/feat" -Jobs 8` | **4717 个测试：4692 通过，0 失败，25 跳过**（15 个 ONNX Runtime 未安装的 `ort_*`，10 个 VS Code 语法依赖未安装的 `grammar.scopes.*`，都是既有的前置条件跳过） |
+| `python test/tools/cppexec/run.py test/cases/loops/arm_loops.cml test/cases/loops/arm_loops_edges.cml --jobs 2` | 2 个程序，2 个与 `std::fvm` 一致，2 个 standalone（不链接运行时），clang++ |
+| `node scripts/check-doc-links.mjs --all` | 264 个文档，无断链 |
+| `node scripts/check-std-includes.mjs` | 1015 个文件，通过 |
+| `python test/tools/parsecheck/check.py snapshot --update` | 只改 `arm_loops_edges.cml` 的哈希一行（用例改了内容） |
+
+**手动跑过的命令**（每条都在 `std::nvm`、`std::fvm`、`std::jit`、`std::prl`、
+`std::prl(bytecode=false)`、`std::jit(hot_threshold=0)`、`std::opt::inline` 后面接
+`std::nvm` / `std::fvm` / `std::jit(hot_threshold=0)` 上逐条比对输出，全部相同）：
+
+```powershell
+$env:CAMEL_HOME = "D:\Projects\Camel-wt\h5b-operators\out\latest"
+& camel test\cases\loops\arm_loops.cml std::nvm
+& camel test\cases\loops\arm_loops_edges.cml std::nvm
+python test\tools\cppexec\run.py test/cases/loops/arm_loops.cml test/cases/loops/arm_loops_edges.cml --jobs 2
+# 2 programs, 2 same, 2 standalone, exit 0（生成的 C++ 与 fvm 一致）
+```
+
+## 自查（第 2 节逐条）
+
+1. **核心按名字认具体的东西**：没有。改动只读区域与排布位置，没有节点种类、URI 或名字判断
+   （其实是**删掉**了一个按种类的判断）；新的区域检查按区域种类（`LoopCond`/`LoopBody`）与父子关系
+   判断，不认名字。
+2. **另造一套相似的机制**：没有。用的是既有的 `ControlRegions`/`ExecPlan`/`validateRuntimeBranchArms`；
+   把两份"区域从哪开始"的算法合并成一份，又给"循环的区域在哪"补上提交时的检查。
+3. **同一事实写在多处**：这次缺陷正是这一类的实例（`buildLoopTables` 与 `BranchArmEntries` 各算
+   一次"区域起点"，只差一个 `runs` 过滤）。修复后两处规则相同；区域检查与执行器按区域切循环的假定
+   一致（执行器没有任何地方处理"循环在臂里、body 在主体"）。没有引入新的重复。
+4. **写死的上限与封闭的枚举**：没有新增。
+5. **临时裁定语义**：没有。臂里的循环等于函数体里的循环，这是既有契约；区域规则是结构不变量，
+   不是语义选择。没有新的语义开关。
+6. **为了让测试通过而改**：没有。既有期望输出一字未动；新期望先手算再手动跑；`compiled.cml`
+   删掉的是一句不成立的注释，不是期望值。修复前的数据是把修复临时改回去测出来的，报告里如实列出，
+   没有为了让数字好看而挑选形状。
+7. **兼容层与过渡方案**：没有。没有开关、别名或"旧行为"。
+8. **只做一个后端**：没有。四个调度器 + 宏求值器 + JIT（编译与不编译、内联与不内联）+ `prl`
+   无 bytecode + `std::cpp`（生成的 C++ 编译后运行）都验证了；ONNX 导出对循环的拒绝是既有行为
+   （`loops.onnx_refused`），与臂无关；自动微分穿过臂里的循环也手动确认过（`f(x)=x⁴` 在 2 处
+   的前向 16、梯度 32，与没有臂时相同）。
+
+## 待决问题
+
+### Q1：`docs/design/...` 或裁定记录要不要写明"分支臂的入口是区域区间的第一个位置"
+
+- **已由协调者答复：不写进裁定记录，留在技术文档即可**（这属于缺陷修复，不是新语义）。
+  所以 17 的 4.1 与 39 的第 4 节保留这条规则，`docs/design-principles*.md` 没有改动。
+
+## 没做完的
+
+- **`std::cpp` 生成的代码里，每个调用点的错误消息是坏的**（与本次无关，顺手发现）：
+  `at_<line>_<col>` 的 `rt::Site` 把 `MaxRecursionDepthExceeded` 的消息在生成时预渲染，递归深度
+  上限写成了 `\0370`（如 `func add` 的简单程序也有）。`rt::call(depth, site)` 只在真的超深度时
+  用它，所以不影响正确值，但用户拿生成的 C++ 编译后看到的报错文本是错的。协调者已记录，另开任务
+  （`std::cpp` 的错误位置表），本分支不碰。
+- **自动微分穿过"臂里的循环"**没有加回归用例：手动验证是对的（前向与梯度都与函数体版本相同），
+  但 `modules/autodiff.plan.toml` 里没有这个形状；它属于自动微分那条任务的范围（H43 第 3 项），
+  这次没有扩。
+- **ONNX 导出**对循环的翻译仍是"拒绝"（既有行为），臂里的循环同样在循环处被拒绝；ONNX Loop
+  的翻译不在本任务范围。
+- **`test/tools/cppexec/expect.txt` 的两个新条目**只在本机用 `run.py` 手动跑过（2/2 一致）；
+  `feat.trans.cpp.agree_with_fvm` 计划是慢层，没有整计划跑（规则不允许跑慢层/全套）。
