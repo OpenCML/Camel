@@ -24,6 +24,7 @@ module array
 
 import algo
 import math
+import { is_numeric } from types
 
 // The primitives are declared here, for this module only, and answered on the `array` protocol
 // (H19 step 5). They are pure and return a new array.
@@ -120,7 +121,7 @@ export func count::<T>(xs: T[]): int {
 
 /// The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
 /// @example sum([1, 2, 3])    // 6
-export func sum::<T>(xs: T[]): T {
+export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
     let zero: T = 0
     let add: (a: T, b: T) => T = (a, b) => a + b
     return xs->reduce<add, zero>

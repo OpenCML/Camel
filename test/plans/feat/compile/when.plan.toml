@@ -217,11 +217,11 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "when.types_module"
-desc = "The standard module `types` loads and builds: the seven predicates are ordinary library functions with `match type` bodies, so compiling the module exercises the identity patterns it is written with even though a caller cannot resolve one through the import yet."
+desc = "The standard module `types` is imported and one of its head-only predicates is called from a `when` condition: the imported template keeps its type parameter, is instantiated with `T`, and its identity cases answer the condition."
 kind = "behavior"
 case = "../../../cases/compile/when/types_module.cml"
-args = ["${case}"]
+args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = ""
+expect_stdout_exact = "numeric\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

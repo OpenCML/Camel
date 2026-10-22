@@ -74,3 +74,24 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenPredicateAmbiguous"
 expect_output_contains = ["ambiguous", "'when_import_predicates'", "'when_import_predicates_other'"]
+
+[[tests]]
+name = "when_import.array_sum"
+desc = "The standard `array.sum` applies to integers: its declaration in another module says `when is_numeric::<T>()`, and `is_numeric` resolves through that module's import of `types`."
+kind = "behavior"
+case = "../../../cases/compile/when_import/array_sum.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when_import.array_sum_unmet"
+desc = "The same standard declaration with non-numeric elements: the imported predicate folds to false, so the call is reported as inapplicable instead of failing in the body."
+kind = "negative"
+case = "../../../cases/compile/when_import/array_sum_unmet.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_output_contains = ["is_numeric::<T>()", "every candidate's 'when' condition is false"]

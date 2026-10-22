@@ -111,6 +111,13 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/tensor.cml',
     },
+    {
+        name: 'types',
+        title: '`types`: the properties of types',
+        kind: 'camel',
+        // The predicates are head-only generic functions whose `match type` cases name the
+        // types the language spells, so a `when` condition can ask a property of a type.
+    },
     { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
     {
         name: 'math',

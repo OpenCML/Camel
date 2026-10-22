@@ -1,0 +1,13 @@
+/**
+ * The standard `array.sum` applies only where its element type is numeric: its declaration says
+ * `when is_numeric::<T>()`, and `is_numeric` is imported from `types` where that declaration is
+ * written. The call with integers satisfies the condition and runs the ordinary body.
+ */
+module when_import_array_sum
+
+import array
+
+func main(): int sync {
+    println(array::sum([1, 2, 3]))
+    return 0
+}
