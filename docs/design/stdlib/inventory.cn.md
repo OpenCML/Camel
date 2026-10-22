@@ -195,7 +195,7 @@
 - **默认可见（prelude）**：只有 globals（模块名 ""）一个，名字写死在 src/builtin/modules/globals.cpp，用户不可扩展。优先级里"内建"最低，用户模块可覆盖。没有"再导出（re-export）"之外的 prelude 配置机制（`export { a, b }` 只导出本模块已声明的名字；是否支持转导出：未验证）。
 - **资源名可见性**：原则 3.3 说基础资源默认可见，语言层 `resource`/`uses` 语法目前没有（推断）。
 - **版本**：模块无版本号。C++ 模块有 ABI 版本 `CAMEL_MODULE_ABI_VERSION = 3`（include/camel/core/module/dynamic.h），.cmo 导出 `camel_module_abi_version()` 与 `camel_module_create(Context*)`，加载前检查。原则 10.5 要求"公开 C++ 接口按版本承诺兼容"，尚未建立；.cml 模块没有版本、没有包清单。
-- **模块缓存**：`.cmo` 缓存（`__cmo__/`）默认关闭。C++ 模块与缓存共用扩展名，靠文件头区分。
+- **模块缓存**：`.cmc` 缓存（`__cmc__/`）默认关闭，尚未实现；见设计原则 10.3。
 - **C++ 模块声明签名的方式**：每个模块在 `module.cpp` 里继承 `BuiltinModule`，构造函数用 `exportEntity(name, OperatorGroup)`/`exportType` 导出；类型规则用 `StaticFuncTypeResolver`（固定签名）或 `DynamicFuncTypeResolver`（按实参算，用户重载会悄悄胜出，评审 frontend #11）；`load()` 里 `registerExecutorFactory`、`OperatorTable::declare` 声明纯度、`declareResources` 声明资源、`declareSemantics` 声明数值语义（只有 tensor 做）。tensor 另用 `OpDef`（name/exports/params/infer/kernel/traits，modules/tensor/ops）一个条目生成多项。
 - **stdlib/signatures 的角色**：纯参考元数据，不编译；`node scripts/stdlib-reference.mjs --write` 生成 docs/stdlib-reference.md，`--verify-ops` 对照 `camel inspect --ops` 检查算子名、参数个数、纯度是否一致。只覆盖 18 个模块，是三处来源之一。
 - **用 Camel 写的库怎么被找到**：`stdlib/*.cml` 随 collect-out 拷到 `out/latest/stdlib/`，按文件名导入；它们是泛型函数，在调用模块按元素类型实例化，全程序一张 `__root__`。库可以导出值（C++ 的 `math::pi` 也是值）；不能导出 `var`；既有标注函数又有其他重载的名字目前不能导出（ConstructNotSupported）。
