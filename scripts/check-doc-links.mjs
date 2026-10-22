@@ -5,6 +5,8 @@
 //   node scripts/check-doc-links.mjs            the reader-facing documents (see SCOPE)
 //   node scripts/check-doc-links.mjs --default-roots  the same, ignoring a script path argument
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
+//   node scripts/check-doc-links.mjs --technical-index  every page under docs/technical is listed
+//                                               in docs/technical/README.md (the list is the tree)
 //   node scripts/check-doc-links.mjs a.md b/    the given files and directories
 //
 // Exit status 1 when a link is broken, 2 when the scope is empty or names a missing entry: a
@@ -104,7 +106,66 @@ function check(file) {
     return problems
 }
 
+// The technical index is a table of links, and a link can only be broken when a row exists:
+// a page that was added without a row, or whose row was lost in a merge, is silent to the link
+// check above. This mode derives the page list from the tree, so the index cannot quietly fall
+// behind it. The pages of a subdirectory (jit/) are pages too; the top-level README is the index.
+const TECHNICAL = path.join(root, 'docs', 'technical')
+const TECHNICAL_INDEX = path.join(TECHNICAL, 'README.md')
+
+function technicalPages(directory = TECHNICAL) {
+    if (!fs.existsSync(directory)) return []
+    const pages = []
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const full = path.join(directory, entry.name)
+        if (entry.isDirectory()) {
+            if (SKIP_DIRS.has(entry.name)) continue
+            pages.push(...technicalPages(full))
+        } else if (entry.name.endsWith('.md') && full !== TECHNICAL_INDEX) {
+            pages.push(full)
+        }
+    }
+    return pages.sort()
+}
+
+function checkTechnicalIndex() {
+    if (!fs.existsSync(TECHNICAL_INDEX)) {
+        console.log('docs/technical/README.md: no such file')
+        return 2
+    }
+    const pages = technicalPages()
+    if (pages.length === 0) {
+        console.log('no page under docs/technical: nothing was checked')
+        return 2
+    }
+    const text = withoutCode(fs.readFileSync(TECHNICAL_INDEX, 'utf8'))
+    const listed = new Set()
+    for (const m of text.matchAll(/!?\[[^\]]*\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) {
+        const target = m[1]
+        if (/^[a-z][a-z0-9+.-]*:/i.test(target)) continue
+        const [rawPath] = target.split('#')
+        if (rawPath === '' || !rawPath.endsWith('.md')) continue
+        listed.add(path.resolve(path.dirname(TECHNICAL_INDEX), decodeURIComponent(rawPath)))
+    }
+    const missing = pages.filter((page) => !listed.has(page))
+    if (missing.length > 0) {
+        for (const page of missing) {
+            const name = path.relative(TECHNICAL, page).replace(/\\/g, '/')
+            console.log(`docs/technical/README.md: no row for ${name}`)
+        }
+        console.log(`${missing.length} page(s) under docs/technical are not listed in its index`)
+        return 1
+    }
+    console.log(
+        `every page under docs/technical is listed in docs/technical/README.md (${pages.length} page(s))`,
+    )
+    return 0
+}
+
 const args = process.argv.slice(2)
+if (args.includes('--technical-index')) {
+    process.exit(checkTechnicalIndex())
+}
 const explicit = args.filter((a) => !a.startsWith('--'))
 const entries = args.includes('--all')
     ? ['.']

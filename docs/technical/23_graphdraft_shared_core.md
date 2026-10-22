@@ -1,5 +1,7 @@
 # `GraphDraft` Shared Editable Core
 
+> **Status (2026-10-22): the migration this page sets out has landed.** Compile-time construction is `DraftGraphBuilder` over `GraphDraft`; [21_gcgraph_runtime_bridge.md](21_gcgraph_runtime_bridge.md) records the current split. Kept as the design record.
+
 This document records the next-stage architectural boundary for editable graphs.
 
 ## 1. Problem Statement

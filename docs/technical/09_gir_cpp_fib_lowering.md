@@ -1,5 +1,7 @@
 # GIR 到 C++ 的 `fib` 特化 Lowering
 
+> **历史。** 本页是 `std::cpp` 之前针对 `fib` 的首版 lowering 契约，它列的 `EXIT` 节点已不存在；现行目标是设计原则 10.6 与 [`docs/design/cpp-standalone`](../../docs/design/cpp-standalone/README.cn.md)。保留本页作为记录。
+
 本文档定义 `test/cases/linear/nvm/fib.cml` 的首版 GIR 到 C++ 转译契约，目标不是把现有 `Frame` 机械地搬成一个 C++ 栈上 `slot_t[]`，而是在纯数值图上尽可能把 `Frame` 完全编译掉，让 C++ 编译器直接看到参数、局部变量和结构化控制流。
 
 ## 1. 适用范围

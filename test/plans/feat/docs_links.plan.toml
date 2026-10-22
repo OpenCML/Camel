@@ -2,13 +2,16 @@ id = "docs.links"
 order = 920
 tier = "fast"
 tags = ["feat", "docs"]
-desc = "The relative links of the reader-facing documents point at files and headings that exist"
+desc = "The relative links of the reader-facing documents point at files and headings that exist, and the technical index lists every page under docs/technical"
 
 # scripts/check-doc-links.mjs reads the READMEs, the roadmap, the design principles, the CLI
 # guides, the language reference, the tutorial, the technical index and the example READMEs,
 # and checks every relative link: the file exists and, for a link with a fragment, the target
 # has a heading with that anchor. `node scripts/check-doc-links.mjs --all` checks every
-# document of the repository.
+# document of the repository. Its `--technical-index` mode covers the other half the link
+# check cannot see: a page that was added (or whose row was lost) is not a broken link, it is
+# a page no reader reaches. The mode derives the page list from the tree — every *.md under
+# docs/technical except the index itself, jit/ included — and fails naming each unlisted page.
 #
 # scripts/check-retired-names.mjs reads the same reader-facing pages (plus the Markdown of
 # docs/, editors/, tools/ and scripts/, and the example programs) and fails on a retired name
@@ -40,6 +43,18 @@ case = "../../../scripts/check-doc-links.mjs"
 args = ["${case}", "--default-roots"]
 expect_exit = 0
 expect_stdout_contains = ["no broken links in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "docs.links.technical_index"
+desc = "Every page under docs/technical (jit/ included, except the index itself) has a row in docs/technical/README.md; the page list is derived from the tree, so a page cannot be added, or its row lost, without the check naming it."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--technical-index"]
+expect_exit = 0
+expect_stdout_contains = ["every page under docs/technical is listed in docs/technical/README.md"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 

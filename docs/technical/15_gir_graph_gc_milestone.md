@@ -1,5 +1,7 @@
 # GIR 图生命周期与静态区 GC 里程碑
 
+> **历史（已被取代）。** 本页的根集与静态区迁移建议已由落地的运行期模型取代，见 [21](21_gcgraph_runtime_bridge.md) 与 [23](23_gc_runtime_lifetime.md)；`src/compile/gir/graph.cpp` 已不存在。保留本页作为记录。
+
 ## 1. 目标
 
 本文件对应第三节剩余未完成部分：
