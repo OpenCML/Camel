@@ -107,7 +107,7 @@ func hello(name: string) sync {      // no return value; a sync function body
 - The return type can be omitted and is inferred from the function body; a recursive function must write out its return type. When the body has no `return`, the value of the function is the value of the last statement of the body: that value when the statement is an expression with one, `void` otherwise. Note that the value of `println(x)` is `x` (so that `x->println->f` can go on), so `func main() sync { println('a') }` returns the string `'a'`, and the default pipeline writes the result of `main` to the output: the line appears twice. Declare the return type `: void`, or end with `return 0`.
 - A `sync` before the function body makes the function body a sync block; a `sync` before `func` is a function modifier. The two have different meanings ([4.3](04_execution_model.md#43-sync)).
 - A function can be declared at the module top level, in a namespace, or in a block (a local function). Functions can be mutually recursive, and need not be declared before use.
-- Parameter default values `b: int = 5` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use overloading or `with` parameters.
+- Parameter default values `b: int = 5` of ordinary parameters are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use overloading or `with` parameters. A `with` parameter may have a default ([7.4.2](#742-with-parameters)).
 
 ### 7.4.2 `with` parameters
 
@@ -132,6 +132,28 @@ func main(): int sync {
 ```
 
 `with` parameters are not generic parameters and cannot be used to declare type parameters.
+
+A `with` parameter may write a default, and a call may give its `with` arguments by position or by name:
+
+```cml
+with <rounds: int = 8, strict: bool = false>
+func repeat(x: int): int {
+    return if strict then x * rounds else x + rounds
+}
+
+func main(): int sync {
+    println(repeat(10))                 // both defaults: 18
+    println(repeat<2, true>(10))        // both by position: 20
+    println(repeat<strict: true>(10))   // rounds skipped, strict by name: 80
+    println(repeat<16>(10))             // rounds by position: 26
+    return 0
+}
+```
+
+- **A default is a compile-time constant expression**, evaluated once where the declaration is and filled into the graph at each call: it is not re-evaluated per call. It therefore cannot read a `with` parameter of the same declaration (`WithDefaultNotConstant`), nor be a value computed at run time; a value of the wrong type is `WithDefaultWrongType`.
+- **A parameter after one with a default must also have a default** (`WithParameterAfterDefault`), so that a positional call never leaves a gap before a value.
+- **A named argument comes after the positional ones**, spelled as in a struct literal: `f<rounds: 16>`, `f<strict: true>`. A name that is not one of the function's `with` parameters is `WithArgumentUnknown`, giving one parameter twice is `WithArgumentDuplicate`, and leaving out a parameter with no default is `WithArgumentMissing`. A named argument may only be used in a call; the function value `f<rounds: 8>` binds the arguments it is given in order and applies no default.
+- **A function value carries no defaults**: after `let g = repeat`, every `with` parameter of `g` has to be given. A default belongs to the declaration, not to the type.
 
 ### 7.4.3 Overloading
 
@@ -356,7 +378,7 @@ func main(): int sync {
 
   Two calls that differ only in the string are two graphs, each reading the field its value names.
 - A declaration with a `constas` parameter **has no function value**: the constant must be written at the call, so it cannot be assigned or passed on (`SemanticDiag::ConstasFunctionNeedsCall`). A body-less declaration (the declaration of a C++ operator) cannot take one (`SemanticDiag::ConstasInNativeDeclaration`).
-- The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`): a runtime value cannot select an instance. Constants today are literals, another `constas` value, and compile-time names such as the `n` of `static for` and the `j` of `indices`.
+- The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`): a runtime value cannot select an instance. Constants today are literals, another `constas` value, compile-time names such as the `n` of `static for` and the `j` of `indices`, and a call of a pure function whose arguments are compile-time constants (`label(first_field::<S>())`), which the compiler folds to its value; a call it cannot read at build time is refused by its own name (`SemanticDiag::FoldCallNotEvaluable`, and the other `FoldCall*` diagnostics).
 - `n` is bound only inside the instance body; a type position in the body (`let z: Tensor<f32, [n]>`) has no such scope yet. The array spelling `f32[n]` works as well.
 
 **Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; a function with a `constas` parameter cannot be a value, cannot be combined with a body-less declaration, and an `enum` value cannot yet be a `constas` argument. The design note's `column(constas n, ts)` omits the type; today it is written `column(constas n: string, ..ts)`.

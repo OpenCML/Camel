@@ -246,6 +246,25 @@ enum class SemanticDiag : uint32_t {
     /// No candidate of a call applies: every condition that could take it is false.
     WhenConditionUnmet = 0x0001AC,
 
+    // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
+    // handover H235). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
+    /// A named `with` argument does not name a `with` parameter of the callee.
+    WithArgumentUnknown = 0x0001B7,
+    /// A `with` parameter is given twice, once by position and once by name.
+    WithArgumentDuplicate = 0x0001B8,
+    /// A call gives no value for a `with` parameter that has no default.
+    WithArgumentMissing = 0x0001B9,
+    /// The default of a `with` parameter is not a compile-time constant.
+    WithDefaultNotConstant = 0x0001BA,
+    /// The default of a `with` parameter has a type that does not fit the parameter.
+    WithDefaultWrongType = 0x0001BB,
+    /// A `with` parameter without a default follows one that has a default.
+    WithParameterAfterDefault = 0x0001BC,
+    /// A `with` argument is given by name where the callee's signature is not known.
+    WithArgumentCallee = 0x0001BD,
+    /// A `with` argument is given by name in a binding used as a function value.
+    WithArgumentInValue = 0x0001BE,
+
     // Predicate lookup in a `when` condition (design principles 5.13, 10.2). 0x1BF and up.
     /// A predicate another module declares, but this module does not import it.
     WhenPredicateNotImported = 0x0001BF,
@@ -285,6 +304,17 @@ enum class SemanticDiag : uint32_t {
     /// expression, an open type variable, a type written twice in one case, or a type that an
     /// earlier case already selects.
     StaticMatchPatternCannotMatch = 0x0001C2,
+    // Folding a call of a pure function with constant arguments (handover H271). 0x1C5 and up.
+    /// An argument of a call in a place that needs a constant is not one.
+    FoldCallArgumentNotConstant = 0x0001C5,
+    /// The call has effects: it is `sync`, writes a `var`, or uses a resource.
+    FoldCallHasEffects = 0x0001C6,
+    /// The call nests deeper than the evaluator follows: it recurses without a base case here.
+    FoldCallTooDeep = 0x0001C7,
+    /// The call's result is not a kind a constant can have.
+    FoldCallResultNotConstant = 0x0001C8,
+    /// The call's body uses a construct this build-time evaluation does not read.
+    FoldCallNotEvaluable = 0x0001C9,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

@@ -488,6 +488,10 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     rejectRedeclaredFunction(gct->name(), funcType, gct);
     rejectOperatorConflict(gct->name(), funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, gct->name());
+    // The declaration's `with`-parameter defaults are evaluated here, where the declaration is,
+    // before any body is built: a call written above the definition fills them too, and every
+    // call shares the one value (design principles 4.4, handover H235).
+    evaluateWithDefaults(gct, funcType, graph.get(), false);
     leaveScope();
 
     LEAVE("DECL");
@@ -593,6 +597,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (!annoNodes.empty()) {
         graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
         attachRuleGraphs(decorated, tags.declaration);
+        // The decorated function has the declaration's `with` parameters: a call that leaves a
+        // defaulted one out fills the same value through it.
+        if (const auto found = withDefaults_.find(graph.get()); found != withDefaults_.end()) {
+            withDefaults_[decorated.get()] = found->second;
+        }
         insertDecoratedGraph(name, decorated);
         decoratedOf_[graph.get()] = decorated;
     }
@@ -779,6 +788,10 @@ void Builder::buildFuncBody(
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;
+        // The defaults of the declaration's `with` parameters, in the scope of its body: a
+        // declaration at a module's top level was evaluated already, where it is written
+        // (visitDeclNode), and an instance of a generic one takes its template's (H235).
+        evaluateWithDefaults(gct, funcType, graph.get(), true);
         // A parameter destructured as a tuple: the port is the tuple, and the names take its
         // elements (`((a, b)) => ...` binds as `let (a, b) = p` does). The parameter is one
         // value, so nothing about the call changes; only the names of the body do.

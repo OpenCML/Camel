@@ -59,7 +59,7 @@ for (const l of [
   'RESOURCES node main 12 FUNC countdown: rmw variable (node 5); result unknown',
   'RESOURCES node main 15 CALL: rmw variable (node 2)',
   'RESOURCES node main 19 :var/take: rmw variable (node 18); result may_alias 0',
-  'RESOURCES node main 20 algo:sort_in_place: rmw object (node 19); result same 0',
+  'RESOURCES node main 20 array:sort_in_place: rmw object (node 19); result same 0',
   'RESOURCES node main 23 rand:seed: write ambient rng; external',
   'RESOURCES node main 29 fs:exists: read ambient fs; external',
   'RESOURCES node countdown 12 FUNC countdown: rmw variable (node 0); result unknown',

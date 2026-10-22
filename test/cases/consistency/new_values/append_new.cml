@@ -5,7 +5,7 @@
  */
 module append_new
 
-import { sort } from algo
+import { sort } from array
 
 func main(): int sync {
     let xs = [1, 2, 3]

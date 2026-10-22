@@ -292,6 +292,16 @@ void declareElementaryFunctions() {
     declare("math:min_l", exactInteger("the smaller of two integers (equal values are the same)"));
     declare("math:max_i", exactInteger("the larger of two integers (equal values are the same)"));
     declare("math:max_l", exactInteger("the larger of two integers (equal values are the same)"));
+    // min and max also take the other ordered types: strings by their bytes and bools with false
+    // below true. Comparing and returning an operand is not arithmetic.
+    declare(
+        "math:min_s",
+        exactInteger("the smaller of two strings by their bytes (a proper prefix comes first)"));
+    declare(
+        "math:max_s",
+        exactInteger("the larger of two strings by their bytes (a proper prefix comes first)"));
+    declare("math:min_b", exactInteger("the smaller of two bools, false below true"));
+    declare("math:max_b", exactInteger("the larger of two bools, false below true"));
     declare(
         "math:clamp_i",
         exactInteger("x bounded to [lo, hi]; lo above hi is a fault (the result is one operand)"));

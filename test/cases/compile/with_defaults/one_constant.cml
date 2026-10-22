@@ -1,0 +1,18 @@
+/**
+ * A default is evaluated once, where the declaration is; a call does not evaluate it again.
+ * The two calls below both leave `rounds` out, and the graph of `main` holds one constant node
+ * for the default, which both calls read (design principles 4.4). `std::gir` prints the graph
+ * instead of running it.
+ */
+module with_default_one_constant
+
+with <rounds: int = 4242>
+func bump(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    println(bump(1))
+    println(bump(2))
+    return 0
+}

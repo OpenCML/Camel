@@ -1177,13 +1177,36 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         }
         return false;
     };
+    const auto *withNames = GCT::Tree::of(gct)->withArgumentNamesOf(gct);
+    // A `with` argument may be written by name (`f<rounds: 8>`, design principles 4.4): the
+    // name chooses the parameter the literal takes its type from, and is kept on the argument
+    // for the call to bind (bindWithArguments). A binding used as a value has no names to
+    // resolve them with, and is refused there.
+    const auto slotOf = [&](size_t written) -> size_t {
+        if (withNames == nullptr || written >= withNames->size() || !(*withNames)[written]) {
+            return written;
+        }
+        if (argumentSignature != nullptr) {
+            const std::string &name = *(*withNames)[written];
+            for (size_t i = 0; i < argumentSignature->withTypesCount(); ++i) {
+                if (name == argumentSignature->argNameAt(i)) {
+                    return i;
+                }
+            }
+        }
+        return written;
+    };
     for (size_t i = 1; i < gct->size(); i++) {
-        Type *wanted = argumentSignature && i <= argumentSignature->withTypesCount()
-                           ? argumentSignature->withTypeAt(i - 1)
-                           : nullptr;
+        const size_t slot = slotOf(i - 1);
+        Type *wanted      = argumentSignature && slot < argumentSignature->withTypesCount()
+                                ? argumentSignature->withTypeAt(slot)
+                                : nullptr;
         ExpectedValueScope argumentScope(
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
+        const std::optional<std::string> name =
+            withNames != nullptr && i - 1 < withNames->size() ? (*withNames)[i - 1]
+                                                              : std::nullopt;
         if (!restCall) {
             const GCT::NodeKind kind = gct->at(i)->type();
             // A literal whose type the signature still leaves open takes its type from the
@@ -1202,11 +1225,12 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                 containsTypeVar(wanted)) {
                 // Built at the call, where the ordinary arguments are typed and the signature's
                 // variables have their types (visitLinkNode). A lambda's parameters come from
-                // the parameter it is passed to (design principles 5.9).
-                inputs.push_back({nullptr, gct->at(i)});
+                // the parameter it is passed to (design principles 5.9). The name goes with it:
+                // the binding puts it at its parameter's place before the literal is built.
+                inputs.push_back({nullptr, gct->at(i), name});
                 continue;
             }
-            inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
+            inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i), name});
             continue;
         }
         any res              = visit(gct->at(i));
@@ -1216,7 +1240,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         if (!isCallableName(argNode)) {
             argNode = functionValueOf(argNode, gct->at(i));
         }
-        inputs.push_back({argNode, gct->at(i)});
+        inputs.push_back({argNode, gct->at(i), name});
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());

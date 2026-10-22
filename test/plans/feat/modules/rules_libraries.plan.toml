@@ -1,0 +1,140 @@
+id = "modules.rules_libraries"
+order = 393
+tier = "fast"
+tags = ["feat", "modules", "rules", "rewrite", "accuracy", "fusion"]
+desc = "The first two standard rule libraries (rewrite design 2 (second version) 8.9-8.10): `rules::accuracy`, which turns a log of a softmax and the scalar `log(1+x)`/`exp(x)-1` forms into the accurate operators on licensed functions, and `rules::fusion`, which turns the sigmoid chain 1/(1+exp(-x)) into the sigmoid kernel. The naive softmax and naive log-softmax are deliberately absent: `check` measures the first as worse on f32 and the case `check_rejected_softmax` pins the refusal. Each accepted rule is shown firing with its rewrite count and operator cost, on programs it must not match, and with the same bits on nvm, fvm and jit."
+
+[[tests]]
+name = "rules.accuracy_log_of_softmax_rule"
+desc = "`tensor_log_softmax_of_softmax` fires once on `log(softmax(x, -1))`: two operators become one `log_softmax`."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_logsoftmax_target.cml"
+args = ["${case}", "library_counts::report", "accuracy_schedule::only_log_of_softmax", "library_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["cost composed 2 0 0 0 1 1 0 0 0 0 0", "only_log_of_softmax rewrites 1 rounds 2", "cost composed 1 0 0 0 0 0 1 0 0 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_log_of_softmax_values"
+desc = "`log(softmax(x))` after the pass is `log_softmax(x)`: the gap that rounds a probability to zero gives -300 instead of -inf."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_logsoftmax_target.cml"
+args = ["${case}", "rules::accuracy", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["log of softmax clean -14.18400290608406 -14.18400290608406", "log of softmax gap   -300.0 -300.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_guards_hold"
+desc = "Neither accuracy rule matches `log(exp(x) * 2)` (not a softmax) nor `log(exp(a) / sum(exp(b)))` (the sum is of another tensor): the pass reports zero rewrites and the values are the ones the program computed."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_guard_target.cml"
+args = ["${case}", "accuracy_schedule::all", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["all rewrites 0 rounds 1", "multiplied sum 4.372588634490967", "mismatched sum -3.806684565381147"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_guards_unchanged"
+desc = "The same program without any pass prints exactly the same two values, so the zero rewrites are not a test that would pass on a changed answer."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_guard_target.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "multiplied sum 4.372588634490967\nmismatched sum -3.806684565381147\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fusion_sigmoid_rule"
+desc = "`tensor_sigmoid_chain` fires once: the cost of `chain` goes from four operators (neg, exp, add, divide) to one `sigmoid`; `doubled` and `positive` are left alone, and `after_matmul` fuses only the elementwise part -- the matmul stays a node."
+kind = "behavior"
+case = "../../../cases/modules/rules/fusion_target.cml"
+args = ["${case}", "library_counts::report", "fusion_schedule::only_sigmoid", "library_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["cost chain 4 1 0 1 0 0 0 0 0 1 1", "only_sigmoid rewrites 2 rounds 2", "cost chain 1 0 0 0 0 0 0 1 0 0 0", "cost doubled 4 1 0 1 0 0 0 0 0 1 1", "cost positive 3 1 0 1 0 0 0 0 0 0 1", "cost after_matmul 5 1 0 1 0 0 0 0 1 1 1", "cost after_matmul 2 0 0 0 0 0 0 1 1 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fusion_bit_identical_unfused"
+desc = "The program before the pass: the chain's value against the sigmoid kernel is zero at every element, and the two guarded forms print their own bits."
+kind = "behavior"
+case = "../../../cases/modules/rules/fusion_target.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "chain minus sigmoid 0.0\ndoubled sum         7.31624373793602\npositive sum        2.341878153383732\nafter matmul minus sigmoid 0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.fusion_bit_identical_fused"
+desc = "The same program after `rules::fusion`, run on the interpreter, the byte-code VM and the JIT: the stdout is the same text as the unfused run, so the fused kernel is bit for bit the chain it replaced."
+kind = "behavior"
+case = "../../../cases/modules/rules/fusion_target.cml"
+args = ["${case}", "rules::fusion", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "chain minus sigmoid 0.0\ndoubled sum         7.31624373793602\npositive sum        2.341878153383732\nafter matmul minus sigmoid 0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+[[tests]]
+name = "rules.accuracy_scalar_log1p_rule"
+desc = "The design's `log(1 + x) => log1p(x)`, in f64 and f32: each naive function goes from two operators (log, add) to one `log1p`; the guarded `log(2 + x)` keeps both its operators."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "scalar_counts::report", "accuracy_schedule::only_log1p", "scalar_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["scalar naive_log1p 2 1 1 0 0 0 0", "only_log1p rewrites 2 rounds 2", "scalar naive_log1p 1 0 0 0 0 1 0", "scalar naive_log1p32 1 0 0 0 0 1 0", "scalar guarded_log 2 1 1 0 0 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_expm1_rule"
+desc = "The design's `exp(x) - 1 => expm1(x)`, in f64 and f32: each naive function goes from two operators (exp, subtract) to one `expm1`; the guarded `exp(2 + x)` keeps both."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "scalar_counts::report", "accuracy_schedule::only_expm1", "scalar_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["scalar naive_expm1 2 0 0 1 1 0 0", "only_expm1 rewrites 2 rounds 2", "scalar naive_expm1 1 0 0 0 0 0 1", "scalar naive_expm1_32 1 0 0 0 0 0 1", "scalar guarded_exp 2 0 0 1 1 0 0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_values"
+desc = "After `rules::accuracy` the naive scalar forms print the accurate operators' values: `log(1 + 1e-300)` is 1e-300 and `exp(1e-300) - 1` is 1e-300, where the naive forms printed 0."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "rules::accuracy", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["log1p tiny  1e-300 1e-300", "log1p tiny32 1e-08 1e-08", "expm1 tiny  1e-300 1e-300", "expm1 tiny32 1e-08 1e-08", "guarded log 0.9162907318741551 guarded exp -0.3512787292998718"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_every_backend"
+desc = "The rewritten scalar program prints the same text on the interpreter, the byte-code VM and the JIT."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "rules::accuracy", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["log1p tiny  1e-300 1e-300", "expm1 tiny  1e-300 1e-300"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rules.accuracy_scalar_guards"
+desc = "The scalar rules do not match `log(2 + x)` or `exp(x) - 2`: four rewrites (the two f64 and the two f32 forms), the two guarded functions keep their two operators and their values."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_scalar_target.cml"
+args = ["${case}", "scalar_counts::report", "accuracy_schedule::all_scalar", "scalar_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["all_scalar rewrites 4 rounds 2", "scalar guarded_log 2 1 1 0 0 0 0", "scalar guarded_exp 2 0 0 1 1 0 0", "guarded log 0.9162907318741551 guarded exp -0.3512787292998718"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

@@ -8,7 +8,7 @@
 module merge_sort_small
 
 import { seed, shuffle } from random
-import { merge_sort, merge_sorted_arrays } from algo
+import { merge_sort, merge_sorted_arrays } from array
 import { rendezvous } from para
 
 func sort_leaf(arr: int[]): (int[], int) sync {

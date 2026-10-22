@@ -3,7 +3,7 @@
 // place; the generator, the file system and the console.
 import { exists } from fs
 import { seed, rand } from random
-import { sort } from algo
+import { sort } from array
 
 /// Writes the cell it is given.
 func bump(var t: int): int sync {

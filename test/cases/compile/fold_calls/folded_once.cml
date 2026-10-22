@@ -1,0 +1,21 @@
+/**
+ * A folded call is one value for every call site: the two calls of `first_field::<Point>()` in
+ * `main` reduce to the same `constas` value, so the one instance of `label` they select holds
+ * one DATA node for it and both call sites read that node. This is the "folded once" property
+ * `with` defaults have (design principles 4.4, 6.5).
+ */
+module fold_call_once
+
+type Point = { x: int, y: int }
+
+func first_field::<S>(): string {
+    return ( static for (n, _) in fields S => n ).[0]
+}
+
+func label(constas k: string): string {
+    return k
+}
+
+func main(): (string, string) {
+    return (label(first_field::<Point>()), label(first_field::<Point>()))
+}

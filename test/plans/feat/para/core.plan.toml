@@ -465,7 +465,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "concurrent_alloc.prl_fans_out"
-desc = "Heavy side of the granularity rule: the two halves of a merge sort call module operators (algo), so each split runs as a task graph under PRL: at least 12 task graphs (the program sorts 13 arrays; measured 225)."
+desc = "Heavy side of the granularity rule: the two halves of a merge sort call module operators (array), so each split runs as a task graph under PRL: at least 12 task graphs (the program sorts 13 arrays; measured 225)."
 kind = "behavior"
 case = "../../../cases/para/core/concurrent_alloc.cml"
 args = ["-t", "4", "${case}", "${run_prl_gc_stats1}"]

@@ -1,0 +1,23 @@
+/**
+ * A folded call is a value a `constas` parameter accepts: the field name `first_field` computes
+ * is handed on as the `constas` value, so it selects the instance and is read by the body
+ * (design principles 5.4).
+ */
+module fold_call_constas
+
+type Point = { x: int, y: int }
+type Pair = (int, int)
+
+func first_field::<S>(): string {
+    return ( static for (n, _) in fields S => n ).[0]
+}
+
+func label(constas k: string): string {
+    return k
+}
+
+func main(): int sync {
+    println(label(first_field::<Point>()))
+    println(label(first_field::<Pair>()))
+    return 0
+}
