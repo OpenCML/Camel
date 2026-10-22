@@ -508,6 +508,13 @@ function displayArgv(argv) {
         .join(' ')
 }
 
+function displayPath(target) {
+    // Same rule as displayArgv: repo-relative, and with '/' whichever platform is reading.
+    const prefix = REPO_ROOT + path.sep
+    const shown = target.startsWith(prefix) ? target.slice(prefix.length) : target
+    return shown.replace(/\\/g, '/')
+}
+
 function formatMs(value) {
     if (!Number.isFinite(value)) {
         return 'n/a'
@@ -806,9 +813,9 @@ function printList(options) {
     try {
         baseline = readBaseline(options.baseline)
     } catch (error) {
-        console.log(`\nbaseline: ${path.relative(REPO_ROOT, options.baseline)} is unusable (${error.message})`)
+        console.log(`\nbaseline: ${displayPath(options.baseline)} is unusable (${error.message})`)
     }
-    const baselinePath = path.relative(REPO_ROOT, options.baseline)
+    const baselinePath = displayPath(options.baseline)
     if (baseline) {
         const load = baseline.load ? `, load ${baseline.load.max.load1.toFixed(1)}` : ''
         console.log(
@@ -891,7 +898,7 @@ function main() {
             load
         )
         log(
-            `perf-gate: wrote ${path.relative(REPO_ROOT, options.baseline)}: ` +
+            `perf-gate: wrote ${displayPath(options.baseline)}: ` +
                 `${Object.keys(baseline.cases).length} cases, ${options.reps} repetitions` +
                 `${load ? `, load ${load.max.load1.toFixed(1)}` : ''}`
         )
@@ -915,6 +922,16 @@ function main() {
         return 2
     }
 
+    // A baseline is a property of one machine. A different name or core count is the cheap signal
+    // that this run is not on it; the numbers would still compare, so say so instead of pretending.
+    if (baseline && baseline.host && (baseline.host.name !== host.name || baseline.host.cores !== host.cores)) {
+        console.error(
+            `perf-gate: caution: the baseline was recorded on ${baseline.host.name} (${baseline.host.cores} cores); ` +
+                `this is ${host.name} (${host.cores} cores). A baseline from another machine is not comparable; ` +
+                '--update reseeds it here.'
+        )
+    }
+
     if (options.json) {
         const payload = {
             schema: BASELINE_SCHEMA,
@@ -927,7 +944,7 @@ function main() {
             plans: options.selected.map((plan) => plan.id),
             commit: revision,
             build,
-            baseline: baseline ? { path: path.relative(REPO_ROOT, options.baseline), written_at: baseline.written_at } : null,
+            baseline: baseline ? { path: displayPath(options.baseline), written_at: baseline.written_at } : null,
             cases: measured,
         }
         if (baseline && !options.update) {
@@ -944,7 +961,7 @@ function main() {
 
     if (!baseline) {
         console.log(
-            `\nperf-gate: no baseline at ${path.relative(REPO_ROOT, options.baseline)}; nothing to ` +
+            `\nperf-gate: no baseline at ${displayPath(options.baseline)}; nothing to ` +
                 'compare. Run --update on the host to seed one.'
         )
         console.log('verdict: no regression claim (there is no baseline)')
@@ -952,7 +969,7 @@ function main() {
     }
 
     console.log(
-        `perf-gate: baseline ${path.relative(REPO_ROOT, options.baseline)} ` +
+        `perf-gate: baseline ${displayPath(options.baseline)} ` +
             `(${baseline.written_at}, commit ` +
             `${baseline.commit && baseline.commit.revision ? baseline.commit.revision.slice(0, 10) : 'unknown'}, ` +
             `${baseline.reps} reps, load ${baseline.load ? baseline.load.max.load1.toFixed(1) : 'unknown'})`
