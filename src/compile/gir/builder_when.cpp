@@ -1252,7 +1252,13 @@ const std::string written = callee->at(0)->name();
                 // field names of T against the argument). The same GCT the graph came from is
                 // walked over the constants the call gave; a body this evaluation cannot read
                 // says why, and the declaration stays inapplicable rather than becoming false.
+                //
+                // The body is read where it is written, not where the declaration was selected:
+                // a predicate that asks another one (`is_numeric` asks `is_integer`) resolves
+                // that name among the names of its own module, exactly as the condition itself
+                // did before this fold started.
                 try {
+                    ConditionContext body(*this, tmpl, nullptr);
                     data_ptr_t folded = GctConstantEvaluator::runFunction(
                         tmpl->func, callBindings, valueArgs, {}, nullptr,
                         [this](

@@ -9,19 +9,13 @@
  * `match type` compares a type's identity as well as its shape (design principles 5.5): the
  * cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
  * `string`, `bool`), and `case func` is the shape of every function type.
+ *
+ * A type is named once: the family predicates (`is_integer`, `is_float`, `is_complex`,
+ * `is_string`, `is_bool`) carry the identity cases, and `is_numeric` and `is_ordered` ask them
+ * instead of listing the types again, so a new integer width is added in one place.
  */
 
 module types
-
-/// True when `T` is a number: an integer, a float or a complex number.
-/// @example is_numeric::<int>()    // true
-/// @example is_numeric::<string>()    // false
-export func is_numeric::<T>(): bool {
-    return match type T {
-        case int | i32 | float | f32 | c64 | c128 => true
-        case _ => false
-    }
-}
 
 /// True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
 /// @example is_integer::<int>()    // true
@@ -43,14 +37,33 @@ export func is_float::<T>(): bool {
     }
 }
 
+/// True when `T` is a complex number (`c64` is 64-bit, `c128` is 128-bit).
+/// @example is_complex::<c64>()    // true
+/// @example is_complex::<float>()    // false
+export func is_complex::<T>(): bool {
+    return match type T {
+        case c64 | c128 => true
+        case _ => false
+    }
+}
+
+/// True when `T` is a number: an integer, a float or a complex number.
+///
+/// The three families are asked, not listed again: a type spelled in one of them is numeric
+/// without appearing here, so adding an integer width changes `is_integer` alone. The complex
+/// branch is `is_complex`, which is why `c64` is numeric.
+/// @example is_numeric::<int>()    // true
+/// @example is_numeric::<string>()    // false
+/// @example is_numeric::<c64>()    // true
+export func is_numeric::<T>(): bool {
+    return is_integer::<T>() || is_float::<T>() || is_complex::<T>()
+}
+
 /// True when `T` has a total order: the number types, `string` and `bool`.
 /// @example is_ordered::<string>()    // true
 /// @example is_ordered::<bool>()    // true
 export func is_ordered::<T>(): bool {
-    return match type T {
-        case int | i32 | float | f32 | string | bool => true
-        case _ => false
-    }
+    return is_integer::<T>() || is_float::<T>() || is_string::<T>() || is_bool::<T>()
 }
 
 /// True when `T` is a function type, whatever its parameters and result.

@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "what": "PyTorch matmul cost against the thread budget, on the host of the sweep; it is why the sweep's all-core column is 16 threads (one per physical core) and not the 32 hardware threads",
+  "generated_at": "2026-10-22T19:07:19-04:00",
+  "machine": {
+    "host": "tangshan88",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "cpu": "AMD EPYC 7343 16-Core Processor",
+    "hardware_threads": 32,
+    "memory_bytes": 540891693056,
+    "python": "3.10.12",
+    "numpy": "2.2.6",
+    "torch": "2.14.1+cu130"
+  },
+  "git": {
+    "commit": "2adf18c042b1de3992190aab4553cdb405d1844c",
+    "branch": "handover/h275-sweep",
+    "dirty": true,
+    "dirty_paths": [
+      "M docs/stdlib-reference.md",
+      " M examples/models/naive-in-expert-out/measure.py",
+      " M examples/models/naive-in-expert-out/torch_impl.py",
+      " M src/compile/gir/builder_when.cpp",
+      " M stdlib/types.cml",
+      " M test/plans/feat/compile/when.plan.toml",
+      "?? examples/models/naive-in-expert-out/thread_scale.py",
+      "?? results/",
+      "?? test/cases/compile/when/types_numeric_complex.cml"
+    ]
+  },
+  "python": "3.10.12",
+  "torch": "2.14.1+cu130",
+  "load_average": {
+    "1m": 72.32,
+    "5m": 61.33,
+    "15m": 54.72,
+    "running": 61,
+    "threads": 5326
+  },
+  "matmul": {
+    "dtype": "float32",
+    "big": {
+      "a": [
+        2048,
+        1024
+      ],
+      "b": [
+        1024,
+        1024
+      ],
+      "repeats": 9
+    },
+    "small": {
+      "a": [
+        8,
+        16,
+        64
+      ],
+      "b": [
+        64,
+        64
+      ],
+      "repeats": 200
+    },
+    "note": "medians in-process, after two untimed calls; torch.set_num_threads sets the budget, OMP/MKL are not overridden here"
+  },
+  "rows": [
+    {
+      "threads": 1,
+      "big_matmul_ms": 46.563629,
+      "small_matmul_ms": 0.014467
+    },
+    {
+      "threads": 8,
+      "big_matmul_ms": 27.841668,
+      "small_matmul_ms": 17.998615
+    },
+    {
+      "threads": 16,
+      "big_matmul_ms": 49.386472,
+      "small_matmul_ms": 32.338542
+    },
+    {
+      "threads": 32,
+      "big_matmul_ms": 47.433143,
+      "small_matmul_ms": 48.829601
+    }
+  ]
+}
