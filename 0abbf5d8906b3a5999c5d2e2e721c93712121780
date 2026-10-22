@@ -1,0 +1,290 @@
+# H125：`#strict` 下的精确加倍——`permissions.strict_algebra` 的期望错在哪
+
+分支 `handover/H125-strict-algebra`，基于 `origin/develop` `d418daf2c`。
+测试提交：`26938ce5b`。
+
+## 0. 结论
+
+**H112 §6.1 的诊断成立：用例的期望是陈旧的，编译器没有缺陷，规则库不需要改。**
+
+- `x*0.1 + x*0.1` 的两个乘积先被 **CSE** 合并成 `p + p`（`p = x*0.1`）；CSE 不需要许可，逐位不变。
+- `stdlib/rules.cml:111` 的 `float_add_self`（`x + x => x * 2.0`）**不声明 `#requires`**，所以
+  `#strict` 的空许可集拦不住它。`p + p` 与 `p * 2.0` 对全部 binary64 值逐位相等（§2）。
+- 反过来，`x*0.1 + x*0.1 => x*0.2` 是 `float_combine`（`stdlib/rules.cml:210-213`），
+  `#requires<reassociate>`；`#strict` 下不触发。
+- 因此 strict 的最终形状是 `["mul_d" (x*0.1), "mul_d" (p*2.0)]`，0 个 `add_d`。旧断言
+  “1 个乘 + 1 个加”钉的是 H100 之前没有 `add_self` 的规则集形状。
+
+本轮只改用例：从“钉住旧的指令形状”改成“断言许可的属性”，并新增一条不跑任何遍的逐位对照。
+没有改 `stdlib/rules.cml`、没有改 `std::opt` 的顺序、没有改语义。
+
+## 1. 从设计原则推导
+
+### 1.1 7.2 与 7.3
+
+`docs/design-principles.cn.md:423`：
+
+> 许可的名字：`reassociate`（改变归约的顺序或结合方式）、`contract`（收缩为乘加融合）……
+
+`docs/design-principles.cn.md:432`：`reassociate` 默认**允许**。所以默认策略把
+`x*0.1 + x*0.1` 合成 `x*0.2` 是合法的；`#strict` 拿走的正是这个默认许可。
+
+### 1.2 7.4 的两条
+
+`docs/design-principles.cn.md:446`：
+
+> 标签 `#strict` 使所标记的函数或代码块按规范算法逐位计算，**不使用任何许可**（包括默认许可）。
+
+`docs/design-principles.cn.md:448`：
+
+> **`std::opt::algebra` 是独立的通用算式优化遍，`std::opt` 默认集成。** `safe_fp=true` 将算式阶段
+> 限制为**严格等价的浮点变换**，包括可证明等价的系数翻倍；即使节点有更宽的许可，这个阶段也不
+> 使用它来改变舍入路径。……
+
+关键在“逐位计算”与“严格等价”这两个词：`#strict` 禁止的是**改变结果**的改写，不是一切改写。
+`float_add_self` 的结果逐位不变，属于 7.4 允许的那一类；`float_combine` 改变舍入路径，属于
+7.2 的 `reassociate`，没有许可就不做。
+
+### 1.3 这个用例实际走的是哪一条
+
+`permissions.strict_algebra` 的参数是 `["${case}", "std::opt", "std::gir"]`，**没有**
+`safe_fp=true`。它走的是 7.4 第一条（节点上的 `#strict` 标签），不是第三条（流水线安全模式）。
+两条对这条表达式的结论相同，但机制要分清：
+
+- 第一条：`tag::effectivePermissions`（`include/camel/core/tags.h:257-268`）对 strict 节点返回空集；
+  规则执行处用 `(rule.needs & ~context) != 0` 跳过（`src/runtime/writings.cpp:1456`、`:1588`）。
+  `float_combine` 的 `reassociate` 位不满足，跳过；`float_add_self` 的 `needs` 是 0，照常命中。
+- 第三条：`safe_fp=true` 时遍选 `rules::simplify_strict`（`src/execute/pass.cpp:1437`）；它与
+  `simplify` 共用同一张规则表（`stdlib/rules.cml:528-549`），只是把 `strict=true` 交给 `rewrite`，
+  由它把有效许可当作空集。`float_combine` 仍在表里，但 `reassociate` 位不满足，跳过；
+  `float_add_self` 没有 `needs`，照常命中（`stdlib/rules.cml:556-560`）。
+  即使节点带着更宽的许可，这个阶段也不拿它改变舍入路径。
+
+**不能**把这个用例的参数改成 `std::opt(safe_fp=true)`：那样 `loose`（非 strict 函数）也不再合成
+`x*0.2`，用例就失去了“默认策略会重结合、strict 不会”的对照。`safe_fp=true` 的精确加倍已由
+`feat/opt/algebra` 的 `.safe` 系列和 `rules.strict_policy_keeps_exact_laws` 覆盖。
+
+### 1.4 顺序：为什么命中 `float_add_self` 而不是 `float_double`
+
+`std::opt` 的顺序是 fold → **cse** → algebra → dce（H112 §6.1）。CSE 先把两个 `x*0.1` 合并成一个
+`p`，algebra 看到的是 `p + p`：
+
+- `float_add_self` 的模式就是 `x + x`，不需要许可，命中，得到 `p * 2.0`。
+- `float_double` 的模式是 `x*c + x*c`，但其守卫 `exactDoubling(c)` 要求 `c` 是有限整数且
+  `1 <= |c| <= 2^52`；`0.1` 不满足，所以它本来也不会命中（`stdlib/rules.cml:182-188`）。
+- `float_combine` 需要 `reassociate`，strict 下跳过。
+
+把 algebra 移到 CSE 之前（H112 §6.1 的另一条路）会让形状回到旧断言，但 `float_double` 对 `0.1`
+仍然不触发，strict 会保留“2 个乘 + 1 个加”；这要改遍的顺序和 H65 语料计数，影响面远大于本任务。
+既然 7.4 允许精确加倍，就没有理由走那条路。
+
+## 2. 逐位检查
+
+### 2.1 证明
+
+对 binary64 的每个 `x`：
+
+- **有限 `x`**：精确的实数 `2x` 与 `x` 有相同的有效数位；若 `|2x| <= maxFinite`，它可表示，
+  `x + x` 与 `x * 2` 都得到同一个可表示值；若 `|2x| > maxFinite`，两者都溢出。加法和乘法都是
+  “把精确实数 `2x` 正确舍入一次”，结果相同，与舍入模式无关。
+- **次正规 `x`**：`2x` 仍可表示（最小次正规 `5e-324` 的两倍是 `1e-323`），不会下溢到零；两者精确。
+- **`±0`**：`-0 + -0 = -0`，`-0 * 2 = -0`；`+0` 同理。
+- **`±inf`**：两者都保持符号。
+- **NaN**：两者都传播 NaN；7.7 规定普通算术的 NaN 位模式/载荷不受约束、文本无符号
+  （`docs/design-principles.cn.md:464-471`），语言层不可区分。
+- **溢出边界**：`half = max/2` 时 `2*half = max`（有限）；`half` 再往上一个可表示值翻倍就超过
+  `max + ulp/2`，两者都溢出。§2.2 的 `half_max` 与 `above_half_max` 两行把两侧都钉住。
+
+### 2.2 可执行检查
+
+`test/cases/compile/tags/strict_doubling.cml` 用 `std::nvm`（不跑任何优化遍）打印 16 行
+`name, x + x, x * 2.0`。主机上的实际输出：
+
+| 行 | `x + x` | `x * 2.0` |
+|---|---|---|
+| `zero` | `0.0` | `0.0` |
+| `negzero` | `-0.0` | `-0.0` |
+| `one` | `2.0` | `2.0` |
+| `minus_one` | `-2.0` | `-2.0` |
+| `tenth` | `0.2` | `0.2` |
+| `minus_tenth` | `-0.2` | `-0.2` |
+| `subnormal`（`5e-324`） | `1e-323` | `1e-323` |
+| `minus_subnormal` | `-1e-323` | `-1e-323` |
+| `max_subnormal` | `4.450147717014402e-308` | `4.450147717014402e-308` |
+| `min_normal` | `4.450147717014403e-308` | `4.450147717014403e-308` |
+| `max` | `inf` | `inf` |
+| `half_max` | `1.7976931348623157e+308` | `1.7976931348623157e+308` |
+| `above_half_max` | `inf` | `inf` |
+| `inf` | `inf` | `inf` |
+| `minus_inf` | `-inf` | `-inf` |
+| `nan` | `nan` | `nan` |
+
+浮点文本是“最短且读回来得到同一个数”（7.7）；对非 NaN，文本相等 ⇔ 位相等，`-0.0` 保留符号。
+16 对全部逐字相同。
+
+### 2.3 NaN 的位
+
+语言不暴露 NaN 的载荷和符号（7.7），`modules/rewrite/module.cpp:584-585` 的 `agreeFloat` 对
+“NaN 对 NaN”也只比较 NaN 性，不比较位。为确认定律在硬件层也成立，在主机上用 C（`cc -O0`，
+避免编译器把 `x * 2.0` 改写成 `x + x`）做了独立对照：
+
+| 类型 | 输入位 | `x + x` | `x * 2.0` |
+|---|---|---|---|
+| f64 qNaN | `7ff8000000000000` | `7ff8000000000000` | `7ff8000000000000` |
+| f64 带载荷 qNaN | `7ff8123456789abc` | `7ff8123456789abc` | `7ff8123456789abc` |
+| f64 负 qNaN | `fff8000000000001` | `fff8000000000001` | `fff8000000000001` |
+| f64 sNaN | `7ff0000000000001` | `7ff8000000000001` | `7ff8000000000001` |
+| f64 负 sNaN | `fff0000000000001` | `fff8000000000001` | `fff8000000000001` |
+| f32 qNaN / 带载荷 / 负 qNaN / ±sNaN | 同上模式 | 位相同 | 位相同 |
+
+这只是佐证，不是语言的契约：契约只到“都是 NaN”。但它说明即使按最严格的位比较，也没有找到
+不等的值。
+
+### 2.4 结论
+
+**没有找到一个不等的值。** `float_add_self` 不需要加条件，规则库不需要改，用例失败的唯一原因是
+它要求了一个编译器不再产生、7.4 也允许不产生的形状。
+
+## 3. 用例怎么改
+
+### 3.1 旧断言
+
+`permissions.strict_algebra` 旧脚本要求 `tight`/`tightBlock`：
+
+```js
+assert(count(fn, 'mul') === 1, `${fn} keeps the product CSE left`)
+assert(count(fn, 'add') === 1, `${fn} keeps its sum`)
+```
+
+它钉住的是“CSE 之后、`add_self` 之前”的中间形状，而不是许可的性质。任何精确改写（包括将来
+把 `p*2.0` 再折成别的东西）都会让它变红，尽管结果没有变。
+
+### 3.2 新断言：属性，不是形状
+
+`test/plans/feat/compile/tag_permissions.plan.toml` 的 `permissions.strict_algebra` 现在：
+
+- `loose`、`loosePair`（默认策略）：必须是 1 个乘、0 个加，系数分别为 `0.2`、`0.4`。这证明
+  `float_combine` 在默认许可下确实触发，对照成立。
+- `tight`、`tightBlock`：**拒绝**任何系数 `0.2`；接受三种精确结果：
+  1. 2 个乘 + 1 个加（CSE 之前）；
+  2. 1 个乘 + 1 个加（CSE 之后、加倍之前）；
+  3. 2 个乘 + 0 个加，其中一个乘数是 `2.0`（CSE + `float_add_self`）。
+- 系数从 GIR 的 DATA 节点沿入边读取（`0.1`、`2.0`、`0.2`、`0.4`），不靠指令下标。
+- `tightPair`：`x*0.1 + x*0.3`，两个系数不同；strict 下必须 2 个乘 + 1 个加，不得出现 `0.4`；
+  默认策略下同一表达式合成 1 个乘（`0.4`）。
+
+用例的 `desc`、CML 注释和失败信息都点名接受的变换（CSE、`float_add_self`、精确系数 `2.0`），
+不再写“保留那个和”。这符合任务要求的“断言属性、点名接受的变换，而不是钉住旧指令形状”。
+
+### 3.3 实测形状
+
+主机 `std::gir` 的输出（节选）：
+
+```
+loose:      N01 0.2   N02 :op/mul_d
+tight:      N04 0.1   N05 :op/mul_d
+            N06 2.0   N07 :op/mul_d
+tightBlock: N09 0.1   N0A :op/mul_d
+            N0B 2.0   N0C :op/mul_d
+loosePair:  N0E 0.4   N0F :op/mul_d
+tightPair:  N11 0.1   N12 :op/mul_d
+            N13 0.3   N14 :op/mul_d
+            N15 :op/add_d
+```
+
+即 strict 的两个函数都是 `["mul_d","mul_d"]`，`tightPair` 是
+`["mul_d","mul_d","add_d"]`。测试不是靠“空图也通过”：每个断言都要求节点和系数存在。
+
+### 3.4 新增精确性用例
+
+`permissions.strict_doubling_exact`（`test/cases/compile/tags/strict_doubling.cml`）：
+
+- 16 行，每行 `x + x` 与 `x * 2.0` 必须逐字相同；不同则报出名字和两个值；
+- 钉住 `zero`/`negzero`/`max`/`half_max`/`above_half_max`/`inf`/`minus_inf`/`nan` 的文本；
+- 次正规四行不得为 `0.0`/`-0.0`；
+- 覆盖名字集合固定，防止漏掉某个特殊值。
+
+它不跑任何遍（`std::nvm`），所以它检查的是运行时算子本身，而不是某个优化遍。
+
+## 4. 权限剩下的牙齿
+
+“strict 允许精确加倍”不等于“strict 什么都能做”。本轮用 `tightPair` 做正对照：
+
+- `x*0.1 + x*0.3` 的两个系数不同，`float_combine` 的守卫 `combineSameSign` 成立，但它
+  `#requires<reassociate>`（`stdlib/rules.cml:210-213`）；strict 节点有效许可为空，规则被跳过。
+- 没有别的精确律能消掉这个和：`float_double` 的 `exactDoubling(0.1)`/`(0.3)` 为假，
+  `float_add_self` 要求两边是同一个值。于是 strict 下保留 2 个乘 + 1 个加。
+- 默认策略下同一表达式合成 `x*0.4`，证明差别确实来自许可，而不是表达式本身不可改写。
+
+`feat/modules/rules` 里既有的两条仍然绿：
+
+- `rules.strict_policy_refuses_reassociation`：strict 下 `float_combine` 不触发；
+- `rules.strict_policy_keeps_exact_laws`：strict 下 `float_add_self`/`float_double` 仍触发。
+
+`reassociate` 仍然拦住的浮点规则包括 `float_combine`、`float_combine_mixed`、
+`float_combine_one`、`float_combine_one_mixed`、`float_fold`（后四条还叠加 `no_infs` 等假设）；
+`float_add_self` 与 `float_double` 没有 `#requires`，靠守卫保证精确。所以这个许可不是空壳，
+只是它的牙齿咬在“重结合”上，不咬在“精确翻倍”上。
+
+## 5. 计划数字
+
+全部在 Linux 主机 `88zjwei` 上用 `camel-remote.ps1` 运行，Release，`-Jobs 8`，后续用
+`-NoBuild` 复用构建。首次干净构建 342.6 s；测试只改用例和计划，不需要重编。
+
+| 计划 | total | pass | fail | 说明 |
+|---|---:|---:|---:|---|
+| `test/plans/feat/compile/tag_permissions.plan.toml` | 7 | 7 | 0 | 改写前 5/6，唯一红就是 `permissions.strict_algebra`；新增 `strict_doubling_exact` |
+| `test/plans/feat/compile` | 1009 | 1009 | 0 | 含新增用例；基线 997 条，其余增长来自本分支之前的合并 |
+| `test/plans/feat/opt/algebra.plan.toml` | 192 | 192 | 0 | 含 `.safe`、`boundary64`、`rules_simplify_strict` |
+| `test/plans/feat/modules/rules.plan.toml` | 67 | 67 | 0 | 含 `strict_policy_*`、`typed_exact_doubling_*` |
+| `smoke` | 10 | 10 | 0 | |
+
+`feat/compile` 的 1009 条里包含本轮新增的 `permissions.strict_doubling_exact`；`tag_permissions`
+从 6 条变成 7 条。没有跑 stress/progen/GC-stress/PyTorch。
+
+## 6. 改动与提交
+
+测试提交 `26938ce5b`：
+
+- `test/cases/compile/tags/strict_algebra.cml`：新增 `loosePair`/`tightPair`，重写文档注释；
+- `test/cases/compile/tags/strict_doubling.cml`（新）：16 行无遍执行的精确性对照；
+- `test/plans/feat/compile/tag_permissions.plan.toml`：`permissions.strict_algebra` 改为属性断言，
+  新增 `permissions.strict_doubling_exact`，更新计划 `desc`。
+
+文档（本报告与 H125 看板行）单独提交，提交信息是
+`docs: record H125's strict-algebra decision`。
+
+没有改：`stdlib/rules.cml`、`std::opt` 的遍顺序、`modules/rewrite` 的 `agreeFloat`、任何语义或
+许可定义。
+
+## 7. 没做什么，以及为什么
+
+- **没有给 `float_add_self` 加条件**：§2 没有找到一个不等的值；加条件反而会把一个精确律改坏。
+- **没有把 algebra 移到 CSE 之前**：H112 的另一条路能回到旧形状，但要改遍顺序和 H65 语料计数；
+  7.4 允许精确加倍，所以没有语义理由付这个代价。
+- **没有给这个用例加 `safe_fp=true`**：那会同时禁掉 `loose` 的重结合，丢掉对照；`safe_fp=true`
+  的精确加倍已有 `.safe` 与 `rules.strict_policy_keeps_exact_laws` 覆盖。
+- **没有把 NaN 位检查写进用例**：语言层看不到载荷/符号（7.7），写进去会依赖实现；§2.3 的
+  C 探针只作为报告证据。
+- **没有动 H124 行**：它的 `tag_permissions` 症状在 H112 修好模块解析后已不再复现，但
+  `H124` 看板行仍是“未开始”；那是一次独立的状态清理，避免在本任务里顺手改别人的行。
+- **H87 §2.2 的 `algebra.cpp` 差异**：那是“迟早删 `algebra.cpp` 时的行为变化”，当前路径已经
+  走规则库，不在本轮范围。
+
+## 8. 引用
+
+- `docs/design-principles.cn.md:423`（7.2 许可的名字）、`:432`（7.3 `reassociate` 默认允许）、
+  `:446`（7.4 `#strict` 不使用任何许可）、`:448`（`safe_fp=true` 与“严格等价的浮点变换”）、
+  `:464-471`（7.7 NaN 与浮点文本）。
+- `stdlib/rules.cml:111`（`float_add_self`，无 `#requires`）、`:182-188`（`exactDoubling`）、
+  `:210-213`（`float_combine`，`#requires<reassociate>`）、`:528-549`（`simplifyWith` 的规则表，
+  `simplify` 与 `simplify_strict` 共用）、`:556-560`（`simplify_strict` 把 `strict=true` 交给
+  `rewrite`）。
+- `include/camel/core/tags.h:257-268`（`effectivePermissions`）。
+- `src/runtime/writings.cpp:1456`、`:1588`（规则许可不足时跳过）。
+- `src/execute/pass.cpp:1437`（`safe_fp` 选择 `rules::simplify_strict`）。
+- `modules/rewrite/module.cpp:584-585`（`agreeFloat` 对 NaN 只比较 NaN 性）。
+- `docs/handover/reports/H112.md:179-201`（本用例的诊断与两条路）。
+- `docs/handover/reports/H87.md:92-105`（严格策略下 `rules::simplify_strict` 与 `algebra.cpp`
+  的唯一差异，正是 `t + t => t*2`）。
+- `docs/handover/reports/H118.md:28-30`、`:153-155`（`float_double`/严格策略的守卫）。
