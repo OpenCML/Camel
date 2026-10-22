@@ -343,47 +343,24 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TypeVariableNotAllowed,
-            {
-                "TypeVariableNotAllowed",
-                "'typeas {0}' cannot bind a type variable here: {1}.",
-                "A type variable is declared where it first appears in the parameters or result of "
-                "a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is "
-                "written as plain '{0}' everywhere after that.",
-            },
-        },
-        {
             SemanticDiag::TypeVariableRedeclared,
             {
                 "TypeVariableRedeclared",
-                "'typeas {0}' cannot bind '{0}': this signature already binds a type variable "
-                "'{0}'.",
-                "A type variable is bound once: write 'typeas {0}' only at the place where it is "
-                "first bound, and plain '{0}' everywhere after that (a plain '{0}' in a "
-                "parameter type binds it already, so the explicit form is only needed when the "
-                "name also denotes a type).",
+                "The type parameter '{0}' is declared twice at the head of this declaration.",
+                "A declaration declares each type parameter once, after its name: "
+                "'func first::<T>(xs: T[]): T'. A call names them by position or by name "
+                "('f::<T = int>').",
             },
         },
         {
-            SemanticDiag::TypeVariableOnlyInReturn,
+            SemanticDiag::TypeVariableUnused,
             {
-                "TypeVariableOnlyInReturn",
-                "The name '{0}' appears only in the return type and no type answers it.",
-                "A type variable binds where it first appears in a parameter type, including the "
-                "type of a 'with' parameter; a name first written in the return type has no "
-                "argument to take a type from. Write it in a parameter type, or declare it "
-                "explicitly as 'typeas {0}' when only the expected result determines it (design "
-                "principles 5.9).",
-            },
-        },
-        {
-            SemanticDiag::TypeVariableUsedOnce,
-            {
-                "TypeVariableUsedOnce",
-                "The type variable '{0}' is bound here and appears only once in the signature.",
-                "One occurrence is what a misspelt type name looks like, so check the spelling. "
-                "If the name is wanted, use it again in a later parameter type or in the return "
-                "type; an explicit 'typeas {0}' states that the single occurrence is deliberate.",
+                "TypeVariableUnused",
+                "The type parameter '{0}' is declared at the head but never written in the "
+                "signature.",
+                "A type parameter is one the declaration uses in a parameter or result type; a "
+                "declaration that writes it nowhere can never take a type for it. Write it in a "
+                "type, or remove it from '::<...>'.",
             },
         },
         {
@@ -401,7 +378,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericArgumentsMismatch",
                 "The generic function '{0}' cannot be called with argument types {1}: {2}.",
-                "A type variable takes the type of the argument found at its 'typeas' position, "
+                "A type variable takes the type of the argument found at its first binding position, "
                 "or, when that argument says nothing (a 'null', a generic function that is "
                 "itself waiting for its types), at another occurrence; every parameter is then "
                 "checked against its type with the variables replaced. Result-only variables take "
@@ -1519,9 +1496,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "CmlUnsupportedConstruct",
                 "std::cml cannot print {0}: {1}.",
-                "This version prints straight-line code only: arithmetic, comparisons, "
-                "conversions, direct calls, `let` and `var` (handover H240, step S1). Control "
-                "flow, regions, tags, named types and generic instances come in later steps.",
+                "This version prints expressions, `let` and `var`, branches, loops, closures, "
+                "`with` and `var` parameters, and `sync` blocks (handover H240). Tags, named "
+                "types, generic instances and the other region kinds are refused.",
             },
         },
         {
@@ -1645,6 +1622,18 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The dimension name '{0}' is written once in this signature, so it relates nothing.",
                 "A name relates the extents that write it. If the size is not a relation, write "
                 "'?' instead; if it is, write the name in another parameter or in the return type.",
+            },
+        },
+        {
+            SemanticDiag::TensorElementTypeNotStored,
+            {
+                "TensorElementTypeNotStored",
+                "'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this "
+                "declaration would silently run with '{1}'. Tensors that keep the element type "
+                "they are written with are not implemented yet.",
+                "Write '{1}' and convert the values explicitly where they enter the tensor; "
+                "element-type-exact tensor storage (design/arrays-memory, P4) removes this "
+                "restriction. 'zeros' and 'ones' already build f32 tensors.",
             },
         },
     };

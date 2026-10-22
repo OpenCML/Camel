@@ -9,11 +9,18 @@
  * `simplify` applies the rules that always make an expression smaller, one way, to a fixpoint;
  * `saturate_all` adds the rules that rearrange (commutation, association, distribution) to the
  * saturation and extracts the smallest writing of each value.
+ *
+ * A rule is a `Rule` value, so a rule set is an ordinary `Rule[]`. The scheduling combinators at
+ * the end compose rule sets without new syntax (rewrite design 2 (second version) 8.5): `seq` runs
+ * the stages in the written order once each, `first` takes the first stage that rewrites
+ * something, `repeat` applies one round at a time to a fixpoint, `until` stops on a predicate of
+ * the program, and `alternate` alternates two stages until a full pair changes nothing. Each
+ * answers the program and what the application cost.
  */
 module rules
 import { Program, Node, constant } from graph
 import { abs, trunc } from math
-import { rewrite, saturate, extract } from rewrite
+import { Rule, rewrite, saturate, extract, run, run_program, run_rewrites, run_rounds, run_visited } from rewrite
 import { Tensor } from tensor
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
@@ -603,4 +610,157 @@ export func saturate_all(p: Program): Program! {
 /// The saturation under the strict numeric policy, as `simplify_strict` is the simplification.
 export func saturate_all_strict(p: Program): Program! {
     return saturateWith(p, true)
+}
+
+// ---- scheduling rule sets (rewrite design 2 (second version) 8.5) ----
+//
+// A stage is a `Rule[]`: `rewrite` applies it one way to a fixpoint. The combinators are ordinary
+// Camel functions over stages; each answers the program, the rewrites applied, the rounds made and
+// the nodes visited, so a schedule can be checked and measured (H226). No combinator reorders a
+// stage's rules or drops a match: a stage that applies nothing stays applied nothing.
+
+/// Applies one stage to a fixpoint: the program, the rewrites, the rounds and the nodes visited.
+func applyStage(p: Program, rules: Rule[], strict: bool): (Program, int, int, int)! {
+    return match run(p, rules, 16, strict) {
+        case error e => { throw e }
+        case r => (run_program(r), run_rewrites(r), run_rounds(r), run_visited(r))
+    }
+}
+
+/// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails
+/// fails the whole sequence. The stages are not interleaved or reordered.
+export func seq(p: Program, stages: Rule[][], strict: bool): (Program, int, int, int)! {
+    return seqFrom(p, stages, 0, strict)
+}
+
+func seqFrom(
+    p: Program, stages: Rule[][], at: int, strict: bool
+): (Program, int, int, int)! {
+    return if at >= len(stages) then (p, 0, 0, 0)
+    else match applyStage(p, stages[at], strict) {
+        case error e => { throw e }
+        case stage => {
+            let (q, rewrites, rounds, visited) = stage
+            match seqFrom(q, stages, at + 1, strict) {
+                case error e => { throw e }
+                case rest => {
+                    let (last, moreRewrites, moreRounds, moreVisited) = rest
+                    (last, rewrites + moreRewrites, rounds + moreRounds, visited + moreVisited)
+                }
+            }
+        }
+    }
+}
+
+/// `first`: the stages tried in the written order, and the first one that rewrites something is
+/// the result. A stage that matches nothing does not stop the choice; when no stage rewrites
+/// anything the program is returned unchanged. A failing stage fails the choice.
+export func first(p: Program, stages: Rule[][], strict: bool): (Program, int, int, int)! {
+    return firstFrom(p, stages, 0, strict)
+}
+
+func firstFrom(
+    p: Program, stages: Rule[][], at: int, strict: bool
+): (Program, int, int, int)! {
+    return if at >= len(stages) then (p, 0, 0, 0)
+    else match applyStage(p, stages[at], strict) {
+        case error e => { throw e }
+        case stage => {
+            let (q, rewrites, rounds, visited) = stage
+            if rewrites > 0 then (q, rewrites, rounds, visited)
+            else firstFrom(p, stages, at + 1, strict)
+        }
+    }
+}
+
+/// `repeat`: one round of the rule set at a time, until a round applies nothing or `rounds`
+/// rounds were made. A rule is therefore applied at most once per round, and the round that
+/// proves the fixpoint is made and counted.
+export func repeat(
+    p: Program, rules: Rule[], rounds: int, strict: bool
+): (Program, int, int, int)! {
+    return repeatFrom(p, rules, rounds, strict, 0, 0, 0)
+}
+
+func repeatFrom(
+    p: Program, rules: Rule[], left: int, strict: bool, rewrites: int, rounds: int,
+    visited: int
+): (Program, int, int, int)! {
+    return if left <= 0 then (p, rewrites, rounds, visited)
+    else match run(p, rules, 1, strict) {
+        case error e => { throw e }
+        case r => {
+            let applied = run_rewrites(r)
+            let q = run_program(r)
+            let made = rounds + run_rounds(r)
+            let seen = visited + run_visited(r)
+            if applied == 0 then (q, rewrites, made, seen)
+            else repeatFrom(q, rules, left - 1, strict, rewrites + applied, made, seen)
+        }
+    }
+}
+
+/// `until`: a round at a time, while `done` is false for the program; stops at a fixpoint, at
+/// `rounds` rounds, or when `done` holds. `done` is read before a round, so the program it holds
+/// for already has every rewrite before it.
+export func until(
+    p: Program, rules: Rule[], done: (q: Program) => bool, rounds: int, strict: bool
+): (Program, int, int, int)! {
+    return untilFrom(p, rules, done, rounds, strict, 0, 0, 0)
+}
+
+func untilFrom(
+    p: Program, rules: Rule[], done: (q: Program) => bool, left: int, strict: bool,
+    rewrites: int, rounds: int, visited: int
+): (Program, int, int, int)! {
+    return if left <= 0 || done(p) then (p, rewrites, rounds, visited)
+    else match run(p, rules, 1, strict) {
+        case error e => { throw e }
+        case r => {
+            let applied = run_rewrites(r)
+            let q = run_program(r)
+            let made = rounds + run_rounds(r)
+            let seen = visited + run_visited(r)
+            if applied == 0 then (q, rewrites, made, seen)
+            else untilFrom(q, rules, done, left - 1, strict, rewrites + applied, made, seen)
+        }
+    }
+}
+
+/// `alternate`: one round of `a`, then one round of `b`, until a full pair applies nothing or
+/// `rounds` pairs were made. Both stages see the program the other produced, in that order.
+export func alternate(
+    p: Program, a: Rule[], b: Rule[], rounds: int, strict: bool
+): (Program, int, int, int)! {
+    return alternateFrom(p, a, b, rounds, strict, 0, 0, 0)
+}
+
+func alternateFrom(
+    p: Program, a: Rule[], b: Rule[], left: int, strict: bool, rewrites: int, rounds: int,
+    visited: int
+): (Program, int, int, int)! {
+    return if left <= 0 then (p, rewrites, rounds, visited)
+    else match run(p, a, 1, strict) {
+        case error e => { throw e }
+        case firstRun => {
+            let firstApplied = run_rewrites(firstRun)
+            let afterFirst = run_program(firstRun)
+            let firstVisited = run_visited(firstRun)
+            match run(afterFirst, b, 1, strict) {
+                case error e => { throw e }
+                case secondRun => {
+                    let secondApplied = run_rewrites(secondRun)
+                    let pairRewrites = rewrites + firstApplied + secondApplied
+                    let pairRounds = rounds + run_rounds(firstRun) + run_rounds(secondRun)
+                    let pairVisited = visited + firstVisited + run_visited(secondRun)
+                    if firstApplied + secondApplied == 0 then
+                        (run_program(secondRun), pairRewrites, pairRounds, pairVisited)
+                    else
+                        alternateFrom(
+                            run_program(secondRun), a, b, left - 1, strict,
+                            pairRewrites, pairRounds, pairVisited)
+                }
+            }
+        }
+    }
 }

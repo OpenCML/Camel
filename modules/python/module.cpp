@@ -252,7 +252,7 @@ bool PythonModule::load() {
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
     // The purity of every operator of the module (design principles 3.3), which the declaration
     // loader requires before it accepts a body-less declaration (`Builder::declareNativeOperator`,
-    // src/compile/gir/builder_modules.cpp:385; H157, H166). All twelve are effectful: each one
+    // src/compile/gir/builder_modules.cpp#declareNativeOperator; H157, H166). All twelve are effectful: each one
     // observes or advances the interpreter, which no argument names. `py_call`, `py_exec`,
     // `py_eval` and `py_run` execute arbitrary Python; `py_attr` may run a descriptor or a
     // property; `py_import` runs a module body and writes `sys.modules`; `py_print`/`py_println`

@@ -1,0 +1,20 @@
+// `with` parameters: a function configured at the call, two of them, and a configured function
+// that also reads a module value.
+let base = 5
+
+with <k: int>
+func scale(x: int): int {
+    return x * k + base
+}
+
+with <lo: int, hi: int>
+func clamp(x: int): int {
+    return if x < lo then lo else if x > hi then hi else x
+}
+
+func main(): int sync {
+    let a = scale<3>(4)
+    let b = clamp<0, 10>(15)
+    println(a, b)
+    return 0
+}

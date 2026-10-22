@@ -123,7 +123,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "format.type_params_snapshot"
-desc = "A type declaration with parameters keeps them (`type Pair<T> = ...`, also written `Pair<T>=`), as do `typeas` and applied type functions in signatures."
+desc = "A type declaration with parameters keeps them (`type Pair<T> = ...`, also written `Pair<T>=`), as do head type parameters and applied type functions in signatures."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/type_params.cml"

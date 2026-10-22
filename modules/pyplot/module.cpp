@@ -54,7 +54,7 @@ bool PyplotModule::load() {
     // The purity of the module's operator (design principles 3.3). `plot` writes an image file
     // (or opens a window when matplotlib shows one): no pass may fold, merge or drop the call.
     // Without this entry the declaration loader refuses a body-less declaration of `pyplot:plot`
-    // (`Builder::declareNativeOperator`, src/compile/gir/builder_modules.cpp:385; H157, H166).
+    // (`Builder::declareNativeOperator`, src/compile/gir/builder_modules.cpp#declareNativeOperator; H157, H166).
     camel::core::OperatorTable::instance().declare("pyplot", {{"plot", false}});
     loaded_ = true;
     return true;

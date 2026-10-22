@@ -406,7 +406,7 @@ match type type {
 - A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
 
 ```cml
-func duplicate(t: typeas T) {
+func duplicate::<T>(t: T) {
     return match type T {
         case struct => (t, t)
         case tuple  => (t, t)
@@ -420,7 +420,7 @@ func duplicate(t: typeas T) {
 `static for (n, F) in fields T => block` expands the **field list** of `T` when the function is instantiated (design principles 5.5): the block runs once per field, and the expanded code becomes straight-line code at that position. The graph has no loop node.
 
 - `T` must be concrete and an [R3 inner node](../../design/generic-structure/README.cn.md): a struct or an **ordinary** tuple. `T?`, `T!`, a mutable cell, a scalar, an array and a function are leaves and report `SemanticDiag::StaticForNotComposite`; handle them with `match type` first.
-- `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type. Both are visible in the block only; `F` may be written in a type position (`let x: F`, `typeas F`) but is not a value.
+- `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type. Both are visible in the block only; `F` may be written in a type position (`let x: F`) but is not a value.
 - The type after `fields` is a type position too: a `(` there is always the start of a type, so the empty tuple is written `fields ()` without a `type EmptyTuple = ()` first; a function type takes one more pair of parentheses, `fields ((x: int) => int)`.
 - Fields are expanded in declaration order, each with its own block scope. An empty struct or tuple expands zero times and the block is not built at all.
 - As a statement, `static for` always drops the value of the block, and the construct has type `void`; where a value is needed, write the comprehension form (below).
@@ -429,7 +429,7 @@ func duplicate(t: typeas T) {
 - When the field's value is dropped (a `t.[n];` statement on its own), the field is checked but no `ACCS` is built; the target expression is still evaluated, so its effects remain.
 
 ```cml
-func show(t: typeas T) {
+func show::<T>(t: T) {
     static for (n, F) in fields T => {
         print(n, t.[n])
     }
@@ -473,7 +473,7 @@ func doubled(t: {a: int, b: int}): {a: int, b: int} {
     return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
 }
 
-func rebuild(t: typeas T) {
+func rebuild::<T>(t: T) {
     return match type T {
         case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
         case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
@@ -497,7 +497,7 @@ static loop name = init (, name = init)* (for (n, F) in fields T | for (j) in in
 - Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
 
 ```cml
-func count(t: typeas T): int {
+func count::<T>(t: T): int {
     return static loop n = 0 for (name, F) in fields T do n + 1
 }
 

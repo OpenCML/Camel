@@ -781,8 +781,8 @@ void ParserImpl::parseFrontMatter() {
 }
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
-///            'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
-///            stmtBlock?
+///            'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+///            resourceClause? stmtBlock?
 ///
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
 /// (design principles 6.4): it has no block, and what it declares is its signature. The
@@ -941,6 +941,9 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     } else {
         parseIdentRef(NK::IdentRef);
     }
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
     parseParentParams(true, true);
     if (eat(TK::Colon)) {
         parseType();
@@ -958,6 +961,35 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseStmtBlock();
     }
     close(m, NK::FuncDecl);
+}
+
+/// typeParams : '::' '<' identDef (',' identDef)* ','? '>'
+///
+/// The type parameters of a generic declaration, written at its head right after the name
+/// (design principles 5.5): `func first::<T>(xs: T[]): T`. The spelling is the one a call site
+/// uses for explicit type arguments (`first::<int>(xs)`), so whether a declaration is generic is
+/// visible in its head; without `::<...>` it is not generic. `rule` and `fact` declare theirs the
+/// same way. A dimension name still binds where a shape first writes it (5.4) and may be listed
+/// here too, which is why the list can name one.
+void ParserImpl::parseTypeParams() {
+    const size_t m = mark();
+    bump(); // `::`
+    if (!panic_ && cur_ != TK::Lt && cur_ != TK::LAngle) {
+        unexpected({e(TK::Lt)});
+        return close(m, NK::TypeParams);
+    }
+    bump(); // `<`
+    {
+        Scope scope(*this, false);
+        parseIdentDef();
+        while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
+            parseIdentDef();
+        }
+    }
+    if (!panic_ && !eat(TK::Gt)) {
+        unexpected({e(TK::Comma), e(TK::Gt)});
+    }
+    close(m, NK::TypeParams);
 }
 
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')
@@ -1210,6 +1242,22 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 /// report it; the parameter lists of a lambda, a function type and a rule take neither.
 void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
     const size_t m = mark();
+    if (lambdaParams_ && cur_ == TK::LParen) {
+        // A lambda parameter destructured as a tuple: `((a, b)) => ...`. The rule is the one of
+        // `let (a, b) = p`: the names take the elements of the tuple the position passes.
+        bump();
+        parseIdentDef();
+        while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {
+            bump();
+            parseIdentDef();
+        }
+        eat(TK::Comma);
+        if (!panic_) {
+            expect(TK::RParen);
+        }
+        close(m, NK::TupleParam);
+        return;
+    }
     if (allowRest && cur_ == TK::DotDot) {
         bump();
         parseIdentDef();
@@ -1266,6 +1314,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
     {
         Scope scope(*this, false);
         if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
+            (lambdaParams_ && cur_ == TK::LParen) ||
             (allowRest && cur_ == TK::DotDot) || (allowConstas && cur_ == TK::KwConstas)) {
             parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {

@@ -173,10 +173,18 @@ any Formatter::visitProgram(cst::Program context) {
     string headStr, tailStr;
     if (moduleDecl) {
         // The comments above `module` (the description of the file) stay above it; they used
-        // to be dropped.
+        // to be dropped. A blank line between two of them is kept: it is what separates the
+        // licence header from the file's own description, and without it the two runs of
+        // comments become one, which changes how the parser reads the file.
+        size_t previousEnd = 0;
         for (size_t i = 0; i < moduleDecl.firstToken().index(); i++) {
             if (tokens[i].channel > 1) {
+                const size_t line = tokens[i].line();
+                if (previousEnd != 0 && line > previousEnd + 1) {
+                    headStr += lineEnd();
+                }
                 headStr += tokens[i].text() + lineEnd();
+                previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
         headStr += any_cast<string>(visit(moduleDecl));
@@ -507,6 +515,9 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     } else {
         result += "func " + any_cast<string>(visitIdentRef(identRef));
     }
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
     result += any_cast<string>(visitParentParams(parentParams));
 
     if (typeExpr) {
@@ -539,6 +550,9 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
     }
     result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
     if (const auto ruleContext = context->get<cst::RuleContext>()) {
         result += any_cast<string>(visitRuleContext(ruleContext));
     }
@@ -879,13 +893,30 @@ any Formatter::visitPairedValues(cst::PairedValues context) {
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
+any Formatter::visitTupleParam(cst::TupleParam context) {
+    string result = "(";
+    bool first    = true;
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        if (!first) {
+            result += ", ";
+        }
+        first   = false;
+        result += any_cast<string>(visitIdentDef(identDef));
+    }
+    return result + ")";
+}
+
+/*
+pairedParams : keyParamPair (',' keyParamPair)* ;
+*/
 any Formatter::visitPairedParams(cst::PairedParams context) {
-    return formatList(
-        vec(context->all<cst::KeyParamPair>()),
-        context,
-        ", ",
-        ",",
-        PaddingNL | PushScope);
+    std::vector<syn::Node> params;
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyParamPair) || child.is(NK::TupleParam)) {
+            params.push_back(child);
+        }
+    }
+    return formatList(params, context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
@@ -939,7 +970,7 @@ any Formatter::visitSliceIndices(cst::SliceIndices context) {
     for (size_t i = 0; i < context->childCount(); ++i) {
         const auto child = context->child(i);
         if (child.isToken()) {
-            result += ":";
+            result += child.token().kind() == TK::ColonColon ? "::" : ":";
             continue;
         }
         if (!result.empty() && result.back() == ':') {
@@ -1741,6 +1772,16 @@ any Formatter::visitTypeList(cst::TypeList context) {
 }
 
 /*
+typeParams
+    : '::' '<' identDef (',' identDef)* ','? '>'
+    ;
+*/
+any Formatter::visitTypeParams(cst::TypeParams context) {
+    const auto names = vec(context->all<cst::IdentDef>());
+    return "::<" + formatList(names, context, ", ", ",", PaddingNL | PushScope) + ">";
+}
+
+/*
 typeArguments
     : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
     ;
@@ -1845,6 +1886,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(AnalysisDecl)
         CAMEL_FORMAT(AnalysisClause)
         CAMEL_FORMAT(RuleContext)
+        CAMEL_FORMAT(TypeParams)
         CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)
         CAMEL_FORMAT(ResourceDecl)
@@ -1858,6 +1900,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(KeyTypePair)
         CAMEL_FORMAT(KeyValuePair)
         CAMEL_FORMAT(KeyParamPair)
+        CAMEL_FORMAT(TupleParam)
         CAMEL_FORMAT(DataList)
         CAMEL_FORMAT(IdentList)
         CAMEL_FORMAT(IndexValues)
@@ -1968,8 +2011,6 @@ any Formatter::visit(syn::Node context) {
         return "(" + any_cast<string>(visit(context.type())) + ")";
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
-    case NK::TypeAsType:
-        return "typeas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::ConstasData:
         return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::SliceIndices:

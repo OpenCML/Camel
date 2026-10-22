@@ -205,6 +205,9 @@ struct Budget {
 
 struct RewriteStats {
     size_t rounds  = 0;
+    /// The nodes the matcher looked at, over all rounds: the alive nodes that take part in a
+    /// rewrite.
+    size_t visited = 0;
     size_t applied = 0;
     size_t erased  = 0;
     bool fixpoint  = false; // a round applied nothing

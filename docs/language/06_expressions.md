@@ -406,7 +406,7 @@ match type 类型 {
 - 泛型函数的返回类型可以省略，由每个实例选中的分支推出（返回类型推断）。如果递归调用回到**同一个类型实例**、而该实例的返回类型还没有推出，报 `SemanticDiag::GenericInstantiationCycle`；递归到严格更小的类型参数则照常先完成子实例。
 
 ```cml
-func duplicate(t: typeas T) {
+func duplicate::<T>(t: T) {
     return match type T {
         case struct => (t, t)
         case tuple  => (t, t)
@@ -420,7 +420,7 @@ func duplicate(t: typeas T) {
 `static for (n, F) in fields T => 块` 把 `T` 的**字段表**在实例化时展开（[5.5](../design-principles.cn.md)）：每个字段执行一次块，展开出的代码直接成为当前位置的直线代码，运行时没有循环节点。
 
 - `T` 必须是具体类型，而且是 [R3 内部节点](../design/generic-structure/README.cn.md)：结构体或**普通**元组。`T?`、`T!`、可变单元格、标量、数组和函数都是叶子，报 `SemanticDiag::StaticForNotComposite`；先用 `match type` 处理它们。
-- `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`、`typeas F`），不能当值用。
+- `n` 是字段名；元组的字段名是十进制下标（`"0"`、`"1"`，……），按声明顺序。`F` 是字段类型。两者只在块内可见；`F` 可以写在类型位置（`let x: F`），不能当值用。
 - `fields` 后面也是类型位置：紧跟的 `(` 一律读作类型的开头，所以空元组直接写 `fields ()`，不需要先 `type EmptyTuple = ()`；函数类型要再包一层括号，写成 `fields ((x: int) => int)`。
 - 字段按声明顺序展开，每个字段的块有独立的块作用域。空结构体或空元组展开零次，块一次也不建。
 - `static for` 作为语句时块的值总是被丢弃，整个构造的值是 `void`；需要值的位置写 comprehension 形式（见下）。
@@ -429,7 +429,7 @@ func duplicate(t: typeas T) {
 - 字段的值被丢弃时（`t.[n];` 单独成句），只检查字段，不建 `ACCS`；目标表达式仍然求值，以保留它的副作用。
 
 ```cml
-func show(t: typeas T) {
+func show::<T>(t: T) {
     static for (n, F) in fields T => {
         print(n, t.[n])
     }
@@ -473,7 +473,7 @@ func doubled(t: {a: int, b: int}): {a: int, b: int} {
     return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
 }
 
-func rebuild(t: typeas T) {
+func rebuild::<T>(t: T) {
     return match type T {
         case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
         case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
@@ -497,7 +497,7 @@ static loop 名字 = 初值 (, 名字 = 初值)* (for (n, F) in fields T | for (
 - 效应就是直线代码的效应：循环体是不是同步块由它自己决定（3.2），每轮的效应按字段顺序执行。
 
 ```cml
-func count(t: typeas T): int {
+func count::<T>(t: T): int {
     return static loop n = 0 for (name, F) in fields T do n + 1
 }
 

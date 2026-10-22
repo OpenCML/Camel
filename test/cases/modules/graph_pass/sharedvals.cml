@@ -9,7 +9,7 @@ export func bump(x: int): int {
     return x + 1
 }
 
-export func twice(x: (typeas T)): T {
+export func twice::<T>(x: (T)): T {
     return x + x
 }
 

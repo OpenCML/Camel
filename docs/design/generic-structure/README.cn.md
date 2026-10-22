@@ -1,3 +1,5 @@
+# （历史设计稿：文中旧拼写以设计原则 5.5 为准，类型参数在名字后 `::<T>` 声明）
+
 # 泛型按结构展开：设计稿（待作者讨论）
 
 状态：提案，未实现。服务于 [设计原则 5.5](../../design-principles.cn.md) 第一条：`tree_map` 这类"形状由类型决定、编译期展开"的操作用泛型写在库里，不做编译器内建；为此泛型要能在编译期按结构体、元组的字段递归。
@@ -28,7 +30,7 @@
 | R3 | 在叶子处停止。叶子是内部节点以外的一切：标量、张量、字符串、数组、映射、`enum`、`Device<标量或张量>`，以及 `T?`、`T!`（带标记的元组与单元格不是内部节点，13.5、审查 frontend-4） | `Tensor<f32>?` 是叶子，不是一元素的元组 |
 | R4 | 构造同形的结构体或元组，每个字段换成新类型，字段名与顺序不变 | `{ w: Tensor<f32> }` 变成 `{ w: float }` |
 | R5 | 沿途带着路径 | `blocks.0.w`，根为空路径（13.5） |
-| R6 | 同时遍历多棵同形的树，对位的叶子作为多个实参传给回调；边界以第一棵为准 | `tree_map<f>(p, g, m, v)` |
+| R6 | 同时遍历多棵同形的树，对位的叶子作为多个实参传给回调；边界以第一棵为准 | `tree_map(p, g, m, v)` |
 | R7 | 空树（`{}`、`()`）正常工作，不特殊处理 | `tree_reduce` 的结果就是初值 |
 | R8 | 全部在实例化时解决：展开后的图只有逐叶的普通节点（ACCS、FILL、对回调的调用），没有"类型""字段表"这类值；回调是泛型函数或重载集合时，每个叶子按自己的类型各实例化一次 | 13.5、训练设计稿 3.1 |
 
@@ -50,9 +52,9 @@
 新增的构造，共四样：
 
 1. `match type T { case struct => …; case tuple => …; case _ => … }`：按类型的**形状**在实例化时选一条分支，**没被选中的分支不建图、不做类型检查**（相当于 C++ 的 `if constexpr`）。`struct`、`tuple` 只匹配 R3 定义的内部节点，所以 `T?`、`T!`、单元格落在 `case _`。
-2. `static for (constas n, typeas F) in fields T`：把字段表展开，每个字段一份函数体。`n` 是编译期常量（结构体是字段名，元组是下标的十进制字面，两者都能直接当路径的一段），`F` 是字段类型。绑定写法沿用 `constas`、`typeas`（5.4、5.5），不引入新的绑定机制。
+2. `static for (n, F) in fields T`：把字段表展开，每个字段一份函数体。`n` 是编译期常量（结构体是字段名，元组是下标的十进制字面，两者都能直接当路径的一段），`F` 是字段类型。`n`、`F` 的绑定写法就是位置本身（5.4、5.5），不引入新的绑定机制。
 3. 编译期字段访问 `x.[n]`，以及"推导式"构造 `{ static for … => n: e }`（结构体）与 `( static for … => e )`（元组）：生成同形的新值，字段类型由 `e` 的类型得到。
-4. 变长参数 `..ts` 与展开调用 `f(t, ..ts)`：`ts` 是元数在编译期已知的元组，`static for (constas j) in indices ts` 遍历它。解决 R6。
+4. 变长参数 `..ts` 与展开调用 `f(t, ..ts)`：`ts` 是元数在编译期已知的元组，`static for (j) in indices ts` 遍历它。解决 R6。
 
 另外，带 `static` 构造的泛型函数**可以省略返回类型**，由实例化后的函数体推出（见 3.1.4）。
 
@@ -60,19 +62,19 @@
 
 ```camel
 // 回调 f 作为 with 参数；t 决定叶子边界；ts 是其余同形的树（元数可以是 0）
-export func tree_map<f>(t: typeas T, ..ts) {
+export func tree_map::<T>(t: T, ..ts) {
     return match type T {
-        case struct => { static for (constas n, typeas F) in fields T =>
-                             n: tree_map<f>(t.[n], ..column(n, ts)) }
-        case tuple  => ( static for (constas n, typeas F) in fields T =>
-                             tree_map<f>(t.[n], ..column(n, ts)) )
+        case struct => { static for (n, F) in fields T =>
+                             n: tree_map(t.[n], ..column(n, ts)) }
+        case tuple  => ( static for (n, F) in fields T =>
+                             tree_map(t.[n], ..column(n, ts)) )
         case _      => f(t, ..ts)
     }
 }
 
 // 取各棵树在字段 n 处的子树。找不到字段就是普通的"无此字段"错误
 func column(constas n, ts) {
-    return ( static for (constas j) in indices ts => ts.[j].[n] )
+    return ( static for (j) in indices ts => ts.[j].[n] )
 }
 ```
 
@@ -85,13 +87,13 @@ func column(constas n, ts) {
 #### 3.1.2 `tree_paths`
 
 ```camel
-export func tree_paths(t: typeas T) { return paths_at(t, "") }
+export func tree_paths::<T>(t: T) { return paths_at(t, "") }
 
-func paths_at(t: typeas T, here: string) {
+func paths_at::<T>(t: T, here: string) {
     return match type T {
-        case struct => { static for (constas n, typeas F) in fields T =>
+        case struct => { static for (n, F) in fields T =>
                              n: paths_at(t.[n], join(here, n)) }
-        case tuple  => ( static for (constas n, typeas F) in fields T =>
+        case tuple  => ( static for (n, F) in fields T =>
                              paths_at(t.[n], join(here, n)) )
         case _      => here
     }
@@ -113,14 +115,14 @@ func join(a: string, b: string): string { return if a == "" then b else a + "." 
 //   ckpt_open(dir: string, spec: string): Ckpt!               // 一次校验清单、结构、全部文件
 //   ckpt_get::<L>(h: Ckpt, path: string): L                   // 叶子重载，L 为显式类型实参
 
-export func save_tree(dir: string, t: typeas T): unit! {
+export func save_tree::<T>(dir: string, t: T): unit! {
     let h = save_at(ckpt_begin(dir), "", t)       // 沿规范顺序一路传下去，写入次序就是数据依赖
     return ckpt_commit(h, type_spec::<T>(), "")
 }
-func save_at(h: Ckpt, here: string, t: typeas T): Ckpt {
+func save_at::<T>(h: Ckpt, here: string, t: T): Ckpt {
     return match type T {
         case struct | tuple =>
-            static loop h = h for (constas n, typeas F) in fields T do   // 展开的折叠
+            static loop h = h for (n, F) in fields T do   // 展开的折叠
                 save_at(h, join(here, n), t.[n])
         case _ => ckpt_put(h, here, t)             // 没有适用的重载：带路径的编译错误
     }
@@ -131,8 +133,8 @@ export func load_tree::<T>(dir: string): T! {
 }
 func load_at::<T>(h: Ckpt, here: string): T {
     return match type T {
-        case struct => { static for (constas n, typeas F) in fields T => n: load_at::<F>(h, join(here, n)) }
-        case tuple  => ( static for (constas n, typeas F) in fields T => load_at::<F>(h, join(here, n)) )
+        case struct => { static for (n, F) in fields T => n: load_at::<F>(h, join(here, n)) }
+        case tuple  => ( static for (n, F) in fields T => load_at::<F>(h, join(here, n)) )
         case _      => ckpt_get::<T>(h, here)
     }
 }
@@ -170,20 +172,20 @@ func type_spec::<T>(): string { … }
 
 借鉴：GHC.Generics、Rust 里为元组逐元数 `impl`、`HList`。
 
-不引入循环，只引入"类型上的模式匹配 + 剩余部分"：`match type` 的模式可以写 `(typeas H, ..typeas R)` 与 `{ constas n: typeas H, ..typeas R }`，值上对应 `let (h, ..r) = t` 与 `{ n: x, ..rest }`。
+不引入循环，只引入"类型上的模式匹配 + 剩余部分"：`match type` 的模式可以写 `(H, ..R)` 与 `{ n: H, ..R }`，值上对应 `let (h, ..r) = t` 与 `{ n: x, ..rest }`。
 
 ```camel
-export func tree_map<f>(t: typeas T, ..ts) {
+export func tree_map::<T>(t: T, ..ts) {
     return match type T {
         case ()                    => ()
-        case (typeas H, ..typeas R) => {
+        case (H, ..R) => {
             let (h, ..r) = t
-            return (tree_map<f>(h, ..heads(ts)), ..tree_map<f>(r, ..tails(ts)))
+            return (tree_map(h, ..heads(ts)), ..tree_map(r, ..tails(ts)))
         }
         case {}                    => {}
-        case { constas n: typeas H, ..typeas R } => {
+        case { n: H, ..R } => {
             let { n: h, ..r } = t
-            return { n: tree_map<f>(h, ..heads(ts)), ..tree_map<f>(r, ..tails(ts)) }
+            return { n: tree_map(h, ..heads(ts)), ..tree_map(r, ..tails(ts)) }
         }
         case _                     => f(t, ..ts)
     }
@@ -205,7 +207,7 @@ export func tree_map<f>(t: typeas T, ..ts) {
 
 ```camel
 trait Tree {
-    func tree_map<f>(self, ..others: Self): Self'    // 结果类型随 f 变化，需要关联类型
+    func tree_map(self, ..others: Self): Self'    // 结果类型随 f 变化，需要关联类型
 }
 impl Tree for Tensor<f32> { … }
 derive Tree for struct, tuple                       // 谁来实现 derive？
@@ -238,8 +240,8 @@ derive Tree for struct, tuple                       // 谁来实现 derive？
 
 ```camel
 type Device<T> = match type T {
-    case struct => { static for (constas n, typeas F) in fields T => n: Device<F> }
-    case tuple  => ( static for (constas n, typeas F) in fields T => Device<F> )
+    case struct => { static for (n, F) in fields T => n: Device<F> }
+    case tuple  => ( static for (n, F) in fields T => Device<F> )
     case _      => DeviceLeaf<T>            // 叶子必须是 Device 支持的类型，否则 static error
 }
 ```
@@ -283,7 +285,7 @@ type Device<T> = match type T {
 
 ## 6. 已定（2026-10-20）
 
-第 6 节原有的 11 个问题已全部定下（设计原则 5.5、5.6，及长线风险 7.13 的 G1–G4）：方案 A；带静态构造的泛型函数可以省略返回类型；可变元数 `..ts` 与展开调用；`match type`、`t.[n]`、`[n]: e`、`static loop` 的拼写如本稿；`static for (n, F) in fields T` 中不写 `constas`/`typeas`（位置即说明绑定的种类），需要字段标签时写 `(n, F, tags)`；用户自定义叶子用声明标签 `#leaf`（第二期）；以函数为 `with` 实参时函数身份进入实例键，作为普通实参且编译期已知时由编译器特化（设计原则 4.4）；含静态构造的实例自动内联；实例化链诊断加 `static error`，深度上限可调；路径为运行时字符串、由常量折叠；类型位置使用同一套构造（设计原则 5.6）；`load_tree` 在打开检查点时一次校验，之后逐叶读取不再返回错误。
+第 6 节原有的 11 个问题已全部定下（设计原则 5.5、5.6，及长线风险 7.13 的 G1–G4）：方案 A；带静态构造的泛型函数可以省略返回类型；可变元数 `..ts` 与展开调用；`match type`、`t.[n]`、`[n]: e`、`static loop` 的拼写如本稿；`static for (n, F) in fields T`（位置即说明绑定的种类），需要字段标签时写 `(n, F, tags)`；用户自定义叶子用声明标签 `#leaf`（第二期）；以函数为 `with` 实参时函数身份进入实例键，作为普通实参且编译期已知时由编译器特化（设计原则 4.4）；含静态构造的实例自动内联；实例化链诊断加 `static error`，深度上限可调；路径为运行时字符串、由常量折叠；类型位置使用同一套构造（设计原则 5.6）；`load_tree` 在打开检查点时一次校验，之后逐叶读取不再返回错误。
 
 <details><summary>原问题（存档）</summary>
 
@@ -293,13 +295,13 @@ type Device<T> = match type T {
 建议 A（编译期字段展开）。若倾向 B，需要先定类型层的余部写法（`..R`）和对 100 字段结构体 100 个实例的接受程度；若倾向 C，需要同时承诺 `trait` 这个新的语言特性。
 
 **2. 带静态构造的泛型函数可以省略返回类型，由实例化后的函数体推出吗？**
-例：`func tree_map<f>(t: typeas T, ..ts) { return match type T { … } }`，不写 `: …`。返回类型依赖回调的返回类型，用户写不出（没有类型层的"调用结果"）。建议：只允许泛型函数省略，且只有函数体含 `match type`/`static` 时；递归回到正在实例化的同一个键时报错。
+例：`func tree_map(t: T, ..ts) { return match type T { … } }`，不写 `: …`。返回类型依赖回调的返回类型，用户写不出（没有类型层的"调用结果"）。建议：只允许泛型函数省略，且只有函数体含 `match type`/`static` 时；递归回到正在实例化的同一个键时报错。
 
 **3. 同时遍历多棵树，用变长参数 `..ts` 与展开调用 `f(t, ..ts)`，还是为 1 到 N 棵树分别写重载？**
 例：`tree_map<adam_leaf>(p, g, m, v)`。建议：变长，`..` 绑定一个元数在编译期已知的元组，元数 0 合法；不引入运行时变长。
 
 **4. 静态构造的拼写。**
-候选：`match type T { case struct => … }`；`static for (constas n, typeas F) in fields T => …`；`static loop acc = init for (…) in fields T do …`；`t.[n]`；`{ … => n: e }`。
+候选：`match type T { case struct => … }`；`static for (n, F) in fields T => …`；`static loop acc = init for (…) in fields T do …`；`t.[n]`；`{ … => n: e }`。
 问：(a) `match type` 与 5.3 的值的 `match` 共用 `match` 再加 `type`，是否可接受；(b) 字段访问写 `t.[n]`、`t.(n)` 还是 `field(t, n)`；(c) 构造结构体时 `n: e` 的 `n` 是编译期名字，而平时 `n: e` 的 `n` 是字面的字段名，是否需要标记（如 `[n]: e`）。建议：沿用上面的写法，(c) 加方括号 `[n]: e` 更不易混淆。
 
 **5. 叶子怎么定义，用户能不能把自己的结构体声明成叶子？**
@@ -309,7 +311,7 @@ type Device<T> = match type T {
 例：`tree_map<(a: Tensor<f32>): float => sum(a)>(t)` 与 `tree_map<other>(t)` 是两个实例。这与 4.4"`with` 参数不是泛型参数"不矛盾（`f` 不是类型参数，只是它作为值决定了实例），但需要作者确认这个读法。建议：确认；回调为泛型函数时按名字传入，在叶子处才按叶子类型实例化（现在的行为）。
 
 **7. 展开出来的实例要不要强制内联？**
-例：`tree_map<f>(p, g)` 展开为对 `tree_map<f>::<Block>` 的 12 次调用。13.5 说自动微分与 Tiles 看到的是普通节点。建议：函数体含 `match type`/`static for` 的实例一律内联进调用者（用户不必写标注），内联之后与现在 `tree.cpp` 展开的图一致；9.6 的"优化不改变算子身份"不受影响，因为内联的是用户定义的函数图，不是内建算子。
+例：`tree_map(p, g)` 展开为对 `tree_map<f>::<Block>` 的 12 次调用。13.5 说自动微分与 Tiles 看到的是普通节点。建议：函数体含 `match type`/`static for` 的实例一律内联进调用者（用户不必写标注），内联之后与现在 `tree.cpp` 展开的图一致；9.6 的"优化不改变算子身份"不受影响，因为内联的是用户定义的函数图，不是内建算子。
 
 **8. 编译期展开失败的诊断，怎么给路径？**
 例：`save_tree(dir, { blocks: (b0, b1) })` 里 `b1.w` 是 `Tensor<i64>`，没有对应重载。建议：实例链加静态绑定（3.1.4 的格式），链上 `n` 连起来是 `blocks.1.w`；另提供 `static error "…"`，允许库给出自己的消息；实例化深度上限可调（同第 8 节对宏循环的做法）。

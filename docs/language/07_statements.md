@@ -200,7 +200,7 @@ func main(): int sync {
 - **可以重载的**：二元的 `+` `-` `*` `/` `%` `^` `@` `==` `<` `<=` `>` `>=` `&` `|`，下标 `[]`（被取下标的值与至少一个下标），一元的 `-` `!` `~`。`-` 有一个形参是取负，两个是减法。
 - **重载 `==` 即得到 `!=`**（设计原则 4.3）：用到这个 `==` 重载的 `a != b` 就是 `!(a == b)`，两者不会不一致；这个重载要返回 `bool`，否则在用到 `!=` 的地方是 `SemanticDiag::OperatorOverloadInvalid`。`!=` 本身不能单独重载（`SemanticDiag::OperatorNotOverloadable`）。
 - **不能重载的**：`&&`、`||`（分支）、`??`、`!!`、`?->`（对空值与错误的分支）、`->`（把值交给函数）、`..`、`as`、赋值、`!=`（跟随 `==`），以及 `===`、`!==`。写了是 `SemanticDiag::OperatorNotOverloadable`，诊断给出原因。复合赋值没有自己的重载：`a += b` 就是 `a = a + b`，跟随 `+` 的重载。
-- 运算符的形参个数不对、带 `with` 形参或 `var` 形参，是 `SemanticDiag::OperatorOverloadInvalid`。泛型的重载用 `typeas` 写在形参的类型里（`func operator +(a: (typeas T)[], b: T[]): T[]`），不写在尖括号里：尖括号是 `with` 形参。
+- 运算符的形参个数不对、带 `with` 形参或 `var` 形参，是 `SemanticDiag::OperatorOverloadInvalid`。泛型的重载把类型参数写在运算符名字后的 `::<…>` 里（`func operator +::<T>(a: T[], b: T[]): T[]`），不写在形参类型里。
 - **各层的重载合成一组。** 其他名字只取最近的一层（局部 > 本模块 > 导入的 > 内建），运算符例外（设计原则 10.2）：本模块的、导入的模块导出的、内建的与 C++ 模块的重载是同一组，一次调用取接受这些操作数的那一个。
 - **更具体的重载优先**（设计原则 4.3）。“更具体”的定义：一个程序的重载，形参类型恰好就是操作数的类型（不经装入 `T?`、`T!`），而其他接受这些操作数的都只是把它们当作某一族类型中的一员——内建或 C++ 模块中按类型规则接受多种类型的算子（数组、元组、结构体的按内容比较，张量上的运算），或泛型的重载——这时调用取这个程序的重载。于是结构体可以有自己的相等：`func operator ==(a: V, b: V): bool` 让 `p == q`（`p`、`q` 是 `V`）调用它，而不是按内容比较；其他结构体类型仍按内容比较。内建算子中为恰好这些类型声明的（`int + int`、`float == float`）与之同样具体：声明这样的重载是 `SemanticDiag::OperatorOverloadConflict`。
 - 除此之外有两个都接受时是 `SemanticDiag::AmbiguousCall`，诊断列出它们（两个泛型的重载、两个模块为同样的形参类型各给一个）；同一模块里形参类型相同的两个重载是 `SemanticDiag::Redeclaration`。普通调用与部分应用（`f<w>` 作值）遇到同一遍里有多个候选时也报这个诊断。
@@ -210,18 +210,18 @@ func main(): int sync {
 
 ## 7.5 泛型函数
 
-在形参类型里第一次出现类型变量的位置写 `typeas T`，把那个位置上的类型绑定为 `T`；之后（其余形参、返回类型、函数体）直接写 `T`。
+泛型函数的类型参数在函数头声明，写在函数名后的 `::<…>` 里。函数名后有 `::<…>` 就是泛型，没有就不是。
 
 ```cml
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func pick(c: bool, a: typeas T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T): T {
     return if c then a else b
 }
 
-func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
     return xs->map<f>
 }
 
@@ -240,20 +240,20 @@ func main(): int sync {
 ```
 
 - 泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图（同一组类型只实例化一次；`std::rgir` 里可以看到名为 `first<int>`、`first<string>` 的子图）。图上只有具体类型，运行时不需要类型信息。
-- **类型变量从实参得到类型。** 先取实参在 `typeas` 位置上的类型；那个位置的实参什么都没说时（是 `null`，或是一个自己还在等类型的泛型函数），取它在别处出现的位置上的类型。所有实参给出的约束收集完再检查：每个形参按代入后的类型检查，不做隐式转换（值进入 `T?`/`T!` 形参除外，见 [3.4](03_data_model.md)）。`pick(true, 1, 2.5)` 是错误（`T` 已绑定为 `int`）；定不下来的变量是编译期错误，诊断指出是哪一个。
-- `typeas` 可以出现在数组元素、元组元素、结构体字段、函数类型的形参与返回值、`T?`/`T!` 的内层、`Map`/`Set` 与类型函数的实参这些位置上。不能作为模块类型的实参。
-- `typeas` 可以写在函数声明的形参（包括 `with` 形参）或返回类型里。类型变量必须先声明后使用（按书写顺序，`with` 形参在前）；同一个变量声明两次、或与已有类型同名是错误。
-- 只出现在返回类型中的变量由期望类型推出：`let xs: int[] = empty()`、已知形参类型的位置、声明的返回位置。没有足够上下文时写显式类型实参：`empty::<int>()`。类型实参按签名中变量首次出现的顺序给出（`with` 形参在前），也可以按名字给出，不依赖位置：`pair::<A = int, B = string>(..)`。同一处要么全按位置、要么全按名字，不能混写；按名字时每个类型变量都要给出，名字写错或重复是编译错误；内建算子（`tree`、`json::decode_as` 等）只接受按位置。类型实参只在编译期参与实例化；`f<w>` 继续表示值上下文参数，合用时为 `f::<T><w>(x)`。显式实例也可以作函数值：`let f = id::<int>`。
+- **类型变量从实参得到类型。** 每个实参按它所在形参的类型与形参统一；实参什么都没说时（是 `null`，或是一个自己还在等类型的泛型函数），取它在别处出现的位置上的类型。所有实参给出的约束收集完再检查：每个形参按代入后的类型检查，不做隐式转换（值进入 `T?`/`T!` 形参除外，见 [3.4](03_data_model.md)）。`pick(true, 1, 2.5)` 是错误（`T` 已绑定为 `int`）；定不下来的变量是编译期错误，诊断指出是哪一个。
+- 函数头声明的名字可以在签名的任何类型位置上写：数组元素、元组元素、结构体字段、函数类型的形参与返回值、`T?`/`T!` 的内层、`Map`/`Set` 与类型函数的实参。不能作为模块类型的实参。
+- 只有函数头声明的名字才是类型变量。形参类型里一个不指向任何类型、也没有在函数头声明的名字是未知类型错误（`SemanticDiag::UnresolvedTypeReference`），不会被自动绑定。同一个名字在函数头声明两次是 `SemanticDiag::TypeVariableRedeclared`；声明了却不在签名里写是警告 `SemanticDiag::TypeVariableUnused`，声明仍然可用。函数头声明的名字与已有类型同名时，在这个函数里它是类型参数：头部的声明优先。
+- 只出现在返回类型中的变量由期望类型推出：`let xs: int[] = empty()`、已知形参类型的位置、声明的返回位置。没有足够上下文时写显式类型实参：`empty::<int>()`。类型实参按函数头里变量声明的顺序给出，也可以按名字给出，不依赖位置：`pair::<A = int, B = string>(..)`。同一处要么全按位置、要么全按名字，不能混写；按名字时每个类型变量都要给出，名字写错或重复是编译错误；内建算子（`tree`、`json::decode_as` 等）只接受按位置。类型实参只在编译期参与实例化；`f<w>` 继续表示值上下文参数，合用时为 `f::<T><w>(x)`。显式实例也可以作函数值：`let f = id::<int>`。
 - **函数体在实例化时检查。** 函数体里的类型错误在实例化时报告，诊断给出错误在函数体里的位置，并指出是哪个实例、由哪一处调用实例化的。从未被调用的泛型函数不会被检查。
 - 递归的泛型函数可以用（要写出返回类型）。每次递归都换成更大类型的函数无法终止实例化，嵌套到 8 层时报错。
 - 函数体里可以用 `T`：lambda 的形参类型、`let z: T = 0`、`e as T`。
 - **导出**：泛型函数可以 `export`，别的模块 `import` 之后照常调用（也可以写限定名 `lib::f(x)`）。导出的是模板；全程序每组类型只有一个实例，不论哪个模块调用它。函数体里的名字在声明它的模块里解析，所以可以使用那个模块里没有导出的函数、别的泛型函数、它自己的导入和它顶层的值。
 
-`with` 形参里同样可以绑定：
+`with` 形参的类型同样可以使用函数头声明的名字：
 
 ```cml
-with <f: (acc: typeas U, x: typeas T) => U, init: U>
-func my_fold(xs: T[]): U {
+with <f: (acc: U, x: T) => U, init: U>
+func my_fold::<T, U>(xs: T[]): U {
     return xs->reduce<f, init>
 }
 
@@ -270,9 +270,9 @@ func main(): int sync {
 **泛型函数可以出现在任何期望一个函数的位置**，包括传给另一个泛型函数。编译器把它的实例化延迟到类型变量能从上下文确定时；延迟只发生在编译期，图上只有具体的实例。
 
 ```cml
-func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
-func id(x: typeas A): A { return x }
-func pair(x: typeas A): (A, A) { return (x, x) }
+func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
+func id::<A>(x: A): A { return x }
+func pair::<A>(x: A): (A, A) { return (x, x) }
 
 func main(): int sync {
     println(apply(id, 3), apply(pair, 'a'))   // T 来自 3：id 实例化为 id<int>，于是 U = int
@@ -533,11 +533,11 @@ type PairList<T> = Pair<T>[]
 
 func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
 
-func swap(p: Pair<typeas T>): Pair<T> {       // 与 typeas 组合
+func swap::<T>(p: Pair<T>): Pair<T> {          // 与函数头的类型参数组合
     return (p.1, p.0)
 }
 
-func key_of(e: Entry<typeas K, typeas V>): K {
+func key_of::<K, V>(e: Entry<K, V>): K {
     return e.key
 }
 

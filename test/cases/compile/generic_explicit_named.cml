@@ -1,8 +1,8 @@
 module generic_explicit_named
 // Type arguments by position (the order of first appearance in the signature) or by name,
 // not mixed (design principles 5.9).
-func pair(b: typeas B, a: typeas A): (A, B) { return (a, b) }
-func second(x: typeas T): T { return x }
+func pair::<B, A>(b: B, a: A): (A, B) { return (a, b) }
+func second::<T>(x: T): T { return x }
 func main(): int sync {
     println(pair::<string, int>('s', 1))
     println(pair::<A = int, B = string>('s', 1))

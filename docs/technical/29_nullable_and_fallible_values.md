@@ -248,8 +248,8 @@ language needs that, and it should be refused where the name is resolved.
 ### 4.5 Generics
 
 `substituteTypeVars`, `bindTypeVars`, `containsTypeVar` and `collectBindableTypeVars` descend
-through both forms. `(typeas T)?` binds `T` from the payload of a nullable argument, so
-`func or_zero(x: (typeas T)?, d: T): T { return x ?? d }` instantiates per payload type. A
+through both forms. A `T?` parameter binds `T` from the payload of a nullable argument when `T` is declared at the function's head, so
+`func or_zero::<T>(x: T?, d: T): T { return x ?? d }` instantiates per payload type. A
 plain argument enters the parameter and binds the variable of the payload (`or_zero(5, 0)`
 gives `T = int`). An instance is an ordinary graph of concrete types; nothing new exists at
 run time.

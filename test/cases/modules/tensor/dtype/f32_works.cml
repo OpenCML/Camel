@@ -1,0 +1,22 @@
+// `Tensor<f32>` is the element type this build stores, so it keeps working everywhere: as a cast
+// target, as a parameter type, in creation, arithmetic, reduction and the byte view. The expected
+// bytes below are what f32 has always stored for these values.
+module tensor_dtype_f32_works
+
+import { Tensor, new, zeros, ones, multiply, sum, to_bytes } from tensor
+import { to_array } from bytes
+
+func twice(x: Tensor<f32>): Tensor {
+    return multiply(x, 2.0)
+}
+
+func main(): int sync {
+    let a = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f32>
+    let z = zeros([2, 2]) as Tensor<f32>
+    println(sum(a))
+    println(sum(twice(a)))
+    println(sum(z))
+    println(sum(ones([2, 2])))
+    println(to_array(to_bytes(a)))
+    return 0
+}

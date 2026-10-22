@@ -7,19 +7,19 @@ module values
 
 import { reverse } from array
 
-func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
-func id(x: typeas A): A { return x }
-func pair(x: typeas A): (A, A) { return (x, x) }
-func first(xs: (typeas T)[]): T { return xs[0] }
-func left(p: (typeas A, typeas B)): A { return p.0 }
+func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
+func id::<A>(x: A): A { return x }
+func pair::<A>(x: A): (A, A) { return (x, x) }
+func first::<T>(xs: T[]): T { return xs[0] }
+func left::<A, B>(p: (A, B)): A { return p.0 }
 func twice(f: (x: int) => int, x: int): int { return f(f(x)) }
-func compose(f: (x: typeas A) => typeas B, g: (y: B) => typeas C, x: A): C { return g(f(x)) }
-func or_zero(x: (typeas T)?, d: T): T { return x ?? d }
-func add(a: typeas N, b: N): N { return a + b }
-func longer(a: (typeas T)[], x: T): T[] { return concat(a, [x]) }
-func is_small(x: typeas T): bool { return string(x) < '3' }
+func compose::<A, B, C>(f: (x: A) => B, g: (y: B) => C, x: A): C { return g(f(x)) }
+func or_zero::<T>(x: T?, d: T): T { return x ?? d }
+func add::<N>(a: N, b: N): N { return a + b }
+func longer::<T>(a: T[], x: T): T[] { return concat(a, [x]) }
+func is_small::<T>(x: T): bool { return string(x) < '3' }
 func pick(): (x: string) => string { return id }
-func each(xs: (typeas T)[], f: (x: T) => typeas U): U[] { return xs->map<f> }
+func each::<T, U>(xs: T[], f: (x: T) => U): U[] { return xs->map<f> }
 
 func main(): int sync {
     // passed to another generic function: its other arguments fix the types
@@ -39,7 +39,7 @@ func main(): int sync {
     let f: (x: int) => int = id
     let g: (xs: float[]) => float = first
     println(f(4), g([2.5]), pick()('s'))
-    // a variable that its `typeas` position leaves open takes its type elsewhere
+    // a variable that its first binding position leaves open takes its type elsewhere
     println(or_zero(null, 4), or_zero(7, 4))
     return 0
 }

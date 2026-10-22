@@ -3,7 +3,7 @@
  */
 module err_generic_nesting
 
-func some(x: typeas T): T? {
+func some::<T>(x: T): T? {
     return x
 }
 

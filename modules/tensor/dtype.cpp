@@ -24,18 +24,45 @@ bool isFloatingTensorType(TypeCode code) {
     return code == TypeCode::Float32 || code == TypeCode::Float64;
 }
 
-TypeCode normalizeTensorDType(TypeCode code) {
+std::optional<TypeCode> storedTensorDType(TypeCode code) {
     switch (code) {
-    case TypeCode::Float32:
     case TypeCode::Float64:
         return TypeCode::Float32;
     case TypeCode::Int32:
-    case TypeCode::Int64:
         return TypeCode::Int64;
+    default:
+        return std::nullopt;
+    }
+}
+
+TypeCode normalizeTensorDType(TypeCode code) {
+    if (const std::optional<TypeCode> stored = storedTensorDType(code)) {
+        return *stored;
+    }
+    switch (code) {
+    case TypeCode::Float32:
+    case TypeCode::Int64:
     case TypeCode::Bool:
-        return TypeCode::Bool;
+        return code;
     default:
         throw std::invalid_argument("Unsupported Tensor dtype");
+    }
+}
+
+std::string elementTypeSpelling(TypeCode code) {
+    switch (code) {
+    case TypeCode::Float32:
+        return "f32";
+    case TypeCode::Float64:
+        return "f64";
+    case TypeCode::Int32:
+        return "i32";
+    case TypeCode::Int64:
+        return "i64";
+    case TypeCode::Bool:
+        return "bool";
+    default:
+        return type::typeCodeToString(code);
     }
 }
 

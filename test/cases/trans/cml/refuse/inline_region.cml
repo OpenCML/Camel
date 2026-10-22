@@ -1,0 +1,9 @@
+// `std::opt::inline` leaves the inlined body in an annotation region. The printer does not write
+// a source block for it (S4), so `std::cml` refuses the graph after the inlining pass.
+func add1(x: int): int {
+    return x + 1
+}
+
+func main(): int {
+    return add1(2)
+}

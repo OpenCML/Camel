@@ -1,0 +1,15 @@
+// `Tensor<i32>` asks for i32 elements. This build stores integer tensors as int64, so the
+// declaration is refused at the type expression (SemanticDiag::TensorElementTypeNotStored)
+// instead of the program silently running with int64 storage.
+//
+// Before the diagnostic this program compiled: the cast target was normalized to
+// `Tensor<i64, [4]>`, and `sum` answered 6.0 from int64 storage.
+module tensor_dtype_i32_refused
+
+import { Tensor, range, sum } from tensor
+
+func main(): int sync {
+    let x = range(0, 4) as Tensor<i32, [4]>
+    println(sum(x))
+    return 0
+}
