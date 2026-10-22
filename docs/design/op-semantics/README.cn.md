@@ -1057,7 +1057,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 ```
 
 - 语义：每一轮先求条件（`While`、`ForWhile`；条件看得到状态，看不到元素），再取下一个元素（`For`、`ForWhile`），再求循环体；条件为假或元素取完即结束；循环的值是最后的状态。`camel/core/loop_kind.h` 写明了这一点。
-- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它，每个后端都在程序自己的图上执行，所以 `tiles.run<f>` 等在所有后端上收到的都是程序原来的 `f` 的图。声明了读图的算子（`OperatorTraits::readsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）直接拿到程序里的函数值，不需要把副本换回原图。新的模块算子若读函数值的图，同样在登记时声明 `readsGraphs`。
+- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它，每个后端都在程序自己的图上执行，所以 `tiles.run_preferred_resident<f>` 等在所有后端上收到的都是程序原来的 `f` 的图。声明了读图的算子（`OperatorTraits::readsGraphs`：Tiles 的 `run_preferred_resident`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）直接拿到程序里的函数值，不需要把副本换回原图。新的模块算子若读函数值的图，同样在登记时声明 `readsGraphs`。
 - 没有"在入口降级"这条路径：Tiles 直接读 `LoopView` 的两个区域。
 - 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
 
@@ -1287,7 +1287,7 @@ auto cached = facts.get<MyLayout>(kLayout, fact::Anchor{graph, ref}, target); //
 
 **图的转储不变；CPU 的结果只有 `log_softmax` 变了**（它的内核改为照定义，第 9 节开头：对数在 f32 里取，最后几位可能不同；Tiles 以定义为准对照）；没有遍或后端默认展开定义图。因为加了定义，`tensor:relu`、`tensor:mean` 的键升为 `@1.2`，`tensor:softmax`、`tensor:log_softmax`、`tensor:sigmoid` 第一次有语义记录（`@1.0`，只有定义）；编译缓存若记了这些键，次版本变化按 4.1 处理。
 
-**Tiles 自己的算子已声明资源**（`modules/tiles/src/module.cpp` 的 `load()`，核心为此对 Tiles 做的第二处改动；若 Tiles 想自己维护，直接改那一段即可）：设备内存是外部对象 `tiles:device`，驱动与设备是环境状态 `tiles:driver`；`upload` 新建 `tiles:device`；`download`、`run`、`benchmark` 读第 0 个操作数里的设备值；`run_device` 同样读，并新建 `tiles:device`，结果可能与输入别名（"returned inputs share native ownership"）；`source`、`inspect` 读 `tiles:driver`；全部有外部效应（与 traits 一致）。
+**Tiles 自己的算子已声明资源**（`modules/tiles/src/module.cpp` 的 `load()`，核心为此对 Tiles 做的第二处改动；若 Tiles 想自己维护，直接改那一段即可）：设备内存是外部对象 `tiles:device`，驱动与设备是环境状态 `tiles:driver`；`upload` 新建 `tiles:device`；`download`、`run_preferred_resident`、`benchmark` 读第 0 个操作数里的设备值；`run_preferred_resident` 新建 `tiles:device`，结果可能与输入别名（"returned inputs share native ownership"）；`source`、`inspect` 读 `tiles:driver`；全部有外部效应（与 traits 一致）。
 
 **查询一个节点碰了什么、两个节点要不要保持先后：**
 
@@ -1396,7 +1396,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 
 ### Q11 后端入口能否接受许可
 
-例如 `tiles.run<fn>(x)` 带一个"允许重排"的参数。候选：(A) 不能，许可只能写在 `fn` 的代码上；(B) 能，视为调用处写下的授予，作用于 `fn` 的整张图。
+例如 `tiles.run_preferred_resident<fn>(x)` 带一个"允许重排"的参数。候选：(A) 不能，许可只能写在 `fn` 的代码上；(B) 能，视为调用处写下的授予，作用于 `fn` 的整张图。
 **建议 A**：B 等于让调用者把许可传给被调用的函数，正是"被调用的函数不继承"所排除的；需要放宽就在 `fn` 上写标注。在前端支持标注之前，Tiles 只运行规范算法。
 
 ---

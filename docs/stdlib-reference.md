@@ -57,7 +57,7 @@ Not in this reference: the profiler (`perf`).
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
 | [rewrite](#rewrite) | `import { ... } from rewrite` | C++ | 8 |
-| [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
+| [tiles](#tiles) | `import { ... } from tiles` | C++ | 9 |
 | [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
 | [python](#python) | `import { ... } from python` | C++ | 11 |
 | [nn](#nn) | `import { ... } from nn` | C++ | 19 |
@@ -4434,26 +4434,12 @@ How many constants the rule `r` adds to the program.
 ## `tiles`: programs on a CUDA device
 
 Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
-the device computes, and the results come back to the host. `gpu` marks a function to prefer the
-device, `run`/`run_device` run one explicitly, `source`/`inspect`/`benchmark` show what would
-run, and `upload`/`download` move a value by hand. The device holds a foreign resource
-(`tiles:device`) and the driver is ambient state (`tiles:driver`), so every operator of this
-module has effects and none is folded or dropped.
-
-#### `gpu`
-
-```camel
-gpu: (fn: (x: float) => float) => (x: float) => float
-```
-
-Compiles the function to device code and returns a function of the same type that prefers the
-device: it runs there when the device can take it, and on the host otherwise. The function
-takes no with-parameter, has at least one ordinary parameter, and every leaf of its parameters
-and result is a float or an f32 tensor. The result is the argument's own type, which a
-declaration cannot say without also dropping that restriction.
-
-- With effects: marks a function to prefer the device.
-- Example: `let fast = gpu((x: float): float => x + 1.0)`
+the device computes, and the results come back to the host. `tiles::compile` outlines the regions
+the device can run, `source`/`inspect`/`benchmark` show what would run, and `upload`/`download`
+move a value by hand. Placement is asked for in the source with the `#gpu` label (design
+principles 13.4), which `tiles::compile` reads; the card is chosen at run time with `--devices`.
+The device holds a foreign resource (`tiles:device`) and the driver is ambient state
+(`tiles:driver`), so every operator of this module has effects and none is folded or dropped.
 
 #### `upload`
 
@@ -4480,39 +4466,16 @@ leaf that is not a device value is refused when the call is compiled.
 - With effects: transfers from the device.
 - Example: `download(resident)` gives `the tensor resident holds`
 
-#### `run`
-
-```camel
-run: <fn: (a: float, b: float) => float> (inputs: (float, float)) => float
-```
-
-Runs the function on the CUDA device: its parameter (or the tuple of its parameters) is
-uploaded, the device computes, and the result is downloaded again. The result type is the
-function's result type.
-
-- With effects: transfers both ways and runs device code.
-- Example: `run<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `5.0`
-
-#### `run_device`
-
-```camel
-run_device: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
-```
-
-Runs the function as `run` does but leaves the result on the device: each leaf of it comes back
-wrapped in `Device<...>`.
-
-- With effects: transfers to the device and runs device code.
-- Example: `run_device<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
-
 #### `run_preferred_resident`
 
 ```camel
 run_preferred_resident: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
 ```
 
-Runs the function the way `@gpu` does — a prepared device program when one can be made, the
-host otherwise — and answers the resident form of its result.
+Runs the function through the device path the pipeline prepared for it — the device when a
+program can be made for it, the host otherwise — and answers the resident form of its result.
+This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` scope asks for
+the device explicitly, and an operator the device cannot run is a compile error there.
 
 - With effects: transfers to the device and runs device code.
 - Example: `run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`

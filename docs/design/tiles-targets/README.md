@@ -1,9 +1,8 @@
 # Tiles multi-target compilation
 
 Status: architecture direction accepted by the user on 2026-10-16; concrete public
-signatures and implementation remain in progress. The existing `@gpu` decorator
-now uses capability-based CPU fallback; target descriptors and compiled CPU
-kernels remain pending. This extends the approved
+signatures and implementation remain in progress. Placement is the `#gpu` label, which `tiles::compile` reads;
+target descriptors and compiled CPU kernels remain pending. This extends the approved
 [Tiles route](../tiles-route/README.cn.md), preserving its graph semantics and
 numerical contract. CUDA is currently the only compiled device backend.
 
@@ -16,10 +15,11 @@ fallback, not evidence of a compiled CPU kernel backend.
 
 Separate three decisions in the API: requested target family/device, required or
 preferred selection, and compiled artifact execution. Do not encode all three in
-a CUDA device ordinal or in the generic name `run`. Exact Camel signatures should
+a CUDA device ordinal or in the generic name `run_preferred_resident`. Exact Camel signatures should
 be designed together with target descriptors and executable resource types.
 
-`@gpu` expresses a preference. An unavailable GPU or an unsupported computation
+`#gpu` expresses a placement request. Inside the scope an operator the device cannot
+run is a compile-time error; outside it an unavailable GPU or an unsupported computation
 may select the original CPU graph before execution. Invalid explicit device
 configuration, compiler failures, allocation failures and execution faults remain
 errors. Never replay a partially executed region on CPU. Capability checks must

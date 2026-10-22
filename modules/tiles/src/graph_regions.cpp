@@ -176,6 +176,11 @@ void ids(std::ostream &out, const std::vector<size_t> &values) {
     out << ']';
 }
 } // namespace
+bool deviceCapable(core::OperId oper) {
+    const auto &table = core::OperatorTable::instance();
+    return operations().find(oper) != operations().end() && table.isPure(oper) &&
+           !table.hasExternalEffect(oper);
+}
 RegionAnalysis
 analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {
     std::vector<RegionNode> nodes(graph.nodeCount());

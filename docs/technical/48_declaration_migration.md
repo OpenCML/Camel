@@ -90,7 +90,7 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 
 计算名里没有阻塞的 81 个，按约定是「结果类型或参数类型取自实参」的计算签名：`autodiff` 的
 `grad`/`with_grad`、`graph` 的 4 个、`nn` 的 18 个张量算子、`tensor` 的其余 52 个、`tiles` 的
-`upload`/`download`/`run`/`run_device`/`run_preferred_resident`。它们不是「没做完」，是 C++
+`upload`/`download`/`run_preferred_resident`。它们不是「没做完」，是 C++
 必须保留的那一半。
 
 ### 2.3 旧报告与树不一致时
@@ -203,7 +203,7 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 |---|---|---|---|
 | Q1：声明看不见类型实参 | `tensor:from_bytes`（三个 URI）、`ckpt:load_tree`（`::<T>`）、`json:decode_as`（`shape` 的类型实参） | 作者（H148 Q1） | [47](47_declaration_syntax.md) §3.4；handover note ⟨3597306⟩ (H140) §3.3；handover note ⟨26cee7d⟩ (H115) §3 |
 | Q-F：任意函数类型 | `onnx:export_model`、`tiles` 的 `gpu`/`source`/`inspect`/`benchmark`/`regions`，以及 `rewrite` 的三个保留组（见 §4.2） | 作者（Q-F） | [47](47_declaration_syntax.md) §3.1；handover note ⟨a05a542⟩ (H179) §2.2 |
-| Q3：类型变量谓词 | `ckpt:save_tree`、`tiles:gpu`、`onnx:export_model`（`example` 必须是参数树） | 作者（H148 Q3） | [47](47_declaration_syntax.md) §3.5；handover note ⟨3597306⟩ (H140) §3.2 |
+| Q3：类型变量谓词 | `ckpt:save_tree`、`onnx:export_model`（`example` 必须是参数树） | 作者（H148 Q3） | [47](47_declaration_syntax.md) §3.5；handover note ⟨3597306⟩ (H140) §3.2 |
 | Q-V：变参 | `python:py_call`、`py_print`、`py_println`。`..ts` 已设计、未实现；三者的结果类型还各自取自实参，`rewrite:__analysis` 同理 | 作者 / 语言（47 §3.2） | handover note ⟨cdf4d60⟩ (H157) §6.2；[47](47_declaration_syntax.md) §3.2 |
 | Q-M：模块类型作为类型实参 | `python:py_wrap`、`py_unwrap`；`PyObject` 没有覆写 `typeArguments()` | 作者（H148 Q-M） | handover note ⟨cdf4d60⟩ (H157) §6.2；[47](47_declaration_syntax.md) §3.3 |
 | `ckpt` 的 5 个 intrinsic：`tree_map`、`tree_reduce`、`tree_unzip`、`tree_leaves`、`tree_paths` | 没有执行器：建图时按树形状展开，声明在加载时被 `NativeDeclarationNotLoaded` 拒绝；4 个的结果类型也写不出 | H51 第 2 项（用 Camel 重写 5 个 `tree_*` 并删掉核心里的硬编码展开）；不是声明语法 | handover note ⟨3597306⟩ (H140) §3.1；handover note ⟨2f3c6a8⟩ (H174) §2.1 |

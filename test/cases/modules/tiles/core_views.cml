@@ -4,7 +4,7 @@
 module tiles_core_views
 import { Tensor, load_npy, save_npy, reshape, permute, slice, sum, zeros } from tensor
 import { grad } from autodiff
-import { run, source, inspect } from tiles
+import { source, inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 let weights = reshape([1.0, -2.0, 3.0, -4.0, 5.0, -6.0], [2, 3])
 func chained(x: Tensor<f32>): Tensor<f32> { return slice(permute(x, [2, 0, 1]), 0, 1, 4, 2) }
@@ -38,14 +38,14 @@ func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
     let x = load_npy(folder + '/x.npy') as Tensor<f32, const [2, 3, 4]>
     save_npy(chained(x), folder + '/chain_cpu.npy')
-    save_npy(run<chained>(x), folder + '/chain_gpu.npy')
+    save_npy(download(run_preferred_resident<chained>(x)), folder + '/chain_gpu.npy')
     save_npy(fixed(x), folder + '/fixed_cpu.npy')
-    save_npy(run<fixed>(x), folder + '/fixed_gpu.npy')
+    save_npy(download(run_preferred_resident<fixed>(x)), folder + '/fixed_gpu.npy')
     save_npy(configured<[2, 0, 1]>(x), folder + '/config_cpu0.npy')
     save_npy(configured<[1, 2, 0]>(x), folder + '/config_cpu1.npy')
-    save_npy(run<configured<[2, 0, 1]>>(x), folder + '/config_gpu0.npy')
-    save_npy(run<configured<[1, 2, 0]>>(x), folder + '/config_gpu1.npy')
-    save_npy(run<configured<[2, 0, 1]>>(x), folder + '/config_gpu2.npy')
+    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>(x)), folder + '/config_gpu0.npy')
+    save_npy(download(run_preferred_resident<configured<[1, 2, 0]>(x)), folder + '/config_gpu1.npy')
+    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>(x)), folder + '/config_gpu2.npy')
     let a = zeros([2, 4, 3])
     // Bind each transform once, outside the wrapper: tiles::run specializes the wrapper's
     // graph, and a graph that still contains an autodiff operator cannot be lowered there.
@@ -58,21 +58,21 @@ func main(): int sync {
     let dn = (v: Tensor<f32>): Tensor<f32> => dn_grad<v>()
     let dk = (v: Tensor<f32>): Tensor<f32> => dk_grad<v>()
     save_npy(df(a), folder + '/expand_cpu.npy')
-    save_npy(run<df>(a), folder + '/expand_gpu.npy')
+    save_npy(download(run_preferred_resident<df>(a)), folder + '/expand_gpu.npy')
     save_npy(dn(a), folder + '/negative_cpu.npy')
-    save_npy(run<dn>(a), folder + '/negative_gpu.npy')
+    save_npy(download(run_preferred_resident<dn>(a)), folder + '/negative_gpu.npy')
     save_npy(dk(a), folder + '/keep_cpu.npy')
-    save_npy(run<dk>(a), folder + '/keep_gpu.npy')
+    save_npy(download(run_preferred_resident<dk>(a)), folder + '/keep_gpu.npy')
     let e = zeros([0, 4, 2])
     let de_grad = grad(empty_loss)
     let de = (v: Tensor<f32>): Tensor<f32> => de_grad<v>()
     save_npy(de(e), folder + '/empty_cpu.npy')
-    save_npy(run<de>(e), folder + '/empty_gpu.npy')
+    save_npy(download(run_preferred_resident<de>(e)), folder + '/empty_gpu.npy')
     let w = zeros([2, 3, 4, 5])
     let dw_grad = grad(wide_loss)
     let dw = (v: Tensor<f32>): Tensor<f32> => dw_grad<v>()
     save_npy(dw(w), folder + '/wide_cpu.npy')
-    save_npy(run<dw>(w), folder + '/wide_gpu.npy')
+    save_npy(download(run_preferred_resident<dw>(w)), folder + '/wide_gpu.npy')
     println('FIXED_INSPECT')
     println(inspect<fixed>(x))
     println('EXPAND_SOURCE')

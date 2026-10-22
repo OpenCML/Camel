@@ -1,6 +1,6 @@
 module tiles_extrema_bits
 import { Tensor, load_npy, save_npy, maximum, minimum, relu, max, reshape } from tensor
-import { run, inspect } from tiles
+import { inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 func hi(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return maximum(a, b) }
 func lo(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return minimum(a, b) }
@@ -12,21 +12,21 @@ func main(): int sync {
     let a = load_npy(folder + '/a.npy') as Tensor<f32>
     let b = load_npy(folder + '/b.npy') as Tensor<f32>
     save_npy(hi(a,b), folder + '/hi_cpu.npy')
-    save_npy(run<hi>((a,b)), folder + '/hi_gpu.npy')
-    save_npy(run<hi>((b,a)), folder + '/hi_rev.npy')
+    save_npy(download(run_preferred_resident<hi>((a,b))), folder + '/hi_gpu.npy')
+    save_npy(download(run_preferred_resident<hi>((b,a))), folder + '/hi_rev.npy')
     save_npy(lo(a,b), folder + '/lo_cpu.npy')
-    save_npy(run<lo>((a,b)), folder + '/lo_gpu.npy')
-    save_npy(run<lo>((b,a)), folder + '/lo_rev.npy')
+    save_npy(download(run_preferred_resident<lo>((a,b))), folder + '/lo_gpu.npy')
+    save_npy(download(run_preferred_resident<lo>((b,a))), folder + '/lo_rev.npy')
     save_npy(positive(a), folder + '/relu_cpu.npy')
-    save_npy(run<positive>(a), folder + '/relu_gpu.npy')
+    save_npy(download(run_preferred_resident<positive>(a)), folder + '/relu_gpu.npy')
     save_npy(fused(a,b), folder + '/fused_cpu.npy')
-    save_npy(run<fused>((a,b)), folder + '/fused_gpu.npy')
+    save_npy(download(run_preferred_resident<fused>((a,b))), folder + '/fused_gpu.npy')
     let single = reshape(a, [8, 1])
     save_npy(rows(single), folder + '/single_cpu.npy')
-    save_npy(run<rows>(single), folder + '/single_gpu.npy')
+    save_npy(download(run_preferred_resident<rows>(single)), folder + '/single_gpu.npy')
     let r = load_npy(folder + '/rows.npy') as Tensor<f32>
     save_npy(rows(r), folder + '/rows_cpu.npy')
-    save_npy(run<rows>(r), folder + '/rows_gpu.npy')
+    save_npy(download(run_preferred_resident<rows>(r)), folder + '/rows_gpu.npy')
     println(inspect<fused>((a,b)))
     return 0
 }

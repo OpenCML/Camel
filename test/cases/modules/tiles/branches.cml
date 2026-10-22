@@ -1,19 +1,19 @@
 module tiles_branches
 import { Tensor, reshape, sum, abs } from tensor
-import { run } from tiles
+import { run_preferred_resident, download } from tiles
 func forbidden(x: Tensor<f32>): Tensor<f32> sync { println('unselected effect'); return x }
 func check(flag: bool, x: Tensor<f32>): float {
     let choose = (a: Tensor<f32>): Tensor<f32> => if flag then a + 2.0 else a * 3.0
-    return sum(abs(run<choose>(x) - choose(x)))
+    return sum(abs(download(run_preferred_resident<choose>(x)) - choose(x)))
 }
 func prune(flag: bool, x: Tensor<f32>): float {
     let choose = (a: Tensor<f32>): Tensor<f32> => if flag then a + 2.0 else forbidden(a)
-    return sum(abs(run<choose>(x) - (x + 2.0)))
+    return sum(abs(download(run_preferred_resident<choose>(x)) - (x + 2.0)))
 }
 func nested(flag: bool, x: Tensor<f32>): float {
     let choose = (a: Tensor<f32>): (Tensor<f32>, Tensor<f32>) =>
         if flag then (a + 1.0, a * 2.0) else (a - 1.0, a * 3.0)
-    let actual = run<choose>(x)
+    let actual = download(run_preferred_resident<choose>(x))
     let expected = choose(x)
     return sum(abs(actual.0 - expected.0)) + sum(abs(actual.1 - expected.1))
 }

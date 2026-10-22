@@ -560,38 +560,7 @@ class Compiler {
                 break;
             }
             case rt::GCNodeKind::Oper: {
-                const auto oper       = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
-                static const auto gpu = core::OperatorTable::instance().intern("tiles:gpu");
-                static const auto run = core::OperatorTable::instance().intern("tiles:run");
-                static const auto prefer =
-                    core::OperatorTable::instance().intern("tiles:prefer_gpu");
-                // Dispatch inside an already GPU-compiled graph is a call to the original
-                // computation. Read it structurally; never execute a decorator or launch CUDA.
-                if (oper == gpu) {
-                    if (ins.size() != 1 || !g->withInputsOf(id).empty())
-                        throw std::runtime_error("invalid GPU decorator arguments");
-                    out = eval(f, ins.front());
-                    if (!out.function)
-                        throw std::runtime_error("GPU decorator requires a known function");
-                    break;
-                }
-                if (oper == run || oper == prefer) {
-                    const auto context = g->withInputsOf(id);
-                    if (context.size() != 1 || ins.size() != 1)
-                        throw std::runtime_error("invalid nested GPU dispatch arguments");
-                    const auto fn = eval(f, context.front());
-                    if (!fn.function)
-                        throw std::runtime_error("GPU dispatch requires a known function");
-                    auto args = eval(f, ins.front());
-                    out       = call(
-                        fn.function,
-                        {},
-                        fn.function->normPorts().size() == 1 ? std::vector<Value>{args}
-                                                                   : args.fields,
-                        fn.fields,
-                        fn.functionProgram);
-                    break;
-                }
+                const auto oper = g->nodeBodyAs<rt::GCOperBody>(id)->oper;
                 std::vector<Value> args;
                 if (!g->withInputsOf(id).empty())
                     throw UnsupportedComputation(

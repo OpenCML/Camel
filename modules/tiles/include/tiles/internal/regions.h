@@ -71,20 +71,24 @@ RegionAnalysis analyzeRegions(
 std::string loopEligibility(
     const runtime::Program &program, const runtime::GCGraph &graph, runtime::gc_node_ref_t node,
     runtime::fact::FactStore &facts);
+/// Whether the device back end has an implementation of `oper`: the declared capability list,
+/// the same one the region compiler lowers. A `#gpu` scope refuses an operator outside it.
+bool deviceCapable(core::OperId oper);
 struct RegionDeviceOps {
     operator_t upload, execute, download;
-    std::string uploadUri = "tiles:upload", executeUri = "tiles:run_device",
-                downloadUri = "tiles:download";
+    std::string uploadUri = "tiles:upload", executeUri, downloadUri = "tiles:download";
 };
 void registerRegionPass(RegionDeviceOps preferred);
 // Rewrites the graphs reachable from `root`, a graph of `program`, and returns the program of
 // the rewritten graphs (`program` itself when no region was outlined, `count` is 0 then); null
 // executor produces ordinary CPU CALL nodes. Non-null executors use the supplied stable
-// operator URI and packed arguments.
+// operator URI and packed arguments. With `refuseGpuScopes`, a node carrying the `gpu`
+// tag whose operator is outside `deviceCapable` is reported as `GpuScopeUnsupported` and the
+// graphs are left unrewritten (the pass then fails on the diagnostic).
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
     operator_t executor, const std::string &uri, size_t &count,
-    const RegionDeviceOps *device = nullptr);
+    const RegionDeviceOps *device = nullptr, bool refuseGpuScopes = false);
 // Register semantic-equivalence checks by naming them in a pipeline; no variable gates them.
 void registerRegionTestPasses(
     operator_t run, RegionDeviceOps device, RegionDeviceOps host, RegionDeviceOps preferred);

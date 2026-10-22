@@ -5,8 +5,8 @@ Manual verification after the standard build (PowerShell, repository root):
   $env:CAMEL_HOME = "$PWD/out/latest"
   $env:TILES_TEST_OUT = "$PWD/out/loop-multi-manual"
   out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_device.cml std::nvm
-  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_boundaries.cml tiles::compile std::nvm
-  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_boundaries.cml tiles::compile std::jgir
+  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_device.cml tiles::compile std::nvm
+  out/latest/bin/camel.exe test/cases/modules/tiles/loop_multi_device.cml tiles::compile std::jgir
 """
 import argparse
 import ast
@@ -109,7 +109,7 @@ def verify_device(text, folder, a, b):
             assert report[phase]['mismatches'] == 0, (marker, report[phase])
 
 
-def run_device_matrix():
+def resident_matrix():
     with tempfile.TemporaryDirectory(prefix='camel-loop-multi-') as folder:
         folder = Path(folder)
         a, b = prepare(folder)
@@ -133,4 +133,4 @@ if __name__ == '__main__':
         prepare(args.prepare)
         print('Multi-state LOOP manual fixtures prepared:', args.prepare.resolve())
     else:
-        run_device_matrix()
+        resident_matrix()

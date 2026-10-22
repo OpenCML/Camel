@@ -84,8 +84,8 @@ H202 之前仍是 13 / 210 / 160 的中间态），四桶各是：
 
 | 桶 | 机制 | 条目 | 名字 | 证据 |
 |---|---|---|---:|---|
-| 2 | `result-from-argument` | 65 | tensor：`new` `empty` `zeros` `ones` `full` `eye` `random` `randn` `add` `subtract` `multiply` `divide` `pow` `maximum` `minimum` `where` `neg` `abs` `exp` `log` `sqrt` `rsqrt` `sigmoid` `tanh` `relu` `gelu` `erf` `reshape` `flatten` `unsqueeze` `transpose` `permute` `concat` `slice` `take` `one_hot` `max` `min` `argmax` `argmin` `softmax` `log_softmax` `softmax_grad` `layer_norm` `matmul` `linear` `zeros_like` `ones_like` `cast` · nn：`conv2d` `conv2d_input_grad` `conv2d_kernel_grad` `conv2d_bias_grad` `max_pool2d` `avg_pool2d` `max_pool2d_grad` `avg_pool2d_grad` `batch_norm` `batch_norm_train` `batch_norm_train_grad` `embedding` `embedding_table_grad` · tiles：`run` `run_device` `run_preferred_resident` | `modules/tensor/ops/op_def.h:55-72,139-161`、`modules/tensor/ops/registry.cpp:61-143`、`modules/nn/tensor_ops.cpp:653-853`、`modules/tiles/src/module.cpp:486-592`；[47](47_declaration_syntax.md) §4.3 |
-| 2 | `arbitrary-function-type` | 12 | `grad` `with_grad`（autodiff）· `program_of` `graph_of` `open_function` `to_function`（graph）· `export_model`（onnx）· `gpu` `source` `inspect` `benchmark` `regions`（tiles） | `modules/autodiff/operators.cpp:55-98`、`modules/graph/txn.cpp:370-386,401-447`、`modules/onnx/module.cpp:138-145`、`modules/tiles/src/module.cpp:486-592`；[47](47_declaration_syntax.md) §3.1 |
+| 2 | `result-from-argument` | 65 | tensor：`new` `empty` `zeros` `ones` `full` `eye` `random` `randn` `add` `subtract` `multiply` `divide` `pow` `maximum` `minimum` `where` `neg` `abs` `exp` `log` `sqrt` `rsqrt` `sigmoid` `tanh` `relu` `gelu` `erf` `reshape` `flatten` `unsqueeze` `transpose` `permute` `concat` `slice` `take` `one_hot` `max` `min` `argmax` `argmin` `softmax` `log_softmax` `softmax_grad` `layer_norm` `matmul` `linear` `zeros_like` `ones_like` `cast` · nn：`conv2d` `conv2d_input_grad` `conv2d_kernel_grad` `conv2d_bias_grad` `max_pool2d` `avg_pool2d` `max_pool2d_grad` `avg_pool2d_grad` `batch_norm` `batch_norm_train` `batch_norm_train_grad` `embedding` `embedding_table_grad` · tiles：`run_preferred_resident` | `modules/tensor/ops/op_def.h:55-72,139-161`、`modules/tensor/ops/registry.cpp:61-143`、`modules/nn/tensor_ops.cpp:653-853`、`modules/tiles/src/module.cpp:486-592`；[47](47_declaration_syntax.md) §4.3 |
+| 2 | `arbitrary-function-type` | 11 | `grad` `with_grad`（autodiff）· `program_of` `graph_of` `open_function` `to_function`（graph）· `export_model`（onnx）· `source` `inspect` `benchmark` `regions`（tiles） | `modules/autodiff/operators.cpp:55-98`、`modules/graph/txn.cpp:370-386,401-447`、`modules/onnx/module.cpp:138-145`、`modules/tiles/src/module.cpp:486-592`；[47](47_declaration_syntax.md) §3.1 |
 | 2 | `type-predicate` | 10 | `save_tree`（ckpt）· `encode`（json）· `softmax_cross_entropy` `softmax_cross_entropy_grad` `sgd` `adam_state` `adam`（nn） | `modules/tree/module.cpp:30-60`、`modules/json/module.cpp:71-90`、`modules/nn/tensor_ops.cpp:798-853`、`modules/nn/optim.cpp:390-463`；[47](47_declaration_syntax.md) §3.5 |
 | 2 | `structural-type-function` | 7 | `tree_map` `tree_reduce` `tree_unzip` `tree_leaves` `tree_paths`（ckpt）· `upload` `download`（tiles） | `modules/tree/module.cpp:30-60`、`modules/tiles/src/module.cpp:486-592`；[47](47_declaration_syntax.md) §4.4、§4.5 |
 | 2 | `type-argument-return` | 4 | `load_tree`（ckpt）· `decode_as`（json）· `from_bytes`（tensor） | `modules/tensor/ops/binary_ops.cpp:127-143`、`modules/json/module.cpp:83-90`；[47](47_declaration_syntax.md) §3.4 |
@@ -139,7 +139,7 @@ H202 之前仍是 13 / 210 / 160 的中间态），四桶各是：
 - **`result-from-argument`（65）**：结果的 dtype／形状／轴由实参算出（`zeros([2,3])` 的形状、
   `conv2d` 的输出形状、`run` 的函数返回值）。声明给不出这条规则；近似声明会把该拒绝的调用
   放过去。这是唯一一条**政策**（其余是语法）。其中 `tensor` 49 个与 `nn` 13 个只差这一条；
-  `tiles` 的 `run`／`run_device`／`run_preferred_resident` 的普通参数表也取自 with 函数
+  `tiles` 的 `run_preferred_resident` 的普通参数表也取自 with 函数
   （任意元数，见 Q-V），所以这一条政策独占 62 个，加上 Q-V 才到 65。
 - **`arbitrary-function-type`（12）**：参数是“参数表未知的函数”（47 §3.1，Q-F）。`graph` 的
   4 个是 47 清单外的同形成员——47 §3.1 按 H168 的 9 模块口径写，没含 graph；迁移 graph 时
@@ -173,7 +173,7 @@ H202 之前仍是 13 / 210 / 160 的中间态），四桶各是：
 | 顺序 | 机制 | 名字（独占） | 要动什么 | 风险 |
 |---:|---|---:|---|---|
 | 1 | `result-from-argument` | 65（62） | 一条政策：声明写明参数，结果交给算子的类型规则；47 §4.3 | 低（规则多，语义不变） |
-| 2 | `arbitrary-function-type` | 12 | 新类型形式（47 §3.1 的 A/B 案） | 高 |
+| 2 | `arbitrary-function-type` | 11 | 新类型形式（47 §3.1 的 A/B 案） | 高 |
 | 3 | `type-predicate` | 7 | 新机制（47 §3.5 的 A 案） | 很高 |
 | 4 | `structural-type-function` | 7 | 5.5 第二期的类型函数 + `tree_*` 的执行器 | 高（跨语言设计） |
 | 5 | `type-argument-return` | 3 | 改声明机制与重叠检查（47 §3.4） | 高 |

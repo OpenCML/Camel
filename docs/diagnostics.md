@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-204 diagnostics: 187 errors, 17 warnings.
+205 diagnostics: 188 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -217,6 +217,7 @@ prints one entry.
 | `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
 | `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error |
+| `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
@@ -5744,28 +5745,60 @@ Name a device this machine has (--devices <ordinal>), or run on the host with --
 
 ```camel
 module tiles_gpu_fallback
-import { gpu, available } from tiles
-@gpu
+import { available, run_preferred_resident, download } from tiles
+
 func add(a: float, b: float): float { return a + b }
-@gpu
+
 func effect(x: float): float sync {
     println("cpu effect")
     return x + x
 }
-@gpu
+
 func nested(a: float, b: float): float { return add(a, b) * 2.0 }
-@gpu
+
 func pair(a: float, b: float): (float, float) { return (a + b, a * b) }
+
 func main(): int sync {
     println(available())
-    println(add(2.0, 3.0))
-    println(effect(4.0))
-    let offset = 7.0
-    let captured = gpu((x: float): float => x + offset)
-    println(captured(3.0))
-    println(nested(2.0, 3.0))
-    let p = pair(2.0, 3.0)
+    println(download(run_preferred_resident<add>((2.0, 3.0))))
+    println(download(run_preferred_resident<effect>(4.0)))
+    println(download(run_preferred_resident<nested>((2.0, 3.0))))
+    let p = download(run_preferred_resident<pair>((2.0, 3.0)))
     println(p.0, p.1)
+    return 0
+}
+```
+
+### GpuScopeUnsupported
+
+`0x04000071` · Error · `RuntimeDiag::GpuScopeUnsupported`
+
+**Message**
+
+```text
+`#gpu` scope '{0}': {1} cannot run on the device ({2}).
+```
+
+**Help**
+
+```text
+The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
+```
+
+**Example** (`test/cases/modules/tiles/gpu_scope_refusal.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/modules/tiles/gpu_scope_refusal.cml tiles::compile std::nvm`)
+
+```camel
+module tiles_gpu_scope_refusal
+import { Tensor, reshape, tanh, sum } from tensor
+
+// `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
+// scope that is a compile error, not a silent fallback to the host.
+#gpu
+func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(sum(activate(x)))
     return 0
 }
 ```

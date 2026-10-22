@@ -180,6 +180,18 @@ void declareStandardTags() {
         independent.ident = "independent";
         independent.on    = Func;
         declare(std::move(independent));
+
+        // `#gpu` (design principles 13.4): the function or block it marks is asked to run on
+        // the device. It is a standard tag, so the placement label needs no import; the fact
+        // is on the declaration and on every node written in the scope. The pass that reads
+        // it is `tiles::compile`, which also registers itself as its reader; a pipeline
+        // without that pass warns that the label has no reader (9.4).
+        Decl gpu;
+        gpu.name   = "gpu";
+        gpu.ident  = "gpu";
+        gpu.on     = static_cast<Positions>(Func | Nodes);
+        gpu.readBy = {"tiles::compile"};
+        declare(std::move(gpu));
     });
 }
 

@@ -1,7 +1,7 @@
 module tiles_scalar_zero
-import { run_device, upload, download } from tiles
+import { upload, download, run_preferred_resident } from tiles
 func divide(a: float, b: float): float { return a / b }
 func main(): int sync {
-    println(download(run_device<divide>((upload(1.0), upload(-0.0)))))
+    println(download(run_preferred_resident<divide>((upload(1.0), upload(-0.0)))))
     return 0
 }

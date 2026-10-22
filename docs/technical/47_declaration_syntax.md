@@ -158,7 +158,7 @@ export func show(t: (typeas A)[]): void
 **缺什么。** 一个“任意参数表”的函数类型。今天用 `typeas F` 代替，会接受非函数（约定 §2 `docs/stdlib-conventions.cn.md:46` 禁止这种近似）。H157 的探针里 `Function` 这个名字报 `UnresolvedTypeReference`。
 
 **影响 9 个名字**：`rewrite:__rule`、`rewrite:__rule_when`、`rewrite:__analysis`、
-`onnx:export_model`、`tiles:gpu`、`tiles:source`、`tiles:inspect`、`tiles:benchmark`、
+`onnx:export_model`、`tiles:source`、`tiles:inspect`、`tiles:benchmark`、
 `tiles:regions`。
 
 **选项。**
@@ -248,7 +248,7 @@ H166 §6 已经把这一题写成“待作者裁定”，并给了三个方向�
 
 ### 3.5 Q3 类型变量谓词（3 个名字，独占 1）
 
-**影响**：`ckpt:save_tree`（独占）、`tiles:gpu`、`onnx:export_model`（这两个还要 Q-F）。
+**影响**：`ckpt:save_tree`（独占）、`onnx:export_model`（还要 Q-F）；`tiles:gpu` 已随装饰器删除（现在是标签，不是算子）。
 
 H148 Q3 的 A/B/C（`where`/类型谓词、接受编译期检查退化、维持 C++），
 `handover note ⟨0a5036b⟩ (H148:106-126)`。**不建议顺手加**：H140 §7 已经写过它比 H108 的选项 1
