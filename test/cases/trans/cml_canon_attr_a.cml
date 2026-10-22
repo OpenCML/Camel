@@ -1,0 +1,13 @@
+/** The attribute pair: `cml_canon_attr_b.cml` is this program with `#strict` on the block and
+ * nothing else, so the two canonical documents may differ in node attributes and permissions
+ * only. */
+module cml_canon_attr
+
+func quad(x: float): float {
+    return x * 1.0 + 2.0
+}
+
+func main(): int sync {
+    println(quad(3.0))
+    return 0
+}
