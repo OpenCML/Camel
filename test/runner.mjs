@@ -184,9 +184,15 @@ function selectionPlan(entry, ruleLayer) {
     return { name: String(entry), layer: ruleLayer }
 }
 
+// The selection is read once per process: `--changed` looks at every changed file, and the
+// self-test additionally asks about every tracked file to prove none is rule-less by accident.
+let selectionRulesCache = null
+let directoryRulesCache = null
+
 export function loadSelectionRules() {
+    if (selectionRulesCache) return selectionRulesCache
     const doc = JSON.parse(fs.readFileSync(SELECTION_PATH, 'utf8'))
-    return (doc.rules || []).map((rule) => {
+    selectionRulesCache = (doc.rules || []).map((rule) => {
         // `layer` on the rule is the default for its entries: a layered plan file follows
         // `--tier` even though a named file normally runs in full. A rule about a plan with slow
         // entries that must not run (the PyTorch comparisons of autodiff/onnx) marks them,
@@ -202,6 +208,7 @@ export function loadSelectionRules() {
             except: (rule.except || []).map((entry) => String(entry).replace(/\\/g, '/')),
         }
     })
+    return selectionRulesCache
 }
 
 /**
@@ -222,11 +229,13 @@ export function loadSelectionRules() {
  * for the plans outside the mirrored tree that a component needs (H161).
  */
 export function loadDirectoryRules() {
+    if (directoryRulesCache) return directoryRulesCache
     const doc = JSON.parse(fs.readFileSync(SELECTION_PATH, 'utf8'))
-    return (doc.directoryRules || []).map((rule) => ({
+    directoryRulesCache = (doc.directoryRules || []).map((rule) => ({
         paths: (rule.paths || []).map((entry) => String(entry).replace(/\\/g, '/')),
         plans: String(rule.plans || '').replace(/\\/g, '/').split('/').filter(Boolean),
     }))
+    return directoryRulesCache
 }
 
 function planForDirectory(file) {
@@ -247,13 +256,38 @@ function planForDirectory(file) {
     return null
 }
 
+/**
+ * The nearest directory under test/plans that holds a plan file, for a non-plan file under
+ * test/plans (a golden, a fixture). A golden has no plan of its own; the plans in the directory
+ * that owns it are the ones that read it. Null when no ancestor holds a plan.
+ */
+function nearestPlanDirectory(file) {
+    let dir = path.posix.dirname(file)
+    while (dir.startsWith('test/plans/') && dir !== 'test/plans') {
+        const absolute = path.join(REPO_ROOT, ...dir.split('/'))
+        if (fs.existsSync(absolute) && fs.statSync(absolute).isDirectory()) {
+            const hasPlan = fs.readdirSync(absolute).some((entry) => {
+                const candidate = path.join(absolute, entry)
+                return entry.endsWith('.plan.toml') && fs.statSync(candidate).isFile()
+            })
+            if (hasPlan) return absolute
+        }
+        const parent = path.posix.dirname(dir)
+        if (parent === dir || parent === 'test') return null
+        dir = parent
+    }
+    return null
+}
+
 export function plansForChanges(files) {
     const rules = loadSelectionRules()
     const names = new Set()
     const layered = new Set()
     const targets = new Set()
+    const unmatched = []
     let matched = false
     for (const file of files) {
+        let added = false
         // Directory first: the plan that mirrors the changed path is the narrow selection. The
         // file rules do not replace it, they add the plans that live outside that mirrored tree
         // (a `modules/tiles/` change needs `gpu/**`, which no directory rule can reach).
@@ -261,12 +295,13 @@ export function plansForChanges(files) {
         if (byDirectory) {
             matched = true
             targets.add(byDirectory)
+            added = true
         }
         const rule = rules.find((candidate) =>
             candidate.paths.some((prefix) => file === prefix || file.startsWith(prefix))
         )
+        let excluded = false
         if (rule) {
-            let added = false
             for (const plan of rule.plans) {
                 // A layered plan is still a plan to run: it stays in `names` (so it becomes a
                 // target) and is listed in `layered` so the runner does not treat it as a named
@@ -275,19 +310,35 @@ export function plansForChanges(files) {
                 if (plan.layer) layered.add(plan.name)
                 added = true
             }
-            const excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
-            if (rule.self && file.endsWith('.plan.toml') && !excluded) {
-                const target = path.join(REPO_ROOT, ...file.split('/'))
-                if (fs.existsSync(target)) {
-                    targets.add(target)
-                    added = true
+            excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
+            if (rule.self && !excluded) {
+                if (file.endsWith('.plan.toml')) {
+                    const target = path.join(REPO_ROOT, ...file.split('/'))
+                    if (fs.existsSync(target)) {
+                        targets.add(target)
+                        added = true
+                    }
+                } else {
+                    // A golden or fixture selects the plans of the directory that owns it. It is
+                    // not a plan target itself, so this never names a file the tier filter must
+                    // leave alone.
+                    const target = nearestPlanDirectory(file)
+                    if (target) {
+                        targets.add(target)
+                        added = true
+                    }
                 }
             }
             if (added) matched = true
         }
+        // A file the self rule deliberately excludes (a perf/GC/progen plan) is not a hole: the
+    // policy is that an ordinary change does not run it. Everything else is named.
+        if (!added && !excluded) unmatched.push(file)
     }
     if (layered.size > 0) matched = true
-    return matched ? { names: [...names], targets: [...targets], layered: [...layered] } : null
+    return matched
+        ? { names: [...names], targets: [...targets], layered: [...layered], unmatched }
+        : null
 }
 
 /** A plan named by the selection file, relative to test/plans (a directory or a *.plan.toml). */
@@ -314,6 +365,14 @@ function selectChangedTargets() {
     if (!plans || (plans.names.length === 0 && plans.targets.length === 0 && plans.layered.length === 0)) {
         console.log(`[INFO] --changed: no rule matches ${files.length} changed file(s); running the whole fast layer`)
         return { targets: [], layered: [] }
+    }
+    // A file that matches no rule contributes nothing when another file in the same change does
+// match: the aggregate fallback never runs, and the class would otherwise be dropped silently.
+// Name it instead, so the hole is visible even before the self-test allowlist is updated.
+    if (plans.unmatched && plans.unmatched.length > 0) {
+        const shown = plans.unmatched.slice(0, 8).join(', ')
+        const rest = plans.unmatched.length > 8 ? ` and ${plans.unmatched.length - 8} more` : ''
+        console.warn(`[WARN] --changed: ${plans.unmatched.length} changed file(s) match no rule: ${shown}${rest}`)
     }
     const resolved = new Map()
     for (const target of [...plans.names.map(resolveSelectionTarget), ...plans.targets]) {
