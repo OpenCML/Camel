@@ -32,6 +32,22 @@ expect_stdout = "2147483646.0\n16\n[255, 255, 255, 127, 1, 0, 0, 0, 254, 255, 25
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
+# The adjoint of an operator on an exact-typed tensor is of that element type too: a gradient is
+# read at the width its type names, so a kernel that fills at another width answers with a number
+# that is not the derivative.
+[[tests]]
+name = "gather_grad_f64"
+desc = "`sum(w[labels])` on a `Tensor<f64>` (w = [[1, 2, 3], [-4, 5, -6]], labels = [1, 0]) has adjoint 1.0 at every element: each row enters the loss once, so the gradient sums to 6.0 and each row to 3.0. The scalar broadcast that starts the pullback used to fill f32, so the same buffer read as f64 summed to 3 * 2^-7 = 0.0234375 (six f32 1.0s: one row as f32 pairs, one row from the bytes past its end), with no error. The plain sum's gradient is pinned beside it because both start from that broadcast."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/gather_grad_f64.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "total=1.0 grad_sum=6.0\ngather=1.0 grad_sum=6.0 row0=3.0 row1=3.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
 # A kernel whose declaration is f32 only says so where it is called: it never converts.
 
 [[tests]]

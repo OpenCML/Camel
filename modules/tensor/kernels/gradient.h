@@ -24,8 +24,12 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
 Array *
 broadcastTo(const Array *t, std::span<const int64_t> shape, mm::IAllocator &allocator);
 
-/// A scalar broadcast to `shape`.
-Array *fill(double value, std::span<const int64_t> shape, mm::IAllocator &allocator);
+/// A scalar of element type `dtype` broadcast to `shape`. The element type is the one the value is
+/// made like, not the scalar's: the result is a gradient of that value and is read at the width its
+/// type names, so filling at any other width would put a number of one width behind a type of
+/// another.
+Array *
+fill(double value, type::TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator);
 
 /// Gradient of a reduction over `axis` of an input of `shape`: `g` re-expanded along the axis.
 Array *expandAxis(
