@@ -23,7 +23,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "when.function_query"
-desc = "`is_function::<F>()` is true for a function argument: a pass-shaped declaration `(f: typeas F, x: int) when is_function::<F>()` is selected and its body calls `f`."
+desc = "`is_function::<F>()` is true for a function argument: a pass-shaped declaration `func apply::<F>(f: F, x: int) when is_function::<F>()` is selected and its body calls `f`."
 kind = "behavior"
 case = "../../../cases/compile/when/function_query.cml"
 args = ["${case}", "std::nvm"]

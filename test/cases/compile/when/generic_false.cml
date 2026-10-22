@@ -5,7 +5,7 @@
  */
 module when_generic_false
 
-func add(x: typeas T, y: T): T when is_numeric::<T>() {
+func add::<T>(x: T, y: T): T when is_numeric::<T>() {
     return x + y
 }
 

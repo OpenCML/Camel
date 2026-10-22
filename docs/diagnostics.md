@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-234 diagnostics: 215 errors, 19 warnings.
+232 diagnostics: 213 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -77,7 +77,6 @@ prints one entry.
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
-| `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
 | `0x03000052` | [SemanticDiag::TypeVariableNotBindable](#typevariablenotbindable) | Error |
 | `0x03000053` | [SemanticDiag::GenericArgumentsMismatch](#genericargumentsmismatch) | Error |
@@ -183,7 +182,6 @@ prints one entry.
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
 | `0x0300019E` | [SemanticDiag::DimensionAfterAnyRank](#dimensionafteranyrank) | Error |
-| `0x0300019F` | [SemanticDiag::TypeVariableOnlyInReturn](#typevariableonlyinreturn) | Error |
 | `0x030001A0` | [SemanticDiag::UnknownResource](#unknownresource) | Error |
 | `0x030001A1` | [SemanticDiag::PureAndUses](#pureanduses) | Error |
 | `0x030001A2` | [SemanticDiag::ResourceGroupCycle](#resourcegroupcycle) | Error |
@@ -209,7 +207,7 @@ prints one entry.
 | `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
 | `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn |
-| `0x03100162` | [SemanticDiag::TypeVariableUsedOnce](#typevariableusedonce) | Warn |
+| `0x031001A5` | [SemanticDiag::TypeVariableUnused](#typevariableunused) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -809,7 +807,7 @@ Each identifier must be declared only once in its scope.
 ```camel
 module err_redecl
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
@@ -1032,22 +1030,17 @@ Unresolved type reference: '{0}'.
 Ensure the type is defined and visible in the current scope.
 ```
 
-**Example** (`test/cases/compile/any_typing/written_unknown_name.cml`, run as `camel test/cases/compile/any_typing/written_unknown_name.cml`)
+**Example** (`test/cases/compile/generic_head/err_unknown_type_in_signature.cml`, run as `camel test/cases/compile/generic_head/err_unknown_type_in_signature.cml`)
 
 ```camel
-module written_unknown_name
+module err_unknown_type_in_signature
 
-// `any` is not a type: there is no such name in the type scope, so writing it is the
-// ordinary unknown-type error (design principles 5.10; H27 deleted AnyNotAllowed). The
-// annotation is in the body because a name first written in a parameter type binds a type
-// variable instead (design principles 5.5).
-func keep(x: int): int {
-    let y: any = x
-    return y
+func identity(x: T): T {
+    return x
 }
 
 func main(): int sync {
-    println(keep(3))
+    println(identity(1))
     return 0
 }
 ```
@@ -1381,7 +1374,7 @@ A literal the type cannot hold is not wrapped around or cut off, and a value is 
 ```camel
 module err_literal
 
-func zero_of(x: typeas T): T {
+func zero_of::<T>(x: T): T {
     let z: T = 0.5
     return z
 }
@@ -1811,33 +1804,6 @@ func main(): int sync {
 }
 ```
 
-### TypeVariableNotAllowed
-
-`0x03000050` · Error · `SemanticDiag::TypeVariableNotAllowed`
-
-**Message**
-
-```text
-'typeas {0}' cannot bind a type variable here: {1}.
-```
-
-**Help**
-
-```text
-A type variable is declared where it first appears in the parameters or result of a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is written as plain '{0}' everywhere after that.
-```
-
-**Example** (`test/cases/compile/generics/err_typeas_let.cml`, run as `camel test/cases/compile/generics/err_typeas_let.cml`)
-
-```camel
-module err_typeas_let
-
-func main(): int sync {
-    let f = (x: typeas T) => x
-    return 0
-}
-```
-
 ### TypeVariableRedeclared
 
 `0x03000051` · Error · `SemanticDiag::TypeVariableRedeclared`
@@ -1845,21 +1811,21 @@ func main(): int sync {
 **Message**
 
 ```text
-'typeas {0}' cannot bind '{0}': this signature already binds a type variable '{0}'.
+The type parameter '{0}' is declared twice at the head of this declaration.
 ```
 
 **Help**
 
 ```text
-A type variable is bound once: write 'typeas {0}' only at the place where it is first bound, and plain '{0}' everywhere after that (a plain '{0}' in a parameter type binds it already, so the explicit form is only needed when the name also denotes a type).
+A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T = int>').
 ```
 
-**Example** (`test/cases/compile/generics/err_typeas_twice.cml`, run as `camel test/cases/compile/generics/err_typeas_twice.cml`)
+**Example** (`test/cases/compile/generic_head/err_duplicate_head_param.cml`, run as `camel test/cases/compile/generic_head/err_duplicate_head_param.cml`)
 
 ```camel
-module err_typeas_twice
+module err_duplicate_head_param
 
-func same(a: typeas T, b: typeas T): T {
+func same::<T, T>(a: T, b: T): T {
     return a
 }
 
@@ -1892,7 +1858,7 @@ module err_tf_unused
 
 type Tag<T> = int
 
-func f(p: Tag<typeas T>): int {
+func f::<T>(p: Tag<T>): int {
     return 1
 }
 
@@ -1914,7 +1880,7 @@ The generic function '{0}' cannot be called with argument types {1}: {2}.
 **Help**
 
 ```text
-A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
+A type variable takes the type of the argument found at its first binding position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
 ```
 
 **Example** (`test/cases/compile/constas/constas_argument_shape.cml`, run as `camel test/cases/compile/constas/constas_argument_shape.cml`)
@@ -1955,7 +1921,7 @@ A generic function may stand wherever a function is expected, also as an argumen
 ```camel
 module err_as_value
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
@@ -1987,7 +1953,7 @@ Each call of a generic function with a new set of types builds a new subgraph. A
 ```camel
 module err_deep
 
-func grow(x: typeas T, n: int): int {
+func grow::<T>(x: T, n: int): int {
     return if n <= 0 then 0 else grow([x], n - 1)
 }
 
@@ -2055,7 +2021,7 @@ func deco(f: (x: int) => int): (x: int) => int {
 }
 
 @deco
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
@@ -2189,7 +2155,7 @@ The type '{0}' marks '{1}' twice.
 
 ```camel
 module generic_explicit_nullable_error
-func optional(x: typeas T): T? { return null }
+func optional::<T>(x: T): T? { return null }
 func main(): int sync {
     println(optional::<int?>(null))
     return 0
@@ -3969,7 +3935,7 @@ The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a stru
 ```camel
 module match_type_exhaustive
 
-func only_composite(t: typeas T): int {
+func only_composite::<T>(t: T): int {
     return match type T {
         case struct => 1
         case tuple => 2
@@ -4003,7 +3969,7 @@ The case '{0}' selects every type the cases after it could select.
 ```camel
 module match_type_unreachable
 
-func after_leaf(t: typeas T): int {
+func after_leaf::<T>(t: T): int {
     return match type T {
         case #leaf => 1
         case struct => 2
@@ -4073,7 +4039,7 @@ A recursive generic call can be built only after the return type is known. Write
 ```camel
 module err_recursive_untyped
 
-func count(xs: (typeas T)[], i: int) {
+func count::<T>(xs: T[], i: int) {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 
@@ -4376,12 +4342,12 @@ An operator has one meaning for one call: which rule applies must be decided by 
 module native_overlap
 
 #op<':op/idx_arr'>
-export func pick(xs: (typeas T)[], i: int): T
+export func pick::<T>(xs: T[], i: int): T
 
 // The same call: an array of some element type and an index. `T` and `U` are no help — every
 // call of one is a call of the other.
 #op<':op/idx_arr'>
-export func pick(xs: (typeas U)[], i: int): U
+export func pick::<U>(xs: U[], i: int): U
 
 func main(): int sync {
     println(pick([10, 20, 30], 1))
@@ -4892,37 +4858,6 @@ func main(): int sync {
 }
 ```
 
-### TypeVariableOnlyInReturn
-
-`0x0300019F` · Error · `SemanticDiag::TypeVariableOnlyInReturn`
-
-**Message**
-
-```text
-The name '{0}' appears only in the return type and no type answers it.
-```
-
-**Help**
-
-```text
-A type variable binds where it first appears in a parameter type, including the type of a 'with' parameter; a name first written in the return type has no argument to take a type from. Write it in a parameter type, or declare it explicitly as 'typeas {0}' when only the expected result determines it (design principles 5.9).
-```
-
-**Example** (`test/cases/compile/generic_auto_bind/err_return_only.cml`, run as `camel test/cases/compile/generic_auto_bind/err_return_only.cml`)
-
-```camel
-module err_return_only
-
-func make(x: int): T {
-    return x
-}
-
-func main(): int sync {
-    println(make(1))
-    return 0
-}
-```
-
 ### UnknownResource
 
 `0x030001A0` · Error · `SemanticDiag::UnknownResource`
@@ -5084,7 +5019,7 @@ std::cml cannot print {0}: {1}.
 **Help**
 
 ```text
-This version prints straight-line code only: arithmetic, comparisons, conversions, direct calls, `let` and `var` (handover H240, step S1). Control flow, regions, tags, named types and generic instances come in later steps.
+This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.
 ```
 
 *No example: no test small enough to show raises it.*
@@ -5693,38 +5628,33 @@ func main(): int sync {
 }
 ```
 
-### TypeVariableUsedOnce
+### TypeVariableUnused
 
-`0x03100162` · Warn · `SemanticDiag::TypeVariableUsedOnce`
+`0x031001A5` · Warn · `SemanticDiag::TypeVariableUnused`
 
 **Message**
 
 ```text
-The type variable '{0}' is bound here and appears only once in the signature.
+The type parameter '{0}' is declared at the head but never written in the signature.
 ```
 
 **Help**
 
 ```text
-One occurrence is what a misspelt type name looks like, so check the spelling. If the name is wanted, use it again in a later parameter type or in the return type; an explicit 'typeas {0}' states that the single occurrence is deliberate.
+A type parameter is one the declaration uses in a parameter or result type; a declaration that writes it nowhere can never take a type for it. Write it in a type, or remove it from '::<...>'.
 ```
 
-**Example** (`test/cases/compile/generic_auto_bind/warn_used_once.cml`, run as `camel test/cases/compile/generic_auto_bind/warn_used_once.cml std::fvm`)
+**Example** (`test/cases/compile/generic_head/err_unused_head_param.cml`, run as `camel test/cases/compile/generic_head/err_unused_head_param.cml`)
 
 ```camel
-module warn_used_once
+module err_unused_head_param
 
-func show(x: T): string {
+func show::<T>(x: int): string {
     return 'x'
-}
-
-func twice(x: U): U {
-    return x
 }
 
 func main(): int sync {
     println(show(1))
-    println(twice(2))
     return 0
 }
 ```

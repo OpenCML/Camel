@@ -52,8 +52,8 @@ supported" or "an object reference like the others".
 exporters meet the type through the path they already have for module types: an opaque
 GC-traced reference whose object answers `print`/`equals`/`clone`/`updateRefs` itself.
 Costs: the names `Map` and `Set` are visible only after an `import`; a module type could not
-take a type variable among its arguments (`Tensor<typeas T>` was rejected where written), and
-`Map<typeas K, typeas V>` is a hard requirement; and other modules (JSON) would have to share
+take a type variable among its arguments (`Tensor<T>` was rejected where written), and
+`Map<K, V>` over head-declared `K` and `V` is a hard requirement; and other modules (JSON) would have to share
 C++ classes with a `collections` module across `.cmo` boundaries loaded with `RTLD_LOCAL`.
 
 **Taken: the classes live in the core and use the `OtherType` mechanism.** `MapType` and
@@ -106,9 +106,9 @@ written `Map` or `Set` alone is an `InvalidTypeArgument` error.
   not a `Map<string, int?>`.
 - **`any`** (removed since, design principles 5.10): a collection converted to `any` like every value; `any as Map<...>` was refused
   (nothing at run time could check it).
-- **Generics**: `func get_or_else(m: Map<typeas K, typeas V>, k: K, d: V): V` binds `K` and
+- **Generics**: `func get_or_else::<K, V>(m: Map<K, V>, k: K, d: V): V` binds `K` and
   `V` from the argument's type and instantiates per pair, like any generic function. A key
-  type that becomes inadmissible when a variable is replaced (`func f(x: typeas T): Set<T>`
+  type that becomes inadmissible when a variable is replaced (`func f::<T>(x: T): Set<T>`
   called with a float) is reported at the call, where the repeated-mark check of `T??`
   already runs, and at a conversion written in the body (`xs as Set<T>`).
 
@@ -426,11 +426,11 @@ a "marked" operator that each backend implements itself (`:mark/map_arr` in NVM,
 PRL). They are compositions of what exists, visible to passes:
 
 ```camel
-func map_values(m: Map<typeas K, typeas V>, f: (v: V) => typeas U): Map<K, U> {
+func map_values::<K, V, U>(m: Map<K, V>, f: (v: V) => U): Map<K, U> {
     return items(m)->map<(kv: (K, V)): (K, U) => (kv.0, f(kv.1))> as Map<K, U>
 }
 
-func filter_keys(m: Map<typeas K, typeas V>, f: (k: K) => bool): Map<K, V> {
+func filter_keys::<K, V>(m: Map<K, V>, f: (k: K) => bool): Map<K, V> {
     return items(m)->filter<(kv: (K, V)): bool => f(kv.0)> as Map<K, V>
 }
 ```

@@ -12,7 +12,7 @@
  *   typeUnit          name of T
  *   arrayType         T[]
  *   specType          T<arguments>
- *   primaryType       name, {struct}, (T), (tuple), function type, typeof e, typeas name
+ *   primaryType       name, {struct}, (T), (tuple), function type, typeof e
  *
  * A type often stands where an expression goes on after it (`x as T + 1`, `x as T ^ 2`), and
  * `+`, `-`, `^` are operators of both. The type keeps the operator when a type can follow it,
@@ -39,7 +39,6 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     case TK::LBrace:
     case TK::Lt:
     case TK::KwTypeof:
-    case TK::KwTypeas:
     case TK::KwEnum:
         return true;
     default:
@@ -228,7 +227,7 @@ void ParserImpl::parseSpecType() {
 }
 
 /// primaryType : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-///             | 'typeof' dataExpr | 'typeas' identDef
+///             | 'typeof' dataExpr
 /// tupleType   : '(' typeList? ','? ')'
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
 /// an empty list followed by `=>`); otherwise `(T)` is the parenthesized type and anything
@@ -261,12 +260,6 @@ void ParserImpl::parsePrimaryType() {
             parseLogicalOr();
         }
         return close(m, NK::TypeOfType);
-    }
-    case TK::KwTypeas: {
-        const size_t m = mark();
-        bump();
-        parseIdentDef();
-        return close(m, NK::TypeAsType);
     }
     case TK::LParen: {
         const TK t1 = peek(1);

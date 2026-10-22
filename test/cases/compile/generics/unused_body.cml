@@ -4,7 +4,7 @@
  */
 module unused_body
 
-func never_called(x: typeas T): T {
+func never_called::<T>(x: T): T {
     return x + no_such_name
 }
 

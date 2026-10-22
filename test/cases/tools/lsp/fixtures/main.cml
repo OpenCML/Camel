@@ -6,7 +6,7 @@ import { now } from time
 type Pair = (int, string)
 
 /// Returns its argument.
-func identity(x: typeas T): T {
+func identity::<T>(x: T): T {
     let copy = x
     return copy
 }

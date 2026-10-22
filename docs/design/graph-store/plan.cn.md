@@ -23,7 +23,7 @@
 | `p1_regions.cml` | `if`、`match`、两个 `loop` | `pick` 有 2 个 arm 区域，`classify` 有 4 个（`case 1 \| 2` 拆成两臂）；循环是**区域形式**：`loop.condition/body` 为 `null`，`conditionRegion/bodyRegion` 指向 `g1r1/g1r2`；区域记录只有 `id/kind/parent/owner/result`，**没有 `index`、`ports`、`params`、`attrs`**；`pick` 的第 1 臂没有节点，`result` 是区域外的端口 `g2n0`。 |
 | `p2_tags.cml` | `#kernel { let a = x + 1 }`、`tag finite = [kernel, heavy]` | 标签只在**节点**上：`+` 节点带 `main::kernel`，`finite` 把两个标签都加到节点；**没有建 Block 区域**；`let` 本身不是节点。 |
 | `decl.cml`（`test/cases/compile/tags`） | `#kernel` 在函数上、`#shape`/`#width<32>` 在类型/字段上 | `std::jgir` 里**完全没有**这些标签：函数标签没有落到节点（`marked` 只有 `DATA 1`），类型/字段标签没有存储位置。`#strict` 是例外，它作为节点标签 `strict` 落在每个节点上（`p21`）。 |
-| `check_rules.cml` / `check_when.cml` | `rule` 声明 | 规则是普通图：`add_zero__lhs`、`add_zero__rhs`，加一个 `() => Rule` 的构造图（7 个节点：名字字符串、单向/双向布尔、权限掩码、两个函数值、`rewrite:rule`）；`when` 形式多一个 `__when` 图和 `rewrite:rule_when`。`#requires<fast>` 变成掩码 `3`，组名丢失但位还在。 |
+| `check_rules.cml` / `check_when.cml` | `rule` 声明 | 规则是普通图：`add_zero__lhs`、`add_zero__rhs`，加一个 `let add_zero = ...` 的构造图（7 个节点：名字字符串、单向/双向布尔、权限掩码、两个函数值、`rewrite:rule`）；`when` 形式多一个 `__when` 图和 `rewrite:rule_when`。`#requires<fast>` 变成掩码 `3`，组名丢失但位还在。 |
 | `bound_closures.cml` | lambda、闭包、间接调用 | lambda 是图 `__g_3__`…；闭包是 `DATA Function` + `FILL`（`tupleSlots=1`）；调用是带函数值输入的 `CALL`；捕获在 `capturePorts`。 |
 | `p6_generic.cml` | 泛型函数/类型 | 实例图 `id<int>`、`id<string>`、`pair<float>`；**没有模板图**，类型参数只在名字里。 |
 | `p8_literals.cml` | 字面量 | `1.0e10` 的标签变成 `10000000000.0`（值对、拼写丢）；字符串原样打印、没有引号/转义（标签里直接出现换行、制表符）；数组是 `[1, 2, 3]`、嵌套数组；`f32` 的 `3.0` 值对。 |
@@ -45,7 +45,7 @@
 |---|---|---|---|
 | 命名类型的声明与模块归属 | **部分**：`StructDecl`/`EnumDecl` 有名字、模块、字段/变体；没有“声明列表” | `jgir` 只打印签名字符串；`toString()` 会用 `Point`、`Option<int>` | 打印机可以从类型对象重建**具体**声明；泛型参数与类型级写法丢失 |
 | 函数签名与参数名 | **有**：`FunctionType`，参数名参与驻留键 | `jgir` 打印签名 | 可直接打印 |
-| `let` 名字 | **没有**：`GCNodeChunk` 只有 origins/regions/permissions/attrs（`graph.h:431-461`），草稿也没有名字列 | `jgir` 无字段 | §4.7 计划中的列；**不影响等价**（名字不计），只影响可读性与调试 |
+| `let` 名字 | **没有**：`GCNodeChunk` 只有 origins/regions/permissions/attrs（`graph.h:415-445 # "uint32_t *origins = nullptr; // nodeCount source origins (0: none)"`），草稿也没有名字列 | `jgir` 无字段 | §4.7 计划中的列；**不影响等价**（名字不计），只影响可读性与调试 |
 | 控制依赖 | **有**：控制边 + `shouldAddSyncCtrlLink` 的省略规则 | `jgir` 打印 `control` 边 | 可复原顺序，但需要算法（见 5.7） |
 | 声明标签与节点标签 | **节点标签有**（`nodeAttrs`）；**声明标签没有** | `jgir` 打印节点 `attrs`；函数/类型/字段/参数标签无处可存 | 节点标签可打印；声明标签是缺口（5.3/问题 2） |
 | 常量 | **有**：静态区；`printSlot` 只给显示串 | `jgir` 的 `label` 是显示串，字符串不转义 | 打印机要自己的字面量书写器；大常量缺口（5.10） |
@@ -55,11 +55,11 @@
 
 这些不是设计约束，是 `std::jgir` 的字段缺口；S0 补上：
 
-1. 区域 `index`（臂序号；`GCRegion.index` 已有，`gir.cpp:127-152` 没打）。
+1. 区域 `index`（臂序号；`GCRegion.index` 已有，`gir.cpp:112-137` 没打）。
 2. 区域形参：`regionPorts` + `GCRegion.params`（循环的 `x`、`acc` 名字与类型；`portInfo` 对区域端口给不出名字，见 `p1` 的 `PORT` 全为空名）。
 3. 区域 `attrs`（`GCRegion.attrs` 已有；`Block` 标签要用）。
 4. `Inline` 区域的 `callSite`（`gir.cpp` 只打 `inlined` 名字）。
-5. 图 `flags`（`kGraphFlagMacro` 等；`graph.h:181-197`）。
+5. 图 `flags`（`kGraphFlagMacro` 等；`graph.h:165-181 # "kGraphFlagMacro = 1 << 0,"`）。
 6. 循环的 `collectionCount` 与 `loopKind`（`jgir` 有 kind，没有 collectionCount）。
 7. 静态值的**结构化**表示（类型 + 值），而不是 `label` 字符串。
 8. 类型表（`types`），让检查器能比较结构而不是拼写。
@@ -69,7 +69,7 @@
 
 1. **`let` 名字**：§4.7 计划，交接 H2/H3b 合流。打印机可以生成名字，因此不阻塞；但调试器/诊断要用。
 2. **声明标签**：函数头、类型声明、字段、参数各一套（§4.7、6.2）。今天 `#kernel` 在函数上、`#shape`/`#width` 在类型/字段上，冻结后**完全丢失**。这是往返的硬缺口，必须补存储。
-3. **`Block` 区域**：`GCRegionKind::Block` 与 `region.attrs` 都已存在（`graph.h:413-427`），但前端只在测试遍 `src/passes/test/regions.cpp:54-60` 建块；真实的 `#tag { }` 不建块，作用域只能从节点集合猜。
+3. **`Block` 区域**：`GCRegionKind::Block` 与 `region.attrs` 都已存在（`graph.h:397-411 # "gc_node_ref_t owner = kInvalidNodeRef; // control regions: the BRCH or"`），但前端只在测试遍 `src/passes/test/regions.cpp:39-45 # "const uint32_t outer = draft.addRegion(GCRegionKind::Block, 0);"` 建块；真实的 `#tag { }` 不建块，作用域只能从节点集合猜。
 4. **泛型声明**：模板不是图（1.6），只有实例；`<int>` 只留在图名里，而图名不计。2.5 说“泛型实例写成具体类型的函数”，所以这是**允许的损失**，不是缺口。
 5. **循环收集槽的源码形式**：`loop.h` 说收集槽属于 H4d 设计，源码还没有 `loop ... collect ...` 一类的写法；图里有 `collectionCount`。这是语言缺口。
 6. **大常量的数据文件形式**：2.5 要求“放在旁边的数据文件中由源码引用”，语言还没有这个引用写法。
@@ -132,8 +132,8 @@
 
 - 名字：`std::cml`。头文件 `include/camel/passes/trans/cml/cml.h`，源文件 `src/passes/trans/cml/`（`cml.cpp`、`module_writer.cpp`、`expr_writer.cpp`、`type_writer.cpp`、`literal.cpp`、`operator_syntax.cpp`），与 `src/passes/trans/json/` 同构。
 - 类：`CmlDumpPass : public RuntimeGraphTranslatePass`（运行时图，翻译遍）。`apply(const Program *, std::ostream &)` 写源码，返回 `nullptr`（消费程序），与 `JsonGirDumpPass` 一致。
-- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`src/execute/pass.cpp:1780-1793`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
-- 参数（`PassDescriptor`，`include/camel/execute/pass/params.h:42-90`）：
+- `acceptsWritings()` 保持 `false`：驱动在消费型遍之前会 `extractWritings`（`src/execute/pass.cpp:1764-1777 # "if (const uint64_t origin = camel::execute::entryFunctionOrigin(*ctx);"`），所以遍看到的是可执行状态；带 `kGraphFlagHasWritings` 的图不会到达这里。若手工绕过驱动，遍拒绝。
+- 参数（`PassDescriptor`，`include/camel/execute/pass/params.h:26-74 # "std::vector<PassParam> params;"`）：
   - `out`（String，默认 `""`）：写文件；空 = 写 `os`（stdout）。写文件时 `data_dir` 默认取 `out` 的父目录。
   - `data_dir`（String，默认 `""`）：大常量的 sidecar 目录；为空且需要 sidecar 时拒绝。
   - `comments`（Bool，默认 `true`）：是否写“由哪个流水线打印”的注释；注释不影响图，测试用 `false` 去掉不确定性。
@@ -144,7 +144,7 @@
 ### 3.2 与 `std::jgir` / `std::cpp` 的分工
 
 - 与 `std::jgir` 共享：`src/passes/trans/gir_metadata.cpp` 的 `recordType`、`portInfo`、`nodeStaticSlotType`、`recordLabel`（只用于注释/调试，不用于生成源码）；`Program` 的遍历与 `calleeOf`；`ControlRegions`/`LoopView`；`OperatorTable` 与 `tags.h`。**不共享**格式化：DOT/JSON 是数据转储，CML 是有作用域、优先级、命名与顺序的程序。
-- 与 `std::cpp` 共享**算法形状**：`ProgramEmitter::findEntry`（入口：返回值/退出值/输出值里找 `CALL`，再穿过 `FILL` 找函数常量，`program_emitter.cpp:194-230`）、`collectFunctions`（函数常量 + `FUNC` 的被调图，232-259 行）、`FunctionEmitter` 的序列/分支/循环/变量/高阶算子的分解（`function_emitter.cpp:434-522`、`980-1105`、`1106-1190`、`1571-1660`、`1723+`）。第一版**照抄分解逻辑**，不改 `std::cpp`；等两边都稳定后，再把“读图得到结构”的部分抽成共享的 `ProgramIndex`/`StructuredBody`，避免为了复用而先动导出器。
+- 与 `std::cpp` 共享**算法形状**：`ProgramEmitter::findEntry`（入口：返回值/退出值/输出值里找 `CALL`，再穿过 `FILL` 找函数常量，`program_emitter.cpp:178-214 # "ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {"`）、`collectFunctions`（函数常量 + `FUNC` 的被调图，232-259 行）、`FunctionEmitter` 的序列/分支/循环/变量/高阶算子的分解（`function_emitter.cpp:418-506 # "Block FunctionEmitter::lowerSequence("`、`980-1105`、`1106-1190`、`1571-1660`、`1723+`）。第一版**照抄分解逻辑**，不改 `std::cpp`；等两边都稳定后，再把“读图得到结构”的部分抽成共享的 `ProgramIndex`/`StructuredBody`，避免为了复用而先动导出器。
 - 与 `std::cpp` 不共享输出：C++ 有语句序列和显式类型，Camel 需要 `sync`、`loop`、`match`、标签块、`var`、函数值语法。
 
 ### 3.3 为什么不是“又一种 GIR”
@@ -172,7 +172,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
   - 有 `Block` 区域时：按区域的 `attrs` 打印 `#[...] { ... }`，块内节点保留自己的标签（见 5.3）。
   - 没有 `Block` 区域、但一个语句的整棵表达式树的节点集合恰好等于某个标签集：在语句外打印块。
   - 否则拒绝（`CmlTagScope`），并把它记为缺口（5.3）。
-- **规则**：识别 `rewrite:rule` / `rewrite:rule_when` 的构造图（7/8 节点、`() => Rule`、名字字符串、单向/双向、掩码、lhs/rhs/when 函数值），打印 `rule name(...) { lhs => rhs }` / `<=>` / `when ...`；`#requires<...>` 从掩码的位反推标准标签名（`3 -> reassociate, contract`；组名丢失）。构造图不是这个形状（例如被折叠成 `Rule` 常量）则拒绝。
+- **规则**：识别 `rewrite:rule` / `rewrite:rule_when` 的构造图（7/8 节点、`let name = ...` 的初值、名字字符串、单向/双向、掩码、lhs/rhs/when 函数值），打印 `rule name(...) { lhs => rhs }` / `<=>` / `when ...`；`#requires<...>` 从掩码的位反推标准标签名（`3 -> reassociate, contract`；组名丢失）。构造图不是这个形状（例如被折叠成 `Rule` 常量）则拒绝。
 - **`#macro`**：图 `flags` 的 `kGraphFlagMacro` 或函数类型的 `macro` 修饰；打印在函数声明前。
 - **`#vjp<rule>`**：图的规则引用（`GCGraphRefRole::Rule`）打印成标准标签 `#vjp<rule>`；规则名从被引图取。
 - **`#requires`** 只在规则上；其他声明标签（`#shape`、`#width`、函数上的 `#kernel`）等 §4.7 的声明标签存储落地后再打印（5.3、问题 2）。
@@ -254,7 +254,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 ### 5.7 效应顺序与 `sync`
 
-**决定**：按控制边把每个区域内的效应节点串成链；构造 `sync` 块时按链顺序打印语句。构造器的规则（`builder_helpers.h:441`）是：若前驱已经是目标的直接数据输入，就不再建控制边。打印机按同一规则预测重编译的边集；若预测的边集与原图不一致，先尝试相邻交换/把被省略的节点插回链中；仍不一致则拒绝（`CmlEffectOrder`）。
+**决定**：按控制边把每个区域内的效应节点串成链；构造 `sync` 块时按链顺序打印语句。构造器的规则（`builder_helpers.h:425`）是：若前驱已经是目标的直接数据输入，就不再建控制边。打印机按同一规则预测重编译的边集；若预测的边集与原图不一致，先尝试相邻交换/把被省略的节点插回链中；仍不一致则拒绝（`CmlEffectOrder`）。
 **测量支撑**：`p11` 的 `println(a)` 边被省略；`p12` 的嵌套块摊平成一条链。一个块可以复现同样的边集，所以块边界不是必须还原的。
 **影响**：顺序是语义（3.1/3.3），不能靠“反正文本一样”糊过去；这一块需要独立测试（边集逐条比较，不只是执行）。
 
@@ -276,7 +276,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 ### 5.11 写法表（两张写法）
 
-**决定**：`std::cml` 是翻译遍，驱动在它之前抽取一种写法（`src/execute/pass.cpp:1780-1793`），所以它打印的是抽取后的可执行图；写法表本身不可打印（源码没有“一个值两种写法”的语法）。若手工把带 `kGraphFlagHasWritings` 的图送进来，拒绝（`CmlHasWritings`）。
+**决定**：`std::cml` 是翻译遍，驱动在它之前抽取一种写法（`src/execute/pass.cpp:1764-1777 # "if (const uint64_t origin = camel::execute::entryFunctionOrigin(*ctx);"`），所以它打印的是抽取后的可执行图；写法表本身不可打印（源码没有“一个值两种写法”的语法）。若手工把带 `kGraphFlagHasWritings` 的图送进来，拒绝（`CmlHasWritings`）。
 **影响**：2.5 的“任何合法的图”按“可执行状态的图”理解；表是遍之间的内部表示，不是程序。需要作者确认（问题 7）。
 
 ### 5.12 没有 `main` / 库模块
@@ -337,7 +337,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 4. **泛型实例**：打印成具体函数/类型（`id_int`、`Option_int`），不打印泛型声明；类型参数与 `<...>` 名字丢失。**我的答案**：可以，2.5 明确说“泛型实例写成具体类型的函数”；名字本来就不计。
 5. **模块边界**：v1 一个文件、全部摊平、不打印 `import`；还是每模块一个文件 + `import`？**我的答案**：v1 摊平（图等价、实现简单、不依赖模块解析）；如果作者要可读的模块结构，第二版再做“每模块一文件”，但那是输出组织，不是等价条件。
 6. **大常量**：语言还没有数据文件引用形式。先按 `max_literal_bytes` 拒绝，还是全部内联？**我的答案**：拒绝并列出缺口；内联 100 MB 数组不可用，也不是 2.5 的本意。等作者定下 `data(...)`/sidecar 形式再实现。
-7. **写法表**：`std::cml` 在驱动抽取之后运行，打印的是抽取后的可执行图；写法表不可打印。2.5 的“任何合法的图”是否按“可执行状态的图”理解？**我的答案**：是；抽取是驱动对消费型遍的既定行为（`pass.cpp:1780-1793`），表是内部表示，不是程序。若作者要求打印表，需要新的源码形式，那是语言设计。
+7. **写法表**：`std::cml` 在驱动抽取之后运行，打印的是抽取后的可执行图；写法表不可打印。2.5 的“任何合法的图”是否按“可执行状态的图”理解？**我的答案**：是；抽取是驱动对消费型遍的既定行为（`pass.cpp:1764-1777`），表是内部表示，不是程序。若作者要求打印表，需要新的源码形式，那是语言设计。
 
 ## 8. 这个遍给谁用
 
@@ -439,13 +439,13 @@ func unwrapOr(o: Option<int>, fallback: int): int {
 
 | 图结构 | `std::cpp` 的位置 | `std::cml` 的目标 |
 |---|---|---|
-| 入口（`CALL`/`FILL`/函数常量） | `program_emitter.cpp:194-230` | `findEntry` + 去掉入口链 |
-| 收集函数/规则/常量 | `program_emitter.cpp:232-259` | `collectFunctions` |
-| 序列/尾调用/GATE | `function_emitter.cpp:434-522` | 语句序列 + `return` |
-| 分支/臂/默认臂 | `function_emitter.cpp:1106-1190` | `if`/`match` + 臂区域 |
-| 循环（区域形式） | `function_emitter.cpp:980-1105` | `loop ... do ...` |
-| `var`/复合赋值 | `function_emitter.cpp:1571-1660` | `var` + `=`/`+=` |
-| 高阶算子/函数值 | `function_emitter.cpp:1723+` | `->map<f>` 等 |
+| 入口（`CALL`/`FILL`/函数常量） | `program_emitter.cpp:178-214 # "ProgramEmitter::Entry ProgramEmitter::findEntry(GCGraph *root) const {"` | `findEntry` + 去掉入口链 |
+| 收集函数/规则/常量 | `program_emitter.cpp:216-243 # "std::vector<GCGraph *> ProgramEmitter::collectFunctions(const"` | `collectFunctions` |
+| 序列/尾调用/GATE | `function_emitter.cpp:418-506` | 语句序列 + `return` |
+| 分支/臂/默认臂 | `function_emitter.cpp:1090-1174` | `if`/`match` + 臂区域 |
+| 循环（区域形式） | `function_emitter.cpp:964-1089` | `loop ... do ...` |
+| `var`/复合赋值 | `function_emitter.cpp:1555-1644` | `var` + `=`/`+=` |
+| 高阶算子/函数值 | `function_emitter.cpp:1707+` | `->map<f>` 等 |
 | 算子语法 | `operator_rules.cpp`（C++ 输出） | 新表 `operator_syntax.cpp`（Camel 输出） |
 
 `std::cpp` 已证明这些分解在现有测试上可行；`std::cml` 复用的是**分解的判断**，不是 C++ 文本。第一版复制到 `src/passes/trans/cml/`，不重构导出器；S5 之后再考虑把“读图得到结构”抽成共享层。

@@ -21,7 +21,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "generic_values.values"
-desc = "Passed to another generic function (also two at once, one waiting for the other), to an ordinary function, to map / filter / reduce (also an imported generic function), handed on to an operator by a generic function, under a declared type and a declared return type; a type variable that its typeas position leaves open (null) takes its type elsewhere."
+desc = "Passed to another generic function (also two at once, one waiting for the other), to an ordinary function, to map / filter / reduce (also an imported generic function), handed on to an operator by a generic function, under a declared type and a declared return type; a type variable that its first binding position leaves open (null) takes its type elsewhere."
 case = "../../../cases/consistency/generic_values/values.cml"
 golden = "golden/generic_values.txt"
 

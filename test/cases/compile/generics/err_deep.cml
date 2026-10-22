@@ -1,6 +1,6 @@
 module err_deep
 
-func grow(x: typeas T, n: int): int {
+func grow::<T>(x: T, n: int): int {
     return if n <= 0 then 0 else grow([x], n - 1)
 }
 

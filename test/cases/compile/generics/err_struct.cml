@@ -1,6 +1,6 @@
 module err_struct
 
-func name_of(s: { name: typeas T }): T {
+func name_of::<T>(s: { name: T }): T {
     return s.name
 }
 

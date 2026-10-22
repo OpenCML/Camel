@@ -817,17 +817,17 @@ ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody 
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
-and the right one what it becomes (rewrite design 2.1, graph store 5.2), and of the function that
-makes the rule from them:
+and the right one what it becomes (rewrite design 2.1, graph store 5.2), and of the value that
+holds them (rewrite design 2 (second version) 8.5):
 
     func name__lhs(params) => left
     func name__rhs(params) => right
-    func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+    let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
 
 `__rule` is an operator of the module `rewrite`, imported by the declaration itself. The rule is
-the function `name`: it is exported, imported and listed like any function (a library function
-has no module-level values), and the engines of the module call the functions of a list to get
-the rules. `consts` has bit i set when the parameter i is `const`.
+the value `name` (type `Rule`): it is held in a variable, passed and returned like any value,
+stored in a `Rule[]`, exported and imported. `consts` has bit i set when the parameter i is
+`const`.
 */
 Value Builder::visitRuleDecl(cst::RuleDecl context) {
     ENTER("RuleDecl");
@@ -846,6 +846,15 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
     const auto when   = context->expr();
+    // A rule declares its type parameters the way a function does, after its name
+    // (`rule sub_self::<T>(x: T) { ... }`): every function the rule becomes is generic over
+    // them, so the sides bind and instantiate like an ordinary generic function.
+    std::vector<std::string> typeParams;
+    if (const auto declared = context->get<cst::TypeParams>()) {
+        for (const auto ident : declared->all<cst::IdentDef>()) {
+            typeParams.emplace_back(ident->text());
+        }
+    }
     int64_t consts    = 0;
     if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
         int bit = 0;
@@ -959,6 +968,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         const Reference sideRef = qualifyRef(Reference(name + suffix));
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
+        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParams(typeParams);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
         if (params) {
             *funcTypeNode << any2node(visitParentParams(params));
@@ -1034,7 +1044,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         *whenFunc << whenData;
     }
 
-    // func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+    // let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
     const auto literal = [&](LiteralType type, const std::string &text) {
         node_ptr_t literalNode = createNodeAs<LiteralLoad>(Literal(type, text));
         setNodeTokenRangeByContext(literalNode, context);
@@ -1062,37 +1072,42 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(call, context);
     *call << reference(makerName) << args << createNodeAs<RepeatedLoad>("NamedData");
 
-    node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
-    setNodeTokenRangeByContext(exprStmt, context);
-    *exprStmt << call;
-    node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
-    setNodeTokenRangeByContext(stmts, context);
-    *stmts << exprStmt;
-    node_ptr_t block = createNodeAs<StmtBlockLoad>();
-    setNodeTokenRangeByContext(block, context);
-    *block << stmts;
-
-    node_ptr_t makerType = createNodeAs<FuncTypeLoad>();
-    setNodeTokenRangeByContext(makerType, context);
-    *makerType << createNodeAs<RepeatedLoad>("NamedPair")
-               << createNodeAs<RepeatedLoad>("NamedPair");
-    node_ptr_t makerTypeOpt = createNodeAs<OptionalLoad>("Type");
-    setNodeTokenRangeByContext(makerTypeOpt, context);
-    *makerType << makerTypeOpt;
-    node_ptr_t makerNode = createNodeAs<FuncDataLoad>(ref);
-    setNodeTokenRangeByContext(makerNode, context);
-    *makerNode << makerType << block;
-    node_ptr_t makerDecl = createNodeAs<FuncDeclLoad>(ref);
-    unwrapNodeAs<FuncDeclLoad>(makerDecl)->setDoc(docOf(context));
-    *makerDecl << makerNode;
-    setNodeTokenRangeByContext(makerDecl, context);
+    // The rule is a module-level value, not a function: `let name = __rule(...)` (rewrite design
+    // 2 (second version) 8.5). A value can be held, passed, returned and put in a `Rule[]`; a
+    // function that made one could only be called.
+    node_ptr_t typeList = createNodeAs<RepeatedLoad>("Type");
+    setNodeTokenRangeByContext(typeList, context);
+    node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(dataList, context);
+    *dataList << call;
+    node_ptr_t valueDecl =
+        createNodeAs<DataDeclLoad>(false, UnpackType::Tuple, std::vector<Reference>{ref});
+    unwrapNodeAs<DataDeclLoad>(valueDecl)->setDoc(docOf(context));
+    setNodeTokenRangeByContext(valueDecl, context);
+    *valueDecl << typeList << dataList;
+    // The AST tooling reads the binding and the initializer of a declaration; a rule declaration
+    // has the same two, under the name of the rule.
+    std::vector<camel::source::SemanticPart> parts;
+    const auto nameToken = context->get<cst::IdentDef>();
+    parts.push_back(semanticPart(
+        camel::source::SemanticRole::BindingName,
+        nameToken ? deriveAstAnchorOrigin(valueDecl, nameToken, "ast.data.binding")
+                  : nodeOrigin(valueDecl),
+        0,
+        name));
+    parts.push_back(semanticPart(
+        camel::source::SemanticRole::ValueProducer,
+        nodeOrigin(valueDecl->atAs<RepeatedLoad>(1)),
+        -1,
+        "initializer"));
+    registerAstSemanticBundle(valueDecl, std::move(parts));
 
     LEAVE("RuleDecl");
     std::vector<node_ptr_t> declarations{lhsFunc, rhsFunc};
     if (whenFunc) {
         declarations.push_back(whenFunc);
     }
-    declarations.push_back(makerDecl);
+    declarations.push_back(valueDecl);
     return declarations;
 }
 
@@ -1623,6 +1638,17 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         }
     }
     funcType->setModifiers(modSet);
+
+    // The type parameters declared at the head (`func first::<T>(...)`, design principles 5.5).
+    // They are the names the declaration's type variables are; the GCT builder puts them in
+    // scope before it visits a parameter type, so one of them wins over a type of the same name.
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        std::vector<std::string> names;
+        for (const auto ident : typeParams->all<cst::IdentDef>()) {
+            names.emplace_back(ident->text());
+        }
+        funcType->setTypeParams(std::move(names));
+    }
 
     if (context->get<cst::AngledParams>()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->get<cst::AngledParams>()));
@@ -4634,15 +4660,6 @@ Value Builder::visitTypeOfType(cst::TypeOfType context) {
     return res;
 }
 
-Value Builder::visitTypeAsType(cst::TypeAsType context) {
-    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeAs);
-    setNodeTokenRangeByContext(res, context);
-    Reference ref(context->get<cst::IdentDef>()->text());
-    *res << createNodeAs<RefTypeLoad>(ref);
-    setNodeTokenRangeByContext(res, context->get<cst::IdentDef>());
-    return res;
-}
-
 /*
 structType
     : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
@@ -4916,8 +4933,6 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
-    case NK::TypeAsType:
-        return visitTypeAsType(cst::TypeAsType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

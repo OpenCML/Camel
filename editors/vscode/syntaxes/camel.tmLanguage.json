@@ -194,7 +194,6 @@
         { "include": "#with-parameters" },
         { "include": "#function-declaration" },
         { "include": "#type-declaration" },
-        { "include": "#typeas-binding" },
         { "include": "#catch-binding" },
         { "include": "#let-declaration" },
         { "include": "#var-declaration" }
@@ -303,14 +302,6 @@
           }
         }
       ]
-    },
-    "typeas-binding": {
-      "comment": "primaryType: TYPEAS identDef binds a type variable.",
-      "match": "\\b(typeas)\\s+([A-Za-z_][A-Za-z_0-9]*)",
-      "captures": {
-        "1": { "name": "keyword.operator.expression.typeas.camel" },
-        "2": { "name": "entity.name.type.parameter.camel" }
-      }
     },
     "catch-binding": {
       "comment": "catchClause: CATCH identDef ':' typeExpr stmtBlock",
@@ -439,7 +430,7 @@
         },
         {
           "name": "keyword.operator.expression.camel",
-          "match": "\\b(?:as|is|of|typeof|typeas|constas|keyof)\\b"
+          "match": "\\b(?:as|is|of|typeof|constas|keyof)\\b"
         },
         {
           "name": "constant.language.boolean.camel",

@@ -69,6 +69,7 @@ CAMEL_NODE(ParentArgues, Other)        // '(' argumentList? ','? ')'
 CAMEL_NODE(AngledParams, Other)        // '<' pairedParams? ','? '>'
 CAMEL_NODE(AngledValues, Other)        // '<' argumentList? ','? '>'
 CAMEL_NODE(TypeArguments, Other)       // '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
+CAMEL_NODE(TypeParams, Other)          // '::' '<' identDef (',' identDef)* ','? '>', after a declaration's name
 CAMEL_NODE(NamedTypeArgument, Other)   // IDENTIFIER '=' typeExpr
 CAMEL_NODE(Pattern, Other)             // identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 CAMEL_NODE(EnumTuplePattern, Other)    // '(' (pattern (',' pattern)*)? ','? ')', after a variant path
@@ -137,7 +138,6 @@ CAMEL_NODE(ParenType, Type)            // '(' typeExpr ')'
 CAMEL_NODE(TupleType, Type)            // '(' typeList? ','? ')'
 CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
 CAMEL_NODE(TypeOfType, Type)           // 'typeof' dataExpr
-CAMEL_NODE(TypeAsType, Type)           // 'typeas' identDef
 CAMEL_NODE(EnumType, Type)             // 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 CAMEL_NODE(EnumVariant, Other)         // identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 CAMEL_NODE(EnumField, Other)           // identDef ':' typeExpr

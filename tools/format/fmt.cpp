@@ -507,6 +507,9 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     } else {
         result += "func " + any_cast<string>(visitIdentRef(identRef));
     }
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
     result += any_cast<string>(visitParentParams(parentParams));
 
     if (typeExpr) {
@@ -539,6 +542,9 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
     }
     result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
     if (const auto ruleContext = context->get<cst::RuleContext>()) {
         result += any_cast<string>(visitRuleContext(ruleContext));
     }
@@ -1741,6 +1747,16 @@ any Formatter::visitTypeList(cst::TypeList context) {
 }
 
 /*
+typeParams
+    : '::' '<' identDef (',' identDef)* ','? '>'
+    ;
+*/
+any Formatter::visitTypeParams(cst::TypeParams context) {
+    const auto names = vec(context->all<cst::IdentDef>());
+    return "::<" + formatList(names, context, ", ", ",", PaddingNL | PushScope) + ">";
+}
+
+/*
 typeArguments
     : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
     ;
@@ -1845,6 +1861,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(AnalysisDecl)
         CAMEL_FORMAT(AnalysisClause)
         CAMEL_FORMAT(RuleContext)
+        CAMEL_FORMAT(TypeParams)
         CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)
         CAMEL_FORMAT(ResourceDecl)
@@ -1968,8 +1985,6 @@ any Formatter::visit(syn::Node context) {
         return "(" + any_cast<string>(visit(context.type())) + ")";
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
-    case NK::TypeAsType:
-        return "typeas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::ConstasData:
         return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::SliceIndices:

@@ -26,7 +26,7 @@ export func noisy(x: Tensor<f32>): Tensor<f32> sync {
 }
 
 /// Declared for tensor:log: generic, so not one graph.
-export func generic(x: typeas T): T {
+export func generic::<T>(x: T): T {
     return x
 }
 

@@ -6,8 +6,8 @@
  *
  * Both exist only while a module is compiled; neither ever reaches a graph.
  *
- * - TypeVarType is a named hole in a type. A generic function binds one with `typeas T` at the
- *   position of its signature where the type first appears and names it `T` afterwards; a
+ * - TypeVarType is a named hole in a type. A generic function declares its type parameters at
+ *   its head (`func first::<T>(xs: T[]): T`) and uses them as plain names in its signature; a
  *   parameterised type declaration (`type Pair<T> = (T, T)`) names its parameters the same
  *   way. A generic function is a subgraph template: every call binds the variables from the
  *   argument types and builds a subgraph in which each variable is replaced by its binding.
@@ -33,8 +33,8 @@ namespace camel::core::type {
 
 class TypeVarType : public Type {
   public:
-    /// `binder`: this occurrence is the one written `typeas T`, where the variable takes the
-    /// type found at its position. Every other occurrence is a use.
+    /// `binder`: this occurrence is one the signature can bind, because it writes a type parameter
+    /// the declaration declares at its head. Every other occurrence is a use.
     static TypeVarType *create(const std::string &name, bool binder);
 
     const std::string &name() const { return name_; }
@@ -118,12 +118,12 @@ OpenFunctionType *instantiateFunctionType(
     const ExtentValues *extents = nullptr);
 
 /**
- * Binds the variables `pattern` binds (its `typeas` occurrences) from the type `actual` found
- * at the same position, appending to `bindings`. Only binding occurrences are looked at: a
- * variable that is already bound, and every use, is left for the ordinary check of the
- * substituted type against the argument. Returns false when `actual` does not have the shape
- * `pattern` needs to reach a binding occurrence (an array where a tuple is, tuples of
- * different sizes, ...).
+ * Binds the variables `pattern` binds (occurrences of its head-declared type parameters) from
+ * the type `actual` found at the same position, appending to `bindings`. Only binding
+ * occurrences are looked at: a variable that is already bound, and every use, is left for the
+ * ordinary check of the substituted type against the argument. Returns false when `actual` does
+ * not have the shape `pattern` needs to reach a binding occurrence (an array where a tuple is,
+ * tuples of different sizes, ...).
  */
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings);
 
@@ -144,14 +144,14 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings);
 void collectTypeVars(Type *type, std::vector<std::string> &names);
 
 /// The names of the variables `pattern` can bind (see bindTypeVars), appended to `names`
-/// without duplicates. A `typeas` inside a union is not among them: there is no position of
-/// the argument type to take it from. Among the arguments of a module type it is, when those
-/// arguments are plain types (OtherType::typeArguments, e.g. `Map<typeas K, typeas V>`).
+/// without duplicates. One inside a union is not among them: there is no position of the
+/// argument type to take it from. Among the arguments of a module type it is, when those
+/// arguments are plain types (OtherType::typeArguments, e.g. `Map<K, V>`).
 void collectBindableTypeVars(Type *pattern, std::vector<std::string> &names);
 
 /// A `T??` or `T!!` anywhere in `type`, or nullptr: the same mark twice, which a type
 /// expression rejects where it is written and which substitution can still produce
-/// (`(typeas T)?` with `T = int?`).
+/// (`T?` with `T = int?`).
 TupleType *findRepeatedMark(Type *type);
 
 /// `T = int, U = string`, for diagnostics and instance names.

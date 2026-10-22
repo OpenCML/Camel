@@ -31,46 +31,46 @@ func main(): int sync {
     return 0
 }
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
 // a generic function calling generic functions
-func wrap(x: typeas T): (T, T[]) {
+func wrap::<T>(x: T): (T, T[]) {
     return (id(x), [id(x)])
 }
 
 // captures a module-level value
-func add_base(x: typeas T): T {
+func add_base::<T>(x: T): T {
     return x + base
 }
 
 // with parameters are ordinary context parameters; their types may use and bind variables
-with <k: typeas T>
-func scaled(x: T): T {
+with <k: T>
+func scaled::<T>(x: T): T {
     return x * k
 }
 
-with <w: typeas W>
-func keep(x: typeas T): (W, T) {
+with <w: W>
+func keep::<T, W>(x: T): (W, T) {
     return (w, x)
 }
 
 // a lambda in the body typed with the variable
-func lam(x: typeas T): T[] {
+func lam::<T>(x: T): T[] {
     let dup = (y: T) => [y, y]
     return dup(x)
 }
 
 // conversions to a type written with the variable
-func conv(x: typeas T): T {
+func conv::<T>(x: T): T {
     let zero: T = 0
     return (x + zero) as T
 }
 
 // a generic function declared inside a function
 func local_generic(n: int): (int, string) {
-    func twice(x: typeas T): (T, T) {
+    func twice::<T>(x: T): (T, T) {
         return (x, x)
     }
     let a = twice(n)
@@ -78,17 +78,17 @@ func local_generic(n: int): (int, string) {
     return (a.0 + a.1, b.0 + b.1)
 }
 
-sync func bump(var x: typeas T, d: T): void sync {
+sync func bump::<T>(var x: T, d: T): void sync {
     x = x + d
 }
 
 // a lambda capturing a parameter whose type is the variable
-func capture_param(x: typeas T): T {
+func capture_param::<T>(x: T): T {
     let f = () => x
     return f()
 }
 
-func ann(x: typeas T): T {
+func ann::<T>(x: T): T {
     let y: T = 2
     return x * y
 }

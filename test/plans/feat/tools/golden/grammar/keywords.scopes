@@ -244,34 +244,6 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->func generic(x: typeas T, y: tag of T, z: Tensor<f32, const [constas n, 4]>): T {
-#^^^^ meta.function.definition.camel storage.type.function.camel
-#     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
-#            ^ meta.parens.camel punctuation.section.parens.begin.camel
-#             ^ meta.parens.camel variable.parameter.camel
-#              ^ meta.parens.camel punctuation.separator.colon.camel
-#                ^^^^^^ meta.parens.camel keyword.operator.expression.typeas.camel
-#                       ^ meta.parens.camel entity.name.type.parameter.camel
-#                        ^ meta.parens.camel punctuation.separator.comma.camel
-#                          ^ meta.parens.camel variable.parameter.camel
-#                           ^ meta.parens.camel punctuation.separator.colon.camel
-#                                 ^^ meta.parens.camel keyword.operator.expression.camel
-#                                     ^ meta.parens.camel punctuation.separator.comma.camel
-#                                       ^ meta.parens.camel variable.parameter.camel
-#                                        ^ meta.parens.camel punctuation.separator.colon.camel
-#                                                ^ meta.parens.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.begin.camel
-#                                                 ^^^ meta.parens.camel meta.angle-arguments.camel support.type.primitive.camel
-#                                                    ^ meta.parens.camel meta.angle-arguments.camel punctuation.separator.comma.camel
-#                                                      ^^^^^ meta.parens.camel meta.angle-arguments.camel storage.modifier.camel
-#                                                            ^ meta.parens.camel meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.begin.camel
-#                                                             ^^^^^^^ meta.parens.camel meta.angle-arguments.camel meta.brackets.camel keyword.operator.expression.camel
-#                                                                      ^ meta.parens.camel meta.angle-arguments.camel meta.brackets.camel punctuation.separator.comma.camel
-#                                                                        ^ meta.parens.camel meta.angle-arguments.camel meta.brackets.camel constant.numeric.integer.decimal.camel
-#                                                                         ^ meta.parens.camel meta.angle-arguments.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                                                                          ^ meta.parens.camel meta.angle-arguments.camel punctuation.definition.angle-arguments.end.camel
-#                                                                           ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                                                            ^ punctuation.separator.colon.camel
-#                                                                                ^ meta.block.camel punctuation.section.block.begin.camel
 >    return x
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 >}

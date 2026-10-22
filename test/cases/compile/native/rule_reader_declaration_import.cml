@@ -1,7 +1,7 @@
 /**
  * The four rule readers are declarations in `stdlib/rewrite.cml`: they take a `Rule` (the value a
- * rule maker returns) and answer the name, the direction, the rewrites it needs and the constants
- * it adds. The calls reach the C++ kernels with the declared types (handover H183).
+ * rule declaration makes) and answer the name, the direction, the rewrites it needs and the
+ * constants it adds. The calls reach the C++ kernels with the declared types (handover H183).
  */
 module rule_reader_declaration_import
 
@@ -11,7 +11,7 @@ export rule add_zero(x: int) { x + 0 => x }
 rule swap(a: int, const c: int) { a * c <=> c * a }
 
 func main(): int sync {
-    println(rule_name(add_zero()), rule_two_way(add_zero()), rule_needs(add_zero()), rule_consts(add_zero()))
-    println(rule_name(swap()), rule_two_way(swap()))
+    println(rule_name(add_zero), rule_two_way(add_zero), rule_needs(add_zero), rule_consts(add_zero))
+    println(rule_name(swap), rule_two_way(swap))
     return 0
 }

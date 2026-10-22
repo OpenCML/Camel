@@ -4,7 +4,7 @@
  */
 module when_function
 
-func apply(f: typeas F, x: int): int when is_function::<F>() {
+func apply::<F>(f: F, x: int): int when is_function::<F>() {
     return f(x)
 }
 
