@@ -429,3 +429,53 @@ expect_stdout_contains = ["PASS"]
 expect_output_not_contains = ["FAIL"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+# ---- A command line that cannot be honoured is an error, not a run with a default (H181) ----
+
+# These three refusals printed their reason and returned 0. They are not program diagnostics, but
+# the same question applies: a branch that reports a failure and exits 0 tells a script that the
+# command succeeded.
+
+[[tests]]
+name = "usage.invalid_timeit_spec"
+desc = "A --timeit value that is not '<pass>/<iterations>' is reported and the exit code is 1 (it used to be 0)."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--timeit", "nonsense", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["Invalid --timeit value"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "usage.nonpositive_timeit_count"
+desc = "A --timeit iteration count of 0 is reported and the exit code is 1 (it used to be 0)."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--timeit", "std::nvm/0", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["Iterations must be a positive integer"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "usage.timeit_with_profile"
+desc = "--timeit cannot be combined with --profile: the conflict is reported and the exit code is 1 (it used to be 0)."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--timeit", "std::nvm/1", "--profile", "${case}"]
+expect_exit = 1
+expect_stderr_contains = ["--timeit cannot be combined with --profile"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "usage.missing_input"
+desc = "A run with passes but no input file is reported as a usage error and the exit code is 1 (it used to be 0)."
+kind = "behavior"
+case = "../../../cases/compile/check/clean.cml"
+args = ["--passes", "std::nvm"]
+expect_exit = 1
+expect_stderr_contains = ["Run requires an input file"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
