@@ -1106,7 +1106,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
             arms[1] = buildArm(exec, [&] {
                 const GCT::node_ptr_t dref = tree_->makeDRef(name);
                 dref->setOrigin(gct->origin());
-                return visitDRefNode(dref);
+                return valueNodeOf(visitDRefNode(dref));
             });
         } else {
             diags_->of(SemanticDiag::TaggedOperandMismatch)
@@ -1143,7 +1143,7 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     arms[0]          = buildArm(exec, [&] {
         const GCT::node_ptr_t dref = tree_->makeDRef(name);
         dref->setOrigin(gct->origin());
-        node_handle_t failed = visitDRefNode(dref);
+        node_handle_t failed = valueNodeOf(visitDRefNode(dref));
         return resultType->equals(subjectType) ? failed : castNodeTo(failed, resultType, gct);
     });
     return buildBranch(gct, tagNode, &arms);
@@ -1602,11 +1602,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
         condNode = visitInPosition(gct->at(0), Type::Bool());
     } else {
         ExpectedValueScope scrutineeScope(expectedValueType_, nullptr);
-        const auto &res = visit(gct->at(0));
-        ASSERT(
-            res.type() == typeid(node_handle_t),
-            "Unexpected result type from Enter the child of BRCH node.");
-        condNode = any_cast<node_handle_t>(res);
+        condNode = valueNodeOf(visit(gct->at(0)));
     }
     node_handle_t node{};
     if (asTagged(valueTypeOf(nodeTypeOf(condNode))) == nullptr && isNarrowedName(gct->at(0))) {
@@ -1797,11 +1793,7 @@ node_handle_t Builder::buildBranch(
                 break;
             case GCT::CaseType::Value: {
                 ASSERT(caseNode->size() == 2, "Value case should have two children.");
-                any res = visit(caseNode->at(0));
-                ASSERT(
-                    res.type() == typeid(node_handle_t),
-                    "Unexpected result type from visiting the case node.");
-                node_handle_t valueNode = any_cast<node_handle_t>(res);
+                node_handle_t valueNode = valueNodeOf(visit(caseNode->at(0)));
                 // A case is compared with the value matched, by the comparison of that type:
                 // a case of another type was compared bit for bit (`case 1` on a string read
                 // the integer as a string, and crashed).

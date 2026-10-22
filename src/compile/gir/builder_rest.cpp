@@ -56,20 +56,15 @@ const Builder::RestBinding *Builder::restBindingNamed(const std::string &name) c
     return nullptr;
 }
 
-node_handle_t
-Builder::materializeRestBinding(const RestBinding &binding, const GCT::node_ptr_t &at) {
-    return packStaticValues(false, binding.type, binding.values, at, "gir.rest.fill");
-}
-
 std::vector<node_handle_t> Builder::expandRestArgument(
     const GCT::node_ptr_t &operand, const std::string &written, const GCT::node_ptr_t &call) {
-    if (operand->type() == GCT::NodeKind::DREF) {
-        if (const RestBinding *binding = restBindingNamed(operand->name());
-            binding != nullptr) {
-            return binding->values;
-        }
+    // A build-time tuple (the rest parameter being forwarded, or a tuple comprehension) gives
+    // its elements directly: no FILL is built for it.
+    const std::any operandRes = visit(operand);
+    if (operandRes.type() == typeid(StaticTuple)) {
+        return any_cast<const StaticTuple &>(operandRes).elements;
     }
-    const node_handle_t value = valueNodeOf(visit(operand));
+    const node_handle_t value = valueNodeOf(operandRes);
     if (value == nullptr) {
         diags_->of(SemanticDiag::RestArgumentNotTuple)
             .atOrigin(operand->origin() != 0 ? operand->origin() : call->origin())
@@ -229,9 +224,11 @@ node_handle_t Builder::inlineRestCall(
         restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
     }
     RestBinding rest;
-    rest.name   = restName;
-    rest.values = std::move(restValues);
-    rest.type   = TupleType::create(std::move(restTypes));
+    rest.name                 = restName;
+    rest.tuple.type           = TupleType::create(std::move(restTypes));
+    rest.tuple.elements       = std::move(restValues);
+    rest.tuple.materializable = false;
+    rest.tuple.origin         = call;
 
     Type *exitType =
         signature->hasExitType() ? substituteTypeVars(signature->exitType(), bindings) : nullptr;

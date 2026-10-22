@@ -926,6 +926,12 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
                 result = visit(child);
             }
             unusedStatement_ = nullptr;
+            if (result.has_value() && result.type() == typeid(StaticTuple)) {
+                // A build-time tuple is the block's value only as a runtime tuple: a tail
+                // comprehension materializes here, and an unused one is held to the same
+                // unused-pure-value rule as before.
+                result = valueNodeOf(result);
+            }
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
             }

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-222 diagnostics: 205 errors, 17 warnings.
+212 diagnostics: 195 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -175,17 +175,7 @@ prints one entry.
 | `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error |
 | `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error |
 | `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error |
-| `0x03000191` | [SemanticDiag::ConstasParameterNotFirst](#constasparameternotfirst) | Error |
-| `0x03000192` | [SemanticDiag::ConstasParameterOnlyOne](#constasparameteronlyone) | Error |
-| `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error |
-| `0x03000194` | [SemanticDiag::ConstasTypeNotInt](#constastypenotint) | Error |
-| `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error |
-| `0x03000196` | [SemanticDiag::ConstasValueNotInt](#constasvaluenotint) | Error |
-| `0x03000197` | [SemanticDiag::ConstasNotUsedInType](#constasnotusedintype) | Error |
-| `0x03000198` | [SemanticDiag::ConstasWithRest](#constaswithrest) | Error |
-| `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error |
-| `0x0300019A` | [SemanticDiag::ConstasInNativeDeclaration](#constasinnativedeclaration) | Error |
-| `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
+| `0x03000191` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -1900,19 +1890,13 @@ The generic function '{0}' cannot be called with argument types {1}: {2}.
 A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
 ```
 
-**Example** (`test/cases/compile/constas/constas_argument_shape.cml`, run as `camel test/cases/compile/constas/constas_argument_shape.cml`)
+**Example** (`test/cases/compile/generic_explicit_named_unknown.cml`, run as `camel test/cases/compile/generic_explicit_named_unknown.cml`)
 
 ```camel
-module constas_argument_shape
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
-    return sum(x)
-}
-
+module generic_explicit_named_unknown
+func second(x: typeas T): T { return x }
 func main(): int sync {
-    // The instance for n = 3 takes a Tensor<f32, [3]>; this argument has extent 4.
-    println(total(3, ones([4])))
+    println(second::<U = int>(1))
     return 0
 }
 ```
@@ -2705,7 +2689,7 @@ module if_condition
 import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
-// bool. It is a `Json` now, and a condition is a bool.
+// bool (docs/design/any-typing, defect D5). It is a `Json` now, and a condition is a bool.
 func check(a: Json): int sync {
     println(if a then 1 else 2)
     return 0
@@ -2740,7 +2724,7 @@ module match_subject
 import { Json, decode } from json
 
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
-// bit, a string by address, so `'ab'` fell to `case _`. It
+// bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
 // is a `Json` now, and a case has the type of the value matched.
 func check(v: Json): int sync {
     let r = match v {
@@ -4609,366 +4593,33 @@ func main(): int sync {
 }
 ```
 
-### ConstasParameterNotFirst
+### StaticTupleEscapes
 
-`0x03000191` · Error · `SemanticDiag::ConstasParameterNotFirst`
+`0x03000191` · Error · `SemanticDiag::StaticTupleEscapes`
 
 **Message**
 
 ```text
-The 'constas' parameter '{0}' must be the first ordinary parameter.
+The build-time tuple '{0}' is not a value.
 ```
 
 **Help**
 
 ```text
-A 'constas' value is part of the declaration's identity: it is bound at the call, before any runtime argument. Write it first, as in 'func f(constas n: int, x: f32)'.
+A rest parameter's tuple stands for the arguments a call left over: read it with 'indices {0}', '{0}.[j]' or '..{0}', or write a tuple literal '(a, b)' when a runtime tuple value is wanted.
 ```
 
-**Example** (`test/cases/compile/constas/constas_not_first.cml`, run as `camel test/cases/compile/constas/constas_not_first.cml`)
+**Example** (`test/cases/compile/static_expansion/static_tuple_escape.cml`, run as `camel test/cases/compile/static_expansion/static_tuple_escape.cml`)
 
 ```camel
-module constas_not_first
+module static_tuple_escape
 
-// The `constas` value is bound before the runtime arguments, so it comes first.
-func bad(x: int, constas n: int): int {
-    return x + n
+func first(..ts): int {
+    return ts
 }
 
 func main(): int sync {
-    println(bad(1, 2))
-    return 0
-}
-```
-
-### ConstasParameterOnlyOne
-
-`0x03000192` · Error · `SemanticDiag::ConstasParameterOnlyOne`
-
-**Message**
-
-```text
-The declaration already has the 'constas' parameter '{1}'; '{0}' is a second one.
-```
-
-**Help**
-
-```text
-A declaration takes at most one 'constas' parameter: two compile-time values would make the instance key ambiguous. Combine them into one value, or use a type parameter for the other.
-```
-
-**Example** (`test/cases/compile/constas/constas_twice.cml`, run as `camel test/cases/compile/constas/constas_twice.cml`)
-
-```camel
-module constas_twice
-
-// A declaration takes at most one `constas` value parameter.
-func bad(constas n: int, constas m: int): int {
-    return n + m
-}
-
-func main(): int sync {
-    println(bad(1, 2))
-    return 0
-}
-```
-
-### ConstasTypeRequired
-
-`0x03000193` · Error · `SemanticDiag::ConstasTypeRequired`
-
-**Message**
-
-```text
-The 'constas' parameter '{0}' writes no type.
-```
-
-**Help**
-
-```text
-A 'constas' parameter is a compile-time value and its type is part of the declaration's identity. Only 'int' is supported for now: write 'constas {0}: int'.
-```
-
-**Example** (`test/cases/compile/constas/constas_no_type.cml`, run as `camel test/cases/compile/constas/constas_no_type.cml`)
-
-```camel
-module constas_no_type
-
-// A `constas` parameter writes its type; only `int` is supported.
-func bad(constas n): int {
-    return n
-}
-
-func main(): int sync {
-    println(bad(1))
-    return 0
-}
-```
-
-### ConstasTypeNotInt
-
-`0x03000194` · Error · `SemanticDiag::ConstasTypeNotInt`
-
-**Message**
-
-```text
-The 'constas' parameter '{0}' has type '{1}'; only 'int' is supported.
-```
-
-**Help**
-
-```text
-The value of a 'constas' parameter becomes an extent of a type, and extents are integers. Write 'constas {0}: int'.
-```
-
-**Example** (`test/cases/compile/constas/constas_type_not_int.cml`, run as `camel test/cases/compile/constas/constas_type_not_int.cml`)
-
-```camel
-module constas_type_not_int
-import { Tensor, ones } from tensor
-
-// The value becomes an extent, and extents are integers.
-func bad(constas n: float, x: Tensor<f32, const [3]>): float {
-    return 0.0
-}
-
-func main(): int sync {
-    println(bad(1.0, ones([3])))
-    return 0
-}
-```
-
-### ConstasValueNotConstant
-
-`0x03000195` · Error · `SemanticDiag::ConstasValueNotConstant`
-
-**Message**
-
-```text
-The value given for the 'constas' parameter '{0}' is not a compile-time constant.
-```
-
-**Help**
-
-```text
-The value selects the instance of the declaration, so it must be known before the program runs: a literal or a constant expression. A runtime value would need one instance per possible value.
-```
-
-**Example** (`test/cases/compile/constas/constas_value_not_constant.cml`, run as `camel test/cases/compile/constas/constas_value_not_constant.cml`)
-
-```camel
-module constas_value_not_constant
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
-    return sum(x)
-}
-
-func use(m: int): float {
-    return total(m, ones([3]))
-}
-
-func main(): int sync {
-    println(use(3))
-    return 0
-}
-```
-
-### ConstasValueNotInt
-
-`0x03000196` · Error · `SemanticDiag::ConstasValueNotInt`
-
-**Message**
-
-```text
-The value given for the 'constas' parameter '{0}' has type '{1}'; it must be an 'int' constant.
-```
-
-**Help**
-
-```text
-A 'constas' value is an extent of a type, so the call must give an integer.
-```
-
-**Example** (`test/cases/compile/constas/constas_value_not_int.cml`, run as `camel test/cases/compile/constas/constas_value_not_int.cml`)
-
-```camel
-module constas_value_not_int
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
-    return sum(x)
-}
-
-func main(): int sync {
-    println(total(3.0, ones([3])))
-    return 0
-}
-```
-
-### ConstasNotUsedInType
-
-`0x03000197` · Error · `SemanticDiag::ConstasNotUsedInType`
-
-**Message**
-
-```text
-The 'constas' parameter '{0}' is not used by a type of '{1}'.
-```
-
-**Help**
-
-```text
-A value that no type reads is a decoration: nothing would differ between two instances. Use '{0}' as an extent in a parameter or result type ('Tensor<f32, const [{0}]>'), or write an ordinary parameter.
-```
-
-**Example** (`test/cases/compile/constas/constas_unused.cml`, run as `camel test/cases/compile/constas/constas_unused.cml`)
-
-```camel
-module constas_unused
-
-// A value no type reads is a decoration: it would make two instances that differ in nothing.
-func bad(constas n: int, x: float): float {
-    return x
-}
-
-func main(): int sync {
-    println(bad(3, 1.0))
-    return 0
-}
-```
-
-### ConstasWithRest
-
-`0x03000198` · Error · `SemanticDiag::ConstasWithRest`
-
-**Message**
-
-```text
-The 'constas' parameter '{0}' cannot be combined with a rest parameter.
-```
-
-**Help**
-
-```text
-A rest parameter's element types are decided at the call, while a 'constas' value is part of the declaration's identity; the two need the type-level tuple of the declaration ('StaticTuple') first.
-```
-
-**Example** (`test/cases/compile/constas/constas_with_rest.cml`, run as `camel test/cases/compile/constas/constas_with_rest.cml`)
-
-```camel
-module constas_with_rest
-
-// The element types of a rest parameter are decided at the call; combining the two needs the
-// type-level tuple of the declaration first.
-func bad(constas n: int, ..ts): int {
-    return 0
-}
-
-func main(): int sync {
-    println(bad(3, 1, 2))
-    return 0
-}
-```
-
-### ConstasFunctionNeedsCall
-
-`0x03000199` · Error · `SemanticDiag::ConstasFunctionNeedsCall`
-
-**Message**
-
-```text
-The declaration '{0}' takes a 'constas' parameter, so it has no function value.
-```
-
-**Help**
-
-```text
-The value must be known where the call is written. Call the declaration directly with its constant ('{0}(4, ...)'), or wrap it in a function that does.
-```
-
-**Example** (`test/cases/compile/constas/constas_as_value.cml`, run as `camel test/cases/compile/constas/constas_as_value.cml`)
-
-```camel
-module constas_as_value
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
-    return sum(x)
-}
-
-func apply(f: (x: Tensor<f32>) => float, x: Tensor<f32>): float {
-    return f(x)
-}
-
-func main(): int sync {
-    // The value must be known where the call is written, so `total` has no function value.
-    println(apply(total, ones([3])))
-    return 0
-}
-```
-
-### ConstasInNativeDeclaration
-
-`0x0300019A` · Error · `SemanticDiag::ConstasInNativeDeclaration`
-
-**Message**
-
-```text
-The body-less declaration '{0}' cannot take a 'constas' parameter.
-```
-
-**Help**
-
-```text
-A body-less declaration names a C++ operator whose signature is fixed; a 'constas' value would have to be part of the operator's compile-time identity, which the native declaration mechanism does not carry yet. Write the function with a body.
-```
-
-**Example** (`test/cases/compile/constas/constas_native.cml`, run as `camel test/cases/compile/constas/constas_native.cml`)
-
-```camel
-module constas_native
-import { Tensor } from tensor
-
-// A body-less declaration names a C++ operator whose signature does not carry a compile-time
-// value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): Tensor<f32, const [n]>
-
-func main(): int sync {
-    println(zeros(3))
-    return 0
-}
-```
-
-### ConstasArgumentMissing
-
-`0x0300019B` · Error · `SemanticDiag::ConstasArgumentMissing`
-
-**Message**
-
-```text
-The call gives no value for the 'constas' parameter '{0}'.
-```
-
-**Help**
-
-```text
-A 'constas' value is bound at the call, like any other argument, but it is not a runtime argument: give the constant first, as in 'f(4, x)'.
-```
-
-**Example** (`test/cases/compile/constas/constas_missing_argument.cml`, run as `camel test/cases/compile/constas/constas_missing_argument.cml`)
-
-```camel
-module constas_missing_argument
-import { Tensor, ones, sum } from tensor
-
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
-    return sum(x)
-}
-
-func main(): int sync {
-    println(total())
-    return 0
+    return first(1, 2)
 }
 ```
 

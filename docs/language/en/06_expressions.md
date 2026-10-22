@@ -441,11 +441,12 @@ func first(t: (int, float)) {
 
 **`indices`: expanding by tuple position.** `static for (j) in indices ts => block` expands the **positions** of the tuple value `ts` when the function is instantiated: the block runs once per position, `j` is this round's position (an `int`), and the trip count is the tuple's arity.
 
-- `ts` must be a value of tuple type (an ordinary tuple; `T?`, `T!` and a mutable cell are leaves). A value that is not a tuple reports `SemanticDiag::StaticIndicesNotTuple`; a type that is not concrete reports `SemanticDiag::StaticTypeNotConcrete`. The count is decided by `ts`'s type at instantiation.
+- `ts` must be of tuple type (an ordinary tuple; `T?`, `T!` and a mutable cell are leaves). A type that is not a tuple reports `SemanticDiag::StaticIndicesNotTuple`; a type that is not concrete reports `SemanticDiag::StaticTypeNotConcrete`. The count is decided by `ts`'s type at instantiation.
+- **The operand only supplies its type.** When the operand is a compile-time tuple (a rest parameter's `ts`, or a tuple comprehension), no container node is built: `indices ts` builds no `FILL`, and `ts.[j]` in the body is the element node itself, with no `ACCS`. A runtime tuple variable or parameter already has its own node; `indices` does not build another.
 - `j` may be used as a value (`print(j)`, or in arithmetic) and as the key of `t.[j]`: it is a compile-time constant in every round. A local of the same name still shadows it, and using that as a key reports `SemanticDiag::StaticAccessNotConstant` (the same rule as `n` of `fields`).
 - `indices` binds one name only (there is no `F`); the element types come from `ts`'s type and are not given a name yet. `static for (j, F) in indices ts` is a syntax error.
 - `indices` walks tuples only: a struct has field names, so use `fields T`. `{ static for (j) in indices ts => e }` has no field names to give and reports `SemanticDiag::ConstructNotSupported`; where a value is needed, write `( static for (j) in indices ts => e )`.
-- The graph is the hand-written expansion: the generator leaves no node of its own, and each round's `ts.[j]` builds one `ACCS`, the same one `ts.[0]`, `ts.[1]` build.
+- The graph is the hand-written expansion: the generator leaves no node of its own. `ts.[j]` over a compile-time tuple is the element node itself, the same field selection `ts.[0]`, `ts.[1]` make; over a runtime tuple value it still builds one `ACCS`.
 
 ```cml
 func sum(t: (int, int, int)): int {
@@ -462,7 +463,7 @@ func positions(t: (int, string)): (int, int) {
 - The **value of the block is the round's value**: unlike the statement form, it is not dropped. The block may use `let`, and its last statement's value is the field's value; a block that gives none (an empty block, or one ending in a statement without a value) reports `SemanticDiag::StaticComprehensionVoidElement`.
 - Each field's or element's **type comes from that round's value**, not from `F`: with `F` an `int` and the value a `float`, the result field is a `float`. The field names and their order still come from `T` in declaration order, which is what lets an expansion such as `tree_map` change the leaves and keep the shape.
 - An empty struct or tuple has no round; the value is `{}` / `()` (a `FILL` with no slot).
-- The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and one `FILL` per struct or tuple packs the rounds' values into the same shape; the comprehension leaves no node of its own. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
+- The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and the comprehension leaves no node of its own. A tuple comprehension first stays a compile-time tuple: used only by `indices`, `..` or `.[j]`, its elements stay separate and no `FILL` is built; used as a value (printed, returned, assigned to a runtime position), one `FILL` at the use packs the rounds' values into the same shape. A struct comprehension always packs one `FILL`. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
 - `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for (n, F) in fields T => block`.
 - To fold the rounds' values into one result (rather than pack them back into the same shape), use the `static loop` of [6.8.5](#685-static-loop).
 

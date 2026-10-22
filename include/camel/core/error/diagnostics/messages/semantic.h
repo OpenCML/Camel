@@ -209,6 +209,8 @@ enum class SemanticDiag : uint32_t {
     RestFunctionNeedsExpansion = 0x00018F,
     /// A call passes fewer arguments than the fixed parameters of a rest function.
     RestArgumentsMismatch = 0x000190,
+    /// A rest parameter's build-time tuple was used where a runtime value is needed.
+    StaticTupleEscapes = 0x000191,
 
     // `constas` value parameters (design principles 5.4): 0x191 and up. 0x18C stays free.
     /// A `constas` parameter is not the first ordinary parameter.
