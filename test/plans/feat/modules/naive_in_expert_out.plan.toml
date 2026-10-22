@@ -13,7 +13,7 @@ tags = ["feat", "modules", "showcase", "naive-in-expert-out"]
 name = "train_step.loss"
 desc = "Sixteen fixed-seed steps of the naive Transformer: the loss falls from 3.4656 to 1.5680, the same on std::nvm, std::fvm and std::jit."
 case = "../../../../examples/models/naive-in-expert-out/train_step.cml"
-args = ["${case}", "${backend}"]
+args = ["-t", "1", "${case}", "${backend}", "--arg", "bench=false", "--arg", "init_dir=", "--arg", "final_dir="]
 backends = ["nvm", "fvm", "jit"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0

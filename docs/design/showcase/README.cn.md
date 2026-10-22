@@ -75,7 +75,7 @@
 
 ## 6. 旗舰示例的当前状态：朴素写法进，专家写法出
 
-设计稿：`docs/design/showcase/naive-in-expert-out.cn.md`（已定；在 `fsh-dev` 上，本分支从 `develop` 切出时还没有这个文件）。示例在
+设计稿：`docs/design/showcase/naive-in-expert-out.cn.md`（已定，本分支合并 `develop` 后已在树内）。示例在
 `examples/models/naive-in-expert-out/`；本节的"现在能跑"指这个目录今天的代码，不是设计稿里的全部目标。
 
 **今天能跑**
@@ -84,6 +84,10 @@
   GELU MLP、逐位置的朴素 softmax 交叉熵、Adam——在 `std::nvm`、`std::fvm`、`std::jit` 上输出
   相同的固定种子损失，16 步内从 3.4656 降到 1.5680。朴素写法就是教科书写法：`exp(s)/sum(exp(s))`、
   `log(softmax)`、Q/K/V 三个独立投影，没有减最大值、没有 `log_softmax`、没有融合 QKV。
+  源码的每个签名和字段都写着形状（`Tensor<f32, [8, 16, 64]>` 与 `TokenStates` 等别名），
+  `1 / sqrt(d_head)` 是算出来的而不是字面量 `4.0`，参数计数是模型的 `param_count` 函数。
+  `main` 的输入是 `--arg bench=... --arg init_dir=... --arg final_dir=...`，程序不读环境变量；
+  线程数由命令行 `-t 1` 给出。
 - `torch_impl.py`：同一模型、同一份初始权重与数据的 PyTorch 朴素、专家（`F.scaled_dot_product_attention`、
   `F.log_softmax`、融合 QKV）与 `torch.compile(朴素)` 三个实现，外加一个 float64 参考；四个实现由
   `measure.py` 一条命令驱动。
@@ -95,12 +99,33 @@
 
 **Camel 侧还缺什么**
 
-- **数值类型**：`Tensor` 的公开元素类型实际上只有 f32、i64、bool；没有 bf16、f16，也没有真正的
-  f64 张量（`modules/tensor/dtype.cpp` 的 `normalizeTensorDType` 把 f64、i32 归一为 f32、i64）。
+- **数值类型（H238，优先）**：`Tensor` 的公开元素类型实际上只有 f32、i64、bool；没有 bf16、f16，也没有
+  真正的 f64 张量（`modules/tensor/dtype.cpp` 的 `normalizeTensorDType` 把 f64、i32 归一为 f32、i64）。
   因此 bf16 溢出与 fp64 误差的测量只能在 PyTorch 里做；Camel 的 f32 阈值与 PyTorch 的 f32 阈值逐项一致。
+  H238 的两条分支 `handover/h259-dtype`（拒绝 `Tensor<f64>`/`Tensor<i32>` 而不是替换）与
+  `handover/h260-tensor-storage`（删掉归一化表）落地后，这一条要删掉，f64 可用则补一列。
+- **块只是元组，不是 `Block[]`**：H17 的原生数组语法与带形状的 `Tensor<f32, [...]>` 已经可用，但
+  "循环迭代一个依赖可微参数的张量数组"仍被拒绝（反向要把每轮的梯度散射回数组，而数组元素还没有零切向量）。
+  模型因此写 `blocks: (Block, Block)`，前向用
+  `static loop ... for (i, B) in fields (Block, Block)`；没有 `block0`/`block1` 字段，也没有复制块体。
+  H17 能对 `Block[]` 求导后，元组换成数组、静态循环换成
+  `loop h = x for b in m.blocks`。
+- **`f32[b, t, d]` 还进不了张量算子**：`exp`、`@`、`sum` 接收的是 `Tensor`，不是核心数组类型；
+  `let x: f32[2, 3] = randn(...)` 是 `DeclaredTypeMismatch`。示例用带形状的
+  `Tensor<f32, [8, 16, 64]>`（以及 `TokenStates` 等别名），每个形状都写全；但
+  `Tensor<f32, [b, t, d]>` 里的维度名不绑定（会报 `DimensionNameUsedOnce`），所以只写常量形状，
+  由别名与顶部注释说明含义。
+- **没有写成类型的 dtype 转换**：`f32(oh)` 没有张量重载，`oh as f32[...]` 是
+  `DynamicCastForbidden`；示例用数值提升（f32 * int64 得 f32）代替旧的 `cast(oh, 'float32')`
+  字符串。带类型的张量转换仍是缺口。
 - **算子与规则**：没有融合 QKV/注意力算子，也没有 `rules::accuracy`、`rules::fusion` 的规则流水线，
   所以朴素源码不会自动变成专家写法；`softmax`、`log_softmax` 与融合交叉熵作为普通算子已经存在，
   但示例刻意不调用它们。融合 QKV 可以手写成 `concat` 后切片，但还没有规则替用户做这件事。
-- **自动微分**：`one_hot` 没有 VJP；标签经过它时必须显式 `stop_gradient`，否则求导直接报错。
+  这些仍是 H232 的依赖。
+- **自动微分**：`one_hot` 没有 VJP；标签写成 `Tensor<i64, [8, 16]>` 后它是离散值、没有切向量，
+  所以示例不再需要 `stop_gradient`。浮点标签仍会触发缺规则。
+- **线程**：`-t` 只限制图调度器，张量 kernel 的工作池仍读 `CAMEL_NUM_THREADS`；`measure.py`
+  为四个实现统一设置它（与 PyTorch 的 OMP/MKL 一样），程序本身不读环境变量。把 `-t` 接到
+  kernel 工作池是运行时的缺口。
 - **解释与对照**：`explain` 的改写链依赖规则语言第二版；PyTorch 侧没有做设计的第 5 节
   "杀死搜索"（Inductor 的模式匹配实测），因此"别人做不到"这一句还不能写。
