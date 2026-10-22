@@ -79,7 +79,16 @@ const MODULES = [
         declaration: true,
     },
     { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp' },
-    { name: 'tensor', title: '`tensor`: binary conversion', kind: 'cpp', only: ['from_bytes', 'to_bytes'] },
+    {
+        name: 'tensor',
+        title: '`tensor`: multi-dimensional numeric arrays',
+        kind: 'cpp',
+        // The fixed signatures are declared; the ones whose element type or shape follows an
+        // argument stay in C++ and are recorded as computed (handover H151).
+        source: 'tensor.cml',
+        declaration: true,
+        computed: 'signatures/tensor.cml',
+    },
     { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
     {
         name: 'math',
@@ -604,7 +613,7 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-    out.push('Not in this reference: the tensor stack (`tensor`, `nn`, `autodiff`, `onnx`, `sim`), the Python')
+    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`), the Python')
     out.push('bridge (`python`, `pyplot`) and the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')
@@ -630,51 +639,65 @@ function renderDoc() {
             out.push(...header)
             out.push('')
         }
-        // Overloads written one after another under one comment are one entry.
-        const groups = []
+        // Entries are grouped by section, in the order the sections first appear, and a section
+        // may be written in both files of the module (its computed signatures and its
+        // declarations): `tensor` writes `binary form` in both, and the two read as one section
+        // (handover H151). Within a section, overloads written one after another under one
+        // comment are one entry.
+        const sectionOrder = []
+        const bySection = new Map()
         for (const entry of entries) {
-            const last = groups[groups.length - 1]
-            if (last && last[0].name === entry.name && entry.doc.length === 0) last.push(entry)
-            else groups.push([entry])
+            const key = entry.section || ''
+            if (!bySection.has(key)) {
+                bySection.set(key, [])
+                sectionOrder.push(key)
+            }
+            bySection.get(key).push(entry)
         }
-        let section = null
-        for (const group of groups) {
-            const entry = group[0]
-            if (entry.section !== section && entry.section) {
-                out.push(`### ${entry.section[0].toUpperCase()}${entry.section.slice(1)}`)
+        for (const key of sectionOrder) {
+            if (key) {
+                out.push(`### ${key[0].toUpperCase()}${key.slice(1)}`)
                 out.push('')
-                const notes = entries.sectionNotes.get(entry.section) || []
+                const notes = entries.sectionNotes.get(key) || []
                 if (notes.length) {
                     out.push(...notes)
                     out.push('')
                 }
             }
-            section = entry.section
-            out.push(`#### \`${entry.name}\``)
-            out.push('')
-            out.push('```camel')
-            for (const overload of group) out.push(signatureText(overload))
-            out.push('```')
-            out.push('')
-            out.push(entry.doc.join('\n'))
-            out.push('')
-            if (entry.value) {
-                out.push('- A value: written without parentheses, a constant where it is used.')
-            } else if (module.kind === 'camel') {
-                out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
-            } else if (entry.purity === 'pure') {
-                out.push('- Pure.')
-            } else {
-                out.push(`- With effects: ${entry.effect || 'not pure'}.`)
+            const groups = []
+            for (const entry of bySection.get(key)) {
+                const last = groups[groups.length - 1]
+                if (last && last[0].name === entry.name && entry.doc.length === 0) last.push(entry)
+                else groups.push([entry])
             }
-            for (const fails of entry.fails) {
-                out.push(`- Failure: ${fails}.`)
+            for (const group of groups) {
+                const entry = group[0]
+                out.push(`#### \`${entry.name}\``)
+                out.push('')
+                out.push('```camel')
+                for (const overload of group) out.push(signatureText(overload))
+                out.push('```')
+                out.push('')
+                out.push(entry.doc.join('\n'))
+                out.push('')
+                if (entry.value) {
+                    out.push('- A value: written without parentheses, a constant where it is used.')
+                } else if (module.kind === 'camel') {
+                    out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
+                } else if (entry.purity === 'pure') {
+                    out.push('- Pure.')
+                } else {
+                    out.push(`- With effects: ${entry.effect || 'not pure'}.`)
+                }
+                for (const fails of entry.fails) {
+                    out.push(`- Failure: ${fails}.`)
+                }
+                for (const example of entry.examples) {
+                    const [code, result] = example.split(/\s{2,}\/\/\s*/)
+                    out.push(result ? `- Example: \`${code}\` gives \`${result}\`` : `- Example: \`${code}\``)
+                }
+                out.push('')
             }
-            for (const example of entry.examples) {
-                const [code, result] = example.split(/\s{2,}\/\/\s*/)
-                out.push(result ? `- Example: \`${code}\` gives \`${result}\`` : `- Example: \`${code}\``)
-            }
-            out.push('')
         }
     }
     return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
@@ -715,16 +738,64 @@ function verifyOps() {
     for (const module of MODULES.filter((m) => m.kind === 'cpp')) {
         const registeredName = module.registered || module.name
         const file = path.relative(REPO_ROOT, sourceOf(module)).replace(/\\/g, '/')
-        // The operators behind the language's own operators are registered under reserved names.
-        const ops = registered.filter(
+        // Every operator the module registers and a declaration may name. A type-qualified alias
+        // (`Tensor.shape`) is the same operator under a type namespace, so it is not a name a
+        // declaration must write: it is checked below, against the plain name.
+        const allOps = registered.filter(
             (op) => op.module === registeredName && !op.name.startsWith('__') && (!module.only || module.only.includes(op.name)),
         )
-        if (ops.length === 0) {
+        const ops = allOps.filter((op) => !op.name.includes('::'))
+        if (allOps.length === 0) {
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }
         // Values are not operators: inspect --ops does not list them.
         const entries = parseDeclarations(module).filter((e) => !e.value)
+        const declaredNames = new Set(entries.filter((e) => e.file === file).map((e) => e.name))
+        // A module may publish an operator under a type namespace too (`Tensor.shape`). That
+        // name is C++'s, because a declaration cannot write it, and the compiler points it at
+        // the declaration when the declaration replaces the module's entity
+        // (`Module::replaceTypeQualifiedAliases`). A declared name's alias must be that
+        // declaration, and its parameter counts are the proof: a declaration answers with the
+        // counts it was written with, a stale C++ group answers -2 ("does not tell").
+        const aliases = allOps.filter((op) => op.name.includes('::'))
+        for (const alias of aliases) {
+            const leaf = alias.name.split('::').pop()
+            if (!declaredNames.has(leaf)) {
+                // A computed operator's alias is C++'s own business, like the operator: its URI
+                // must be a registered one (`inspect --ops` printed it, so it is).
+                continue
+            }
+            const sibling = ops.find((op) => op.name === leaf && op.uri === alias.uri)
+            if (!sibling) {
+                problems.push(
+                    `${file}: the type-qualified alias '${alias.name}' (${alias.uri}) has no plain '${leaf}' ` +
+                        `operator with the same URI`,
+                )
+                continue
+            }
+            if (!(alias.with === sibling.with && alias.norm === sibling.norm && alias.norm >= 0)) {
+                problems.push(
+                    `${file}: the type-qualified alias '${alias.name}' does not resolve to the declaration of ` +
+                        `'${leaf}' (${alias.with} with-parameter(s) and ${alias.norm} parameter(s); the declaration ` +
+                        `has ${sibling.with}/${sibling.norm}): C++ still exports the old group under the alias, so ` +
+                        `one operator has two signatures`,
+                )
+            }
+        }
+        // The module that declares its signatures one by one and publishes them under a type
+        // namespace publishes every declared name there: `Tensor.shape` is not a second
+        // signature, so it costs nothing to require it (handover H151).
+        if (module.declaration && aliases.length > 0) {
+            for (const name of declaredNames) {
+                if (!aliases.some((alias) => alias.name.split('::').pop() === name)) {
+                    problems.push(
+                        `${file}: the declared '${name}' has no type-qualified alias, but the module publishes ` +
+                            `its other operators under one (${aliases[0].name.split('::').slice(0, -1).join('::')}.${name})`,
+                    )
+                }
+            }
+        }
         for (const op of ops) {
             const sameName = entries.filter((e) => e.name === op.name)
             if (sameName.length === 0) {
@@ -760,7 +831,7 @@ function verifyOps() {
             }
         }
         for (const entry of entries) {
-            const hit = ops.some((op) => op.name === entry.name && uriMatches(entry.uri, op.uri))
+            const hit = allOps.some((op) => op.name === entry.name && uriMatches(entry.uri, op.uri))
             if (!hit) {
                 problems.push(`${entry.file}:${entry.line}: '${entry.name}' (${entry.uri}) is declared but no such operator is registered`)
             }

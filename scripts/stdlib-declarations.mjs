@@ -44,6 +44,23 @@
 //      shows the calls; this check resolves the loops over `get*Groups()` so it also sees the
 //      groups exported by `exportEntity(group->name(), group)`.
 //
+// Two shapes that the tensor module writes are resolved rather than reported:
+//
+//   - A module that exports the groups of its operator registry
+//     (`for (g : OpRegistry::instance().operatorGroups("<module>"))`, `modules/tensor`). The
+//     names are the OpDef table, so the check reads the C++ skip list (`kDeclaredOperators`)
+//     and requires it to be exactly the declaration names, both ways; the loop then exports
+//     exactly the computed signatures, which `--verify-ops` proves is the rest of the
+//     registered operators. The loop must skip the declared names and publish the
+//     type-qualified alias.
+//
+//   - A type-qualified alias (`exportEntity(Reference({"Tensor", name}), group)`). A
+//     declaration has no syntax for `Tensor.shape`, so C++ publishes it, and the compiler
+//     points it at the declaration when the declaration replaces the module's entity
+//     (`Module::replaceTypeQualifiedAliases`, handover H151). This is not a second signature:
+//     `--verify-ops` requires the alias to resolve to the same operator as the plain name
+//     (same URI, same parameter counts, which a stale C++ group would not report).
+//
 // The output is one line per problem, each naming the file, the module and the operator, and a
 // final line starting `migrated modules stay migrated:`. Exit 1 when there is a problem.
 
@@ -332,10 +349,24 @@ function computedSignatures(module, entry) {
 // The operator groups a module's C++ sources create, the groups it exports, and the functions
 // a `for (... : get*Groups()) exportEntity(group->name(), group)` loop iterates. Comments are
 // stripped first, so a name in a comment is not a resolver or an export.
+//
+// Two more shapes are read, both written by `modules/tensor`:
+// - a loop over the module's operator registry
+//   (`for (g : OpRegistry::instance().operatorGroups("<module>"))`), whose groups are the OpDef
+//   table rather than `OperatorGroup::create` calls; the names it exports are the module's
+//   operators minus the skip list `kDeclaredOperators`, and --verify-ops proves that set is the
+//   declarations plus the computed signatures;
+// - a type-qualified alias export (`exportEntity(Reference({"Tensor", leaf}), group)`), which
+//   publishes an operator under a type namespace. A declaration cannot write that name; the
+//   compiler points the alias at the declaration when it replaces the module's entity
+//   (Module::replaceTypeQualifiedAliases), and --verify-ops checks that every alias resolves to
+//   the same operator as the plain name.
 function analyseCpp(dir) {
     const groups = []
     const exports = []
     const loops = []
+    const registryLoops = []
+    const declaredList = []
     const factories = new Set()
     const loopFunctions = new Map()
     const files = listCppFiles(dir).map((file) => ({ file, text: stripComments(read(file)) }))
@@ -395,11 +426,45 @@ function analyseCpp(dir) {
             const literal = body.match(/^\s*"([^"]*)"/)
             const reference = body.match(/^\s*Reference\s*\(\s*"([^"]*)"\s*\)/)
             const loop = body.match(/^\s*([A-Za-z_]\w*)\s*->\s*name\s*\(\s*\)/)
+            // `Reference(std::vector<std::string>{"Tensor"}, ...)`: the same operator under a
+            // type namespace (see the comment above).
+            const alias = body.match(
+                /^\s*Reference\s*\(\s*(?:std\s*::\s*)?vector\s*<\s*(?:std\s*::\s*)?string\s*>\s*\{\s*"([^"]+)"\s*\}\s*,\s*(?:"([^"]+)"|([A-Za-z_]\w*)\s*->\s*name\s*\(\s*\))\s*\)/,
+            )
             exports.push({
                 file: relativeFile,
                 line: lineAt(text, open),
                 name: literal ? literal[1] : reference ? reference[1] : null,
                 loopVariable: loop ? loop[1] : null,
+                alias: alias ? { prefix: alias[1], leaf: alias[2] || null } : null,
+            })
+        }
+
+        // The skip list of a module that exports its operator registry: the names whose groups
+        // the module does not export because `stdlib/<module>.cml` declares them.
+        for (const match of text.matchAll(
+            /\bconstexpr\s+(?:std\s*::\s*)?string_view\s+kDeclaredOperators\s*\[\s*\]\s*=\s*\{([^}]*)\}/g,
+        )) {
+            for (const name of match[1].matchAll(/"([^"]+)"/g)) declaredList.push(name[1])
+        }
+
+        // `for (g : OpRegistry::instance().operatorGroups("<module>"))`: the group names are the
+        // module's operator table, which no text can list; the loop's body says whether the
+        // declared names are skipped and whether the type-qualified alias is exported.
+        for (const match of text.matchAll(
+            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*OpRegistry\s*::\s*instance\s*\(\s*\)\s*\.\s*operatorGroups\s*\(\s*"([^"]+)"\s*\)\s*\)/g,
+        )) {
+            const brace = text.indexOf('{', match.index + match[0].length)
+            const body = brace < 0 ? '' : text.slice(brace, matchDelimiter(text, brace) + 1)
+            registryLoops.push({
+                file: relativeFile,
+                line: lineAt(text, match.index),
+                variable: match[1],
+                module: match[2],
+                skipsDeclared: /\bisDeclaredOperators?\s*\(/.test(body),
+                alias: new RegExp(
+                    `Reference\\s*\\(\\s*(?:std\\s*::\\s*)?vector\\s*<\\s*(?:std\\s*::\\s*)?string\\s*>\\s*\\{\\s*"[^"]+"\\s*\\}\\s*,\\s*${match[1]}\\s*->\\s*name\\s*\\(\\s*\\)\\s*\\)`,
+                ).test(body),
             })
         }
 
@@ -422,7 +487,16 @@ function analyseCpp(dir) {
         }
     }
 
-    return { groups, exports, loops, factories, factoryCalls, loopFunctions }
+    return {
+        groups,
+        exports,
+        loops,
+        registryLoops,
+        declaredList,
+        factories,
+        factoryCalls,
+        loopFunctions,
+    }
 }
 
 // The group names a `for (... : getOperatorGroups())` loop exports, or null when the names are
@@ -525,26 +599,86 @@ function staticChecks() {
             }
         }
 
-        // (4) the export group is the declaration's: C++ may export only computed names.
+        // (4) the export group is the declaration's: C++ may export only computed names, and a
+        // type-qualified alias (`Tensor.shape`) is not an export group of its own.
         const exported = new Set()
         for (const exportedCall of analysis.exports) {
+            if (exportedCall.alias) continue
             if (exportedCall.name) exported.add(exportedCall.name)
         }
-        for (const loop of analysis.loops) {
-            const names = loopGroupNames(loop, analysis)
-            if (names === null) {
+        const registryLoops = analysis.registryLoops.filter(
+            (loop) => loop.module === module.name,
+        )
+        if (analysis.registryLoops.length > registryLoops.length) {
+            for (const loop of analysis.registryLoops.filter(
+                (each) => each.module !== module.name,
+            )) {
                 problems.push(
-                    `${loop.file}:${loop.line}: cannot resolve the operator groups the loop over ${loop.fn}() exports; ` +
-                        `give the groups literal names so the export group can be checked against '${module.name}'`,
+                    `${loop.file}:${loop.line}: the migrated module '${module.name}' exports the operator ` +
+                        `registry of '${loop.module}', not its own`,
                 )
-                continue
             }
-            for (const name of names) exported.add(name)
+        }
+        if (registryLoops.length > 0) {
+            // The module exports the groups of its OpDef table: the names are not written in
+            // C++, so the set is the declarations plus the computed signatures (--verify-ops
+            // proves the registered operators are exactly that set), and the C++ skip list must
+            // be the declarations, both ways. A name that is not in the skip list is exported by
+            // the loop, so it may not be declared; a declared name that is missing from the skip
+            // list would be exported beside its declaration.
+            if (analysis.declaredList.length === 0) {
+                problems.push(
+                    `${registryLoops[0].file}:${registryLoops[0].line}: the loop over the operator registry exports ` +
+                        `every group; give it a kDeclaredOperators skip list so the declaration-only names are checked`,
+                )
+            }
+            for (const loop of registryLoops) {
+                if (!loop.alias) {
+                    problems.push(
+                        `${loop.file}:${loop.line}: the loop over the operator registry does not export the ` +
+                            `type-qualified alias of a name; a module that publishes 'Type.name' must publish it ` +
+                            `for every operator (handover H151)`,
+                    )
+                }
+                if (!loop.skipsDeclared) {
+                    problems.push(
+                        `${loop.file}:${loop.line}: the loop over the operator registry does not skip the declared ` +
+                            `names (isDeclaredOperators); a declared operator would be exported beside its declaration`,
+                    )
+                }
+            }
+            const skipped = new Set(analysis.declaredList)
+            for (const name of declaredNames) {
+                if (!skipped.has(name)) {
+                    problems.push(
+                        `${source}: '${name}' is declared, but kDeclaredOperators in C++ does not skip it`,
+                    )
+                }
+            }
+            for (const name of skipped) {
+                if (!declaredNames.has(name)) {
+                    problems.push(
+                        `kDeclaredOperators skips '${name}', but ${source} does not declare it`,
+                    )
+                }
+            }
+            for (const name of computed.keys()) exported.add(name)
+        } else {
+            for (const loop of analysis.loops) {
+                const names = loopGroupNames(loop, analysis)
+                if (names === null) {
+                    problems.push(
+                        `${loop.file}:${loop.line}: cannot resolve the operator groups the loop over ${loop.fn}() exports; ` +
+                            `give the groups literal names so the export group can be checked against '${module.name}'`,
+                    )
+                    continue
+                }
+                for (const name of names) exported.add(name)
+            }
         }
         for (const exportedCall of analysis.exports) {
-            if (!exportedCall.name && !exportedCall.loopVariable) {
-                problems.push(`${exportedCall.file}:${exportedCall.line}: the migrated module '${module.name}' exports a group this checker cannot name`)
-            }
+            if (exportedCall.alias || exportedCall.name || exportedCall.loopVariable) continue
+            problems.push(`${exportedCall.file}:${exportedCall.line}: the migrated module '${module.name}' exports a group this checker cannot name`)
         }
 
         for (const name of exported) {
