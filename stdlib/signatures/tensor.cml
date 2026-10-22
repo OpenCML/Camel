@@ -342,10 +342,8 @@ export func ones_like(t: Tensor): Tensor
 /// @example cast(new([1.0, 2.0]), 'int64')    // [1, 2]
 export func cast(t: Tensor | number[], dtype: string): Tensor
 
-/// Prints t to the console, in the module's layout.
-/// @effect writes the console
-/// @example show(new([[1.0, 2.0]]))
-export func show(t: Tensor | number[]): void
+// `show` is declared: its result is fixed `void` and its umbrella parameter is two declarations
+// (a tensor, and any array). See `stdlib/tensor.cml` (handover H175).
 
 // ---- binary form ----
 

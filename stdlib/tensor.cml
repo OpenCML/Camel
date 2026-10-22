@@ -6,7 +6,8 @@
  * type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
  * axis forms of a reduction — cannot be written as a declaration; they are implemented in
  * `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
- * under the same sections (design principles 6.4; handover H19, H151).
+ * under the same sections (design principles 6.4; handover H19, H151). `show`'s umbrella parameter
+ * — a tensor, or any array — is written as one declaration per accepted type (handover H175).
  */
 
 // The fixed signatures of the operators of `modules/tensor` (design principles 6.4; handover H19,
@@ -56,6 +57,14 @@ export func load_npy(path: string): Tensor
 /// @fails fault `RuntimeError` when the file cannot be written
 /// @example save_npy(zeros([2, 2]), 'x.npy')
 export func save_npy(t: Tensor, path: string): void
+
+// ---- conversion and display ----
+
+/// Prints t to the console, in the module's layout.
+/// @effect writes the console
+/// @example show(new([[1.0, 2.0]]))
+export func show(t: Tensor): void
+export func show(t: (typeas A)[]): void
 
 // ---- module state ----
 

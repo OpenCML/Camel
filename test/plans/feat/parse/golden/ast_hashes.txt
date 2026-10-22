@@ -332,7 +332,7 @@ a8be31ddfa495bf4 ok stdlib/re.cml
 dc425a313698f684 ok stdlib/rules.cml
 94e8811447b8d758 ok stdlib/statistics.cml
 1c94db09ee5e88dd ok stdlib/str.cml
-de5ef2f025a8450f ok stdlib/tensor.cml
+da3a8662c4a7d607 ok stdlib/tensor.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
 baf632062421ca18 ok stdlib/this.cml
 34ac0521ab709cc5 ok stdlib/tiles.cml
@@ -349,7 +349,7 @@ a6332d59a0e18fb4 ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
 71655c7c19844d68 no stdlib/signatures/python.cml
 82c91a732389ed7e ok stdlib/signatures/random.cml
-7d2a28b97aca6e46 no stdlib/signatures/tensor.cml
+5f79aa6028c4e548 no stdlib/signatures/tensor.cml
 c4e42b3e18cc655d ok stdlib/signatures/tiles.cml
 c2aadab066717442 ok test/cases/compile/format_string_bad_spec.cml
 482fb68058e35e2e ok test/cases/compile/format_string_checked.cml
@@ -870,6 +870,10 @@ da06782ea199dba8 ok test/cases/compile/native/statistics_type.cml
 18c99cf48eb6a338 ok test/cases/compile/native/str_type.cml
 65b71236f3a2eb9b ok test/cases/compile/native/tensor_arity.cml
 fb7aca2e2254e9a2 ok test/cases/compile/native/tensor_declaration_import.cml
+ead3dfd937d73e2a ok test/cases/compile/native/tensor_show_arity.cml
+867fe743063adbb6 ok test/cases/compile/native/tensor_show_declaration_import.cml
+0f1ca8340c74b320 ok test/cases/compile/native/tensor_show_empty_array.cml
+d820cb5ef1ca556a ok test/cases/compile/native/tensor_show_type.cml
 00d1815b6c447a11 ok test/cases/compile/native/tensor_type.cml
 e756c17378ebe35e ok test/cases/compile/native/this_arity.cml
 df65117e41c58e9d ok test/cases/compile/native/this_declaration_import.cml
