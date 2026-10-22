@@ -2,11 +2,11 @@
 /// the emitted program is two C++ functions that call each other.
 module d10_tail_loop
 
-func loop(i: int, acc: int): int {
-    return if i == 0 then acc else loop(i - 1, acc + i % 7)
+func loop_(i: int, acc: int): int {
+    return if i == 0 then acc else loop_(i - 1, acc + i % 7)
 }
 
 func main(): int sync {
-    println(loop(10000000, 0))
+    println(loop_(10000000, 0))
     return 0
 }
