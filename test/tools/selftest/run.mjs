@@ -22,7 +22,9 @@
 //     four distinct names, and one source test reused under two sweeps keeps two (H120);
 //   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
 //     mean (H66), and the runner reports that failure instead of throwing on the missing metric;
-//   * the `--changed` mapping: directory rule first, file rules second, the base branch and its
+//   * the `--changed` mapping: the directory rule and the file rules together (the mirrored
+//     plan plus the plans outside that tree that catch the same change), the layered plans that
+//     follow `--tier`, the forbidden perf/GC-stress/progen boundary, the base branch and its
 //     CAMEL_TEST_BASE override.
 import fs from 'fs'
 import path from 'path'
@@ -322,6 +324,18 @@ for (const [label, run] of [
         problems.push(`named plan (${label}): the run did not say the named plan runs in full`)
     }
 }
+// `--changed`'s `layer: true` rule (H161): the plan file stays a named target but follows the
+// tier, so a fast plan's slow test is filtered instead of run in full.
+const tierLayered = runRunner(['--tier', 'fast', '--selection-layer', tierPlan, tierPlan])
+if (!tierLayered.output.includes('[SUMMARY] total: 2, pass: 2, fail: 0')) {
+    problems.push(`layered named plan: unexpected summary (${summaryLine(tierLayered.output)})`)
+}
+if (statusLines(tierLayered.output).join(', ') !== 'PASS tier.fast, PASS tier.default') {
+    problems.push(`layered named plan ran: ${statusLines(tierLayered.output).join(', ')}`)
+}
+if (!tierLayered.output.includes('selected plan target(s) follow --tier fast')) {
+    problems.push('layered named plan: the run did not say the selected plan follows the tier')
+}
 
 // --- the risk-based fast sample of a sweep -----------------------------------------------------
 // sweep/ holds two source plans (five tests tagged collections, four scalar tests) and the plan
@@ -401,6 +415,7 @@ fs.rmSync(path.join(scratchRoot, `run-${reuse.pid}`), { recursive: true, force: 
 
 // --- the --changed mapping ---------------------------------------------------------------------
 const hasPlan = (selection, name) => selection !== null && selection.names.includes(name)
+const hasLayered = (selection, name) => selection !== null && selection.layered.includes(name)
 const hasTarget = (selection, relative) =>
     selection !== null && selection.targets.some((target) => path.resolve(target) === path.join(repoRoot, relative))
 const scheduler = plansForChanges(['src/passes/sched/fastvm/dispatch.cpp'])
@@ -411,19 +426,59 @@ const docs = plansForChanges(['docs/test-plans.md'])
 if (!hasPlan(docs, 'feat/docs_links.plan.toml')) {
     problems.push(`--changed: docs/ selected ${docs ? docs.names.join(', ') : 'nothing'}`)
 }
-// Directory first: the module's own plan directory, not the broad `modules/` mapping.
+// A directory rule names the plan that mirrors the path, and the file rule adds the plans
+// outside that tree that the same change can break (H161): tensor keeps its own plans and adds
+// the autodiff plan, which is layered so its slow PyTorch comparisons stay out of --tier fast.
 const tensor = plansForChanges(['modules/tensor/ops/matmul.cpp'])
 if (!hasTarget(tensor, 'test/plans/feat/modules/tensor')) {
     problems.push(
         `--changed: modules/tensor/ selected ${tensor ? tensor.targets.join(', ') || tensor.names.join(', ') : 'nothing'}`
     )
 }
-if (tensor && (tensor.names.length !== 0 || tensor.targets.length !== 1)) {
-    problems.push(`--changed: modules/tensor/ fell through to the file rules as well: ${JSON.stringify(tensor)}`)
+if (!hasPlan(tensor, 'feat/modules/index_semantics.plan.toml')) {
+    problems.push('--changed: modules/tensor/ did not add the operator/index semantics plans')
+}
+if (!hasLayered(tensor, 'feat/modules/autodiff.plan.toml')) {
+    problems.push('--changed: modules/tensor/ did not layer the autodiff plan')
+}
+// A layered plan is a plan to run, just one that follows the tier: it must also be selected, or
+// the runner would never see it at all.
+if (!hasPlan(tensor, 'feat/modules/autodiff.plan.toml')) {
+    problems.push('--changed: the layered autodiff plan is not among the selected plans')
 }
 const nn = plansForChanges(['modules/nn/ops.cpp'])
 if (!hasTarget(nn, 'test/plans/feat/modules/nn.plan.toml')) {
     problems.push(`--changed: modules/nn/ did not select its plan file`)
+}
+// The plans no directory rule can reach: a tiles change selects the CPU plan and the GPU plans.
+const tiles = plansForChanges(['modules/tiles/src/foo.cpp'])
+for (const plan of [
+    'feat/modules/tiles.plan.toml',
+    'gpu/tiles.plan.toml',
+    'gpu/tiles_rows.plan.toml',
+    'gpu/tiles_transfer.plan.toml',
+]) {
+    if (!hasPlan(tiles, plan)) problems.push(`--changed: modules/tiles/ did not select ${plan}`)
+}
+// `layer: true` keeps the slow PyTorch comparisons out of an ordinary change while the fast
+// cases of the same plan still run.
+const onnx = plansForChanges(['modules/onnx/exporter.cpp'])
+if (!hasLayered(onnx, 'feat/modules/onnx.plan.toml') || !hasPlan(onnx, 'feat/trans')) {
+    problems.push('--changed: modules/onnx/ did not select its layered plans')
+}
+const autodiff = plansForChanges(['modules/autodiff/pullback.cpp'])
+if (!hasLayered(autodiff, 'feat/modules/autodiff.plan.toml')) {
+    problems.push('--changed: modules/autodiff/ did not layer its plan')
+}
+// The optimizer, and the rule library it runs, select the opt plans (a directory, so the slow
+// progen plan is filtered by --tier fast).
+for (const file of ['src/passes/opt/generic/algebra.cpp', 'stdlib/rules.cml']) {
+    const selection = plansForChanges([file])
+    if (!hasPlan(selection, 'feat/opt') || !hasPlan(selection, 'feat/modules/rules.plan.toml')) {
+        problems.push(
+            `--changed: ${file} selected ${selection ? selection.names.join(', ') : 'nothing'}`
+        )
+    }
 }
 // A test case takes the directory rule too, down to the deepest plan that mirrors its
 // directory: test/cases/compile/enum/ selects feat/compile/enum.plan.toml, not all of
@@ -451,6 +506,44 @@ if (!hasTarget(ownPlan, planFile)) {
 }
 if (plansForChanges(['no/such/directory/file.txt']) !== null) {
     problems.push('--changed: an unmatched path selected plans instead of falling back')
+}
+// The forbidden layers stay unselectable: perf, the GC-stress plans and progen. A change there
+// falls back to the fast layer rather than running a plan the project keeps for a quiet machine.
+for (const file of [
+    'benchmarks/train.py',
+    'test/cases/perf/fib_recursive.cml',
+    'test/plans/perf/fib.plan.toml',
+    'test/plans/gpu/tiles_regions.plan.toml',
+    'test/plans/feat/mm/gc.plan.toml',
+    'test/plans/feat/opt/progen.plan.toml',
+]) {
+    if (plansForChanges([file]) !== null) {
+        problems.push(`--changed: ${file} selected a plan; perf/GC-stress/progen must be unselectable`)
+    }
+}
+// Every plan the selection file names must exist, and no rule may wire in a forbidden plan.
+const selectionDoc = JSON.parse(fs.readFileSync(path.join(repoRoot, 'test', 'plan-selection.json'), 'utf8'))
+const forbiddenPlan = (name) =>
+    name === 'perf' ||
+    name.startsWith('perf/') ||
+    name === 'feat/mm/gc' ||
+    name.startsWith('feat/mm/gc.') ||
+    name.startsWith('feat/mm/gc_') ||
+    name === 'feat/opt/progen' ||
+    name.startsWith('feat/opt/progen.') ||
+    name.includes('tiles_regions') ||
+    name.includes('tiles_decorator')
+for (const rule of selectionDoc.rules || []) {
+    for (const entry of rule.plans || []) {
+        const name = typeof entry === 'string' ? entry : entry.plan
+        const base = path.join(repoRoot, 'test', 'plans', ...String(name).split('/'))
+        if (!fs.existsSync(base) && !fs.existsSync(`${base}.plan.toml`)) {
+            problems.push(`plan-selection.json: '${name}' is not a plan in test/plans`)
+        }
+        if (forbiddenPlan(name)) {
+            problems.push(`plan-selection.json: '${name}' is a plan an ordinary change must not run`)
+        }
+    }
 }
 // The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.
 const savedBase = process.env.CAMEL_TEST_BASE

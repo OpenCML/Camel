@@ -411,11 +411,19 @@ function parseArgs(argv) {
         // compares parallel output with serial output.
         jobs: DEFAULT_JOBS,
         targets: [],
+        // Plan files that `--changed` selected through a `layer: true` rule: they stay named
+        // targets but follow `--tier`, so a plan whose slow cases must not run from an ordinary
+        // change runs only its fast layer. `--run-changed` produces this; it is not a user knob.
+        layeredPlans: new Set(),
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '--update-golden') {
             options.updateGolden = true
+        } else if (arg === '--selection-layer' && i + 1 < argv.length) {
+            for (const entry of argv[++i].split(',')) {
+                if (entry.trim()) options.layeredPlans.add(path.resolve(process.cwd(), entry.trim()))
+            }
         } else if (arg === '--tier' && i + 1 < argv.length) {
             const tier = argv[++i]
             if (!TIERS.has(tier)) throw new Error(`--tier must be one of ${[...TIERS].join(', ')}, got '${tier}'`)
@@ -1604,14 +1612,15 @@ function selectTier(plans, tier, namedPlans = new Set()) {
     return selectedPlans
 }
 
-function loadPlans(targets, tier) {
+function loadPlans(targets, tier, layeredPlans = new Set()) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
-    // plans a directory reaches follow the layer. The same plan reached both ways is named.
+    // plans a directory reaches follow the layer. The same plan reached both ways is named,
+    // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
     const namedPlans = new Set()
     const discovered = []
     for (const target of targets) {
         const resolved = path.resolve(target)
-        if (fs.statSync(resolved).isFile()) namedPlans.add(resolved)
+        if (fs.statSync(resolved).isFile() && !layeredPlans.has(resolved)) namedPlans.add(resolved)
         discovered.push(...walkPlans(target))
     }
     if (targets.length === 0) discovered.push(...walkPlans(PLANS_ROOT))
@@ -1827,12 +1836,12 @@ async function main() {
     const sharedVars = loadVars()
     const namedPlans = options.targets.filter((target) => {
         try {
-            return fs.statSync(target).isFile()
+            return fs.statSync(target).isFile() && !options.layeredPlans.has(path.resolve(target))
         } catch {
             return false
         }
     })
-    const plans = loadPlans(options.targets, options.tier)
+    const plans = loadPlans(options.targets, options.tier, options.layeredPlans)
     ensureDir(LOG_ROOT)
     // The pid keeps two runs started in the same second (the self-test does this) out of one
     // directory, whose logs and summary.json would otherwise overwrite each other.
@@ -1845,6 +1854,14 @@ async function main() {
     console.log(
         `${COLORS.cyan}[INFO]${COLORS.reset} tier: ${options.tier}, tests: ${testCount}, jobs: ${options.jobs}`
     )
+    if (options.layeredPlans.size > 0 && options.tier !== 'all') {
+        // `--changed` marked these plans `layer: true`: naming them is not "run the whole file",
+        // it is "run the cases of this layer", so the slow cases that must not run from an
+        // ordinary change are filtered while the fast ones still run.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} selected plan target(s) follow --tier ${options.tier}: ${options.layeredPlans.size}`
+        )
+    }
     if (namedPlans.length > 0 && options.tier !== 'all') {
         // Naming a plan is the user's intent: it runs in full, whatever `--tier` says. A
         // directory target still selects the layer (see loadPlans).

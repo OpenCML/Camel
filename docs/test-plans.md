@@ -37,8 +37,8 @@ the job count and layer.
 
 `node test/tools/selftest/run.mjs` checks the runner itself: the back-end matrix, the per-test
 scratch directories and the run root, parallel versus serial output, the tier filter and the
-named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule,
-file rules, `CAMEL_TEST_BASE`).
+named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule, file
+rules, the layered plans, `CAMEL_TEST_BASE`).
 
 ## Layers: fast, slow And debug
 
@@ -142,26 +142,59 @@ staged or not) and runs the plans they touch, so a small change does not start t
 layer. The base is `origin/develop`; `CAMEL_TEST_BASE` overrides it for a release branch or a
 local comparison.
 
-`test/plan-selection.json` is applied in two steps:
+`test/plan-selection.json` is applied to every changed file, and both kinds of rule contribute:
 
-- **Directory rules first** (`directoryRules`): a change under `modules/`, `tools/` or
-  `test/cases/` selects the plan mirroring its directory. The deepest existing match wins, so
+- **Directory rules** (`directoryRules`): a change under `modules/`, `tools/` or `test/cases/`
+  selects the plan mirroring its directory. The deepest existing match wins, so
   `modules/tensor/ops/matmul.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
-  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. A plan file
-  found this way is a named target and runs in full.
-- **File rules second**: only when no plan directory mirrors the path. Each rule is a path
-  prefix and the plans it selects, as paths under `test/plans`; a rule with `"self": true`
-  selects the changed plan file itself (a change to `test/plans/...` runs that plan). Rules
-  may name plan directories or plan files; the first matching rule wins.
+  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. This names
+  the plan that mirrors the path; it cannot name a plan that lives outside that tree.
+- **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
+  reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under
+  `test/plans/gpu/` (a change to the tiles C++ used to select only the CPU tiles plan),
+  `modules/onnx/**` selects the exporter dumps in `feat/trans`, and `modules/tensor/**` selects
+  autodiff and the operator/index semantics plans. The union of the directory match and the file
+  rule is the selection; a file rule with `"self": true` selects the changed plan file itself, and
+  its `"except"` list keeps the forbidden plans out (see below).
 
-The union of everything selected runs in plan order. When no rule matches, or git cannot read the
-base branch, the whole fast layer runs. `--tier all` combines with `--changed` to run the slow
-tests of directory targets too.
+A rule entry is a path under `test/plans` (a directory or a `*.plan.toml`), or
+`{ "plan": "...", "layer": true }`; `"layer": true` on the rule is the default for its entries. A
+layered plan stays a named target but follows `--tier` like a directory: `--tier fast` runs its
+fast cases and filters its slow ones. That is the honest rule for a plan whose slow cases are
+comparisons the project will not run from an ordinary change (autodiff's five PyTorch gradients,
+onnx's four ONNX Runtime/PyTorch comparisons): naming the file in full would run them, and naming
+a directory would filter cases the change does need. A plan without `layer` is named and runs in
+full whatever `--tier` says; the three GPU plans are the case that needs this, because they are
+`tier = "slow"` as a whole and a `--tier fast` run of the `gpu` directory would execute none of
+their 88 tests.
+
+What a rule deliberately does **not** select, because the project forbids it on a shared host:
+
+- `test/plans/perf/**` (benchmarks and the PyTorch showcase comparisons);
+- the GC-stress plans `feat/mm/gc`, `feat/mm/gc_collections`, `feat/mm/gc_elder_exhaustion`,
+  `gpu/tiles_regions`, `gpu/tiles_decorator`;
+- the random-program check `feat/opt/progen.plan.toml`.
+
+No file rule names them, and the `test/plans/` self rule excludes them: editing one of those plan
+files falls back to the fast layer instead of running the plan. A change that is only relevant to
+one of them (say `benchmarks/`) therefore runs the fast layer, and the report says so; the only
+way to run them is to name the plan file deliberately. The ordinary opt selection still includes
+`feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
+progen plan while `--tier all` runs it.
+
+When no rule matches, or git cannot read the base branch, the whole fast layer runs. `--tier all`
+combines with `--changed` to run the slow tests of directory targets too; a layered plan then runs
+its slow cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list`
+prints the plan targets the changed files select without running them.
 
 Keep the file short and honest: map the smallest set of plans that would catch a regression in
-that area, specific rules first (`src/passes/sched/` before `src/passes/`). Add a rule when a
-new subsystem gets a plan of its own; do not add a rule that maps every change to every plan.
+that area, specific rules first (`src/passes/sched/` before `src/passes/`, `modules/tiles/` before
+`modules/`). A rule that selects one plan too many is better than a rule that selects none, but say
+the cost: `stdlib/rules.cml` selects the whole `feat/opt` directory (the rewrite engine can change
+any optimized result), which is 710 tests plus smoke; `modules/tiles/**` selects six plan files and
+the 88 GPU tests among them. Add a rule when a new subsystem gets a plan of its own; do not add a
+rule that maps every change to every plan.
 
 ## Top-Level Plan Fields
 
@@ -280,8 +313,9 @@ everywhere is written once:
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
 `parallel = false` test overlaps nothing), the tier filter (`fast`, `slow` and `all` select
 the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the scheduler
-plans, `docs/` the documentation checks, a plan file itself, an unknown path nothing); it runs
-with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
+plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
+layered plan, a plan file itself, the forbidden perf/GC-stress/progen plans nothing, an unknown
+path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
 
 ## Supported Normalizers
 

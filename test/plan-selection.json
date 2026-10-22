@@ -1,5 +1,5 @@
 {
-    "comment": "Rules for `node scripts/test.js --changed`: a changed file is first looked up by its directory (`directoryRules`), then by the file rules below. The first rule whose path prefix matches names the plans to run, as paths under test/plans; a change that no rule matches (or whose plans cannot be found) falls back to the whole fast layer. Directory rules mirror the path under test/plans/feat and take the deepest existing match: modules/tensor/ops.cpp runs the tensor plans, test/cases/compile/enum/x.cml runs feat/compile/enum.plan.toml (not all of feat/compile), test/cases/loops/x.cml falls through to the file rule for loops. Keep the file rules from specific to general: the first match wins. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, or { \"plan\": path, \"layer\": true }: a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions, gpu/tiles_decorator) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
     "directoryRules": [
         {
             "comment": "A test case: its directory is looked up under test/plans/feat (compile, linear, modules/tensor, modules/nn.plan.toml, tools/unicode -> tools, ...).",
@@ -29,9 +29,24 @@
             "plans": ["smoke", "feat/linear", "feat/para", "feat/trans"]
         },
         {
-            "comment": "Optimization passes.",
-            "paths": ["src/passes/opt/"],
-            "plans": ["smoke", "feat/opt", "feat/trans"]
+            "comment": "The optimization passes and the rewrite rule library they run: the opt plans, the pass dumps that print their effect, and the rewrite-rule plan. stdlib/rules.cml is the data these passes run, so it selects the same set. `feat/opt` is a directory target, so `--tier fast` keeps its fast plans and filters the slow progen plan (progen is never selected by a rule).",
+            "paths": ["src/passes/opt/", "stdlib/rules.cml", "modules/rewrite/"],
+            "plans": ["smoke", "feat/opt", "feat/trans/pass_dump.plan.toml", "feat/modules/rules.plan.toml"]
+        },
+        {
+            "comment": "The profiler pass: its own plan runs without a CUDA device (the host fallback), so it is safe from an ordinary change.",
+            "paths": ["src/passes/trans/profile/"],
+            "plans": ["smoke", "gpu/profile.plan.toml"]
+        },
+        {
+            "comment": "The other translation passes: the graph printers, the C++ emitter, the JSON dump.",
+            "paths": ["src/passes/trans/"],
+            "plans": ["smoke", "feat/trans", "feat/compile/gir.plan.toml", "feat/consistency/print_formats.plan.toml"]
+        },
+        {
+            "comment": "The test-only passes (test::facts, test::regions, test::rules, ...): the plans that name them in their arguments.",
+            "paths": ["src/passes/test/"],
+            "plans": ["smoke", "feat/compile", "feat/linear", "feat/mm", "feat/modules", "feat/opt"]
         },
         {
             "comment": "Any other pass, including the shared pass machinery.",
@@ -59,32 +74,84 @@
             "plans": ["smoke", "feat/linear", "feat/para"]
         },
         {
-            "comment": "Automatic differentiation.",
-            "paths": ["modules/autodiff/"],
-            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+            "comment": "Tiles: the CPU plan, the three GPU plans H154 first ran (all slow, so they are named as plan files and run in full even under --tier fast), the profile plan, and the DDPM plan whose training cases are written against tiles. The GPU plans are what no directory rule could reach before H161.",
+            "paths": ["modules/tiles/", "test/cases/modules/tiles/", "test/cases/gpu/"],
+            "plans": ["feat/modules/tiles.plan.toml", "gpu/tiles.plan.toml", "gpu/tiles_rows.plan.toml", "gpu/tiles_transfer.plan.toml", "gpu/profile.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
-            "comment": "The ONNX exporter.",
-            "paths": ["modules/onnx/"],
+            "comment": "The ONNX exporter. `layer` is true because the plan's four slow cases are ONNX Runtime and PyTorch comparisons: under --tier fast the fast exporter tests run and those are filtered; --tier all runs them. `feat/trans` holds the dumps that print the exported graph.",
+            "paths": ["modules/onnx/", "test/cases/modules/onnx/"],
+            "layer": true,
             "plans": ["feat/modules/onnx.plan.toml", "feat/trans", "feat/compile/enum.plan.toml"]
         },
         {
             "comment": "Neural-network operators: the nn plan and the plans that train with them.",
             "paths": ["modules/nn/"],
-            "plans": ["feat/modules/nn.plan.toml", "feat/modules/checkpoints.plan.toml", "feat/modules/ddpm_primitives.plan.toml", "feat/linear"]
+            "plans": ["feat/modules/nn.plan.toml", "feat/modules/checkpoints.plan.toml", "feat/modules/ddpm_primitives.plan.toml"]
         },
         {
-            "comment": "Tensor operators and shapes.",
+            "comment": "Automatic differentiation. `layer` is true because five slow cases compare gradients against PyTorch: --tier fast runs the fast autodiff cases and filters those.",
+            "paths": ["modules/autodiff/", "test/cases/modules/autodiff/"],
+            "layer": true,
+            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+        },
+        {
+            "comment": "Tensor operators and shapes: the tensor plans, the index/operator semantics plans, and autodiff (layered, for the same PyTorch reason), because a shape or operator change shows up in gradients.",
             "paths": ["modules/tensor/"],
-            "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/autodiff.plan.toml"]
+            "plans": ["feat/modules/tensor.plan.toml", "feat/modules/tensor", "feat/modules/index_semantics.plan.toml", "feat/modules/operator_semantics.plan.toml", { "plan": "feat/modules/autodiff.plan.toml", "layer": true }]
         },
         {
-            "comment": "Keyed random: the random plan and the signatures/reference that list it.",
+            "comment": "Keyed random: the random plan (named, so its slow std::cpp comparison runs) and the registry that lists it.",
             "paths": ["modules/random/"],
             "plans": ["feat/modules/random.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
-            "comment": "Any other module.",
+            "comment": "Graph values and passes, and the rewrite rules built on them.",
+            "paths": ["modules/graph/"],
+            "plans": ["feat/modules/graph.plan.toml", "feat/modules/graph_facts.plan.toml", "feat/modules/rules.plan.toml"]
+        },
+        {
+            "comment": "Checkpoint trees.",
+            "paths": ["modules/tree/"],
+            "plans": ["feat/modules/checkpoints.plan.toml"]
+        },
+        {
+            "comment": "I/O: the module's plan and the std facade that wraps it.",
+            "paths": ["modules/io/"],
+            "plans": ["feat/modules/io.plan.toml", "feat/modules/std.plan.toml"]
+        },
+        {
+            "comment": "JSON values: the accessor/typed/value plans and the std facade.",
+            "paths": ["modules/json/"],
+            "plans": ["feat/modules/json_typed.plan.toml", "feat/modules/json_value.plan.toml", "feat/modules/json_accessor_error.plan.toml", "feat/modules/std.plan.toml"]
+        },
+        {
+            "comment": "Bytes and the std facade over them.",
+            "paths": ["modules/bytes/"],
+            "plans": ["feat/modules/bytes.plan.toml", "feat/modules/std.plan.toml"]
+        },
+        {
+            "comment": "Parallel operators: the para plans and the registry that lists their signatures.",
+            "paths": ["modules/para/"],
+            "plans": ["feat/para", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "The Python bridge: the std plan whose python cases run it and the two consistency plans that drive it.",
+            "paths": ["modules/python/"],
+            "plans": ["feat/modules/std.plan.toml", "feat/consistency/attempt.plan.toml", "feat/consistency/cleanup.plan.toml"]
+        },
+        {
+            "comment": "Numeric operators: the std facade and the operator-semantics plan.",
+            "paths": ["modules/math/"],
+            "plans": ["feat/modules/std.plan.toml", "feat/modules/operator_semantics.plan.toml"]
+        },
+        {
+            "comment": "The declaration modules with no plan of their own: their cases live under test/cases/modules/std, which feat/modules/std.plan.toml runs, and their signatures are checked by the registry plan.",
+            "paths": ["modules/algo/", "modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
+            "plans": ["feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
+        },
+        {
+            "comment": "Any other module. A directory target, so --tier fast filters the slow cases; a module that grows a specific rule above stops using this one.",
             "paths": ["modules/"],
             "plans": ["feat/modules"]
         },
@@ -104,11 +171,6 @@
             "plans": ["feat/examples"]
         },
         {
-            "comment": "Benchmark scripts and artifacts: the slow gradient comparisons and the perf plans.",
-            "paths": ["benchmarks/"],
-            "plans": ["feat/modules/autodiff.plan.toml", "perf"]
-        },
-        {
             "comment": "Documentation checks.",
             "paths": ["docs/", "AGENTS.md", "agents/"],
             "plans": ["feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
@@ -120,7 +182,7 @@
         },
         {
             "comment": "The build definitions: every backend may be affected, so the smoke set and the runtime plans.",
-            "paths": ["CMakeLists.txt", "cmake/", "modules/python/"],
+            "paths": ["CMakeLists.txt", "cmake/"],
             "plans": ["smoke", "feat/linear", "feat/para", "feat/modules"]
         },
         {
@@ -134,14 +196,10 @@
             "plans": ["feat/linear/loops.plan.toml"]
         },
         {
-            "comment": "A case directory with no plan directory of its own: the recursive Fibonacci case is timed by the perf plan.",
-            "paths": ["test/cases/perf/"],
-            "plans": ["perf/fib.plan.toml"]
-        },
-        {
-            "comment": "A plan file selects itself: editing the tests of one plan runs that plan.",
+            "comment": "A plan file selects itself: editing the tests of one plan runs that plan. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",
             "paths": ["test/plans/"],
-            "self": true
+            "self": true,
+            "except": ["test/plans/perf/", "test/plans/feat/mm/gc.plan.toml", "test/plans/feat/mm/gc_collections.plan.toml", "test/plans/feat/mm/gc_elder_exhaustion.plan.toml", "test/plans/feat/opt/progen.plan.toml", "test/plans/gpu/tiles_regions.plan.toml", "test/plans/gpu/tiles_decorator.plan.toml"]
         }
     ]
 }
