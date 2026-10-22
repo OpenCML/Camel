@@ -8,6 +8,7 @@
 4. [参数与链式](#4-参数与链式)
 5. [错误](#5-错误)
 6. [模块放在哪里](#6-模块放在哪里)
+7. [文档](#7-文档)
 
 ## 1. 一个事实只写一处
 
@@ -78,3 +79,15 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 | 测试用例 | `test/cases/`，计划在 `test/plans/` |
 
 模块名就是导入名，也是算子 URI 的前缀。新模块按分层放：前奏（内置，尽量小）／基础（`str`、`bytes`、`array`、`math`、`random`、`stats`、`time`、`re`、`json`、`hash`）／系统（`fs`、`io`、`env`、`process`）／数值（`tensor` 栈）／工具（`test_support`、`bench`、`profiler`）。
+
+## 7. 文档
+
+参考页 `docs/stdlib-reference.md` 的每一条都要是读者真能照着做的，`///` 注释里的东西就是参考页的全部内容。规则如下，由 [`scripts/stdlib-reference.mjs`](../scripts/stdlib-reference.mjs) 的 `--verify-docs` 检查，跑它的是 [`stdlib_registry.plan.toml`](../test/plans/feat/modules/stdlib_registry.plan.toml) 里的 `registry.docs_complete`（`feat/modules`）：
+
+- **每个打印出来的名字都要有描述**：`///` 里至少一行正文，说明它做什么、什么时候用。只有标签（`@pure` 一行）不算描述。
+- **每个名字都要有 `@example`，并且它要能编译。** 检查器把例子当成一次真实调用：按位置把实参绑到声明上的参数类型（`->` 的接收者是第一个参数），按探测到的模块补上例子里用到的类型的导入，再放进一个函数里编译。所以例子不能出现没有定义的 `x`、`w`、`rules`：它要么只用声明里的名字，要么自己构造值（`[1, 2, 3]->foreach<...>`、`([('a', 1)] as Map<string, int>)->get<'z'>`）。参数名与声明不同的例子按声明改正——`nn.conv2d` 的参数是 `input`、`kernel`、`bias`，例子就写这三个名字，`x`、`w`、`b` 会被编译器拒绝。
+- **写不成独立程序的例子**用 `@example-fragment <原因>` 标出，原因必填。这样的例子不编译，参考页把“未编译”和原因一起打印。没有标记又不编译的例子是错误，不是“以后再说”；标记是决定，不是省略。
+- **返回 `T!` 的名字要有 `@fails`**，写明错误种类：`error value \`Kind\`` 或 `fault \`Kind\``。返回的只是裸类型变量（`T!`、`F!`）时，错误是调用方传进来的、这个函数没有定义它，描述里说明来源即可，不编一个种类。
+- 值（`// value 名字: 类型`）、普通函数与计算签名同样适用上面几条：描述、`@example`、能编译。
+
+`--audit --compile` 从同一份解析给出每个模块的表（名字、条目、缺描述、缺例子、片段、编译失败），查缺口用它；`--audit` 加 `--compile` 需要已构建的编译器。

@@ -164,7 +164,7 @@ export func sort_by(xs: T[]): T[] {
 
 /// f(xs[i], ys[i]) for every i.
 /// @fails fault `InvalidArgument` (of zip) when the two arrays differ in length
-/// @example zip_with<add>([1, 2], [10, 20])    // [11, 22]
+/// @example zip_with<(a: int, b: int): int => a + b>([1, 2], [10, 20])    // [11, 22]
 with <f: (a: typeas T, b: typeas U) => typeas V>
 export func zip_with(xs: T[], ys: U[]): V[] {
     return zip(xs, ys)->map<(p: (T, U)) => f(p.0, p.1)>

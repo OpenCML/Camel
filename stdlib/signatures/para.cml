@@ -13,7 +13,7 @@
 
 /// Calls f for every element; the calls have no order among them.
 /// @effect what f does
-/// @example xs->unordered_foreach<work>
+/// @example [1, 2]->unordered_foreach<(x: int) => println(x)>
 #op<':mark/unordered_foreach_arr'>
 with <f: (item: T) => void>
 export func unordered_foreach(xs: T[]): void
@@ -21,7 +21,7 @@ export func unordered_foreach(xs: T[]): void
 /// Combines the elements with f starting from initial; the order in which elements are
 /// combined is not fixed, so f should be associative and commutative.
 /// @effect what f does
-/// @example xs->unordered_reduce<add, 0>
+/// @example [1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>
 #op<':mark/unordered_reduce_arr'>
 with <f: (acc: T, item: T) => T, initial: T>
 export func unordered_reduce(xs: T[]): T

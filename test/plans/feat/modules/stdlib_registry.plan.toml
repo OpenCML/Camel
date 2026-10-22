@@ -80,6 +80,18 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
+name = "registry.docs_complete"
+desc = "Every name the reference prints has a description and an @example, every example compiles as a call of its declaration (its arguments bound to the declared parameter types, the types it mentions imported), a fallible result has an @fails line naming the error, and an example the checker cannot compile says why with @example-fragment <reason>."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-docs"]
+expect_exit = 0
+expect_stdout_contains = ["every declared name has a description and an @example"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
 name = "registry.migrations_stay_migrated"
 desc = "A module that has moved to a declaration module stays migrated: C++ has no StaticFuncTypeResolver for a name the declaration fixes, no stray stdlib/signatures/<module>.cml survives unless the reference generator names it in computed:, every declaration is behind a registered operator (--verify-ops, reused), the C++ export groups are the declaration's plus the computed signatures, and a computed name has exactly one recorded place (its computed: signature file, never an inline // dynamic func; handover H180)."
 kind = "behavior"
