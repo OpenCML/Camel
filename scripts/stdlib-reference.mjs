@@ -89,8 +89,25 @@ const MODULES = [
         source: 'math.cml',
         declaration: true,
     },
-    { name: 'statistics', title: '`statistics`', kind: 'cpp' },
-    { name: 'algo', title: '`algo`: sorting and array primitives', kind: 'cpp' },
+    {
+        name: 'statistics',
+        title: '`statistics`',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19).
+        source: 'statistics.cml',
+        declaration: true,
+    },
+    {
+        name: 'algo',
+        title: '`algo`: sorting and array primitives',
+        kind: 'cpp',
+        // The declaration of `argsort`, and, in the signature file, the reference entries of the
+        // seven names whose result type C++ computes from their array argument (handover H115,
+        // H128, H135).
+        source: 'algo.cml',
+        declaration: true,
+        computed: 'signatures/algo.cml',
+    },
     {
         name: 'random',
         title: '`random`',

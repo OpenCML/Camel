@@ -7,9 +7,10 @@
  * array in place when nothing else refers to it, an optimisation that does not change what the
  * program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
  *
- * For reference only: these declarations are not compiled. They are checked against the
- * operators the module registers, and docs/stdlib-reference.md is generated from them
- * (scripts/stdlib-reference.mjs).
+ * For reference only: these entries are the signatures C++ computes from their arguments, and
+ * they are not compiled. `stdlib/algo.cml` declares the rest of the module; the module entry of
+ * scripts/stdlib-reference.mjs names this file with `computed:`, and --verify-ops reads the
+ * declaration file and these entries together (handover H115, H128).
  */
 
 /// A sorted copy of xs (quicksort).
@@ -54,15 +55,3 @@ export func flatten(xss: T[][]): T[]
 /// @pure
 /// @example unique([3, 1, 3, 2, 1])    // [3, 1, 2]
 export func unique(xs: T[]): T[]
-
-/// The positions of the keys in ascending order of key; equal keys keep their order (a stable
-/// sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
-/// primitive behind `sort_by` of the `array` module.
-/// @pure
-/// @example argsort([30, 10, 20])    // [1, 2, 0]
-export func argsort(keys: i32[]): int[]
-export func argsort(keys: int[]): int[]
-export func argsort(keys: f32[]): int[]
-export func argsort(keys: float[]): int[]
-export func argsort(keys: bool[]): int[]
-export func argsort(keys: string[]): int[]

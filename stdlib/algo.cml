@@ -1,0 +1,37 @@
+/**
+ * Signatures of the `algo` module (C++ operators, modules/algo).
+ *
+ * Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
+ * returns a new array and leaves its argument unchanged (design principles 11.3); to sort a
+ * variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
+ * array in place when nothing else refers to it, an optimisation that does not change what the
+ * program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
+ */
+
+// The declarations of the operators of the C++ module `algo` (`modules/algo`). This file is the
+// one source of their fixed signatures (design principles 6.4; handover H19, step 10): the C++
+// side keeps the kernels, the executor, the operator traits and the in-place forms.
+//
+// Seven of the eight names take their result type from the element type of their array argument:
+// `sort`, `insert_sort`, `quick_sort`, `merge_sort`, `merge_sorted_arrays`, `flatten` and
+// `unique` are computed by a `DynamicFuncTypeResolver` and stay in C++; their reference entries
+// are in `stdlib/signatures/algo.cml`, named by the module entry's `computed:` field, as `json`
+// and `random` do with their computed signatures (handover H115, H128).
+//
+// `argsort` has no such computation: it gives `int[]` whatever the keys are, and it accepts the
+// six key element types enumerated below. Those were already the six rules of its C++ resolver,
+// so they are written as declarations that share the one `algo:argsort` operator.
+
+module algo
+
+/// The positions of the keys in ascending order of key; equal keys keep their order (a stable
+/// sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
+/// primitive behind `sort_by` of the `array` module.
+/// @pure
+/// @example argsort([30, 10, 20])    // [1, 2, 0]
+export func argsort(keys: i32[]): int[]
+export func argsort(keys: int[]): int[]
+export func argsort(keys: f32[]): int[]
+export func argsort(keys: float[]): int[]
+export func argsort(keys: bool[]): int[]
+export func argsort(keys: string[]): int[]
