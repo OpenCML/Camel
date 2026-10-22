@@ -744,7 +744,11 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
     for (size_t i = 0; i < like->size(); ++i) {
         result->set<slot_t>(
             i,
-            zeroTangent(primalArray->elemType(), tangentArray->elemType(), like->get<slot_t>(i)),
+            zeroTangent(
+                ctx,
+                primalArray->elemType(),
+                tangentArray->elemType(),
+                like->get<slot_t>(i)),
             tangentArray);
     }
     for (Int64 i = 0; i < range.count; ++i) {

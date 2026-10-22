@@ -2584,3 +2584,39 @@ expect_diagnostic_line = 17
 expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator that carries a tensor's gradient back into an array"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "slice_open_end.runtime.nvm"
+desc = "The open-ended slice `x[3:]`: the end was not written, so the adjoint recovers it as dim(x, 0), the length of the parent along the sliced dimension, instead of reading it from the call. Checked against the adjoint written out by hand for sum(x[3:] * [2, 3]), which is [0, 0, 0, 2, 3]: `dot` with c = [0, 0, 0, 1, 2] is 8.0 (0.0 if the rule returned the zero tensor, and 0.0 again if the gradient landed a place to the left), `sq` is 13.0 and `sum` 5.0. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_open_end.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "slice_open_end dot=8.0 sq=13.0 sum=5.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_open_end.macro.fvm"
+desc = "The same open-ended slice adjoint when std::macro builds the gradient ahead of time and the FastVM runs it: the end recovered as dim(x, 0) is in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_open_end.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "slice_open_end dot=8.0 sq=13.0 sum=5.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "concat_array_part.skipped_and_refused"
+desc = "`concat`'s array part, both halves in one program so the pair is visible. A constant array part is skipped: for concat([2.0, 3.0], w, 0) weighted by [1, 0, 2, 3] the gradient of w is [2, 3], printed as sum=5.0 sq=13.0 - the hand adjoint's own numbers, which the zero tensor would print as 0.0 twice and a shifted gradient would change. An array part that depends on the differentiated parameter is refused at the concat call (line 28), naming the operator, after the first gradient has been printed."
+kind = "negative"
+case = "../../../cases/modules/autodiff/concat_array_part.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 28
+expect_stdout_contains = ["concat_array_part sum=5.0 sq=13.0"]
+expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
