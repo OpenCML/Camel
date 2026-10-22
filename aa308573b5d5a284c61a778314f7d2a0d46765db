@@ -1,0 +1,163 @@
+# H101：慢层全套扫描（Linux 主机）
+
+**任务**：H6 第 5 项的剩余部分——在今天的 `develop` 上跑慢层（`-Tier slow` 的各计划目录加 `perf/**`），
+按 H80 的方法给每个失败定性（回归／过期期望／产品缺陷／环境），只修便宜且无歧义的（过期期望、过窄的
+超时窗口、计划设定错的变量）；回归与产品缺陷给最小复现、**不修**、上板。分支
+`handover/H101-slow-tier`（自 `origin/develop` 的 `45520f228`），只动测试计划、快照与交接文档，不改语言
+语义，不改 `test/tools/` 的运行器行为。
+
+## 1 机器、构建与跑法
+
+| 项 | 值 |
+|---|---|
+| 主机 | `88zjwei`：EPYC 7343（32 核），503 GB，8×RTX 3090，Ubuntu 22.04 |
+| 构建 | Release（clang），`camel-remote.ps1` 在 `45520f228` 上重建，436.7 s；之后各轮 `-NoBuild` 复用同一 `out/latest` |
+| 负载 | 共享主机；首轮扫描期间负载 **81–108**（32 核，另有三四个工作树在构建/跑测）；最终复跑时降到 24 左右 |
+| 跑法 | `-Plan <目录> -Tier slow -Jobs 8 -NoBuild`；`-Plan <计划文件>` 按计划跑全量；`perf/**` 单独一轮 |
+| 日志 | `test/tmp/h101/*.log`（已忽略，不入库） |
+
+分目录跑（每个目录一条命令，互不并发），首轮结果与墙钟：
+
+| 目录 | 项 | pass / fail / skip | 墙钟 |
+|---|---|---|---|
+| `test/plans/feat/linear` | 7 | 7 / 0 / 0 | 16.6 s |
+| `test/plans/feat/mm`（含 poison 全扫的未抽样副本） | 2225 | 2221 / 4 / 0 | 286.6 s |
+| `test/plans/feat/modules` | 10 | 10 / 0 / 0 | 136.8 s |
+| `test/plans/feat/opt` | 2 | 1 / 1 / 0 | 7.9 s |
+| `test/plans/feat/parse` | 1 | 1 / 0 / 0 | 0.7 s |
+| `test/plans/feat/tools` | 5 | 5 / 0 / 0 | 6.4 s |
+| `test/plans/feat/trans` | 1 | 1 / 0 / 0 | 54.8 s |
+| `test/plans/gpu` | 129 | 129 / 0 / 0 | 193.5 s |
+| `test/plans/perf` | 32 | 29 / 3 / 0 | 783.7 s |
+| **合计** | **2412** | **2404 / 8 / 0** | **约 1487 s** |
+
+`feat/mm` 的 2225 项里有 2200 多项是 `gc_poison_sweep` 展开的未抽样副本，它们来自 `smoke`、`modules`、
+`compile`、`linear`、`para`、`trans`、`consistency` 的计划；H80 的慢层是 2165 项，多出来的是此后新增的
+用例与 poison 抽样面的扩大。
+
+没有慢层条目的目录（按各计划里的 `tier = "slow"` 标记核对，不是跳过）：`feat/compile`、
+`feat/consistency`、`feat/format`、`feat/golden`、`feat/para`、`feat/*.plan.toml` 顶层文件、`smoke`；
+其中 `smoke` 的 10 项与 `feat` 的 4913 项在 fast 层跑到（§2.2）。`gpu/profile` 是 `tier = "fast"`，既不在
+慢层也不在 CI 的 fast 层（`npm run test` 只跑 `smoke` + `feat/**`），本轮未跑。
+
+## 2 结果与判定
+
+### 2.1 失败项（慢层六项，fast 验收两项）
+
+| 计划 / 测试 | 判定 | 证据 | 处置 |
+|---|---|---|---|
+| `feat.mm.gc_pacing`：`gc_pacing.churn_prl` | **过期窗口**（并发门下断言窗口过窄） | 首轮 `peak=9600000`，断言 `4800000 ≤ peak ≤ 8000000`；同一程序三个后端单跑都是 `peak=7200000 low=2400000 dropped=298 released=597 total=180000000`，计划单独 15/15 PASS。H80 在 `-Jobs 8` 下见过 12000000。峰值是"收集器放过的窗口 + 一个块"，而 safepoint 是请求、收集在 worker 到达时才发生：机器忙时多一两个窗口还活着。 | 测试加 `parallel = false`（`0ecdc2f5a`），断言与窗口不动；`feat/mm` 复跑时它在 8 并发门内 **PASS**（788 ms），整套 2222/2225 |
+| `poison:shapes.fvm/jit/prl`（3 项） | **运行器/扫描伪失败**（不是产品缺陷） | `reference back end did not run: poison:shapes.nvm`，而同一次扫描里 `poison:shapes.nvm` PASS；最小复现见 §4（33 项 30 pass / 3 fail，0.5 s）。两个源计划各有一个名为 `shapes` 的测试：`test/plans/feat/compile/enum.plan.toml:8` 与 `test/plans/feat/para/handoff.plan.toml:24`。H80 已见同一伪失败并判定"修 sweep 引用登记即可"。 | 不改 `test/tools`（本任务约束）；上板 **H102** |
+| `feat.opt`：`progen_check` | **回归**（期望类型漏进操作数） | `164 wrong`，种子 12/14/19/22 的 41 个单元全部 FRONTEND 失败；最小复现为 `let o: bool? = true \|\| false;` 与 `let o: float? = if false then 4.75 else { let n = (if true then null else 'b') ?? 'ab'; -1.5 };`，报 `LogicalOperandNotBool` 与 `BranchReturnTypeMismatch`。H80 的慢层（`819a22ef`）里 `progen_check` 通过；最可疑的是 H88 的 `a87b57d4`（"Apply a position's expected type in one place"）把期望类型放进单一通道后，`T?` 漏进 `\|\|` 右操作数与 `??` 的臂。 | 不修；上板 **H98**（§4 有完整复现） |
+| `perf.fib`：`nvm_timeit` | **超时窗口过窄**（不是产品/计时缺陷） | 15.04 s 被杀，`got null`、无 benchmark 载荷；同一轮 `inline_nvm_timeit` 1.14 s/次 × 10 次通过。主机安静时一次 0.49 s（最终 perf 轮实测），负载 26–54 时 0.96 s（H80），负载 108 时 1.1–1.7 s；10 次即 11–17 s，卡在 15 s 上。 | 15 s → 60 s（`883b75554`，推导见提交与 `fib.plan.toml` 注释）；`perf.fib` 复跑 6/6 |
+| `perf.fib`：`inline_nvm_timeit` | 同上 | 15.05 s 被杀；与上一项同一通道 | 同上 |
+| `perf.para`：`asian_option_mc.nvm_timeit` | **超时窗口过窄** | 120.12 s 被杀；单独在负载 108 上量为 **140.78 s**（`--timeit std::nvm/1`，1 次），120 s 低于工作量本身；H80 在负载 26–54 下同一档通过，降载（24）后同一命令 **66.82 s**——120 s 只有安静时的 1.8 倍。 | 120 s → 300 s（`76bda038c`）；`perf.para` 复跑 6/6（nvm 167.4 s、prl 9.6 s） |
+| `frontend.ast_snapshot`（fast 层，`45520f228` 上已红） | **过期期望** | `read differently: test/cases/loops/captures.cml`（`092b61923ca3ef5e` → `92079bf05e4cf5ec`）：H91 重写了该用例；另外 H92 新增的 10 个 `test/cases/compile/lambda_inference/*.cml` 在 `ast_hashes.txt` 里没有行。 | `snapshot --update`（`c5a23d3ed`，只加 10 行、改 1 行）；fast 层复跑转绿 |
+| `feat.opt.generic`：`fold_struct_cast.in_return_position`（fast 层，`45520f228` 上已红） | **回归**（返回位置不套声明类型） | `the folded constant must keep the declared result type P`；`camel test/cases/opt/generic/fold_struct_cast.cml std::opt std::gir` 里折好的常量是 `value_type="{ a: int, b: float }"`，`CAST` 也不再生成（`std::gir` 无 opt 时同样没有 CAST）。测试由 `94768edec` 加、钉住设计原则 5.1/5.2，H80 的 fast 层是绿的；H88 的 `a87b57d4` 删掉了 `visitExitNode` 里"返回位置的匿名结构体拷进声明类型"的那段，统一的期望类型通道只覆盖函数体尾表达式，`return` 的值没有拿到 `P`。 | 不修；上板 **H103**（§4） |
+
+### 2.2 最终树复跑
+
+| 跑法 | 结果 | 墙钟 |
+|---|---|---|
+| `feat/mm -Tier slow` | 2225 项，**2222 pass / 3 fail**；只剩 `poison:shapes.fvm/jit/prl`；`gc_pacing.churn_prl` 在门内 PASS（788 ms） | 149.8 s |
+| `feat/opt -Tier slow` | 2 项，1 / 1；`progen_check` 仍红（H98），`progen_fixed` 绿 | 8.6 s |
+| `feat/mm/gc_pacing.plan.toml`（全量） | 15 / 15 | 10.0 s |
+| `perf/fib.plan.toml`（全量） | 6 / 6；nvm 1.66 s、inline_nvm 1.39 s（每次，n=10） | 37.0 s |
+| `perf/para.plan.toml`（全量） | 6 / 6；asian nvm 167.37 s、merge nvm 146.44 s、prl 84.27 s | 453.9 s |
+| `perf -Tier slow`（全量） | 32 / 32（负载 24；本轮 `nvm_timeit` 491 ms/次，`asian_option_mc.nvm` 66.82 s） | 369.4 s |
+| `smoke -Tier fast` | 10 / 10 | 0.1 s |
+| `feat -Tier fast` | 4913 项，**4901 pass / 1 fail / 11 skip**；唯一红是 `fold_struct_cast.in_return_position`（H103），`frontend.ast_snapshot` 已绿 | 82.0 s |
+
+最终慢层：**2412 项，2408 pass，4 fail**——`poison:shapes.fvm/jit/prl`（运行器伪失败，H102）与
+`progen_check`（回归，H98）。fast 层：4913 项，1 fail（回归，H103）；这几处都不是本轮改动造成的，
+本轮改的四个测试/快照文件在 fast 层里没有别的入口。
+
+## 3 本分支改了什么（只动测试与快照）
+
+| 提交 | 改动 | 理由与证据 |
+|---|---|---|
+| `0ecdc2f5a` | `test/plans/feat/mm/gc_pacing.plan.toml`：`gc_pacing.churn_prl` 加 `parallel = false` | 峰值随机器负载多一个窗口（7.2 MB 单跑、9.6 MB 门内、H80 12 MB）；这是"数字取决于机器负载"的测试，运行器文档（`docs/test-plans.md` "Parallel Execution"）要求它单独跑。断言不变 |
+| `883b75554` | `test/plans/perf/fib.plan.toml`：`nvm_timeit`、`inline_nvm_timeit` 的 `timeout_ms` 15 s → 60 s | 10 次计时；安静 0.49 s/次、负载 108 时 1.1–1.7 s/次，10 次 11–17 s；60 s 是最忙实测总时长的约 4–5 倍，挂起仍要几分钟，守卫不失效 |
+| `76bda038c` | `test/plans/perf/para.plan.toml`：`asian_option_mc.nvm_timeit` 的 `timeout_ms` 120 s → 300 s | 一次计时实测 140.78 s（负载 108），120 s 低于工作量；300 s 为实测的约 2 倍 |
+| `c5a23d3ed` | `test/plans/feat/parse/golden/ast_hashes.txt`：`snapshot --update` | H91 改了 `captures.cml`（哈希随文本变），H92 加了 10 个 lambda 推断用例却没登记；只加 10 行、改 1 行，2410 个文件 |
+
+没有改任何 `src/`、`include/`、`modules/`，没有改 `test/tools/`；没有把失败断言改成跳过；没有动数值断言
+（三个超时是守卫不是测量，取值都写在提交信息里）。
+
+## 4 转交（上板）
+
+### H98：`progen_check` 的期望类型回归（慢层，164 个单元）
+
+- 复现：`pwsh -NoProfile -File camel-remote.ps1 -Path <worktree> -Plan test/plans/feat/opt -Tier slow -Jobs 8 -NoBuild`
+  → `[FAIL] progen_check`，`164 wrong`；`python3 test/tools/progen/progen.py check` 同。
+- 最小复现（主机上 `camel <file> std::nvm`）：
+
+  ```camel
+  func main(): int sync {
+      let o: bool? = true || false;
+      return 0
+  }
+  ```
+
+  → `error[SemanticDiag::LogicalOperandNotBool]: The right side of '||' has type 'bool?', not 'bool'.`
+
+  ```camel
+  func main(): int sync {
+      let o: float? = if false then 4.75 else { let n = (if true then null else 'b') ?? 'ab'; -1.5 };
+      return 0
+  }
+  ```
+
+  → `error[SemanticDiag::BranchReturnTypeMismatch]: Return type mismatch ... expected 'float?', found 'string'.`
+  种子 22 的第三种形态：`return if (if false then false else null) ?? null ?? false then null else 0;`
+  → `expected 'bool', found 'int?'`。
+- 判定依据：H80 的慢层（`819a22ef`）`progen_check` 通过；H88 合并后红。最可疑的是 `a87b57d4`：期望类型
+  由一个通道落到 `||` 的两条臂与 `??` 的臂上，`T?` 整体被当成了操作数/臂的期望类型。**未修**。
+
+### H102：poison 扫描的同名副本碰撞（运行器缺陷）
+
+- 复现：临时计划只含两个源计划（33 项、0.5 s），`poison:shapes.nvm` PASS，`poison:shapes.fvm/jit/prl`
+  三项报 `reference back end did not run: poison:shapes.nvm`：
+
+  ```toml
+  id = "tmp.collision"
+  tier = "slow"
+
+  [[sweeps]]
+  name = "poison"
+  plans = ["../../plans/feat/compile/enum.plan.toml", "../../plans/feat/para/handoff.plan.toml"]
+  envs = ["CAMEL_GC_POISON=1"]
+  timeout_scale = 20
+  ```
+
+- 原因：`test/tools/run-tests.mjs` 的 `expandSweeps` 只按 `${sweep.name}:${test.name}` 命名副本，引用按
+  `planId + name`／`name` 查（`__backendReference`）；`enum.plan.toml` 与 `handoff.plan.toml` 都有名为
+  `shapes` 的测试，展开后同名。
+- 判定：H80 已见，属扫描基础设施；**本任务不改 `test/tools` 行为**，只上板。
+
+### H103：返回位置的结构体值不带声明类型（fast 层回归）
+
+- 复现：`camel test/cases/opt/generic/fold_struct_cast.cml std::opt std::gir`；
+
+  ```
+  N01 [label="{ a: 3, b: 1.5 }", type="DATA", value_type="{ a: int, b: float }"];
+  ```
+
+  测试期望 `value_type="P"`（`P` 是 `type P = { a: int, b: float }`），且 `std::gir`（不接 `std::opt`）里
+  也没有 `CAST` 节点。`camel ... std::opt std::nvm` 的运行结果正确（3、1.5），所以是类型/图形态回归，
+  不影响取值。
+- 判定依据：测试由 `94768edec` 加，H80 的 fast 层通过；H88 的 `a87b57d4` 删除了 `visitExitNode` 里把
+  返回的匿名结构体拷进声明类型的那段，统一通道只覆盖函数体尾表达式。**未修**。
+
+## 5 限制
+
+- 首轮慢层在负载 81–108 下跑，perf 的三个超时既是负载也是守卫过窄；守卫按实测放宽后，降载（24）的
+  全量 `perf` 复跑为 32/32，安静时 fib nvm 为 0.49 s/次，与 H80 的 0.41–0.43 s 一致。
+- 没有在 `819a22ef` 上重建做 A/B（构建只走 `camel-remote.ps1`，不应再开工作树）；H98/H103 的"回归"
+  依据是 H80 同层通过 + 代码阅读，不是二分。
+- `poison:shapes.*` 的修法在运行器里（`expandSweeps` 的命名空间），按任务约束未动；H102 已带最小复现。
+- 退役变量核对过、未改：`feat/linear/jit_framed`、`feat/linear/var_reference`、`feat/mm/gc`、
+  `feat/consistency/attempt` 里仍有 `CAMEL_GC_ENABLE_YOUNG_COPYING=0`（H81/H93 后不再被读取），但每一处
+  同时写了 `--gc mark-sweep`，变量只是冗余；这些测试还靠 `CAMEL_GC_` 前缀被 poison 扫描跳过，删掉会改变
+  扫描面，所以不动（在慢层里也没有对应的红）。
+- `gpu/profile`（tier fast，不在 CI 的 fast 路径里）与 `test/plans/debug` 不在慢层范围，未跑。
