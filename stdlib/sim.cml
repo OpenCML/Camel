@@ -1,0 +1,39 @@
+/**
+ * Monte Carlo simulation: two kernels that estimate a number from random samples. `pi_hits`
+ * estimates pi from the fraction of points that fall inside the unit circle and
+ * `asian_call_price` prices a one-year Asian call by simulating the underlying's paths. Both
+ * take the sample count and the seed, so a seed reproduces the result exactly and the operators
+ * are pure.
+ */
+
+// The declarations of the operators of the C++ module `modules/sim` (design principles 6.4;
+// handover H19, step 10; H179). This file is the one source of both fixed signatures; the C++
+// side keeps the kernels, the executor and the purity.
+//
+// No signature of this module is computed: `pi_hits` and `asian_call_price` answer `int` and
+// `float` whatever the argument values are, so the module needs no
+// `stdlib/signatures/sim.cml`. `modules/sim` therefore exports no operator group of its own; the
+// declarations are the only source of the two names.
+//
+// Neither operator needs a device, a clock or a file: the generator is local and seeded by the
+// seed argument, which is why both are registered pure and may be folded, merged or run
+// concurrently.
+
+module sim
+
+/// Draws `samples` points uniformly from the square [-1, 1]^2 with a generator seeded by `seed`
+/// and returns how many fall inside the unit circle. The estimate of pi is `4 * hits / samples`;
+/// a negative sample count is a fault.
+/// @pure
+/// @fails fault `RuntimeError` when `samples` is negative
+/// @example pi_hits(10000, 42)    // 7863
+export func pi_hits(samples: int, seed: int): int
+
+/// Prices a one-year Asian call on a geometric random walk with `paths` simulated paths of
+/// `steps` steps each, using the fixed parameters S0 = 100, K = 100, r = 0.05 and sigma = 0.2,
+/// and a generator seeded by `seed`; the result is the discounted average payoff. A negative
+/// path count or a non-positive step count is a fault.
+/// @pure
+/// @fails fault `RuntimeError` when `paths` is negative or `steps` is not positive
+/// @example asian_call_price(2000, 128, 42)    // 5.894325529519635
+export func asian_call_price(paths: int, steps: int, seed: int): float

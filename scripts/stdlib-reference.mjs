@@ -129,14 +129,6 @@ const MODULES = [
         computed: 'signatures/random.cml',
     },
     {
-        name: 'sim',
-        title: '`sim`: Monte Carlo kernels',
-        kind: 'cpp',
-        // Two fixed signatures, so the module is covered by its signature file as `ckpt` is:
-        // `registry_all.cml` imported it for the purity check but the reference did not list it,
-        // so `--verify-ops` never saw it (handover H173).
-    },
-    {
         name: 'time',
         title: '`time`',
         kind: 'cpp',
@@ -279,6 +271,26 @@ const MODULES = [
         source: 'autodiff.cml',
         declaration: true,
         computed: 'signatures/autodiff.cml',
+    },
+    {
+        name: 'sim',
+        title: '`sim`: Monte Carlo simulation',
+        kind: 'cpp',
+        // Both operators have fixed signatures and are declared in stdlib/sim.cml; nothing is
+        // computed, so the module has no signature file (handover H179).
+        source: 'sim.cml',
+        declaration: true,
+    },
+    {
+        name: 'onnx',
+        title: '`onnx`: export a program as an ONNX model',
+        kind: 'cpp',
+        // `supported_operators` is declared in stdlib/onnx.cml; `export_model` takes a function
+        // of any parameter list and an example that must be its parameter tree, so its reference
+        // entry is in the signature file named by `computed:` (handover H179).
+        source: 'onnx.cml',
+        declaration: true,
+        computed: 'signatures/onnx.cml',
     },
 ]
 
@@ -728,7 +740,7 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-out.push('Not in this reference: the `onnx` exporter and the profiler (`perf`).')
+out.push('Not in this reference: the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')
     out.push('|---|---|---|---|')

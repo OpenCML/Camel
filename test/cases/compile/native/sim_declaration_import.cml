@@ -1,0 +1,17 @@
+/**
+ * `sim`'s declarations are what an importer sees: `pi_hits` takes two `int`s and answers an
+ * `int`, `asian_call_price` takes three and answers a `float`, read from `stdlib/sim.cml`, and
+ * both calls reach the C++ kernels with the same fixed seeds as `modules/std/sim/basic.cml`
+ * (handover H179).
+ */
+module sim_declaration_import
+
+import { pi_hits, asian_call_price } from sim
+
+func main(): int sync {
+    let hits: int = pi_hits(10000, 42)
+    let price: float = asian_call_price(2000, 128, 42)
+    println(hits)
+    println(price)
+    return 0
+}

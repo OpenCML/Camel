@@ -13,39 +13,13 @@
  */
 
 #include "module.h"
-#include "camel/compile/gir.h"
+
 #include "camel/core/context/context.h"
 #include "camel/core/operator_traits.h"
-#include "camel/core/type.h"
-#include "camel/core/type/resolver.h"
 #include "executor.h"
-#include "operators.h"
 
 using namespace camel::core::context;
 using namespace camel::core::module;
-using namespace camel::core::type;
-
-namespace {
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "pi_hits",
-            {{"sim:pi_hits",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::Int64(), false}, {Type::Int64(), false}},
-                  Type::Int64())}}),
-        OperatorGroup::create(
-            "asian_call_price",
-            {{"sim:asian_call_price",
-              StaticFuncTypeResolver::create(
-                  {},
-                  {{Type::Int64(), false}, {Type::Int64(), false}, {Type::Int64(), false}},
-                  Type::Float64())}}),
-    };
-    return groups;
-}
-} // namespace
 
 SimModule::SimModule(context_ptr_t ctx) : BuiltinModule("sim", ctx) {
     // Both kernels are functions of their arguments: the random generator is local and seeded
@@ -55,8 +29,8 @@ SimModule::SimModule(context_ptr_t ctx) : BuiltinModule("sim", ctx) {
     for (const char *uri : {"sim:pi_hits", "sim:asian_call_price"}) {
         camel::core::OperatorTable::instance().set(uri, {.pure = true, .elementwise = false});
     }
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
+    // Both signatures are fixed and are declared in stdlib/sim.cml (handover H179); the C++ side
+    // keeps the kernels and the executor, and exports no operator group of its own.
 }
 
 module_ptr_t SimModule::create(context_ptr_t ctx) { return std::make_shared<SimModule>(ctx); }

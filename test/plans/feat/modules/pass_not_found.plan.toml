@@ -82,6 +82,24 @@ expect_output_not_contains = ["not found, available passes are", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 20000
 
+# `onnx` gained a declaration module in H179 (`stdlib/onnx.cml`), so it is now a Camel module of
+# the kind H130 answers with the short diagnostic. Its `onnx::export` pass is registered by C++,
+# and the `provided` list of the diagnostic names only the module's Camel pass functions (H130),
+# so it says "no passes"; the generic unknown-pass answer is kept by the `hash` case in
+# feat/compile/diag_json.
+
+[[tests]]
+name = "pass_absent_from_a_declaration_module"
+desc = "onnx::nosuchpass: `onnx` is a declaration module and declares no pass function, so the diagnostic is the H130 module-specific one; the program does not run and the global pass list is not printed."
+kind = "negative"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "onnx::nosuchpass", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'onnx' provides no pass 'nosuchpass'", "it provides no passes"]
+expect_output_not_contains = ["not found, available passes are", "2011"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000
+
 # A module whose file is there but that the loader refuses: the pass specification reports the
 # loader's reason. Before H130 this was "Pass <unloadable::run> not found" with the reason lost.
 

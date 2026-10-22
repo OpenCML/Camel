@@ -45,6 +45,9 @@ import python
 // no callable name). Its only undeclared purity, `analysis`, is now declared effectful; before
 // that this probe never listed it, so no check saw it (handover H173).
 import rewrite
+// `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the
+// stdlib registry tests hold them to the declaration and the computed signature (handover H179).
+import onnx
 
 func main(): int {
     return 0
