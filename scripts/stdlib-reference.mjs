@@ -94,9 +94,13 @@ const MODULES = [
         name: 'math',
         title: '`math`: numbers and bits',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles (H19).
+        // The declarations, and, in the signature file, the reference entries of the three names
+        // whose result type C++ computes from their argument (sqrt; the mixed-integer shifts).
+        // One convention for every declaration module: the computed half is a signature file
+        // named by `computed:` (handover H180).
         source: 'math.cml',
         declaration: true,
+        computed: 'signatures/math.cml',
     },
     {
         name: 'statistics',
@@ -199,12 +203,14 @@ const MODULES = [
         name: 'graph',
         title: '`graph`: a program as a value',
         kind: 'cpp',
-        // The declarations, not a signature file: they are what the module compiles (H19). The
-        // operators whose type C++ computes (`constant` and `add_constant` take the type of their
-        // sample; the four of a function value take the function's type) stay in the C++ resolver
-        // and are recorded in the declaration file as `// dynamic func` (handover H141).
+        // The declarations, and, in the signature file, the reference entries of the operators
+        // whose type C++ computes (`constant` and `add_constant` take the type of their sample;
+        // the four of a function value take the function's type). One convention for every
+        // declaration module: the computed half is a signature file named by `computed:`
+        // (handover H180).
         source: 'graph.cml',
         declaration: true,
+        computed: 'signatures/graph.cml',
     },
     {
         name: 'rewrite',
@@ -460,7 +466,9 @@ function readDeclarations(file, module) {
     const keyword = 'export func'
     const entries = []
     const sectionNotes = new Map()
+    const sections = []
     entries.sectionNotes = sectionNotes
+    entries.sections = sections
     let section = ''
     let doc = []
     let withText = ''
@@ -471,6 +479,7 @@ function readDeclarations(file, module) {
         const sectionMatch = trimmed.match(/^\/\/ ---- (.+?) ----$/)
         if (sectionMatch) {
             section = sectionMatch[1]
+            sections.push(section)
             // The plain comment lines right under a section line are its introduction.
             const notes = []
             while (i + 1 < lines.length && /^\/\/(?!\/)/.test(lines[i + 1].trim())) {
@@ -669,14 +678,22 @@ function parseDeclarations(module) {
     }
     const entries = []
     const sectionNotes = new Map()
+    const sections = []
     for (const file of files) {
         const part = readDeclarations(file, module)
         for (const [name, notes] of part.sectionNotes) {
-            if (!sectionNotes.has(name)) sectionNotes.set(name, notes)
+            // A section may be declared in both files (the computed file and the declarations):
+            // the introduction is the one that has text, so a bare `// ---- name ----` used only to
+            // keep the section in the module's order does not erase the other file's note.
+            if (!sectionNotes.has(name) || (sectionNotes.get(name).length === 0 && notes.length > 0)) {
+                sectionNotes.set(name, notes)
+            }
         }
+        sections.push(...part.sections)
         entries.push(...part)
     }
     entries.sectionNotes = sectionNotes
+    entries.sections = sections
     return entries
 }
 
@@ -765,22 +782,35 @@ out.push('Not in this reference: the profiler (`perf`).')
             out.push(...header)
             out.push('')
         }
-        // Entries are grouped by section, in the order the sections first appear, and a section
-        // may be written in both files of the module (its computed signatures and its
+        // Entries are grouped by section, in the order the `// ---- name ----` lines declare, and
+        // a section may be written in both files of the module (its computed signatures and its
         // declarations): `tensor` writes `binary form` in both, and the two read as one section
-        // (handover H151). Within a section, overloads written one after another under one
-        // comment are one entry.
+        // (handover H151). Ordering by the declarations rather than by the first entry lets a
+        // computed file keep the module's order even when only a few of its sections hold a
+        // computed name (handover H180). Within a section, overloads written one after another
+        // under one comment are one entry.
         const sectionOrder = []
+        const seenSections = new Set()
+        const pushSection = (key) => {
+            if (!seenSections.has(key)) {
+                seenSections.add(key)
+                sectionOrder.push(key)
+            }
+        }
+        if (entries.some((entry) => !entry.section)) pushSection('')
+        for (const section of entries.sections || []) pushSection(section)
+        for (const entry of entries) pushSection(entry.section || '')
         const bySection = new Map()
         for (const entry of entries) {
             const key = entry.section || ''
-            if (!bySection.has(key)) {
-                bySection.set(key, [])
-                sectionOrder.push(key)
-            }
+            if (!bySection.has(key)) bySection.set(key, [])
             bySection.get(key).push(entry)
         }
         for (const key of sectionOrder) {
+            // A section marker may order the module without holding an entry of its own (the
+            // computed file repeats its declaration file's sections to keep their place).
+            const sectionEntries = bySection.get(key)
+            if (!sectionEntries) continue
             if (key) {
                 out.push(`### ${key[0].toUpperCase()}${key.slice(1)}`)
                 out.push('')
@@ -791,7 +821,7 @@ out.push('Not in this reference: the profiler (`perf`).')
                 }
             }
             const groups = []
-            for (const entry of bySection.get(key)) {
+            for (const entry of sectionEntries) {
                 const last = groups[groups.length - 1]
                 if (last && last[0].name === entry.name && entry.doc.length === 0) last.push(entry)
                 else groups.push([entry])

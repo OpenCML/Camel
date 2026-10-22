@@ -1,0 +1,58 @@
+/**
+ * The computed signatures of the `graph` module: the operators whose type C++ computes from an
+ * argument (`constant` and `add_constant` take the type of their sample; `program_of`, `graph_of`,
+ * `open_function` and `to_function` take a function value's type). The C++ operators in
+ * `modules/graph` are the one source of these types; this file is for reference only (it is not
+ * compiled) and feeds `docs/stdlib-reference.md` and the `--verify-ops` check. The fixed
+ * signatures are declared in `stdlib/graph.cml` (design principles 6.4; handover H19, H141, H180).
+ *
+ * The section lines follow `stdlib/graph.cml`, including the sections that hold no computed
+ * signature, so the reference page reads in the module's order (handover H180).
+ */
+
+// ---- the program ----
+
+// ---- reading nodes ----
+
+/// The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
+/// @pure
+/// @example constant(n, 0)    // int?
+export func constant(n: Node, sample: T): T?
+
+// ---- regions ----
+
+// ---- facts ----
+
+// ---- function values ----
+
+/// The Program a function value lives in.
+/// @pure
+/// @example program_of(f)
+export func program_of(f: F): Program
+
+/// The graph of a function value.
+/// @pure
+/// @example graph_of(f)
+export func graph_of(f: F): Graph
+
+// ---- transactions ----
+
+/// Adds a value the transaction creates to the graph's static values and gives the node that
+/// holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+/// space because a value a transaction creates may be live at a safepoint where its draft is not
+/// traced.
+/// @effect changes the transaction
+/// @example add_constant(t, g, 7)
+export func add_constant(t: Txn, g: Graph, value: T): Node
+
+/// Opens a transaction on a function value's graph and the graphs it reaches.
+/// @effect opens a transaction
+/// @example open_function(f)
+export func open_function(f: F): Txn
+
+/// Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
+/// @effect changes the transaction
+/// @example to_function(t, f)
+export func to_function(t: Txn, sample: F): F!
+
+// ---- comparison ----

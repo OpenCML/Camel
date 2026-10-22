@@ -2243,6 +2243,20 @@ A NaN. It equals nothing, itself included: test with is_nan.
 
 ### Elementary functions
 
+#### `sqrt`
+
+```camel
+sqrt: (x: i32) => f32
+sqrt: (x: int) => float
+sqrt: (x: f32) => f32
+sqrt: (x: float) => float
+```
+
+The square root. An integer argument is converted: i32 gives f32, int gives float.
+
+- Pure.
+- Example: `sqrt(9.0)` gives `3`
+
 #### `abs`
 
 ```camel
@@ -2295,20 +2309,6 @@ The conjugate of a complex number: the imaginary part is negated.
 
 - Pure.
 - Example: `conj(3+4i)` gives `3-4i`
-
-#### `sqrt`
-
-```camel
-sqrt: (x: i32) => f32
-sqrt: (x: int) => float
-sqrt: (x: f32) => f32
-sqrt: (x: float) => float
-```
-
-The square root. An integer argument is converted: i32 gives f32, int gives float.
-
-- Pure.
-- Example: `sqrt(9.0)` gives `3`
 
 #### `exp`
 
@@ -2733,6 +2733,33 @@ The digits of x in base 16, in upper case, with the prefix 0x.
 Bit operations are functions, not operators. Integers are two's complement: `int` has 64
 bits, `i32` has 32.
 
+#### `shl`
+
+```camel
+shl: (x: i32, count: i32) => i32
+shl: (x: int, count: int) => int
+```
+
+x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+change. The count may be of either integer type.
+
+- Pure.
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
+- Example: `shl(1, 4)` gives `16`
+
+#### `shr`
+
+```camel
+shr: (x: i32, count: i32) => i32
+shr: (x: int, count: int) => int
+```
+
+x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
+
+- Pure.
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
+- Example: `shr(256, 4)` gives `16`
+
 #### `bit_and`
 
 ```camel
@@ -2780,33 +2807,6 @@ Every bit of x inverted; the same as the operator ~.
 
 - Pure.
 - Example: `bit_not(0)` gives `-1`
-
-#### `shl`
-
-```camel
-shl: (x: i32, count: i32) => i32
-shl: (x: int, count: int) => int
-```
-
-x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-change. The count may be of either integer type.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
-- Example: `shl(1, 4)` gives `16`
-
-#### `shr`
-
-```camel
-shr: (x: i32, count: i32) => i32
-shr: (x: int, count: int) => int
-```
-
-x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
-- Example: `shr(256, 4)` gives `16`
 
 <a id="statistics"></a>
 
@@ -3925,6 +3925,17 @@ The nodes of the graph in NodeId order; the places of removed nodes are skipped.
 
 ### Reading nodes
 
+#### `constant`
+
+```camel
+constant: (n: Node, sample: T) => T?
+```
+
+The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
+
+- Pure.
+- Example: `constant(n, 0)` gives `int?`
+
 #### `inputs`
 
 ```camel
@@ -4056,17 +4067,6 @@ Whether the node is a constant of the graph.
 
 - Pure.
 - Example: `is_constant(n)`
-
-#### `constant`
-
-```camel
-constant: (n: Node, sample: T) => T?
-```
-
-The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
-
-- Pure.
-- Example: `constant(n, 0)` gives `int?`
 
 #### `type_of`
 
@@ -4245,6 +4245,42 @@ The graph of a function value.
 
 ### Transactions
 
+#### `add_constant`
+
+```camel
+add_constant: (t: Txn, g: Graph, value: T) => Node
+```
+
+Adds a value the transaction creates to the graph's static values and gives the node that
+holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+space because a value a transaction creates may be live at a safepoint where its draft is not
+traced.
+
+- With effects: changes the transaction.
+- Example: `add_constant(t, g, 7)`
+
+#### `open_function`
+
+```camel
+open_function: (f: F) => Txn
+```
+
+Opens a transaction on a function value's graph and the graphs it reaches.
+
+- With effects: opens a transaction.
+- Example: `open_function(f)`
+
+#### `to_function`
+
+```camel
+to_function: (t: Txn, sample: F) => F!
+```
+
+Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
+
+- With effects: changes the transaction.
+- Example: `to_function(t, f)`
+
 #### `open`
 
 ```camel
@@ -4266,20 +4302,6 @@ Puts the node `new` of the same graph in the place of `old`, which is removed; w
 
 - With effects: changes the transaction.
 - Example: `replace(t, n, inputs(n)[0])`
-
-#### `add_constant`
-
-```camel
-add_constant: (t: Txn, g: Graph, value: T) => Node
-```
-
-Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value may be a number, a bool or a string; a string is copied into the permanent
-space because a value a transaction creates may be live at a safepoint where its draft is not
-traced.
-
-- With effects: changes the transaction.
-- Example: `add_constant(t, g, 7)`
 
 #### `erase`
 
@@ -4314,6 +4336,7 @@ Drops the transaction.
 - With effects: changes the transaction.
 - Example: `abort(t)`
 
+<<<<<<< HEAD
 #### `open_function`
 
 ```camel
@@ -4442,6 +4465,8 @@ How many constants the rule `r` adds to the program.
 - Pure.
 - Example: `rule_consts(r)` gives `0`
 
+=======
+>>>>>>> handover/H180-computed-notation
 <a id="tiles"></a>
 
 ## `tiles`: programs on a CUDA device

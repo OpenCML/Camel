@@ -9,8 +9,9 @@
 // one source of their fixed signatures (design principles 6.4; handover H19, step 10): the C++
 // side keeps the kernels, the executor, the operator traits, the numeric semantics and the
 // constants. Two entries are not declarations:
-//   - `// dynamic func` records a reference entry whose result type C++ computes from the
-//     argument (sqrt; the mixed-integer shifts); it stays an operator group of the C++ module.
+//   - the computed signatures (`sqrt`, `shl`, `shr`) have a result type C++ computes from the
+//     argument; their reference entries are in `stdlib/signatures/math.cml`, named by the
+//     module's `computed:` field (handover H180).
 //   - `// value` records a constant the C++ module exports; a value has no declaration to write,
 //     and the C++ module remains the one source of the value itself.
 
@@ -77,14 +78,6 @@ export func im(x: c128): float
 export func conj(x: c64): c64
 #op<'math:conj_z'>
 export func conj(x: c128): c128
-
-/// The square root. An integer argument is converted: i32 gives f32, int gives float.
-/// @pure
-/// @example sqrt(9.0)    // 3
-// dynamic func sqrt(x: i32): f32
-// dynamic func sqrt(x: int): float
-// dynamic func sqrt(x: f32): f32
-// dynamic func sqrt(x: float): float
 
 /// e raised to the power x.
 /// @pure
@@ -419,17 +412,4 @@ export func bit_not(x: i32): i32
 #op<'math:bit_not_l'>
 export func bit_not(x: int): int
 
-/// x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-/// change. The count may be of either integer type.
-/// @pure
-/// @fails fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32)
-/// @example shl(1, 4)    // 16
-// dynamic func shl(x: i32, count: i32): i32
-// dynamic func shl(x: int, count: int): int
 
-/// x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-/// @pure
-/// @fails fault `InvalidArgument` when count is negative or not below the width of x
-/// @example shr(256, 4)    // 16
-// dynamic func shr(x: i32, count: i32): i32
-// dynamic func shr(x: int, count: int): int

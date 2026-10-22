@@ -318,10 +318,10 @@ cd2479e5aabb7c48 ok stdlib/array.cml
 700d7499f9bc23ce ok stdlib/autodiff.cml
 f8a426c8e96936da ok stdlib/bytes.cml
 dd4c782619481c22 ok stdlib/fs.cml
-5f1b2c71c5757202 ok stdlib/graph.cml
+efec7dcc3188e93c ok stdlib/graph.cml
 81d50d711442ef6b ok stdlib/io.cml
 6020479adef220b0 ok stdlib/json.cml
-f234da727937674c ok stdlib/math.cml
+bdb99323d8c2469b ok stdlib/math.cml
 c21ebaf80603b717 ok stdlib/nn.cml
 52a7b10558db471d ok stdlib/onnx.cml
 ebb8e94036f7abd2 ok stdlib/para.cml
@@ -344,8 +344,10 @@ f26840bc30a7d5b4 ok stdlib/time.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
 3364937d4942b0ed no stdlib/signatures/globals.cml
+65b29ea56cb7a948 ok stdlib/signatures/graph.cml
 b465908c31d8462a ok stdlib/signatures/hash.cml
 df6e9b39c870578c ok stdlib/signatures/json.cml
+84b08904c6adac57 ok stdlib/signatures/math.cml
 5c8c32730b1852f0 no stdlib/signatures/nn.cml
 d4049fbe5d74713b ok stdlib/signatures/onnx.cml
 a6332d59a0e18fb4 ok stdlib/signatures/para.cml

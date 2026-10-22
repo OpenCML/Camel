@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// A module that has moved to a declaration module stays migrated (handover H137).
+// A module that has moved to a declaration module stays migrated (handover H137), and the
+// computed signatures a declaration cannot express have one recorded place (handover H180).
 //
 //   node scripts/stdlib-declarations.mjs --check
 //
@@ -16,14 +17,12 @@
 // set is read from the tree, not from a list in this script: the next batch (`time`, `algo`,
 // `statistics`, `tree`/`ckpt`) is covered the day its `.cml` lands.
 //
-// The four checks, for every declaration module:
+// The five checks, for every declaration module:
 //
 //   1. C++ registers no `StaticFuncTypeResolver` for a name the declaration fixes. A name
-//      whose signature C++ computes (`DynamicFuncTypeResolver`) may stay in C++: `math`'s
-//      `sqrt`/`shl`/`shr` (recorded as `// dynamic func` in `stdlib/math.cml`), `random`'s
-//      `choice`/`sample`/`shuffle` and `json`'s `encode`/`decode_as` (recorded in the
-//      module's `computed:` signature file). This is "no static resolver for a declared
-//      name", not "no resolver at all".
+//      whose signature C++ computes (`DynamicFuncTypeResolver`) may stay in C++: this is
+//      "no static resolver for a declared name", not "no resolver at all". The computed
+//      names themselves are recorded in the module's `computed:` signature file (check 5).
 //
 //   2. `stdlib/signatures/<module>.cml` does not exist unless the reference generator
 //      (`scripts/stdlib-reference.mjs`) names it in that module's `computed:` field. A stray
@@ -54,6 +53,17 @@
 //      registry_all imported while MODULES did not list it, and the four modules no program
 //      imported at all). A module imported but absent from MODULES is the same hole and is
 //      reported too.
+//
+// And one for the notation:
+//
+//   6. A computed name has exactly one place: `stdlib/signatures/<module>.cml`, named by the
+//      MODULES entry's `computed:` field. The inline `// dynamic func` form is retired (H180):
+//      it cannot carry an `#op` URI, so a computed name whose operator URI differs from
+//      `<module>:<name>` has no inline spelling. An inline record is a problem even when the
+//      name is also in the file (the pointer and the file are then two places); a module whose
+//      `computed:` field names a file that records no name is a pointer that does not agree
+//      with reality. A name recorded in neither place is caught by the exported-name loop of
+//      check 4 ("no computed signature records it").
 //
 // The reserved group `__neq__` is the one exception to (1) and (4): `!=` cannot be declared
 // (design principles 4.3 — an overload of `==` gives it, and `operator !=` is
@@ -522,23 +532,43 @@ function readDeclarations(file, moduleName) {
     return { declarations, dynamic }
 }
 
-// The signatures C++ computes and a declaration cannot express: `// dynamic func` entries in
-// the declaration file, and the declarations of the module's `computed:` signature file.
-function computedSignatures(module, entry) {
-    const result = new Map()
+// The computed signatures of a module, with the place each name is recorded in. A computed name
+// has exactly one such place (H180):
+//
+//   - `stdlib/signatures/<module>.cml`, named by the module's `computed:` field. This is the
+//     invariant; it is the only place a computed name is recorded.
+//   - an inline `// dynamic func` in the declaration file. This is the retired convention: it
+//     cannot carry an `#op` URI (a computed name whose operator URI differs from `<module>:<name>`
+//     has no inline spelling), so the check reports every inline record instead of accepting it.
+//
+// `inline` and `file` are maps from name to the first record, for the problem messages; `all` is
+// the union, which keeps `--verify-ops`'s "every computed name has an exported group" check going
+// while a wrong-place record is being reported.
+function computedPlaces(module, entry) {
     const own = readDeclarations(module.source, module.name)
+    const inline = new Map()
     for (const dynamic of own.dynamic) {
-        result.set(dynamic.name, { file: relative(module.source), line: dynamic.line })
+        if (!inline.has(dynamic.name)) {
+            inline.set(dynamic.name, { file: relative(module.source), line: dynamic.line })
+        }
     }
+    const file = new Map()
+    let filePath = null
     if (entry && entry.computed) {
-        const file = path.join(STDLIB_DIR, entry.computed)
-        if (fs.existsSync(file)) {
-            for (const declaration of readDeclarations(file, module.name).declarations) {
-                result.set(declaration.name, { file: relative(file), line: declaration.line })
+        filePath = path.join(STDLIB_DIR, entry.computed)
+        if (fs.existsSync(filePath)) {
+            for (const declaration of readDeclarations(filePath, module.name).declarations) {
+                if (!file.has(declaration.name)) {
+                    file.set(declaration.name, {
+                        file: relative(filePath),
+                        line: declaration.line,
+                    })
+                }
             }
         }
     }
-    return result
+    const all = new Map([...inline, ...file])
+    return { inline, file, all, filePath }
 }
 
 // ---- the C++ side ---------------------------------------------------------------------------
@@ -732,7 +762,8 @@ function staticChecks() {
         const declared = readDeclarations(module.source, module.name).declarations
         const declaredNames = new Set(declared.map((declaration) => declaration.name))
         const declaredUris = new Set(declared.map((declaration) => declaration.uri))
-        const computed = computedSignatures(module, entry)
+        const places = computedPlaces(module, entry)
+        const computed = places.all
         computedCount += computed.size
 
         // The reference generator must see the module, or --verify-ops never checks it.
@@ -761,6 +792,26 @@ function staticChecks() {
         }
         if (!fs.existsSync(signatureFile) && namesSignatureFile) {
             problems.push(`${relative(signatureFile)}: the reference generator names it as the computed signatures of '${module.name}', but the file does not exist`)
+        }
+
+        // (5) The computed half has one convention and one place (handover H180). It is the
+        // module's signature file, named by `computed:`. An inline `// dynamic func` cannot carry
+        // an `#op` URI, so it cannot record every computed name; it is not an alternative.
+        for (const [name, where] of places.inline) {
+            const also = places.file.get(name)
+            problems.push(
+                `${where.file}:${where.line}: the computed signature '${name}' of '${module.name}' is recorded inline as ` +
+                    `'// dynamic func'${also ? ` and in ${also.file}:${also.line}` : ''}; a computed name has exactly one ` +
+                    `place: stdlib/signatures/${module.name}.cml, named by the MODULES entry's computed: field (handover H180)`,
+            )
+        }
+        // The pointer must agree with the file: a module whose MODULES entry names a computed
+        // file has to record at least one computed name there. (A missing file is check 2.)
+        if (entry && entry.computed && places.filePath && fs.existsSync(places.filePath) && places.file.size === 0) {
+            problems.push(
+                `${relative(places.filePath)}: the MODULES entry names it as the computed signatures of '${module.name}', ` +
+                    `but it records no computed name`,
+            )
         }
 
         // One signature, one place: a name cannot be both declared and computed.
