@@ -47,19 +47,19 @@
 
 | 形态 | 类型 | 用在哪 | 节点怎么存 | 出处 |
 |---|---|---|---|---|
-| 建图期 | `DraftGraphBuilder`（`shared_ptr` 持有），内含一个 `GraphDraft` | GCT → GIR | 同"草稿"，外加 7 张以节点指针为键的哈希表 | 【读码 `include/camel/compile/gir/draft_graph_builder.h:50-226`】 |
-| 草稿 | `GraphDraft` | 各改写遍 | 每节点一个 56 字节的头（`DraftNode`）加一块 64/96/128 字节的尾（负载与六个邻接表），来自 4 KB 的页 | 【读码 `include/camel/runtime/draft.h:62-190`】 |
-| 运行期 | `GCGraph` | 四个后端、宏求值器、导出器、调试器 | 一段变长的节点块：40 字节的头（`GCNode`）加各种类的负载，邻接是指向公共边表的六个切片 | 【读码 `include/camel/runtime/graph.h:134-297`】 |
+| 建图期 | `DraftGraphBuilder`（`shared_ptr` 持有），内含一个 `GraphDraft` | GCT → GIR | 同"草稿"，外加 7 张以节点指针为键的哈希表 | 【读码 `include/camel/compile/gir/draft_graph_builder.h:37-203 # "class DraftGraphBuilder {"`】 |
+| 草稿 | `GraphDraft` | 各改写遍 | 每节点一个 56 字节的头（`DraftNode`）加一块 64/96/128 字节的尾（负载与六个邻接表），来自 4 KB 的页 | 【读码 `include/camel/runtime/draft.h:46-174 # "class GraphDraft *owner = nullptr;"`】 |
+| 运行期 | `GCGraph` | 四个后端、宏求值器、导出器、调试器 | 一段变长的节点块：40 字节的头（`GCNode`）加各种类的负载，邻接是指向公共边表的六个切片 | 【读码 `include/camel/runtime/graph.h:118-281`】 |
 
-**建图期与运行期不是同一个结构，而且中间还有第三份。** 前端把一张图建在 `DraftGraphBuilder` 的草稿里；编码时为每张图新建第二个草稿，只拷入出口可达的节点并重新编号（`prepareGraph`）；再由第二个草稿编码成 `GCGraph`。【读码 `src/compile/gir/graph_encode.cpp:395-612`】也就是说每个节点在一次编译里被构造三次。之后每个改写遍再把 `GCGraph` 解码成草稿、改完重新编码。
+**建图期与运行期不是同一个结构，而且中间还有第三份。** 前端把一张图建在 `DraftGraphBuilder` 的草稿里；编码时为每张图新建第二个草稿，只拷入出口可达的节点并重新编号（`prepareGraph`）；再由第二个草稿编码成 `GCGraph`。【读码 `src/compile/gir/graph_encode.cpp:379-596 # "PreparedGraph prepareGraph(const graph_ptr_t &graph) {"`】也就是说每个节点在一次编译里被构造三次。之后每个改写遍再把 `GCGraph` 解码成草稿、改完重新编码。
 
-**图与图之间是指针。** `GCGraph` 里 `FUNC` 节点的负载是被调图的指针（`GCFuncBody::calleeGraph`，`graph.h:188-190`），函数常量是静态区里指向 `Function` 对象、再指向图的指针，另有 `dependencies_`、`subGraphs_`、`staticGraphRefs_` 三个图指针数组（`graph.h:459-465`）。后果是：**一张图被改写后地址变了，所有指向它的图都得重新编码**。`RuntimeGraphDraftSession::commit()` 因此对整个可达闭包里的每一张图重新分配、编码、校验，不管改了几张。【读码 `src/runtime/draft_session.cpp:743-798`；`docs/technical/17_graph_rewrite_api_contracts.md` 1.1】通用的改写驱动 `rewriteReachableGraphs` 则先把每一张可达的图都解码成草稿再问"你要改吗"。【读码 `src/passes/opt/generic/rewrite.cpp:217-233`】
+**图与图之间是指针。** `GCGraph` 里 `FUNC` 节点的负载是被调图的指针（`GCFuncBody::calleeGraph`，`graph.h:172-174`），函数常量是静态区里指向 `Function` 对象、再指向图的指针，另有 `dependencies_`、`subGraphs_`、`staticGraphRefs_` 三个图指针数组（`graph.h:443-449`）。后果是：**一张图被改写后地址变了，所有指向它的图都得重新编码**。`RuntimeGraphDraftSession::commit()` 因此对整个可达闭包里的每一张图重新分配、编码、校验，不管改了几张。【读码 `src/runtime/draft_session.cpp:727-782`；`docs/technical/17_graph_rewrite_api_contracts.md` 1.1】通用的改写驱动 `rewriteReachableGraphs` 则先把每一张可达的图都解码成草稿再问"你要改吗"。【读码 `src/passes/opt/generic/rewrite.cpp:200-216`】
 
-内存来自三块按段增长的空间，各有 256 MB 的总上限：图空间（`GCGraph`，可释放）、永久空间（类型与布局，**从不释放**）、元空间（建图期的常量与函数值）。【读码 `include/camel/core/mm.h:41-51`；`docs/cli.md` "Resource limits"】一张 `GCGraph` 是图空间里的一次分配（`src/runtime/graph.cpp:999-1010`）。
+内存来自三块按段增长的空间，各有 256 MB 的总上限：图空间（`GCGraph`，可释放）、永久空间（类型与布局，**从不释放**）、元空间（建图期的常量与函数值）。【读码 `include/camel/core/mm.h:25-35`；`docs/cli.md` "Resource limits"】一张 `GCGraph` 是图空间里的一次分配（`src/runtime/graph.cpp:982-993 # "GCGraphDebugRecord *createGraphDebugRecord(std::string mangledName,"`）。
 
 ### 1.2 节点种类的完整清单
 
-`GCNodeKind` 有 15 个值【读码 `graph.h:76-92`；编译期的 `NodeType` 与它一一对应，`include/camel/compile/gir/types.h:44-60`】。下表的"占比"是 1.10 的普查结果（769 个程序，未加任何遍）。
+`GCNodeKind` 有 15 个值【读码 `graph.h:60-76`；编译期的 `NodeType` 与它一一对应，`include/camel/compile/gir/types.h:28-44`】。下表的"占比"是 1.10 的普查结果（769 个程序，未加任何遍）。
 
 | 种类 | 是什么 | Norm 入边 | With 入边 | 负载 | 占比 |
 |---|---|---|---|---|---|
@@ -79,23 +79,23 @@
 | `BIND` | 注释写的是"部分应用" | — | — | — | **0：没有任何代码创建它** |
 | `DREF` | 建图期"还没定下来指谁"的名字占位 | — | — | — | 0：编码时遇到即报错 |
 
-- `BIND`：全仓库只有两处定义它的构造函数（`draft_graph_builder.cpp:203`、`draft_construct.cpp:271`），没有调用者；部分应用实际做成了闭包（见 3.5 的卡片）。后端里为它留着的分支都是死代码。【读码，检索 `addBindNode`】
+- `BIND`：全仓库只有两处定义它的构造函数（`draft_graph_builder.cpp:203`、`draft_construct.cpp:255`），没有调用者；部分应用实际做成了闭包（见 3.5 的卡片）。后端里为它留着的分支都是死代码。【读码，检索 `addBindNode`】
 - `SYNC`：前端不产生，`inlineCallableInDraft` 在被内联体有多个入口时新建一个（`src/runtime/draft_inline.cpp:1988-1992`）。
-- 每个节点头上还有：类型指针 `dataType`、槽位 `dataIndex`（正数是帧槽，负数是静态区下标，0 是没有值）、两个标志位（`macro`、`constant`）。【读码 `graph.h:117-148`】
+- 每个节点头上还有：类型指针 `dataType`、槽位 `dataIndex`（正数是帧槽，负数是静态区下标，0 是没有值）、两个标志位（`macro`、`constant`）。【读码 `graph.h:101-132`】
 
 ### 1.3 边
 
-三种：`Norm`、`With`、`Ctrl`。【读码 `draft.h:56-60`】
+三种：`Norm`、`With`、`Ctrl`。【读码 `draft.h:40-44`】
 
 - `Norm` 与 `With` 都是数据边，区别是"接在目标节点的哪一组输入上"；这两组输入在每种节点上的含义见上表。它们与语言里"普通参数 / `with` 参数"的区分对应（设计原则 4.4），但 `CALL`、`FILL`、`BRCH`、`JOIN` 借用了 `With` 这一组做别的事。
 - `Ctrl` 是控制边：目标排在源之后，不传值。来源有四处【读码 `src/compile/gir/builder.cpp`】：同步块里相邻表达式之间的链（`lastSyncedNode_`，`:6016-6029`、`:6305-6311`）；`wait` 与变量写入的排序（`recordWrite`/`orderAfterLastWriter`）；`BRCH` 指向各臂的入口（`:5796`）；臂捕获的外部值指向 `BRCH`（"先于分支就绪"，`:5750-5756`）。
 - **不变量**（提交时检查，1.7）：每条输入边在对端的输出表里出现，反之亦然；三种边合起来无环。
-- **节点是否执行由可达性决定**：所有后端共用一个取执行序的函数，从出口沿三种入边反向标出需要的节点【读码 `src/execute/graph_runtime_support.cpp:131-166`】。"同步块之外没人用的效应不执行"（设计原则 3.1）在图上就是"出口到不了它"；同步块的效应会执行，是因为控制链最终接到出口的 `GATE` 上。
-- **每条边存两份**：`GCGraph` 的边表里，每个节点的输入与输出各占一段，16 位寻址的"边表项"上限数的是两份之和。【读码 `src/runtime/graph.cpp:591`："one for each input and one for each user of every node, that is two per edge"】而四个后端里只有任务流调度器有两处读输出表（1.8）。
+- **节点是否执行由可达性决定**：所有后端共用一个取执行序的函数，从出口沿三种入边反向标出需要的节点【读码 `src/execute/graph_runtime_support.cpp:115-150`】。"同步块之外没人用的效应不执行"（设计原则 3.1）在图上就是"出口到不了它"；同步块的效应会执行，是因为控制链最终接到出口的 `GATE` 上。
+- **每条边存两份**：`GCGraph` 的边表里，每个节点的输入与输出各占一段，16 位寻址的"边表项"上限数的是两份之和。【读码 `src/runtime/graph.cpp:574`："one for each input and one for each user of every node, that is two per edge"】而四个后端里只有任务流调度器有两处读输出表（1.8）。
 
 ### 1.4 图怎样持有子图与依赖图
 
-`GCGraph` 有三张图指针表与一个外层图指针【读码 `graph.h:328-330、459-465`】：
+`GCGraph` 有三张图指针表与一个外层图指针【读码 `graph.h:312-314、459-465`】：
 
 - `dependencies`：`FUNC` 节点调用的图、分支臂的图；建图器在每次建 `FUNC` 节点或函数值时登记（`builder.cpp:3574`、`:5741`）。
 - `subGraphs`：写在这张图"里面"的函数与臂，按词法归属。
@@ -108,17 +108,17 @@
 
 | 信息 | 建图期 | 运行期 |
 |---|---|---|
-| 图的名字 | `DraftGraphBuilder::name_`、`stableId_` | `GCGraphDebugRecord` 里三个 `std::string`：`stableId`、`mangledName`、`name`（`src/runtime/graph_build.h:39-45`） |
+| 图的名字 | `DraftGraphBuilder::name_`、`stableId_` | `GCGraphDebugRecord` 里三个 `std::string`：`stableId`、`mangledName`、`name`（`src/runtime/graph_build.h:23-29 # "std::string mangledName;"`） |
 | 节点的调试标识 | `nodeDebugIds_`：**每个节点一个 `std::string`**（`draft_graph_builder.h:205`） | 无 |
 | 端口名 | `nodePortNames_`（哈希表，节点指针 → 字符串） | 形参名在函数类型里；捕获端口没有名字 |
-| 字段名（`ACCS`） | `nodeAccsKeys_` | 内嵌在节点负载里；NodeVM 每次访问先构造一个 `std::string` 再查（`nodevm.cpp:608-612`） |
+| 字段名（`ACCS`） | `nodeAccsKeys_` | 内嵌在节点负载里；NodeVM 每次访问先构造一个 `std::string` 再查（`nodevm.cpp:592-596`） |
 | 算子 | `operTargets_`（节点指针 → `shared_ptr<OperatorIndex>`） | 内嵌在节点里的 URI 字符串 + 函数指针 |
 | 被调图 | `funcTargets_`（节点指针 → `shared_ptr` 图） | 节点里的图指针 |
 | 类型 | `Type*`，分配在永久空间 | 同一个指针 |
-| 源码位置 | 节点头上的 `origin`（64 位）；语义部件另存在 `SourceContext` 里以字符串为键的表 | 每图一张 `unordered_map<节点引用, origin>`（`graph_build.h:44`） |
-| 捕获了哪些名字 | **函数类型对象上**的 `closureRefs`（字符串列表，建图时就地追加，`builder.cpp:1025-1028`） | 同左 |
+| 源码位置 | 节点头上的 `origin`（64 位）；语义部件另存在 `SourceContext` 里以字符串为键的表 | 每图一张 `unordered_map<节点引用, origin>`（`graph_build.h:28`） |
+| 捕获了哪些名字 | **函数类型对象上**的 `closureRefs`（字符串列表，建图时就地追加，`builder.cpp:1009-1012`） | 同左 |
 
-类型没有驻留：`TupleType::create` 每次调用都在永久空间里新分配一个（`src/core/type/composite/tuple.cpp:120-147`）；变量单元类型 `TupleType::cell` 用一把互斥锁加线性查找去重（`:151-163`）。每张图有自己的帧布局元组类型，改写后重新编码又生成新的，旧的留在永久空间里。函数类型对象是可变的：返回类型在建图时才填（`setExitType`，`builder.cpp:81-89`），捕获名也往里加。
+类型没有驻留：`TupleType::create` 每次调用都在永久空间里新分配一个（`src/core/type/composite/tuple.cpp:104-131`）；变量单元类型 `TupleType::cell` 用一把互斥锁加线性查找去重（`:135-147`）。每张图有自己的帧布局元组类型，改写后重新编码又生成新的，旧的留在永久空间里。函数类型对象是可变的：返回类型在建图时才填（`setExitType`，`builder.cpp:65-73`），捕获名也往里加。
 
 函数类型的形参名不参与类型相容：`func sub(a: int, b: int)` 可以传给 `(x: int, y: int) => int` 的位置【实测，打印 7】；按名字传参尚未支持（`FeatureNotSupported: kwargs`）【实测】。
 
@@ -126,15 +126,15 @@
 
 - **`sync` 块**：没有专门的节点。块内相邻表达式之间一条 `Ctrl` 边；块的值经一个 `GATE`（Norm 接值，Ctrl 接链尾）交出去。【实测，见 3.5】
 - **`wait` 与 `var`**：变量是一个单元（`:var/new` 建，`:var/get` 读，赋值算子写）；排序靠 `Ctrl` 边，依据是"谁用过这个变量"。【实测】
-- **纯度**：不在图上。算子的纯度在一张全局的、以 URI 字符串为键、带读写锁的注册表里（`OperatorTraitsRegistry`，`include/camel/core/operator_traits.h:44-97`），三个位：`pure`、`elementwise`、`stateOnly`；遍每问一次做一次字符串哈希查找。函数的效应：`sync` 修饰符在函数类型上；"这张图的出口是否依赖效应""它写了哪些捕获的变量"是建图器内部的表（`effectfulGraphs_`、`captures_`，`src/compile/gir/builder.h:180-225`），建完就丢，遍看不到。
+- **纯度**：不在图上。算子的纯度在一张全局的、以 URI 字符串为键、带读写锁的注册表里（`OperatorTraitsRegistry`，`include/camel/core/operator_traits.h:44-97`），三个位：`pure`、`elementwise`、`stateOnly`；遍每问一次做一次字符串哈希查找。函数的效应：`sync` 修饰符在函数类型上；"这张图的出口是否依赖效应""它写了哪些捕获的变量"是建图器内部的表（`effectfulGraphs_`、`captures_`，`src/compile/gir/builder.h:164-209 # "std::vector<compile_graph_ptr_t> builtBodies;"`），建完就丢，遍看不到。
 - **故障**：没有任何声明。哪些节点可能故障只能由读者自己按算子名判断。
-- **捕获**：闭包捕获的值是图上的一类端口（`closureNodes`）；函数第一次被直接调用时，捕获端口就地改成 `with` 端口，此后每个调用处按**名字**在调用处的作用域里再解析一次并连 `WITH` 边。【读码 `builder.cpp:988-1041`、`:3591-3625`；模块 root 设计稿 1.2】这段逻辑依赖"这张图用过没有"（`usedGraphs_`），函数被调用之后再发现新的捕获就是 `ClosureCaptureAfterSelfCall`。
-- **泛型**：模板是建图器里的一个对象（GCT 子树 + 声明处的四个作用域），不是图；每组类型建一张名为 `first<int>` 的普通图。【读码 `builder.h:237-296`；实测】
+- **捕获**：闭包捕获的值是图上的一类端口（`closureNodes`）；函数第一次被直接调用时，捕获端口就地改成 `with` 端口，此后每个调用处按**名字**在调用处的作用域里再解析一次并连 `WITH` 边。【读码 `builder.cpp:972-1025`、`:3591-3625`；模块 root 设计稿 1.2】这段逻辑依赖"这张图用过没有"（`usedGraphs_`），函数被调用之后再发现新的捕获就是 `ClosureCaptureAfterSelfCall`。
+- **泛型**：模板是建图器里的一个对象（GCT 子树 + 声明处的四个作用域），不是图；每组类型建一张名为 `first<int>` 的普通图。【读码 `builder.h:221-280`；实测】
 - **分支臂是独立的图**：前端为每条臂建一张子图，外层图里是一个 `FUNC` 节点，既是臂头也是臂尾；臂用到的外层值是它的 `with` 端口。【读码 `builder.cpp:5697-5798`；实测】内联之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。
 
 ### 1.7 "提交"是什么，校验哪些不变量
 
-提交有三处：前端编码（`encodeToRuntimeGraph`）、改写会话的 `commit()`、`GraphDraftGroup::encode()`。三处在每张图编码之后调用同一组校验，**所有构建模式都执行**，失败抛异常并被遍驱动转成 `PassInternalError`【读码 `src/runtime/graph.cpp:232、1175-1181`，`src/runtime/branch_arms.cpp:115`；`docs/technical/17_graph_rewrite_api_contracts.md` 第 4 节】：
+提交有三处：前端编码（`encodeToRuntimeGraph`）、改写会话的 `commit()`、`GraphDraftGroup::encode()`。三处在每张图编码之后调用同一组校验，**所有构建模式都执行**，失败抛异常并被遍驱动转成 `PassInternalError`【读码 `src/runtime/graph.cpp:232、1175-1181`，`src/runtime/branch_arms.cpp:99`；`docs/technical/17_graph_rewrite_api_contracts.md` 第 4 节】：
 
 1. 锚点、端口、闭包节点、所有边的节点引用有效；槽位在范围内；没有残留的 `DREF`；
 2. 邻接表双向一致；
@@ -168,13 +168,13 @@
 | 调试器索引（`program_index.cpp`） | 624 | 2 | 0 | — | — | 1 | 3 |
 
 - 后端几乎只沿输入方向读图；输出表主要是改写遍在用。
-- 所有执行类的消费者（四个后端、宏求值器、`std::cpp`、`std::tns`）都从 `buildReachableExecutionTopoIndices` 取执行序，各自再算一遍并各自缓存。NodeVM 用图上的 8 个"扩展槽"（`GCGraph::extraSlots_`，`graph.h:468`）挂自己的缓存。
+- 所有执行类的消费者（四个后端、宏求值器、`std::cpp`、`std::tns`）都从 `buildReachableExecutionTopoIndices` 取执行序，各自再算一遍并各自缓存。NodeVM 用图上的 8 个"扩展槽"（`GCGraph::extraSlots_`，`graph.h:452`）挂自己的缓存。
 - 认算子靠比较 URI 字符串（`":op/add_l"`、`":mark/map_arr"`）。
-- 调试器的"位置 ↔ 节点"：节点 → 位置是 `GCGraph::nodeOrigin(ref)`，再经 `SourceContext` 查到区间；位置 → 节点是调试器启动时把所有图扫一遍建的索引（`tools/debugger/src/core/program_index.cpp`）。断点钩子只有 NodeVM 有（`nodevm.cpp:526-528`）。
+- 调试器的"位置 ↔ 节点"：节点 → 位置是 `GCGraph::nodeOrigin(ref)`，再经 `SourceContext` 查到区间；位置 → 节点是调试器启动时把所有图扫一遍建的索引（`tools/debugger/src/core/program_index.cpp`）。断点钩子只有 NodeVM 有（`nodevm.cpp:510-512`）。
 
 **绕过接口直接改内部的地方**【读码】：
 
-- NodeVM 对冻结图做 `const_cast`，把查到的算子函数指针写回 `OPER` 节点的负载（`nodevm.cpp:754-766`）。
+- NodeVM 对冻结图做 `const_cast`，把查到的算子函数指针写回 `OPER` 节点的负载（`nodevm.cpp:738-750 # "void NodeVMSchedPass::evalMarkedOperator_map_arr("`）。
 - 自动微分直接调 `GraphDraft::decode`，不经会话（`modules/autodiff/pullback.cpp`，2 处），并与内联引擎一样用 `mutablePayloadOf` 直接改节点负载字节。
 - 建图器建分支时先放一个空的 `BRCH`，再把它的六个邻接表逐个拷出来、连同新负载整体重写一遍（`builder.cpp:5862-5910`）。
 - 建图器导出值时 `new` 出一个裸的节点指针放进模块的导出表（`builder.cpp:6351-6356`）：这是一个存在图外面、指向某张图内部节点的指针。
@@ -182,9 +182,9 @@
 ### 1.9 模块、命名空间与缓存
 
 - 每个模块各建一张 `__root__`，程序只运行入口模块的那张；导出值、导出的函数使用本模块顶层值、互相导入都是带位置的诊断。
-- 导入在建 GCT 时处理，遇到 `import` 就把被导入模块**完整编译完**再回来。【读码 `src/compile/gct/builder.cpp:413-470`、`src/core/context/context.cpp:326-400`】
-- 模块之间交换的实体：节点（值）、图集（重载的函数）、算子组、带装饰器的图、泛型模板，装在一个 `variant` 里；前者是裸指针，后几种是 `shared_ptr`。【读码 `include/camel/core/module/module.h:40-72`】
-- 没有任何缓存，每次运行从源码编译全部模块。`.cmo` 是 C++ 模块动态库的扩展名；查找一个模块时在每个目录里**先找 `名字.cmo`，再找 `名字.*`**。【读码 `context.cpp:519-533`、`src/core/module/dynamic.cpp:44-51`】
+- 导入在建 GCT 时处理，遇到 `import` 就把被导入模块**完整编译完**再回来。【读码 `src/compile/gct/builder.cpp:397-454 # "namespace blocks it is written in; the GIR builder finds them on its"`、`src/core/context/context.cpp:310-384 # "An imported module's errors come before those of the entry module,"`】
+- 模块之间交换的实体：节点（值）、图集（重载的函数）、算子组、带装饰器的图、泛型模板，装在一个 `variant` 里；前者是裸指针，后几种是 `shared_ptr`。【读码 `include/camel/core/module/module.h:24-56`】
+- 没有任何缓存，每次运行从源码编译全部模块。`.cmo` 是 C++ 模块动态库的扩展名；查找一个模块时在每个目录里**先找 `名字.cmo`，再找 `名字.*`**。【读码 `context.cpp:503-517 # "module_ptr_t Context::moduleAtPath(const std::string &path) const {"`、`src/core/module/dynamic.cpp:28-35`】
 - 命名空间的现状在第 8 节。
 
 ### 1.10 用仓库里的程序量出来的数字
@@ -231,11 +231,11 @@
 | 项 | 证据 |
 |---|---|
 | 节点种类 `BIND` | 无创建者（1.2） |
-| 节点种类 `DREF` 出现在运行期枚举里 | 只在建图期存在，编码时遇到即报错（`graph_encode.cpp:440-446`） |
+| 节点种类 `DREF` 出现在运行期枚举里 | 只在建图期存在，编码时遇到即报错（`graph_encode.cpp:424-430`） |
 | `src/compile/gir/validate.cpp` 全文 | 无调用点（1.7） |
 | ~~`src/compile/gir/debug_json.cpp`（304 行）~~ | 更正（2026-10-14）：它**有**调用点，调试器的 `tools/debugger/src/compile.cpp` 链接 `getGirJsonFromCompileGraph`；不是包袱，保留 |
 | `DraftGraphBuilder::looped_` | 读写函数都没有调用者 |
-| 四个锚点 `entry`/`exit`/`output`/`return` 加 `GCReturnKind` 的四个值 | 前端总是把 `output` 与 `exit` 设成同一个节点，`returnKind` 只用 `None`/`Self`（`builder.cpp:73-91`） |
+| 四个锚点 `entry`/`exit`/`output`/`return` 加 `GCReturnKind` 的四个值 | 前端总是把 `output` 与 `exit` 设成同一个节点，`returnKind` 只用 `None`/`Self`（`builder.cpp:57-75`） |
 | `GCCallBody` | 只有保留字段，`callKind` 只有一个值 |
 | 每图三个字符串名字、每节点一个调试字符串 | 1.5 |
 | `dependencies`/`subGraphs`/`staticGraphRefs` 三张表 | 都可由节点推出，提交时也确实重建（1.4） |
@@ -867,7 +867,7 @@ N0D -> N0F [WITH 0|0]; N0E -> N0F [NORM 0|0]; N0F -> N10 [WITH 0|0]; N10 -> EXIT
 
 **位置表。** 沿用现有的 `SourceContext`（文件、区间、位置及其派生链），改两点：位置编号收成 32 位、按模块连续分配，使一个模块的位置可以整段写进缓存、装载时加一个基数；节点 → 位置从"每图一张哈希表"改为与节点数组平行的列。
 
-**改写怎样保持位置**（沿用今天的规则，`draft.h:96-98`）：替换一个节点的新节点继承它的位置；内联进来的节点保留被调图里的位置；遍新造的节点取触发它的节点的位置。位置列因此总是满的，调试器与诊断不需要"稳定的节点标识"。
+**改写怎样保持位置**（沿用今天的规则，`draft.h:80-82`）：替换一个节点的新节点继承它的位置；内联进来的节点保留被调图里的位置；遍新造的节点取触发它的节点的位置。位置列因此总是满的，调试器与诊断不需要"稳定的节点标识"。
 
 **诊断所需**：编译期诊断只在编译这个模块时产生，缓存命中的模块不重放警告（Q5）；运行期的故障位置经位置列与位置表得到，所以位置表与文件表进缓存，源文本不进（显示代码行时再读源文件，读不到就只给行列号）。
 
@@ -1071,7 +1071,7 @@ struct Node {
 };
 ```
 
-节点数组末尾多放一个哨兵节点，所以三段的长度都是两个相邻字段之差。节点序号就是数组下标：遍历是一个 `for`，按序号取节点是一次乘法（今天节点是变长的，按"8 字节块的偏移"寻址，遍历要逐个跳，`graph.h:377-409`）。
+节点数组末尾多放一个哨兵节点，所以三段的长度都是两个相邻字段之差。节点序号就是数组下标：遍历是一个 `for`，按序号取节点是一次乘法（今天节点是变长的，按"8 字节块的偏移"寻址，遍历要逐个跳，`graph.h:361-393`）。
 
 **图头，64 字节**：块长、模型版本、`role`、标志与效应摘要、`id`、`name`、`entity`、`lineage`、`owner`、`signature`、函数声明处的 `OriginId`，十个 16 位计数（节点、输入表项、负载字、常量、引用、三类端口、槽位），`exit`、`result`。
 
@@ -1130,7 +1130,7 @@ GraphDraft
 
 **段式增长与下标寻址怎样配合。** 所有"编号 → 东西"的表都是"高位选段、低位段内下标"的两级结构：加段不搬动已有的段，所以编号一经分配永远有效，别处持有的编号不需要更新；一次查找是两次取数。图内的数组则必须连续（16 位下标直接寻址），所以一张图是一次分配、整块落在一个段里——一张图最大约 2 MB（65,535 个节点与 65,535 条边全满时），远小于段长（图空间每段 64 MB）。
 
-**快照。** `Program` 是不可变的：一次提交产生一个新的快照，它与旧快照共享所有没改的冻结块与图表段，只为改了的图分配新块。旧快照在没人持有后释放它独占的块。"导出某个函数时在一份脱离主程序的拷贝上做改写"（今天的 `trackDetached`/`releaseDetached`，`graph.h:486-490`）就是持有一个旧快照，不需要专门的机制。
+**快照。** `Program` 是不可变的：一次提交产生一个新的快照，它与旧快照共享所有没改的冻结块与图表段，只为改了的图分配新块。旧快照在没人持有后释放它独占的块。"导出某个函数时在一份脱离主程序的拷贝上做改写"（今天的 `trackDetached`/`releaseDetached`，`graph.h:470-474`）就是持有一个旧快照，不需要专门的机制。
 
 ### 4.4 与现状相比
 
@@ -1487,7 +1487,7 @@ export func simplify(p: Program): Program! {
 
 1. **声明索引**：不看任何函数体就能列出一个模块的顶层声明（种类、限定名、写出来的类型、是否导出）与它的 `import`。三步加载的第一步只读这个。
 2. **按声明取 GCT**：一个函数体、一个顶层值的初始化表达式可以单独请求，不必一次建完整个模块。
-3. **`import` 不触发被导入模块的编译**：今天在建 GCT 时编译被导入模块（`src/compile/gct/builder.cpp:413-470`），要挪到驱动里。
+3. **`import` 不触发被导入模块的编译**：今天在建 GCT 时编译被导入模块（`src/compile/gct/builder.cpp:397-454 # "namespace blocks it is written in; the GIR builder finds them on its"`），要挪到驱动里。
 4. **按声明取源码切片与模块内连续的位置编号**：缓存里的泛型模板与位置表靠它。
 
 **步骤。**
@@ -1589,7 +1589,7 @@ AST/GCT 重构 ──► 6 ──► 7 ──► 8 ──┐
 
 "做了一半"的实际情况是：**路径这一半做完了，作用域这一半没做。**
 
-内部形式【读码】：命名空间不是一种对象。AST 建造时维护一个路径栈，把块里声明的函数与类型的名字加上前缀（`src/parse/ast/builder.cpp:235-253、786-815`）；之后各层看到的就是一个带路径的名字 `Tools::inc`。建图器把函数登记在以完整名字为键的作用域里。模块的导出表是一棵按路径分层的名字树（`include/camel/common/ns.h`）；`import m` 登记"本地前缀 `m` → 模块 `m`"的绑定，`using namespace m::Tools` 把匹配前缀的导出名逐个登记为本地名（`src/core/module/module.cpp:173-295`）。名字解析的顺序在 `visitDRefNode`（`builder.cpp:2799-2969`）：局部值与捕获 → 泛型模板 → 带装饰器的函数 → 本模块的函数 → 导入的实体 → 报错。
+内部形式【读码】：命名空间不是一种对象。AST 建造时维护一个路径栈，把块里声明的函数与类型的名字加上前缀（`src/parse/ast/builder.cpp:219-237、786-815`）；之后各层看到的就是一个带路径的名字 `Tools::inc`。建图器把函数登记在以完整名字为键的作用域里。模块的导出表是一棵按路径分层的名字树（`include/camel/common/ns.h`）；`import m` 登记"本地前缀 `m` → 模块 `m`"的绑定，`using namespace m::Tools` 把匹配前缀的导出名逐个登记为本地名（`src/core/module/module.cpp:157-279 # "if (nsIt != importedNamespaceBindings_.end()) {"`）。名字解析的顺序在 `visitDRefNode`（`builder.cpp:2799-2969`）：局部值与捕获 → 泛型模板 → 带装饰器的函数 → 本模块的函数 → 导入的实体 → 报错。
 
 逐项【实测】（`pNN` 指 `test/cases/compile/namespace_rules/pNN_*.cml`）：
 
@@ -1619,7 +1619,7 @@ AST/GCT 重构 ──► 6 ──► 7 ──► 8 ──┐
 | 22 | 命名空间可以与类型同名（`Foo::new`、`Tensor::ones`） | 可用 | `test/cases/compile/namespace/type_namespace_*.cml` |
 | 23 | 泛型函数在命名空间里 | 可用 | `test/cases/compile/generics/ns.cml` |
 
-测试覆盖：`test/plans/feat/compile/namespace.plan.toml` 有 10 个用例，都是上表里"可用"的写法；第 4、5、6、13、14、16 行没有测试。语言服务器的查询层知道"导入的模块作为命名空间有哪些成员"【读码 `src/service/semantic/analyze.cpp:854-922`】；它对本模块的命名空间块知道多少【未查】。
+测试覆盖：`test/plans/feat/compile/namespace.plan.toml` 有 10 个用例，都是上表里"可用"的写法；第 4、5、6、13、14、16 行没有测试。语言服务器的查询层知道"导入的模块作为命名空间有哪些成员"【读码 `src/service/semantic/analyze.cpp:838-906 # "static_cast<camel::compile::gir::ExportedValue"`】；它对本模块的命名空间块知道多少【未查】。
 
 ### 8.2 补全方案
 
@@ -1892,7 +1892,7 @@ let u  = t as (int, int)    // 今天：同上，'(int, int)' to '(int, int)'
 | D3 | 写在函数体里的 `using namespace` 对整个模块生效 | `camel test/cases/compile/namespace_rules/p24_using_scope.cml` 打印 `2 11`（`b` 里没有写 `using` 也能用 `inc`） | 按 8.2 N2：`b` 里的 `inc` 是 `UnresolvedReference` |
 | D4 | 带类型标注的结构体字面量里有算出来的字段时是 `LiteralNotRepresentable`：`let p: P = { x: a, y: b }`；去掉标注可以 | 带类型标注的结构体字面量，字段是算出来的 | 通过，打印 `2` |
 | D5 | `src/compile/gir/validate.cpp` 没有调用点（`debug_json.cpp` 原列在此处，有误：调试器在用，见第 7 节的实施状态）；`GCNodeKind::Bind` 没有创建者；`DraftGraphBuilder::looped_` 没有读写者 | 检索 `assertGraphTreeSealingPreconditions`、`getGirJsonFromCompileGraph`、`addBindNode`、`setLooped` | 删除（第 7 节第 1 步） |
-| D6 | NodeVM 对冻结的图做 `const_cast` 并写入（把解析到的算子函数指针写回节点负载）。冻结图按约定是只读的（`docs/technical/17_graph_rewrite_api_contracts.md` 2.2） | 【读码 `src/passes/sched/nodevm/nodevm.cpp:754-766`】；未构造出可观察的错误 | 解析结果放在后端自己的结构里（4.1 的 `ExecPlan`） |
+| D6 | NodeVM 对冻结的图做 `const_cast` 并写入（把解析到的算子函数指针写回节点负载）。冻结图按约定是只读的（`docs/technical/17_graph_rewrite_api_contracts.md` 2.2） | 【读码 `src/passes/sched/nodevm/nodevm.cpp:738-750 # "void NodeVMSchedPass::evalMarkedOperator_map_arr("`】；未构造出可观察的错误 | 解析结果放在后端自己的结构里（4.1 的 `ExecPlan`） |
 
 D4 与图模型无关，是做 `FILL` 的例子时碰到的。
 

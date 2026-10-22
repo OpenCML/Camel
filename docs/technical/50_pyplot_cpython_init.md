@@ -67,7 +67,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
   import`。
 - **仍留在导入期的一步**：激活的 venv 版本没有对应 bridge 时，`.cmo` 本身加载不了
   （`SemanticDiag::ModuleNotFound`，说明缺少哪个 `libpy_bridge<tag>`，
-  `src/core/module/dynamic.cpp:296` 的 `tryLoadPythonBridgeForActiveEnv`）。那一步决定加载哪个二进制，
+  `src/core/module/dynamic.cpp:280 # "bool tryLoadPythonBridgeForActiveEnv("` 的 `tryLoadPythonBridgeForActiveEnv`）。那一步决定加载哪个二进制，
   不是 CPython 初始化，没有动。
 
 ## 4. 改动后的数字

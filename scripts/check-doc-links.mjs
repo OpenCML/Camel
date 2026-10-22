@@ -12,13 +12,18 @@
 //                                               in docs/technical/README.md (the list is the tree)
 //   node scripts/check-doc-links.mjs --citations  every *.md path cited anywhere in the tree — in a
 //                                               document, a code or .cml comment, a plan — exists, and
-//                                               every line citation's quoted anchor is on its line
+//                                               every line citation with a quoted anchor is verified
+//                                               against the cited line; one without an anchor fails
+//   node scripts/check-doc-links.mjs --citations --allow-unanchored
+//                                               list the line citations that have no anchor instead
+//                                               of failing them (a tree that predates the convention)
 //   node scripts/check-doc-links.mjs --citations --root DIR
 //                                               check a fixture tree instead of the repository
 //   node scripts/check-doc-links.mjs FILE DIR  the given files and directories
 //
-// Exit status 1 when a link is broken, 2 when the scope is empty or names a missing entry: a
-// check of nothing is refused, never reported as a pass. External links (http, mailto) are not fetched.
+// Exit status 1 when a link is broken or an anchored citation does not match, 2 when the scope is
+// empty or names a missing entry: a check of nothing is refused, never reported as a pass. External
+// links (http, mailto) are not fetched.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -50,7 +55,9 @@ const SCOPE = [
     'examples',
 ]
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'third_party', 'out', 'build', 'tmp', 'dist', 'sdks'])
+// `fixture` trees are inputs of the checks themselves (test/plans/feat/*/fixture): their
+// citations are deliberately wrong, so the whole-tree runs must not read them.
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'third_party', 'out', 'build', 'tmp', 'dist', 'sdks', 'fixture'])
 // 'sdks' is upstream CPython: its headers cite CPython's own documentation, not ours.
 
 function markdownFiles(entry) {
@@ -188,18 +195,22 @@ function checkTechnicalIndex() {
 //
 // A citation that names a line promises more than the file's existence: it promises that the line
 // still holds what the sentence says. The line is written `path:LINE` or `path:START-END`, and the
-// evidence is a quoted anchor inside the same code span:
+// evidence is a quoted anchor after it, inside the same code span:
 //
-//     `src/runtime/graph.cpp:591 # "one for each input and one for each user of every node"`
+//     `src/runtime/graph.cpp:574 # "case GCNodeKind::Brch:"`
 //
 // The anchor is text the cited range must contain (whitespace is compared as single spaces); it is
-// also what tells an ambiguous short name (`graph.h` names two files) which file was meant. A line
-// citation without an anchor cannot be verified and fails, and so does one whose anchor is not in
-// the cited range. The failure names the citing line, the target, what the line holds and what was
-// claimed, plus the line the anchor moved to, so a sweep that only shifts lines can be repaired by
-// re-deriving the line from the tree instead of adding an offset. A bare file name that exists
-// nowhere is an example in prose (a diagnostic's `a.cml:3`), not a citation of the tree; a missing
-// path with a directory or a missing `.md` path is still a failure.
+// also what tells an ambiguous short name (`graph.h` names two files) which file was meant. A
+// citation whose anchor is not in the cited range fails. The failure names the citing line, the
+// target, what the line holds and what was claimed, plus the line the anchor moved to, so a sweep
+// that only shifts lines can be repaired by re-deriving the line from the tree instead of adding an
+// offset. A citation with no anchor fails: the check refuses to certify a claim it cannot read.
+// `--allow-unanchored` is the one exception, for a tree whose citations predate the convention: it
+// lists each such citation with the line it holds and keeps going, so the debt stays visible
+// instead of being blessed. Taking the anchor from the line itself would do exactly that blessing,
+// which is the defect this check exists to prevent. A bare file name that exists nowhere is an
+// example in prose (a diagnostic's `a.cml:3`), not a citation of the tree; a missing path with a
+// directory or a missing `.md` path is still a failure.
 //
 // Not every `*.md` string is a citation: a script that writes its report names a run output. Only
 // the files listed above are read, and in code only a comment line is (a string literal that names
@@ -256,7 +267,9 @@ function isComment(file, text, index) {
     const lineStart = text.lastIndexOf('\n', index - 1) + 1
     const prefix = text.slice(lineStart, index)
     if (C_LIKE.has(extension)) return prefix.includes('//') || /^\s*\*/.test(prefix) || prefix.includes('/*')
-    if (HASH_COMMENT.has(extension)) return prefix.includes('#')
+    // A plan's strings are test data (`expect_output_contains = ["file.cml:12"]`), not citations;
+    // a plan cites a line in a comment, like code does.
+    if (HASH_COMMENT.has(extension) || extension === '.toml') return prefix.includes('#')
     return true
 }
 
@@ -281,6 +294,8 @@ function checkCitations() {
     const lineCitation =
         /(?<![\w./*-])((?:\.{1,2}\/|[\w@-]+\/)*[\w-][\w.-]*\.(?:c|cc|cpp|cxx|h|hpp|inl|cml|mjs|js|ts|py|sh|ps1|cmake|md|toml|json|yml|yaml))\b:(\d+)(?:[-–](\d+))?(?: # "([^"\n]*)")?(?![\d:])(?!\s*:\d)/g
     const problems = []
+    const unanchored = []
+    const allowUnanchored = args.includes('--allow-unanchored')
     let pathCitations = 0
     let lineCitations = 0
     let verified = 0
@@ -368,7 +383,9 @@ function checkCitations() {
             if (!resolved) {
                 if (ambiguous) {
                     if (anchor === null) {
-                        lineProblem(file, line, cite, `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' and there is no quoted anchor to say which; the line holds nothing that was named`)
+                        const message = `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' and there is no quoted anchor to say which`
+                        if (allowUnanchored) unanchored.push(`${relative(file)}:${line}: '${cite}': ${message}`)
+                        else lineProblem(file, line, cite, message)
                     } else {
                         lineProblem(file, line, cite, `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' and none holds the claimed "${excerpt(anchor)}" in its cited range`)
                     }
@@ -384,22 +401,27 @@ function checkCitations() {
             lineCitations++
             const lines = fs.readFileSync(resolved, 'utf8').split(/\r?\n/)
             const actual = lines[start - 1] === undefined ? '' : outside(lines[start - 1])
+            // A citation with no quoted anchor makes no claim this check can confirm. It fails by
+            // default. `--allow-unanchored` is the one explicit exception: it lists the citation with
+            // the line it holds and keeps going, for a tree whose citations predate the convention.
+            // Taking the anchor from the line instead would bless whatever a stale pointer holds,
+            // which is the defect this check exists to prevent.
+            if (anchor === null || anchor === '') {
+                const message =
+                    'cannot be verified: no quoted anchor; ' +
+                    (start < 1 || end > lines.length
+                        ? `line ${start}${end === start ? '' : `-${end}`} does not exist (the file has ${lines.length} lines)`
+                        : `the cited line holds "${excerpt(actual)}"`)
+                if (allowUnanchored) unanchored.push(`${file.replace(/\\/g, '/')}:${line}: '${cite}': ${message}`)
+                else lineProblem(file, line, cite, message)
+                continue
+            }
             if (start < 1 || end < start || end > lines.length) {
                 lineProblem(
                     file,
                     line,
                     cite,
-                    `line ${start} does not exist (the file has ${lines.length} lines)` +
-                        (anchor === null ? '' : `; the citation claims "${excerpt(anchor)}"`),
-                )
-                continue
-            }
-            if (anchor === null || anchor === '') {
-                lineProblem(
-                    file,
-                    line,
-                    cite,
-                    `cannot be verified: no quoted anchor; the cited line holds "${excerpt(actual)}"`,
+                    `line ${start} does not exist (the file has ${lines.length} lines); the citation claims "${excerpt(anchor)}"`,
                 )
                 continue
             }
@@ -420,6 +442,7 @@ function checkCitations() {
     }
 
     for (const problem of problems) console.log(problem)
+    for (const note of unanchored) console.log(note)
     if (problems.length > 0) {
         console.log(
             `${problems.length} unverified citation(s) in ${lineCitations} line citation(s) and ${pathCitations} path citation(s)`,
@@ -435,7 +458,9 @@ function checkCitations() {
         return 2
     }
     console.log(
-        `no unverified line citation in ${verified} line citation(s) and ${pathCitations} path citation(s) across ${files.length} file(s)`,
+        `no unverified anchored citation in ${verified} of ${verified + unanchored.length} line citation(s); ` +
+            `${unanchored.length} line citation(s) carry no anchor and were listed above; ` +
+            `${pathCitations} path citation(s) across ${files.length} file(s)`,
     )
     return 0
 }
