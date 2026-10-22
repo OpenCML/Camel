@@ -339,7 +339,8 @@ enum class SemanticDiag : uint32_t {
     /// The default of an ordinary parameter has a type that does not fit the parameter.
     ParamDefaultWrongType = 0x0001D3,
     /// An ordinary parameter without a default follows one that has a default.
-    ParamAfterDefault = 0x0001D4,
+    ParamAfterDefault           = 0x0001D4,
+    PrecisionChangeNotPermitted = 0x0001D5,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

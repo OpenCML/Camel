@@ -1,0 +1,54 @@
+/**
+ * `Tensor<bf16>` and `Tensor<f16>` store their own element type, two bytes per element, and are
+ * not an f32 tensor with a label (handover H238, design principles 7.3):
+ *
+ *   - 0.1 rounds to bf16 0x3DCD (bytes [205, 61]) and to f16 0x2E66 (bytes [102, 46]);
+ *   - reading either back into f32 is exact: bf16 0x3DCD widens to 0x3DCD0000 ([0, 0, 205, 61]),
+ *     which is not the f32 0.1 ([205, 204, 204, 61]);
+ *   - the stored element is two bytes: 1 element is 2 bytes, 2 elements 4.
+ *
+ * The arithmetic path is f32 with one rounding into the element type when it is stored, so a
+ * sum of [1, 2^-8] accumulates in double and rounds the exact halfway value 1 + 2^-8 with ties to
+ * even, giving 1 (0x3F80), and 3 * 1.0078125 rounds the exact halfway product 3.0234375 to
+ * 3.03125 (0x4042, ties to even). Both would differ under another rounding mode or a second
+ * rounding. Writing a value of another element type into one of these needs `change_precision`.
+ */
+module tensor_dtype_bf16_storage
+
+import { Tensor, new, cast, sum, multiply, to_bytes } from tensor
+import { to_array, size } from bytes
+
+#[change_precision]
+func narrow(x: Tensor<f32>): Tensor<bf16> {
+    return cast(x, 'bf16')
+}
+
+#[change_precision]
+func narrowHalf(x: Tensor<f32>): Tensor<f16> {
+    return cast(x, 'f16')
+}
+
+func main(): int sync {
+    let tenthValue: f32[] = [0.1]
+    let tenth = narrow(new(tenthValue))
+    println(size(to_bytes(tenth)))
+    println(to_array(to_bytes(tenth)))
+    let wide: Tensor<f32> = cast(tenth, 'f32')
+    println(to_array(to_bytes(wide)))
+    println(to_array(to_bytes(new(tenthValue))))
+    let half = narrowHalf(new(tenthValue))
+    println(size(to_bytes(half)))
+    println(to_array(to_bytes(half)))
+
+    let pairValue: f32[] = [1.0, 0.00390625]
+    let pair = narrow(new(pairValue))
+    println(size(to_bytes(pair)))
+    println(to_array(to_bytes(sum(pair, 0, true))))
+
+    let threeValue: f32[] = [3.0]
+    let factorValue: f32[] = [1.0078125]
+    let product = multiply(narrow(new(threeValue)), narrow(new(factorValue)))
+    println(size(to_bytes(product)))
+    println(to_array(to_bytes(product)))
+    return 0
+}

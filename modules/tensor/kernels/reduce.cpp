@@ -134,8 +134,12 @@ Array *reduceAxis(
     TypeCode outType = input->dtype();
     if (op == ReduceOp::Mean) {
         // A mean of floats keeps the element type (an f64 tensor averages in f64); a mean of
-        // integers and bools has always been f32.
-        outType = outType == TypeCode::Float64 ? TypeCode::Float64 : TypeCode::Float32;
+        // integers and bools has always been f32. A bf16 or f16 tensor averages with an f64
+        // accumulator and rounds once into its own element type (dtype.h).
+        outType = (outType == TypeCode::Float64 || outType == TypeCode::BFloat16 ||
+                   outType == TypeCode::Float16)
+                      ? outType
+                      : TypeCode::Float32;
     } else if (op == ReduceOp::ArgMax || op == ReduceOp::ArgMin) {
         outType = TypeCode::Int64;
     } else if (op == ReduceOp::Sum && outType == TypeCode::Bool) {
@@ -153,10 +157,11 @@ Array *reduceAxis(
                 // f64 accumulation for floats; integers and bools exactly in int64, wrapping on
                 // overflow as integer arithmetic does (design principles 5.1, 7.7): the
                 // addition is done on uint64_t, where it is defined to wrap.
-                using Acc = std::conditional_t<std::is_floating_point_v<T>, double, uint64_t>;
+                using Acc = std::conditional_t<
+                    camel::core::rtdata::is_ieee_float_v<T>, double, uint64_t>;
                 Acc acc   = 0;
                 for (int64_t k = 0; k < split.extent; ++k) {
-                    if constexpr (std::is_floating_point_v<T>) {
+                    if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {
                         acc += static_cast<double>(src[base + k * stride]);
                     } else {
                         acc += static_cast<uint64_t>(static_cast<int64_t>(src[base + k * stride]));
@@ -164,13 +169,15 @@ Array *reduceAxis(
                 }
                 if (op == ReduceOp::Mean) {
                     double total = 0.0;
-                    if constexpr (std::is_floating_point_v<T>) {
+                    if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {
                         total = acc;
                     } else {
                         total = static_cast<double>(static_cast<int64_t>(acc));
                     }
                     const double mean = total / static_cast<double>(split.extent);
-                    if (outType == TypeCode::Float64) {
+                    if constexpr (camel::core::rtdata::is_reduced_float_v<T>) {
+                        out->dataAs<T>()[lane] = T(mean);
+                    } else if (outType == TypeCode::Float64) {
                         out->dataAs<double>()[lane] = mean;
                     } else {
                         out->dataAs<float>()[lane] = static_cast<float>(mean);
@@ -222,7 +229,7 @@ Array *reduceAxis(
 double sumAll(const Array *input) {
     return dispatchDType(input->dtype(), [&]<typename T>() {
         const T *src = input->dataAs<T>();
-        if constexpr (std::is_floating_point_v<T>) {
+        if constexpr (camel::core::rtdata::is_ieee_float_v<T>) {
             double acc = 0.0;
             for (uint64_t i = 0; i < input->numel(); ++i) {
                 acc += static_cast<double>(src[i]);

@@ -87,7 +87,15 @@ enum class TypeCode : uint32_t {
     // ask instead of `isPrimitive`.
     Complex64  = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x011),
     Complex128 = makeTypeCode(TypeFlag::Primitive | TypeFlag::GC_Traced, 0x012),
-    Other      = makeTypeCode(TypeFlag::OtherType, 0x000),
+    // Reduced-precision floating element types (design principles 7.3, H238): the storage of
+    // `Tensor<bf16>` and `Tensor<f16>`, two bytes per element, with the conversions of
+    // camel/core/rtdata/half.h. They are element types only: no value of either fits in a slot,
+    // no literal has one, and a conversion from another element type needs `change_precision`.
+    // The bit patterns are not the low 16 bits of their type code, so a consumer that indexes a
+    // table by `code & 0xF` must handle them first (castSafetyFrom does).
+    BFloat16 = makeTypeCode(TypeFlag::Primitive, 0x014),
+    Float16  = makeTypeCode(TypeFlag::Primitive, 0x015),
+    Other    = makeTypeCode(TypeFlag::OtherType, 0x000),
 };
 
 inline constexpr bool hasFlag(uint32_t code, TypeFlag flag) {
@@ -255,6 +263,8 @@ class Type {
     static Type *String();
     static Type *Complex64();
     static Type *Complex128();
+    static Type *BFloat16();
+    static Type *Float16();
     static Type *Ref();
 };
 

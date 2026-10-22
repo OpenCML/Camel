@@ -1,0 +1,20 @@
+/**
+ * Writing an f32 value into bf16 rounds it, so the conversion needs `change_precision` where it
+ * is written (design principles 7.3, H238): the call is refused at its line, naming both element
+ * types. Nothing is converted or rounded silently, and the refusal is the compiler's, not a
+ * runtime fault.
+ */
+module tensor_dtype_bf16_no_licence
+
+import { Tensor, new, cast } from tensor
+
+func shrink(x: Tensor<f32>): Tensor<bf16> {
+    return cast(x, 'bf16')
+}
+
+func main(): int sync {
+    let values: f32[] = [0.1]
+    let t = shrink(new(values))
+    println('unreachable')
+    return 0
+}

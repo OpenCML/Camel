@@ -1905,8 +1905,13 @@ cast: (t: Tensor | number[], dtype: string) => Tensor
 ```
 
 t converted to the element type the name gives: "float32", "float", "double" or "float64"
-for `f32`; "int64", "int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do
-not change.
+for `f32`; "bfloat16" or "bf16" for `bf16`; "float16", "half" or "f16" for `f16`; "int64",
+"int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do not change.
+
+A conversion into `bf16` or `f16` rounds (to nearest, ties to even) and needs the numeric
+permission `change_precision` where the call is written; `#strict` revokes it. Reading a
+`bf16` or `f16` tensor into a wider type is exact for every stored value and needs no
+permission.
 
 - Pure.
 - Failure: fault `RuntimeError` when the name is not one of those.
@@ -1934,8 +1939,9 @@ from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
 type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-is `f32`, `f64`, `i32`, `i64` or `bool`, exactly the type given. A byte count that does not fit
-the shape is a fault.
+is `f32`, `f64`, `bf16`, `f16`, `i32`, `i64` or `bool`, exactly the type given. A byte count
+that does not fit the shape is a fault. The bits are copied: reading `bf16` or `f16` here
+passes the stored values through without rounding, so it needs no numeric permission.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.

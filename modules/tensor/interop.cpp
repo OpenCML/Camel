@@ -81,6 +81,10 @@ void flattenArray(
         switch (tensor->dtype()) {
         case type::TypeCode::Float32:
         case type::TypeCode::Float64:
+        // A bf16 or f16 element is written by the same double conversion, which rounds once into
+        // it (camel/core/rtdata/half.h).
+        case type::TypeCode::BFloat16:
+        case type::TypeCode::Float16:
             tensor->setFromDouble(offset++, scalarToDouble(elemType->code(), value));
             break;
         case type::TypeCode::Int32:
