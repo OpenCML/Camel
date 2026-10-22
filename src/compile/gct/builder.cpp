@@ -4442,7 +4442,9 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
     } break;
 
     case AST::TypeOp::TypeAs: {
-        // `typeas T`: the type found at this position of an argument type becomes `T`.
+        // `typeas T`: the type found at this position of an argument type becomes `T`, also
+        // when the name already denotes a type (design principles 5.5): that is what the
+        // explicit form is for, since a plain name would be read as that type.
         const Reference &ref = ast->atAs<AST::TypeLoad>(0)->loadAs<AST::RefTypeLoad>()->ref();
         const string name    = ref.toString();
         if (!typeasAllowed_) {
@@ -4454,7 +4456,11 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
                                       : "this is not a parameter of a function declaration");
             throw BuildAbortException();
         }
-        if (typeScope_->get(ref).has_value() || module_->getImportedType(ref).has_value()) {
+        // One variable is bound once per signature; a second `typeas` of the same name binds
+        // nothing new, and one after a plain occurrence has bound the name already is the same
+        // mistake.
+        if (std::find(declaredTypeVars_.begin(), declaredTypeVars_.end(), name) !=
+            declaredTypeVars_.end()) {
             diags_->of(SemanticDiag::TypeVariableRedeclared)
                 .at(ast->load()->tokenRange())
                 .commit(name);
@@ -4619,6 +4625,34 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         boundDims_ = std::make_shared<std::set<std::string>>();
     }
     dimBindAllowed_ = false;
+    // Automatic type-variable binding (design principles 5.5). A declaration counts the plain
+    // names its signature writes, and its parameter types bind the ones no type answers. A
+    // function type nested in a parameter type is part of that type, so it binds too; one
+    // nested in the return type does not. The flags are therefore set only here, around the
+    // parameter types and the return type, and a nested visit leaves them alone.
+    struct TypeVarGuard {
+        Builder &self;
+        bool bind, onlyReturn;
+        std::shared_ptr<std::unordered_map<std::string, size_t>> uses;
+        std::shared_ptr<std::unordered_map<std::string, camel::source::origin_id_t>> autos;
+        explicit TypeVarGuard(Builder &builder)
+            : self(builder), bind(builder.typeVarBindAllowed_),
+              onlyReturn(builder.typeVarOnlyInReturn_), uses(builder.typeVarUses_),
+              autos(builder.autoBoundVars_) {}
+        ~TypeVarGuard() {
+            self.typeVarBindAllowed_  = bind;
+            self.typeVarOnlyInReturn_ = onlyReturn;
+            self.typeVarUses_         = uses;
+            self.autoBoundVars_       = autos;
+        }
+    } typeVarGuard(*this);
+    if (signature) {
+        typeVarUses_   = std::make_shared<std::unordered_map<std::string, size_t>>();
+        autoBoundVars_ = std::make_shared<
+            std::unordered_map<std::string, camel::source::origin_id_t>>();
+        typeVarBindAllowed_  = false;
+        typeVarOnlyInReturn_ = false;
+    }
     if (signature) {
         // A `constas n: int` parameter binds the name `n` for the signature, like the `constas`
         // of a `const [constas n]` shape: the parameter types and the result type may use it.
@@ -4678,6 +4712,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     };
 
     // Process "with" parameters (context parameters)
+    // Their types bind type variables too (design principles 5.5); so do the ordinary
+    // parameters below. The return type may only use what they bound.
+    if (signature) {
+        typeVarBindAllowed_ = true;
+    }
     for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(0)) {
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
         bool isVar            = paramLoad->isVar();
@@ -4840,6 +4879,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
 
     // The return type may name existing variables or bind return-only ones.
+    if (signature) {
+        // The parameter types end here: a name first written in the return type binds nothing.
+        typeVarBindAllowed_  = false;
+        typeVarOnlyInReturn_ = true;
+    }
     const auto &exitTypeNode = ast->optAtAs<AST::TypeLoad>(2);
     if (exitTypeNode) {
         if (signature) {
@@ -4848,6 +4892,24 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         }
         dimBindAllowed_ = false;
         factory.setExitType(visitType(exitTypeNode));
+        if (signature) {
+            typeVarOnlyInReturn_ = false;
+        }
+    }
+    // A type variable bound automatically and written only once is most likely a misspelt type
+    // name: it is reported, and the signature still compiles (design principles 5.5).
+    if (signature) {
+        for (const std::string &name : declaredTypeVars_) {
+            if (!autoBoundVars_->contains(name)) {
+                continue;
+            }
+            const auto uses = typeVarUses_->find(name);
+            if (uses != typeVarUses_->end() && uses->second == 1) {
+                diags_->of(SemanticDiag::TypeVariableUsedOnce)
+                    .atOrigin(autoBoundVars_->at(name))
+                    .commit(name);
+            }
+        }
     }
 
     LEAVE("FuncType");
@@ -5232,6 +5294,11 @@ Type *Builder::visitRefType(const AST::node_ptr_t &ast) {
     const Reference &ref = typeLoad->ref();
 
     Type *type = lookupType(ref, ast);
+    // One occurrence of a plain name in the signature being visited (design principles 5.5):
+    // the count decides the warning for a type variable written only once.
+    if (typeVarUses_ && ref.plain()) {
+        ++(*typeVarUses_)[ref.ident()];
+    }
     LEAVE("RefType");
     return type;
 }
@@ -5414,6 +5481,29 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     }
     if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
         throw BuildAbortException();
+    }
+    // Layer 6: a plain name that first appears in a parameter type of the declaration being
+    // visited binds a type variable (design principles 5.5), exactly as `typeas` would bind it.
+    // The rule is the one named dimensions follow (5.4): an existing type name is a reference,
+    // and a name that no type answers is a new binding; the first appearance is the binding.
+    if (ref.plain()) {
+        if (typeVarBindAllowed_) {
+            const std::string name = ref.ident();
+            typeScope_->insert(ref, TypeVarType::create(name, false));
+            declaredTypeVars_.push_back(name);
+            if (autoBoundVars_) {
+                (*autoBoundVars_)[name] = ast->load()->origin();
+            }
+            return report(TypeVarType::create(name, true), camel::source::kInvalidOriginId);
+        }
+        // A name written only in the return type has no argument to take a type from, so it
+        // is an error rather than a variable: the signature binds it nowhere.
+        if (typeVarOnlyInReturn_) {
+            diags_->of(SemanticDiag::TypeVariableOnlyInReturn)
+                .at(ast->load()->tokenRange())
+                .commit(written);
+            throw BuildAbortException();
+        }
     }
     diags_->of(SemanticDiag::UnresolvedTypeReference).at(ast->load()->tokenRange()).commit(written);
     throw BuildAbortException();

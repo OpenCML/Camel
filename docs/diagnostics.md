@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-218 diagnostics: 201 errors, 17 warnings.
+220 diagnostics: 202 errors, 18 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -182,6 +182,7 @@ prints one entry.
 | `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
+| `0x0300019E` | [SemanticDiag::TypeVariableOnlyInReturn](#typevariableonlyinreturn) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -194,6 +195,7 @@ prints one entry.
 | `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
 | `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
+| `0x03100161` | [SemanticDiag::TypeVariableUsedOnce](#typevariableusedonce) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -1016,17 +1018,22 @@ Unresolved type reference: '{0}'.
 Ensure the type is defined and visible in the current scope.
 ```
 
-**Example** (`test/cases/compile/generics/err_unbound_use.cml`, run as `camel test/cases/compile/generics/err_unbound_use.cml`)
+**Example** (`test/cases/compile/any_typing/written_unknown_name.cml`, run as `camel test/cases/compile/any_typing/written_unknown_name.cml`)
 
 ```camel
-module err_unbound_use
+module written_unknown_name
 
-func id(a: T, b: typeas T): T {
-    return a
+// `any` is not a type: there is no such name in the type scope, so writing it is the
+// ordinary unknown-type error (design principles 5.10; H27 deleted AnyNotAllowed). The
+// annotation is in the body because a name first written in a parameter type binds a type
+// variable instead (design principles 5.5).
+func keep(x: int): int {
+    let y: any = x
+    return y
 }
 
 func main(): int sync {
-    println(id(1, 2))
+    println(keep(3))
     return 0
 }
 ```
@@ -1824,13 +1831,13 @@ func main(): int sync {
 **Message**
 
 ```text
-'typeas {0}' cannot bind '{0}': the name already denotes a type here.
+'typeas {0}' cannot bind '{0}': this signature already binds a type variable '{0}'.
 ```
 
 **Help**
 
 ```text
-Write 'typeas' only at the first occurrence of a type variable and plain '{0}' afterwards, or choose a name that is not a type in scope.
+A type variable is bound once: write 'typeas {0}' only at the place where it is first bound, and plain '{0}' everywhere after that (a plain '{0}' in a parameter type binds it already, so the explicit form is only needed when the name also denotes a type).
 ```
 
 **Example** (`test/cases/compile/generics/err_typeas_twice.cml`, run as `camel test/cases/compile/generics/err_typeas_twice.cml`)
@@ -4839,6 +4846,37 @@ func main(): int {
 }
 ```
 
+### TypeVariableOnlyInReturn
+
+`0x0300019E` · Error · `SemanticDiag::TypeVariableOnlyInReturn`
+
+**Message**
+
+```text
+The name '{0}' appears only in the return type and no type answers it.
+```
+
+**Help**
+
+```text
+A type variable binds where it first appears in a parameter type, including the type of a 'with' parameter; a name first written in the return type has no argument to take a type from. Write it in a parameter type, or declare it explicitly as 'typeas {0}' when only the expected result determines it (design principles 5.9).
+```
+
+**Example** (`test/cases/compile/generic_auto_bind/err_return_only.cml`, run as `camel test/cases/compile/generic_auto_bind/err_return_only.cml`)
+
+```camel
+module err_return_only
+
+func make(x: int): T {
+    return x
+}
+
+func main(): int sync {
+    println(make(1))
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -5246,6 +5284,42 @@ func f(x: int): int {
 
 func main(): int {
     println(f(1))
+    return 0
+}
+```
+
+### TypeVariableUsedOnce
+
+`0x03100161` · Warn · `SemanticDiag::TypeVariableUsedOnce`
+
+**Message**
+
+```text
+The type variable '{0}' is bound here and appears only once in the signature.
+```
+
+**Help**
+
+```text
+One occurrence is what a misspelt type name looks like, so check the spelling. If the name is wanted, use it again in a later parameter type or in the return type; an explicit 'typeas {0}' states that the single occurrence is deliberate.
+```
+
+**Example** (`test/cases/compile/generic_auto_bind/warn_used_once.cml`, run as `camel test/cases/compile/generic_auto_bind/warn_used_once.cml std::fvm`)
+
+```camel
+module warn_used_once
+
+func show(x: T): string {
+    return 'x'
+}
+
+func twice(x: U): U {
+    return x
+}
+
+func main(): int sync {
+    println(show(1))
+    println(twice(2))
     return 0
 }
 ```
