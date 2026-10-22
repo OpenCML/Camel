@@ -173,10 +173,18 @@ any Formatter::visitProgram(cst::Program context) {
     string headStr, tailStr;
     if (moduleDecl) {
         // The comments above `module` (the description of the file) stay above it; they used
-        // to be dropped.
+        // to be dropped. A blank line between two of them is kept: it is what separates the
+        // licence header from the file's own description, and without it the two runs of
+        // comments become one, which changes how the parser reads the file.
+        size_t previousEnd = 0;
         for (size_t i = 0; i < moduleDecl.firstToken().index(); i++) {
             if (tokens[i].channel > 1) {
+                const size_t line = tokens[i].line();
+                if (previousEnd != 0 && line > previousEnd + 1) {
+                    headStr += lineEnd();
+                }
                 headStr += tokens[i].text() + lineEnd();
+                previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
         headStr += any_cast<string>(visit(moduleDecl));
