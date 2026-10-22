@@ -200,6 +200,10 @@ for (const name of ['abs', 'min', 'max', 'clamp', 'sign', 'gcd', 'lcm', 'bit_and
                     'bit_xor', 'bit_not', 'bin', 'oct', 'hex']) {
   for (const suffix of ['_i', '_l']) add(`math:${name}${suffix}`, 'exact', undefined, NONE)
 }
+// min and max over the other ordered types: comparing a string's bytes or two bools is exact too.
+for (const name of ['min', 'max']) {
+  for (const suffix of ['_s', '_b']) add(`math:${name}${suffix}`, 'exact', undefined, NONE)
+}
 for (const name of ['shl', 'shr']) add(`math:${name}`, 'exact', undefined, NONE)
 
 for (const op of mathOps) {

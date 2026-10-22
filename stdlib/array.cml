@@ -22,18 +22,16 @@
  */
 module array
 
-// `algo` carries the C++ kernels of the three primitives. Their declarations above name this
-// module's operators (`array:flatten`, `array:unique`, `array:argsort`), which that module
-// registers and the import loads. The C++ module cannot be folded into this one while a module
-// with bodies may not sit beside a C++ module of the same name (it would be a declaration
-// module).
+// `algo` is imported for its operator table, not for a name: the C++ module registers the
+// implementations of `array:flatten`, `array:unique` and `array:argsort` (H19 step 5), and a
+// body-less declaration is only a function once the module that implements it is loaded.
 import algo
 import math
-import { is_numeric } from types
+import { is_numeric, is_ordered } from types
 
 // The primitives are declared here, as body-less declarations of this module: each stands for
-// the operator of its own name, implemented by the C++ module the import above loads (H19
-// step 5). They are pure and return a new array.
+// the operator of its own name, implemented by the C++ module `algo`. They are pure and return a
+// new array.
 
 /// The indices that sort the keys ascending; equal keys keep their order (stable).
 /// @example argsort([3, 1, 2])    // [1, 2, 0]
@@ -127,17 +125,21 @@ export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
     return xs->reduce<(a, b) => a + b, 0>
 }
 
-/// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
-/// +0), or null for an empty array.
+/// The smallest value, or null for an empty array. Numbers compare by the IEEE 754 minimum (a
+/// NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
+/// prefix first), and false is below true.
 /// @example min([3, 9, 2]) ?? 0    // 2
-export func min::<T>(xs: T[]): T? when is_numeric::<T>() {
+/// @example min(['b', 'a']) ?? ''    // 'a'
+export func min::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
 }
 
-/// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
-/// -0), or null for an empty array.
+/// The largest value, or null for an empty array. Numbers compare by the IEEE 754 maximum (a
+/// NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
+/// prefix first), and false is below true.
 /// @example max([3, 9, 2]) ?? 0    // 9
-export func max::<T>(xs: T[]): T? when is_numeric::<T>() {
+/// @example max(['a', 'b']) ?? ''    // 'b'
+export func max::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::max, xs[0]>
 }
 

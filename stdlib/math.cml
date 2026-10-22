@@ -274,10 +274,12 @@ export func trunc(x: float): float
 
 // ---- comparing ----
 
-/// The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
-/// the result is NaN; -0 is below +0.
+/// The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
+/// NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+/// prefix first), and false is below true.
 /// @pure
 /// @example min(3, 5)    // 3
+/// @example min('b', 'a')    // 'a'
 #op<'math:min_i'>
 export func min(a: i32, b: i32): i32
 #op<'math:min_l'>
@@ -286,11 +288,17 @@ export func min(a: int, b: int): int
 export func min(a: f32, b: f32): f32
 #op<'math:min_d'>
 export func min(a: float, b: float): float
+#op<'math:min_s'>
+export func min(a: string, b: string): string
+#op<'math:min_b'>
+export func min(a: bool, b: bool): bool
 
-/// The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
-/// the result is NaN; -0 is below +0.
+/// The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
+/// NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+/// prefix first), and false is below true.
 /// @pure
 /// @example max(3, 5)    // 5
+/// @example max('a', 'b')    // 'b'
 #op<'math:max_i'>
 export func max(a: i32, b: i32): i32
 #op<'math:max_l'>
@@ -299,6 +307,10 @@ export func max(a: int, b: int): int
 export func max(a: f32, b: f32): f32
 #op<'math:max_d'>
 export func max(a: float, b: float): float
+#op<'math:max_s'>
+export func max(a: string, b: string): string
+#op<'math:max_b'>
+export func max(a: bool, b: bool): bool
 
 /// x held between lo and hi: lo when x is below, hi when above. A NaN x stays NaN.
 /// @pure

@@ -30,6 +30,10 @@ func main(): int sync {
     println(min(xs) ?? -1, max(xs) ?? -1, min(none) ?? -1, max(none) ?? -1, min([7]) ?? -1)
     println(min([2.5, -1.5]) ?? 0.0, max([2.5, -1.5]) ?? 0.0)
     println(min([-9223372036854775807 - 1, 9223372036854775807]) ?? 0, max([-9223372036854775807 - 1, 9223372036854775807]) ?? 0)
+    // every ordered type, not only the numbers: strings compare by their bytes, false is below true
+    println(min(words) ?? '', max(words) ?? '')
+    println(min([true, false]) ?? false, max([false, true]) ?? false)
+    println(min(['é', 'e']) ?? '', max(['é', 'e']) ?? '')
     // the argument is not changed
     println(xs, words)
     return 0

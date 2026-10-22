@@ -17,6 +17,7 @@
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/string.h"
 #include "camel/core/type.h"
 #include "camel/core/type/resolver.h"
 
@@ -145,8 +146,50 @@ template <typename T> T signOf(T x) {
         }                                                                                          \
     }
 
-CAMEL_MATH_NUMERIC(min, minOf<T>(norm.get<T>(0), norm.get<T>(1)))
-CAMEL_MATH_NUMERIC(max, maxOf<T>(norm.get<T>(0), norm.get<T>(1)))
+// `min` and `max` are over every ordered type, not only the numbers: the numbers are IEEE
+// 754-2019 minimum and maximum, `string` is ordered by its bytes (a proper prefix first, as `<`
+// compares strings; design principles log 2.9) and `bool` has false below true. `is_ordered` is
+// the condition that admits exactly these types, so a declaration guarded by it may call these.
+slot_t minOrMax(ArgsView &norm, bool minimum) {
+    switch (norm.code(0)) {
+    case TypeCode::Int32: {
+        const Int32 a = norm.get<Int32>(0), b = norm.get<Int32>(1);
+        return toSlot(minimum ? minOf(a, b) : maxOf(a, b));
+    }
+    case TypeCode::Int64: {
+        const Int64 a = norm.get<Int64>(0), b = norm.get<Int64>(1);
+        return toSlot(minimum ? minOf(a, b) : maxOf(a, b));
+    }
+    case TypeCode::Float32: {
+        const Float32 a = norm.get<Float32>(0), b = norm.get<Float32>(1);
+        return toSlot(minimum ? minOf(a, b) : maxOf(a, b));
+    }
+    case TypeCode::Float64: {
+        const Float64 a = norm.get<Float64>(0), b = norm.get<Float64>(1);
+        return toSlot(minimum ? minOf(a, b) : maxOf(a, b));
+    }
+    case TypeCode::String: {
+        String *a = norm.get<String *>(0), *b = norm.get<String *>(1);
+        const int order = a->compare(b);
+        return toSlot(minimum ? (order <= 0 ? a : b) : (order >= 0 ? a : b));
+    }
+    case TypeCode::Bool: {
+        const Bool a = norm.get<Bool>(0), b = norm.get<Bool>(1);
+        return toSlot(static_cast<Bool>(minimum ? (a && b) : (a || b)));
+    }
+    default:
+        unsupported(minimum ? "min" : "max", norm.code(0), "an ordered value");
+    }
+}
+
+slot_t __math_min__(ArgsView &, ArgsView &norm, Context &) {
+    return minOrMax(norm, true);
+}
+
+slot_t __math_max__(ArgsView &, ArgsView &norm, Context &) {
+    return minOrMax(norm, false);
+}
+
 CAMEL_MATH_NUMERIC(clamp, clampOf<T>(norm.get<T>(0), norm.get<T>(1), norm.get<T>(2)))
 CAMEL_MATH_NUMERIC(sign, signOf<T>(norm.get<T>(0)))
 
@@ -304,6 +347,12 @@ std::unordered_map<std::string, operator_t> getMathNumericOpsMap() {
     both("hypot", __math_hypot__);
     numbers("min", __math_min__);
     numbers("max", __math_max__);
+    // `min`/`max` also take the other ordered types (`is_ordered` admits them): strings by their
+    // bytes and bools with false below true.
+    ops["min_s"] = __math_min__;
+    ops["max_s"] = __math_max__;
+    ops["min_b"] = __math_min__;
+    ops["max_b"] = __math_max__;
     numbers("clamp", __math_clamp__);
     numbers("sign", __math_sign__);
     both("is_nan", __math_is_nan__);

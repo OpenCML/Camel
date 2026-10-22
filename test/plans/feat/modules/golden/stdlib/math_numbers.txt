@@ -2,6 +2,9 @@
 -9223372036854775808 9223372036854775807
 1.5 2.5 -0.0 inf -inf
 true true true true
+a b a ab
+e é
+false true false true
 10 0 5 5 0
 1.0 0.0 0.25 1.0
 true
