@@ -613,11 +613,10 @@ function staticChecks() {
         // type-qualified alias (`Tensor.shape`) is not an export group of its own.
         const exported = new Set()
         for (const exportedCall of analysis.exports) {
+            if (exportedCall.alias) continue
             if (exportedCall.name && !UNDERIVABLE_OPERATORS.has(exportedCall.name)) {
                 exported.add(exportedCall.name)
             }
-            if (exportedCall.name && !UNDERIVABLE_OPERATORS.has(exportedCall.name)) {
-                exported.add(exportedCall.name)
         }
         const registryLoops = analysis.registryLoops.filter(
             (loop) => loop.module === module.name,
