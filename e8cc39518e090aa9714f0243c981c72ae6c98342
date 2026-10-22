@@ -1,0 +1,188 @@
+# H92：lambda 参数类型从上下文推出（H21 第 2 项）
+
+- 分支：`handover/H92-lambda-inference`，从 `origin/develop` `950b690f5` 切出。
+- 范围：H21 第 2 项——lambda 不写的形参类型（以及省略的返回类型）从它所在位置的函数类型推出；
+  期望类型确定不了就报错、点名那个形参。不做泛型高阶函数（见第 6 节，待决）。
+- 依据：设计原则 5.9（lambda 的形参类型与返回类型来自期望的函数类型，推不出时必须写）、5.10
+  （不静默变成 `any`）、第 14 节（误读清单，先对一遍）。
+
+## 1. 语法与 AST
+
+`(形参...) : 返回类型 => 体` 里的形参类型现在可省略，与返回类型一样：
+
+```cml
+apply((x) => x + 1, 3)                  // x: int
+apply_with<(x) => x * 2>(21)            // with 实参
+let g: (x: int) => int = (x) => x + 1   // 带标注的绑定
+return (x) => x + n                     // 返回位置
+h = (x) => x + 100                      // 赋回带标注的变量
+```
+
+- 词法/语法：`lambdaAhead()` 多认一种头——`(` 名字 之后是 `,` 或 `)` 时，按括号配平扫到配对的
+  `)`，后面是 `=>` 或返回类型的 `:` 就是 lambda；`(x)`、`(x, y)` 仍然读作括号表达式/元组。参数表里
+  冒号可省由 `lambdaParams_` 标志控制（只在这一层打开，函数声明与函数类型的参数仍必须写类型）；
+  `=` 默认值只在写了类型时允许。
+- AST：省略类型处由 `visitKeyParamPair` 造一个 `InferTypeLoad(Reference())`，其 origin 就是那个
+  形参名——后面所有诊断都指到这里。格式化器（`tools/format/fmt.cpp`）把省略的类型原样打回。
+- 之前这条路径是什么样：`let g = (x) => x + 1` 是**语法错误**
+  `SyntaxDiag::UnexpectedToken`：`Unexpected '=>'; expected '}'`（指在 `=>` 上，`3:17`）。
+  也就是说"没有期望类型"的位置以前根本走不到语义分析。现在能解析，再由第 3 节的位置决定能不能推断；
+  没有期望类型时仍然是错误，只是换成带位置、点名形参的
+  `SemanticDiag::LambdaParameterWithoutType`（见第 5 节）。
+- 函数**类型**里漏写形参类型（`func apply(f: (x) => int, ...)`）**仍然**是语法错误：类型一侧的
+  前看（`parsePrimaryType` 的 `(` 分支）要求 `(name:` 才算函数类型，所以 `(x)` 被读成括号类型，
+  `=>` 落空，报 `SyntaxDiag::MissingComma`（`Expected ',' or ')' before '=>'`，指在 `=>` 上）。
+  也就是说 H92 没有顺带放宽"函数类型/声明可以不写形参类型"，省略只发生在 lambda 自己的形参表里。
+  GCT 里"函数类型和声明要写出每个形参的类型"那个分支留着当护栏（这条路径今天的语法分析产生不出来）。
+
+## 2. 期望类型从哪来（三个位置，加赋值）
+
+用的就是基线里已经有的那**一条**通道（`expectedValueType_` + `ExpectedValueScope`；H88 之后它在
+develop 上成为位置的唯一通道，见第 8 节），没有新建第二条：
+
+| 位置 | 谁设期望类型 |
+|---|---|
+| 实参（形参是函数类型） | `visitLinkNode` 的参数作用域，签名来自 `signatureForArgumentContext` |
+| `with` 实参 | `visitWithNode` |
+| 带标注的绑定（`let`/`var`） | `visitCastNode`（声明上的 CAST） |
+| 赋回带标注的变量（`v = lambda`） | `visitLinkNode`：`v = e` 降低成 `LINK(DREF __assn__, DREF v, e)`，值的位置取 `v` 的类型 |
+| 返回值 | `visitExitNode` / `expectedExitTypeHere()` |
+
+最后一条赋值位置是这次补的：`inPlaceRebindingOf` 那里的注释早就写着"右值取被写位置的类型，正如它在
+`v = e` 里取变量的类型"，但**普通** `v = e` 走的是通用调用路径，之前没有做到。现在 `visitLinkNode`
+在 `__assn__` 且正好两个实参时，把第一个实参（被写的地方）的类型交给第二个实参当期望类型——**只在那个
+类型是函数类型时**，别的赋值一个字节都不变。这仍然是同一条 `ExpectedValueScope`，不是新通道。
+
+GCT 侧把"省略的形参"记成一个洞：`Tree::UnwrittenParam{index, origin}` 旁表（`void` 是合法写出的
+类型，所以不能用 `Type::Void()` 当标记），形参类型先用 `Void()` 占位。GIR 的
+`completeLambdaSignature` 在建函数图时填洞：
+
+- 没有洞（参数都写了）直接返回，路径完全不变——这是"推断不改变重载决议"的技术保证。
+- 期望类型：必须有、必须是 `TypeCode::Function`、with/普通形参个数要对得上、对应位置的类型不能还带
+  这个位置绑定不了的类型变量。任一不满足就报错（第 5 节），不填一半。
+- 返回类型：写了用写的；没写用期望类型的返回部分（同样要求不含类型变量）。
+- 填好后用 `FunctionTypeFactory` 重建（implMark、修饰符、形参名、`var` 标记、返回类型），
+  `buildOpen()` 交回去，lambda 的图照旧建。
+
+## 3. 重载决议没有变
+
+- **带类型的 lambda**：`completeLambdaSignature` 没有洞，直接返回，选重载用的还是 lambda 自己的
+  类型。测试 `lambda_inference.overload_typed` 在 `950b690f5` 的构建上与新构建上输出逐字相同：
+  `over 41 2.5` / `pick 42 string`——两个重载同名、以及靠另一个实参区分的重载，选中的都没变。
+- **不带类型、又面对一组重载**：`signatureForArgumentContext` 对重载组返回 `nullptr`（没有唯一
+  函数类型），于是报 `LambdaParameterWithoutType`，**不**替调用挑一个重载。这是故意的：让右值反过来
+  影响决议，等于让推断参与重载，规则就说不清了。测试 `lambda_inference.overload_untyped`。
+
+## 4. 诊断
+
+新增一个码（任务允许；加码就要重生成目录）：
+
+| 码 | 名字 | 消息 |
+|---|---|---|
+| `0x0300017E` | `SemanticDiag::LambdaParameterWithoutType` | `The type of the parameter '{0}' of this lambda is not written and cannot be inferred: {1}.` |
+
+`{1}` 是原因，四种：`nothing here expects a function type`；`the type expected here, 'int', is not
+a function type`；`the expected type '(x: int, y: int) => int' takes 2 parameters and the lambda 1`；
+`the expected type '...' still holds the type variable 'T' that this position does not bind`；
+函数类型/声明里的漏写是 `a function type and a declaration write every parameter's type`。
+help 把三个位置和写法都说了一遍（`'(x: int) => ...'`）。`docs/diagnostics.md` 由
+`node scripts/diagnostics-catalog.mjs --write` 重新生成（198 条：181 错误、17 警告；示例取自新增的
+`no_expected.cml`）。
+
+为什么不复用现有码：现有诊断没有一个说"这个形参的类型推不出来"——`TypeMismatch` 说的是值不对，
+`AnnotationRequired` 一类不存在；而这一条需要点名形参并给出原因，复用会把原因塞进别的消息里。
+
+## 5. 测试
+
+新增 `test/cases/compile/lambda_inference/`（9 个用例）与
+`test/plans/feat/compile/lambda_inference.plan.toml`（order 327，9 个测试）：
+
+| 测试 | 内容 |
+|---|---|
+| `positions` | 实参、`with` 实参、`let`/`var` 绑定、赋回、返回值五个位置；一个形参写类型一个不写；省略的返回类型（`1` 在 f64 位置打印 `1.0`） |
+| `overload_typed` | 带类型 lambda 的重载选择不变（与 `950b690f5` 同输出） |
+| `no_expected` | `let g = (x) => x + 1`：报错，指到 `x`（`9:14`） |
+| `not_function` | `let n: int = (x) => x + 1`：期望的不是函数类型（`8:19`） |
+| `arity` | 形参个数对不上（`11:20`） |
+| `overload_untyped` | 一组重载 + 不写类型的 lambda：报错而不是挑一个（`14:19`） |
+| `generic_undecided` | `map` 这个待决情形的现状（`11:22`） |
+| `call_in_place` | `((x) => x)(1)`：被调用的位置不是期望类型位置（`9:15`） |
+| `func_type` | 函数类型里漏写形参类型：仍是语法错误 `SyntaxDiag::MissingComma`（`8:19`），H92 没有放宽它 |
+
+## 6. 待决：泛型高阶函数（没做）
+
+`tree_reduce`、`map` 这类形参类型里带类型变量的，现在推不出来：lambda 在泛型实例化之前、在动态
+resolver 定型之前就降低了，那时没有实例，"期望类型"要么不存在，要么是还带类型变量的模板。`map`
+的例子（`xs->map<(x) => x * x>`）报的仍是 `nothing here expects a function type`，测试
+`lambda_inference.generic_undecided` 把这个现状钉住。
+
+按设计原则 5.9 的读法，这一条要真正做，得先定两件事，都属于作者没定的范围，H92 没有替它决定：
+
+1. **部分推断**：`map` 的期望类型是 `(T) => U`，`T` 可以从 `xs` 推出来、`U` 不行——是允许"能推的
+   先推、推不出的报错"，还是要求整个期望类型都确定才推？5.9 只说了"推不出时诊断要求标注"，没说
+   部分推断合法。
+2. **顺序**：要让 lambda 的签名参与泛型实例化（先定 `T` 再填 lambda），就得改"lambda 总在实例化
+   之前降低"这条实现顺序；这会影响 `tree_reduce` 的实参位置（那里 `T` 正是由 lambda 的返回类型
+   与初值共同决定的）。
+
+## 7. 验收
+
+Linux 主机（`-Jobs 8`，Release，提交时的工作树，`-NoBuild` 复用构建）：
+
+| 计划 | 结果 |
+|---|---|
+| `feat/parse` | 57/57 |
+| `feat/compile` | 961/961 |
+| `feat/opt` | 684/685（`control.test_pass_hidden` 是既有失败，与 H92 无关，见下） |
+| `feat/linear` | 722/722 |
+| `smoke` | 11/11 |
+| 合计 | **2435/2436**，1 失败（既有，见下） |
+
+**已知的既有失败（与 H92 无关）**：`feat/opt` 的 `control.test_pass_hidden` 断言
+`test::control` 在普通进程里不可用（`UnrecognizedGraphPass`，退出 1）。H81 撤掉了
+`CAMEL_ENABLE_TEST_PASSES`（`reports/H81.md` 第 1 节的表），测试遍现在"写出名字就能用"，于是这个负向
+用例在**基线 `950b690f5` 的构建上也一样失败**（我直接用基线构建跑
+`camel test/cases/opt/generic/control_chain.cml test::control`：打出 `CONTROL topology ... PASS`、
+退出 0）。属于 H81 漏改的用例，不在 H92 的范围里，没有动它。
+
+构建：同一工作树在主机上 Release 全量构建成功；之后改动的只有测试与文档，用 `-NoBuild` 复用。
+
+## 8. 与 H88 的关系（合并注意事项）
+
+H88（`51459c69c`，报告 `reports/H88.md`）在**本分支的基线之后**才进 develop（当前 develop 到
+`fe7c46b5c`），它把"位置的期望类型"收成一条通道（`visitInPosition` / `checkValue` /
+`literalDataInType`），删掉了 `tailExpectedFor_`/`tailExpectedType_`/`tailStatement_`，`return` 与
+实参都改走 `visitInPosition`。
+
+H92 的落点只在"这个表达式建的时候，位置的期望类型是什么"：
+
+- `visitFuncNode` 里读 `expectedValueType_`——H88 之后这个作用域仍然在表达式建造期间有效（H88 报告
+  第 2 节："建的过程中 `expectedValueType_` 在作用域内"），读法不用改；
+- 实参位置：H92 只在 `visitLinkNode` 里给实参算一个 `wanted`。H88 在这个函数里改的是**决议之后**的
+  两处 `coerceTo` → `checkValue`，没有动这个循环，所以 `wanted` 原样保留；
+- `return` 位置：H92 不碰 `visitExitNode`，只依赖"lambda 建出来时 `expectedValueType_` 就是返回
+  位置的类型"，H88 之后由 `visitExecNode(gct, tailExpected)` 提供，同样成立。
+
+`git merge-tree --write-tree fe7c46b5c HEAD` 的结果是**没有冲突**（退出 0，只有树哈希）——两边改的
+不是同一批行。语义上也不需要第二条通道，不需要新的 `TypeCode`（H88 已经给类型码重新编号，H92 没有加码）。
+合并后的树没有编译过：那要另一份工作树，本任务不允许；按上面的落点判断 `checkValue` 与
+`visitInPosition` 不改变"建造期间 `expectedValueType_` 的值"，填洞逻辑不依赖决议之后的转换。
+
+## 9. 改动清单
+
+| 文件 | 改动 |
+|---|---|
+| `src/parse/syntax/parser_impl.h` | `lambdaParams_` 状态 |
+| `src/parse/syntax/parser_expr.cpp` | `lambdaAhead()` 认 `(name)` / `(name, ...)` + `=>`/`:`；`parseFuncData` 打开/恢复标志 |
+| `src/parse/syntax/parser.cpp` | `keyParamPair` 的冒号在 lambda 参数表里可省 |
+| `src/parse/ast/builder.cpp` | 省略类型 → `InferTypeLoad(Reference())`，origin 是形参名 |
+| `include/camel/compile/gct/tree.h`、`src/compile/gct/tree.cpp` | `UnwrittenParam` 旁表、克隆 |
+| `src/compile/gct/builder.h`、`builder.cpp` | `visitFuncType` 记洞；`visitFuncData` 挂到函数节点上 |
+| `src/compile/gir/builder.h`、`builder.cpp` | `completeLambdaSignature`；`visitFuncNode` 里填洞 |
+| `src/compile/gir/builder_operators.cpp` | `v = lambda`：值取被写位置的函数类型 |
+| `include/.../messages/semantic.h`、`src/core/.../semantic.cpp` | 新码 `0x0300017E` 与消息 |
+| `tools/format/fmt.cpp` | 省略的形参类型原样打回 |
+| `docs/language/06_expressions.md`、`en/06_expressions.md` | 6.9 新增"形参类型从哪里来"；顺手改掉"`let f: (x:int)=>int = inc` 不支持"的过时说法（它现在就能用） |
+| `docs/language/08_top_level_and_grammar.md`、`en/08_...` | 前看表里 lambda 的头；两个产生式块由 `node scripts/check-grammar.mjs --write` 重新生成（121 个产生式） |
+| `docs/diagnostics.md` | 重新生成 |
+| `test/cases/compile/lambda_inference/*`、`test/plans/feat/compile/lambda_inference.plan.toml` | 新增 |
