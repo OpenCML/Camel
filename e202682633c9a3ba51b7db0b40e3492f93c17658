@@ -1,0 +1,118 @@
+# H27 报告
+
+分支：`handover/H27-small`，从 `develop` 切出。任务书：`docs/handover/README.cn.md` 的 H27 —— H24–H26 检查后的小项。依据 `reviews/H24-H25-H26.md` 与设计原则 5.1（该轮已把 `if`/`match` 各臂的值列为有期望类型的位置）、5.10。设计原则、历史报告与评审未改。
+
+## 1. 复合字面量只舍入一次
+
+### 问题
+
+两处缺陷叠在一起：
+
+- GCT 建数组 / 结构体字面量时，把元素按默认类型落成 `Data`，写下的精确值（如 `0.1` 是十进制的一成，而不是最近的 double）只存在元素节点上，节点被 `extractData` 取走数据后就丢了。GIR 之后再按目标类型重建这个字面量时，只能从已经变成 double 的元素数据转，于是 `f32` 位置上先舍入到 double、再舍入到 f32。
+- `compositeLiteralInType`（`src/compile/gir/builder_control.cpp`）判断"这是不是一个常量"的条件写反了：静态常量的槽下标是负数（`draft_graph_builder.cpp` 的 `addStaticSlot` 返回 `-slotIndex`），而代码要求 `dataIndex < 0` 才继续，于是对所有常量都返回 `nullptr`，GIR 的复合字面量重建路径对常量从未运行。此前 `return [1.0]` 在声明返回 `f32[]` 的函数里直接是 `ReturnTypeMismatch`，而不是重建。
+
+### 改动
+
+- **GCT 保留元素的精确值**（`include/camel/compile/gct/tree.h`、`src/compile/gct/tree.cpp`）：`Tree::setLiteralElements` / `literalElementsOf` 按数据对象记下复合字面量每个元素写下的 `literal::Value`（非数字元素、嵌套复合字面量记 `nullopt`；嵌套字面量有自己的条目）。`Tree::clone` 一并复制。
+- **建复合字面量时收集**（`src/compile/gct/builder.cpp`）：`visitArrayData`、`visitStructData` 在元素全是常量（`!dangling`）时按数据顺序记录；`literalNodeInType` 转换后的节点继续携带原精确值，后续位置不会从转换后的 double 再转。
+- **GIR 用精确值重建**（`src/compile/gir/builder_control.cpp`）：`compositeDataInType` 按元素下标取出记下的值，`literalElementInType` 增加可选的 `written` 参数并从它转换；嵌套复合字面量递归时按自己的数据对象取条目。
+- **修正常量判断**：`compositeLiteralInType` 现在要求静态槽（`dataIndex >= 0` 时返回 `nullptr`，即运行时槽不是字面量常量）。
+
+### 锁定用例
+
+`test/cases/compile/literals/context_composite_rounding.cml`，计划 `context.composite_rounding`（四个后端一致）。关键十进制：
+
+```text
+1.0000000596046447753906251
+```
+
+它比 `1.0` 与下一个 f32 的中点 `1.000000059604644775390625` 大一点点（`f64` 的舍入把它拉回中点）。从写下的值直接舍入到 f32 得 `1.0000001192092896`（`{:.9g}` 打印 `1.00000012`）；先到 double 再舍入则落在中点，ties-to-even 回到 `1.0`。用例覆盖四条路径，全部打印 `1.00000012`：
+
+- 函数返回数组字面量（`return [十进制]` 到 `f32[]`，走 GIR 重建）；
+- 带类型声明（`let xs: f32[] = [十进制]`）；
+- 结构体字段（`return { x: 十进制 }` 到 `{ x: f32 }`）；
+- 嵌套数组（`return [[十进制]]` 到 `f32[][]`）。
+
+修复前返回路径是 `ReturnTypeMismatch`；把重建修通但从 double 转换时，这四条都会得到 `1.0`。
+
+## 2. `if` / `match` 各臂的值取整个表达式的期望类型
+
+### 改动
+
+- `src/compile/gir/builder_expr.cpp` 的 `visitDataNode`：当该字面量正是函数体 / 臂的值语句（`tailStatement_`），且整个表达式有期望类型时，字面量从现在期望的类型转换：数字字面量用精确值，已解决的复合字面量逐元素用 `compositeDataInType`。这样 `let x: float = if c then 1 else 2` 的两条臂都是 `float`，`let xs: f32[] = if c then [1.0] else [2.0]` 的臂数组取 `f32[]`。
+- `src/compile/gir/builder.cpp` 的 `visitExecNode`：在进入"体的值语句"的 `ExpectedValueScope` 时设置 `tailStatement_`，访问完恢复；`builder.h` 增加这个成员及注释。
+- 只有字面量按 5.1 取类型；写成名字的臂值是变量，不转换。`let x: float = if c then n else 2`（`n: int`）仍是错误（臂类型不一致），与设计原则一致。
+- 文档（中英）`docs/language/06_expressions.md` / `en/...`：6.8.1 增加"臂的值本身是有期望类型的位置"，6.8.2 的臂条目同步；6.8.1 原有"臂里的 `return` 按臂所在位置取类型、函数声明返回类型不是它的期望类型"不变。
+
+### 锁定用例
+
+`test/cases/compile/literals/context_arm_value.cml`，计划 `context.arm_value`（四个后端一致）：`if` 与 `match` 的声明、`i32` 臂、`f32[]` 复合臂、函数体最后一个表达式是整个分支的情况（`func fromIf(c: bool): float { if c then 1 else 2 }`），以及 `return if c then 1 else 2` 在声明返回类型下。输出：
+
+```text
+1.0 1.0 1
+1.0
+1.0 2.0
+1.0 2.0
+2.0
+1.0 2.0
+```
+
+字面量运算（`1 + 2`、`-1`、`1.0 / 3.0`）作为臂值时已由 `foldLiteralCall` 使用期望类型，手工确认同样得到 `float` / `f32`。
+
+## 3. VS Code 语法
+
+- `editors/vscode` 依赖已装好（`npm install --no-audit --no-fund`，`have-deps.mjs` 通过，`tokenize.mjs` 可用）。
+- `editors/vscode/syntaxes/camel.tmLanguage.json`：单竖线 `|` 从 `keyword.operator.type` 移到 `keyword.operator.logical`（它是普通的或运算符，也是 `match` 的或模式分隔符；本语言没有联合类型）。类型运算符的 pattern 现为 `\?|&|\\`，注释说明 `|` 不属于它。
+- 作用域夹具：`test/cases/tools/grammar/types.cml` 删去 `type All = i32 | i64 | ...`；`test/cases/tools/grammar/operators.cml` 删去 `type Union = int | string`，加一行 `let either = eq | ne`。
+- 重新生成的金标：`test/plans/feat/tools/golden/grammar/types.scopes`（−15 行联合类型）、`operators.scopes`（`|` 现为 logical，新增 `either` 行）、`keywords.scopes`（`case 'a' | 'd'` 的竖线为 logical）、`literals.scopes`。`literals.scopes` 的差异只是源文件注释文字（该用例在 `119195dc` 改了注释而没有更新金标，是 develop 上原有的失配），随本次重新生成一并同步。
+
+## 4. 删除 `AnyNotAllowed`
+
+- `include/camel/core/error/diagnostics/messages/semantic.h`：删除 `AnyNotAllowed = 0x0000E2`；注释改为 0xE0、0xE1、0xE2 均已退役，码不复用。
+- `src/core/error/diagnostics/messages/semantic.cpp`：删除消息表条目。
+- `src/compile/gct/builder.cpp`、`builder.h`：删除 `TypePosition`、`typePosition_`、`TypePositionGuard`、`reportAnyType` 及七处守卫；`lookupType` 里对 `any` 的特殊诊断分支删除。`any` 现在和任何未知类型名一样报 `SemanticDiag::UnresolvedTypeReference`。
+- 测试：删除 `test/cases/compile/any_typing/` 的 `written_annotation.cml`、`written_cast.cml`、`written_function_type.cml`、`written_parameter.cml`、`written_return.cml`、`written_type_decl.cml`、`written_with.cml`、`recommended_forms.cml`，以及 `typing_any.plan.toml` 里对应的 8 个测试；新增 `written_unknown_name.cml` 与 `any_typing.written_unknown_name`：5:14 报 `UnresolvedTypeReference`，码 `0x0300000A`，消息 `Unresolved type reference: 'any'.`
+- 文档：中英语言参考 3.x 删除"写 `any` 时改写成什么"的整张表，改为一句"与任何未知类型名一样报 `UnresolvedTypeReference`；多类型形参用类型参数，不同类型的值并排放用元组或结构体"，JSON 的 `decode_as` / `decode` 说明保留为正文；`docs/design/any-typing/README.cn.md` 的状态行改为说明 `any` 是普通未知名字、H27 删去了 `AnyNotAllowed` 与按位置的推荐写法；`docs/diagnostics.md` 重新生成（167 条）。
+
+## 5. 语言参考 8.6 与命令行未知选项
+
+- `docs/language/08_top_level_and_grammar.md` 与 `en/...` 的 8.6 表：`| keyof、enum | 语法错误 | 无 |` 改为只有 `keyof`；`enum` 是正常语言特性（3.5），不再列为"保留但未实现"。
+- `tools/camel-cli/config.cpp`：clipp 解析成功后、`startupMark("parse")` 前检查 `Run::targetFiles`，凡以 `-` 开头且长度大于 1 的参数报
+  `Error: unknown option '--bogus'. Run 'camel --help' for the options accepted.`，退出码 1，不再落到 "Cannot open file --bogus"。文件名真的以 `-` 开头时写 `./-name`（`rejectUnknownOptions` 的注释说明了这一点；`-` 本身不拒绝）。
+- 测试：`test/plans/feat/compile/diag_options.plan.toml` 新增 `option.unknown`（`--bogus <case>`：退出 1，含 `unknown option '--bogus'`，不含 `Cannot open file`）。
+
+## 6. 生成文件
+
+| 文件 | 生成器 | 变化 |
+|---|---|---|
+| `docs/diagnostics.md` | `node scripts/diagnostics-catalog.mjs --write` | 删除 `AnyNotAllowed`，168 → 167 条 |
+| `test/plans/feat/tools/golden/grammar/{types,operators,keywords,literals}.scopes` | `node editors/vscode/scripts/tokenize.mjs` | 见第 3 节 |
+| `docs/language/(en/)08_top_level_and_grammar.md` 文法块 | `node scripts/check-grammar.mjs --write` | 无变化（产生式未动，`--check` 通过：102 个产生式） |
+
+AST 与 GIR 快照未变（`smoke` 的 `inspect.ast_snapshot`、`gir.*_snapshot` 均通过），未重新生成。
+
+## 7. 验证
+
+| 目标 | 结果 |
+|---|---|
+| `test/plans/feat/compile/literal_context.plan.toml` | 32 / 32 通过（新增 `context.arm_value`、`context.composite_rounding`，各 4 个后端） |
+| `test/plans/feat/compile/typing_any.plan.toml` | 11 / 11 通过 |
+| `test/plans/feat/compile/diag_options.plan.toml` | 34 / 34 通过 |
+| `test/plans/feat/compile`（全部编译计划） | 761 / 761 通过 |
+| `test/plans/smoke` | 10 / 10 通过 |
+| `test/plans/feat/tools/grammar.plan.toml` | 11 / 12 通过；唯一失败是 `grammar.tables`，见下 |
+| `test/plans/feat/tools`（全部工具计划） | 28 / 29 通过；同一失败 |
+| `node scripts/diagnostics-catalog.mjs --check` / `--verify-doc` | 167 条，`docs/diagnostics.md` 是最新的 |
+| `node scripts/check-doc-links.mjs` | 31 个文档，无断链 |
+| `node scripts/check-grammar.mjs --check` | 102 个产生式，与解析器、词法表、语言参考一致 |
+
+构建用 `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h27-small`，Release，退出 0。
+
+**预期变化**：没有为了让测试通过而改动任何既有期望。删除的期望都属于第 4 项要删的 `AnyNotAllowed` 测试；`literals.scopes` 的重新生成只同步了源注释（见第 3 节）。
+
+## 8. 未决
+
+- **复合字面量作实参仍在重载解析处被拒**：`func pick(xs: f32[]): f32` 下 `pick([1.0])` 仍是 `NoMatchingFunction`。`builder_operators.cpp` 的 `enteringTypes` 只让数字字面量"进入"形参类型，数组 / 结构体字面量不参与；H24 报告把"实参"列为 GIR 重建复合字面量的位置，但要让它成立需要改重载解析的进入规则（`builder_operators.cpp` 正由另一任务改动），本任务没有动。精确值的基础设施已经能支持它，是否让复合字面量在解析阶段也进入形参类型留给语言作者 / 后续任务。
+- **`grammar.tables` 的既有失败**：`editors/vscode/scripts/check-grammar.mjs` 报
+  `keyword 'constas' of include/camel/parse/syntax/token_kinds.def is matched by no pattern of the grammar's "keywords" rule`。`constas` 在 `token_kinds.def` 里是关键字，VS Code 语法的 `keywords` 规则没有它；H14 报告已把它记为当时的基线缺口。它与 `|` 的改动无关，本任务没有改（修它要改编辑器语法并重新生成相关作用域金标，属于另一项工作）。
+- H24 / H26 的历史报告仍描述当时的边界（"臂的值不是有期望类型的位置"、"`AnyNotAllowed` 有意保留"），按任务书作为历史记录未改；本报告与语言参考 6.8.1 / 6.8.2、设计原则 5.1 是现在的口径。
