@@ -1,7 +1,8 @@
 /**
- * The declaration of `para:rendezvous` is what an importer sees; the two unordered higher-order
- * operators still answer from the C++ resolver, and every call reaches the operator the module
- * runs (handover H19, step 10; H146).
+ * The declarations of `para` are what an importer sees: the fixed one of `rendezvous` and the two
+ * that take the element type of their array argument (`unordered_foreach` has a callback whose
+ * result type is free, `unordered_reduce` a callback from the element to itself). Every call
+ * reaches the operator the module runs (handover H19, step 10; H146; H202).
  */
 module para_declaration_import
 

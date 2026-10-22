@@ -185,44 +185,6 @@ slot_t __algo_argsort__(ArgsView &, ArgsView &norm, Context &) {
 
 } // namespace
 
-// The signatures that take their result type from the element type of an array argument stay
-// here, as a `DynamicFuncTypeResolver` (design principles 6.4; handover H94, ruling 1, H135).
-// `argsort` is not one of them: its result is `int[]` and the six key element types it accepts
-// are the six declarations of `algo:argsort` in `stdlib/algo.cml`, so its group is gone from
-// this file and the declarations are the one source of its signature.
-const std::vector<oper_group_ptr_t> &getAlgoSequenceGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "flatten",
-            {{"algo:flatten",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {1, {false}}},
-                  "(xss: T[][]) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (norm[0]->code() != TypeCode::Array)
-                          return std::nullopt;
-                      Type *inner = tt::as_ptr<ArrayType>(norm[0])->elemType();
-                      if (inner == nullptr || inner->code() != TypeCode::Array)
-                          return std::nullopt;
-                      return ArrayType::create(tt::as_ptr<ArrayType>(inner)->elemType());
-                  })}}),
-        OperatorGroup::create(
-            "unique",
-            {{"algo:unique",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {1, {false}}},
-                  "(xs: T[]) => T[]",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (norm[0]->code() != TypeCode::Array)
-                          return std::nullopt;
-                      return ArrayType::create(tt::as_ptr<ArrayType>(norm[0])->elemType());
-                  })}}),
-    };
-    return groups;
-}
-
 std::unordered_map<std::string, operator_t> getAlgoSequenceOpsMap() {
     return {
         {"flatten", __algo_flatten__},

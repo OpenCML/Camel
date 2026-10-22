@@ -1,20 +1,21 @@
 # 49 计算签名的账本：`stdlib/signatures/` 的每条条目各是什么
 
-**问题**（H194）：`stdlib/signatures/` 还有 17 个文件、一批只作参考的 `export func` 条目。
-它们到底是什么？每条属于哪一类、差什么才能写成声明、最该先问作者的是哪一件事？这个目录还应
-该存在吗？缺口本身的语法与提案见 [47](47_declaration_syntax.md)，迁移配方与检查器见
-[48](48_declaration_migration.md)；本页不重复那两页，只把**条目**逐条归账。
+**问题**（H194）：`stdlib/signatures/` 里那批只作参考的 `export func` 条目到底是什么？每条属于
+哪一类、差什么才能写成声明、最该先问作者的是哪一件事？这个目录还应该存在吗？缺口本身的语法与
+提案见 [47](47_declaration_syntax.md)，迁移配方与检查器见 [48](48_declaration_migration.md)；
+本页不重复那两页，只把**条目**逐条归账。桶 1 已由 H202 迁完（§4），本页的数按迁移后记账，迁移
+前的数在各节的括注里。
 
 ## 0. 回答
 
-**17 个文件、232 条条目、177 个名字。** 四桶各是：
+**13 个文件、210 条条目、160 个名字**（H202 之前是 17 个文件、232 条、177 个名字）。四桶各是：
 
 | 桶 | 标签 | 条目 | 名字 | 含义 |
 |---|---|---:|---:|---|
-| 1 | `declarable-today` | **30** | 24 | 用今天的语法（按元数／拼写重载、`typeas`）就能逐点复现 C++ resolver，零决策 |
+| 1 | `declarable-today` | **8** | 7 | 只剩 `env`/`process`/`hash` 的 `unmigrated-module`（H163 正在迁）；其余 22 条已迁（§4） |
 | 2 | `needs-one-feature` | **104** | 99 | 各差一条已记录在 47 的机制或政策；换一条机制就移动一批 |
 | 3 | `permanently-reference-only` | **98** | 54 | 声明一定是错的，不是难写 |
-| 4 | `not-a-signature` | **0** | 0 | 本基点没有：232 条都对应 `inspect --ops` 打印的算子 |
+| 4 | `not-a-signature` | **0** | 0 | 本基点没有：210 条都对应 `inspect --ops` 打印的算子 |
 
 - **最该先问作者的一件事**：是否允许一条声明**把结果类型交给算子的类型规则**（47 §4.3
   “结果取自实参”，约定 `docs/stdlib-conventions.cn.md:47`）。这一条政策单独移动 **62 个名字**
@@ -22,24 +23,27 @@
   5 种标量拼写，8 个逐元素名字因此各要 25 条——不是风险。同一机制下的 `tiles` `run*` 3 个还要
   with 函数的参数表（Q-V），其余六条机制合计 34 个名字。
 - **这个目录去不掉**：桶 3 的 98 条永远不会变成声明（`globals` 93 条没有声明宿主；
-  `range`/`sum`/`mean` 5 条违反“一个名字一处”）。但它今天不该是 17 个文件：不动任何机制先迁掉
-  桶 1，就只剩 10 个文件 202 条；两条大政策都落地后，下界是 **2 个文件 98 条**。
+  `range`/`sum`/`mean` 5 条违反“一个名字一处”）。但它今天不该是 13 个文件：`env`/`process`/`hash`
+  三个模块的 8 条（H163）迁掉后只剩 10 个文件 202 条；两条大政策都落地后，下界是
+  **2 个文件 98 条**。
 
 ## 1. 目录里到底有什么
 
 - **条目 = 一条 `export func`**（`#op<'uri'>` 绑定下一条），按文件顺序记；名字是 `export func`
-  的名字。232 条里有 55 条与另一条同名（`math:sqrt` 4 条、`tensor:sum/mean` 各 2 条、
-  `json:encode` 等），所以是 **232 条 / 177 个名字**。
-- **17 个文件都对得上** `scripts/stdlib-reference.mjs` 的 `computed:` 字段；`--verify-ops` 逐条
-  与 `inspect --ops`（794 行）对账，232 条都落到一个已注册算子上，这就是桶 4 为空的意思
+  的名字。210 条里有 50 条与另一条同名：`globals` 占 42（如 `int` 的多种写法、`*` 通配），
+  其余是 `json:encode`、`nn` 的 `softmax_cross_entropy` 两项、`tensor:sum/mean`、`hash` 与
+  `python` 各一项。所以是 **210 条 / 160 个名字**。
+- **13 个文件都对得上** `scripts/stdlib-reference.mjs` 的 `computed:` 字段；`--verify-ops` 逐条
+  与 `inspect --ops` 对账，210 条都落到一个已注册算子上，这就是桶 4 为空的意思
   （没有任何一条是“只有文档、没有算子”的条目；目录里剩下的只有注释）。
 - **brief 的 241 条不在这个基点上**：`29a55e0d4` 是 232 条；H183 删除
   `stdlib/signatures/rewrite.cml`（10 条，`rule`/`rule` with `when`/`analysis` 的参考条目，
-  机制见 [46](46_rules.md)）之前是 242 条。241 与两者都不符，按树上的数记账。
-- **`--check` 的 112 不是这 232 条**：它数的是 13 个**声明模块**（有 `stdlib/<m>.cml` 且
-  `BuiltinModule` 同名）的签名文件里被记录的**名字**（124 条去重成 112 个名字）。另外 5 个
-  文件的模块不是声明模块：`ckpt` 7 条（没有 `stdlib/ckpt.cml`）、`globals` 93、`env` 2、
-  `process` 3、`hash` 3，共 108 条。124 + 108 = 232。
+  机制见 [46](46_rules.md)）之前是 242 条。241 与两者都不符，按树上的数记账。H202 又删了
+  `algo`/`math`/`para`/`random` 四个文件、`graph` 从 6 条减到 4 条。
+- **`--check` 的 95 不是这 210 条**：它遍历 23 个声明模块，只数其中有签名文件的那些里被记录的
+  **名字**（迁移前是 12 个文件 124 条、去重 112 个名字；现在 8 个文件 102 条、去重 95 个名字）。
+  另外 5 个文件的模块不是声明模块：`ckpt` 7 条（没有 `stdlib/ckpt.cml`）、`globals` 93、`env` 2、
+  `process` 3、`hash` 3，共 108 条。102 + 108 = 210。（旧版这一段把声明模块数写错了，已改。）
 
 ## 2. 四桶的判定规则
 
@@ -62,24 +66,20 @@
 
 | 文件 | 条目 | 名字 | 桶 1 | 桶 2 | 桶 3 |
 |---|---:|---:|---:|---:|---:|
-| `algo.cml` | 7 | 7 | 7 | – | – |
 | `autodiff.cml` | 2 | 2 | – | 2 | – |
 | `ckpt.cml` | 7 | 7 | – | 7 | – |
 | `env.cml` | 2 | 2 | 2 | – | – |
 | `globals.cml` | 93 | 51 | – | – | 93 |
-| `graph.cml` | 6 | 6 | 2 | 4 | – |
+| `graph.cml` | 4 | 4 | – | 4 | – |
 | `hash.cml` | 3 | 2 | 3 | – | – |
 | `json.cml` | 4 | 2 | – | 4 | – |
-| `math.cml` | 8 | 3 | 8 | – | – |
 | `nn.cml` | 20 | 18 | – | 20 | – |
 | `onnx.cml` | 1 | 1 | – | 1 | – |
-| `para.cml` | 2 | 2 | 2 | – | – |
 | `process.cml` | 3 | 3 | 3 | – | – |
 | `python.cml` | 6 | 5 | – | 6 | – |
-| `random.cml` | 3 | 3 | 3 | – | – |
 | `tensor.cml` | 55 | 53 | – | 50 | 5 |
 | `tiles.cml` | 10 | 10 | – | 10 | – |
-| **合计** | **232** | **177** | **30** | **104** | **98** |
+| **合计** | **210** | **160** | **8** | **104** | **98** |
 
 桶 4 全为 0，未单列一列。
 
@@ -88,7 +88,7 @@
 
 | 桶 | 机制 | 条目 | 名字 | 证据 |
 |---|---|---:|---|---|
-| 1 | `misjudged-computed` | 22 | `sort` `insert_sort` `quick_sort` `merge_sort` `merge_sorted_arrays` `flatten` `unique`（algo）· `constant` `add_constant`（graph）· `sqrt` `shl` `shr`（math）· `unordered_foreach` `unordered_reduce`（para）· `choice` `sample` `shuffle`（random） | `modules/algo/module.cpp:43-136`、`modules/algo/sequence.cpp:193-224`、`modules/graph/read.cpp:73-85,686-705`、`modules/graph/txn.cpp:432-444`、`modules/math/module.cpp:64-88`、`modules/math/numeric.cpp:255-307`、`modules/para/module.cpp:46-104`、`modules/random/module.cpp:43-83` |
+| 1 | `misjudged-computed` | 0（原 22） | 全部迁入声明（H202）：`sort` `insert_sort` `quick_sort` `merge_sort` `merge_sorted_arrays` `flatten` `unique`（algo）· `constant` `add_constant`（graph）· `sqrt` `shl` `shr`（math）· `unordered_foreach` `unordered_reduce`（para）· `choice` `sample` `shuffle`（random） | 迁移前的证据保留在 `scripts/computed-gaps.mjs` 的历史里：`modules/algo/module.cpp:43-136`、`modules/algo/sequence.cpp:193-224`、`modules/graph/read.cpp:73-85,686-705`、`modules/graph/txn.cpp:432-444`、`modules/math/module.cpp:64-88`、`modules/math/numeric.cpp:255-307`、`modules/para/module.cpp:46-104`、`modules/random/module.cpp:43-83` |
 | 1 | `unmigrated-module` | 8 | `get_env` `get_cwd`（env）· `sha256` `sha256_rounds`（hash）· `sleep` `whoami` `cpu_count`（process） | `modules/env/module.cpp:34-42`、`modules/hash/module.cpp:32-41`、`modules/process/module.cpp:36-45`；[48](48_declaration_migration.md) §4.2 |
 | 2 | `result-from-argument` | 65 | tensor：`new` `empty` `zeros` `ones` `full` `eye` `random` `randn` `add` `subtract` `multiply` `divide` `pow` `maximum` `minimum` `where` `neg` `abs` `exp` `log` `sqrt` `rsqrt` `sigmoid` `tanh` `relu` `gelu` `erf` `reshape` `flatten` `unsqueeze` `transpose` `permute` `concat` `slice` `take` `one_hot` `max` `min` `argmax` `argmin` `softmax` `log_softmax` `softmax_grad` `layer_norm` `matmul` `linear` `zeros_like` `ones_like` `cast` · nn：`conv2d` `conv2d_input_grad` `conv2d_kernel_grad` `conv2d_bias_grad` `max_pool2d` `avg_pool2d` `max_pool2d_grad` `avg_pool2d_grad` `batch_norm` `batch_norm_train` `batch_norm_train_grad` `embedding` `embedding_table_grad` · tiles：`run` `run_device` `run_preferred_resident` | `modules/tensor/ops/op_def.h:55-72,139-161`、`modules/tensor/ops/registry.cpp:61-143`、`modules/nn/tensor_ops.cpp:653-853`、`modules/tiles/src/module.cpp:486-592`；[47](47_declaration_syntax.md) §4.3 |
 | 2 | `arbitrary-function-type` | 12 | `grad` `with_grad`（autodiff）· `program_of` `graph_of` `open_function` `to_function`（graph）· `export_model`（onnx）· `gpu` `source` `inspect` `benchmark` `regions`（tiles） | `modules/autodiff/operators.cpp:55-98`、`modules/graph/txn.cpp:370-386,401-447`、`modules/onnx/module.cpp:138-145`、`modules/tiles/src/module.cpp:486-592`；[47](47_declaration_syntax.md) §3.1 |
@@ -100,17 +100,19 @@
 | 3 | `no-operator-host` | 93 | `globals` 的全部条目（如 `int` `parse_int` `print` `format` `map` `get` `contains`，51 个名字） | `src/builtin/modules/globals.cpp:2144`（`BuiltinModule("")`）、`docs/stdlib-conventions.cn.md:40`（`*` 通配只在签名文件里） |
 | 3 | `one-name-one-source` | 5 | `range` `sum` `mean`（tensor，含两条带 `_axis` URI 的重载） | `modules/tensor/ops/creation_ops.cpp:219-228`、`modules/tensor/ops/reduction_ops.cpp:313-330`；[47](47_declaration_syntax.md) §4.2 |
 
-## 4. 桶 1：30 条今天就能迁，零决策
+## 4. 桶 1：已迁完（H202）
 
-这 24 个名字今天的声明就能覆盖，但 C++ 仍然自己算：或者曾被记成“计算签名”，或者模块还没迁移。
-在主机上对**编译好的编译器**试过（`CAMEL_STD_LIB` 指向 stdlib 的副本，不动树）：
+H194 判为“今天就能迁”的 30 条里，22 条（17 个名字）已由 H202 迁入声明；剩下 8 条（7 个名字）
+是 `env`/`process`/`hash` 三个还没有 `stdlib/<m>.cml` 的模块，由 H163 按
+[48](48_declaration_migration.md) §4.2 的批次新建并迁移。迁移前在主机上对**编译好的编译器**
+试写过（`CAMEL_STD_LIB` 指向 stdlib 的副本，不动树）：
 
 ```
 export func sort(xs: (typeas T)[]): T[]                      // insert_sort/quick_sort/merge_sort/unique 同形 1 条
 export func flatten(xss: (typeas T)[][]): T[]
 export func merge_sorted_arrays(left: (typeas T)[], right: T[]): T[]
 #op<':mark/unordered_foreach_arr'>
-with <f: (item: typeas T) => void>
+with <f: (item: typeas T) => typeas R>
 export func unordered_foreach(xs: T[]): void
 #op<':mark/unordered_reduce_arr'>
 with <f: (acc: typeas T, item: T) => T, initial: T>
@@ -131,10 +133,19 @@ export func add_constant(t: Txn, g: Graph, value: i32): Node  // 同样 6 条
   `graph:add_constant` 是 `Node`）。
 - 反例也成立：`unordered_foreach<(x: string) => println(x)>(int[])` 与
   `constant(n, [1.0, 2.0])` 都被拒绝，诊断里打印的就是这几条声明——声明没有放宽接受集合。
-- 迁移任务：把名字从 `stdlib/signatures/<m>.cml` 移到 `stdlib/<m>.cml`，删掉 C++ 的
-  `DynamicFuncTypeResolver` 与导出组（[48](48_declaration_migration.md) §5 的七步）。`algo`、
-  `math`、`random`、`para` 四个文件可以整个删掉；`graph` 只剩 4 条。`env`/`process`/`hash`
-  本来就没有 `stdlib/<m>.cml`，按 [48](48_declaration_migration.md) §4.2 的批次新建即可。
+- **H194 的一处更正**：H194 §4 把 `unordered_foreach` 的回调写成 `(item: T) => void`，这比 C++
+  resolver 窄——resolver 不看回调的结果类型，`test/cases/para/core/map_chunks.cml:42` 的
+  `(x: int) => x` 会被那样的声明拒绝（H146 已记过这一点）。写成 `typeas R` 后接受集合逐点相同。
+  其余 21 条的声明文本按 H194 的试写，未发现偏差。
+- 迁移结果（条目／名字）：`algo` 7/7、`math` 8/3、`graph` 2/2、`para` 2/2、`random` 3/3。
+- 迁移的做法就是 [48](48_declaration_migration.md) §5 的七步：名字移入 `stdlib/<m>.cml`，删掉
+  C++ 的 `DynamicFuncTypeResolver` 与导出组（kernel、executor、纯度、资源留在 C++），删掉签名
+  文件（`algo`/`math`/`random`/`para` 整个删，`graph` 只剩 4 条），改 `MODULES` 的
+  `source:`/`declaration: true`，重生成参考页，补元数／类型用例。
+- `random` 的算子在 `rand:` 上，不是模块名：`#op<'rand:...'>` 的声明要过
+  `NativeDeclarationForeignOperator` 检查，而 C++ 的 `rand:` 组已不再导出。H202 因此把“本模块
+  答在哪些协议上”变成模块自己的声明（`Module::operatorProtocols()`，`random` 覆写为
+  `{"rand"}`，声明模块转问它的实现），检查器不再从已导出的组里反读。
 - 注意 `math` 的签名文件只记了 `shl`/`shr` 各 2 条（同型拼写），要写出 C++ 接受的全部调用
   需要 4 条（含混合拼写）；`47` §2.2 已裁定“一种拼写一条”，所以这是条数问题，不是缺口。
 
@@ -195,18 +206,19 @@ export func add_constant(t: Txn, g: Graph, value: i32): Node  // 同样 6 条
 
 | 情形 | 文件 | 条目 | 说明 |
 |---|---:|---:|---|
-| 什么都不做 | 17 | 232 | 今天 |
-| 只迁桶 1（零决策） | 10 | 202 | `algo`/`math`/`random`/`para` 的文件消失，`graph` 只剩 4 条 |
-| 再加 `result-from-argument` | 10 | 140 | 只剩桶 2 的其余 42 条与桶 3 |
+| H194 的基点 | 17 | 232 | 迁移前 |
+| 桶 1 迁完（H202） | 13 | 210 | 今天：`algo`/`math`/`random`/`para` 的文件消失，`graph` 只剩 4 条 |
+| 再迁 `env`/`process`/`hash`（H163） | 10 | 202 | 桶 1 清零 |
+| 再加 `result-from-argument` | 7 | 137 | 只剩桶 2 的其余 39 条与桶 3 |
 | 所有机制都答完 | 2 | 98 | 下界：`globals.cml` 93 + `tensor.cml` 5 |
 
-结论：目录**不能删**——98 条里有 93 条没有宿主、5 条被“一个名字一处”挡住；但它应该从 17 个
-文件缩到 2 个。桶 1 的 30 条不需要任何决定，先做掉；桶 2 的 104 条等 7 条机制——第一条就能
-独立移动 62 个名字。
+结论：目录**不能删**——98 条里有 93 条没有宿主、5 条被“一个名字一处”挡住；但它应该从 13 个
+文件缩到 2 个。桶 1 只剩 H163 的 8 条；桶 2 的 104 条等 7 条机制——第一条就能独立移动 62 个名字。
 
-每一桶清零的最小改动：桶 1 是**零决策**（照 [48](48_declaration_migration.md) §5 迁 5 个模块）；
-桶 2 是 §7 的第一条政策加其余六条机制（其中 Q-V 单独不解锁任何名字）；桶 3 **不可能**清零，
-除非改语言：让内置函数有一个可导入的模块宿主，并放宽“一个名字一处”。
+每一桶清零的最小改动：桶 1 是**零决策**（`env`/`process`/`hash` 照
+[48](48_declaration_migration.md) §4.2 新建声明文件即可，H163 在做）；桶 2 是 §7 的第一条政策加
+其余六条机制（其中 Q-V 单独不解锁任何名字）；桶 3 **不可能**清零，除非改语言：让内置函数有一个
+可导入的模块宿主，并放宽“一个名字一处”。
 
 ## 9. 检查器：第 7 条规则与红证明
 
@@ -216,38 +228,38 @@ export func add_constant(t: Txn, g: Graph, value: i32): Node  // 同样 6 条
 多记录、不存在的标签、标签与桶不符，都报出来。`node scripts/computed-gaps.mjs` 单独跑同一套
 自检，并打印 §3 的两张表。
 
-红证明一：把一条已注册的条目重复追加进 `stdlib/signatures/algo.cml`（在主机的工作副本上做，
-随后 `git checkout --` 恢复；`--verify-ops` 仍然通过，因为同名条目里有一条匹配）：
+红证明一：把一条已注册的条目重复追加进 `stdlib/signatures/graph.cml`（在主机的工作副本上做，
+随后恢复备份；`--verify-ops` 仍然通过，因为同名条目里有一条匹配）：
 
 ```
-$ printf '\nexport func unique(xs: (typeas T)[]): T[]\n' >> stdlib/signatures/algo.cml
+$ printf '\nexport func program_of(f: F): Program\n' >> stdlib/signatures/graph.cml
 $ node scripts/stdlib-declarations.mjs --check
-stdlib/signatures/algo.cml:59: 'unique' (algo:unique) is not classified in scripts/computed-gaps.mjs;
-add it to the 'algo' row with a bucket tag
+stdlib/signatures/graph.cml:47: 'program_of' (graph:program_of) is not classified in
+scripts/computed-gaps.mjs; add it to the 'graph' row with a bucket tag
 migrated modules stay migrated: 1 problem(s) across 23 declaration module(s)     [exit 1]
 ```
 
-红证明二：把一个桶标签改成一个不存在的值：
+红证明二：把一个桶标签改成一个不存在的值（`autodiff:grad`）：
 
 ```
 $ node scripts/computed-gaps.mjs
-scripts/computed-gaps.mjs: 'sort' (algo) names the bucket 'declarable', which has no tag; use one of
-declarable-today, needs-one-feature, permanently-reference-only, not-a-signature
-scripts/computed-gaps.mjs: 'sort' (algo) is in 'declarable' but its mechanism 'misjudged-computed'
-belongs to 'declarable-today'
+scripts/computed-gaps.mjs: 'grad' (autodiff) names the bucket 'declarable', which has no tag; use
+one of declarable-today, needs-one-feature, permanently-reference-only, not-a-signature
+scripts/computed-gaps.mjs: 'grad' (autodiff) is in 'declarable' but its mechanism
+'arbitrary-function-type' belongs to 'needs-one-feature'
 computed-gaps: 2 problem(s)                                                      [exit 1]
 ```
 
-两条都恢复后：`migrated modules stay migrated: 23 declaration module(s), 112 computed signature(s)
-left in C++, 0 excluded module(s), 232 signature entries classified, 0 problem(s)` 与
+两条都恢复后：`migrated modules stay migrated: 23 declaration module(s), 95 computed signature(s)
+left in C++, 0 excluded module(s), 210 signature entries classified, 0 problem(s)` 与
 `computed-gaps: every entry is classified`。
 
 ## 10. 这一轮查出的文档缺陷
 
-1. **代码注释把“能不能写”说反了**：`modules/algo/module.cpp:38-42`、`modules/algo/sequence.cpp:188-192`、
-   `modules/math/module.cpp:64-67`、`modules/math/numeric.cpp:287-290`、`stdlib/para.cml:9-13` 都写
-   “cannot be a declaration”。按 §4 的试写，有限条声明就能复现接受集与结果类型；正确的说法是
-   “按当前约定被记作计算签名”，不是“写不出”。迁桶 1 时一并改掉。
+1. **代码注释把“能不能写”说反了**（H202 已改）：`modules/algo/module.cpp`、
+   `modules/algo/sequence.cpp`、`modules/math/module.cpp`、`modules/math/numeric.cpp`、
+   `stdlib/para.cml`、`stdlib/random.cml` 都写“computed signature stays in C++ / cannot be a
+   declaration”。按 §4 的试写，有限条声明就能复现接受集与结果类型；迁移时已改成“已声明”。
 2. **`48` 的 globals 数**：写“50 名 96 条”，树上是 51 名 93 条。
 3. **`48` 的模块数**：`48:42`（表头）与索引写“22 个模块”，`--check` 报 23 个声明模块
    （H183 的 rewrite 之后）。
@@ -259,14 +271,14 @@ left in C++, 0 excluded module(s), 232 signature entries classified, 0 problem(s
    Q-F（本页 §5）。
 7. **`48` §3.5 的规则数**：写“有五条规则”，H180 的“一个计算名一处”之后是六条，本页再加第 7 条
    （条目分类），表里没有后两行。
-8. **brief 的 241 条**与树不符（232；H183 前 242），按树上的数记账。
+8. **brief 的 241 条**与树不符（H202 后 210；H202 前 232，H183 前 242），按树上的数记账。
 
 ## 11. 复现
 
 ```
 node scripts/computed-gaps.mjs                      # 逐模块与逐机制的计数，并自检账本
 node scripts/stdlib-declarations.mjs --check        # 需要已构建的 out/latest/bin/camel
-node scripts/stdlib-reference.mjs --verify-ops      # 232 条对 794 行 inspect --ops
+node scripts/stdlib-reference.mjs --verify-ops      # 210 条对 813 行 inspect --ops（543 条公开重载）
 ```
 
 试写声明时用标准库的副本（`CAMEL_STD_LIB=/tmp/.../stdlib`），不要在树上改签名文件。

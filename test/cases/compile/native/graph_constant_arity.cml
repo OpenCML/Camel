@@ -1,0 +1,13 @@
+/**
+ * `graph:constant` is declared with two arguments per sample type: a third one is refused at the
+ * call, and the overloads the message lists are the declarations' (handover H202; H194 bucket 1).
+ */
+module graph_constant_arity
+
+import { current, root, nodes, constant } from graph
+
+func main(): int sync {
+    let ns = nodes(root(current()))
+    println(constant(ns[0], 0, 1))
+    return 0
+}

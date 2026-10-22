@@ -36,14 +36,14 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 | 项 | 数字 | 来源 |
 |---|---:|---|
 | 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | **23** | `--check` |
-| 声明名 / 声明条数（`export func`） | **178 / 293** | 读 22 个声明文件 |
-| 计算名（C++ 算签名） | **112** | `--check` |
+| 声明名 / 声明条数（`export func`） | **195 / 329** | 读 23 个声明文件 |
+| 计算名（C++ 算签名） | **95** | `--check` |
 | 其中因语言机制写不出（阻塞） | **14** | 本页 §2.4 的口径，逐条见表 |
-| 注册重载（22 个模块） | **413** | `inspect --ops`，293 条由声明回答、120 条由 C++ 计算 |
-| 注册重载（参考页全部模块，含 `<builtin>`） | **524** | `--verify-ops`；`<builtin>` 占 96 条 |
-| `stdlib/signatures/` 的文件 | **16** | 10 个是已迁移模块的计算签名，6 个属于尚未迁移的模块 |
+| 注册重载（23 个模块） | **432** | `inspect --ops`，329 条由声明回答、103 条由 C++ 计算 |
+| 注册重载（参考页全部模块，含 `<builtin>`） | **543** | `--verify-ops`；`<builtin>` 占 96 条 |
+| `stdlib/signatures/` 的文件 | **13** | 8 个是已迁移模块的计算签名，5 个属于尚未迁移的模块 |
 
-这 23 个模块的 290 个公开名 = 178 个声明名 + 112 个计算名。12 个模块有计算签名、10 个没有；
+这 23 个模块的 290 个公开名 = 195 个声明名 + 95 个计算名。8 个模块有计算签名、15 个没有；
 5 个模块有阻塞名（`json`、`onnx`、`python`、`tensor`、`tiles`）。
 
 ### 2.2 逐模块
@@ -54,21 +54,22 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 
 | 模块 | 名字 | 声明（名/条） | 计算 | 阻塞（缺口） | 重载 | 依据 |
 |---|---:|---:|---:|---|---:|---|
-| `algo` | 8 | 1 / 6 | 7 | — | 13 | handover note ⟨8db99af⟩ (H135) |
+| `algo` | 8 | 8 / 13 | 0 | — | 13 | handover note ⟨8db99af⟩ (H135)；H202 |
 | `autodiff` | 3 | 1 / 1 | 2 | — | 3 | handover note ⟨65416a0⟩ (H165) |
 | `bytes` | 6 | 6 / 6 | 0 | — | 6 | handover note ⟨05673a8⟩ (H76) |
 | `fs` | 15 | 15 / 15 | 0 | — | 15 | handover note ⟨f7dfc75⟩ (H131) |
-| `graph` | 41 | 35 / 37 | 6 | — | 43 | handover note ⟨9a5ec0a⟩ (H141) |
+| `graph` | 41 | 37 / 49 | 4 | — | 53 | handover note ⟨9a5ec0a⟩ (H141)；H202 |
 | `io` | 5 | 5 / 5 | 0 | — | 5 | handover note ⟨e6a16f6⟩ (H116) |
 | `json` | 12 | 10 / 35 | 2 | 2：`encode`（参数类型谓词）、`decode_as`（Q1） | 38 | handover note ⟨26cee7d⟩ (H115) §3；[47](47_declaration_syntax.md) §3.4 |
-| `math` | 44 | 41 / 96 | 3 | — | 99 | handover note ⟨fa3cccc⟩ (H113) |
+| `math` | 44 | 44 / 108 | 0 | — | 108 | handover note ⟨fa3cccc⟩ (H113)；H202 |
 | `nn` | 19 | 1 / 1 | 18 | — | 21 | handover note ⟨65416a0⟩ (H165) |
 | `onnx` | 2 | 1 / 1 | 1 | 1：`export_model`（Q-F + Q3） | 2 | handover note ⟨a05a542⟩ (H179) §2.2；[47](47_declaration_syntax.md) §3.1、§3.5 |
-| `para` | 3 | 1 / 1 | 2 | — | 3 | handover note ⟨b083ff2⟩ (H146) §2.2 |
+| `para` | 3 | 3 / 3 | 0 | — | 3 | handover note ⟨b083ff2⟩ (H146) §2.2；H202 |
 | `pyplot` | 1 | 1 / 8 | 0 | — | 8 | handover note ⟨26e8cc0⟩ (H166) |
 | `python` | 11 | 6 / 6 | 5 | 5：`py_call`、`py_print`、`py_println`（Q-V）；`py_wrap`、`py_unwrap`（Q-M） | 12 | handover note ⟨cdf4d60⟩ (H157) §6.2；[47](47_declaration_syntax.md) §3.2、§3.3 |
-| `random` | 10 | 7 / 7 | 3 | — | 10 | handover note ⟨b3452d6⟩ (H128) |
+| `random` | 10 | 10 / 10 | 0 | — | 10 | handover note ⟨b3452d6⟩ (H128)；H202 |
 | `re` | 1 | 1 / 1 | 0 | — | 1 | handover note ⟨bd54bb4⟩ (H126) |
+| `rewrite` | 8 | 8 / 10 | 0 | — | 10 | handover note ⟨cdf4d60⟩ (H157) §2；H183 |
 | `sim` | 2 | 2 / 2 | 0 | — | 2 | handover note ⟨a05a542⟩ (H179) §3 |
 | `statistics` | 5 | 5 / 20 | 0 | — | 20 | handover note ⟨8db99af⟩ (H135) |
 | `str` | 14 | 14 / 14 | 0 | — | 14 | handover note ⟨73ce85e⟩ (H104) |
@@ -76,20 +77,20 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 | `this` | 1 | 1 / 1 | 0 | — | 1 | handover note ⟨b083ff2⟩ (H146) |
 | `tiles` | 12 | 2 / 2 | 10 | 5：`gpu`、`source`、`inspect`、`benchmark`、`regions`（Q-F；`gpu` 另有 Q3） | 12 | handover note ⟨0ebbbbd⟩ (H156)；handover note ⟨cdf4d60⟩ (H157) §7；[47](47_declaration_syntax.md) §3.1、§3.5 |
 | `time` | 3 | 3 / 3 | 0 | — | 3 | handover note ⟨55e0bf3⟩ (H133) |
-| **合计** | **290** | **178 / 293** | **112** | **14** | **413** | |
+| **合计** | **290** | **195 / 329** | **95** | **14** | **432** | |
 
-计算名里没有阻塞的 98 个，按约定是「结果类型或参数类型取自实参」的计算签名：`algo` 的 `sort`
-族、`autodiff` 的 `grad`/`with_grad`、`graph` 的 6 个、`math` 的 `sqrt`/`shl`/`shr`、`nn` 的
-18 个张量算子、`para` 的 2 个、`random` 的 3 个、`tensor` 的其余 52 个、`tiles` 的
-`upload`/`download`/`run`/`run_device`/`run_preferred_resident`。它们不是「没做完」，是 C++
-必须保留的那一半。
+计算名里没有阻塞的 81 个，按约定是「结果类型或参数类型取自实参」的计算签名：`autodiff` 的
+`grad`/`with_grad`、`graph` 的 4 个函数值算子、`nn` 的 18 个张量算子、`tensor` 的其余 52 个、
+`tiles` 的 `upload`/`download`/`run`/`run_device`/`run_preferred_resident`。它们不是「没做完」，
+是 C++ 必须保留的那一半。
 
 ### 2.3 旧报告与树不一致时
 
 - handover note ⟨a05a542⟩ (H179) 记的是 **22 / 113 / 513**（声明模块 / 计算名 / 注册重载），
-  那是它自己基点上的数。今天的树是 **23 / 112 / 524**：`show` 已由
-  handover note ⟨ce4a81c⟩ (H175) 从计算签名改成两条声明，所以计算名少 1；重载数以今天
-  `--verify-ops` 打印的 524 为准，旧报告不能相加。
+  那是它自己基点上的数。今天的树是 **23 / 95 / 543**：`show` 已由
+  handover note ⟨ce4a81c⟩ (H175) 从计算签名改成两条声明，所以计算名少 1；H202 又把
+  `algo`/`math`/`para`/`random` 与 `graph` 的 17 个计算名迁成声明，计算名再少 17；重载数以今天
+  `--verify-ops` 打印的 543 为准，旧报告不能相加。
 - handover note ⟨9897519⟩ (H170) 的「16 个模块 / 87 条计算签名」、
   handover note ⟨19465cf⟩ (H173) 的「18 / 92」、H165 的「18 / 107」、H175 的「20 / 111」
   都是各自基点的快照。它们不能相加，也不能拿来当今天的总数。
@@ -97,8 +98,8 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
   handover note ⟨cdf4d60⟩ (H157) §7 按机制把它们中的 5 个记作阻塞，并写明这是分桶差异。
   本页按 §2.4 的口径记阻塞，`tiles` 的「计算」仍是 10。
 - H180 的「112 个计算名 / 124 条条目」是它基点上的数（`tensor` 54 名
-  56 条，含 `show`）。今天同样是 112 / 124，但组成不同：`tensor` 是 53 名 55 条，加上 `onnx` 的
-  1 名 1 条。
+  56 条，含 `show`）。今天的树是 95 名 / 102 条，组成是：`tensor` 53 名 55 条、`nn` 20 条、
+  `tiles` 10 条、`json` 4 条、`python` 6 条、`graph` 4 条、`autodiff` 2 条、`onnx` 1 名 1 条。
 - [47](47_declaration_syntax.md) 的「130 个名字 / 17 个阻塞」是它 9 个模块的基点，不是 22 个
   声明模块的合计。
 
@@ -114,8 +115,8 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
   Q-M（模块类型不接受类型变量）、Q1（声明看不见类型实参）、Q3（类型变量谓词），加上 H140 的
   「没有执行器」。由实参算结果、但写法本身合法的名字算**计算**，不算阻塞；这是 H157 §0 与
   47 §4.3 的分法。
-- **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。524 =
-  403（23 个声明模块）+ 15（`ckpt` 7、`env` 2、`hash` 3、`process` 3）+
+- **重载** = `inspect --ops` 的 `OPERATOR` 行去掉 `::` 别名与 `__` 组后的条数。543 =
+  432（23 个声明模块）+ 15（`ckpt` 7、`env` 2、`hash` 3、`process` 3）+
   96（`<builtin>`）。
 
 ## 3. 机制
@@ -152,14 +153,14 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 `// dynamic func`，同一个名字不能两处都有，也不能两处都没有。
 
 本页所在分支从 `2f263766e` 出发，H180 尚未合入（它的报告不在这个基点的树上，所以本页只引用它
-定下的规则，不链接报告），所以树上还有两处内联：
-`stdlib/math.cml`（`sqrt`、`shl`、`shr`，3 名 8 条）与 `stdlib/graph.cml`（6 名 6 条）。112 个
-计算名里 103 个在文件里、9 个在这两处内联；H180 合入后这 9 个迁到文件，`--check` 的第五条会拒绝
-内联写法。迁移新模块时按文件记法写，不要新增内联。
+定下的规则，不链接报告）。H180 合入后树上没有内联写法；原先内联的两处也已按 H202 迁完：
+`stdlib/math.cml` 的 `sqrt`、`shl`、`shr`（3 名 8 条）与 `stdlib/graph.cml` 的 `constant`、
+`add_constant`（2 名 12 条）成为声明，`graph` 只剩 `program_of`、`graph_of`、`open_function`、
+`to_function` 四个函数值算子在 `stdlib/signatures/graph.cml`。95 个计算名全部在文件里。
 
 ### 3.5 检查器
 
-`scripts/stdlib-declarations.mjs --check` 有五条规则，加上复用的 `--verify-ops`：
+`scripts/stdlib-declarations.mjs --check` 有七条规则，加上复用的 `--verify-ops`：
 
 | # | 拦什么 |
 |---|---|
@@ -168,6 +169,8 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 | 3 | 声明背后没有已注册的算子（复用 `--verify-ops`：逐条比名字、URI、`with`/普通参数个数、纯度） |
 | 4 | C++ 的导出组与声明不一致（导出声明名，或计算条目没有导出组） |
 | 5 | 注册算子的 C++ 模块既不在 `registry_all.cml` 探针、也不在 `MODULES`、也不在排除表 |
+| 6 | 一个计算名在两处记录（声明文件里内联 + 签名文件），或两处都没有 |
+| 7 | 签名文件的条目在 `scripts/computed-gaps.mjs` 的账本里没有记录，或桶/机制标签不存在（H194） |
 
 ### 3.6 三种退回写法，各由谁抓
 
@@ -197,7 +200,7 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 | `env`（2 名 2 条）、`process`（3 名 3 条）、`hash`（2 名 3 条） | 固定签名，参考文件仍在 `stdlib/signatures/`；没有 `stdlib/<m>.cml`。没有机制缺口 | H19 第 10 步的剩余批次 | handover note ⟨b5ede1f⟩ (H19-plan) §0.1；handover note ⟨26cee7d⟩ (H115) §10 |
 | `rewrite`（8 个可声明名字，参考文件里 10 条声明） | 声明已经写在 `stdlib/signatures/rewrite.cml`，但没有编译：3 个保留组没有 Camel 名（见 §4.1） | 先决定保留组的例外，再做迁移 | handover note ⟨cdf4d60⟩ (H157) §2 |
 | `globals`（50 名 96 条） | 语言全局，`BuiltinModule("")`、不可导入；不是模块，没有声明宿主 | 作者（H141 的调查，未裁定） | handover note ⟨9a5ec0a⟩ (H141) |
-| `math` / `graph` 的内联计算签名 | 记法问题，不是能力问题 | H180 | 本页 §3.4 |
+| `math` / `graph` 的内联计算签名 | 已迁（H202）：两处成为声明，`graph` 只留 4 个函数值算子 | H180、H202 | 本页 §3.4 |
 | `tensor` 的 `range`、`sum`、`mean` | 轴形式与全量形式共用一个名字，拆成两条声明会违反「一个名字一处」；47 §4.2 把它记作策略，不是缺口 | 作者若愿意放宽「一个名字一处」 | handover note ⟨8dd93b7⟩ (H151) §3.4；[47](47_declaration_syntax.md) §4.2 |
 
 ### 4.3 解锁上限
@@ -226,16 +229,17 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 6. **过检查器。** `node scripts/stdlib-declarations.mjs --check` 与
    `node scripts/stdlib-reference.mjs --verify-ops` 都必须 0 问题；`--check` 的五条就是完成的
    定义（§3.5）。遇到没有 Camel 名的保留组，先加一条带理由的例外，不要把它硬写进声明。
-7. **补用例与快照。** 在 `test/cases/compile/native/` 加导入、错元数、错类型三条；更新 AST
-   快照与 `registry_all.cml` 的注册行；在 Linux 主机上跑 `feat/modules` 与 `smoke`
+7. **补用例与快照。** 在 `test/cases/compile/native/` 加导入、错元数、错类型三条；AST 金标
+   （`test/plans/feat/parse/golden/ast_hashes.txt`）只覆盖解析语料（H188），stdlib 的改动不动它；
+   `registry_all.cml` 若还没有注册该模块则加一行；在 Linux 主机上跑 `feat/modules` 与 `smoke`
    （`camel-remote.ps1 -Jobs 8`），不在工作站构建。
 
 ## 6. 复核
 
 | 命令 | 今天打印 |
 |---|---|
-| `node scripts/stdlib-declarations.mjs --check` | `23 declaration module(s), 112 computed signature(s) ... 0 problem(s)`，并确认 `522 registered operator overloads` |
-| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 524 registered operator overloads` |
-| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | 354 个公开名（其中 `<builtin>` 50 个）/ 522 条公开重载（其中 `<builtin>` 96 条），另含 `__` 组与 `::` 别名 |
+| `node scripts/stdlib-declarations.mjs --check` | `23 declaration module(s), 95 computed signature(s) ... 0 problem(s)`，并确认 `543 registered operator overloads` |
+| `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 543 registered operator overloads` |
+| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | 354 个公开名（其中 `<builtin>` 50 个）/ 543 条公开重载（其中 `<builtin>` 96 条），另含 `__` 组与 `::` 别名 |
 | `node scripts/check-doc-counts.mjs` | `no stale count in ...` |
 | `node scripts/check-doc-links.mjs --default-roots` | `no broken links in ...` |

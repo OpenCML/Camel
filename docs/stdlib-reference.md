@@ -2737,6 +2737,8 @@ bits, `i32` has 32.
 
 ```camel
 shl: (x: i32, count: i32) => i32
+shl: (x: i32, count: int) => i32
+shl: (x: int, count: i32) => int
 shl: (x: int, count: int) => int
 ```
 
@@ -2751,6 +2753,8 @@ change. The count may be of either integer type.
 
 ```camel
 shr: (x: i32, count: i32) => i32
+shr: (x: i32, count: int) => i32
+shr: (x: int, count: i32) => int
 shr: (x: int, count: int) => int
 ```
 
@@ -2899,91 +2903,6 @@ variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the varia
 array in place when nothing else refers to it, an optimisation that does not change what the
 program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
 
-#### `sort`
-
-```camel
-sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs (quicksort).
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: T[], right: T[]) => T[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
-
-#### `flatten`
-
-```camel
-flatten: (xss: T[][]) => T[]
-```
-
-The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
-of the `array` module.
-
-- Pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
-
-#### `unique`
-
-```camel
-unique: (xs: T[]) => T[]
-```
-
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
-module.
-
-- Pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
-
 #### `argsort`
 
 ```camel
@@ -3002,6 +2921,91 @@ primitive behind `sort_by` of the `array` module.
 - Pure.
 - Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
 
+#### `sort`
+
+```camel
+sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs (quicksort).
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `insert_sort`
+
+```camel
+insert_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by insertion sort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `quick_sort`
+
+```camel
+quick_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by quicksort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sort`
+
+```camel
+merge_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by merge sort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sorted_arrays`
+
+```camel
+merge_sorted_arrays: (left: (typeas T)[], right: T[]) => T[]
+```
+
+The sorted array made of the elements of two sorted arrays of numbers.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
+
+#### `flatten`
+
+```camel
+flatten: (xss: (typeas T)[][]) => T[]
+```
+
+The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
+of the `array` module.
+
+- Pure.
+- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
+
+#### `unique`
+
+```camel
+unique: (xs: (typeas T)[]) => T[]
+```
+
+The first occurrence of every value, in order; values are compared as `==` compares them
+(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
+module.
+
+- Pure.
+- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
+
 <a id="random"></a>
 
 ## `random`
@@ -3017,41 +3021,6 @@ distributions, which differ between libraries: a float in [0, 1) is the generato
 times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
 method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
 output modulo the number of places left.
-
-#### `choice`
-
-```camel
-choice: (xs: T[]) => T
-```
-
-One element of xs, drawn uniformly.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when xs is empty.
-- Example: `choice(['a', 'b', 'c'])` gives `'b'`
-
-#### `sample`
-
-```camel
-sample: (xs: T[], n: int) => T[]
-```
-
-n elements of xs drawn without replacement, as a new array.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
-- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
-
-#### `shuffle`
-
-```camel
-shuffle: (xs: T[]) => T[]
-```
-
-The elements of xs in a random order, as a new array; xs is not changed.
-
-- With effects: advances the generator.
-- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `seed`
 
@@ -3097,6 +3066,41 @@ above high.
 
 - With effects: advances the generator.
 - Example: `randint(1, 6)` gives `4`
+
+#### `choice`
+
+```camel
+choice: (xs: (typeas T)[]) => T
+```
+
+One element of xs, drawn uniformly.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when xs is empty.
+- Example: `choice(['a', 'b', 'c'])` gives `'b'`
+
+#### `sample`
+
+```camel
+sample: (xs: (typeas T)[], n: int) => T[]
+```
+
+n elements of xs drawn without replacement, as a new array.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
+- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
+
+#### `shuffle`
+
+```camel
+shuffle: (xs: (typeas T)[]) => T[]
+```
+
+The elements of xs in a random order, as a new array; xs is not changed.
+
+- With effects: advances the generator.
+- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `key`
 
@@ -3777,29 +3781,6 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 The unordered counterparts of the built-in `foreach` and `reduce`: the scheduler may run the
 calls of the function in any order and at the same time.
 
-#### `unordered_foreach`
-
-```camel
-unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
-```
-
-Calls f for every element; the calls have no order among them.
-
-- With effects: what f does.
-- Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
-
-#### `unordered_reduce`
-
-```camel
-unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
-```
-
-Combines the elements with f starting from initial; the order in which elements are
-combined is not fixed, so f should be associative and commutative.
-
-- With effects: what f does.
-- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
-
 #### `rendezvous`
 
 ```camel
@@ -3813,6 +3794,29 @@ were waiting). A tool for showing that calls really run at the same time.
 - With effects: waits for other calls.
 - Failure: fault `RuntimeError` when parties is below 1 or timeout_ms is negative.
 - Example: `rendezvous(2, 1000)` gives `2 when another call arrived in time`
+
+#### `unordered_foreach`
+
+```camel
+unordered_foreach: <f: (item: typeas T) => typeas R> (xs: T[]) => void
+```
+
+Calls f for every element; the calls have no order among them.
+
+- With effects: what f does.
+- Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
+
+#### `unordered_reduce`
+
+```camel
+unordered_reduce: <f: (acc: typeas T, item: T) => T, initial: T> (xs: T[]) => T
+```
+
+Combines the elements with f starting from initial; the order in which elements are
+combined is not fixed, so f should be associative and commutative.
+
+- With effects: what f does.
+- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
 
 <a id="this"></a>
 
@@ -3891,17 +3895,6 @@ The nodes of the graph in NodeId order; the places of removed nodes are skipped.
 - Example: `nodes(root(current()))`
 
 ### Reading nodes
-
-#### `constant`
-
-```camel
-constant: (n: Node, sample: T) => T?
-```
-
-The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
-
-- Pure.
-- Example: `constant(n, 0)` gives `int?`
 
 #### `inputs`
 
@@ -4090,6 +4083,23 @@ The source origin id of the node, 0 when unknown.
 - Pure.
 - Example: `origin(n)`
 
+#### `constant`
+
+```camel
+constant: (n: Node, sample: i32) => i32?
+constant: (n: Node, sample: int) => int?
+constant: (n: Node, sample: f32) => f32?
+constant: (n: Node, sample: float) => float?
+constant: (n: Node, sample: bool) => bool?
+constant: (n: Node, sample: string) => string?
+```
+
+The value of a constant node of the type of the sample (a number, a bool or a string; the value
+of the sample is not read), null for any other node.
+
+- Pure.
+- Example: `constant(n, 0)` gives `int?`
+
 ### Regions
 
 #### `region_of`
@@ -4212,20 +4222,6 @@ The graph of a function value.
 
 ### Transactions
 
-#### `add_constant`
-
-```camel
-add_constant: (t: Txn, g: Graph, value: T) => Node
-```
-
-Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value may be a number, a bool or a string; a string is copied into the permanent
-space because a value a transaction creates may be live at a safepoint where its draft is not
-traced.
-
-- With effects: changes the transaction.
-- Example: `add_constant(t, g, 7)`
-
 #### `open_function`
 
 ```camel
@@ -4303,6 +4299,25 @@ Drops the transaction.
 
 - With effects: changes the transaction.
 - Example: `abort(t)`
+
+#### `add_constant`
+
+```camel
+add_constant: (t: Txn, g: Graph, value: i32) => Node
+add_constant: (t: Txn, g: Graph, value: int) => Node
+add_constant: (t: Txn, g: Graph, value: f32) => Node
+add_constant: (t: Txn, g: Graph, value: float) => Node
+add_constant: (t: Txn, g: Graph, value: bool) => Node
+add_constant: (t: Txn, g: Graph, value: string) => Node
+```
+
+Adds a value the transaction creates to the graph's static values and gives the node that
+holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+space because a value a transaction creates may be live at a safepoint where its draft is not
+traced.
+
+- With effects: changes the transaction.
+- Example: `add_constant(t, g, 7)`
 
 <a id="rewrite"></a>
 

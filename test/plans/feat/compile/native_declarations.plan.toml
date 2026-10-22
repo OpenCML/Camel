@@ -169,12 +169,12 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.math_declaration_import"
-desc = "`math`'s declarations are the module's signature: the per-type overloads (`abs`, `min`, `clamp`) and the computed-signature operator that stayed in C++ (`sqrt`) are read from `stdlib/math.cml`, every call reaches the C++ operator, and the C++ module's constant `pi` is visible through the same declaration module."
+desc = "`math`'s declarations are the module's signature: the per-type overloads (`abs`, `min`, `clamp`), `sqrt` with its four spellings and the two shifts with both integer types for the count are read from `stdlib/math.cml`, every call reaches the C++ operator, and the C++ module's constant `pi` is visible through the same declaration module."
 kind = "behavior"
 case = "../../../cases/compile/native/math_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "3\n2.5\n3\n10\n3.0\n16\n3.141592653589793\n"
+expect_stdout_exact = "3\n2.5\n3\n10\n3.0\n16\n16\n3.141592653589793\n"
 
 [[tests]]
 name = "native.math_wrong_arity"
@@ -196,7 +196,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.math_on_the_graph"
-desc = "A call of a per-type declaration of `math` is an OPER of the concrete URI (`math:abs_l`, `math:min_l`), not a CALL of the name and not a graph of the declaration; the computed-signature `sqrt` and `shl` are OPERs of their C++ groups too. This is the H19 trap-2 answer: the declarations are per-type overloads, not a generic family, so nothing is instantiated into a CALL."
+desc = "A call of a per-type declaration of `math` is an OPER of the concrete URI (`math:abs_l`, `math:min_l`), not a CALL of the name and not a graph of the declaration; `sqrt` and `shl`, whose declaration is per spelling too, are OPERs of their C++ operators. This is the H19 trap-2 answer: the declarations are per-type overloads, not a generic family, so nothing is instantiated into a CALL."
 kind = "behavior"
 case = "../../../cases/compile/native/math_declaration_import.cml"
 args = ["${case}", "std::gir"]
@@ -212,11 +212,29 @@ verify_script = """
 }
 """
 
+[[tests]]
+name = "native.math_sqrt_wrong_arity"
+desc = "`math:sqrt` is declared with one argument per spelling: a second one is refused at the call, and the overloads the message lists are the declarations', parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/math_sqrt_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "math_sqrt_arity.cml:10:17", "argument types: <> (float, int)", "<math:sqrt>: (x: i32) => f32"]
+
+[[tests]]
+name = "native.math_sqrt_wrong_type"
+desc = "A string where the declarations of `math:sqrt` take a number: refused at the declarations' type, and the signature in the message has their own parameter name (`x`) — `stdlib/math.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/math_sqrt_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "math_sqrt_type.cml:11:17", "argument types: <> (string)", "<math:sqrt>: (x: i32) => f32"]
+
 # ---- The declarations of `random`: the generator and the keyed functions (handover H128) ----
 
 [[tests]]
 name = "native.random_declaration_import"
-desc = "`random`'s declarations are the module's signature: an importer calls the generator functions with their declared types, passes `key(42)`'s `Key` to `split` and `permutation` with their declared results, and the three operators whose result type is computed (`choice`, `sample`, `shuffle`) still answer from the C++ resolver; every call reaches the C++ operator."
+desc = "`random`'s declarations are the module's signature: an importer calls the generator functions with their declared types, passes `key(42)`'s `Key` to `split` and `permutation` with their declared results, and calls `choice`, `sample` and `shuffle`, which are generic declarations of the element type of their array; every call reaches the C++ operator."
 kind = "behavior"
 case = "../../../cases/compile/native/random_declaration_import.cml"
 args = ["${case}"]
@@ -241,16 +259,34 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:11:24", "argument types: <> (int, int)", "<rand:permutation>: (key: { hi: int, lo: int }, n: int) => int[]"]
 
-# ---- The declarations of `algo`: `argsort`, and the computed signatures kept in C++ (handover H135) ----
+[[tests]]
+name = "native.random_choice_wrong_arity"
+desc = "`rand:choice` is declared with one array argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/random_choice_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_arity.cml:10:19", "argument types: <> (string[], int)", "<rand:choice>: (xs: typeas T[]) => T"]
+
+[[tests]]
+name = "native.random_choice_wrong_type"
+desc = "A number where the declarations of `rand:choice` take an array: refused at the declarations' type, and the signature in the message has their own parameter name (`xs`) — `stdlib/random.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/random_choice_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_choice_type.cml:11:19", "argument types: <> (int)", "<rand:choice>: (xs: typeas T[]) => T"]
+
+# ---- The declarations of `algo`: `argsort` and the seven generic ones (handover H135, H202) ----
 
 [[tests]]
 name = "native.algo_declaration_import"
-desc = "`algo`'s declarations are the module's signature: `argsort` has its six declared key element types and gives `int[]`, and the seven operators whose result type comes from the element type of their array (`sort`, `merge_sorted_arrays`, `flatten`, `unique`) still answer from the C++ resolver; every call reaches the C++ operator."
+desc = "`algo`'s declarations are the module's signature: `argsort` has its six declared key element types and gives `int[]`, and the seven operators whose result type comes from the element type of their array (`sort`, `insert_sort`, `quick_sort`, `merge_sort`, `merge_sorted_arrays`, `flatten`, `unique`) are generic declarations; every call reaches the C++ operator."
 kind = "behavior"
 case = "../../../cases/compile/native/algo_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "[1, 2, 0]\n[1, 0, 2]\n[2, 1, 0]\n[1, 2, 3]\n[1, 2, 3, 4]\n[1, 2, 3]\n[3, 1, 2]\n"
+expect_stdout_exact = "[1, 2, 0]\n[1, 0, 2]\n[2, 1, 0]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3]\n[1, 2, 3, 4]\n[1, 2, 3]\n[3, 1, 2]\n"
 
 [[tests]]
 name = "native.algo_wrong_arity"
@@ -269,6 +305,24 @@ case = "../../../cases/compile/native/algo_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "algo_type.cml:12:20", "argument types: <> (int)", "<algo:argsort>: (keys: i32[]) => int[]"]
+
+[[tests]]
+name = "native.algo_sort_wrong_arity"
+desc = "`algo:sort` is declared with one array argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/algo_sort_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "algo_sort_arity.cml:10:17", "argument types: <> (int[], int)", "<algo:sort>: (xs: typeas T[]) => T[]"]
+
+[[tests]]
+name = "native.algo_sort_wrong_type"
+desc = "A number where the declarations of `algo:sort` take an array: refused at the declarations' type, and the signature in the message has their own parameter name (`xs`) and type variable — `stdlib/algo.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/algo_sort_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "algo_sort_type.cml:11:17", "argument types: <> (int)", "<algo:sort>: (xs: typeas T[]) => T[]"]
 
 # ---- The declarations of `statistics`: four element types per name (handover H135) ----
 
@@ -558,16 +612,17 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_type.cml:11:19", "argument types: <> (int)", "<fs:exists>: (path: string) => bool"]
 
-# ---- The declaration of `para` (handover H146) ----
+# ---- The declarations of `para` (handover H146, H202) ----
 #
 # `rendezvous` has a fixed signature and is declared; `unordered_foreach` and `unordered_reduce`
-# take the element type of their array argument and stay computed in C++. The behavior case proves
-# both: the importer reads `rendezvous`'s declared two `int` arguments and `int` result, and the
-# two higher-order calls still answer from the C++ resolver.
+# take the element type of their array argument, which a `(typeas T)` declaration states, and
+# `unordered_foreach`'s callback result is free (`typeas R`) because the operator ignores it. The
+# behavior case proves both: the importer reads `rendezvous`'s declared two `int` arguments and
+# `int` result, and the two higher-order calls are checked against the declarations.
 
 [[tests]]
 name = "native.para_declaration_import"
-desc = "`para`'s declaration is the fixed signature of `rendezvous`; the two operators whose signature comes from the element type of their array still answer from the C++ resolver, and every call reaches the operator the module runs."
+desc = "`para`'s declarations are the module's signature: the fixed signature of `rendezvous` and the two operators whose type comes from the element type of their array, `unordered_foreach` with a callback whose result type is free and `unordered_reduce` with one from the element to itself; every call reaches the operator the module runs."
 kind = "behavior"
 case = "../../../cases/compile/native/para_declaration_import.cml"
 args = ["${case}"]
@@ -591,6 +646,24 @@ case = "../../../cases/compile/native/para_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:11:23", "argument types: <> (string, int)", "<para:rendezvous>: (parties: int, timeout_ms: int) => int"]
+
+[[tests]]
+name = "native.para_unordered_wrong_arity"
+desc = "`para:unordered_foreach` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's, parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/para_unordered_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_arity.cml:10:5", "argument types: <(item: int) => int> (int[], int)", "<:mark/unordered_foreach_arr>: <f: (item: typeas T) => typeas R> (xs: T[]) => void"]
+
+[[tests]]
+name = "native.para_unordered_wrong_type"
+desc = "A number where the declarations of `para:unordered_foreach` take an array: refused at the declarations' type, and the signature in the message has their own parameter name (`xs`) — `stdlib/para.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/para_unordered_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_unordered_type.cml:11:5", "argument types: <(item: int) => int> (int)", "<:mark/unordered_foreach_arr>: <f: (item: typeas T) => typeas R> (xs: T[]) => void"]
 
 # ---- The declaration of `this` (handover H146) ----
 
@@ -1004,3 +1077,36 @@ case = "../../../cases/compile/native/rule_reader_type.cml"
 args = ["check", "${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:11:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]
+
+# ---- The declarations of `graph`: `constant` per sample type (handover H141, H202) ----
+#
+# `constant` and `add_constant` take the type of their sample, which a declaration cannot compute
+# from an argument; they are written out per sample type instead (six each). The four operators of
+# a function value stay computed in C++ (`stdlib/signatures/graph.cml`).
+
+[[tests]]
+name = "native.graph_constant_import"
+desc = "`graph:constant` is declared per sample type: an importer reads the first node of its root graph with an `i32`, an `int`, an `f32`, a `float`, a `bool` and a `string` sample, and every call is the C++ operator of that URI."
+kind = "behavior"
+case = "../../../cases/compile/native/graph_constant_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\ntrue\ntrue\ntrue\ntrue\n"
+
+[[tests]]
+name = "native.graph_constant_wrong_arity"
+desc = "`graph:constant` is declared with two ordinary arguments per sample type: a third one is refused at the call, and the overloads the message lists are the declarations', parameter names included."
+kind = "negative"
+case = "../../../cases/compile/native/graph_constant_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_arity.cml:11:21", "argument types: <> (Node, int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]
+
+[[tests]]
+name = "native.graph_constant_wrong_type"
+desc = "A number where the declarations of `graph:constant` take a node: refused at the declarations' type, and the signature in the message has their own parameter name (`n`) — `stdlib/graph.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/graph_constant_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_constant_type.cml:11:21", "argument types: <> (int, int)", "<graph:constant>: (n: Node, sample: i32) => i32?"]

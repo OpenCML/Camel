@@ -33,7 +33,7 @@
 //                                  `mean`).
 //   4 `not-a-signature`           a doc entry, or a name with no registered operator: it does not
 //                                  belong in `signatures/` at all. Empty at this base: every one of
-//                                  the 232 entries names an operator `inspect --ops` prints, and
+//                                  the 210 entries names an operator `inspect --ops` prints, and
 //                                  the rest of the directory is comments.
 //
 // A bucket and a mechanism are tags, never numbers: the checker rejects an entry whose bucket is
@@ -104,20 +104,6 @@ export const MECHANISMS = {
 // `module` is the module the entries belong to, `file` its signature file, `evidence` the default
 // place for that module's rows. `entries` must list the file's entries in file order.
 export const LEDGER = [
-    {
-        module: 'algo',
-        file: 'stdlib/signatures/algo.cml',
-        evidence: 'modules/algo/module.cpp:43-136; modules/algo/sequence.cpp:193-224',
-        entries: [
-            ['sort', 'algo:sort', 'declarable-today', 'misjudged-computed'],
-            ['insert_sort', 'algo:insert_sort', 'declarable-today', 'misjudged-computed'],
-            ['quick_sort', 'algo:quick_sort', 'declarable-today', 'misjudged-computed'],
-            ['merge_sort', 'algo:merge_sort', 'declarable-today', 'misjudged-computed'],
-            ['merge_sorted_arrays', 'algo:merge_sorted_arrays', 'declarable-today', 'misjudged-computed'],
-            ['flatten', 'algo:flatten', 'declarable-today', 'misjudged-computed'],
-            ['unique', 'algo:unique', 'declarable-today', 'misjudged-computed'],
-        ],
-    },
     {
         module: 'autodiff',
         file: 'stdlib/signatures/autodiff.cml',
@@ -255,10 +241,8 @@ export const LEDGER = [
         file: 'stdlib/signatures/graph.cml',
         evidence: 'modules/graph/txn.cpp:370-386,401-447',
         entries: [
-            ['constant', 'graph:constant', 'declarable-today', 'misjudged-computed', 'modules/graph/read.cpp:73-85,686-705'],
             ['program_of', 'graph:program_of', 'needs-one-feature', 'arbitrary-function-type'],
             ['graph_of', 'graph:graph_of', 'needs-one-feature', 'arbitrary-function-type'],
-            ['add_constant', 'graph:add_constant', 'declarable-today', 'misjudged-computed', 'modules/graph/txn.cpp:432-444'],
             ['open_function', 'graph:open_function', 'needs-one-feature', 'arbitrary-function-type'],
             ['to_function', 'graph:to_function', 'needs-one-feature', 'arbitrary-function-type'],
         ],
@@ -282,21 +266,6 @@ export const LEDGER = [
             ['encode', 'json:encode', 'needs-one-feature', 'type-predicate'],
             ['decode_as', 'json:decode_as', 'needs-one-feature', 'type-argument-return', 'modules/json/module.cpp:83-90'],
             ['decode_as', 'json:decode_as', 'needs-one-feature', 'type-argument-return', 'modules/json/module.cpp:83-90'],
-        ],
-    },
-    {
-        module: 'math',
-        file: 'stdlib/signatures/math.cml',
-        evidence: 'modules/math/module.cpp:64-88; modules/math/numeric.cpp:291-307',
-        entries: [
-            ['sqrt', 'math:sqrt', 'declarable-today', 'misjudged-computed'],
-            ['sqrt', 'math:sqrt', 'declarable-today', 'misjudged-computed'],
-            ['sqrt', 'math:sqrt', 'declarable-today', 'misjudged-computed'],
-            ['sqrt', 'math:sqrt', 'declarable-today', 'misjudged-computed'],
-            ['shl', 'math:shl', 'declarable-today', 'misjudged-computed', 'modules/math/numeric.cpp:255-307'],
-            ['shl', 'math:shl', 'declarable-today', 'misjudged-computed', 'modules/math/numeric.cpp:255-307'],
-            ['shr', 'math:shr', 'declarable-today', 'misjudged-computed', 'modules/math/numeric.cpp:255-307'],
-            ['shr', 'math:shr', 'declarable-today', 'misjudged-computed', 'modules/math/numeric.cpp:255-307'],
         ],
     },
     {
@@ -335,15 +304,6 @@ export const LEDGER = [
         ],
     },
     {
-        module: 'para',
-        file: 'stdlib/signatures/para.cml',
-        evidence: 'modules/para/module.cpp:46-104',
-        entries: [
-            ['unordered_foreach', ':mark/unordered_foreach_arr', 'declarable-today', 'misjudged-computed'],
-            ['unordered_reduce', ':mark/unordered_reduce_arr', 'declarable-today', 'misjudged-computed'],
-        ],
-    },
-    {
         module: 'process',
         file: 'stdlib/signatures/process.cml',
         evidence: 'modules/process/module.cpp:36-45',
@@ -364,16 +324,6 @@ export const LEDGER = [
             ['py_println', 'python:py_println', 'needs-one-feature', 'variadic'],
             ['py_wrap', 'python:py_wrap', 'needs-one-feature', 'module-type-argument', 'modules/python/module.cpp:476-503; modules/python/type.h'],
             ['py_unwrap', 'python:py_unwrap', 'needs-one-feature', 'module-type-argument', 'modules/python/module.cpp:491-503; src/compile/gct/builder.cpp:4871-4884'],
-        ],
-    },
-    {
-        module: 'random',
-        file: 'stdlib/signatures/random.cml',
-        evidence: 'modules/random/module.cpp:43-83',
-        entries: [
-            ['choice', 'rand:choice', 'declarable-today', 'misjudged-computed'],
-            ['sample', 'rand:sample', 'declarable-today', 'misjudged-computed'],
-            ['shuffle', 'rand:shuffle', 'declarable-today', 'misjudged-computed'],
         ],
     },
     {
