@@ -364,7 +364,7 @@ expect_exit = 1
 verify_script = """
 const diags = JSON.parse(input.stdout)
 assert(diags.length === 1 && diags[0].data.name === 'RuntimeDiag::UnrecognizedGraphPass', 'diagnostic: ' + input.stdout)
-assert(diags[0].data.stage === 'pass:hash::nosuchpass', 'stage ' + diags[0].data.stage)
+assert(diags[0].data.stage === 'pass:tree::nosuchpass', 'stage ' + diags[0].data.stage)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
