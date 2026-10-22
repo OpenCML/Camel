@@ -1,0 +1,198 @@
+# H180 — 计算签名只有一处：`stdlib/signatures/<模块>.cml`
+
+分支 `handover/H180-computed-notation`，起点 `origin/develop` `b1fb58b63`。任务是给“声明写不出的那一半签名”定一条记法：现在 20 个声明模块里，`math`、`graph` 把计算签名写成声明文件里的 `// dynamic func` 注释，其余 9 个有计算签名的模块用 `stdlib/signatures/<模块>.cml` 加参考生成器的 `computed:` 字段。本报告盘点两种记法、给出不变量、把检查器扩展到能拦下第三种写法，并把少数派（2 个模块）迁到文件记法。
+
+一句话结论：**一个计算签名只在 `stdlib/signatures/<模块>.cml` 一处记录，由 MODULES 条目的 `computed:` 指名；声明文件里不写 `// dynamic func`，同一个名字不能两处都有，也不能两处都没有。**
+
+## 0 结论摘要
+
+| 项 | 改动前 | 改动后 |
+|---|---|---|
+| 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | 20 | 20 |
+| 有计算签名的声明模块 | 11 | 11 |
+| 计算名字 / 条目 | 112 / 124 | 112 / 124 |
+| 内联 `// dynamic func` 的模块 | **2**（`math` 3 名 8 条、`graph` 6 名 6 条） | **0** |
+| 文件记法的模块 | 9（103 名 110 条） | **11**（112 名 124 条） |
+| `stdlib/signatures/*.cml` 文件 | 14（含 `ckpt`/`env`/`globals`/`hash`/`process` 5 个未声明化模块） | **16**（新增 `math.cml`、`graph.cml`） |
+| `scripts/stdlib-declarations.mjs --check` | 20 模块 / 112 名字 / 0 问题（但不检查内联写法） | 20 / 112 / 0，新增“计算签名只有一处”的检查 |
+| `--verify-ops` 注册重载 | 509（本任务未改 C++/注册） | **509** |
+| `inspect --ops` | 777 行 | **777 行，与基线 `cmp` 逐字节相同** |
+| `docs/stdlib-reference.md` | 4978 行 / 374 条目 | **4978 行 / 374 条目；行多重集逐字节相同，88 行只是节内换位** |
+
+`math` 与 `graph` 各一个迁移提交。参考页的节顺序不变（生成器改为按 `// ---- ... ----` 声明排节），条目文本、签名、文档、纯度、资源、效果一条没改。没有新增诊断码，没有改 `changes.log` 或版本文件。
+
+## 1 盘点和两种记法
+
+### 1.1 谁用哪种
+
+判定“声明模块”的规则沿用 H137：`stdlib/<m>.cml` 存在、文件头写 `module <m>`、`modules/` 下有 C++ 模块用 `BuiltinModule("<m>", ...)` 注册。`stdlib/perf.cml` 写 `module util`，不是 `perf` 的声明模块；`ckpt` 只有 `stdlib/signatures/ckpt.cml`，还不是声明模块。
+
+改动前，20 个声明模块的计算签名如下（“条”是按参考页/`--verify-ops` 读到的条目，一个名字可以有多条重载）：
+
+| 模块 | 计算名字 / 条目 | 记法 | 说明 |
+|---|---:|---|---|
+| `math` | 3 / 8 | **内联** | `sqrt` 4 条、`shl` 2 条、`shr` 2 条 |
+| `graph` | 6 / 6 | **内联** | `constant`、`add_constant`、`program_of`、`graph_of`、`open_function`、`to_function` |
+| `algo` | 7 / 7 | 文件 | `sort`、`insert_sort`、`quick_sort`、`merge_sort`、`merge_sorted_arrays`、`flatten`、`unique` |
+| `autodiff` | 2 / 2 | 文件 | `grad`、`with_grad` |
+| `json` | 2 / 4 | 文件 | `encode`、`decode_as` |
+| `nn` | 18 / 20 | 文件 | 15 个张量算子 + 3 个优化器 |
+| `para` | 2 / 2 | 文件 | `unordered_foreach`、`unordered_reduce` |
+| `python` | 5 / 6 | 文件 | `py_call`（两条 URI）、`py_print`、`py_println`、`py_wrap`、`py_unwrap` |
+| `random` | 3 / 3 | 文件 | `choice`、`sample`、`shuffle` |
+| `tensor` | 54 / 56 | 文件 | 逐元素/形状/归约/线性代数/转换等 |
+| `tiles` | 10 / 10 | 文件 | `gpu`、`upload`、`download`、`run`、`run_device`、`run_preferred_resident`、`source`、`inspect`、`benchmark`、`regions` |
+| **合计** | **112 / 124** | 2 内联 + 9 文件 | |
+
+其余 9 个声明模块没有计算签名：`bytes`、`fs`、`io`、`pyplot`、`re`、`statistics`、`str`、`this`、`time`。其中 `pyplot`（8 条声明 / 1 个名字）和 `this`（1 条声明 / 1 个名字）是**只有固定签名**的声明模块，没有计算签名；任务书把它们列在“文件记法”的例子里，与树上的事实不符。`ckpt` 在任务书里也被列在文件记法里，但它只有 `stdlib/signatures/ckpt.cml`，**不是声明模块**（H140 的机制边界阻塞，见 `reports/H140.md` §3）；它的签名文件不在本任务的“声明模块计算签名”范围内。
+
+### 1.2 规则存在，但它允许两种
+
+`docs/stdlib-conventions.cn.md` §1（第 26 行）是唯一写到这个选择的规范性文字：
+
+> 计算签名的算子（C++ 的 `DynamicFuncTypeResolver`，结果类型取自实参）留在 C++；声明文件里用 `// dynamic func 名字(...): 类型` 的注释记录参考页条目与文档，不写成声明。……也可以把这几条留在 `stdlib/signatures/<模块>.cml` 里，模块条目的 `computed` 字段指向它，参考页与 `--verify-ops` 把声明文件与它合起来对账（`json`、`random`）。
+
+§6 的模块位置表（第 76 行）同样写：
+
+> 已声明化模块里算不出来的签名（过渡） | 同一个 `stdlib/signatures/<模块>.cml` 里只留那几条，只作参考；……也可以像 `math` 那样用 `// dynamic func` 写进声明文件，不保留签名文件；`json`、`random` 用的是签名文件加 `computed` 字段
+
+所以有一条规则，但规则的内容是“两种都行”，**没有**说明一个模块该按什么条件选哪一种。翻阅各批次的报告也没有找到选择理由：
+
+- H113（`math`）先用了内联 `// dynamic func`；
+- H115（`json`）改用 `stdlib/signatures/json.cml` 加 `computed:`；
+- H128（`random`）沿用文件；
+- H141（`graph`）又回到内联；
+- H151（`tensor`）、H156（`tiles`）、H165（`nn`/`autodiff`）、H166（`python`）都用文件。
+
+选择与批次的先后、写报告的人有关，与模块的性质没有稳定对应：`random` 的 3 个名字都不需要 `#op`，仍用文件；`graph` 的 6 个名字也都不需要 `#op`，却用内联。H151/H156 解释的是“文件为什么存在”（能带 `#op`、能分节、能承载写不进声明的参数类型），不是“为什么这个模块用文件”。因此结论是：**这是历史留下的双记法，不是一条可复述的原则**；`math`/`graph` 是少数派（按模块 2 vs 9，按名字 9 vs 103）。
+
+### 1.3 为什么文件记法是唯一能覆盖全部计算名字的
+
+内联写法不是声明，是一条注释；解析它的代码（`readDeclarations` 的 `dynamicMatch`）总是把 URI 取成 `<模块>:<名字>`，没有 `#op` 的位置。文件写法读的是无函数体的 `export func`，可以带 `#op<'...'>`，因此能记录 URI 与 Camel 名字不同的计算名字：
+
+- `stdlib/signatures/tensor.cml`：9 处 `#op`（`sum_axis`、`mean_axis`、`max_axis`、`min_axis`、`argmax_axis`、`argmin_axis`、`from_bytes_*` 等）；
+- `stdlib/signatures/python.cml`：`py_call` / `py_call_kw` 两个 URI；
+- `stdlib/signatures/nn.cml`：`softmax_cross_entropy_labels` / `..._labels_grad`。
+
+只要模块里有一个计算名字的 URI 不是 `<模块>:<名字>`，内联写法就写不出来。文件写法是超集，所以“一种记法”只能是文件；另一条路是给注释加 `#op` 语法，但那是在为一等公民造第二套签名语法，不是本任务要的。
+
+## 2 不变量
+
+**一个计算签名只在 `stdlib/signatures/<模块>.cml` 一处记录，由 MODULES 条目的 `computed:` 指名；声明文件里不写 `// dynamic func`，同一个名字不能两处都有，也不能两处都没有。**
+
+没有例外。选它而不是“内联优先”或“按有没有 `#op` 分工”的理由：
+
+1. 文件是超集（§1.3），内联写不出全部计算名字；把 9 个模块的 103 个名字搬回声明文件，既要重写 110 条条目为注释，又会在下一次遇到 `#op` 时再次分裂。
+2. “没有 `#op` 就内联、有 `#op` 就文件”是两条记法加一条判据，读者仍要先看完整模块才知道用哪种；而且 `json`、`random`、`algo`、`para`、`tiles` 等 7 个模块在现有内容下都“可以内联”，按这条判据反而要迁移，代价更大。
+3. 文件让一个模块的整个计算面（全部名字、URI、文档、分节）在一个可评审的文件里；声明文件只回答“固定签名是什么”。检查器只需要知道一个位置，规则能用一句话说清。
+
+参考页的分节仍是模块自己的顺序：`stdlib-reference.mjs` 现在按 `// ---- ... ----` 声明排节，而不是按“第一条出现的条目”；一个只在计算文件里出现、没有条目的节不会输出。这样 `math`/`graph` 的签名文件可以按声明文件的节次写（包括当前没有计算名字的节），页面节顺序不变。
+
+## 3 检查器：`scripts/stdlib-declarations.mjs --check`
+
+### 3.1 新增的第五条
+
+原脚本守 H137 的四条：没有声明名的静态解析器、旧签名文件只在 `computed:` 指名时存在、每条声明背后有算子（复用 `--verify-ops`）、C++ 导出组是声明加计算签名。本任务加第五条：
+
+- 读两个地方：声明文件里的 `// dynamic func`（`computedPlaces`，第 364 行）和 MODULES `computed:` 指名的文件里的无体声明；按名字合并，分别记下第一个记录的文件与行号。
+- **内联记录一律报问题**（第 614–623 行）。即使名字同时还在文件里，也报“两处都有”，并给出两处的位置；消息点名模块与名字，并给出唯一正确位置 `stdlib/signatures/<模块>.cml`。
+- **`computed:` 指针必须与文件一致**：指名了文件但文件里一个计算名字都没有（第 626–631 行）报“指名但不记录”；文件不存在沿用原第 2 条；文件里出现声明名沿用“一个签名一处”的重复检查。
+- **两处都没有**：由原有的导出组循环报出（`modules/<m>/...: the migrated module '<m>' exports '<name>' from C++, but no computed signature records it`），不需要第二份名单。
+- 内联解析器没有删：它现在的作用是**读出违规记录并报名字**，不是第二种合法写法。声明模块里任何 `// dynamic func` 都会让 `--check` 红。
+
+`docs/stdlib-conventions.cn.md` §1/§6 改成一条记法（文件），并写明内联写法已退役；`test/plans/feat/modules/stdlib_registry.plan.toml` 的 `registry.migrations_stay_migrated` 描述同步更新，仍由该计划运行 `--check`。
+
+### 3.2 红证
+
+在主机上把 `sqrt` 的 4 条从 `stdlib/signatures/math.cml` 搬回 `stdlib/math.cml`（写成 `// dynamic func`），运行真实的 `--check`：
+
+```
+stdlib/math.cml:85: the computed signature 'sqrt' of 'math' is recorded inline as '// dynamic func'; a computed name has exactly one place: stdlib/signatures/math.cml, named by the MODULES entry's computed: field (handover H180)
+migrated modules stay migrated: 1 problem(s) across 20 declaration module(s)
+```
+
+恢复后：
+
+```
+migrated modules stay migrated: 20 declaration module(s), 112 computed signature(s) left in C++, 0 problem(s)
+every declaration is behind a registered operator (the declarations agree with the 509 registered operator overloads)
+```
+
+另外两个方向也验过（本地 `staticChecks`，不依赖构建）：
+
+- 两处都有：保留文件条目，再在声明文件里加同名内联记录 → 同一行报 `... is recorded inline as '// dynamic func' and in stdlib/signatures/math.cml:21; ...`；
+- 两处都没有：只从文件删除、不加内联 → `modules/math/module.cpp:94: the migrated module 'math' exports 'sqrt' from C++, but no computed signature records it`。
+
+## 4 迁移：2 个模块，各一个提交
+
+### 4.1 `math`
+
+`stdlib/signatures/math.cml` 新建，按 `stdlib/math.cml` 的 6 个节（constants、elementary functions、rounding、comparing、integers、bits）写节标记；`sqrt`（4 条）、`shl`（2 条）、`shr`（2 条）的 `///` 文档、`@pure`、`@fails`、`@example` 原样搬入，写成无体 `export func`。`stdlib/math.cml` 删除这 3 条内联记录和它们的文档，头注释改为指向签名文件。`scripts/stdlib-reference.mjs` 的 `math` 条目加 `computed: 'signatures/math.cml'`。头注释、节标记、文档文本逐字对照过。
+
+### 4.2 `graph`
+
+同样新建 `stdlib/signatures/graph.cml`，按 7 个节（the program、reading nodes、regions、facts、function values、transactions、comparison）写节标记；`constant`、`add_constant`、`program_of`、`graph_of`、`open_function`、`to_function` 的文档与 6 条签名搬入。`stdlib/graph.cml` 删除内联记录，头注释指向文件；MODULES 的 `graph` 条目加 `computed: 'signatures/graph.cml'`。
+
+### 4.3 参考页：行内容不变，只有位置
+
+- 页面前后都是 **4978 行 / 374 条目**；`git diff` 是 88 行删除、88 行增加；
+- 把两边的行做多重集比较：**完全相同**（`LINE_MULTISET_IDENTICAL`）——没有任何一行内容变化，新增行都是被删行的逐字重放；
+- `math` 与 `graph` 的 `###` 节序列逐项相同（`SECTIONS_IDENTICAL`）：`math` 仍是 Constants → Elementary functions → Rounding → Comparing → Integers → Bits，`graph` 仍是 The program → Reading nodes → Regions → Facts → Function values → Transactions；
+- 变化的只是节内位置：`sqrt` 从 `conj` 之后移到 Elementary 开头；`shl`/`shr` 从 `bit_not` 之后移到 Bits 开头；`constant` 移到 Reading nodes 开头；`program_of`/`graph_of` 移到 Function values 开头；`add_constant`/`open_function`/`to_function` 移到 Transactions 开头。原因是签名文件按“计算半边在前”被读取（`tensor` 等 9 个文件记法模块一直如此），这是不变量带来的**分组/顺序**变化，不是文本或语义变化。
+
+严格说参考页不是逐字节相同：88 行换了位置。逐字节能证明的是**每个被移动的行本身就逐字节相同**，且节顺序、条目文本、签名、文档、示例全部不变。任务允许“only its grouping if the invariant requires it”；这里把“grouping”理解为节内条目的顺序。
+
+### 4.4 `inspect --ops` 和 `--verify-ops`
+
+- `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` 输出 **777 行**；基线用同一份新二进制、把 `b1fb58b63` 的 `stdlib/` 覆盖到构建安装的 `stdlib/` 上（C++ 二进制未改，所以读的就是旧声明/旧计算条目），两次 `cmp`：**`OPS_IDENTICAL`**。
+- `node scripts/stdlib-reference.mjs --verify-ops`：**509 条注册重载一致**；`--verify-doc`：`docs/stdlib-reference.md is up to date`。
+- AST 快照：`python3 test/tools/parsecheck/check.py snapshot --update` 在主机重新生成 **2565 个文件**；`stdlib/math.cml`、`stdlib/graph.cml` 两个哈希变化，`stdlib/signatures/math.cml`、`stdlib/signatures/graph.cml` 两个新条目（`ok`）。
+- ROADMAP 的“签名文件”计数由 14 改 16（`scripts/check-doc-counts.mjs --check` 绿）。
+
+## 5 验收
+
+主机 `88zjwei`，`-Jobs 8`，最终树 `07d33730b`：
+
+| 计划 | 结果 |
+|---|---|
+| `feat/modules` | 1084 条，1081 通过，0 失败，3 跳过 |
+| `feat/compile` | 1069 条，1069 通过，0 失败 |
+| `feat/docs_links` | 4 条，4 通过，0 失败 |
+| `smoke` | 10 条，10 通过，0 失败 |
+| `feat/parse`（附加，验证 AST 快照） | 57 条，57 通过 |
+
+跳过全是环境项：Windows 专用的 `unicode.paths` 与 PyTorch/ORT 前置条件。没有跑 stress、progen、GC-stress 或 PyTorch 计划。第一次运行没有用 `-NoBuild`；后续在同一内容上使用 `-NoBuild`。
+
+直接命令（主机）：
+
+```
+node scripts/stdlib-declarations.mjs --check
+migrated modules stay migrated: 20 declaration module(s), 112 computed signature(s) left in C++, 0 problem(s)
+every declaration is behind a registered operator (the declarations agree with the 509 registered operator overloads)
+
+node scripts/stdlib-reference.mjs --verify-ops
+the declarations agree with the 509 registered operator overloads
+
+node scripts/stdlib-reference.mjs --verify-doc
+docs/stdlib-reference.md is up to date
+```
+
+## 6 提交
+
+| 提交 | 内容 |
+|---|---|
+| `bbf52ed6e` | `docs(stdlib): move math's computed signatures to signatures/math.cml`——`stdlib/signatures/math.cml`、`stdlib/math.cml`、MODULES `math` 条目、参考页，以及生成器的“按节声明排节”改动 |
+| `d4504a1ae` | `docs(stdlib): move graph's computed signatures to signatures/graph.cml`——`stdlib/signatures/graph.cml`、`stdlib/graph.cml`、MODULES `graph` 条目、参考页 |
+| `c3224fff2` | `feat(scripts): one recorded place for computed signatures`——`stdlib-declarations.mjs` 第五条检查、约定页 §1/§6、计划描述 |
+| `07d33730b` | `test(parse): record the stdlib reading after H180`——AST 快照 2 改 2 增、ROADMAP 签名文件数 14→16 |
+| 本报告 | `docs(handover): report H180 and update the board`——本报告、看板 H180 行、H19 账本 `math`/`graph` 行与 H180 校正 |
+
+迁移提交只碰一个模块（以及为保持参考页节顺序所需的生成器改动）；报告与看板单独一个提交。
+
+## 7 边界与没有做的事
+
+- 没有改任何签名、类型规则、计算签名的含义、C++ 执行器、纯度、资源、效果或诊断码；C++ 一行未动。
+- 没有删 `stdlib/signatures/` 里未声明化模块（`ckpt`、`env`、`globals`、`hash`、`process`）的文件；它们不是本任务的“声明模块”。
+- 内联 `// dynamic func` 的解析代码保留在 `stdlib-declarations.mjs` 里，唯一用途是发现并点名违规；参考生成器不再需要它（当前树没有内联记录）。
+- 参考页的“节内顺序”变了 88 行（§4.3）；这是本任务唯一读者可见的变化，节顺序与所有文本不变。
+- 没有改 `changes.log`、版本文件，没有 push，没有碰 `develop`/`main`。
