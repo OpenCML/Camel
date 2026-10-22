@@ -294,6 +294,8 @@ int main() {
 
 ### 2.1 做法：运行时的堆上的对象，裸指针拿着，不告诉任何人
 
+<!-- camel-snippet: fragment: an excerpt of generated-code input; the body is elided -->
+
 ```camel
 func main(): int sync {
     println('hello, ' + 'camel' + ' #' + string(1))

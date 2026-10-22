@@ -190,6 +190,8 @@ main 7
 
 **“被依赖”是静态的，并且在 `main` 之前。** `examples/now_order/main.cml`【实测】：
 
+<!-- camel-snippet: fragment: the top of examples/now_order/main.cml; noisy is declared above -->
+
 ```camel
 let cfg = noisy('evaluating cfg')
 let other = noisy('evaluating other')
@@ -226,6 +228,8 @@ main starts
 ### 1.5 跨模块时发生什么
 
 **(1) 导出的函数用到本模块顶层的值：名字找错。** `examples/lib_let/`：
+
+<!-- camel-snippet: fragment: two files side by side to compare them, not one program -->
 
 ```camel
 // lib.cml
@@ -771,6 +775,8 @@ root 上的值在整个运行期间都被 `main` 的函数值与各层帧引用�
 
 ### Q2 求值时机：`main` 之前，还是首次用到时
 
+<!-- camel-snippet: fragment: an open question; read_config is the question's hypothetical function -->
+
 ```camel
 let cfg = read_config()                   // 读文件，带效应
 func port(): int { return cfg.1 }
@@ -800,6 +806,8 @@ let b = open_log('b.log')
 **建议保持不是。** 需要顺序时写进一个 `sync` 函数体，或用数据依赖串起来。把 root 定为同步块等于让模块顶层成为一段脚本，并且跨模块时“谁的顶层先执行”没有自然的答案。
 
 ### Q4 是否允许导出 `var`
+
+<!-- camel-snippet: fragment: an open question; the body is elided and cnt is hypothetical -->
 
 ```camel
 // counter.cml

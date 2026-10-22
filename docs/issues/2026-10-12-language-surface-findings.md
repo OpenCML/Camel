@@ -12,6 +12,10 @@
 
 ## 2. `i32(x)` 对超出范围的运行期值截断
 
+反例（本条记录的行为）：
+
+<!-- camel-snippet: counter-example: a dated finding; the snippet shows the behaviour the issue reports -->
+
 ```cml
 func main(): int sync { println(i32(3000000000)); return 0 }
 ```
@@ -23,6 +27,10 @@ func main(): int sync { println(i32(3000000000)); return 0 }
 ## 3.（已解决，见文末）
 
 ## 4. `int('4x')` 接受数字前缀
+
+反例（本条记录的行为）：
+
+<!-- camel-snippet: counter-example: a dated finding; the snippet shows the behaviour the issue reports -->
 
 ```cml
 func main(): int sync { println(int('4x')); println(float('abc')); return 0 }
@@ -40,6 +48,10 @@ func main(): int sync { println(int('4x')); println(float('abc')); return 0 }
 
 ## 8. `===` 对字符串字面量为假
 
+反例（本条记录的行为）：
+
+<!-- camel-snippet: counter-example: a dated finding; the snippet shows the behaviour the issue reports -->
+
 ```cml
 func main(): int sync { println('a' === 'a'); println('a' == 'a'); return 0 }
 ```
@@ -49,6 +61,10 @@ func main(): int sync { println('a' === 'a'); println('a' == 'a'); return 0 }
 期望：`===` 的含义需要裁定；若是同一性比较，它对不可变的字符串没有可预期的结果，宜对字符串按值比较或拒绝。
 
 ## 9. 联合类型的形参不接受成员类型的值
+
+反例（本条记录的行为）：
+
+<!-- camel-snippet: counter-example: a dated finding; the snippet shows the behaviour the issue reports -->
 
 ```cml
 func show(u: int | string): string { return 'u' }

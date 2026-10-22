@@ -12,6 +12,8 @@
 
 **被求值了却没有使用的 `T!` 是警告。** 同步块里的语句无论有没有东西取它的值都会执行；这个值是 `T!`（[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)）时，它带着的错误会无声无息地丢掉，编译器为此给出警告（`SemanticDiag::UnusedFallibleValue`）：
 
+<!-- camel-snippet: fragment: the body of save is elided; the four uses of a fallible value are the subject -->
+
 ```cml
 func save(path: string): int! sync { ... }
 
@@ -410,10 +412,14 @@ tag finite = [kernel, fast]                 // 标签组：成员一起生效
 
 `#` 有三种写法，可以写在函数、类型声明、结构体字段或块之前：
 
+<!-- camel-snippet: fragment: the three tag forms are illustrative; width is a tag a module declares, and the bodies are elided -->
+
 ```cml
 #kernel
 func matmul(a: T, b: T): T { ... }
 ```
+
+<!-- camel-snippet: fragment: the tag forms are illustrative; width is a tag a module declares -->
 
 ```cml
 #width<32>

@@ -150,12 +150,15 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 - It is shorthand for `'...'->format<...>`: the same tree and the same meaning ([6.2](06_expressions.md#62-literals-and-construction)).
 
 ```cml
-let name = 'Camel'
-let n = 42
-println(`hello, ${name}!`)                    // the same as 'hello, {}!'->format<name>
-println(`n = ${n}, twice = ${n * 2}`)
-println(`pi = ${3.14159:.2f}`)                // the same as 'pi = {:.2f}'->format<3.14159>
-println(`literal { } and \${not} interpolated`)
+func main(): int sync {
+    let name = 'Camel'
+    let n = 42
+    println(`hello, ${name}!`)                    // the same as 'hello, {}!'->format<name>
+    println(`n = ${n}, twice = ${n * 2}`)
+    println(`pi = ${3.14159:.2f}`)                // the same as 'pi = {:.2f}'->format<3.14159>
+    println(`literal { } and \${not} interpolated`)
+    return 0
+}
 ```
 
 ```text

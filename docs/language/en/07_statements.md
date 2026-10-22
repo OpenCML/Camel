@@ -12,6 +12,8 @@ Any expression can be a statement. In a sync block it executes in order; outside
 
 **A `T!` that is evaluated and not used is a warning.** In a sync block a statement runs whether or not anything takes its value; when that value is a `T!` ([3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t)), an error it holds is lost without a trace, and the compiler says so (`SemanticDiag::UnusedFallibleValue`):
 
+<!-- camel-snippet: fragment: the body of save is elided; the four uses of a fallible value are the subject -->
+
 ```cml
 func save(path: string): int! sync { ... }
 
@@ -409,6 +411,8 @@ The core carries a set of **numeric permission tags** (design principles 7.2), w
 A rule declaration may be preceded by `#requires<permission, ...>`: the arguments are permission names, the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]` (members are expanded recursively, and the group name means the union of its permissions). The engine applies the rule only where the numeric policy of the nodes allows those permissions ([46 Rules](../../technical/46_rules.md)). A requirement that names an ordinary tag, an undeclared name, or `#requires` outside a rule is a located error, never a silent pass.
 
 There are three forms of `#`, written before a function, a type declaration, a struct field or a block:
+
+<!-- camel-snippet: fragment: the three tag forms are illustrative; width is a tag a module declares, and the bodies are elided -->
 
 ```cml
 #kernel

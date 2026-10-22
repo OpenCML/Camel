@@ -89,10 +89,13 @@ type Pair<T> = (T, T)
 ### 3.3.1 数组
 
 ```cml
-let xs = [1, 2, 3]
-let names: string[] = []          // 空数组要写出类型
-let grid = [[1, 2], [3]]          // int[][]
-println(xs[0], len(xs), grid[0][1])
+func main(): int sync {
+    let xs = [1, 2, 3]
+    let names: string[] = []          // 空数组要写出类型
+    let grid = [[1, 2], [3]]          // int[][]
+    println(xs[0], len(xs), grid[0][1])
+    return 0
+}
 ```
 
 ```text
@@ -124,9 +127,12 @@ println(xs[0], len(xs), grid[0][1])
 ### 3.3.2 元组
 
 ```cml
-let pair = (1, 'one')
-let (n, s) = pair              // 解构
-println(pair.0, pair.1, n, s)
+func main(): int sync {
+    let pair = (1, 'one')
+    let (n, s) = pair              // 解构
+    println(pair.0, pair.1, n, s)
+    return 0
+}
 ```
 
 ```text
@@ -147,9 +153,12 @@ println(pair.0, pair.1, n, s)
 ```cml
 type Point = { x: int, y: int }
 
-let p: Point = { x: 3, y: 4 }
-let q = { x: p.x + 1, y: p.y }     // “修改”就是造一个新的
-println(p, q.x)
+func main(): int sync {
+    let p: Point = { x: 3, y: 4 }
+    let q = { x: p.x + 1, y: p.y }     // “修改”就是造一个新的
+    println(p, q.x)
+    return 0
+}
 ```
 
 ```text
@@ -279,6 +288,8 @@ type Tree<T> = enum { Leaf, Node(Tree<T>, T, Tree<T>) }
 **构造。** 变体写在类型名后面，用 `::` 限定：`Shape::Circle(1.0)`、`Shape::Rect { w: 2.0, h: 3.0 }`、`Shape::Empty`。结构体变体要写全字段，顺序不限；元组变体按位置给全。无数据的变体就是那个值本身，不写括号。构造出的值有类型 `Shape`；泛型实例的参数由字段的实参推出（`Option::Some(42)` 是 `Option<int>`），推不出时（`Option::None`）由期望的类型推出（`let x: Option<int> = Option::None`、实参位置、返回类型），仍推不出是编译期错误（`EnumTypeArgumentNotInferred`）。字段的类型必须与声明一致（`EnumFieldTypeMismatch`），个数与字段名也必须一致（`EnumVariantFieldCount`、`EnumConstructionMismatch`）；字段的实参按与声明字段相同的规则接受自动装入（`int` 进入 `float` 字段不自动，数值之间仍不做隐式转换）。
 
 **`match`。** 枚举靠 `match` 取出数据，不能直接取字段（`b.w` 是 `EnumFieldAccess`，诊断提示用 `match`）：
+
+<!-- camel-snippet: fragment: continues the Shape enum declared in the example above -->
 
 ```cml
 func area(s: Shape): float {
