@@ -20,6 +20,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 const SCOPE = [
     'README.md',
+    'CONTRIBUTING.md',
+    'SECURITY.md',
+    'CODE_OF_CONDUCT.md',
     'ROADMAP.md',
     'docs/README.cn.md',
     'docs/design-principles.cn.md',

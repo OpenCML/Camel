@@ -6,8 +6,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| Latest release | Yes |
-| Development (main) | Yes |
+| Latest release (`main`) | Yes |
+| Development (`develop`) | Yes |
 | Older releases | No longer actively supported |
 
 ## Reporting a Vulnerability
@@ -21,6 +21,10 @@ Please report it privately via:
 
 2. **Or contact maintainers**  
    Reach out through the [OpenCML organization](https://github.com/OpenCML).
+
+The private advisory is the only private reporting channel: the project does not publish a security email address yet, so do not open a public issue for a vulnerability.
+
+<!-- TODO(author): add a security contact address here if the project wants one; otherwise confirm that the GitHub private advisory stays the only channel and remove this comment. -->
 
 We will respond within a reasonable time after confirming the report, and will:
 

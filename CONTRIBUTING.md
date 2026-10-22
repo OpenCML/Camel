@@ -29,7 +29,7 @@ Issues labeled `beginner-friendly` are great for first-time contributors.
 
 ## Development Environment
 
-See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detailed installation instructions. Required components:
+See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detailed installation instructions. Components and minimum versions:
 
 | Component | Min. Version |
 |-----------|--------------|
@@ -39,6 +39,8 @@ See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detaile
 | CMake | 3.25 |
 | Conan | 2.10 |
 | Ninja | 1.11 |
+
+Clang, CMake, Conan and Ninja are required for the build itself. Python is needed only for the `python`/`pyplot` modules and the wheel: the build skips those modules when it finds no CPython with development headers, and `CAMEL_SKIP_PYTHON=1` forces the skip.
 
 ## Development Workflow
 
@@ -52,10 +54,10 @@ See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detaile
 2. **Install dependencies**
 
    ```bash
-   pip install camel-lang
-   npm install
-   npm run init
+   npm install          # npm packages; its prepare step runs conan install
    ```
+
+   `npm install` runs `scripts/install.js` (Conan) through the `prepare` hook. Run `npm run init` only when `conanfile.txt` or the CMake options change: it deletes `build/` and runs `conan install` again.
 
 3. **Build**
 
@@ -66,19 +68,23 @@ See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detaile
 4. **Run tests**
 
    ```bash
-   npm run test
+   npm run test        # the fast layer, against the build in out/latest
    ```
+
+   `npm run test:all` adds the slow plans; see [docs/test-plans.md](docs/test-plans.md).
 
 5. **Before committing**
 
    ```bash
-   npm run format    # Format C++ code
-   npm run check     # Run checks
+   npm run format    # format C++ sources under src/, include/, modules/ and tools/
+   npm run test      # fast test layer
    ```
+
+   The pre-commit hook formats and updates the staged files automatically (it refuses a partially staged file, so stage whole files). `npm run check` is not a linter: it runs the housekeeping pass (format, refresh the `Updated:` header dates, print code counts) and rewrites files, so review the diff if you run it.
 
 ## Style Guide
 
-- **C++ code**: Use `clang-format`—run `npm run format` for files under `src/` and `include/` (`.cpp`, `.h`)
+- **C++ code**: Use `clang-format`—run `npm run format` for files under `src/`, `include/`, `modules/` and `tools/` (`.cpp`, `.h`)
 - **Camel source**: Follow existing project syntax and style
 - **Documentation**: Markdown format, consistent with existing docs
 
@@ -86,20 +92,22 @@ See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detaile
 
 - `src/`: C++ implementation
 - `include/`: C++ headers
-- `libs/`: Library modules (e.g., `python`)
+- `modules/`: Library modules (e.g., `python`)
+- `stdlib/`: Standard library written in Camel
 - `test/`: Test cases
 - `docs/`: Documentation
 
 ## Commit Guidelines
 
-- Write clear, concise commit messages describing the change
-- Reference issues with `Fix #123` or `Closes #123`
-- [Conventional Commits](https://www.conventionalcommits.org/) style (optional):
+- Use [Conventional Commits](https://www.conventionalcommits.org/) prefixes:
   - `feat:` new feature
   - `fix:` bug fix
   - `docs:` documentation
-  - `refactor:` refactoring
+  - `refactor:` structural change with no behaviour change
   - `test:` tests
+  - `chore:` maintenance
+- Reference issues with `Fix #123` or `Closes #123`.
+- The subject describes the whole staged change, not the last edit; a merge commit describes the work it integrates.
 
 ## Issue & PR Guidelines
 
@@ -111,10 +119,10 @@ See the [Setup Guide](docs/setup.en.md) ([中文](docs/setup.cn.md)) for detaile
 
 ### Submitting Pull Requests
 
-1. Branch from the latest `main`
+1. Branch from the latest `develop` and open the PR against `develop`. `main` is release-only: never commit to `main` or `develop` directly
 2. Keep PRs focused for easier review
-3. Ensure CI passes
-4. Request review from at least one maintainer
+3. Run `npm run test` locally before opening the PR. No CI runs on pull requests: `.github/workflows/ci.yml` builds and tests on release tags (`v*`) and on manual dispatch, so a PR is not gated automatically
+4. Request review from a maintainer. A reviewed PR is merged into `develop` with a merge commit (`git merge --no-ff`), not squashed or rebased; the merge commit summarizes the integrated work
 
 ---
 

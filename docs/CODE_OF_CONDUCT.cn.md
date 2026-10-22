@@ -38,7 +38,9 @@
 
 ## 执行
 
-对滥用、骚扰或其他不可接受行为的举报，可发送至负责执行的社区领导者：[在 GitHub 上开启 Issue](https://github.com/OpenCML/Camel/issues)（如涉及敏感内容，可使用 GitHub 的私有安全通告功能）。所有投诉都将得到及时和公正的审查与调查。
+对滥用、骚扰或其他不可接受行为的举报，可发送至负责执行的社区领导者：[在 GitHub 上开启 Issue](https://github.com/OpenCML/Camel/issues)；如涉及敏感内容，请使用 GitHub 的[私有安全通告](https://github.com/OpenCML/Camel/security/advisories/new)，不要开公开 Issue。项目目前尚未公布单独的行为准则邮箱。所有投诉都将得到及时和公正的审查与调查。
+
+<!-- TODO(author): add a private Code of Conduct contact address before the repository is public, or state that the GitHub routes above are the only channels, and remove this comment. -->
 
 所有社区领导者都有义务尊重任何事件举报人的隐私和安全。
 

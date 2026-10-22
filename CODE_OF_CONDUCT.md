@@ -38,7 +38,9 @@ This Code of Conduct applies within all community spaces, and also applies when 
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement by [opening a GitHub Issue](https://github.com/OpenCML/Camel/issues) (use GitHub's private security advisory for sensitive matters). All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders responsible for enforcement by [opening a GitHub Issue](https://github.com/OpenCML/Camel/issues); for sensitive reports, use GitHub's [private security advisory](https://github.com/OpenCML/Camel/security/advisories/new) instead of a public issue. The project does not publish a separate Code of Conduct email address yet. All complaints will be reviewed and investigated promptly and fairly.
+
+<!-- TODO(author): add a private Code of Conduct contact address before the repository is public, or state that the GitHub routes above are the only channels, and remove this comment. -->
 
 All community leaders are obligated to respect the privacy and security of the reporter of any incident.
 

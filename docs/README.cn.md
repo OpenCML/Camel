@@ -69,7 +69,7 @@ camel prog.cml std::jit                 # 带即时编译运行
 camel prog.cml std::prl                 # 并行调度
 camel prog.cml std::opt std::fvm        # 先优化，再运行
 camel prog.cml std::rgir                # 不运行，打印图（Graphviz DOT）
-camel prog.cml std::macro std::opt onnx::export    # 把 main 转译为 ONNX 模型
+camel prog.cml std::macro std::opt 'onnx::export(out="model.onnx")'   # 把 `main` 导出为 ONNX 模型
 ```
 
 自动微分（`autodiff` 模块的 `grad`）与 ONNX 导出是建立在同一套遍机制之上的库。[入门教程](tutorial/tutorial.cn.md)会带你看图、换流水线、导出一个小模型、求一次梯度。
@@ -81,14 +81,16 @@ camel prog.cml std::macro std::opt onnx::export    # 把 main 转译为 ONNX 模
 
 ### 构建
 
-Camel 从源码构建，工具链见 [setup.cn.md](setup.cn.md)。
+Camel 从源码构建；各平台的工具链见 [setup.cn.md](setup.cn.md)。构建需要 Clang 19 或更高、CMake 3.25 或更高、Ninja、Conan 2.10 或更高，脚本还需要 Node.js 18 或更高。第一次构建会执行 `conan install` 下载 C++ 依赖，因此需要网络。
 
 ```bash
-npm install
-npm run build        # 可执行文件在 out/latest/bin/camel
+npm install          # 安装 npm 包，并执行 conan install
+npm run build        # Release 构建；可执行文件落在 out/latest/bin
 ```
 
-把 `out/latest/bin` 加入 `PATH`（并把 `CAMEL_HOME` 设为 `out/latest`）。同一棵源码树还可以打出名为 `camel-lang` 的 Python wheel，见 [pypi-packaging.md](pypi-packaging.md)。
+Linux 与 macOS 上可执行文件是 `out/latest/bin/camel`，Windows 上是 `out/latest/bin/camel.exe`。把 `out/latest/bin` 加入 `PATH`，并把 `CAMEL_HOME` 设为 `out/latest`（包含 `bin/`、`libs/`、`include/` 与 `stdlib/` 的目录）。发布 CI 构建并测试 Linux x64 与 Windows x64；macOS arm64 是手动选择的试验任务，因此 macOS 未经 CI 验证。
+
+只有找到带开发头文件的 CPython 时才会构建 `python` 与 `pyplot` 模块；没有就跳过，`CAMEL_SKIP_PYTHON=1` 可显式跳过。同一棵源码树还可以用 `npm run pypi:rollup` 打出名为 `camel-lang` 的 Python wheel，见 [pypi-packaging.md](pypi-packaging.md)。
 
 ### VS Code
 
@@ -97,7 +99,7 @@ npm run build        # 可执行文件在 out/latest/bin/camel
 ### Hello, Camel
 
 ```camel
-// hello.cml
+// greeting.cml
 module hello
 
 func main(): int sync {
@@ -107,7 +109,7 @@ func main(): int sync {
 ```
 
 ```bash
-camel hello.cml
+camel greeting.cml
 ```
 
 ```text
