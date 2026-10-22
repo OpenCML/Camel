@@ -7,8 +7,8 @@ func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
 }
 
 func main(): int sync {
-    let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
-    let b = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [3, 2])
+    let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let b = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [3, 2])
     println(download(run_preferred_resident<product>((a, b))))
     return 0
 }

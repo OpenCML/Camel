@@ -16,7 +16,7 @@ func f(): float {
 }
 
 func main(): int sync {
-    let d = grad(f)<reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])>()
+    let d = grad(f)<reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])>()
     'loop_grad_refuse_tensor_iterable d={}'->format<d>->println
     return 0
 }

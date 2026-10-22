@@ -47,7 +47,7 @@ size_t checkedBytes(std::span<const int64_t> shape, size_t width) {
 } // namespace
 
 size_t tensorPayloadSize(type::TypeCode dtype, std::span<const int64_t> shape) {
-    return checkedBytes(shape, elementSize(normalizeTensorDType(dtype)));
+    return checkedBytes(shape, elementSize(dtype));
 }
 
 std::string tensorToLittleEndian(const Array *tensor) {
@@ -62,7 +62,6 @@ std::string tensorToLittleEndian(const Array *tensor) {
 Array *tensorFromLittleEndian(
     std::string_view input, type::TypeCode dtype, std::span<const int64_t> shape,
     mm::IAllocator &allocator) {
-    dtype                 = normalizeTensorDType(dtype);
     const size_t width    = elementSize(dtype);
     const size_t expected = tensorPayloadSize(dtype, shape);
     if (input.size() != expected) {

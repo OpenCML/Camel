@@ -7,7 +7,7 @@ import { Tensor, reshape, sum } from tensor
 func scale(x: Tensor<f32>): Tensor<f32> { return x * 2.0 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(sum(scale(x)))
     return 0
 }

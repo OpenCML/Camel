@@ -1308,11 +1308,21 @@ DraftInlineResult inlineCallableInDraft(
         "The call of an arm is the node of the region of its arm.");
     const size_t slotsBefore = draft.nodeSlotCount();
     // The call is the whole of its arm, which already has its region: the body goes into it.
+    // The region records the function this code is a copy of, which is what the inline history
+    // asks it (GraphDraft::inlinedCopyOf, H44c). A type specialization is that function with a
+    // more precise type, and the program the next round sees makes it again, under a new id, when
+    // its copy of the specialization is gone: recording the specialization's id would leave a
+    // record nothing resolves, the history would not recognize the call, and a recursion would
+    // be unrolled a level per round without bound. Recording the function it derives from keeps
+    // the record resolvable for as long as the function is.
+    const GraphId inlineSource = isValid(calleeGraph->typeSpecializationRoot())
+                                     ? calleeGraph->typeSpecializationRoot()
+                                     : calleeGraph->id();
     const uint32_t inlineRegion =
         intoArm ? draft.nodeRegion(funcNodeId)
                 : draft.addInlineRegion(
                       draft.nodeRegion(funcNodeId),
-                      calleeGraph->id(),
+                      inlineSource,
                       kInvalidNodeRef);
     draft.setRegionOrigin(inlineRegion, static_cast<uint32_t>(draft.nodeOrigin(funcNodeId)));
     if (intoArm) {

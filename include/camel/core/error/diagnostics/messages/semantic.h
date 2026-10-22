@@ -230,9 +230,9 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
-    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 and up.
-    /// The tensor type's element type would be stored as another one (`Tensor<f64>` as f32).
-    TensorElementTypeNotStored = 0x0001A7,
+    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
+    // tensor keeps the element type it is written with, so nothing rewrites it and there is no
+    // such diagnostic. The code is not reused.
 
     // Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A8 and up.
     /// The condition's value is not a bool.

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-255 diagnostics: 236 errors, 19 warnings.
+254 diagnostics: 235 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,7 +189,6 @@ prints one entry.
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
 | `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
-| `0x030001A7` | [SemanticDiag::TensorElementTypeNotStored](#tensorelementtypenotstored) | Error |
 | `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
 | `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
 | `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
@@ -5080,42 +5079,6 @@ Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a m
 
 *No example: no test small enough to show raises it.*
 
-### TensorElementTypeNotStored
-
-`0x030001A7` · Error · `SemanticDiag::TensorElementTypeNotStored`
-
-**Message**
-
-```text
-'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this declaration would silently run with '{1}'. Tensors that keep the element type they are written with are not implemented yet.
-```
-
-**Help**
-
-```text
-Write '{1}' and convert the values explicitly where they enter the tensor; element-type-exact tensor storage (design/arrays-memory, P4) removes this restriction. 'zeros' and 'ones' already build f32 tensors.
-```
-
-**Example** (`test/cases/modules/tensor/dtype/f64_refused.cml`, run as `camel test/cases/modules/tensor/dtype/f64_refused.cml`)
-
-```camel
-// `Tensor<f64>` asks for f64 elements. This build stores every tensor as f32, int64 or bool, so
-// the declaration is refused at the type expression (SemanticDiag::TensorElementTypeNotStored)
-// instead of the program silently running in f32.
-//
-// Before the diagnostic this program compiled: the cast target was normalized to `Tensor<f32>`,
-// and `sum` answered 10.0 from f32 storage.
-module tensor_dtype_f64_refused
-
-import { Tensor, new, sum } from tensor
-
-func main(): int sync {
-    let x = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f64>
-    println(sum(x))
-    return 0
-}
-```
-
 ### WhenConditionNotBool
 
 `0x030001A8` · Error · `SemanticDiag::WhenConditionNotBool`
@@ -7009,7 +6972,27 @@ A replacement field is a pair of braces, optionally holding a format specificati
 Convert the value to a supported type before the call.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
+
+```camel
+// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
+// diagnostic naming the operator, the argument's element type and the set the kernel takes.
+// It is never narrowed to f32 (design principles 5.1, 13.1).
+module tensor_dtype_f32_only
+
+import { new, reshape, ones, sum } from tensor
+import { conv2d } from nn
+
+func main(): int sync {
+    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
+    let x = reshape(new(values), [1, 1, 2, 2])
+    let kernel = ones([1, 1, 1, 1])
+    let bias = ones([1])
+    let y = conv2d(x, kernel, bias, 1, 0)
+    println(sum(y))
+    return 0
+}
+```
 
 ### FieldNotFound
 
@@ -7426,7 +7409,7 @@ import { Tensor, reshape, tanh, sum } from tensor
 func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(sum(activate(x)))
     return 0
 }
@@ -7524,7 +7507,7 @@ func step(x: Tensor<f32>): Tensor<f32> {
 }
 
 func main() {
-    let x = reshape([1.0, 2.0], [2])
+    let x = reshape([1.0, 2.0] as f32[], [2])
     println(step(x))
 }
 ```

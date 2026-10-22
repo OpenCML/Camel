@@ -26,7 +26,7 @@ func check(name: string, a: Tensor<f32>, b: Tensor<f32>, target: Tensor<f32>, ru
         let plus = pair(a + 0.001, b - 0.001)
         let minus = pair(a - 0.001, b + 0.001)
         let fd = (loss<plus>(target) - loss<minus>(target)) / 0.002
-        let fd_error = sum(abs(reshape([fd - sum(gpu.1.a) + sum(gpu.1.b)], [1])))
+        let fd_error = sum(abs(reshape([f32(fd - sum(gpu.1.a) + sum(gpu.1.b))], [1])))
         println('BATCH {} forward_l1={} gradient_l1={} directional_error={}'->format<name, forward_error, gradient_error, fd_error>)
         if forward_error > 0.0001 || gradient_error > 0.0001 || fd_error > 0.002 then sync { exit(1) }
     }
@@ -43,8 +43,8 @@ func main(run_gpu: bool): int sync {
     check('broadcast4', randn([2, 1, 3, 4]), randn([1, 3, 4, 5]), randn([2, 3, 3, 5]), run_gpu)
     check('tail_tiles', randn([2, 17, 19]), randn([2, 19, 18]), randn([2, 17, 18]), run_gpu)
     if run_gpu then sync {
-        let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], [2, 2, 3])
-        let expected = reshape([22.0, 28.0, 49.0, 64.0, 220.0, 244.0, 301.0, 334.0], [2, 2, 2])
+        let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0] as f32[], [2, 2, 3])
+        let expected = reshape([22.0, 28.0, 49.0, 64.0, 220.0, 244.0, 301.0, 334.0] as f32[], [2, 2, 2])
         let known_error = sum(abs(download(run_preferred_resident<product>((a, reshape(a, [2, 3, 2])))) - expected))
         if known_error != 0.0 then sync { exit(1) }
         let empty_k = download(run_preferred_resident<product>((randn([2, 3, 0]), randn([2, 0, 4]))))

@@ -7,7 +7,7 @@ func scale(x: Tensor<f32>, k: float): Tensor<f32> { return x * k }
 with <k: float>
 func shifted(x: float): float { return x + k }
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(source<arithmetic>((1.0, 2.0)) == source<arithmetic>((16777217.0, 3.0)))
     println(source<scale>((x, 0.5)) == source<scale>((x, 1.25)))
     println(source<shifted<1.0>>(2.0) == source<shifted<3.0>>(4.0))

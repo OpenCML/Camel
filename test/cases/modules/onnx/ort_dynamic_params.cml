@@ -32,9 +32,9 @@ func step(w: Tensor, b: Tensor, x: Tensor): (Tensor, Tensor, Tensor) {
 func main(): int sync {
     let mode = get_env('MODE')
     return if mode == 'export' then sync {
-        let w = reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, 0.375, -0.625], [3, 3])
-        let b = reshape([0.1, -0.2, 0.3], [3])
-        let x = reshape([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], [3, 3])
+        let w = reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, 0.375, -0.625] as f32[], [3, 3])
+        let b = reshape([0.1, -0.2, 0.3] as f32[], [3])
+        let x = reshape([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] as f32[], [3, 3])
         export_model((w: Tensor, b: Tensor, x: Tensor): (Tensor, Tensor, Tensor) => step(w, b, x), (w, b, x), get_env('ONNX_OUT'), [0])
         println('exported')
         return 0

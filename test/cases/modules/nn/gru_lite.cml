@@ -49,13 +49,13 @@ func sequence_loss(x0: Tensor, x1: Tensor, target: Tensor): float {
 
 func init(): GruLite {
     return {
-        wxz: full([2, 2], 0.1),
-        whz: full([2, 2], 0.1),
+        wxz: full([2, 2], f32(0.1)),
+        whz: full([2, 2], f32(0.1)),
         bz: zeros([2]),
-        wxn: full([2, 2], 0.1),
-        whn: full([2, 2], 0.1),
+        wxn: full([2, 2], f32(0.1)),
+        whn: full([2, 2], f32(0.1)),
         bn: zeros([2]),
-        why: full([2, 1], 0.1),
+        why: full([2, 1], f32(0.1)),
         by: zeros([1])
     }
 }
@@ -66,9 +66,9 @@ func train(model: GruLite, x0: Tensor, x1: Tensor, target: Tensor, steps: int): 
 
 func main(): int sync {
     let model = init()
-    let x0 = full([1, 2], 1.0)
-    let x1 = full([1, 2], 0.5)
-    let target = full([1, 1], 1.0)
+    let x0 = full([1, 2], f32(1.0))
+    let x1 = full([1, 2], f32(0.5))
+    let target = full([1, 1], f32(1.0))
 
     let before = sequence_loss<model>(x0, x1, target)
     let vg = with_grad(sequence_loss)<model>(x0, x1, target)

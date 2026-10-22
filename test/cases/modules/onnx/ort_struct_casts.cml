@@ -57,7 +57,7 @@ func walk(h: Tensor, k: int): Run {
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -2.0, 0.5, 1.5], [2, 2])
+    let ex = reshape([1.0, -2.0, 0.5, 1.5] as f32[], [2, 2])
     export_model((x: Tensor): Run => identity(x, 1), ex, 'identity.onnx')
     export_model((x: Tensor): Run => reordered(x, 1), ex, 'reordered.onnx')
     export_model((x: Tensor): Run => declared(x, 1), ex, 'declared.onnx')

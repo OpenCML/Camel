@@ -67,8 +67,8 @@ digraph GraphIR {
             N11 -> N12 [label="0|0", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT"];
-        N13 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="18:20-18:41", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="float[]"];
-        N14 [label="[4]", type="DATA", origin=<ORIGIN>, span="18:43-18:46", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int[]"];
+        N13 [label="[1.0, -2.0, 3.0, 0.5]", type="DATA", origin=<ORIGIN>, span="18:20-18:50", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="f32[]"];
+        N14 [label="[4]", type="DATA", origin=<ORIGIN>, span="18:52-18:55", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int[]"];
         N15 [label="tensor:reshape", type="OPER", origin=<ORIGIN>, span="18:12-18:19", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="Tensor<float32, [4]>"];
         N16 [label="gate", type="FUNC", origin=<ORIGIN>, span="19:12-19:19", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="Tensor"];
         N17 [label="0", type="DATA", origin=<ORIGIN>, span="20:39-20:40", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="int"];

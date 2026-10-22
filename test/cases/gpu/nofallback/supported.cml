@@ -10,6 +10,6 @@ func scale(x: Tensor<f32, [3]>): Tensor<f32, [3]> {
 }
 
 func main() {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(sum(scale(x)))
 }

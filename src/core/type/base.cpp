@@ -196,13 +196,7 @@ Type::applyArguments(std::span<const TypeArgument> arguments, std::string &error
     return nullptr;
 }
 
-bool Type::argumentStoredAs(
-    std::span<const TypeArgument> arguments, std::string &written, std::string &stored) const {
-    (void)arguments;
-    (void)written;
-    (void)stored;
-    return false;
-}
+
 
 ExtentBinding bindExtents(
     const Type *parameter, const Type *actual, ExtentValues &values, ExtentPacks &packs,

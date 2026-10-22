@@ -826,12 +826,12 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_empty_array"
-desc = "The umbrella boundary: `show([])` binds the second rule's type variable to the empty array's element type, so the call is accepted as it was under the C++ `TensorLike` resolver, and the kernel faults with the same `Unsupported Tensor dtype` — the declaration narrows nothing (H175, docs/stdlib-conventions.cn.md 第 8 节)."
+desc = "The umbrella boundary: `show([])` binds the second rule's type variable to the empty array's element type, so the call is accepted as it was under the C++ `TensorLike` resolver, and the kernel faults with `Unsupported Tensor element type.` — the declaration narrows nothing (H175, docs/stdlib-conventions.cn.md 第 8 节)."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["RuntimeDiag::RuntimeError", "tensor_show_empty_array.cml:12:5", "show: Unsupported Tensor dtype"]
+expect_output_contains = ["RuntimeDiag::RuntimeError", "tensor_show_empty_array.cml:12:5", "show: Unsupported Tensor element type."]
 # ---- The declarations of `pyplot` (handover H166) ----
 #
 # `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never

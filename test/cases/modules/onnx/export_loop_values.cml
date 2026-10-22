@@ -32,8 +32,8 @@ func model(w: Tensor, x: Tensor): (Tensor, int, Tensor, Tensor) {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
-    let w = reshape([0.5, -0.25, 0.1, 0.3], [2, 2])
+    let x = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
+    let w = reshape([0.5, -0.25, 0.1, 0.3] as f32[], [2, 2])
     export_model((w: Tensor, x: Tensor): (Tensor, int, Tensor, Tensor) => model(w, x), (w, x), get_env('ONNX_OUT'))
     println('exported')
     return 0

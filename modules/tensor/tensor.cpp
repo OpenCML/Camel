@@ -9,10 +9,12 @@
 
 #include "tensor.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/utils/assert.h"
 
 #include <cstring>
+#include <string>
 
 namespace camel::tensor {
 
@@ -32,7 +34,9 @@ uint64_t numelOf(std::span<const int64_t> shape) {
 Array *
 createTensor(TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator,
              bool zeroInit) {
-    dtype                          = normalizeTensorDType(dtype);
+    if (!isSupportedTensorScalar(dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
+    }
     const type::ArrayType *arrType = type::ArrayType::create(type::Type::create(dtype));
     return Array::create(allocator, arrType, shape, zeroInit);
 }
@@ -58,6 +62,15 @@ Array *viewTensor(
     }
     Array *unwrapped = const_cast<Array *>(source);
     return Array::view(unwrapped, shape, elementOffset);
+}
+
+void refuseTensorElementType(
+    std::string_view op, const Array *tensor, std::initializer_list<TypeCode> supported) {
+    camel::core::error::throwRuntimeFault(
+        camel::core::error::RuntimeDiag::OperandTypeUnsupported,
+        std::string(op),
+        "Tensor<" + elementTypeSpelling(tensor->dtype()) + ">",
+        supportedElementTypes(supported) + " tensors");
 }
 
 } // namespace camel::tensor

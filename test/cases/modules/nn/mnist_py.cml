@@ -6,7 +6,7 @@
 module mnist_py
 
 import {
-    Tensor, argmax, concat, exp, log, max, ones, range, reshape, shape, sum, transpose, zeros
+    Tensor, argmax, cast, concat, exp, log, max, ones, range, reshape, shape, sum, transpose, zeros
 } from tensor
 import { py_import, py_call, py_wrap, py_unwrap, py_exec, py_attr, PyObject } from python
 import { round } from math
@@ -86,7 +86,8 @@ func main(): int sync {
     let n = data.shape[0]
     let d_in = data.shape[1]
 
-    let X = reshape(data.images, [n, d_in])
+    // The loaded images are float[] (f64); the classifier computes in f32, and cast is the explicit conversion.
+    let X = cast(reshape(data.images, [n, d_in]), 'float32')
     let ones_col = ones([n, 1])
     let X_bias = concat(X, ones_col, 1)
     let d = shape(X_bias)[1]

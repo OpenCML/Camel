@@ -46,7 +46,8 @@ class ShapeError : public std::invalid_argument {
 /// Product of all extents; 1 for a scalar (rank-0) shape.
 uint64_t numelOf(std::span<const int64_t> shape);
 
-/// Allocates a tensor. `dtype` may be any numeric scalar code; it is normalized to storage.
+/// Allocates a tensor. `dtype` is any supported element type and is stored exactly as written
+/// (dtype.h); an unsupported code is refused.
 Array *createTensor(
     type::TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator,
     bool zeroInit = false);
@@ -60,5 +61,17 @@ Array *createTensor(
 Array *viewTensor(
     const Array *source, std::span<const int64_t> shape, mm::IAllocator &allocator,
     uint64_t elementOffset = 0);
+
+/**
+ * Refuses a tensor whose element type a kernel does not compute in, as
+ * `RuntimeDiag::OperandTypeUnsupported`: the message names the operator, the argument's
+ * element type and the set the kernel takes. A kernel that supports only some element types
+ * calls this instead of converting the tensor (design principles 5.1: no implicit conversion
+ * between numeric types; 13.1: a construct the implementation cannot handle is refused, never
+ * silently done another way).
+ */
+[[noreturn]] void refuseTensorElementType(
+    std::string_view op, const Array *tensor,
+    std::initializer_list<type::TypeCode> supported);
 
 } // namespace camel::tensor

@@ -796,7 +796,7 @@ Value Evaluator::evalCast(Activation &act, gc_node_ref_t ref, Value src) {
                 have));
     }
     if (src.form == Value::Form::Scalar && tensor::isSupportedTensorScalar(target->code())) {
-        const TypeCode code = tensor::normalizeTensorDType(target->code());
+        const TypeCode code = target->code();
         return Value::symbolicScalar(
             emitter_.node(
                 "Cast",
@@ -3535,7 +3535,7 @@ Value Evaluator::symbolicFloatArray(
     auto *templ = rtdata::fromSlot<::Array *>(source.slot);
     type::Type *elemType =
         static_cast<type::ArrayType *>(act.graph->node(ref)->dataType())->elemType();
-    const TypeCode dtype = tensor::normalizeTensorDType(elemType->code());
+    const TypeCode dtype = elemType->code();
     const auto fillSlots = act.graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
     std::vector<std::optional<Value>> elems(templ->size());
     for (size_t k = 0; k < fillSlots.size(); ++k) {

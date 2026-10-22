@@ -120,11 +120,9 @@
 
 **Camel 侧还缺什么**
 
-- **数值类型（H238，优先）**：`Tensor` 的公开元素类型实际上只有 f32、i64、bool；没有 bf16、f16，也没有
-  真正的 f64 张量（`modules/tensor/dtype.cpp` 的 `normalizeTensorDType` 把 f64、i32 归一为 f32、i64）。
-  因此 bf16 溢出与 fp64 误差的测量只能在 PyTorch 里做；Camel 的 f32 阈值与 PyTorch 的 f32 阈值逐项一致。
-  H238 的两条分支 `handover/h259-dtype`（拒绝 `Tensor<f64>`/`Tensor<i32>` 而不是替换）与
-  `handover/h260-tensor-storage`（删掉归一化表）落地后，这一条要删掉，f64 可用则补一列。
+- **数值类型**：`Tensor` 的公开元素类型是 f32、f64、i32、i64、bool，元素类型就是写下的那一个
+  （`modules/tensor/dtype.h`）；还没有 bf16、f16。因此 bf16 溢出的测量只能在 PyTorch 里做；fp64
+  误差现在也可以在 Camel 里测。Camel 的 f32 阈值与 PyTorch 的 f32 阈值逐项一致。
 - **块只是元组，不是 `Block[]`**：H17 的原生数组语法与带形状的 `Tensor<f32, [...]>` 已经可用，但
   "循环迭代一个依赖可微参数的张量数组"仍被拒绝（反向要把每轮的梯度散射回数组，而数组元素还没有零切向量）。
   模型因此写 `blocks: (Block, Block)`，前向用

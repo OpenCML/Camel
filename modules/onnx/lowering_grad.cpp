@@ -23,10 +23,10 @@ using type::TypeCode;
 
 namespace {
 
-std::string floatConst(Emitter &e, double v) {
+std::string floatConst(Emitter &e, double v, std::optional<TypeCode> dtype = TypeCode::Float32) {
     return e.operand(
         Value::constant(rtdata::toSlot(static_cast<rtdata::Float64>(v)), type::Type::Float64()),
-        TypeCode::Float32);
+        dtype);
 }
 
 /// ReduceSum/ReduceMean of `x` over `axes`, in the form the opset takes.
@@ -322,7 +322,7 @@ Value lowerPermuteInverse(const LowerContext &ctx) {
 }
 
 /// sgd on one parameter tree: every tensor p becomes p - lr * g; other leaves are kept.
-Value sgdTree(Emitter &e, const Value &p, const Value &g, const std::string &lr) {
+Value sgdTree(Emitter &e, const Value &p, const Value &g, double lr) {
     if (p.isAggregate() != g.isAggregate() ||
         (p.isAggregate() && p.fields.size() != g.fields.size())) {
         throw ExportError("nn:sgd: the parameters and gradients differ in structure");
@@ -343,11 +343,12 @@ Value sgdTree(Emitter &e, const Value &p, const Value &g, const std::string &lr)
             e.node(
                 "Sub",
                 {e.operand(p, TypeCode::Float32),
-                 e.node("Mul", {e.operand(g, TypeCode::Float32), lr})}),
+                 e.node("Mul", {e.operand(g, TypeCode::Float32), floatConst(e, lr)})}),
             ty);
     }
     const TensorFacts facts = factsOf(p);
-    const std::string step  = e.node("Mul", {e.operand(g, facts.dtype), lr});
+    const std::string step =
+        e.node("Mul", {e.operand(g, facts.dtype), floatConst(e, lr, facts.dtype)});
     return Value::symbolic(
         e.node("Sub", {e.operand(p, facts.dtype), step}),
         facts.dtype,
@@ -356,9 +357,8 @@ Value sgdTree(Emitter &e, const Value &p, const Value &g, const std::string &lr)
 
 // sgd(params, grads, lr)
 Value lowerSgd(const LowerContext &ctx) {
-    Emitter &e           = ctx.emitter();
-    const std::string lr = floatConst(e, ctx.constNumber(2, 0.0));
-    return sgdTree(e, ctx.arg(0), ctx.arg(1), lr);
+    Emitter &e = ctx.emitter();
+    return sgdTree(e, ctx.arg(0), ctx.arg(1), ctx.constNumber(2, 0.0));
 }
 
 std::string int64Const(Emitter &e, int64_t v) {

@@ -29,13 +29,13 @@ TensorFacts InferContext::facts(size_t index) const {
         }
         TensorFacts facts;
         if (isSupportedTensorScalar(elem->code())) {
-            facts.dtype = normalizeTensorDType(elem->code());
+            facts.dtype = elem->code();
         }
         facts.shape = StaticShape(rank, kUnknownDim);
         return facts;
     }
     if (isSupportedTensorScalar(argType->code())) {
-        return {normalizeTensorDType(argType->code()), StaticShape{}};
+        return {argType->code(), StaticShape{}};
     }
     return {};
 }
