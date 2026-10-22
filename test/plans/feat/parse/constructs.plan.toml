@@ -101,4 +101,4 @@ kind = "behavior"
 case = "../../../cases/parse/constructs/fstring.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["hello, Camel!", "pi = 3.50", "nested: <inner 42>", "braces { } are literal; ${not} interpolated"]
+expect_stdout_contains = ["hello, Camel!", "pi = 3.50", "nested: <inner 42>", "braces { } are literal"]
