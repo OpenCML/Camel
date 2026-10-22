@@ -1,0 +1,186 @@
+# H117：无设备时只探测一次，`@gpu` 的报错给出位置
+
+## 0. 结论
+
+- 探测（构造 CUDA 后端，即加载驱动并 `cuInit`）现在是**每进程一次**，结果（成功、能力缺失、点名的设备缺失、普通故障）连同解释一起缓存；之后任何一次偏好调用都读这份答案，**不再重试**。今天的代码在同一程序里探测 **7 次**，改后 **1 次**（第 1 节有计数方法）。
+- 无设备时的诊断仍由 `RuntimeDiag::DeviceUnavailable`（`0x04000070`，H105 的码）发出，语义不变：没写 `--devices` 时静默走主机；写了 `--devices <序号>` 时第一次调用就报错，不回落。
+- `@gpu` 包装图的派发节点现在带上被包装函数的图起点，因此 `--devices 63` 的报错从 `(add):?:?:` 变成 **`gpu_decorator.cml:5:1`**（`@gpu` 注解那一行），`gpu_fallback.cml` 的首次使用仍是精确的 `15:13`（`available()`）。回填的是**图起点**：注解与声明是“要求设备”的来源；**动态调用点拿不到**，原因见第 5 节。
+- 行为在有设备与 `--devices cpu` 下不变：有设备时主机回退依旧静默（只是探测从每次调用一次变成一次），`cpu` 在探测之前就被回答，一行日志都不产生。
+- 验收：`feat/modules/tiles`（串行 `-Jobs 1`）**67/67**、`gpu/tiles_decorator` **12/12**、`smoke` **10/10**、`feat/docs_links` **1/1**。`feat/modules` 是 **977/1078**，余下 99 条红在分支点 `f200920c0` 上就已存在（`onnx` 的 `rules::simplify` 与 `graph_facts` 的 FACTS 计数），与本项无关，4.1 节有改前/改后的同集合对照。
+
+## 1. 重试是怎么来的（改前的证据）
+
+`sharedBackend()` 原来是：
+
+```cpp
+std::shared_ptr<Backend> sharedBackend() {
+    static auto instance = createBackend();
+    return instance;
+}
+```
+
+函数内静态的初始化只有在构造**成功**时才完成。`createBackend()` 在无设备时抛 `BackendUnavailable`（能力缺失），静态因此从未初始化，下一次调用会**重新执行整条初始化**：重新 `dlopen` 驱动、重新 `cuInit`。`@gpu` 的每个包装图都在自己的 `tiles:prefer_gpu` 节点上调 `preferGpuKernel` → `deviceInfo()` → `backend()`，所以一个程序里有几个偏好调用就重试几次。
+
+改前的构造次数不是推测，是数出来的：在探测处加一行 info 日志（见 2.2），用 `-vv` 跑无设备的 `gpu_fallback.cml`，`stderr` 里该行出现 **7 次**：`available()` 一次、5 个 `@gpu` 包装图（`add`、`effect`、`nested`、`pair`、`gpu(...)` 的 lambda）各一次，第 7 次是 `nested` 执行时又调了一次 `add` 的包装图。同一程序改后是 **1 次**。两次用的是同一台 Linux 主机、同一个 Release 构建配置，唯一差别是 `sharedBackend()` 是否缓存：
+
+```
+# 改前（把 sharedBackend 临时还原成每次 probeBackend()）
+[FAIL] h117.probe_count
+    [INFO] verification output: Error: expected one device probe, saw 7
+# 改后
+[PASS] h117.probe_count
+```
+
+有设备时旧代码只构造一次（静态成功即缓存），所以重试只发生在“失败”这一侧——这也解释了为什么 H105 只在无设备的机器上看到它。
+
+## 2. 改动
+
+### 2.1 缓存一次探测（`modules/tiles/src/cuda_backend.cpp`）
+
+`createBackend()` 变成 `probeBackend()`，返回一个 `ProbeOutcome`：
+
+```cpp
+struct ProbeOutcome {
+    enum class Kind : uint8_t { Ready, Unavailable, DeviceMissing, Fault };
+    std::shared_ptr<Backend> backend;
+    Kind kind = Kind::Ready;
+    int ordinal = 0;
+    std::string reason;
+};
+```
+
+- `Ready`：后端已建好，缓存 `shared_ptr`。
+- `Unavailable`：能力缺失（`--devices cpu`，或无设备且没点名），调用方按 H105 的语义静默走主机。
+- `DeviceMissing`：`--devices` 点了名而设备不在，带序号与解释，调用方抛 `DeviceUnavailable`。
+- `Fault`：既不是能力缺失也不是点名缺失的普通失败，**也缓存**，避免一个坏后端在每次偏好调用上重建；按原样以 `std::runtime_error(reason)` 重新抛出。
+
+`sharedBackend()` 现在只做一次测量：
+
+```cpp
+static const ProbeOutcome outcome = probeBackend();
+```
+
+函数内静态的初始化在 C++11 起是线程安全的一次性初始化：并发调用者要么看到同一个答案，要么在首次初始化上等待，不会各测一次。每次调用**新建**一个异常对象（`DeviceUnavailable(ordinal, reason)` / `BackendUnavailable(reason)` / `std::runtime_error(reason)`），不共享 `exception_ptr`，避免多线程同时抛出同一个异常对象。
+
+`--devices cpu` 在打日志和构造之前就被回答（`selection.given && (selection.cpu || selection.cuda.empty())`），所以主机选择不会加载驱动，也不会产生探测日志。
+
+### 2.2 探测的日志钩子（`capability.h`、`module.cpp`）
+
+**先试过的做法失败了，值得记下来**：直接在 `cuda_backend.cpp` 里 `CAMEL_LOG_INFO_S("tiles", ...)`。构建在 `tiles-module-lease` 上失败——这个可执行文件按设计**不链接 libcamel**（设备的代码也编进模块自己的检查程序，见 `modules/tiles/CMakeLists.txt` 的说明），`CAMEL_LOG_*` 因此没有定义。不会为了让一行日志通过而给检查程序加 libcamel 依赖（那会掩盖它本来要抓的未导出符号）。
+
+改法：在 `capability.h` 里放一个进程内的通知钩子，
+
+```cpp
+inline void (*deviceProbeStarted)() = nullptr;
+```
+
+探测真正开始时调用它（为空则不调用），由 `module.cpp` 在模块加载时注册成写日志的 lambda：
+
+```cpp
+deviceProbeStarted = [] {
+    CAMEL_LOG_INFO_S("tiles", "probe: constructing the CUDA backend");
+};
+```
+
+设备代码保持不依赖核心；模块自己（链接 libcamel）决定这行日志怎么写。没有环境变量，也没有让生产代码读取的测试开关——**测试数的是这行 info 日志的出现次数**（第 3 节）。
+
+### 2.3 `@gpu` 包装图的位置（`modules/tiles/src/dispatch.cpp`）
+
+H105 报告第 6 节问题 6：`@gpu` 路径的 `DeviceUnavailable` 报在 `(add):?:?:`，而传 `--devices` 的普通路径有位置。原因：`@gpu` 的包装图是**合成**的，`tiles:prefer_gpu` 节点是新加的，没有源节点，运行时按“节点 → 起点”查就查不到。
+
+`gpuFunction()` 现在取被包装函数的**图起点**（`context.sourceContext()->debugMap().graphOrigin(source->graph()->id())`），做两件事：
+
+1. `draft.setNodeOrigin(output, origin)`：让派发节点自身有位置；
+2. `draft.encode(...)` 之后 `registerGraphOrigin(graph->id(), origin)`：让只知道“图”而不知道“节点”的执行点也能定位。
+
+于是诊断落在 `@gpu` 注解上（并带出声明行），而不是 `?:?:`。没有新增诊断码，仍是 `0x04000070`。
+
+## 3. 行为对照（同一台 Linux 主机，Release，`CUDA_VISIBLE_DEVICES=-1` 表示无卡）
+
+| 场景 | 命令 | 探测次数 | 结果 |
+| --- | --- | --- | --- |
+| 无设备、无 `--devices` | `-vv gpu_fallback.cml std::nvm` | **1**（改前 7） | `false` 起头，全部在主机上跑，输出与改前逐字节相同 |
+| 无设备、`--devices cpu` | `-vv --devices cpu ...` | **0** | 同上；主机选择在探测之前被回答 |
+| 有设备、`--devices 0` | `-vv --devices 0 ...` | **1** | `true` 起头，`@gpu` 在设备上；与改前相同 |
+| 点名的设备缺失 | `--devices 63 gpu_decorator.cml` | 1（首次调用即失败） | `gpu_decorator.cml:5:1`，`@gpu` 处，退出 1 |
+| 点名的设备缺失、首次使用是 `available()` | `--devices 63 gpu_fallback.cml` | 1 | `gpu_fallback.cml:15:13`（`available()` 调用） |
+
+“探测次数”用 `grep -c 'probe: constructing the CUDA backend'` 数 `stderr`；默认日志阈值下这行不出现，所以主机回退在用户看来仍然是安静的。
+
+## 4. 测试
+
+`test/plans/feat/modules/tiles.plan.toml`：
+
+- `gpu_probe.once_per_process`（新）：无设备、`-vv`、`std::nvm`，`verify_script` 数 `stderr` 里探测行的条数并断言 `=== 1`，同时 `expect_stdout_exact` 锁住主机回退的输出。**这就是选定的测试钩子：数日志行，不加计数器 API、不加环境变量。**
+- `gpu_probe.host_only_is_silent`（新）：`--devices cpu`、`-vv`，断言探测行 `=== 0`。
+- `gpu_preference.missing_device`（加强）：补 `expect_diagnostic_name`、`expect_diagnostic_line = 15`、`expect_diagnostic_column = 13`。
+
+`test/plans/gpu/tiles_decorator.plan.toml`：
+
+- `missing_device`（加强）：补 `expect_diagnostic_name`、`expect_diagnostic_line = 5`、`expect_diagnostic_column = 1`，并把注释里“`(add):?:?:`、没有源位置”的旧说明改成现在的位置；`expect_output_contains` 仍断言消息本身。
+
+计划数字（Release，Linux 主机，最终提交 `78879fd23`）：
+
+- `feat/modules/tiles`（`-Jobs 1`，串行）**67/67**：新增 2 条，原 65 条不变。
+- `gpu/tiles_decorator` **12/12**（含加强后的 `missing_device`）。
+- `smoke` **10/10**（`smoke.core`），`feat/docs_links` **1/1**。
+- `feat/modules`（`-Jobs 8`）**977/1078 通过、99 失败、2 跳过**。失败**全部**落在 `feat.modules.onnx`（导出/ORT 路径，`rules::simplify` 报 `RewriteInvalid: The commit conflicts with a newer program`）与 `feat.modules.graph_facts` 的两条（FACTS 计数与期望不符）；**这些红在分支点上就已经存在**，见 4.1。
+
+### 4.1 分支点上既有的红（不是本项引入）
+
+把本项的 6 个文件（4 个源文件 + 2 个计划）还原到分支点 `f200920c0`，用同一组计划、同样的 `-Jobs 8` 再跑一次，结果与本项改后**完全一致**：
+
+```
+# 只跑 feat.modules.onnx + feat.modules.graph_facts
+改前（f200920c0）：total 137, pass 34, fail 103
+改后（78879fd23）：total 137, pass 34, fail 103
+# 失败集合只差 4 条（ort_train_step_adam、resnetbn_train_step_export、
+# pass_export_equals_export_model、export_tree_recursion），它们在两次运行之间翻转，
+# 说明这批红里还带顺序/并发敏感的部分；其余 99 条完全相同。
+```
+
+失败文本与本项改动的四个文件无关：
+
+```
+():?:?: [Error]: Pass 'rules::simplify' failed: error RewriteInvalid: The commit
+conflicts with a newer program: 2 graph(s) the session used have another version
+there ('walk$tspec1', '__g_4__') ... (name=RuntimeDiag::GraphPassFailed, code=0x04000061)
+```
+
+`graph_facts.rewrite_opt` 的实际输出是：
+
+```
+FACTS graph layer valid=3 revalidated=0 stale=3     # 期望 valid=6 revalidated=0 stale=0
+FACTS graph total valid=1 revalidated=0 stale=3     # 期望 valid=4 revalidated=0 stale=0
+FACTS graph count valid=1 revalidated=0 stale=1     # 期望 valid=2 revalidated=0 stale=0
+```
+
+这两处都是 H100 把 `std::opt::algebra` 换成规则库的 `simplify` 之后的契约问题（H100 报告 1.2 节讲的正是“遍必须返回流水线要用的当前 program”），落在本项范围之外；本项没有改 `std::opt`、没有改 `rules`、也没有改 `onnx`。合并闸门若要 `feat/modules` 全绿，需要单独派一项修它。
+
+诊断目录检查：`node scripts/diagnostics-catalog.mjs --check`（202 个码，无重复、无缺名）与 `--verify-doc`（`docs/diagnostics.md` 已是最新）都通过；没有新增码，所以文档无需改。
+
+## 5. 还剩什么，为什么
+
+- **动态调用点拿不到**。诊断能给出的位置是“要求设备”的**来源**：`@gpu` 注解与函数声明（或 `available()` 的调用点）。具体是哪一次调用（`println(add(...))` 还是别的）拿不到：一个包装图服务这个函数的所有调用，故障在包装图的 `tiles:prefer_gpu` 节点上抛出，那个节点是每次编译时合成的、不属于某一次调用。这也意味着报错是“这个函数要设备”而不是“这次调用要设备”——对 `@gpu` 的**偏好**语义来说是准确的（13.1：注解表达偏好，由 Tiles 的遍执行）。若作者希望报错指向调用点，要改的是派发方式（按调用点生成/内联包装，或让故障带上调用帧），那是语义与代码生成的改动，不在本项内。
+- **缓存是“每进程”，不是“每后端代”**。本项允许二者之一；进程内设备集合不会变（`CUDA_VISIBLE_DEVICES` 在驱动初始化时读一次），所以按进程缓存足够。若将来支持运行时增删设备（例如多后端切换），这份缓存要在切换点失效。
+- **`Fault` 也被缓存**。普通故障（非能力缺失）如果不缓存，就还是每次偏好调用重建一次；缓存它符合“一次测量”的目标，但把一个可能可恢复的失败变成进程内永久失败。当前的失败原因（驱动/NVRTC 不在）在进程内不可恢复，所以这是有意的取舍；若作者认为可恢复故障应重试，需要给 `ProbeOutcome` 加“可重试”标志，这一项没有做。
+- **没有做的**：`@gpu` 与 `#gpu` 的取舍（H105 第 7 节问题 1，本项按指示不碰）；`--devices` 的语义一行未改；多设备/多卡选择；探测时间的度量（现在只有一行日志，没有耗时）。
+
+## 6. 复现
+
+```powershell
+# 工作站：只同步与跑计划（构建在 Linux 主机上做）
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+  -Path D:\Projects\Camel-wt\h117-device-init `
+  -Plan test/plans/feat/modules/tiles.plan.toml -Jobs 1
+```
+
+```sh
+# 在主机上手动观察（Release 构建）
+export CAMEL_HOME=$PWD/out/latest
+export LD_LIBRARY_PATH=$HOME/camel-eval/conda/envs/clang/lib
+CUDA_VISIBLE_DEVICES=-1 out/latest/bin/camel -vv test/cases/modules/tiles/gpu_fallback.cml std::nvm 2>&1 >/dev/null | grep -c 'probe: constructing the CUDA backend'   # 1
+CUDA_VISIBLE_DEVICES=-1 out/latest/bin/camel -vv --devices cpu test/cases/modules/tiles/gpu_fallback.cml std::nvm 2>&1 >/dev/null | grep -c 'probe: constructing the CUDA backend'   # 0
+CUDA_VISIBLE_DEVICES=-1 out/latest/bin/camel --devices 63 test/cases/modules/tiles/gpu_decorator.cml std::nvm
+# --> test/cases/modules/tiles/gpu_decorator.cml:5:1
+```
