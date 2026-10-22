@@ -38,6 +38,7 @@ returned for rework when it misses any of these, however well it tests:
 - **Tests assert behaviour that matters** (a property, a graph shape, an exact output), not
   counters that move with unrelated changes.
 - **Camel code** follows `docs/stdlib-conventions.cn.md` section 6.5 and is formatter output.
+- **Documents cite files and symbols, never line numbers.** A line number moves with every edit; cite `src/compile/gir/builder.cpp` and the function, type or test name instead.
 
 ## Architecture Reporting
 - During major refactors, identify the primary structural contradiction early.

@@ -268,6 +268,12 @@ class NamedPairLoad : public Load {
     /// `constas n: T`, a compile-time value parameter of a function declaration: the value is
     /// part of the declaration's identity, not a runtime argument (design principles 5.4).
     bool isConstas() const { return isConstas_; }
+    /// A lambda parameter destructured as a tuple (`((a, b)) => ...`): the names the elements
+    /// are bound to, in order. The parameter itself has a name the program does not write; the
+    /// binding of its elements follows the rule of `let (a, b) = p`.
+    const std::vector<std::string> &tupleNames() const { return tupleNames_; }
+    void setTupleNames(std::vector<std::string> names) { tupleNames_ = std::move(names); }
+    bool isTupleParam() const { return !tupleNames_.empty(); }
     const std::string geneCode() const override;
 
   private:
@@ -276,6 +282,7 @@ class NamedPairLoad : public Load {
     bool isConst_;
     bool isRest_;
     bool isConstas_;
+    std::vector<std::string> tupleNames_;
 };
 
 class NullLoad : public Load {

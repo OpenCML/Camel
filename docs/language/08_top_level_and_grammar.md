@@ -77,13 +77,13 @@ typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (类型 | const 数据), ... '>')?
 primaryType : 名字 | '(' 类型 ')' | '(' 类型, ... ')' | '{' 名字: 类型, ... '}'
-            | 修饰符* '(' 形参 ')' '=>' 类型 | typeas 名字
+            | 修饰符* '(' 形参 ')' '=>' 类型
 enumBody  : 'enum' '{' 变体, ... '}'
 变体      : 名字 | 名字 '(' 类型, ... ')' | 名字 '{' 名字: 类型, ... '}'
 ```
 
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
-- `typeas T`：[7.5](07_statements.md#75-泛型函数)。
+- `::<T>`：函数、`rule` 与 `fact` 在名字后声明类型参数（[7.5](07_statements.md#75-泛型函数)）。
 - `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参可以写在形参表的任意位置，个数不限；每个值各自进入实例键。形状里的维度名不再写 `constas`：名字在形参类型里第一次出现时自动绑定，之后直接写 `n`。
 - `enum`：[3.5](03_data_model.md#35-枚举-enum)。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
@@ -117,8 +117,8 @@ namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDec
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause?
-                     stmtBlock?
+                     'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+                     resourceClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -126,6 +126,7 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef angledValues?
+typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
@@ -225,7 +226,7 @@ arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-                     | 'typeof' dataExpr | 'typeas' identDef
+                     | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
@@ -235,8 +236,8 @@ typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
-ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
-                     '}' (IDENTIFIER dataExpr)?
+ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
+                     '{' ruleBody '}' (IDENTIFIER dataExpr)?
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr

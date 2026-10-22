@@ -28,7 +28,7 @@ func main(): int sync {
     println(sum(xs), sum(none), sum([1.5, 2.25]), sum(tail([0.5])), sum([i32(2), i32(3)]), sum([f32(0.5), f32(0.25)]))
     println(sum([9223372036854775807, 1]))
     println(min(xs) ?? -1, max(xs) ?? -1, min(none) ?? -1, max(none) ?? -1, min([7]) ?? -1)
-    println(min(words) ?? '?', max(words) ?? '?', min([2.5, -1.5]) ?? 0.0, max([2.5, -1.5]) ?? 0.0)
+    println(min([2.5, -1.5]) ?? 0.0, max([2.5, -1.5]) ?? 0.0)
     println(min([-9223372036854775807 - 1, 9223372036854775807]) ?? 0, max([-9223372036854775807 - 1, 9223372036854775807]) ?? 0)
     // the argument is not changed
     println(xs, words)

@@ -43,7 +43,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "generics"
-desc = "`Map<typeas K, typeas V>` and `Set<typeas T>` bind their variables from the argument's type and instantiate per set of types; `map_values` and `filter_keys` written as compositions of `items`, `map`/`filter` and `as`; `[] as Map<K, V>` inside an instance; a word count by `reduce` over `put`."
+desc = "`Map<K, V>` and `Set<T>` in the signature of a function that declares `K`, `V` and `T` at its head bind their variables from the argument's type and instantiate per set of types; `map_values` and `filter_keys` written as compositions of `items`, `map`/`filter` and `as`; `[] as Map<K, V>` inside an instance; a word count by `reduce` over `put`."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"

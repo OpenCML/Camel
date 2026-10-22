@@ -49,7 +49,7 @@ Camel 是图原生的通用编程语言，AI 是它首要的应用领域。
 ### 4.2 类型系统（优先级很高）
 
 - `[定]` 泛型函数按实参类型实例化：泛型函数是子图模板，每组具体类型实例化出一张子图。复用现有的专门化与类型重推断。（状态：部分完成——按实参类型实例化已实现并有测试，泛型函数可以跨模块导出，由导入它的模块各自实例化（`docs/technical/28_generic_functions_and_type_functions.md`、`test/plans/feat/compile/generics.plan.toml` 中的 `generic_exported` 各项，`stdlib/array.cml` 即这样导出）；泛型函数还不能当作函数值，导入的泛型函数体不能使用它所在模块的顶层值，实例放在哪个模块标为 `DESIGN-QUESTION(generic-export)`，待裁定）
-- `[定]` 类型变量用 `typeas T` 就地绑定。（状态：已完成，见 `test/plans/feat/compile/generics.plan.toml`）
+- `[定]` 类型变量在函数、`rule` 与 `fact` 名字后的 `::<T>` 里声明。（状态：已完成，见 `test/plans/feat/compile/generics.plan.toml` 与 `generic_head.plan.toml`）
 - `[定]` 类型函数用专门的类型表达式来写，在类型位置上用尖括号调用；带参数的类型声明就是类型函数。（状态：已完成，见 `type Pair<T> = (T, T)`，`test/plans/feat/compile/generics.plan.toml`）
 - `[定]` `T?` 与 `T!` 两种专用的内建形式；错误值是固定的内建结构。（状态：部分完成——两种形式与内建的 `Error` 结构已实现并有测试（`docs/technical/29_nullable_and_fallible_values.md`、`test/plans/feat/compile/tagged.plan.toml`）；隐式转换、嵌套、`match` 的写法等十一处行为按建议实现，代码中标为 `DESIGN-QUESTION(nullable-error)`，待裁定）
 - `[问]` 类型表达式语言的具体内容；预留运算符的含义；类型里的数值参数如何绑定与计算；`typeof` 用于常量值；`any` 的定位。（状态：未开始）

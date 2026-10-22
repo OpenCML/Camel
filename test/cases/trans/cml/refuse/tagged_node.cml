@@ -1,0 +1,10 @@
+// A tag on the code reaches the nodes as an attribute. Printing it needs the declaration and
+// block storage of S4, so the printer refuses a graph whose nodes carry attributes.
+#strict
+func f(x: float): float {
+    return x * 1.0
+}
+
+func main(): float {
+    return f(2.0)
+}

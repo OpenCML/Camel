@@ -5,7 +5,7 @@
  */
 module match_type_unresolved
 
-func shape(t: typeas T): int {
+func shape::<T>(t: T): int {
     return match type T {
         case struct => 1
         case tuple => nope

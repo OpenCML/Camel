@@ -19,7 +19,7 @@ export func indirect(x: int): int {
     return helper(x) + 1
 }
 
-export func biased(x: typeas T): int {
+export func biased::<T>(x: T): int {
     return base + len([x])
 }
 

@@ -12,7 +12,7 @@ export func size(content: Bytes): int
 
 type Box = { a: int }
 
-func probe(x: typeas T): int {
+func probe::<T>(x: T): int {
     return match type T {
         case struct => 0
         case _ => size(from_array([0]))

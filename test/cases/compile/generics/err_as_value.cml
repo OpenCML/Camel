@@ -1,6 +1,6 @@
 module err_as_value
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 

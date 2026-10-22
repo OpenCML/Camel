@@ -1,0 +1,14 @@
+/**
+ * A declaration without `::<...>` at its head is not generic, so an explicit type argument at
+ * a call can mean nothing (design principles 5.5, 5.9).
+ */
+module err_non_generic_explicit
+
+func twice(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    println(twice::<int>(2))
+    return 0
+}

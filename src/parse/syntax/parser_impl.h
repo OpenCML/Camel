@@ -191,6 +191,9 @@ class ParserImpl {
     void parseFuncAnno();
     void parseFuncDecl();
     void parseFuncDeclRest(size_t m);
+    /// The type parameters a generic declaration declares at its head, `::<T, U>` after its name
+    /// (design principles 5.5): `func first::<T>(xs: T[]): T`, `rule sub_self::<T>(x: T) { ... }`.
+    void parseTypeParams();
     void parseAnnotatedStmt();
     /// The `@` decorators and `#` tag uses before a declaration or a block, in either order.
     void parseFrontMatter();

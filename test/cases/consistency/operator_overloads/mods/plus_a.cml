@@ -3,5 +3,5 @@ import { V } from base
 export func operator +(a: V, b: V): V { return { x: a.x + b.x } }
 export func operator -(a: V): V { return { x: 0 - a.x } }
 /// A generic overload exported by a module: the importer builds its instances.
-export func operator ==(a: (typeas T)[], b: T): bool { return a->contains<b> }
+export func operator ==::<T>(a: T[], b: T): bool { return a->contains<b> }
 export func zero(): V { return { x: 0 } }

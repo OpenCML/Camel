@@ -1,23 +1,23 @@
 /**
- * Generic functions: a type variable is bound with `typeas T` where its type first appears
- * among the parameters and is written `T` afterwards. Every call with a new set of types
- * builds one subgraph in which the variables are replaced by those types.
+ * Generic functions: a declaration declares its type parameters at its head (`::<T>`) and
+ * writes them as plain names in its signature. Every call with a new set of types builds one
+ * subgraph in which the variables are replaced by those types.
  */
 module basic
 
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func pick(c: bool, a: typeas T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T): T {
     return if c then a else b
 }
 
-func pair_of(a: typeas T, b: typeas U): (T, U) {
+func pair_of::<T, U>(a: T, b: U): (T, U) {
     return (a, b)
 }
 
-func swap(p: (typeas A, typeas B)): (B, A) {
+func swap::<A, B>(p: (A, B)): (B, A) {
     return (p.1, p.0)
 }
 

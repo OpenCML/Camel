@@ -6,7 +6,7 @@
  */
 module static_loop
 
-func sumOf(t: typeas T): int {
+func sumOf::<T>(t: T): int {
     return static loop acc = 0 for (n, F) in fields T do acc + t.[n]
 }
 

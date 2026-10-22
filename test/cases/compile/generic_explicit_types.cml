@@ -1,8 +1,8 @@
 module generic_explicit_types
-func id(x: typeas T): T { return x }
+func id::<T>(x: T): T { return x }
 with <n: int>
-func repeat(x: typeas T): T[] { return range(0, n)->map<(i: int): T => x> }
-func empty(): (typeas T)[] { let xs: T[] = []; return xs }
+func repeat::<T>(x: T): T[] { return range(0, n)->map<(i: int): T => x> }
+func empty::<T>(): T[] { let xs: T[] = []; return xs }
 func returned(): int[] { return empty() }
 func length(xs: int[]): int { return len(xs) }
 with <xs: int[]>
