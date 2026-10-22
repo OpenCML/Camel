@@ -24,8 +24,8 @@
 //     `scripts/stdlib-reference.mjs --verify-ops`, which needs the built compiler and costs
 //     seconds; the pages that state it are dated records, which this guard does not scan;
 //   * "N declaration modules": `scripts/stdlib-declarations.mjs` has the truth and this guard
-//     reads it, but no current reader-facing page states the number. The rule below is kept so
-//     the next page that does state it is checked; it reports 0 live claims today.
+//     reads it; the technical index's row for 48 is the one page that states the number, and
+//     the rule checks that row.
 //
 // A dated snapshot must not make the guard red: the ALLOWED list below names the page, the
 // rules it is excused from, and why. A page is excused as a whole page, not line by line, so an
@@ -636,12 +636,9 @@ async function main() {
     }
 
     // A rule that matches nothing no longer checks an assertion: the page was reworded, the
-    // pattern rotted, or the rule's page went away. It has to say so, not pass. `declaration-modules`
-    // is the one documented exception: no reader-facing page states that number today, and the
-    // rule is kept for the page that does (its own comment above).
-    const silent = RULES.filter((rule) => rule.id !== 'declaration-modules' && matched.get(rule.id) === 0).map(
-        (rule) => rule.id,
-    )
+    // pattern rotted, or the rule's page went away. It has to say so, not pass. Every rule now
+    // has a live claim, the declaration-modules row of the technical index included.
+    const silent = RULES.filter((rule) => matched.get(rule.id) === 0).map((rule) => rule.id)
     if (files.length === 0) {
         console.log('no reader-facing document in the scope: nothing was checked')
         process.exit(2)
