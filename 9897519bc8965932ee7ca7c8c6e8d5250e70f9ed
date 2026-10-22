@@ -1,0 +1,215 @@
+# H170 — 声明化迁移的残留清查
+
+分支 `handover/H170-migration-leftovers`，起点 `origin/develop` `e82f41c99`（H19 的 16 个模块
+都已声明化之后）。任务是把这些批次作为**一个整体**审计一遍：每个已迁移模块的 C++ 里还有没有
+“声明已经给出的签名”留下的残骸——静态解析器、`exportEntity`、只为它存在的 helper/表、旧的
+`stdlib/signatures/<m>.cml` 条目；并回答整个仓库层面 `StaticFuncTypeResolver`、
+`foldFromTypes`、别名发布这些机制是否还需要。
+
+16 个模块（`math`、`json`、`random`、`algo`、`para`、`this`、`time`、`fs`、`io`、`re`、
+`str`、`bytes`、`statistics`、`graph`、`tiles`、`tensor`）逐个查完，结论是**签名层面的残留为
+零**：H137 的检查器与各批次的收尾已经把解析器、`exportEntity` 和旧签名条目清干净了，也没有
+“最后一个调用者被删掉”的 helper 或表。真正的残骸只有 **3 行 `#include`**——`bytes` 2 行、
+`graph` 1 行——它们只为被删掉的 `StaticFuncTypeResolver` 代码而存在，已经分两个提交删除。
+其余看起来可以删的东西（`StaticFuncTypeResolver`、`foldFromTypes`、`replaceTypeQualifiedAliases`、
+graph 的 `__neq__`、tensor 的 `kDeclaredOperators`）都还有调用者，**没有删**，理由与调用点见 §3。
+
+## 1. 判定与证据
+
+一个模块“已迁移”指 `stdlib/<m>.cml` 是它的声明模块（无体 `export func`），固定签名只有这一处；
+C++ 只留计算签名（`DynamicFuncTypeResolver` 或 `OpDef` 的 infer）与声明查不了的东西。对每个
+模块查四件事：
+
+- **(a) 声明名的静态解析器**：C++ 里还有没有 `StaticFuncTypeResolver` 回答一个声明已经固定的
+  名字/URI；
+- **(b) 声明名的 `exportEntity`**：C++ 还有没有把声明名再导出一次（`tensor` 的
+  `kDeclaredOperators` 跳过与 `Tensor::` 别名是设计，见 §3）；
+- **(c) 孤立的 helper/表**：某个函数、结构体字段或表是否只剩“被删掉的签名代码”这一个调用者；
+- **(d) 陈旧的签名条目**：`stdlib/signatures/<m>.cml` 里是否还有声明名（而不是计算名），或模块
+  已经没有计算签名却还留着文件。
+
+证据来源（全部在 Linux 主机 `88zjwei` 上，`-Jobs 8`）：
+
+| 检查 | 结果 |
+|---|---|
+| `node scripts/stdlib-declarations.mjs --check` | `16 declaration module(s), 87 computed signature(s) left in C++, 0 problem(s)` |
+| `node scripts/stdlib-reference.mjs --verify-ops` | 与 **465** 条已注册算子重载一致 |
+| `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | **733** 行 `OPERATOR`；改动前后逐字节相同（`cmp`） |
+| `node scripts/stdlib-reference.mjs --verify-doc` | `docs/stdlib-reference.md is up to date` |
+| 主机全量构建（clang，`-Wall -Wextra`） | 16 个模块没有 `-Wunused-function` / `-Wunused-const-variable` / `-Wunused-variable`；全树只有 4 条 `unused` 诊断，都在 `src/`（`enum.cpp:156`、`cpp_types.cpp:604`、`graph.cpp:1757` 的 lambda 捕获）与 `modules/onnx/exporter.cpp:3456`，与本任务无关 |
+| 调用点扫描 | 16 个模块里每个函数定义都至少有一个调用点；出现次数 ≤2 的定义数都是“定义 + 1 处调用”（如 `declareElementaryFunctions`、`atomicReplace`、`shuffleArray`）或内核表条目/同名标准库函数（`memcpy`/`mktime`/`sort`），没有只有定义、没有调用者的项 |
+
+`--check` 的四条规则正好覆盖 (a)、(b)、(d) 的文本形态；它**不**覆盖 (c)，所以 (c) 由构建警告、
+调用点扫描和逐个文件阅读补上。`inspect --ops` 的基线在改动前从主机上抓取，两个提交各跑一次
+`cmp`，都是 `OPS_IDENTICAL`。`std::jgir` 另用 13 个模块的样本
+（`h170_jgir_sample.cml`：`bytes`/`algo`/`graph`/`math`/`random`/`re`/`statistics`/`str`/
+`tensor`/`tiles`/`time`/`this`/`para`，771 行输出）在“恢复 include 的基线二进制”与“删掉
+include 的最终二进制”之间比较，**连 `origin` 都逐字节相同**：`JGIR_IDENTICAL_INCLUDING_ORIGIN`。
+
+## 2. 逐模块审计
+
+“声明（条/名）”是声明文件里的重载条数/唯一名字数；“计算签名”是 H137 口径下 C++ 保留的唯一名字数
+（`--check` 合计 87 个名字）。
+
+| 模块 | 声明（条/名） | 计算签名（名） | (a) | (b) | (c) | (d) | `stdlib/signatures/<m>.cml` |
+|---|---|---|---|---|---|---|---|
+| `math` | 96 / 41 | 3：`sqrt`、`shl`、`shr` | 0 | 0 | 0 | 0 | 无；3 条 `// dynamic func` 在声明文件里 |
+| `json` | 35 / 10 | 2：`encode`、`decode_as` | 0 | 0 | 0 | 0 | 有，`computed:` 指名，只含这 2 个名字 |
+| `random` | 7 / 7 | 3：`choice`、`sample`、`shuffle` | 0 | 0 | 0 | 0 | 有，`computed:` 指名，只含这 3 个名字 |
+| `algo` | 6 / 1 | 7：`argsort`、`flatten`、`insert_sort`、`merge_sort`、`merge_sorted_arrays`、`quick_sort`、`unique` | 0 | 0 | 0 | 0 | 有，`computed:` 指名 |
+| `para` | 1 / 1 | 2：`unordered_foreach`、`unordered_reduce` | 0 | 0 | 0 | 0 | 有，`computed:` 指名 |
+| `this` | 1 / 1 | 0 | 0 | 0 | 0 | 0 | 无 |
+| `time` | 3 / 3 | 0 | 0 | 0 | 0 | 0 | 无 |
+| `fs` | 15 / 15 | 0 | 0 | 0 | 0 | 0 | 无 |
+| `io` | 5 / 5 | 0 | 0 | 0 | 0 | 0 | 无 |
+| `re` | 1 / 1 | 0 | 0 | 0 | 0 | 0 | 无 |
+| `str` | 14 / 14 | 0 | 0 | 0 | 0 | 0 | 无 |
+| `bytes` | 6 / 6 | 0 | 0 | 0 | 0（2 个 include 残留，已删） | 0 | 无 |
+| `statistics` | 20 / 5 | 0 | 0 | 0 | 0 | 0 | 无 |
+| `graph` | 45 / 35 | 6：`constant`、`add_constant`、`open_function`、`to_function`、`program_of`、`graph_of` | 0（`__neq__` 1 组是例外，见 §3） | 0 | 0（1 个 include 残留，已删） | 0 | 无 |
+| `tensor` | 13 / 10 | 54（56 条；`computed:` 文件按名字列出） | 0 | 0（10 个声明名只以 `Tensor::` 别名导出） | 0 | 0 | 有，`computed:` 指名，只含计算名 |
+| `tiles` | 2 / 2 | 10：`gpu`、`upload`、`download`、`run`、`run_device`、`run_preferred_resident`、`source`、`inspect`、`benchmark`、`regions` | 0 | 0 | 0 | 0 | 有，`computed:` 指名，只含这 10 个名字 |
+
+补充：
+
+- **`graph` 的 `__neq__`** 是 16 个模块里唯一还构造 `StaticFuncTypeResolver` 的地方（1 组、每个
+  handle 类型一条）。它不是声明名：`!=` 按设计原则 4.3 不能声明，编译器只否定 Camel 的 `==`
+  重载、不否定原生组，所以 C++ 必须提供；H137 的检查器为它留了注明原因的例外。
+- **`tensor` 的 10 个声明名**在 C++ 里仍有 `OpDef` 与 operator group，但普通名由
+  `kDeclaredOperators` 跳过、只导出 `Tensor::<name>` 别名；别名由
+  `Module::replaceTypeQualifiedAliases` 指回声明。`kDeclaredOperators` 的 10 个名字与
+  `stdlib/tensor.cml` 的 10 个声明名目前逐字相同（多一个或少一个都会被 `--check` 的第 4 条
+  或 `--verify-ops` 抓到）。
+- 6 个有 `stdlib/signatures/<m>.cml` 的已迁移模块（`json`、`random`、`algo`、`para`、`tensor`、
+  `tiles`）留下的是**计算名**；`math`、`graph` 把计算签名写成声明文件里的 `// dynamic func`，
+  所以没有单独文件；其余 8 个模块没有任何签名文件。没有一条“声明名还留在签名文件里”。
+
+## 3. 跨模块：哪些机制还需要
+
+### 3.1 `StaticFuncTypeResolver`：还需要，不能删
+
+全树 20 个文件、210 处文本出现。按用途分：
+
+| 位置 | 处数 | 用途 |
+|---|---|---|
+| `src/builtin/modules/globals.cpp` | 183 | 语言全局算子的固定签名（不是可导入模块，H141 已裁定不迁移） |
+| `src/builtin/modules/profiler.cpp` | 4 | `std::profile` 的算子组 |
+| `src/builtin/operators/tagged.cpp` | 3 | tagged 值的算子组 |
+| `src/passes/test/resources.cpp` | 4 | 测试 pass 的算子组 |
+| `src/compile/gir/builder_operators.cpp` | 1 | 对 `FunctionType` 的局部构造（`accepts`，检查调用能否匹配） |
+| `src/core/module/introspect.cpp` | 1 | `dynamic_cast` 探测（报告“静态/计算”用的就是它） |
+| `src/core/type/resolver.cpp` | 1 | 类定义本身 |
+| `modules/env` / `hash` / `process` | 2 / 3 / 3 | 未迁移模块，不动 |
+| `modules/onnx` / `rewrite` / `sim` | 1 / 1 / 2 | 不在 H19 的模块 |
+| `modules/graph/module.cpp` | 1 | `__neq__` 例外 |
+
+即：除了类定义与探测，其余 208 处都是**仍有调用者**的签名构造；16 个已迁移模块里只剩
+`graph` 的 `__neq__` 1 处。删掉这个类会拆掉全局算子、未迁移模块和 `builder_operators` 的调用
+路径，不属于本任务。
+
+### 3.2 `foldFromTypes` / `setTypeFolder`：是常量折叠，不是签名
+
+`OpDef::foldFromTypes`（`modules/tensor/ops/op_def.h:148`）在
+`modules/tensor/ops/registry.cpp:211` 注册成 core 的 type folder；读它的有三处：
+
+- `src/compile/gir/builder_operators.cpp:2204`（建图时的常量折叠）；
+- `src/passes/opt/generic/generic.cpp:550`（`std::opt::fold` 的 `foldFromTypes`，`generic.cpp:644`
+  调用）；
+- `src/passes/opt/generic/screen.cpp:142`（判断节点有没有 type folder）。
+
+三个写入点是 `gradient_ops.cpp:350,372` 与 `layout_ops.cpp:709`。它按实参类型算出结果，是
+**优化**事实，不是签名；tensor 的声明化没有、也不应该让它消失。
+
+### 3.3 别名发布：还需要，是 `tensor` 的 `Tensor::<name>`
+
+`Module::replaceTypeQualifiedAliases` 的调用点：
+
+- `src/core/module/module.cpp:341`（`exportEntity` 写完一个普通名后）；
+- `src/core/module/module.cpp:355`（`replaceEntity`）；
+- `src/core/module/module.cpp:420`（`inheritExportsFrom`，声明继承时再指一次）。
+
+写别名的是 `modules/tensor/module.cpp:92`（`Tensor::from_bytes`）与 `:100`（注册表循环里的
+`Reference({"Tensor"}, group->name())`）。声明写不了 `Tensor.shape` 这种限定名；没有这段，别名
+会指向 C++ 的旧组而不是声明。H151 的结论仍然成立：机制通用、没有 tensor 特判，不能删。
+
+### 3.4 graph 的 `__neq__` 与 `exportDefaultImportRef`
+
+`modules/graph/module.cpp:146-153` 构造 `__neq__`（8 条）并默认导入 `__eq__`/`__neq__`。
+`__eq__` 来自声明里的 `operator ==`，`__neq__` 没有声明可写；两者都是“类型的算子”而不是模块名，
+保持原样。
+
+## 4. 删除
+
+两个提交，一个模块一个，都是**只为已删签名代码存在的 include**，不改任何符号、类型或行为。
+
+### 4.1 `bytes` — `f50fa8c69`
+
+`modules/bytes/module.cpp` 删 2 行：
+
+- `#include "camel/core/type/resolver.h"`：`StaticFuncTypeResolver`、`param_init_list_t` 的来源，
+  随 H76 的静态签名块一起失效；
+- `#include "camel/core/type/bytes.h"`：`BytesType` 的来源，同上。
+
+内核仍用 `TupleType`（经 `rtdata/tagged.h`）与 `ArrayType`（经 `type/composite/array.h`），构建
+证明其余 include 足够。
+
+### 4.2 `graph` — `aa518693d`
+
+`modules/graph/facts.cpp` 删 1 行 `#include "camel/core/type/resolver.h"`。H141 删掉
+`factGroups()`、把 `FactOp` 缩成 `{name, kernel}` 之后，这个头不再贡献任何符号；`TupleType`
+与 `Type` 由 `type/composite/tuple.h` 带入。
+
+### 4.3 每个提交的证明
+
+| 提交 | 主机构建 | `--check` | `--verify-ops` | `inspect --ops` | 计划 |
+|---|---|---|---|---|---|
+| `f50fa8c69`（bytes） | 通过（`bytes_cmo` 重编、链接） | 16 / 87 / 0 | 465 | 与基线 `cmp` 相同 | `feat/modules/bytes`、`native_declarations`、`stdlib_registry`：71/71 |
+| `aa518693d`（graph） | 通过（`facts.cpp` 重编、链接） | 16 / 87 / 0 | 465 | 与基线 `cmp` 相同 | `feat/modules/graph`、`graph_facts`、`native_declarations`、`stdlib_registry`：135/135 |
+
+`std::jgir` 的 771 行样本在“基线二进制”（临时把 3 行 include 加回构建）与最终二进制之间
+`cmp` 相同（含 `origin`）；随后最终二进制重新构建，`inspect --ops` 仍与基线相同。
+
+## 5. 没删的东西
+
+除了 §3 的四个机制，下面这些也**不是**残留，没有动：
+
+- 16 个模块的 `OpDef` 内核、执行器表、纯度表、资源表、原地形式：都是运行/优化事实，声明不提供；
+- `tensor` 的 `kDeclaredOperators`（10 个名字）与 `OpDef` 里的推断函数：普通名靠它跳过、
+  别名靠它发布，`--verify-ops` 证明两边一致；
+- `graph` 的 `__neq__`、`exportDefaultImportRef("__eq__")`；
+- 未迁移的 `env`、`process`、`hash`、`ckpt`（任务边界，未读改）；
+- 两处 H19 之前就存在的未使用 namespace 别名（`modules/graph/module.cpp:61` 的 `mm`、
+  `modules/tensor/tensor.h:46` 的 `rtdata`）：`git blame` 到 H19 之前的图骨架/张量重建提交，
+  不是这批声明化留下的，留给一般清理，不计入本任务的删除。
+
+## 6. 合计
+
+| 项 | 数 |
+|---|---|
+| 审计的已迁移模块 | 16 |
+| 声明已固定、C++ 仍有静态解析器的名字 | **0** |
+| 声明名又被 `exportEntity` 导出的 | **0** |
+| 陈旧/多余的 `stdlib/signatures/*.cml` 条目 | **0** |
+| 只剩“被删签名代码”一个调用者的 helper/表 | **0** |
+| 只为被删签名代码存在的 `#include` | **3**（删除 3） |
+| 删除的其它代码行 | 0 |
+| 计算签名（H137 口径） | 87 个名字 |
+| 已注册算子重载 | 465 |
+| `inspect --ops` 行数 | 733（改动前后逐字节相同） |
+
+## 7. 提交与验证
+
+- `f50fa8c69` bytes：`modules/bytes/module.cpp` −2 行；
+- `aa518693d` graph：`modules/graph/facts.cpp` −1 行；
+- 本文档与看板 H170 行。
+
+验证（主机 `-Jobs 8`）：
+
+- 最终树 `feat/modules` + `feat/compile` + `smoke`：81 个计划、**2150 条，2149 通过、0 失败、
+  1 跳过**（`unicode.paths` 是 Windows 专用）；改动前的同一条命令是 2147 通过、3 跳过——
+  `mnist_py`/`mnist_py.fold` 的前置命令首次运行返回 `exit null`，最终运行通过，不是代码差异；
+- 两个改动提交各自的模块计划、`native_declarations`、`stdlib_registry` 全绿（bytes 71/71、
+  graph 135/135，见 §4.3）；
+- `--check` 16/87/0、`--verify-ops` 465、`--verify-doc` `docs/stdlib-reference.md is up to date`、
+  `inspect --ops` 与 `std::jgir` 均与基线逐字节相同；
+- 未跑 stress / progen / GC-stress / PyTorch 计划；未改纯度、资源、效果与诊断码。
