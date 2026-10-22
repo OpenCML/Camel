@@ -381,50 +381,6 @@ function baselineWall(reps) {
     }
 }
 
-// A program that imports the given modules and does nothing else: one fresh process per
-// measurement, and `--time-phases` turns each import into `resolve` + `cmo_load` + `import`
-// phases whose `detail` is the module name.
-function multiImportProgram(dir, modules) {
-    const file = path.join(dir, 'multi.cml')
-    const body = modules.map((module) => `import ${module}`).join('\n')
-    fs.writeFileSync(
-        file,
-        `module import_audit_multi\n\n${body}\n\nfunc main(): int {\n    return 0\n}\n`,
-    )
-    return file
-}
-
-function perImportPhases(modules) {
-    const dir = caseDir()
-    try {
-        const file = multiImportProgram(dir, modules)
-        const run = runOnce([camelExe(), file, 'std::nvm'], {
-            cwd: dir,
-            env: { CAMEL_TIME_PHASES: '-' },
-        })
-        const report = phaseReport(run.stderr)
-        if (run.status !== 0 || report === null) {
-            return null
-        }
-        const rows = new Map()
-        for (const phase of report.phases) {
-            if (phase.depth !== 1) {
-                continue
-            }
-            if (!['resolve', 'cmo_load', 'import'].includes(phase.name)) {
-                continue
-            }
-            const key = `${phase.detail}`
-            const row = rows.get(key) || { module: phase.detail }
-            row[phase.name] = (row[phase.name] || 0) + phase.wall_ns
-            rows.set(key, row)
-        }
-        return [...rows.values()]
-    } finally {
-        fs.rmSync(dir, { recursive: true, force: true })
-    }
-}
-
 // `CAMEL_PACKAGES` and `-I` add search roots. Each root is a directory listing the first time
 // the context looks a module up, cached afterwards (doc 38, section 8 item 5). The price is the
 // `resolve` phase of the first import, with and without the roots.
@@ -648,7 +604,7 @@ function main(argv) {
             )
         }
         console.log(
-            `import.audit resolution roots=${resolution.roots} plain_resolve_ms=${resolution.plain_resolve_ms} packages_resolve_ms=${resolution.packages_resolve_ms} plain_wall_ms=${resolution.plain_wall_ms.toFixed(2)} packages_wall_ms=${resolution.packages_wall_ms.toFixed(2)} include3_wall_ms=${resolution.include_wall_ms.toFixed(2)}`,
+            `import.audit resolution roots=${resolution.roots} plain_resolve_ms=${resolution.plain_resolve_ms} packages_resolve_ms=${resolution.packages_resolve_ms} plain_wall_ms=${resolution.plain_wall_ms.toFixed(2)} packages_wall_ms=${resolution.packages_wall_ms.toFixed(2)} include3_wall_ms=${resolution.include_wall_ms.toFixed(2)} include_status=${resolution.include_status}`,
         )
         for (const entry of declaration) {
             console.log(

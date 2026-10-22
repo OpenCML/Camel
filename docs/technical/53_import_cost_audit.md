@@ -29,7 +29,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 
 ## 53.2 28 行
 
-26 个 `.cmo` 行都做同样的三件事，表里不再重复：把算子表（含纯性声明）合入 `OperatorTable`、注册一个执行器
+25 个 `.cmo` 行（再加无 `.cmo` 的 `array`）都做同样的三件事，表里不再重复：把算子表（含纯性声明）合入 `OperatorTable`、注册一个执行器
 工厂（`ExecutorManager::registerExecutorFactory`，第一次查找才构造执行器）、声明资源（`declareResources`）。
 `load()` 由 `Context::importModule` 在 `import` 阶段调用一次；构造函数由 `camel_module_create` 在 `cmo_load`
 阶段跑，也只做同一类注册。表里只列**额外的**注册。
@@ -81,7 +81,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
 |------|-----------|-----------|
 | `python` | **10.29 ms** | +15.4 ms |
 | `pyplot` | **9.90 ms** | +11.9 ms |
-| 其余 24 个 C++ 行 | 0.19–3.4 ms（中位 ~0.45） | 噪声内 |
+| 其余 25 个 `.cmo` 行 | 0.19–3.3 ms（中位 ~0.43） | 噪声内 |
 
 50 已经算过同一件事（`import pyplot` 18.67 ms 对 `imports_nothing` 8.46 ms，边际 +10.2 ms），本页的数字是同一
 现象的另一次测量。为什么是 (b) 而不是 (a)：把初始化推迟到首次使用会改变错误码（`inspect --ops` 在导入期 exit 1，
@@ -126,7 +126,7 @@ CPython，41 ms 的运行里 9.9 ms，见 [50](50_pyplot_cpython_init.md)）；3
   那是注册一个回调，回调在之后才跑（`tensor` 的入口参数 loader 读 `.npy` 就是这种形状）；
 - 一个形状出现在判为 (c) 的行上就失败，并点名模块、行列与原因；class (b) 的形状必须出现在具名表里。
   这就是“工作回到导入期就变红”的守门：它不依赖墙钟，也不依赖日志级别。
-- `--scan-only` 不需要 `camel`，可在任何树上跑；计划里只跑全量模式（约 3 s）。
+- `--scan-only` 不需要 `camel`，可在任何树上跑；计划里只跑全量模式（约 2–3 s）。
 
 模块层的 `let` 由两个独立程序证明（`test/cases/modules/import_audit/`）：
 
