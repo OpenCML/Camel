@@ -5,7 +5,7 @@ tags = ["feat", "trans", "dump", "cml", "roundtrip"]
 
 [[tests]]
 name = "print_and_recompile"
-desc = "std::cml prints straight-line runtime programs as Camel source. The printed source compiles to a canonical graph isomorphic to the original (test/tools/cml_roundtrip.py, version 2), printing is deterministic, `let` names survive, a construct outside S1 is refused with CmlUnsupportedConstruct without partial output, and a constant over max_literal_bytes is refused with CmlBigConstant naming the size and the limit."
+desc = "std::cml prints a runtime program as Camel source: module values, functions, branches (if, match, nested arms, a return that gives an arm's value), loops (for, while, for ... while, several states, a struct state, effects in the body), closures (a lambda as a value, a block body, captures, a returned lambda, a closure over a cell), with parameters, and var parameters. The printed source compiles to a canonical graph isomorphic to the original (test/tools/cml_roundtrip.py, version 2), runs with the same stdout and exit status, is deterministic, keeps the source's names, refuses a construct outside this subset with CmlUnsupportedConstruct without partial output, and refuses a constant over max_literal_bytes with CmlBigConstant naming the size and the limit."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/cml_contract.py"
