@@ -1,0 +1,98 @@
+/**
+ * The adjoint of `t[a:b]` (design principles 9.9): a slice selects indices, so its gradient is
+ * the upstream gradient scattered back into the parent's shape at those same indices, padded
+ * with zeros everywhere else. Every expected adjoint below is written out by hand from the
+ * forward expression — no other implementation of the rule is consulted — and the program
+ * prints the distance to it, so a rule that returns zeros, a shifted scatter or the gradient of
+ * another axis does not pass. The last number adds the distance to the zero tensor: if the
+ * checks were vacuous (a zero gradient compared with a zero expectation) it would be 0.0, so it
+ * must be 70.0 (10 + 18 + 42).
+ *
+ *   slice      sum(x[1:4] * [2, 3, 5])            = x1*2 + x2*3 + x3*5  -> [0, 2, 3, 5, 0, 0]
+ *   nested     sum((x[1:5])[1:3] * [7, 11])       = x2*7 + x3*11        -> [0, 0, 7, 11, 0, 0]
+ *   stepped    sum(slice(x, 0, 0, 6, 2) * [2,3,5]) = x0*2 + x2*3 + x4*5 -> [2, 0, 3, 0, 5, 0]
+ *   roundtrip  sum(reshape(transpose(transpose(reshape(x, [2,3]))), [6]) * w) with w = 1..6
+ *              must give exactly the gradient of the unreshaped sum(x * w), which is w itself.
+ *   query      sum(x * x) + sum(zeros([dim(x, 0)])) + sum(zeros([numel(x)])): a shape query is
+ *              locally constant in the tensor it reads, so its contribution is exactly zero and
+ *              the gradient is 2 * x = [2, 4, 6, 8, 10, 12].
+ *
+ * Red when: sliceSubVjp is missing (the case refuses and exits 1), returns zeros (slice_d=10.0,
+ * nested_d=18.0, stepped_d=10.0), scatters at the wrong offset (nested_d and stepped_d move),
+ * the reshape/transpose adjoints lose the permutation (roundtrip_d != 0.0), or the numel/dim
+ * noGradient entries are removed (the case refuses at the shape query).
+ */
+module slice_grad
+
+import { Tensor, abs, dim, numel, reshape, slice, sum, transpose, zeros } from tensor
+import { grad, with_grad } from autodiff
+
+with <x: Tensor>
+func slice_loss(): float {
+    let c = reshape([2.0, 3.0, 5.0], [3])
+    return sum(x[1:4] * c)
+}
+
+with <x: Tensor>
+func nested_loss(): float {
+    let c = reshape([7.0, 11.0], [2])
+    return sum(x[1:5][1:3] * c)
+}
+
+with <x: Tensor>
+func stepped_loss(): float {
+    let c = reshape([2.0, 3.0, 5.0], [3])
+    return sum(slice(x, 0, 0, 6, 2) * c)
+}
+
+with <x: Tensor>
+func round_trip(): float {
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6])
+    return sum(reshape(transpose(transpose(reshape(x, [2, 3]))), [6]) * w)
+}
+
+with <x: Tensor>
+func plain(): float {
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6])
+    return sum(x * w)
+}
+
+with <x: Tensor>
+func shape_queries(): float {
+    let a = zeros([dim(x, 0)])
+    let b = zeros([numel(x)])
+    return sum(x * x) + sum(a) + sum(b)
+}
+
+func distance(g: Tensor, expected: Tensor): float {
+    return sum(abs(g - expected))
+}
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6])
+    let zero = reshape([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [6])
+    let g1 = grad(slice_loss)<x>()
+    let g2 = grad(nested_loss)<x>()
+    let g3 = grad(stepped_loss)<x>()
+    let g4 = grad(round_trip)<x>()
+    let g5 = grad(plain)<x>()
+    let g6 = grad(shape_queries)<x>()
+    let (v, g7) = with_grad(slice_loss)<x>()
+    let slice_d = distance(g1, reshape([0.0, 2.0, 3.0, 5.0, 0.0, 0.0], [6]))
+    let nested_d = distance(g2, reshape([0.0, 0.0, 7.0, 11.0, 0.0, 0.0], [6]))
+    let stepped_d = distance(g3, reshape([2.0, 0.0, 3.0, 0.0, 5.0, 0.0], [6]))
+    let round_d = distance(g4, g5)
+    let query_d = distance(g6, reshape([2.0, 4.0, 6.0, 8.0, 10.0, 12.0], [6]))
+    let with_grad_d = distance(g7, g1)
+    let nonzero = distance(g1, zero) + distance(g2, zero) + distance(g6, zero)
+    'slice_grad slice_d={:.1f} nested_d={:.1f} stepped_d={:.1f} roundtrip_d={:.1f} query_d={:.1f} with_grad_d={:.1f} value={:.1f} nonzero={:.1f}'->format<
+        slice_d,
+        nested_d,
+        stepped_d,
+        round_d,
+        query_d,
+        with_grad_d,
+        v,
+        nonzero>->println
+    return 0
+}
