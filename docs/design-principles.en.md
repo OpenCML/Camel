@@ -593,7 +593,12 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 ### 10.4 The place of native C++ modules
 
-- **Native C++ modules are legitimate, but do not rely on them too much**: whatever can be expressed in Camel should be in Camel, unless there is a clear reason (performance, flexibility and so on); expressiveness problems exposed in the implementation are discussed one by one, and common needs are absorbed into the language core.
+- **Semantic atoms and implementation atoms are separate.** A function's **semantics** comes from one of two sources, a primitive operator or a definition written in Camel; its **execution** may in addition have a native kernel. With the two separated, the library need not choose between expressiveness and performance.
+- **Primitive operators (body-less C++ declarations) only in three cases**: dealing with the outside world (I/O, the operating system, foreign libraries, devices); kernels that need memory and layout control the language does not expose (matrix multiplication, convolution, `take` and scatter, sorting); scalar mathematical functions. The primitive set is **minimal and orthogonal**: what other primitives compose cheaply is not a primitive. Every primitive declares its semantic facts (purity, resources, index maps, laws, derivative).
+- **Everything else is defined in Camel** (the default): softmax, normalisation, losses, optimisers, `tree_*`, statistics, the array and string utilities. The compiler sees through them, so fusion, differentiation, export and rules apply without a derivative or export rule written for each.
+- **Common hot definitions carry a native kernel**: the Camel body remains the semantics, and `#kernel` names the native kernel that implements it. **It is not expanded by default**: ordinary passes and executors treat it as one operator, so its compile and run cost is that of a primitive; only passes that need to look inside (differentiation, fusion, export, rules) expand it on demand. A differential test keeps the two in agreement. The common numeric operations (`sum`, `min`, `max`, `all`, `map`/`reduce` over numeric arrays and the like) have a kernel from the start; the others get one when measurement shows the compiler's result clearly slower, and lose it once the compiler catches up.
+- **A library is compiled once**: library functions are compiled and optimised once per instance, into the module cache (10.3) and the specialisation cache; a call site pays a call or an inlining, not a re-optimisation of the library body.
+- Expressiveness problems exposed in the implementation are discussed one by one, and common needs are absorbed into the language core rather than worked around in the library.
 
 ### 10.5 Library boundary
 
