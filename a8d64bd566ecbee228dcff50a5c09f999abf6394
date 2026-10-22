@@ -1,0 +1,157 @@
+# H123 — 两层标记的拼写：`R!?` 与 `R?!`
+
+分支 `handover/H123-two-layer-spelling`，起点 `origin/develop` `aa5a9ec0c`。承接 H115 报告 §4
+与 §10 第 1 项：H16 把访问器对 `Json!` 的两层结果写成 `R?!`，H115 在声明化时发现解析器的规则
+相反，并留下“语言文档与 H16 报告仍是错的”。
+
+## 1. 规则：从实现读出
+
+**标记从最内层写起：解析器从左到右把每个标记套在已建好的类型外面，最右边的标记最后应用、
+成为最外层，所以 `T?!` 是 fallible(nullable(T))，`T!?` 是 nullable(fallible(T))。**
+
+三处代码（本任务没有改它们，行号是 `aa5a9ec0c` 上的）：
+
+- `src/parse/ast/builder.cpp` 的 `visitTypeExpr`（第 4284–4297 行）：注释写的是
+  “`T?` and `T!`, innermost mark first”；循环按源码顺序读标记，每读到一个就
+  `createNodeAs<NullableTypeLoad>(mark == "!")` 把当前的 `lhsNode` 包一层。
+- `src/compile/gct/builder.cpp` 的 `visitNullableType`（第 4275–4291 行）：每个标记变成
+  `TupleType::fallible(payload)` 或 `TupleType::nullable(payload)`；同一种标记重复时
+  报 `TaggedTypeNesting`。
+- `src/core/type/text.cpp` 的 `tupleParts`（第 120–131 行）：tagged tuple 先打印 payload，
+  再打印这一层自己的 `?` 或 `!`。
+
+打印器与解析器**一致**，不是两个缺陷：nullable(fallible(R)) 的 payload 是 fallible(R)
+（打印 `R!`），外层再打印 `?`，得到 `R!?`；fallible(nullable(R)) 对称地得到 `R?!`。
+H115 在 `json.accessor_error` 上看到的就是前者写反的后果：声明写成 `Json?!` 后外层成了
+错误，`case null` 不再穷尽。
+
+## 2. 先手动观察，再写自动化断言
+
+在主机（`88zjwei`）的 Release 构建上直接跑三个新用例：
+
+```text
+$ camel test/cases/compile/tagged/two_layer.cml
+7
+-4
+5
+-8
+```
+
+`int?!`（fallible(nullable(int))）配 `case null`：
+
+```text
+error[SemanticDiag::TaggedMatchCases]: This 'match' on a value of type 'int?!' is not well formed: 'case null' needs a value that may be null.
+   --> test/cases/compile/tagged/err_two_layer_null.cml:10:13
+```
+
+`int!?`（nullable(fallible(int))）配 `case error e`：
+
+```text
+error[SemanticDiag::TaggedMatchCases]: This 'match' on a value of type 'int!?' is not well formed: 'case error' needs a value that may have failed.
+   --> test/cases/compile/tagged/err_two_layer_error.cml:10:13
+```
+
+两条诊断里的类型名同时钉住了解析（哪一层在外）与打印（`int?!` / `int!?`）。
+
+## 3. 改掉的文档与注释
+
+每一处都读过上下文再决定；没有做替换脚本。
+
+| 文件 | 处 | 改动 |
+|---|---|---|
+| `docs/design-principles.cn.md` | 3.9 | `int?!` 允许之后补一句：标记从最内层写起，`T?!` = fallible(nullable(T))，`T!?` = nullable(fallible(T)) |
+| `docs/design-principles.cn.md` | 11.2 | `decode(text)->get<'a'>` 的类型 `Json?!` → `Json!?` |
+| `docs/design-principles.cn.md` | 14 | 新增第 12 条误读：把两层标记的顺序读反 |
+| `docs/design-principles.en.md` | 3.9 / 11.2 / 14 | 同上的英文版 |
+| `docs/design-principles-log.cn.md` | 2026-10-20 续 | `decode(text)->get<'a'>` 为 `Json!?`；保留“原文写作 `Json?!`，H123 更正”的注记，不静默改写记录 |
+| `docs/language/03_data_model.md` | 3.4 JSON 一段 | 两处 `Json?!` → `Json!?`（接受的实参、访问器的结果） |
+| `docs/language/03_data_model.md` | 3.4 标记组合一条 | 补两层顺序与“`match` 只拆最外层” |
+| `docs/language/en/03_data_model.md` | 3.4 同两处 | 同上的英文版 |
+| `docs/stdlib-conventions.cn.md` | 第 2 节 | 实参形态 `Json?!` → `Json!?`；结果 `R?!`、`R?!` → `R!?`、`R!?` |
+| `docs/technical/29_nullable_and_fallible_values.md` | 4.3 | 把两种层序写成 `T?!` (fallible(nullable(T))) 与 `T!?` (nullable(fallible(T))) |
+| `docs/technical/31_map_and_set.md` | 第 7 节 | 三处 `Json?!` → `Json!?`（实参与两层结果） |
+| `docs/handover/reports/H19-plan.md` | 1.1 | 已接受的 `Json!`/`Json?!` → `Json!`/`Json!?` |
+| `modules/json/operators.cpp` | 4 处注释 | `Json?!`/`R?!` → `Json!?`/`R!?`（只改注释，不改代码） |
+| `test/plans/feat/compile/native_declarations.plan.toml` | `native.json_declaration_import` desc | `Json?!` → `Json!?` |
+| `test/plans/feat/modules/json_accessor_error.plan.toml` | `json.accessor_error` desc | `Json?!` → `Json!?` |
+| `docs/handover/reports/H16.md` | 顶部 | 加更正注记，指向 H123；正文与结论不重写 |
+| `docs/diagnostics.md` | `TaggedMatchCases` 例 | 由 `node scripts/diagnostics-catalog.mjs --write` 重新生成；诊断目录按用例挑例子，新增的负例成了例子 |
+
+共计 20 处拼写更正（中英文档 14、C++ 注释 4、测试计划 desc 2，其中 `stdlib-conventions`
+一处改了 3 个标记），另加 7 处规则说明（中英设计原则的 3.9 与第 14 节、中英语言页的标记组合
+一条、`technical/29` 的 4.3）。
+`docs/handover/README.cn.md` 的 H115 行本来就写的是正确的 `Json!?`，未动；
+`docs/stdlib-reference.md` 由 H115 生成，已是 `Json!?`，未手改。
+
+## 4. 判定不改的（逐条）
+
+- `docs/design-principles.cn.md:181` / `en:184` 的“`int?!` 允许”：它只是在说允许哪种链，
+  没有说哪一层在外；同一个段落已补上顺序，保留原例。
+- `docs/design-principles-log.cn.md:330` 的“`int?!` 允许”：同上，是允许性记录。
+- `docs/language/03_data_model.md:250` / `en:246` 的 `let x: int?! = 5`：说的是“一次进入
+  多层”，两种层序都成立，不是“可空套可错”的断言。
+- `docs/language/03_data_model.md:253` / `en:249` 同时列出 `T?!`、`T!?`：正确，已补顺序说明。
+- `docs/diagnostics.md` 的“'T?!' and 'T!?' are allowed”：两种都允许，正确；重新生成后文字未变。
+- `docs/technical/29_nullable_and_fallible_values.md:52` 的 “Nesting (`T?!`)”、`:199` 的
+  `int` 进入 `int?!`：分别是嵌套与一次进入多层的例子，都正确。
+- `docs/technical/33_fault_isolation.md:45` 的 `U?!`：`attempt` 包住 `(A...) => U?` 时外层是
+  attempt 的错误、内层是 `U?` 的空，即 fallible(nullable(U))，与“可能失败、结果可能缺席”
+  一致，正确。
+- `docs/handover/reports/H108.md:125` 的 `T?!`：假设语气里的一个特例，不是两层顺序的主张。
+- `docs/handover/reports/H115.md`：它自己写的是对的（`R!?`），且是历史报告，不改。
+- `stdlib/json.cml`、`docs/stdlib-reference.md`：H115 已写对/已生成，未改。
+- H16 报告的正文：只加顶部更正注记，§1.1、§1.2、§2、§3.1、§5 第 2 条的原文与结论保留，
+  这是历史记录，不由 H123 重写。
+
+`git grep -F '?!'` 与 `-F '!?'` 的全部结果都按上表或本节处理过；没有剩下把
+nullable(fallible(R)) 写成 `R?!` 的地方。
+
+## 5. 锁定用例
+
+三个用例都在 `test/cases/compile/tagged/`，计划 `test/plans/feat/compile/tagged.plan.toml`：
+
+| 用例 | 值的类型 | 打开外层 | 观察 |
+|---|---|---|---|
+| `two_layer.cml` | 同时有 `int!?` 与 `int?!` | `case null` + `!!`；`case error e` + `??` | 四后端输出 `7`、`-4`、`5`、`-8`，`backends_agree` 逐字节一致 |
+| `err_two_layer_null.cml` | `int?!` | `case null` | `TaggedMatchCases`，诊断打印 `int?!`，说 `case null` 需要可空的值 |
+| `err_two_layer_error.cml` | `int!?` | `case error e` | `TaggedMatchCases`，诊断打印 `int!?`，说 `case error` 需要可错的值 |
+
+`two_layer` 用 `backends = ["nvm", "fvm", "jit", "prl"]` 跑四个后端；两条负例按
+`SemanticDiag::TaggedMatchCases`（`0x03000076`）、第 10 行第 13 列与完整消息断言。
+`feat.compile.tagged` 整计划 58/58 通过。
+
+## 6. 验证
+
+全部构建与测试在 Linux 主机 `88zjwei` 上，经
+`camel-remote.ps1 -Path D:\Projects\Camel-wt\h123-two-layer-spelling -Jobs 8`：
+
+| 命令/计划 | 结果 |
+|---|---|
+| Release 构建（625 个目标，`conan` + ninja） | 通过（`BUILD_EXIT=0`） |
+| `test/plans/feat/compile/tagged.plan.toml` | 58/58 |
+| `smoke` | 10/10 |
+| `feat/parse` | 57/57（含 `frontend.ast_snapshot`、`frontend.format_keeps_ast`） |
+| `feat/compile` | 1006/1008 |
+| `scripts/check-doc-links.mjs --all` | 353 篇，0 断链 |
+| `node scripts/diagnostics-catalog.mjs --check` | 202 个 code，无重号 |
+
+`feat/compile` 的 2 条红是基线，不是本任务引入的：`tags.read_by.present`
+（期望退出 7、得到 1）与 `tag_permissions.permissions.strict_algebra`
+（“loose must fold its two products into one, got undefined”）。H115 §6 与 H116 都记录过
+它们在干净树 `5d71b1fe5` 上同样失败；本任务除 `modules/json/operators.cpp` 的注释外没有改
+任何可执行代码，因此不可能改变它们的行为。按要求不为了让测试变绿而改语义。
+
+**AST 快照**：`test/plans/feat/parse/golden/ast_hashes.txt` 在主机上用
+`python3 test/tools/parsecheck/check.py snapshot --update` 刷新（2454 个文件），之后
+`snapshot` 复跑通过。刷新包含 14 条既有文件的哈希变化与 10 条基线新增用例，来源是 H104
+最后一次刷新之后 develop 上的其它任务（H116 的 `stdlib/io.cml`、`stdlib/signatures/ckpt.cml`
+与 `io/*` 用例、tree→ckpt 的签名与用例、H118 的 `algebra_commutative.cml`/`algebra_order.cml`，
+以及 json/os 签名、snake、c2-mlp、bytes_values、checkpoint 五条、registry_all）；本任务只新增
+了自己三个用例的行，没有改变任何既有文件的读法。刷新它们是因为验收要求 `feat/parse` 绿；
+它们与两层标记无关，已在此单列。
+
+## 7. 留下的
+
+- 上述 2 条 `feat/compile` 基线红，归 H115/H116 已记的既有缺陷，不在本任务内修。
+- AST 快照的基线条目已随本任务刷新；若协调者希望把这次刷新拆到单独提交，golden 的 diff
+  就是全部内容（本报告 §6 列了来源）。
