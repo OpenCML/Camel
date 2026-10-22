@@ -4580,69 +4580,6 @@ Type *Builder::visitTupleType(const AST::node_ptr_t &ast) {
 FuncType(Modifier[] modifiers, string uri)
     : NamedPair* withParams, NamedPair* normParams, Type? ExitType ;
 */
-namespace {
-
-bool typeMentionsExtent(Type *type, const std::string &name) {
-    if (type == nullptr) {
-        return false;
-    }
-    const auto formMentions = [&](const ExtentForm &form) {
-        return std::any_of(
-            form.terms().begin(), form.terms().end(), [&](const auto &term) {
-                return term.first == name;
-            });
-    };
-    if (type->isOtherType()) {
-        std::vector<ExtentForm> forms;
-        if (static_cast<OtherType *>(type)->extentForms(forms)) {
-            if (std::any_of(forms.begin(), forms.end(), formMentions)) {
-                return true;
-            }
-        }
-    }
-    switch (type->code()) {
-    case TypeCode::Array: {
-        auto *array = static_cast<ArrayType *>(type);
-        const auto extents = array->extents();
-        if (std::any_of(extents.begin(), extents.end(), formMentions)) {
-            return true;
-        }
-        return typeMentionsExtent(array->elemType(), name);
-    }
-    case TypeCode::Tuple: {
-        const auto types = static_cast<TupleType *>(type)->types();
-        return std::any_of(types.begin(), types.end(), [&](Type *member) {
-            return typeMentionsExtent(member, name);
-        });
-    }
-    case TypeCode::Struct: {
-        auto *record     = static_cast<StructType *>(type);
-        const auto types = record->named() ? record->typeArgs() : record->types();
-        return std::any_of(types.begin(), types.end(), [&](Type *member) {
-            return typeMentionsExtent(member, name);
-        });
-    }
-    case TypeCode::Function: {
-        auto *func = static_cast<FunctionType *>(type);
-        for (Type *param : func->withTypesSpan()) {
-            if (typeMentionsExtent(param, name)) {
-                return true;
-            }
-        }
-        for (Type *param : func->normTypesSpan()) {
-            if (typeMentionsExtent(param, name)) {
-                return true;
-            }
-        }
-        return func->hasExitType() && typeMentionsExtent(func->exitType(), name);
-    }
-    default:
-        return false;
-    }
-}
-
-} // namespace
-
 Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     ENTER("FuncType");
     // Ensure the AST node is of the expected type (Type)
@@ -4921,20 +4858,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
     FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen())
                                : factory.build();
-        if (sawRest) {
-                .at(paramLoad->tokenRange())
-                .commit(constasName);
-            throw BuildAbortException();
-        }
-        // A value the types never read decides nothing at the call: refuse the decoration.
-        if (!typeMentionsExtent(built, constasName)) {
-                .at(paramLoad->tokenRange())
-                .commit(
-                    constasName,
-                    built->toString(),
-            throw BuildAbortException();
-        }
-    }
     // A dimension name written once constrains nothing: another parameter (or the return type)
     // would have to write it to make it a relation (design principles 5.4).
     if (signature && dimUses_) {
