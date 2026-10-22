@@ -440,7 +440,7 @@ void declareCheckpointResources() {
     auto &table = core::OperatorTable::instance();
     table.declare("ckpt", {{"save_tree", false}, {"load_tree", false}});
     auto reader = core::sem::externalAmbient("fs", core::sem::AccessMode::Read);
-    reader.accesses.push_back(core::sem::ambientAccess("io:stderr", core::sem::AccessMode::Write));
+    reader.accesses.push_back(core::sem::ambientAccess("stderr", core::sem::AccessMode::Write));
     table.declareResources("ckpt:load_tree", std::move(reader));
     table.declareResources(
         "ckpt:save_tree",

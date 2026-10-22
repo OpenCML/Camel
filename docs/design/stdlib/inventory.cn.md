@@ -106,7 +106,7 @@
 ### 2.5 效应、资源、纯度声明
 
 - 纯度：仓库内模块有测试强制逐个声明（`warnUndeclaredOperatorTraits` 对第三方给警告；test/plans/feat/modules/stdlib_registry.plan.toml）。但 `tree` 为过测试把永不成节点的名字声明为有副作用（评审 frontend #10）；`math` 无数值声明（评审 modules #15）。
-- 资源：C++ 侧已有 `declareResources`（fs、process、env、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/input 在 builtin_semantics.cpp 声明。资源名是 `io:stdout`、`io:stdin`、`io:terminal`、`time:clock`、`process:environment`、`process`、`rand:generator`、`fs`、`profiler`，与原则 3.3 约定的默认资源名（`stdout/stderr/stdin/fs/clock/env`）不一致；`stderr` 没有对应的输出函数。
+- 资源：C++ 侧已有 `declareResources`（fs、process、env、time、random、para、algo、nn::save_params、tree、tiles 都有），内建 print/println/input 在 builtin_semantics.cpp 声明。H134 之后资源名是 `stdout`、`stdin`、`stderr`、`clock`、`env`、`fs`、`process`、`rng`、`tensor:generator`、`tensor:threads`、`tiles:driver`、`tiles:device`、`para:rendezvous`，与原则 3.3 一致；`io:terminal` 是 raw mode 自己的资源（并入 `stdin` 是资源集变化，留给作者）。`stderr` 还没有对应的输出函数。
 - 签名文件里的 `@effect` 是自由文本（"reads a file"、"advances the generator"、"what f does"），不是资源名；`.cml` 签名头注明"for reference only: not compiled"。算子的类型规则、纯度、资源、故障在 C++ 注册、OperatorTable 声明、signatures/*.cml 三处各写一遍（评审 frontend #10）。
 - 语言层面 `uses`/`pure`/`resource` 的语法：docs/language 里没有出现（只有 design-principles 与 blueprint 描述），推断尚未实现；所以库作者现在无法用 Camel 声明资源。
 - `random` 全部 @effect（全局生成器）；原则 13.5 的键式纯随机数尚未实现。

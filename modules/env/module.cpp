@@ -63,8 +63,8 @@ bool EnvModule::load() {
         camel::core::OperatorTable::instance().declareResources(
             "env",
             {
-                {"get_env", externalAmbient("process:environment", AccessMode::Read)},
-                {"get_cwd", externalAmbient("process:environment", AccessMode::Read)},
+                {"get_env", externalAmbient("env", AccessMode::Read)},
+                {"get_cwd", externalAmbient("env", AccessMode::Read)},
             });
     }
     loaded_ = true;

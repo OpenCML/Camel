@@ -20,7 +20,7 @@ value: the file system, the console, a module's random generator. An operator's
 
 | Part | Values |
 |---|---|
-| resource | `Variable`, `Object`, `Foreign` (with a name: `tiles:device`), `Ambient` (with a name: `fs`, `io:stdout`, `rand:generator`); `Unknown` only in the conservative reading |
+| resource | `Variable`, `Object`, `Foreign` (with a name: `tiles:device`), `Ambient` (with a name: `fs`, `stdout`, `rng`, `tensor:generator`, `io:terminal`); `Unknown` only in the conservative reading |
 | binding | the ordinary or with operand that names it; none for an ambient resource (`Capture` appears in graph footprints only) |
 | region | `Whole`; `Mapped` (the elements an access or the write map of the node's index instance reaches); `Unknown` (read as whole) |
 | mode | `Read`, `Write`, `ReadModifyWrite` |
@@ -56,13 +56,17 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:op/assn_<op>_<t>` | read-modify-write of the cell |
 | `:struct/append_arr_in_place`, `:op/set_index_in_place` | read-modify-write of operand 0; the result is that object |
 | `algo:*_in_place` | read-modify-write of an object (operand 0); the result is that object |
-| `:io/print`, `:io/println`, `tensor:show` | write `io:stdout`, external |
-| `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `io:stdin`, external |
-| `io:has_input` | read `io:stdin`, external |
-| `io:set_terminal_raw_mode` | write `io:terminal`, external |
-| `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy` | read or read-modify-write `fs`, external |
-| `rand:*`, `tensor:seed`, `tensor:random`, `tensor:randn` | write or read-modify-write the module's generator, external |
-| `time:*`, `process:*`, `env:*` | the clock, the process, its environment, external |
+| `:io/print`, `:io/println`, `tensor:show` | write `stdout`, external |
+| `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `stdin`, external |
+| `io:has_input` | read `stdin`, external |
+| `io:set_terminal_raw_mode` | write `io:terminal`, external; its own resource, not folded into `stdin` (a set change, H134) |
+| `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy`, `ckpt:save_tree` | read or read-modify-write `fs`, external |
+| `ckpt:load_tree` | read `fs` and write `stderr`, external |
+| `rand:*` | write or read-modify-write `rng`, external |
+| `tensor:seed`, `tensor:random`, `tensor:randn` | write or read-modify-write `tensor:generator`, external |
+| `time:now`, `process:sleep` | read `clock`, external |
+| `time:strftime`, `time:strptime`, `env:get_env`, `env:get_cwd`, `process:whoami`, `process:cpu_count` | read `env`, external |
+| `process:exit` | read-modify-write `process`, external |
 | `:profiler/*`, `para:rendezvous`, `tensor:(set_)num_threads` | their ambient state, external |
 | `tiles:upload` | allocates `tiles:device`; read-modify-write `tiles:driver`, external |
 | `tiles:download`, `tiles:run`, `tiles:benchmark` | read the device values among operand 0; `tiles:driver`, external |

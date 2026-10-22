@@ -120,13 +120,13 @@ bool RandomModule::load() {
         camel::core::OperatorTable::instance().declareResources(
             "rand",
             {
-                {"seed", externalAmbient("rand:generator", AccessMode::Write)},
-                {"rand", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"randn", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"randint", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"choice", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"sample", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
-                {"shuffle", externalAmbient("rand:generator", AccessMode::ReadModifyWrite)},
+                {"seed", externalAmbient("rng", AccessMode::Write)},
+                {"rand", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"randn", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"randint", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"choice", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"sample", externalAmbient("rng", AccessMode::ReadModifyWrite)},
+                {"shuffle", externalAmbient("rng", AccessMode::ReadModifyWrite)},
             });
     }
     loaded_ = true;

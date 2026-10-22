@@ -78,9 +78,9 @@ bool ProcessModule::load() {
             "process",
             {
                 {"exit", externalAmbient("process", AccessMode::ReadModifyWrite)},
-                {"sleep", externalAmbient("time:clock", AccessMode::Read)},
-                {"whoami", externalAmbient("process:environment", AccessMode::Read)},
-                {"cpu_count", externalAmbient("process:environment", AccessMode::Read)},
+                {"sleep", externalAmbient("clock", AccessMode::Read)},
+                {"whoami", externalAmbient("env", AccessMode::Read)},
+                {"cpu_count", externalAmbient("env", AccessMode::Read)},
             });
     }
     loaded_ = true;

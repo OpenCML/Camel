@@ -91,7 +91,7 @@ assert(p && p.value === 'reassociate' && p.class === 'content' && p.stamp === nu
 const s = find('core.shape', 'layer', 2).stamp
 assert(s.revisions[0].graph === 'layer' && s.epoch === 0 && s.nodes.length === 1 && s.nodes[0].graph === 'layer' && s.nodes[0].node === 2 && /^[0-9a-f]{16}$/.test(s.nodes[0].hash), 'shape stamp: the version of the node, not of a cone')
 assert(find('core.instance', 'layer', 2).stamp.epoch > 0, 'instance stamp has the epoch')
-assert(facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'main' && f.value === 'write ambient io:stdout; external'), 'println writes the console')
+assert(facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'main' && f.value === 'write ambient stdout; external'), 'println writes the console')
 assert(!facts.some(f => f.kind === 'core.resources' && f.anchors[0].graph === 'layer'), 'pure tensor code touches no resource')
 }
 """

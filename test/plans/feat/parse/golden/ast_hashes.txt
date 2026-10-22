@@ -2163,6 +2163,7 @@ f7282e239e9b6bc9 ok test/cases/perf/gc/fib.cml
 67d7480ba05afe38 ok test/cases/perf/gc/jit_const.cml
 3bf44e76d6935b32 ok test/cases/perf/gc/map_chain.cml
 308cd3c79d6d3c2f ok test/cases/resources/effects.cml
+6464a4bd00592647 ok test/cases/resources/names.cml
 a3872dff9491d245 ok test/cases/smoke/core/fib10_pipeline.cml
 4f768199400dac2f ok test/cases/smoke/core/prl_scheduler.cml
 c75f6a4154956a5e ok test/cases/tools/debugger/fixtures/branch.cml

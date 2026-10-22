@@ -380,17 +380,19 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
             .accesses = {operandAccess(ResourceClass::Object, 0, AccessMode::ReadModifyWrite)},
             .result   = ResultAlias{.kind = ResultAlias::Kind::Same, .operand = 0}});
     // The console and the profiler: state outside the values, visible outside the program.
+    // The standard streams are named as design principles 3.3 names them (`stdout`, `stdin`);
+    // stderr has no writer in the prelude yet (H19 step 9's `eprintln` is still open).
     for (const char *uri : {":io/print", ":io/println"}) {
         table.declareResources(
             uri,
             ResourceSpec{
-                .accesses       = {ambientAccess("io:stdout", AccessMode::Write)},
+                .accesses       = {ambientAccess("stdout", AccessMode::Write)},
                 .externalEffect = true});
     }
     table.declareResources(
         ":io/input",
         ResourceSpec{
-            .accesses       = {ambientAccess("io:stdin", AccessMode::ReadModifyWrite)},
+            .accesses       = {ambientAccess("stdin", AccessMode::ReadModifyWrite)},
             .externalEffect = true});
     for (const char *uri :
          {":profiler/begin", ":profiler/end", ":profiler/instant", ":profiler/enable"}) {

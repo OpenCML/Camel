@@ -51,7 +51,7 @@ void declareResourcesAndDefinitions() {
             {"seed", externalAmbient("tensor:generator", AccessMode::Write)},
             {"random", externalAmbient("tensor:generator", AccessMode::ReadModifyWrite)},
             {"randn", externalAmbient("tensor:generator", AccessMode::ReadModifyWrite)},
-            {"show", externalAmbient("io:stdout", AccessMode::Write)},
+            {"show", externalAmbient("stdout", AccessMode::Write)},
             {"load_npy", externalAmbient("fs", AccessMode::Read)},
             {"save_npy", externalAmbient("fs", AccessMode::ReadModifyWrite)},
             {"set_num_threads", externalAmbient("tensor:threads", AccessMode::Write)},
