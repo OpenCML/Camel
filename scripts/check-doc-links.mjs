@@ -262,7 +262,7 @@ function isComment(file, text, index) {
     const lineStart = text.lastIndexOf('\n', index - 1) + 1
     const prefix = text.slice(lineStart, index)
     if (C_LIKE.has(extension)) return prefix.includes('//') || /^\s*\*/.test(prefix) || prefix.includes('/*')
-    // A plan's strings are test data (`expect_output_contains = ["file.cml#Symbol"]`), not citations;
+    // A plan's strings are test data (`expect_output_contains = ["file.cml"]`), not citations;
     // a plan cites a file in a comment, like code does.
     if (HASH_COMMENT.has(extension) || extension === '.toml') return prefix.includes('#')
     return true
@@ -329,7 +329,20 @@ function checkCitations() {
         if (isFile(fromRoot)) return { target: fromRoot }
         const candidates = byName.get(path.basename(decoded)) ?? []
         if (candidates.length === 1) return { target: candidates[0] }
+        // A definition is stronger evidence than a mention: the test file calls `footprintOf`, the
+        // runtime file defines it.
+        const defines = (candidate, name) => {
+            const last = name.split('::').pop()
+            const escaped = escapeRe(last)
+            return new RegExp(
+                `(?:^|\\n)\\s*(?:class|struct|enum(?:\\s+class)?|union)\\s+${escaped}\\b` +
+                    `|(?:^|\\n)\\s*[\\w:<>,*&]+\\s+${escaped}\\s*\\(` +
+                    `|\\b${escaped}::${escaped}\\s*\\(`,
+            ).test(textOf(candidate))
+        }
         if (candidates.length > 1 && symbol) {
+            const defs = candidates.filter((candidate) => defines(candidate, symbol))
+            if (defs.length === 1) return { target: defs[0] }
             const hits = candidates.filter((candidate) => names(candidate, symbol))
             if (hits.length === 1) return { target: hits[0] }
             return { target: null, ambiguous: candidates }
@@ -382,12 +395,25 @@ function checkCitations() {
 
         for (const m of text.matchAll(lineCitation)) {
             if (isProseExample(m.index) || !isComment(file, text, m.index)) continue
+            // A bare name that exists nowhere is an example in prose (a diagnostic's example
+            // file), not a citation of the tree; a path with a directory, or a missing .md page,
+            // is a citation.
+            const decoded = decodedOf(m[1])
+            if (!decoded.includes('/') && !byName.has(path.basename(decoded))) continue
             problem(
                 file,
                 lineAt(m.index),
                 `${m[1]}:${m[2]}${m[3] === undefined ? '' : `-${m[3]}`}`,
                 `names a line; cite '${m[1]}#Symbol' instead`,
             )
+        }
+
+        // `path 12–20` and `path 12-20` are line ranges too, and the colon is not what makes them
+        // misleading: the numbers move with the edit just the same.
+        const bareRange = new RegExp('\\.(?:' + CITATION_EXT + ')`?\\s+(\\d+)\\s*[–-]\\s*(\\d+)', 'g')
+        for (const m of text.matchAll(bareRange)) {
+            if (isProseExample(m.index) || !isComment(file, text, m.index)) continue
+            problem(file, lineAt(m.index), m[0], 'names a line range; cite a symbol instead')
         }
 
         for (const m of text.matchAll(shorthand)) {
