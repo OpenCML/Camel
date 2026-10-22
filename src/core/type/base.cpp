@@ -91,6 +91,10 @@ string typeCodeToString(TypeCode code) {
         return "c64";
     case TypeCode::Complex128:
         return "c128";
+    case TypeCode::BFloat16:
+        return "bf16";
+    case TypeCode::Float16:
+        return "f16";
     case TypeCode::Array:
         return "array";
     case TypeCode::Tuple:
@@ -143,6 +147,10 @@ std::string Type::mangle() const {
         return "c64";
     case TypeCode::Complex128:
         return "c128";
+    case TypeCode::BFloat16:
+        return "bf16";
+    case TypeCode::Float16:
+        return "f16";
     case TypeCode::Ref:
         return "r";
     case TypeCode::EnumHole:
@@ -274,12 +282,21 @@ CastSafety Type::castSafetyFrom(Type *sourceType) const {
         return CastSafety::Forbidden;
     }
 
-    // After excluding auxiliary types, only eight primitive types remain.
+    // After excluding auxiliary types, only the slot-sized primitive types remain, plus the two
+    // reduced-precision element types, whose codes do not index this matrix (a bf16 or f16 is
+    // stored in a compact tensor buffer, never in a slot, and a conversion between them and a
+    // scalar is not a scalar cast: it is a tensor operator that needs `change_precision`).
     // The matrix is [from][to], i.e. [sourceIndex][targetIndex].
     if (camel::core::type::isPrimitive(code_) &&
         camel::core::type::isPrimitive(sourceType->code())) {
         const int sourceIndex = static_cast<int>(sourceType->code()) & 0b1111;
         const int targetIndex = static_cast<int>(code_) & 0b1111;
+        if ((code_ == TypeCode::BFloat16 || code_ == TypeCode::Float16 ||
+             sourceType->code() == TypeCode::BFloat16 ||
+             sourceType->code() == TypeCode::Float16) ||
+            sourceIndex >= 6 || targetIndex >= 6) {
+            return CastSafety::Forbidden;
+        }
         return static_cast<CastSafety>(primitiveTypeConvMatrix[sourceIndex][targetIndex]);
     }
 
@@ -547,6 +564,16 @@ Type *Type::Complex64() {
 
 Type *Type::Complex128() {
     static Type *type = primitiveSingleton(TypeCode::Complex128);
+    return type;
+}
+
+Type *Type::BFloat16() {
+    static Type *type = primitiveSingleton(TypeCode::BFloat16);
+    return type;
+}
+
+Type *Type::Float16() {
+    static Type *type = primitiveSingleton(TypeCode::Float16);
     return type;
 }
 

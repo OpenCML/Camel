@@ -21,6 +21,10 @@ const DataLayout kInt64{8, 8, false, TypeCode::Int64, 0, nullptr, true, false};
 const DataLayout kFloat32{4, 4, false, TypeCode::Float32, 0, nullptr, true, false};
 const DataLayout kFloat64{8, 8, false, TypeCode::Float64, 0, nullptr, true, false};
 const DataLayout kBool{1, 1, false, TypeCode::Bool, 0, nullptr, true, false};
+// A bf16 or f16 is two bytes of pure data. It is not a slot's bytes (elementSize is 2), so the
+// element accessors go through the slow path; nothing about it holds a reference.
+const DataLayout kBFloat16{2, 2, false, TypeCode::BFloat16, 0, nullptr, true, false};
+const DataLayout kFloat16{2, 2, false, TypeCode::Float16, 0, nullptr, true, false};
 // A complex number is pure data, but its compact bytes are two floating-point numbers, not the
 // bytes of a slot: it is not slot-resident. c64 is 8 bytes and would pass a size-only test;
 // the type-level flag is what keeps `{x: c64}` from taking the bulk-copy path.
@@ -64,6 +68,8 @@ bool computePure(const Type *type) {
     case TypeCode::Float32:
     case TypeCode::Float64:
     case TypeCode::Bool:
+    case TypeCode::BFloat16:
+    case TypeCode::Float16:
     case TypeCode::Complex64:
     case TypeCode::Complex128:
         return true;
@@ -158,6 +164,10 @@ const DataLayout *scalarDataLayout(TypeCode code) {
         return &kFloat64;
     case TypeCode::Bool:
         return &kBool;
+    case TypeCode::BFloat16:
+        return &kBFloat16;
+    case TypeCode::Float16:
+        return &kFloat16;
     case TypeCode::Complex64:
         return &kComplex64;
     case TypeCode::Complex128:

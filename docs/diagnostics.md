@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-262 diagnostics: 243 errors, 19 warnings.
+263 diagnostics: 244 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -223,6 +223,7 @@ prints one entry.
 | `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
 | `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
 | `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
+| `0x030001D5` | [SemanticDiag::PrecisionChangeNotPermitted](#precisionchangenotpermitted) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -6165,6 +6166,41 @@ func f(a: int = 1, b: int): int {
 
 func main(): int sync {
     return f(2, 3)
+}
+```
+
+### PrecisionChangeNotPermitted
+
+`0x030001D5` · Error · `SemanticDiag::PrecisionChangeNotPermitted`
+
+**Message**
+
+```text
+Converting '{0}' to '{1}' needs the numeric permission 'change_precision'.
+```
+
+**Help**
+
+```text
+Write #[change_precision] on the function or the block that does the conversion, or convert from a type that already holds the values the reduced element type can hold exactly. Reading a bf16 or f16 value into a wider type never needs the permission.
+```
+
+**Example** (`test/cases/modules/tensor/dtype/bf16_no_licence.cml`, run as `camel test/cases/modules/tensor/dtype/bf16_no_licence.cml`)
+
+```camel
+module tensor_dtype_bf16_no_licence
+
+import { Tensor, new, cast } from tensor
+
+func shrink(x: Tensor<f32>): Tensor<bf16> {
+    return cast(x, 'bf16')
+}
+
+func main(): int sync {
+    let values: f32[] = [0.1]
+    let t = shrink(new(values))
+    println('unreachable')
+    return 0
 }
 ```
 

@@ -335,6 +335,9 @@ enum class SemanticDiag : uint32_t {
     ParamDefaultWrongType = 0x0001D3,
     /// An ordinary parameter without a default follows one that has a default.
     ParamAfterDefault = 0x0001D4,
+    /// A call writes a value of another element type into a reduced-precision one (bf16/f16)
+    /// without the `change_precision` numeric permission.
+    PrecisionChangeNotPermitted = 0x0001D5,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,

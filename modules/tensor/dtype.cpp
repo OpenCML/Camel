@@ -21,11 +21,17 @@ size_t elementSize(TypeCode dtype) {
 
 bool isSupportedTensorScalar(TypeCode code) {
     return code == TypeCode::Int32 || code == TypeCode::Int64 || code == TypeCode::Float32 ||
-           code == TypeCode::Float64 || code == TypeCode::Bool;
+           code == TypeCode::Float64 || code == TypeCode::Bool || code == TypeCode::BFloat16 ||
+           code == TypeCode::Float16;
 }
 
 bool isFloatingTensorType(TypeCode code) {
-    return code == TypeCode::Float32 || code == TypeCode::Float64;
+    return code == TypeCode::Float32 || code == TypeCode::Float64 ||
+           code == TypeCode::BFloat16 || code == TypeCode::Float16;
+}
+
+bool isReducedFloatTensorType(TypeCode code) {
+    return code == TypeCode::BFloat16 || code == TypeCode::Float16;
 }
 
 std::string elementTypeSpelling(TypeCode code) {
@@ -34,6 +40,10 @@ std::string elementTypeSpelling(TypeCode code) {
         return "f32";
     case TypeCode::Float64:
         return "f64";
+    case TypeCode::BFloat16:
+        return "bf16";
+    case TypeCode::Float16:
+        return "f16";
     case TypeCode::Int32:
         return "i32";
     case TypeCode::Int64:
@@ -51,6 +61,30 @@ TypeCode promoteTensorTypes(TypeCode lhs, TypeCode rhs) {
     }
     if (!isSupportedTensorScalar(rhs)) {
         throw std::invalid_argument("Unsupported Tensor dtype");
+    }
+    // A reduced-precision type meets the wider float it is a subset of, or its own type. It
+    // never meets the other reduced type or an integer: neither type holds every value of the
+    // other (bf16 has f32's range with 8 significand bits, f16 has 11; an i64 has 63), so a
+    // promotion would have to invent a result type or narrow silently. The program casts one
+    // operand, and that conversion needs `change_precision`.
+    if (isReducedFloatTensorType(lhs) || isReducedFloatTensorType(rhs)) {
+        if (lhs == rhs) {
+            return lhs;
+        }
+        const auto widerFloat = [](TypeCode reduced, TypeCode other) {
+            return isReducedFloatTensorType(reduced) &&
+                   (other == TypeCode::Float32 || other == TypeCode::Float64);
+        };
+        if (widerFloat(lhs, rhs)) {
+            return rhs;
+        }
+        if (widerFloat(rhs, lhs)) {
+            return lhs;
+        }
+        throw std::invalid_argument(
+            "cannot mix '" + elementTypeSpelling(lhs) + "' and '" + elementTypeSpelling(rhs) +
+            "' elements: neither type holds every value of the other. Cast one of them to the "
+            "element type the result should have");
     }
     // Widening only: the result is one of the two element types, so promotion never
     // replaces an operand's type with a third one. f64 > f32 > i64 > i32 > bool.
@@ -77,6 +111,10 @@ std::string_view dtypeName(TypeCode dtype) {
         return "float32";
     case TypeCode::Float64:
         return "float64";
+    case TypeCode::BFloat16:
+        return "bfloat16";
+    case TypeCode::Float16:
+        return "float16";
     case TypeCode::Int32:
         return "int32";
     case TypeCode::Int64:

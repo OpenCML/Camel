@@ -306,11 +306,11 @@ OtherType *TensorType::cloneWithArguments(
                 return nullptr;
             }
             // The element type is a storage dtype of this module (dtype.h): exactly the type written,
-            // f32, f64, i32, i64 or bool. Anything else would reach the kernels, which dispatch
-            // on these five element types.
+            // f32, f64, bf16, f16, i32, i64 or bool. Anything else would reach the kernels,
+            // which dispatch on these seven element types.
             const TypeCode code = argument.type->code();
             if (!isSupportedTensorScalar(code)) {
-                error = "the element type is f32, f64, i32, i64 or bool, not '" +
+                error = "the element type is f32, f64, bf16, f16, i32, i64 or bool, not '" +
                         type::typeCodeToString(code) + "'";
                 return nullptr;
             }
