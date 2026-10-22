@@ -14,16 +14,17 @@
 | 事实 | 写在哪里 |
 |---|---|
 | 固定签名（参数、`var`、返回类型、`with` 参数） | 模块的 `.cml` 里**没有函数体的声明**（`export func f(x: T): R`） |
-| 计算出来的签名（返回类型取自实参、按形状展开） | C++ 的 `DynamicFuncTypeResolver` / `OpDef`，在模块注册时声明 |
+| 计算出来的签名（返回类型取自实参、按形状展开） | 类型规则在 C++ 的 `DynamicFuncTypeResolver` / `OpDef`，注册时声明；参考条目与文档在 `stdlib/signatures/<模块>.cml`，由模块条目的 `computed` 指名 |
 | 纯度（`@pure` 当且仅当不读环境、不写环境、同输入同输出） | C++ 的 `OperatorTable::declare`；键式随机是纯的，全局生成器不是 |
 | 资源（`stdout`、`stderr`、`stdin`、`fs`、`clock`、`env`、`net`、`rng`、`process`） | C++ 的 `declareResources`，用 3.3 的标准名字 |
 | 数值语义、原地形式 | C++ 的 `declareSemantics` / `setInPlaceForm` |
 | 文档（描述、`@example`、`@fails`） | 声明上方的 `///` 注释 |
 
-C++ 模块不再重复写签名：没有函数体的声明就是签名本身，调用方按它检查，运行时由 `module:function`（例如 `bytes:len`）找到算子的执行器。声明名与算子名不同、或同一模块的算子用别的前缀（`random` 的 `rand:`）时用 `#op<'...'>` 标出；另一个模块的算子不能在这里声明。`docs/stdlib-reference.md` 由这些声明生成，不手改。
+C++ 模块不再重复写签名：没有函数体的声明就是签名本身，调用方按它检查，运行时由 `module:function`（例如 `bytes:len`）找到算子的执行器。声明名与算子名不同、或同一模块的算子用别的前缀（`random` 的 `rand:`）时用 `#op<'...'>` 标出；另一个模块的算子不能在这里声明。`docs/stdlib-reference.md` 由声明与计算签名文件生成，不手改。
 
 - 一个名字按类型有各自的执行器 URI 时（`math` 的 `abs_i`、`abs_l`、…），声明逐个写、各带确切的 `#op<'模块:算子'>`；不能用一个 `(typeas T)` 的泛型声明代替，因为泛型声明仍只绑定一个 URI，而执行器是按类型分名的。签名文件里的 `*` 通配只作参考，不是声明可用的写法：`ExecutorManager` 与 `OperatorTable` 都按确切的 URI 查找。
-- 计算签名的算子（C++ 的 `DynamicFuncTypeResolver`，结果类型取自实参）留在 C++；声明文件里用 `// dynamic func 名字(...): 类型` 的注释记录参考页条目与文档，不写成声明。`math` 的 `sqrt`（`i32`→`f32`、`int`→`float`）与 `shl`/`shr`（结果取第一个参数的类型）是这样三条。也可以把这几条留在 `stdlib/signatures/<模块>.cml` 里，模块条目的 `computed` 字段指向它，参考页与 `--verify-ops` 把声明文件与它合起来对账（`json`、`random`）。
+- **一个计算签名只在 `stdlib/signatures/<模块>.cml` 一处记录，由模块条目的 `computed` 字段指名；声明文件里不写 `// dynamic func`，同一个名字不能两处都有、也不能两处都没有。** 计算签名的算子（C++ 的 `DynamicFuncTypeResolver`，结果类型取自实参）的类型规则留在 C++；参考条目、`///` 文档与 `@example` 写进签名文件，写成无函数体的 `export func`，只作参考、不参与编译。内联写法是一条注释，URI 只能读成 `<模块>:<名字>`，没有 `#op` 的位置——`tensor:sum_axis` 的 Camel 名字是 `sum`，`nn:softmax_cross_entropy_labels` 的是 `softmax_cross_entropy`，`python:py_call_kw` 的是 `py_call`——所以文件是唯一能覆盖全部计算名字的记法。`math` 的 `sqrt`（`i32`→`f32`、`int`→`float`）与 `shl`/`shr`（结果取第一个参数的类型）现在记在 `stdlib/signatures/math.cml`，`graph`、`json`、`random` 同样；参考页与 `--verify-ops` 把声明文件与它合起来对账。哪些签名算不出来、为什么，见 [`47_declaration_syntax.md`](technical/47_declaration_syntax.md) 的缺口目录；本页只定记录位置。
+- 这条规则由 [`scripts/stdlib-declarations.mjs`](../scripts/stdlib-declarations.mjs) 的 `--check` 守住，检查器把它读成一句话：“a computed name has exactly one place: `stdlib/signatures/<module>.cml`, named by the MODULES entry's `computed:` field (handover H180)”——内联记录、两处都有、`computed` 指名却一个名字都不记录，都报问题；两处都没有由它的导出组检查报 “no computed signature records it”。跑它的是 [`stdlib_registry.plan.toml`](../test/plans/feat/modules/stdlib_registry.plan.toml) 里的 `registry.migrations_stay_migrated`，同计划的 `registry.signatures_match` 跑 `--verify-ops`；两条都在 `feat/modules`。
 - C++ 导出的值（`math::pi`）没有可写的声明：`export let` 必须有初始值，写了就是第二份值。声明模块里用 `// value 名字: 类型` 的注释记录参考页条目，`///` 说明与 `@example` 照常写在它上方；值本身仍由 C++ 导出。
 
 ## 2. 声明
@@ -43,7 +44,7 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 - 声明所绑定的算子必须已加载：执行器存在、纯度已声明。缺一个就在加载该模块时定位到声明报错，不留到运行期。
 - 同一名字的两个非泛型声明如果参数完全相同，视为重复声明。两个泛型声明之间按同样的标准检查重叠：只要存在一次调用两条规则都可能接受，就在第二条声明处报错。一次调用用哪条规则只能由实参类型决定，不能由声明写下的顺序决定。固定的声明比泛型的声明更具体；一次调用两者都能接受时用固定的那条。
 - 一个名字按参数的固定形态给不同结果时，按形态各写一条声明，共用 `<模块>:<名字>` 的 URI：`json` 的 `get` 与访问器对 `Json`、`Json?`、`Json!`、`Json!?` 各一条，依次给 `R?`、`R?`、`R!?`、`R!?`。顺序从最窄到最宽，一次调用落到第一条接受它的签名；联合类型退役之后，重载就是这样写的。尖括号参数写在声明上方、只属于紧接的那一条声明：同一个名字的多条声明各自重写 `with <...>`，不继承上一条的；漏写的一条就是普通参数的签名。
-- 声明写不出来的算子留在 C++ 的 resolver，它仍是那条签名的唯一来源：返回类型取自类型规则（`json::encode` 要求值的类型有 JSON 形式）或取自类型实参（`json::decode_as` 的 `shape`）时，声明给不出这条规则，写一条近似声明会让本该拒绝的调用通过。这样的条目不再写进 `stdlib/<模块>.cml`，参考页的那几条来自 `stdlib/signatures/<模块>.cml` 里剩下的条目，`--verify-ops` 把两处合起来与已注册的算子对账。
+- 声明写不出来的算子留在 C++ 的 resolver，它仍是那条签名的唯一来源：返回类型取自类型规则（`json::encode` 要求值的类型有 JSON 形式）或取自类型实参（`json::decode_as` 的 `shape`）时，声明给不出这条规则，写一条近似声明会让本该拒绝的调用通过。这样的条目不再写进 `stdlib/<模块>.cml`，参考页的那几条来自模块条目的 `computed` 指名的 `stdlib/signatures/<模块>.cml` 里剩下的条目，`--verify-ops` 把两处合起来与已注册的算子对账。
 - 声明也是模块的算子重载：本模块里 `a + b` 能找到自己在 `.cml` 里声明的 `operator +`，与找到自己写的、带函数体的那个一样。
 
 ## 3. 命名
@@ -73,7 +74,7 @@ C++ 模块不再重复写签名：没有函数体的声明就是签名本身，�
 | 用 Camel 写的模块 | `stdlib/<模块>.cml` |
 | C++ 实现的模块 | `modules/<模块>/`（执行器、算子表、资源、语义），签名在 `stdlib/<模块>.cml` |
 | 尚未声明化的 C++ 模块（过渡） | `stdlib/signatures/<模块>.cml`，只作参考、不参与编译；每搬一个模块删一个文件 |
-| 已声明化模块里算不出来的签名（过渡） | 同一个 `stdlib/signatures/<模块>.cml` 里只留那几条，只作参考；其余声明在 `stdlib/<模块>.cml`，两处由 `--verify-ops` 一起对账。也可以像 `math` 那样用 `// dynamic func` 写进声明文件，不保留签名文件；`json`、`random` 用的是签名文件加 `computed` 字段 |
+| 已声明化模块里算不出来的签名 | 只在 `stdlib/signatures/<模块>.cml`，由模块条目的 `computed` 字段指名；只作参考、不参与编译，其余声明在 `stdlib/<模块>.cml`，两处由 `--verify-ops` 一起对账。声明文件里不写 `// dynamic func`，一个名字不能两处都有（H180；`math`、`graph`、`json`、`random` 都这样） |
 | 测试用例 | `test/cases/`，计划在 `test/plans/` |
 
 模块名就是导入名，也是算子 URI 的前缀。新模块按分层放：前奏（内置，尽量小）／基础（`str`、`bytes`、`array`、`math`、`random`、`stats`、`time`、`re`、`json`、`hash`）／系统（`fs`、`io`、`env`、`process`）／数值（`tensor` 栈）／工具（`test_support`、`bench`、`profiler`）。
