@@ -439,6 +439,35 @@ int runCommand(int argc, char *argv[]) {
                         module->load();
                     }
                 }
+                // A listing is only worth printing when nothing it should contain is missing. A
+                // module that failed to compile leaves its operators out, and this tool is how
+                // the inventory is checked: exiting 0 with a shorter list is the silence that
+                // hid the `pyplot`/`python` registration gap (handover H166, H172). A
+                // declaration file that exists and did not load is the case to name: the
+                // diagnostics say where, and the line below says which module and which file.
+                // A module that is not imported is not looked at, and a C++ module whose
+                // signatures are computed (no `.cml` beside its `.cmo`) has no declaration
+                // file to fail.
+                std::vector<const UserDefinedModule *> failedDeclarations;
+                bool anyModuleFailed = false;
+                for (const auto &module : ctx->allUserModules()) {
+                    auto ud = std::dynamic_pointer_cast<UserDefinedModule>(module);
+                    if (!ud || !ud->diagnostics() || !ud->diagnostics()->hasErrors()) {
+                        continue;
+                    }
+                    anyModuleFailed = true;
+                    if (ud->declarationModule()) {
+                        failedDeclarations.push_back(ud.get());
+                    }
+                }
+                if (anyModuleFailed) {
+                    for (const UserDefinedModule *ud : failedDeclarations) {
+                        std::cerr << "camel: the declaration module '" << ud->name()
+                                  << "' failed to load from '" << ud->path() << "'" << std::endl;
+                    }
+                    ctx->dumpAllModuleDiagnostics(std::cerr, useJsonFormat);
+                    return 1;
+                }
                 camel::core::module::dumpOperators(modules, os);
             }
             return 0;
