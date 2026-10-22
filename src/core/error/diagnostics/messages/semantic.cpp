@@ -1927,6 +1927,60 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "'{0}' by name.",
             },
         },
+        {
+            SemanticDiag::FoldCallArgumentNotConstant,
+            {
+                "FoldCallArgumentNotConstant",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "A call in a place that needs a compile-time constant is evaluated only when "
+                "every argument is a constant itself: a literal, the 'n' of a 'static for', a "
+                "'constas' value, or an expression the compiler can evaluate. Make the argument "
+                "a constant, or move the call to a place where a runtime value is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallHasEffects,
+            {
+                "FoldCallHasEffects",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "Only a pure call is evaluated: a function with no effects and no reads of "
+                "mutable state. Remove the effect from the declaration, or call it where a "
+                "runtime value is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallTooDeep,
+            {
+                "FoldCallTooDeep",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "A call that recurses without reaching a value for the constants it is given "
+                "is not a compile-time constant. Give the recursion a base case that the "
+                "constants reach, or move the call to a place where a runtime value is "
+                "accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallResultNotConstant,
+            {
+                "FoldCallResultNotConstant",
+                "The call of '{0}' cannot be used as a compile-time constant: {1}.",
+                "A compile-time value is a number, a bool, a string or a character. Return one "
+                "of those from the function, or move the call to a place where a runtime value "
+                "is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallNotEvaluable,
+            {
+                "FoldCallNotEvaluable",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "The body of a folded call is read from the same constructs a 'when' condition "
+                "reads: data, names, blocks, 'match type', 'static for'/'static loop', branches, "
+                "fields, arithmetic and comparisons, and calls of other pure functions. Rewrite "
+                "the body with those, or move the call to a place where a runtime value is "
+                "accepted.",
+            },
+        },
     };
 
     return infoMap;

@@ -4,7 +4,7 @@
  */
 module resource_names
 
-import algo
+import array
 import ckpt
 import env
 import fs

@@ -9,7 +9,7 @@
 module concurrent_alloc
 
 import { seed, shuffle } from random
-import { merge_sort, merge_sorted_arrays } from algo
+import { merge_sort, merge_sorted_arrays } from array
 
 func mergesort(arr: int[]): int[] {
     return if len(arr) <= 4 then merge_sort(arr) else {

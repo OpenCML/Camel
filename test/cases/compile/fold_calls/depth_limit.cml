@@ -1,0 +1,15 @@
+/**
+ * A call that recurses without a base case for the constants it is given does not fold: where a
+ * constant is required it is refused by name (FoldCallTooDeep), with the depth the evaluation
+ * follows, rather than looping until the build runs out of stack.
+ */
+module fold_call_depth_limit
+
+func spin(n: int): int {
+    return spin(n + 1)
+}
+
+func main(): int {
+    let xs = (1, 2)
+    return xs.[spin(0)]
+}

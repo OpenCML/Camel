@@ -913,12 +913,21 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
     }
     if (!key.has_value() && keyNode->type() != GCT::NodeKind::DATA &&
         keyNode->type() != GCT::NodeKind::DREF) {
-        // A key written as an expression: build it where the access is and take its constant.
-        // A value that is not constant is still refused below.
-        const std::any keyRes = visit(keyNode);
-        if (node_handle_t keyValue = valueNodeOf(keyRes)) {
-            if (data_ptr_t data = constantOfNode(keyValue)) {
-                key = keyOfData(data);
+        // A call of a pure function with constant arguments is a constant; a place that needs
+        // one refuses by the call's name when it does not reduce to one.
+        const FoldedCall folded = foldConstantCall(keyNode);
+        if (folded.data != nullptr) {
+            key = keyOfData(folded.data);
+        } else if (folded.refusal != FoldRefusal::NotAProgramCall) {
+            reportFoldRefusal(folded, keyNode);
+        } else {
+            // A key written as an expression: build it where the access is and take its
+            // constant. A value that is not constant is still refused below.
+            const std::any keyRes = visit(keyNode);
+            if (node_handle_t keyValue = valueNodeOf(keyRes)) {
+                if (data_ptr_t data = constantOfNode(keyValue)) {
+                    key = keyOfData(data);
+                }
             }
         }
     }
@@ -926,8 +935,10 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::StaticAccessNotConstant)
             .atOrigin(keyNode->origin())
             .commit(
-                keyNode->type() == GCT::NodeKind::DREF ? keyNode->name()
-                                                       : std::string("expression"));
+                keyNode->type() == GCT::NodeKind::LINK
+                    ? writtenCallName(keyNode)
+                    : keyNode->type() == GCT::NodeKind::DREF ? keyNode->name()
+                                                             : std::string("expression"));
         throw BuildAbortException();
     }
 

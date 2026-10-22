@@ -227,7 +227,7 @@
         },
         {
             "comment": "The declaration modules with no plan of their own: their cases live under test/cases/modules/std, which feat/modules/std.plan.toml runs, and their signatures are checked by the registry plan.",
-            "paths": ["modules/algo/", "modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
+            "paths": ["modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
             "plans": ["feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {

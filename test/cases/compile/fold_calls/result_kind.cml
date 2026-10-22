@@ -1,0 +1,14 @@
+/**
+ * A call that reduces to a tuple is not a constant: a compile-time constant is a number, a bool
+ * or a string. A key that needs one refuses `pair` by name (FoldCallResultNotConstant).
+ */
+module fold_call_result
+
+func pair(): (int, int) {
+    return (1, 2)
+}
+
+func main(): int {
+    let t = { x: 1 }
+    return t.[pair()]
+}

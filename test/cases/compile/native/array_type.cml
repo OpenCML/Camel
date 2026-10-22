@@ -1,0 +1,14 @@
+/**
+ * An `int` where the declarations of `array:argsort` take an array of keys: the call is refused
+ * at the declaration's type, and the signatures in the message have the declarations' own
+ * parameter name (`keys`) — the one source is `stdlib/array.cml`, not the C++ (handover H19,
+ * step 10; H135).
+ */
+module array_type
+
+import { argsort } from array
+
+func main(): int sync {
+    println(argsort(42))
+    return 0
+}

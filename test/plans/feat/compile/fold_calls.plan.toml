@@ -1,0 +1,138 @@
+id = "compile.fold_calls"
+order = 344
+tier = "fast"
+tags = ["feat", "compile", "constants", "folding"]
+desc = "Build-time folding of a call to a pure function with constant arguments (design principles 5.1, 6.5, handover H271): the same evaluator a `when` condition uses reads the body, so a function that computes a field name, an extent or a depth can be called where a compile-time constant is required. A call that does not reduce to one is refused by its own name. Folding happens where a constant is required (a static-access key, a `constas` value); a call in an ordinary value position keeps the ordinary build, so a later pass still sees the program as written."
+
+# The four refusals are separate cases because each names the call and says what stands in the
+# way: an argument that is not a constant, a declaration with effects, a recursion the evaluator
+# does not reach the base case of, and a result that is not a kind a constant has. A call that
+# folds is a value like a literal where one is required: a static access key, a `constas` value.
+# `first_field` in `stdlib/tree.cml` is the motivating case: the field name is computed once and
+# used as the key of both trees in `first_leaf`.
+
+[[tests]]
+name = "fold_calls.key"
+desc = "A call in a static access key is that constant: `first_of::<S>` reads `v.[first_field::<S>()]`, where `first_field` is an ordinary `func` returning `( static for (n, _) in fields S => n ).[0]`. The fold runs for a struct and for a tuple, and the access reads the first field (7, 1.5)."
+kind = "behavior"
+case = "../../../cases/compile/fold_calls/key.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "7\n1.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.constas"
+desc = "A folded call is a value a `constas` parameter accepts: `label(first_field::<Point>())` is the instance `label<\"x\">` and `label(first_field::<Pair>())` is `label<\"0\">`, so the constas value is selected by a call and read by the body."
+kind = "behavior"
+case = "../../../cases/compile/fold_calls/constas.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "x\n0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.recursive"
+desc = "A pure function that recurses to a base case is folded over its constant argument: `depth(3)` is 3 and `depth(2)` is the index of the third element of a tuple, so the recursion runs at build time where the value is needed."
+kind = "behavior"
+case = "../../../cases/compile/fold_calls/recursive.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3\n30\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.argument"
+desc = "A call whose argument is a parameter of the enclosing function is not a constant: the static key `t.[half(n)]` is refused as FoldCallArgumentNotConstant and names `half`, saying which name it reads."
+kind = "negative"
+case = "../../../cases/compile/fold_calls/argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FoldCallArgumentNotConstant"
+expect_diagnostic_line = 13
+expect_output_contains = ["The call of 'half' cannot be evaluated at build time", "it reads 'n'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.effect"
+desc = "A declaration that declares effects does not fold: `reveal` writes to stdout (`uses stdout`), and the static key `t.[reveal('x')]` is FoldCallHasEffects, naming `reveal` and the resource it uses. Its body is not run while the program is built."
+kind = "negative"
+case = "../../../cases/compile/fold_calls/effect.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FoldCallHasEffects"
+expect_diagnostic_line = 14
+expect_output_contains = ["The call of 'reveal' cannot be evaluated at build time", "it declares effects"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.depth_limit"
+desc = "A recursion with no base case for the constants it is given does not fold: the evaluator stops after a bounded number of nested calls and the static key is FoldCallTooDeep, naming `spin` and the bound, instead of running until the build runs out of stack."
+kind = "negative"
+case = "../../../cases/compile/fold_calls/depth_limit.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FoldCallTooDeep"
+expect_diagnostic_line = 14
+expect_output_contains = ["The call of 'spin' cannot be evaluated at build time", "nests more than 64 calls deep"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.result_kind"
+desc = "A call that reduces to a tuple is not a constant: the static key `t.[pair()]` is FoldCallResultNotConstant, naming `pair` and its result type, because a compile-time constant is a number, a bool or a string."
+kind = "negative"
+case = "../../../cases/compile/fold_calls/result_kind.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FoldCallResultNotConstant"
+expect_diagnostic_line = 13
+expect_output_contains = ["The call of 'pair' cannot be used as a compile-time constant", "not a number, a bool or a string"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.not_evaluable"
+desc = "A body the build-time evaluator cannot read is not folded: `first_of_list` holds an array, which is not one of the constructs a `when` condition's evaluator handles, so the static key `t.[first_of_list()]` is FoldCallNotEvaluable, naming the call and the construct it stopped at, rather than guessing a value."
+kind = "negative"
+case = "../../../cases/compile/fold_calls/not_evaluable.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::FoldCallNotEvaluable"
+expect_diagnostic_line = 16
+expect_output_contains = ["The call of 'first_of_list' cannot be evaluated at build time", "does not read"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "fold_calls.once"
+desc = "The folded value is one node for two call sites: `main` calls `label(first_field::<Point>())` twice, both calls select the one instance of `label` the folded `constas` value names, that instance holds one DATA node for the value, and both call sites read it. This is the 'folded once' property `with` defaults have."
+kind = "behavior"
+case = "../../../cases/compile/fold_calls/folded_once.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const label = doc.graphs.filter((g) => g.name.startsWith('label'))
+assert(label.length === 1, `expected one 'label' instance, got ${label.map((g) => g.name).join(', ')}`)
+const folded = label[0].nodes.filter((n) => n.kind === 'DATA' && n.outputType === 'string')
+assert(folded.length === 1, `expected one folded string node in ${label[0].name}, got ${folded.length}`)
+assert(folded[0].label === 'x', `the folded value is '${folded[0].label}', not 'x'`)
+const main = doc.graphs.find((g) => g.name === 'main')
+assert(main, `main is missing from ${doc.graphs.map((g) => g.name).join(', ')}`)
+const sites = main.nodes.filter((n) => n.kind === 'FUNC' && n.label === label[0].name)
+assert(sites.length === 2, `main reads ${label[0].name} at ${sites.length} site(s), expected 2`)
+}
+"""
+timeout_ms = 8000
