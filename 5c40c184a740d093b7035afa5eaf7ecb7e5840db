@@ -1,0 +1,359 @@
+# H37 — a library program computes its module-level values
+
+Worktree `D:\Projects\Camel-wt\h37-let`, branch `handover/H37-library-let` (from `develop`).
+Everything is left in the working tree: no commit, no new branch, no push.
+
+（这份报告记录的是修复本身；修复随后以 `5c40c184` 提交并合入 `develop`。2026-10-21 在
+`handover/H37-module-let` 上的复验见文末《复验》一节。）
+
+A pass written in Camel (`camel_pass`, the `compileAsLibrary` route) read `0` for every
+module-level value of its own module — a silent wrong value, not a diagnostic:
+
+```text
+module h37let
+import { Program } from graph
+let two = 2
+let four = two + two
+func compute(): int { return 7 }
+let seven = compute()
+export func show(p: Program): Program! sync {
+    println(two); println(four); println(seven)
+    return p
+}
+```
+
+```text
+camel tiny.cml h37let::show std::nvm   # before
+0
+0
+0
+42
+```
+
+The design frame is design principles **10.1** (a module's top-level code is not run by
+default; one `__root__` graph for the whole program; functions read top-level values through
+capture ports bound by "module + name"; a top-level `let` is a node of the root, computed when
+something depends on it, before `main` starts), **3.5** (captures are by reference) and **5.1**
+(a literal takes its type from context).
+
+---
+
+## 1. Root cause, with the evidence
+
+**The library program's module-level root graph is not executed — it is not even part of the
+tool program: `libraryFunction` encoded the pass function graph alone, and the external
+`callGraph` binds only ordinary ports; a capture is bound only by a call's with-inputs or by a
+function value's closure tuple, so the pass's capture ports kept the frame default 0.**
+
+The two halves, each verified before any change:
+
+1. **Nothing executes the root.** `DefinitionStore::libraryFunction` (the only producer of a tool
+   program, used by `src/execute/camel_pass.cpp`) took the function's graph from the module's
+   export table and called `encodeToRuntimeProgram(function, …)`. The encoder walks what the
+   function reaches (`collectReachableGraphs`: sub-graphs, dependency graphs, static function
+   references, FUNC targets, loops) — never the module's root graph — and logs the miss:
+
+   ```text
+   GIREncode  Encoding 1 reachable compile graphs.
+   GIREncode  Prepare compile graph 'h37let::show'.
+   GIREncode  Resolve outer graph for 'h37let::show': outer='__root__' prepared=false.
+   GIREncode  Encoded runtime root 'h37let::show' with 1 runtime graphs.
+   ```
+
+   `outer='__root__' prepared=false` is the root graph referenced (for the capture's origin,
+   debug metadata) and absent from the program. The `-vv --log-include GIREncode` run above is
+   the whole tool program: one graph.
+
+2. **Nothing binds the capture.** `NodeVMSchedPass::callGraph` (called from
+   `CamelPass::apply`) asserts one argument per **norm** port and sets those slots only; it does
+   not look at with-ports or closure nodes. In an ordinary run the binding comes from elsewhere:
+   `fillFrameForIndirectCall` copies the callee's `Function::tuple()` into the target graph's
+   closure slots (`src/execute/graph_runtime_support.cpp:1107-1130`), and
+   `bindDirectCallFrameSlots` does the same for a direct call's with-inputs. A tool program has
+   neither: no call node, no function value. The three capture ports therefore kept their frame
+   default, `0`, which is exactly what was printed.
+
+Which of the two it is: **the root is not executed**. Binding the ports without executing the
+root could not work in general, because `let seven = compute()` needs `compute` to run; and the
+runtime graph deliberately carries no mapping from a capture port to a module-level value
+(`GCGraph::captureNames()` is debug metadata only: "what a capture is bound to at run time is
+the closure tuple and the with-inputs of a call", `include/camel/runtime/graph.h`). The
+missing piece is the computation, so the fix had to execute the root.
+
+## 2. The fix, and why at that layer
+
+The library is compiled as **a program of its own whose entry is the pass function**, built by a
+builder of its own; the tool program the context keeps is that program, and the graph the pass
+runner calls is its **root**:
+
+| layer | code | change |
+|---|---|---|
+| graph builder | `src/compile/gir/builder.h`, `program.cpp` | `buildLibraryEntry(module, entryFunction)`: `buildFrom(unit, callEntry=true)` with the entry name recorded for `buildEntryCall` (it was `buildFrom(…, false)` for a library) |
+| entry call | `src/compile/gir/builder.cpp` (`buildEntryCall`) | the entry name is `main` for a program, the pass function for a library program; when it is a library's, the root graph's type takes the entry's exit type as well as its parameters, so the root has the pass's signature (`(Program) => Program!`) |
+| module | `include/camel/core/module/userdef.h`, `src/core/module/userdef.cpp` | `compileAsProgram(entryFunction, problem, root)`: parsed, GCT, a fresh `Builder`, `declareModule`, export check, `buildLibraryEntry`; the builder is kept with the module (`programBuilders_`), the module's own program graph is left alone (`buildingProgramOfItsOwn_`), and the old restriction stays ("a library compiled on its own (X) imports modules written in C++ only") |
+| store | `include/camel/runtime/definitions.h`, `src/runtime/definitions.cpp` | `library()` split into `importLibrary()` (import only) + compile-as-library; `libraryFunction` uses `compileAsProgram` and encodes `rootGraph` instead of the function graph; `LibraryFunction::graph` is documented as that program's root |
+
+Why this layer, and not binding the ports: a program computes its top-level values before
+`main` starts, and the pass is now that program's entry, so the root graph does exactly what a
+program does — no new binding rule, no capture-origin map in the runtime, `callGraph` unchanged.
+Because the root graph's exit is the call of the function value that `buildEntryCall` makes,
+`fillFrameForIndirectCall` binds the function's captures from that value's closure **after** the
+top-level values have been computed, which is the same rule an executable uses. Unused
+module-level values stay dead and are not computed (checked: a `let unused = print(…)` in a pass
+module prints nothing, without a warning — design 10.1, "被依赖才求值").
+
+The compile is a program of its own, not a re-use of the module's library build: an entry call
+per requested function cannot share one root graph (one call node holds one signature), and a
+pass module may export several passes (locked: two passes of one module each run their own
+root).
+
+## 3. What the cases lock
+
+`test/plans/feat/modules/graph.plan.toml` (all manual first, then through the plan):
+
+| case | expectation |
+|---|---|
+| `camel_pass_reads_module_level_values` (`values.cml`) | a literal (`two = 2`), an expression of it (`four = two + two`), a value from a call (`computed = seven()`), a value built from all three (`total`), and a helper that reads `two` and is called from the pass: `2 4 7 13` / `6` / the program's `42` |
+| `camel_pass_module_level_values_run_each_time` | the same pass twice: each run computes the module-level values of its program |
+| `camel_pass_reads_values_computed_from_a_c_module` (`imported_values.cml`) | `pi` used directly, and `half = pi / 2.0`, `root = sqrt(16.0)` computed at the module's top level from a module written in C++ |
+| `camel_pass_module_importing_a_camel_module_is_refused` (`camel_import_values.cml`) | a pass module importing a module written in Camel is refused with "a library compiled on its own (camel_import_values) imports modules written in C++ only" (task H36 item 1), not run with the imported value reading 0 |
+
+The third case is the "imports the value from another module" case with the restriction that is
+in force: a module written in C++ is the only kind a library compiled on its own may import
+today. The fourth case locks the refusal so that, when H36 item 1 lands, this test is updated
+deliberately instead of the value silently returning to 0.
+
+**Operator-definition programs (same route): affected, and it is a refusal.** A definition
+library is encoded as the function graph alone (`DefinitionStore::build`), so a definition that
+reads a module-level value has a capture node and is refused by the existing check
+`its graph does not take exactly the declared parameters` (`src/runtime/definitions.cpp:339`).
+That is a diagnostic, not a wrong value; the check now has a test:
+`bad_definitions.cml` exports `captured` (reads `first_axis = 1`), `test::definitions` declares
+it for `tensor:matmul`, and `modules.definitions` expects
+`DEFINITION capture refused: the definition of 'tensor:matmul' is refused: its graph does not take exactly the declared parameters`.
+
+## 4. What else the same cause explains
+
+| place | what happens | why |
+|---|---|---|
+| an operator definition (`DefinitionStore::build`) that reads a module-level value | refused: "its graph does not take exactly the declared parameters" | same encode-one-function-graph route; the capture node is what the check sees. Locked (see above) |
+| a rule written in a module (rule engine, `modules/rewrite`) whose body reads a module-level value | refused at rule build: `RuleInvalid: Rule 'same': the right side reads a port that is not a parameter` (`src/runtime/rules.cpp:130`) | the rule maker's graph is called through `callGraph` without a closure, and the rule validator already refuses any non-parameter port. A diagnostic, not a silent 0 |
+| a module-level constant in a **signature** (an array extent, a `const [n]` tensor dimension) | not affected | signatures are compile-time; the constant is part of the type the builder writes, and the encoded graph carries no runtime read of it |
+| a **default argument** | not applicable | Camel has no default arguments on functions; the defaults of a pass's own parameters are pass parameters (H36 item 2), and a pass with `with` parameters is refused today as "is not a pass", so no value is read |
+| a pass module applied twice | top-level values are computed again per run (locked by `camel_pass_module_level_values_run_each_time`) | the tool program is run once per application; see open question 1 |
+
+## 5. Verification
+
+Built only with `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h37-let`
+(every build exit 0: the first clean one 610/610 targets, the last incremental one 76/76). Tests
+run one plan at a time through
+`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-test.ps1 -Path D:\Projects\Camel-wt\h37-let -Plan <plan> -Jobs 8`:
+
+| plan | result |
+|---|---|
+| `test/plans/feat/modules/graph.plan.toml` | 31/31 pass (27 before, 4 new) |
+| `test/plans/feat/modules/definitions.plan.toml` | 22/22 pass (one new expectation line) |
+| `test/plans/feat/modules/rules.plan.toml` | 11/11 pass |
+| `smoke` | 10/10 pass |
+
+Manual beyond the cases: `h37chain` (a top-level value from a call, then two more derived from
+it), `h37nested` (a helper called from the pass reads a module-level value), `h37param` (the
+entry function also called directly inside the module, so its captures are with-ports: the
+entry call makes a forwarding value and still binds them), `h37var` (a module-level `var`
+read and written), `h37math` (top-level values from `pi` and `sqrt`), `h37eff` (an unused
+effectful value is not computed), `h37bad` (a pass module that does not compile:
+"its library 'h37bad' does not compile: SemanticDiag::UnresolvedReference: …").
+
+## 6. Expectations added or changed
+
+- Added: 4 cases in `modules.graph` (§3).
+- Added: one line in `modules.definitions` (`DEFINITION capture refused: …`) and one function in
+  `test/cases/definitions/bad_definitions.cml`, declared for `tensor:matmul` in
+  `src/passes/test/definitions.cpp`. No existing expectation was changed; the existing
+  `DEFINITION none refused: 'tensor:matmul' declares no definition` still prints before that
+  declaration is made.
+- Messages kept byte for byte: `is not a pass` / `(p: Program) => Program!`,
+  `UnrecognizedGraphPass`, `its library 'X' does not compile: …`, `its library 'X' is not a
+  module written in Camel`, `its library 'X' cannot be loaded: …`, and the Camel-import refusal.
+  (`'undefined_name'..` with two periods on the pass route predates this change: the pass
+  specification format appends a period to a diagnostic message that already ends with one.)
+
+## 7. Open questions
+
+1. **A pass applied twice computes the library's top-level values twice.** One run of a program
+   computes its top-level values once; here each application is one run of the tool program. The
+   cases lock the current behaviour. Computing once would need the context to keep the tool
+   program's root frame (or the values) alive between runs — a decided change of what a run of a
+   tool program means, not made here.
+2. **A pass module that the processed program itself imports.** `compileAsProgram` declares the
+   module on a builder of its own, so the module's export table now points at the tool program's
+   graphs. The program is already built and encoded when passes run, so nothing reads those
+   entities afterwards in the tests; a later lazy use of them (a generic instance built at run
+   time, say) would want the entities of two builders separated. Not observed; worth a check if
+   a pass module is ever also imported by its program.
+3. **Camel-module imports for a pass library** are still H36 item 1, and stay a refusal with a
+   diagnostic (locked). When H36 lands, the third case in §3 should become a passing value case
+   rather than the refusal one.
+
+---
+
+## 复验（2026-10-21，`handover/H37-module-let`）
+
+**结论：在本分支的基点 `origin/develop` `2c19dd70` 上，H37 的缺陷已经修复、不再复现。** 修复提交是
+`5c40c184`（"A Camel pass module is compiled as a program whose entry is the pass, so its module-level
+values exist"），已合入 `develop`；本文件上半部分是那次修复的原始报告，`docs/handover/reviews/H17-H22.md`
+里的 H37 检查意见为"通过"。任务书第 5 节表中 H37 一行仍写着"最优先"，是过期的状态，本分支一并改为
+已完成。因此本分支不重复实现修复，只做复验、补上原始报告预留的用例，并处理"运算符定义程序（同一路线）"
+一节。
+
+### 1. 缺陷、根因与修复（读码复核）
+
+交接说明里的复现，原样收进 `test/cases/modules/graph_pass/gl.cml`：
+
+```camel
+module gl
+import { Program } from graph
+
+let two = 2
+
+func ten(): int {
+    return 10
+}
+
+let twelve = two + ten()
+
+export func apply(p: Program): Program! sync {
+    println(two, twelve)
+    return p
+}
+```
+
+`camel tiny.cml gl::apply std::nvm`：修复前打印 `0 0`（原始报告 §1 的记录），修复后打印 `2 12`，随后被
+处理的 `tiny` 打印 `42`。`twelve` 由函数调用算出，所以问题不是"常量被折叠成 0"：是捕获端口保持了帧的
+默认值。
+
+根因与修复和原始报告一致，这次逐层读码复核：库程序过去只把导出函数的图编码成工具程序
+（`DefinitionStore::libraryFunction` → `encodeToRuntimeProgram(function, …)`）。模块顶层的值在 `__root__`
+上，库没有 root，所以这些值从未编码、从未执行；`NodeVMSchedPass::callGraph` 只按 norm 端口写实参，
+捕获端口没有闭包可绑定，保持 0。修复后 `libraryFunction` 走 `UserDefinedModule::compileAsProgram`：
+新建自己的 builder，把入口函数记为库程序的入口（`buildLibraryEntry`），编码的是程序的 **root**；
+`callGraph` 以被处理的程序为实参调用 root，root 的出口是入口函数值的调用，`fillFrameForIndirectCall`
+在顶层值算好之后从闭包绑定捕获（设计原则 10.1、3.5）。日志复核（`-vv --log-include GIREncode`）：
+工具程序是 `Encoding 3 reachable compile graphs` -> `Prepared compile graph '__root__'`、`'gl::ten'`、
+`'gl::apply'` -> `Resolve outer graph for 'gl::apply': outer='__root__' prepared=true` ->
+`Encoded runtime root '__root__' with 3 runtime graphs`；修复前同一位置是 `Encoding 1 reachable compile
+graphs`、`prepared=false`、`1 runtime graphs`（原始报告 §1 的记录）。
+
+### 2. 本分支做了什么
+
+1. `test/cases/modules/graph_pass/gl.cml`：交接说明的复现原样锁进 `modules.graph`。
+2. `valuelib.cml` + `valuereader.cml`：Camel 库导出顶层值 `five`，遍模块在自己的顶层算
+   `sum = five + nine()`。这补上原始报告 §7 Q3 预留的情形：H36 第 1 项之后，库可以导入 Camel 写的
+   模块；原来那条"导入 Camel 模块被拒绝"的用例已由 H36b 改成成功用例，但"导入的是值而不是函数"
+   一直没有用例。
+3. 运算符定义（同一路线）：见第 4 节。拒绝消息改为点名被捕获的模块级值，并补一个"值由函数调用算出"
+   的定义用例，使这条路线对两种形状都有明确的诊断。
+4. `docs/handover/README.cn.md` 的 H37 行改为已完成。
+
+### 3. 用户可见的变化
+
+- 遍的取值：不变（修复已在 `develop`）；本分支只加用例。
+- 定义图读取模块级值时的诊断（同一路线，改前/改后）：
+
+  ```text
+  改前：its graph does not take exactly the declared parameters
+  改后：its graph captures 'first_axis' of the module's top level; a definition is a function of
+        the operator's operands, so a module-level value cannot be bound
+  ```
+
+- 任务书状态行。
+
+### 4. 运算符定义程序（同一路线）的结论
+
+**受影响，但按设计是拒绝，不是静默的 0。** 定义库仍然只编码导出函数的图（`DefinitionStore::build`），
+读取模块级值就在函数图上留下捕获节点；定义图被钉在上下文、不属于任何程序，展开时被拷进目标程序，
+没有调用点或 root 可以绑定这个捕获。
+
+依据：`docs/design/op-semantics/README.cn.md` §9（检查："签名（恰好是声明的参数，没有 with 参数与
+捕获，不是泛型）"）与 `docs/technical/41_resources_and_definitions.md` §2.2 第 3 条。让定义"取到值"
+会改变语义，见待决问题 Q1；按任务书第 4 节没有自行决定，只把诊断改成点名捕获的值，并给"字面量"和
+"由调用算出"两种形状各一个用例。
+
+（如果协调者裁定允许：最直接的做法是 H37 对遍用的同一手法——定义模块编译成以定义为入口的程序，
+展开时调用它的 root。代价是模块顶层值随每次展开/内联在目标程序里求值，对有副作用的顶层值违反
+10.1 的求值时机，并改变定义图的内容散列。）
+
+### 5. 实际跑过的构建与测试
+
+构建与测试都在 Linux host 上，经
+`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h37-let -Plan <计划> -Jobs 12`
+（Release，基点 `2c19dd70`）。第一次完整构建 618/618、第二次增量 117/117，退出码都是 0。计划的数字取自
+同一次运行（`node scripts/test.js ... --jobs 12`）：
+
+| 计划 | 结果 |
+|---|---|
+| `test/plans/feat/modules/graph.plan.toml` | 48/48（46 条既有 + 2 条新增） |
+| `test/plans/feat/modules/definitions.plan.toml` | 23/23（改 1 条期望，新增 1 条 `call_capture`） |
+| `test/plans/feat/modules/rules.plan.toml` | 30/30 |
+| `test/plans/feat/parse/frontend.plan.toml` | 4/4（AST 金标已更新） |
+| `smoke` | 10/10 |
+
+合计 `total: 115, pass: 115, fail: 0`。手工先跑（`AGENTS.md` 的要求），在 host 的同一份 checkout 上：
+
+```text
+camel tiny.cml gl::apply std::nvm                            -> 2 12 / 42
+camel tiny.cml valuereader::show std::nvm                    -> 5 14 / 42
+camel -vv --log-include GIREncode tiny.cml gl::apply std::nvm -> prepared=true，工具程序 3 张图
+```
+
+新增用例：`modules.graph` 两条（`camel_pass_reads_the_handover_reproduction`、
+`camel_pass_reads_a_value_imported_from_a_camel_library`）；`modules.definitions` 改一条期望、加一条
+（`call_capture`）。遍本身总在 NodeVM 上运行（既有机制）；被处理的程序用 `std::nvm`，与 `graph_pass`
+其余用例一致。
+
+AST 金标：3 个新 `.cml` 与改动的 `bad_definitions.cml` 使 `frontend.ast_snapshot` 的金标需要更新，已用
+host 上的 `python3 test/tools/parsecheck/check.py snapshot --update` 更新（2269 个文件）并随本分支提交。
+
+### 6. 自查（任务书第 2 节）
+
+1. 按名字认具体的东西：没有；诊断按图上的捕获节点。
+2. 另造一套机制：没有；沿用 `compileAsProgram` 与既有的定义检查。
+3. 同一事实写在多处：没有；定义签名的规则仍只在 `src/runtime/definitions.cpp` 一处。
+4. 写死的上限：没有。
+5. 临时裁定语义：没有；定义捕获的语义写进 Q1。
+6. 为了让测试通过而改：只改了一条既有期望消息，原因（点名捕获）在本节与提交信息里说明。
+7. 兼容层：没有。
+8. 只做一个后端：遍只在 NodeVM 上跑（既有机制）；被处理的程序用 nvm，和其余 `graph_pass` 用例一致；
+   定义诊断与后端无关。
+
+### 7. 待决问题
+
+#### Q1：运算符定义可以读取模块级值吗？
+
+例子：
+
+```camel
+// 定义库里
+let first_axis = 1
+
+export func softmax_axis(x: Tensor<f32>): Tensor<f32> {
+    return softmax(x, first_axis - 1)
+}
+```
+
+现在是拒绝（诊断见第 3 节）。两种可能：
+
+- (a) 保持拒绝：定义是算子的纯函数，只依赖声明的操作数（现状，`op-semantics` §9 与 `technical/41`
+  §2.2）。
+- (b) 允许：定义模块也编译成以定义为入口的程序，展开时调用它的 root（H37 对遍的做法）。模块顶层值
+  会在目标程序里随展开求值；若允许有副作用的顶层值，求值时机与 10.1 不一致，且定义图的内容散列会变。
+
+建议：(a)。如果语言作者要 (b)，需要先定"定义里的模块级值何时求值"和"有副作用的顶层值怎么办"。
+影响：H37"运算符定义程序是否受影响"一问的答案取决于它；目前只能保证"不静默给 0，而是明确拒绝"。
+
+### 8. 没做完的
+
+- 定义捕获（Q1）；若裁定 (b)，按上面的第二条路实现。
+- H42（每个程序一份导出表）：`compileAsProgram` 仍调用 `clearExportedNamespaces()` 修改共享表；本分支
+  的 `valuereader` 用例正好走这条路径（导入 Camel 库的值），当前通过。
+- 遍应用两次重复计算模块级值：原始报告 Q1，检查意见已接受。
