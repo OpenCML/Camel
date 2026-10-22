@@ -4,6 +4,11 @@
 //   node scripts/stdlib-reference.mjs --verify-doc  docs/stdlib-reference.md is what --write would produce
 //   node scripts/stdlib-reference.mjs --verify-ops  the signature files list exactly the operators the
 //                                                   modules register (needs a built compiler)
+//   node scripts/stdlib-reference.mjs --verify-docs every name has a description and an @example, and
+//                                                   every example compiles (needs a built compiler)
+//   node scripts/stdlib-reference.mjs --audit [--compile]
+//                                                   the gap of each module as a table; --compile also
+//                                                   compiles (needs a built compiler)
 //
 // A run that renders no entry or compares no registered operator is refused (exit 1): agreement
 // over nothing is not a pass.
@@ -13,8 +18,10 @@
 //
 //   /// What it does, in one or more lines.
 //   /// @pure                      or  @effect <what the effect is>
-//   /// @fails <fault or error and when>          (optional; several conditions separated by `;`)
+//   /// @fails <fault or error and when>          (required when the result is `T!`)
 //   /// @example <code>    // <result>
+//   /// @example-fragment <why it is not a program of its own>   (optional; the example is then
+//   ///                                                          shown but not compiled)
 //   #op<'protocol:operator'>                       (only when the URI is not `<module>:<name>`;
 //   with <a: A>                                     `*` stands for any text, for a group of
 //   export func name(x: X): R                       overloads that differ by type)
@@ -51,8 +58,9 @@
 // or on purity.
 
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
-import { spawnSync } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -515,6 +523,7 @@ function readDeclarations(file, module) {
                 name: dynamicMatch[1],
                 section,
                 line: i + 1,
+                file: relative,
                 with: [],
                 norm: splitParams(args.inner),
                 result,
@@ -523,6 +532,7 @@ function readDeclarations(file, module) {
                 effect: '',
                 fails: [],
                 examples: [],
+                fragments: [],
                 uri: `${module.name}:${dynamicMatch[1]}`,
             }
             for (const text of doc) {
@@ -531,6 +541,7 @@ function readDeclarations(file, module) {
                     entry.purity = 'effect'
                     entry.effect = text.slice('@effect'.length).trim()
                 } else if (text.startsWith('@fails')) entry.fails.push(text.slice('@fails'.length).trim())
+                else if (text.startsWith('@example-fragment')) entry.fragments.push(text.slice('@example-fragment'.length).trim())
                 else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
                 else entry.doc.push(text)
             }
@@ -551,6 +562,7 @@ function readDeclarations(file, module) {
                 name: docValue[1],
                 section,
                 line: i + 1,
+                file: relative,
                 value: true,
                 with: [],
                 norm: [],
@@ -560,10 +572,12 @@ function readDeclarations(file, module) {
                 effect: '',
                 fails: [],
                 examples: [],
+                fragments: [],
                 uri: null,
             }
             for (const text of doc) {
-                if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
+                if (text.startsWith('@example-fragment')) entry.fragments.push(text.slice('@example-fragment'.length).trim())
+                else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
                 else if (!text.startsWith('@')) entry.doc.push(text)
             }
             entries.push(entry)
@@ -589,10 +603,12 @@ function readDeclarations(file, module) {
                 effect: '',
                 fails: [],
                 examples: [],
+                fragments: [],
                 uri: null,
             }
             for (const text of doc) {
-                if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
+                if (text.startsWith('@example-fragment')) entry.fragments.push(text.slice('@example-fragment'.length).trim())
+                else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
                 else if (!text.startsWith('@')) entry.doc.push(text)
             }
             entries.push(entry)
@@ -640,6 +656,7 @@ function readDeclarations(file, module) {
                 effect: '',
                 fails: [],
                 examples: [],
+                fragments: [],
                 uri: null,
             }
             for (const text of doc) {
@@ -648,6 +665,7 @@ function readDeclarations(file, module) {
                     entry.purity = 'effect'
                     entry.effect = text.slice('@effect'.length).trim()
                 } else if (text.startsWith('@fails')) entry.fails.push(text.slice('@fails'.length).trim())
+                else if (text.startsWith('@example-fragment')) entry.fragments.push(text.slice('@example-fragment'.length).trim())
                 else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
                 else entry.doc.push(text)
             }
@@ -854,8 +872,13 @@ out.push('Not in this reference: the profiler (`perf`).')
                 }
                 for (const example of entry.examples) {
                     const [code, result] = example.split(/\s{2,}\/\/\s*/)
-                    out.push(result ? `- Example: \`${code}\` gives \`${result}\`` : `- Example: \`${code}\``)
+                    if (entry.fragments.length > 0) {
+                        out.push(result ? `- Example (a fragment, not compiled): \`${code}\` gives \`${result}\`` : `- Example (a fragment, not compiled): \`${code}\``)
+                    } else {
+                        out.push(result ? `- Example: \`${code}\` gives \`${result}\`` : `- Example: \`${code}\``)
+                    }
                 }
+                for (const reason of entry.fragments) out.push(`- Why it is not compiled: ${reason}`)
                 out.push('')
             }
         }
@@ -863,6 +886,385 @@ out.push('Not in this reference: the profiler (`perf`).')
     return out.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n'
 }
 
+const STATEMENT_STARTS = /^(let|var|if|for|while|return|sync|match|throw)\b/
+const BUILTIN_TYPES = new Set([
+    'int', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize',
+    'float', 'f32', 'f64', 'bool', 'string', 'char', 'void', 'null', 'any', 'never',
+    'Map', 'Set', 'Bytes', 'T', 'U', 'V', 'K', 'P', 'R', 'A', 'F',
+])
+
+// The code an `@example` line shows, without the `// result` a page may append to it.
+function exampleCode(example) {
+    return example.split(/\s{2,}\/\/\s*/)[0].trim()
+}
+
+// The call of the entry's own name in an example, with the receiver of `->` and the text of the
+// argument list. `j->get<'a'>` has receiver `j` and no arguments; `conv2d(x, w, b, 1, 0)` has
+// arguments; `let t = open(p)` has the call on the right of `=`.
+function findCall(code, name) {
+    const pattern = new RegExp(`\\b${name}\\b`, 'g')
+    let match
+    while ((match = pattern.exec(code))) {
+        let index = match.index + name.length
+        while (index < code.length && /\s/.test(code[index])) index++
+        if (code[index] === '<') index = skipBalanced(code, index, '<', '>')
+        while (index < code.length && /\s/.test(code[index])) index++
+        let args = null
+        if (code[index] === '(') {
+            const end = skipBalanced(code, index, '(', ')')
+            args = code.slice(index + 1, end - 1)
+        } else if (index < code.length && !/[\w:]/.test(code[index])) {
+            // A bare name (a value, not a call) is not a call site.
+        }
+        const receiver = code.slice(0, match.index).match(/([A-Za-z_]\w*)\s*->\s*$/)
+        return { receiver: receiver ? receiver[1] : null, args }
+    }
+    return null
+}
+
+function skipBalanced(text, start, open, close) {
+    let depth = 0
+    for (let index = start; index < text.length; index++) {
+        if (text[index] === open) depth++
+        else if (text[index] === close) {
+            depth--
+            if (depth === 0) return index + 1
+        }
+    }
+    return text.length
+}
+
+function splitArguments(text) {
+    if (text === null) return []
+    const parts = []
+    let depth = 0
+    let quote = ''
+    let start = 0
+    for (let index = 0; index < text.length; index++) {
+        const char = text[index]
+        if (quote) {
+            if (char === quote && text[index - 1] !== '\\') quote = ''
+            continue
+        }
+        if (char === "'" || char === '"') quote = char
+        else if ('([{<'.includes(char)) depth++
+        else if (')]}>'.includes(char)) depth--
+        else if (char === ',' && depth === 0) {
+            parts.push(text.slice(start, index).trim())
+            start = index + 1
+        }
+    }
+    if (text.slice(start).trim() !== '') parts.push(text.slice(start).trim())
+    return parts
+}
+
+function declaredParams(entry) {
+    return entry.norm
+        .map((text) => {
+            const match = text.match(/^(\w+)\s*\??\s*:\s*(.+)$/)
+            return match ? { text, name: match[1], type: match[2].trim() } : null
+        })
+        .filter(Boolean)
+}
+
+// The names the example uses that stand for the declaration's own parameters: the argument at
+// position i takes parameter i's type, and the receiver of `->` takes parameter 0's. An argument
+// that is a literal or an expression is not a name and binds nothing.
+const NAME = /^[A-Za-z_]\w*$/
+
+// A keyword is not a name: `set_terminal_raw_mode(true)` must not make `true` a parameter.
+const RESERVED = new Set([
+    'true', 'false', 'null', 'func', 'let', 'var', 'if', 'else', 'for', 'while', 'match', 'return',
+    'throw', 'sync', 'with', 'type', 'struct', 'enum', 'rule', 'export', 'module', 'import', 'as', 'is',
+])
+
+function bindArguments(entry, code) {
+    const params = declaredParams(entry)
+    const call = findCall(code, entry.name)
+    if (!call) return []
+    const bindings = []
+    const bind = (name, param) => {
+        if (!param || !NAME.test(name) || RESERVED.has(name)) return
+        // A parameter typed by a type variable cannot be written in the wrapper: its type is not a
+        // type of the program (`T[]`, `Map<K, V>`, `(...args: A) => T`). The example has to
+        // supply a concrete value instead; the compile below reports the name as unresolved.
+        if (/\btypeas\b/.test(param.type) || /\b[A-Z]\b/.test(param.type)) return
+        if (!bindings.some((binding) => binding.name === name)) bindings.push({ name, type: param.type })
+    }
+    if (call.receiver) bind(call.receiver, params[0])
+    splitArguments(call.args).forEach((argument, index) => {
+        const shifted = call.receiver ? index + 1 : index
+        bind(argument, params[shifted])
+    })
+    return bindings
+}
+
+// The type names an example needs in scope: the types of the parameters it binds (a qualified
+// name is not imported) and the capitalized names the example writes itself, such as an enum
+// (`NodeKind::Oper`) or a lambda's annotation (`(j: Json) => ...`). `Map` and `Set` are built in
+// and resolve nowhere, which is not an error.
+function exampleTypeNames(bindings, code) {
+    const names = []
+    for (const binding of bindings) {
+        for (const name of binding.type.match(/\b[A-Z]\w*/g) || []) if (!names.includes(name)) names.push(name)
+    }
+    for (const name of code.match(/\b[A-Z]\w*/g) || []) if (!names.includes(name)) names.push(name)
+    return names.filter((name) => !BUILTIN_TYPES.has(name))
+}
+
+// A module exports a type; which module is not written in a signature file, and a type name is
+// not always the module's name (`Node` is `graph`'s). The resolver tries the entry's own module
+// first (a module's own types are its own), then the modules whose declaration text mentions the
+// name, then every module; the result is cached for the run.
+const typeModuleCache = new Map()
+const probeImportCache = new Map()
+const moduleSources = new Map()
+
+function moduleSource(module) {
+    if (!moduleSources.has(module.name)) {
+        const files = [sourceOf(module)]
+        if (module.computed) files.push(path.join(STDLIB_DIR, module.computed))
+        moduleSources.set(
+            module.name,
+            files
+                .filter((file) => fs.existsSync(file))
+                .map((file) => fs.readFileSync(file, 'utf8'))
+                .join('\n'),
+        )
+    }
+    return moduleSources.get(module.name)
+}
+
+async function resolveTypeModule(name, preferred) {
+    if (typeModuleCache.has(name)) return typeModuleCache.get(name)
+    // A type is usually exported by the module of its name (`Tensor`, `Json`, `Bytes`, `Node`);
+    // otherwise by one whose declarations mention it. Every candidate is tried as a type, not as
+    // an import: a module may export a *value* of the name and not the type.
+    const named = MODULES.map((module) => module.name).filter((module) => module.toLowerCase() === name.toLowerCase())
+    const mentioners = MODULES.map((module) => module.name).filter(
+        (module) => module !== preferred && moduleSource(module).includes(name),
+    )
+    const candidates = [...new Set([...named, preferred, ...mentioners, ...MODULES.map((module) => module.name)])]
+    for (const candidate of candidates) {
+        if (await probeImport(name, candidate)) {
+            typeModuleCache.set(name, candidate)
+            return candidate
+        }
+    }
+    typeModuleCache.set(name, null)
+    return null
+}
+
+// Whether `name` is a type a module exports: the probe uses it as a type annotation, because an
+// import of the same name may succeed and still bring only a value.
+async function probeImport(name, moduleName) {
+    const key = `${name}@${moduleName}`
+    if (probeImportCache.has(key)) return probeImportCache.get(key)
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-type-'))
+    try {
+        const file = path.join(dir, 'main.cml')
+        fs.writeFileSync(
+            file,
+            `import { ${name} } from ${moduleName}\nfunc __doc_type(v: ${name}): void {\n    let _ = v\n}\n` +
+                'func main(): int sync { return 0 }\n',
+        )
+        const result = await runCamelCompile(file, dir)
+        probeImportCache.set(key, result.ok)
+        return result.ok
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+}
+
+// The Camel a doc example compiles as: the module's names in scope, the example's arguments bound
+// to their declared parameter types, and the example inside a function. An example that starts
+// with a statement keyword is used as a statement; anything else is an expression and becomes
+// `let __doc_example = <expression>`. A call that returns nothing cannot be bound, so an
+// expression whose compile fails is retried as a statement before the failure is reported (a void
+// call is a valid example of a writer such as save_params).
+async function exampleSource(module, entries, entry, code, asStatement = false) {
+    const names = [...new Set(entries.map((each) => each.name))].filter((name) => /^[A-Za-z_]\w*$/.test(name))
+    const lines = []
+    if (module.name !== 'globals') {
+        lines.push(`import { ${names.join(', ')} } from ${module.name}`)
+    }
+    const bindings = bindArguments(entry, code)
+    const types = new Map()
+    for (const name of exampleTypeNames(bindings, code)) {
+        const owner = await resolveTypeModule(name, module.name)
+        if (owner) types.set(name, owner)
+    }
+    for (const [name, owner] of types) lines.push(`import { ${name} } from ${owner}`)
+    const params = bindings.map((binding) => `${binding.name}: ${binding.type}`).join(', ')
+    const fallible = /^throw\b/.test(code.trim())
+    lines.push(`func __doc_example(${params}): ${fallible ? 'int!' : 'void'} {`)
+    // A call of a `void` function has no value to bind, so it is a statement, not an expression.
+    if (asStatement || entry.result === 'void' || STATEMENT_STARTS.test(code.trim())) {
+        lines.push(`    ${code.trim()}`)
+    } else {
+        lines.push(`    let __doc_example = ${code.trim()}`)
+    }
+    lines.push('}')
+    lines.push('func main(): int sync { return 0 }')
+    return lines.join('\n') + '\n'
+}
+
+function runCamelCompile(file, cwd) {
+    return new Promise((resolve) => {
+        const env = { ...process.env }
+        env.CAMEL_HOME = process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
+        const child = spawn(camelExe(), [file, 'std::gir'], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+        let output = ''
+        child.stdout.on('data', (chunk) => (output += chunk))
+        child.stderr.on('data', (chunk) => (output += chunk))
+        child.on('error', (error) => resolve({ ok: false, message: error.message }))
+        child.on('close', (code) => {
+            if (code === 0) return resolve({ ok: true })
+            const line = output
+                .split(/\r?\n/)
+                .map((entry) => entry.trim())
+                .find((entry) => /\b(error|fault)\b/i.test(entry))
+            resolve({ ok: false, message: (line || output.trim().split(/\r?\n/)[0] || `exit ${code}`).slice(0, 240) })
+        })
+    })
+}
+
+async function compileExample(job) {
+    const { module, entries, entry, code } = job
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-example-'))
+    try {
+        const file = path.join(dir, 'main.cml')
+        fs.writeFileSync(file, await exampleSource(module, entries, entry, code))
+        const result = await runCamelCompile(file, dir)
+        if (!result.ok && !STATEMENT_STARTS.test(code)) {
+            fs.writeFileSync(file, await exampleSource(module, entries, entry, code, true))
+            const asStatement = await runCamelCompile(file, dir)
+            if (asStatement.ok) return { ...job, ok: true }
+        }
+        return { ...job, ok: result.ok, message: result.message }
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true })
+    }
+}
+
+// Compiles every example of a module, at most JOBS at a time; one temp directory per example. An
+// entry that marks its example a fragment is not compiled: the marker is the record of that, and
+// docProblems requires the reason.
+async function compileExamples(module, entries) {
+    const jobs = []
+    const fragments = []
+    const seen = new Set()
+    for (const entry of entries) {
+        if (seen.has(entry.name)) continue
+        seen.add(entry.name)
+        if (entry.fragments.length > 0) {
+            fragments.push(entry)
+            continue
+        }
+        for (const example of entry.examples) {
+            jobs.push({ module, entries, entry, code: exampleCode(example), file: entry.file, line: entry.line, name: entry.name })
+        }
+    }
+    const results = new Array(jobs.length)
+    let cursor = 0
+    const width = Math.max(1, Math.min(Number(process.env.CAMEL_DOC_JOBS || 8), jobs.length || 1))
+    async function worker() {
+        while (cursor < jobs.length) {
+            const index = cursor++
+            results[index] = await compileExample(jobs[index])
+        }
+    }
+    await Promise.all(Array.from({ length: width }, worker))
+    return { results: results.filter(Boolean), fragments }
+}
+
+// ---- auditing the documentation ------------------------------------------------------------
+
+// The doc-comment rule, as a shape the checker can decide:
+//
+//   * A name the reference prints has a description: at least one prose line in its `///`
+//     block. A block of tags only (`@pure` alone) is not a description. The description is
+//     required, not optional: every name is a call a reader will make.
+//   * A name the reference prints has an `@example`. It is required, not optional, for the
+//     same reason. Compiling it is required too: the checker binds the example's arguments to the
+//     declared parameter types and compiles the call. An entry whose example cannot be a program
+//     of its own (it is a fragment of a program that has the names the description introduces)
+//     says so with `@example-fragment <reason>`: the reason is required, and the reference shows
+//     it, so "not compiled" is a decision with a reason, never a silent gap.
+//   * A name whose declared result is an error (`T!`) has an `@fails` line naming the error.
+//     A name that cannot fail must not be forced to invent one, so `@fails` is required only
+//     when the type says the function returns an error. A fault is not in the type: a `@fails`
+//     line that names a fault stays optional. A result that is a bare type variable (`T!`, `F!`)
+//     passes on an error the function did not define (the error of the function it calls, say);
+//     the description says which, and no kind can be named here.
+//   * A `@fails` line names what it can be: `fault `Name``, `error `Name``, or a diagnostic
+//     kind. A line without a name is not a failure description.
+function docProblems(entries) {
+    const problems = []
+    const seen = new Set()
+    for (const entry of entries) {
+        if (seen.has(entry.name)) continue
+        seen.add(entry.name)
+        const where = `${entry.file}:${entry.line}`
+        const prose = entry.doc.filter((line) => line.trim() !== '')
+        if (prose.length === 0) {
+            problems.push(`${where}: '${entry.name}' has no description`)
+        }
+        if (entry.examples.length === 0) {
+            problems.push(`${where}: '${entry.name}' has no @example`)
+        }
+        for (const example of entry.examples) {
+            if (example.trim() === '') problems.push(`${where}: '${entry.name}' has an empty @example`)
+        }
+        for (const reason of entry.fragments) {
+            if (reason.trim() === '') {
+                problems.push(`${where}: '${entry.name}' marks its example a fragment without a reason (@example-fragment <reason>)`)
+            }
+        }
+        // `string!` is an error result; `string?` is an optional one, not an error. `T!` is an error
+        // the function did not define, so its description says where it comes from instead.
+        const result = entry.result.trim()
+        if (/!\s*$/.test(result) && !/^[A-Z]!$/.test(result) && entry.fails.length === 0) {
+            problems.push(`${where}: '${entry.name}' returns ${entry.result}, so it needs an @fails line naming the error`)
+        }
+        for (const fails of entry.fails) {
+            if (!/\b(fault|error)(\s+value)?\s+`[^`]+`/.test(fails)) {
+                problems.push(`${where}: '${entry.name}' has an @fails line that names no fault or error: '${fails}'`)
+            }
+        }
+    }
+    return problems
+}
+
+// The check the plan runs: the doc-comment rule above, plus every example compiled. It needs a
+// built compiler, like --verify-ops.
+async function verifyDocs() {
+    const problems = []
+    let checked = 0
+    let fragments = 0
+    for (const module of MODULES) {
+        const entries = parseDeclarations(module)
+        problems.push(...docProblems(entries))
+        const compiled = await compileExamples(module, entries)
+        fragments += compiled.fragments.length
+        for (const result of compiled.results) {
+            checked++
+            if (!result.ok) {
+                problems.push(
+                    `${result.file}:${result.line}: '${result.name}' has an @example that does not compile: ` +
+                        `\`${result.code}\`: ${result.message}`,
+                )
+            }
+        }
+    }
+    return { problems, checked, fragments }
+}
+
+// The Camel a doc example compiles as: the entry inside `main`, with the module's names in
+// scope. An example that starts with a statement keyword is used as a statement; anything else
+// is an expression and becomes `let __doc_example = <expression>`. A call that returns nothing
+// cannot be bound, so an expression whose compile fails is retried as a statement before the
+// failure is reported (a void call is a valid example of a writer such as save_params).
 // ---- checking against the registered operators --------------------------------------------
 
 function camelExe() {
@@ -1049,6 +1451,64 @@ if (mode === '--write' || mode === '--verify-doc') {
         }
         console.log('docs/stdlib-reference.md is up to date')
     }
+} else if (mode === '--audit') {
+    // What each module's documentation has, and what it does not: the table the task H189 asks
+    // for, from the same parser the reference is generated with. `--compile` also compiles every
+    // example (needs a built compiler).
+    const compile = process.argv.includes('--compile')
+    const rows = []
+    let totals = { names: 0, entries: 0, noDoc: 0, noExample: 0, examples: 0, fragments: 0, compileBroken: 0 }
+    for (const module of MODULES) {
+        const entries = parseDeclarations(module)
+        const names = [...new Set(entries.map((entry) => entry.name))]
+        const firsts = names.map((name) => entries.find((entry) => entry.name === name))
+        const noDoc = firsts.filter((entry) => entry.doc.filter((line) => line.trim() !== '').length === 0).length
+        const noExample = firsts.filter((entry) => entry.examples.length === 0).length
+        const examples = firsts.reduce((sum, entry) => sum + entry.examples.length, 0)
+        const fragments = firsts.filter((entry) => entry.fragments.length > 0).length
+        for (const problem of docProblems(entries)) console.log(`DOC ${problem}`)
+        let compileBroken = 0
+        if (compile) {
+            const compiled = await compileExamples(module, entries)
+            const broken = compiled.results.filter((result) => !result.ok)
+            compileBroken = broken.length
+            for (const result of broken) {
+                console.log(`BROKEN ${result.file}:${result.line}: ${result.name}: ${result.message}`)
+            }
+        }
+        rows.push({ module: module.name, names: names.length, entries: entries.length, noDoc, noExample, examples, fragments, compileBroken })
+        totals.names += names.length
+        totals.entries += entries.length
+        totals.noDoc += noDoc
+        totals.noExample += noExample
+        totals.examples += examples
+        totals.fragments += fragments
+        totals.compileBroken += compileBroken
+    }
+    console.log('module         names entries noDoc noExample examples fragments broken')
+    for (const row of rows) {
+        console.log(
+            `${row.module.padEnd(14)} ${String(row.names).padStart(5)} ${String(row.entries).padStart(7)} ` +
+                `${String(row.noDoc).padStart(5)} ${String(row.noExample).padStart(9)} ` +
+                `${String(row.examples).padStart(8)} ${String(row.fragments).padStart(9)} ${String(row.compileBroken).padStart(6)}`,
+        )
+    }
+    console.log(
+        `${'total'.padEnd(14)} ${String(totals.names).padStart(5)} ${String(totals.entries).padStart(7)} ` +
+            `${String(totals.noDoc).padStart(5)} ${String(totals.noExample).padStart(9)} ` +
+            `${String(totals.examples).padStart(8)} ${String(totals.fragments).padStart(9)} ${String(totals.compileBroken).padStart(6)}`,
+    )
+} else if (mode === '--verify-docs') {
+    const { problems, checked, fragments } = await verifyDocs()
+    for (const problem of problems) console.log(problem)
+    if (problems.length > 0) {
+        console.log(`${problems.length} documentation problem(s) in ${checked} compiled example(s)`)
+        process.exit(1)
+    }
+    console.log(
+        `every declared name has a description and an @example: ${checked} example(s) compile, ` +
+            `${fragments} marked fragment(s) not compiled`,
+    )
 } else if (mode === '--verify-ops') {
     const { problems, checked } = verifyOps()
     for (const problem of problems) console.log(problem)
@@ -1064,6 +1524,6 @@ if (mode === '--write' || mode === '--verify-doc') {
     }
     console.log(`the declarations agree with the ${checked} registered operator overloads`)
 } else {
-    console.log('usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops')
+    console.log('usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile]')
     process.exit(2)
 }

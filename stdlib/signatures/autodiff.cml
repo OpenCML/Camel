@@ -19,6 +19,7 @@
 /// shape). A function with no `with` parameter, or whose first `with` parameter has no
 /// differentiable tangent, is refused when the call is compiled.
 /// @effect differentiates the function's graph
+/// @example-fragment `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let dh = grad(h)
 export func grad(f: (x: float) => float): (x: float) => float
 
@@ -26,5 +27,6 @@ export func grad(f: (x: float) => float): (x: float) => float
 /// gradient with respect to the first `with` parameter. The same compile-time refusal as `grad`
 /// applies.
 /// @effect differentiates the function's graph
+/// @example-fragment `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let value_and_grad = with_grad(h)
 export func with_grad(f: (x: float) => float): (x: float) => (float, float)

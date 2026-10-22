@@ -357,7 +357,7 @@ export func reduce(xs: T[]): U
 
 /// Calls f for every element, in order.
 /// @effect what f does
-/// @example xs->foreach<(x: int) => println(x)>
+/// @example [1, 2, 3]->foreach<(x: int) => println(x)>
 #op<':mark/foreach_arr'>
 with <f: (item: T) => void>
 export func foreach(xs: T[]): void
@@ -382,8 +382,8 @@ export func apply(xs: T[]): T[]
 /// before the fault is not undone; exit() and the failures of the compiler itself are not
 /// isolated.
 /// @effect what f does
-/// @example attempt(risky, 0) !! -1
-/// @example attempt(() => xs->map<risky>) !! [-1]
+/// @example attempt((x: int) => 10 / x, 0) !! -1    // -1: the division fault becomes an error value
+/// @example attempt((x: int) => 10 / x, 2) !! -1    // 5
 #op<':mark/isolate'>
 export func attempt(f: (...args: A) => T, ...args: A): T!
 
@@ -402,14 +402,14 @@ export func len(c: Set<T>): int
 
 /// The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 /// @pure
-/// @example m->get<'z'> ?? 0    // 0 when m has no 'z'
+/// @example ([('a', 1)] as Map<string, int>)->get<'z'> ?? 0    // 0 when the map has no 'z'
 #op<':coll/map_get'>
 with <key: K>
 export func get(m: Map<K, V>): V?
 
 /// The value stored under key, or fallback when the map has no such key.
 /// @pure
-/// @example m->get_or<'z', -1>    // -1 when m has no 'z'
+/// @example ([('a', 1)] as Map<string, int>)->get_or<'z', -1>    // -1 when the map has no 'z'
 #op<':coll/map_get_or'>
 with <key: K, fallback: V>
 export func get_or(m: Map<K, V>): V
@@ -465,7 +465,7 @@ export func items(s: Set<T>): T[]
 
 /// A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 /// @pure
-/// @example merge(m, n)    // {a: 1, b: 20, c: 30} for m = {a: 1, b: 2}, n = {b: 20, c: 30}
+/// @example merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)    // {a: 1, b: 20, c: 30}
 #op<':coll/merge'>
 export func merge(m: Map<K, V>, other: Map<K, V>): Map<K, V>
 

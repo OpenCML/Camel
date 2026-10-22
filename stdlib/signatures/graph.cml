@@ -27,12 +27,12 @@ export func constant(n: Node, sample: T): T?
 
 /// The Program a function value lives in.
 /// @pure
-/// @example program_of(f)
+/// @example program_of((x: float): float => x + 1.0)
 export func program_of(f: F): Program
 
 /// The graph of a function value.
 /// @pure
-/// @example graph_of(f)
+/// @example graph_of((x: float): float => x + 1.0)
 export func graph_of(f: F): Graph
 
 // ---- transactions ----
@@ -47,12 +47,12 @@ export func add_constant(t: Txn, g: Graph, value: T): Node
 
 /// Opens a transaction on a function value's graph and the graphs it reaches.
 /// @effect opens a transaction
-/// @example open_function(f)
+/// @example open_function((x: float): float => x + 1.0)
 export func open_function(f: F): Txn
 
 /// Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
 /// @effect changes the transaction
-/// @example to_function(t, f)
+/// @example to_function(t, (x: float): float => x + 1.0)
 export func to_function(t: Txn, sample: F): F!
 
 // ---- comparison ----

@@ -557,7 +557,7 @@ foreach: <f: (item: T) => void> (xs: T[]) => void
 Calls f for every element, in order.
 
 - With effects: what f does.
-- Example: `xs->foreach<(x: int) => println(x)>`
+- Example: `[1, 2, 3]->foreach<(x: int) => println(x)>`
 
 #### `apply`
 
@@ -590,8 +590,8 @@ before the fault is not undone; exit() and the failures of the compiler itself a
 isolated.
 
 - With effects: what f does.
-- Example: `attempt(risky, 0) !! -1`
-- Example: `attempt(() => xs->map<risky>) !! [-1]`
+- Example: `attempt((x: int) => 10 / x, 0) !! -1` gives `-1: the division fault becomes an error value`
+- Example: `attempt((x: int) => 10 / x, 2) !! -1` gives `5`
 
 #### `len`
 
@@ -614,7 +614,7 @@ get: <key: K> (m: Map<K, V>) => V?
 The value stored under key, or null when the map has no such key. `m[key]` is the same lookup.
 
 - Pure.
-- Example: `m->get<'z'> ?? 0` gives `0 when m has no 'z'`
+- Example: `([('a', 1)] as Map<string, int>)->get<'z'> ?? 0` gives `0 when the map has no 'z'`
 
 #### `get_or`
 
@@ -625,7 +625,7 @@ get_or: <key: K, fallback: V> (m: Map<K, V>) => V
 The value stored under key, or fallback when the map has no such key.
 
 - Pure.
-- Example: `m->get_or<'z', -1>` gives `-1 when m has no 'z'`
+- Example: `([('a', 1)] as Map<string, int>)->get_or<'z', -1>` gives `-1 when the map has no 'z'`
 
 #### `put`
 
@@ -715,7 +715,7 @@ merge: (m: Map<K, V>, other: Map<K, V>) => Map<K, V>
 A map with the entries of both maps; for a key in both, the entry of other is taken. Neither argument is changed.
 
 - Pure.
-- Example: `merge(m, n)` gives `{a: 1, b: 20, c: 30} for m = {a: 1, b: 2}, n = {b: 20, c: 30}`
+- Example: `merge([('a', 1), ('b', 2)] as Map<string, int>, [('b', 20), ('c', 30)] as Map<string, int>)` gives `{a: 1, b: 20, c: 30}`
 
 #### `contains`
 
@@ -982,6 +982,7 @@ decode: (content: Bytes) => string!
 Decodes UTF-8, returning an EncodingError value for malformed input.
 
 - Pure.
+- Failure: error value `EncodingError` when the bytes are not valid UTF-8 or the text is larger than a string.
 - Example: `decode(encode('中文')) !! ''`
 
 #### `from_array`
@@ -1094,11 +1095,12 @@ The paths of the leaves, as a tree of the same shape.
 #### `save_tree`
 
 ```camel
-save_tree: (dir: string, tree: T, dataset_manifest_sha256: string) => void
+save_tree: (dir: string, tree: T, dataset_manifest_sha256?: string) => void
 ```
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for a
-tensor), with a manifest that records the types, sizes and SHA-256 sums. The directory is
+tensor), with a manifest that records the types, sizes and SHA-256 sums and, when
+`dataset_manifest_sha256` is given, that hash of the data manifest. The directory is
 replaced as a whole or not at all: the new checkpoint is written and flushed into a
 temporary sibling and renamed into place, and the old directory is kept beside it as the
 hidden sibling `.<name>.ckpt-previous` (the destination's own directory name between a
@@ -1116,23 +1118,26 @@ checkpoint.
 
 - With effects: writes and replaces the directory.
 - Failure: fault `FileSystemError` when the directory cannot be written or published.
-- Example: `save_tree('out/ckpt', { w: zeros([2, 2]), step: 10 })`
+- Example: `save_tree('out/ckpt', { w: 1.0, step: 10 })`
 
 #### `load_tree`
 
 ```camel
-load_tree: (dir: string, dataset_manifest_sha256: string) => T!
+load_tree: (dir: string, dataset_manifest_sha256?: string) => T!
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure,
 the types, the sizes and the SHA-256 sums first: a directory that does not fit T is a
-`CheckpointError` value, nothing is partly loaded. T is the explicit type argument or the
+`CheckpointError` value, nothing is partly loaded. A `dataset_manifest_sha256` that differs
+from the one the checkpoint records is a warning on standard error, not an error. T is the
+explicit type argument or the
 expected type of the result. When a save was interrupted after moving the old directory
 aside, the complete `.<name>.ckpt-previous` sibling is read instead, with a warning on
 standard error; the next save restores it before replacing it.
 
 - With effects: reads the directory.
-- Example: `load_tree::<{ w: Tensor<f32>, step: int }>('out/ckpt') !! initial()`
+- Failure: error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
+- Example: `load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }`
 
 <a id="tensor"></a>
 
@@ -2177,7 +2182,7 @@ f(xs[i], ys[i]) for every i.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<add>([1, 2], [10, 20])` gives `[11, 22]`
+- Example: `zip_with<(a: int, b: int): int => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
 <a id="math"></a>
 
@@ -3781,7 +3786,7 @@ unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
 Calls f for every element; the calls have no order among them.
 
 - With effects: what f does.
-- Example: `xs->unordered_foreach<work>`
+- Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
 
 #### `unordered_reduce`
 
@@ -3793,7 +3798,7 @@ Combines the elements with f starting from initial; the order in which elements 
 combined is not fixed, so f should be associative and commutative.
 
 - With effects: what f does.
-- Example: `xs->unordered_reduce<add, 0>`
+- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
 
 #### `rendezvous`
 
@@ -4192,7 +4197,7 @@ program_of: (f: F) => Program
 The Program a function value lives in.
 
 - Pure.
-- Example: `program_of(f)`
+- Example: `program_of((x: float): float => x + 1.0)`
 
 #### `graph_of`
 
@@ -4203,7 +4208,7 @@ graph_of: (f: F) => Graph
 The graph of a function value.
 
 - Pure.
-- Example: `graph_of(f)`
+- Example: `graph_of((x: float): float => x + 1.0)`
 
 ### Transactions
 
@@ -4230,7 +4235,7 @@ open_function: (f: F) => Txn
 Opens a transaction on a function value's graph and the graphs it reaches.
 
 - With effects: opens a transaction.
-- Example: `open_function(f)`
+- Example: `open_function((x: float): float => x + 1.0)`
 
 #### `to_function`
 
@@ -4241,7 +4246,7 @@ to_function: (t: Txn, sample: F) => F!
 Commits a transaction of `open_function` to a Program of its own (the running program is left as it is) and gives the function value, of the type of the sample. The error value has the kinds of `commit`, `SignatureMismatch` (the graph has another signature than the sample) or `ClosureNotEmpty` (the function captures values).
 
 - With effects: changes the transaction.
-- Example: `to_function(t, f)`
+- Example: `to_function(t, (x: float): float => x + 1.0)`
 
 #### `open`
 
@@ -4285,6 +4290,7 @@ commit: (t: Txn) => Program!
 Checks the edits and makes the new Program, which shares every graph nothing changed; the transaction is over. The error value has the kind `GraphConflict` (a graph the transaction touched changed since it was opened), `GraphInvalid` (an edit broke an invariant; the message names the graph, the node and the edge) or `TxnUsed` (the transaction was over already).
 
 - With effects: changes the transaction.
+- Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant; error value `TxnUsed` when the transaction was over already.
 - Example: `commit(t)`
 
 #### `abort`
@@ -4323,6 +4329,7 @@ rewrite: (p: Program, rules: (() => Rule)[], strict: bool) => Program!
 Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
 
 - With effects: runs the rules' functions.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
 - Example: `rewrite(p, rules)` gives `the rewritten program`
 
 #### `saturate`
@@ -4336,6 +4343,7 @@ Applies the rearranging rules too, for at most `rounds` rounds, and gives the sm
 writing of the value it finds.
 
 - With effects: runs the rules' functions.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out.
 - Example: `saturate(p, rules, 20)` gives `the smallest writing found`
 
 #### `extract`
@@ -4347,6 +4355,7 @@ extract: (p: Program, cost: string) => Program!
 Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 
 - With effects: rewrites the program and runs the cost model.
+- Failure: error value `NoCostModel` when there is no cost model named `cost`; error value `RewriteInvalid` when the extraction cannot be carried out.
 - Example: `extract(p, 'size')` gives `the extracted program`
 
 #### `check`
@@ -4442,7 +4451,7 @@ struct — and returns the same tree with each leaf wrapped in `Device<...>`. A 
 type is refused when the call is compiled.
 
 - With effects: transfers to the device.
-- Example: `upload(new([1.0, 2.0]))` gives `a Device<Tensor<f32>>`
+- Example: `upload(host)` gives `a Device<Tensor<f32>>`
 
 #### `download`
 
@@ -4454,7 +4463,7 @@ Downloads every device leaf of the value and returns the host value it came from
 leaf that is not a device value is refused when the call is compiled.
 
 - With effects: transfers from the device.
-- Example: `download(d)` gives `the tensor d holds`
+- Example: `download(resident)` gives `the tensor resident holds`
 
 #### `run`
 
@@ -4467,7 +4476,7 @@ uploaded, the device computes, and the result is downloaded again. The result ty
 function's result type.
 
 - With effects: transfers both ways and runs device code.
-- Example: `run<add>((2.0, 3.0))` gives `5.0`
+- Example: `run<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `5.0`
 
 #### `run_device`
 
@@ -4479,7 +4488,7 @@ Runs the function as `run` does but leaves the result on the device: each leaf o
 wrapped in `Device<...>`.
 
 - With effects: transfers to the device and runs device code.
-- Example: `run_device<add>((2.0, 3.0))` gives `a Device<float>`
+- Example: `run_device<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
 
 #### `run_preferred_resident`
 
@@ -4491,7 +4500,7 @@ Runs the function the way `@gpu` does — a prepared device program when one can
 host otherwise — and answers the resident form of its result.
 
 - With effects: transfers to the device and runs device code.
-- Example: `run_preferred_resident<add>((2.0, 3.0))` gives `a Device<float>`
+- Example: `run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
 
 #### `source`
 
@@ -4502,7 +4511,7 @@ source: <fn: (a: float, b: float) => float> (inputs: (float, float)) => string
 The CUDA source the function compiles to, without running it.
 
 - With effects: compiles device code.
-- Example: `println(source<add>((2.0, 3.0)))`
+- Example: `println(source<(a: float, b: float): float => a + b>((2.0, 3.0)))`
 
 #### `inspect`
 
@@ -4514,7 +4523,7 @@ A report on the function's device plan, without running it: the kernel, its laun
 the values it would keep on the device.
 
 - With effects: compiles device code.
-- Example: `println(inspect<add>((2.0, 3.0)))`
+- Example: `println(inspect<(a: float, b: float): float => a + b>((2.0, 3.0)))`
 
 #### `benchmark`
 
@@ -4526,7 +4535,7 @@ Times the function on the device, and on the host for comparison, and returns th
 JSON text.
 
 - With effects: transfers both ways and runs device code.
-- Example: `println(benchmark<add>((2.0, 3.0)))`
+- Example: `println(benchmark<(a: float, b: float): float => a + b>((2.0, 3.0)))`
 
 #### `regions`
 
@@ -4538,7 +4547,7 @@ The regions the compiler would take for the whole program, as text: which nodes 
 the device and why the others would not.
 
 - With effects: compiles device code.
-- Example: `println(regions<work>())`
+- Example: `println(regions<(a: float, b: float): float => a + b>())`
 
 #### `available`
 
@@ -4795,7 +4804,7 @@ conv2d: (input: Tensor, kernel: Tensor, bias: Tensor, stride?: int, padding?: in
 rank 4, or a window that does not fit, is refused when the call is compiled.
 
 - Pure.
-- Example: `conv2d(x, w, b, 1, 0)` gives `[N, O, OH, OW]`
+- Example: `conv2d(input, kernel, bias, 1, 0)` gives `[N, O, OH, OW]`
 
 #### `conv2d_input_grad`
 
@@ -4807,7 +4816,7 @@ The gradient of `conv2d` with respect to its input, given the upstream gradient 
 like the convolution's result; the result is shaped like `input`.
 
 - Pure.
-- Example: `conv2d_input_grad(x, w, dy, 1, 0)` gives `like x`
+- Example: `conv2d_input_grad(input, kernel, dy, 1, 0)` gives `like x`
 
 #### `conv2d_kernel_grad`
 
@@ -4819,7 +4828,7 @@ The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the 
 result; the result is shaped like `kernel`.
 
 - Pure.
-- Example: `conv2d_kernel_grad(x, w, dy, 1, 0)` gives `like w`
+- Example: `conv2d_kernel_grad(input, kernel, dy, 1, 0)` gives `like w`
 
 #### `conv2d_bias_grad`
 
@@ -4831,7 +4840,7 @@ The gradient of `conv2d` with respect to its bias: the sum of `dy` over the batc
 spatial axes, shaped like `bias`.
 
 - Pure.
-- Example: `conv2d_bias_grad(b, dy)` gives `like b`
+- Example: `conv2d_bias_grad(bias, dy)` gives `like b`
 
 ### Pooling
 
@@ -4846,7 +4855,7 @@ to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`. A window that l
 the padding contributes -inf (the identity of the maximum).
 
 - Pure.
-- Example: `max_pool2d(x, 2)` gives `[N, C, H/2, W/2]`
+- Example: `max_pool2d(input, 2)` gives `[N, C, H/2, W/2]`
 
 #### `avg_pool2d`
 
@@ -4859,7 +4868,7 @@ the padding are summed in an f64 accumulator and divided by `kernel*kernel`. `st
 to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
 
 - Pure.
-- Example: `avg_pool2d(x, 2)` gives `[N, C, H/2, W/2]`
+- Example: `avg_pool2d(input, 2)` gives `[N, C, H/2, W/2]`
 
 #### `max_pool2d_grad`
 
@@ -4871,7 +4880,7 @@ The gradient of `max_pool2d` with respect to its input, given `dy` shaped like t
 result; the result is shaped like `input`.
 
 - Pure.
-- Example: `max_pool2d_grad(x, dy, 2)` gives `like x`
+- Example: `max_pool2d_grad(input, dy, 2)` gives `like x`
 
 #### `avg_pool2d_grad`
 
@@ -4883,7 +4892,7 @@ The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like t
 result; the result is shaped like `input`.
 
 - Pure.
-- Example: `avg_pool2d_grad(x, dy, 2)` gives `like x`
+- Example: `avg_pool2d_grad(input, dy, 2)` gives `like x`
 
 ### Batch normalization
 
@@ -4897,7 +4906,7 @@ Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + 
 `eps` defaulting to 1e-5. Every tensor is f32 and the result is shaped like `input`.
 
 - Pure.
-- Example: `batch_norm(x, running_mean, running_var, gamma, beta)`
+- Example: `batch_norm(input, running_mean, running_var, gamma, beta)`
 
 #### `batch_norm_train`
 
@@ -4911,7 +4920,7 @@ statistics are shaped like `running_mean`/`running_var`. `momentum` defaults to 
 to 1e-5.
 
 - Pure.
-- Example: `let (y, mean, var) = batch_norm_train(x, gamma, beta, running_mean, running_var)`
+- Example: `let (y, mean, variance) = batch_norm_train(input, gamma, beta, running_mean, running_var)`
 
 #### `batch_norm_train_grad`
 
@@ -4924,7 +4933,7 @@ The gradients of training-mode batch normalization: `(dx, dgamma, dbeta)`, shape
 differentiated, so the operator takes `dy` (the gradient of `y`) and `eps`.
 
 - Pure.
-- Example: `let (dx, dgamma, dbeta) = batch_norm_train_grad(x, gamma, dy)`
+- Example: `let (dx, dgamma, dbeta) = batch_norm_train_grad(input, gamma, dy)`
 
 ### Embedding
 
@@ -4939,7 +4948,7 @@ result is `[indices.length, dim]`. An index outside `[0, rows)` is a fault.
 
 - Pure.
 - Failure: fault `RuntimeError` when an index is outside the table.
-- Example: `embedding(table, [0, 2])` gives `[2, dim]`
+- Example: `embedding(table, indices)` gives `[2, dim]`
 
 #### `embedding_table_grad`
 
@@ -4998,7 +5007,7 @@ One step of stochastic gradient descent on a parameter tree: `params - grads * l
 result shaped like `params`. `grads` must be the gradient of `params` and `lr` is a number.
 
 - Pure.
-- Example: `let next = sgd(params, grads, 0.1)`
+- Example: `let next = sgd({ w: 1.0 }, { w: 0.1 }, 0.1)`
 
 #### `adam_state`
 
@@ -5010,7 +5019,7 @@ The initial `OptimizerState` of a parameter tree: zero first and second moments,
 The state's moment trees are shaped like `params`.
 
 - Pure.
-- Example: `let state = adam_state(params)`
+- Example: `let state = adam_state({ w: 1.0 })`
 
 #### `adam`
 
@@ -5022,7 +5031,7 @@ One step of Adam on a parameter tree: answers `(new_params, new_state)`, both sh
 `params`/`state`. `beta1` defaults to 0.9, `beta2` to 0.999 and `eps` to 1e-8.
 
 - Pure.
-- Example: `let (next, state) = adam(params, grads, state, 0.001)`
+- Example: `let (next, state) = adam({ w: 1.0 }, { w: 0.1 }, adam_state({ w: 1.0 }), 0.001)`
 
 #### `save_params`
 
@@ -5036,7 +5045,8 @@ created when missing.
 
 - With effects: writes files under `dir`.
 - Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
-- Example: `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
+- Example (a fragment, not compiled): `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
+- Why it is not compiled: the example builds its tensors with `new` from the `tensor` module, which this page does not import
 
 <a id="autodiff"></a>
 
@@ -5059,7 +5069,8 @@ shape). A function with no `with` parameter, or whose first `with` parameter has
 differentiable tangent, is refused when the call is compiled.
 
 - With effects: differentiates the function's graph.
-- Example: `let dh = grad(h)`
+- Example (a fragment, not compiled): `let dh = grad(h)`
+- Why it is not compiled: `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 
 #### `with_grad`
 
@@ -5072,7 +5083,8 @@ gradient with respect to the first `with` parameter. The same compile-time refus
 applies.
 
 - With effects: differentiates the function's graph.
-- Example: `let value_and_grad = with_grad(h)`
+- Example (a fragment, not compiled): `let value_and_grad = with_grad(h)`
+- Why it is not compiled: `h` must have a `with` parameter for its gradient to exist, and that takes a declaration, so the example is a fragment of a program that declares it
 
 #### `stop_gradient`
 
@@ -5150,7 +5162,7 @@ checked against.
 
 - With effects: writes a file and reads the function's graph.
 - Failure: fault `RuntimeError` when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node.
-- Example: `export_model(f, new([1.0, 2.0]), "/tmp/model.onnx")`
+- Example: `export_model(fn, example, "/tmp/model.onnx")`
 
 #### `supported_operators`
 
