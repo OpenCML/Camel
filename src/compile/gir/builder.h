@@ -827,6 +827,9 @@ class Builder {
         // The declared type with the variables of enclosing instances replaced; the function's
         // own variables remain.
         FunctionType *funcType = nullptr;
+        // The type parameters the declaration put at its head, in order, whether or not the
+        // signature writes them; an explicit `::<...>` binds them by position or by name.
+        std::vector<std::string> headParams;
         // The bindings in force where the template was declared (a generic function declared
         // inside an instance of another one).
         camel::core::type::type_bindings_t outerBindings;
@@ -916,6 +919,19 @@ class Builder {
         return rest || constas || (camel::core::type::containsTypeVar(type) &&
                                    camel::core::type::containsTypeVar(boundType(type)));
     }
+    // Whether the declaration `node` is a template: its head may declare type parameters that
+    // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
+    // and those are bound by an explicit `::<...>` at the call all the same.
+    bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
+        if (node != nullptr &&
+            camel::compile::gct::Tree::of(node)->headTypeParamsOf(node) != nullptr) {
+            return true;
+        }
+        return isGenericHere(type);
+    }
+    // The type parameters of a template in declaration order: the head names first, then the
+    // variables its signature writes that the head did not declare.
+    std::vector<std::string> typeParameterNames(const template_ptr_t &tmpl) const;
     // Registers the generic functions declared directly in the block `exec`, before anything
     // in the block is built: a call may precede the declaration.
     void registerGenericTemplates(const GCT::node_ptr_t &exec);

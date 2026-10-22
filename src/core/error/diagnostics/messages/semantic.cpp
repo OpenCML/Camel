@@ -1678,9 +1678,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "WhenConditionNotBool",
                 "The 'when' condition of '{0}' is not a bool (it is '{1}').",
                 "A 'when' is a compile-time predicate over the declaration's type parameters "
-                "and 'with' parameters: write one of the compiler's type queries "
-                "('is_numeric::<T>()', 'is_function::<F>()'), possibly combined with '!', "
-                "'&&' and '||'. It is not a runtime value.",
+                "and 'with' parameters: write one of the standard type queries "
+                "('is_numeric::<T>()', 'is_function::<F>()') or call a pure function of the "
+                "library ('has_field::<T>('w')'), possibly combined with '!', '&&' and '||'. "
+                "It is not a runtime value.",
             },
         },
         {

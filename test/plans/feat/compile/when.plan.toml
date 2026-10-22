@@ -111,6 +111,67 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "when.user_predicate"
+desc = "A `when` calls a predicate the user wrote with `match type` (`is_compound::<T>()`), not a closed set of compiler operators; the condition is answered when the declaration is instantiated."
+kind = "behavior"
+case = "../../../cases/compile/when/user_predicate.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "compound\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_false"
+desc = "The same user-written predicate where it does not hold: the call site lists the condition the candidate wrote (`is_compound::<T>()`) and no candidate applies."
+kind = "negative"
+case = "../../../cases/compile/when/user_predicate_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 20
+expect_output_contains = ["is_compound::<T>()", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_has_field"
+desc = "A user predicate that folds a value argument (`has_field::<Point>('w')` walks `fields T` with a `static loop`) is answered at instantiation and the declaration applies."
+kind = "behavior"
+case = "../../../cases/compile/when/user_predicate_has_field.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_has_field_false"
+desc = "The folded predicate with a field that does not exist: the condition is false, the declaration does not apply, and the call site lists `has_field::<Point>('d')`."
+kind = "negative"
+case = "../../../cases/compile/when/user_predicate_has_field_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_diagnostic_line = 21
+expect_output_contains = ["has_field::<Point>('d')", "every candidate's 'when' condition is false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when.user_predicate_open_type"
+desc = "A user predicate called with an open type (T is at the head but not in the signature) is reported by the compile-time evaluator as WhenTypeQueryNotConcrete, naming `probe`, not taken for false."
+kind = "negative"
+case = "../../../cases/compile/when/user_predicate_open_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenTypeQueryNotConcrete"
+expect_diagnostic_line = 14
+expect_output_contains = ["type query 'probe'", "cannot be answered for 'T'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "when.with_constant"
 desc = "A `when` that reads a `with` parameter is answered when the call gives a compile-time constant (`add<true>(41)`); the declaration applies and the value is not a body name."
 kind = "behavior"
