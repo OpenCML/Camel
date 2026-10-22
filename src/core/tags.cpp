@@ -181,6 +181,25 @@ void declareStandardTags() {
         independent.on    = Func;
         declare(std::move(independent));
 
+        // The one placement fact (design principles 13.4, docs/design/gpu/plan.cn.md 2.1): a
+        // Symbol, `gpu` or `cpu`. Two labels write it, so a consumer reads one key whichever
+        // label the program wrote. The inner value wins where scopes nest; two different
+        // values on one node are refused (builder_tags.cpp).
+        const attr::AttrKey placement = attr::registerKey(
+            "tiles.placement",
+            attr::KeySpec{
+                attr::ValueKind::Symbol,
+                attr::rules::inner(),
+                attr::rules::equalOnly(),
+            });
+        const auto placementValue =
+            [](std::string_view text) {
+                return [text](std::span<const data::data_ptr_t> args)
+                           -> std::optional<attr::AttrValueId> {
+                    return args.empty() ? std::optional<attr::AttrValueId>(attr::symbol(text))
+                                        : std::nullopt;
+                };
+            };
         // `#gpu` (design principles 13.4): the function or block it marks is asked to run on
         // the device. It is a standard tag, so the placement label needs no import; the fact
         // is on the declaration and on every node written in the scope. The pass that reads
@@ -191,7 +210,21 @@ void declareStandardTags() {
         gpu.ident  = "gpu";
         gpu.on     = static_cast<Positions>(Func | Nodes);
         gpu.readBy = {"tiles::compile"};
+        gpu.key    = placement;
+        gpu.value  = placementValue("gpu");
         declare(std::move(gpu));
+
+        // `#cpu`: the same placement fact with the other value. It says where the code is to
+        // run, not that it must not use a device; no pass decides by it yet. Written as a
+        // nested block it overrides an enclosing `#gpu` (the inner value wins).
+        Decl cpu;
+        cpu.name   = "cpu";
+        cpu.ident  = "cpu";
+        cpu.on     = static_cast<Positions>(Func | Nodes);
+        cpu.readBy = {"tiles::compile"};
+        cpu.key    = placement;
+        cpu.value  = placementValue("cpu");
+        declare(std::move(cpu));
     });
 }
 

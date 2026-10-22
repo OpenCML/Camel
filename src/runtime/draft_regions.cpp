@@ -240,8 +240,13 @@ void GraphDraft::setRegionParams(uint32_t id, const camel::core::type::FunctionT
 }
 
 void GraphDraft::setRegionAttrs(uint32_t id, uint32_t attrs) {
+    // The body region (0) is not in the table until something needs it. A tag written on a
+    // function writes it here, so a graph whose body carries a fact has a one-region table.
+    if (id == 0 && regions_.empty()) {
+        regions_.push_back(GCRegion{}); // the body, and nothing else
+    }
     ++mutations_;
-    ASSERT(id > 0 && id < regions_.size(), "No such region.");
+    ASSERT(id < regions_.size(), "No such region.");
     regions_[id].attrs = attrs;
 }
 

@@ -1,0 +1,12 @@
+/// Two placement labels on one node give one attribute key two values: a conflict, not a
+/// choice left to declaration order (docs/design/gpu/plan.cn.md 2.1).
+module tags_placement_conflict
+
+#[gpu, cpu]
+func both(x: int): int {
+    return x
+}
+
+func main(): int {
+    return both(1)
+}

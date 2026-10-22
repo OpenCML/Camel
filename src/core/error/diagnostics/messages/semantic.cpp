@@ -1374,6 +1374,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TagValueConflict,
+            {
+                "TagValueConflict",
+                "The tag '{0}' gives the fact '{1}' the value {2}, but the node already says {3}.",
+                "One node has one value for a fact. Write one of the tags here, or put the other "
+                "tag on a block of its own: an inner block's value wins.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",

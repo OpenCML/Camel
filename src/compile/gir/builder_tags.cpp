@@ -481,13 +481,27 @@ void Builder::addTagFacts(
         }
         return;
     }
+    const auto mergeFact = [&](camel::core::attr::AttrSetId &set) {
+        const camel::core::attr::AttrValueId current =
+            camel::core::attr::valueOf(set, decl->key);
+        if (current != camel::core::attr::kNoValue && current != value) {
+            diags_->of(SemanticDiag::TagValueConflict)
+                .atOrigin(use.origin)
+                .commit(
+                    use.name,
+                    std::string(camel::core::attr::keyName(decl->key)),
+                    camel::core::attr::valueText(value),
+                    camel::core::attr::valueText(current));
+            throw BuildAbortException();
+        }
+        set = camel::core::attr::unite(
+            set, camel::core::attr::single(decl->key, value));
+    };
     if (declaration) {
-        facts.declaration = camel::core::attr::unite(
-            facts.declaration, camel::core::attr::single(decl->key, value));
+        mergeFact(facts.declaration);
     }
     if (nodes) {
-        facts.nodes =
-            camel::core::attr::unite(facts.nodes, camel::core::attr::single(decl->key, value));
+        mergeFact(facts.nodes);
     }
     // The pipeline can tell the programmer when nothing reads the tag: the declaration names
     // the passes, and a Camel pass names the tags it reads with `#reads<...>`. The use is where

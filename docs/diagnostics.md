@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-211 diagnostics: 194 errors, 17 warnings.
+212 diagnostics: 195 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -175,6 +175,7 @@ prints one entry.
 | `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error |
 | `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error |
 | `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error |
+| `0x03000191` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -4589,6 +4590,39 @@ func first(a: int, ..ts): int {
 
 func main(): int sync {
     return first()
+}
+```
+
+### TagValueConflict
+
+`0x03000191` · Error · `SemanticDiag::TagValueConflict`
+
+**Message**
+
+```text
+The tag '{0}' gives the fact '{1}' the value {2}, but the node already says {3}.
+```
+
+**Help**
+
+```text
+One node has one value for a fact. Write one of the tags here, or put the other tag on a block of its own: an inner block's value wins.
+```
+
+**Example** (`test/cases/compile/tags/placement_conflict.cml`, run as `camel test/cases/compile/tags/placement_conflict.cml`)
+
+```camel
+/// Two placement labels on one node give one attribute key two values: a conflict, not a
+/// choice left to declaration order (docs/design/gpu/plan.cn.md 2.1).
+module tags_placement_conflict
+
+#[gpu, cpu]
+func both(x: int): int {
+    return x
+}
+
+func main(): int {
+    return both(1)
 }
 ```
 

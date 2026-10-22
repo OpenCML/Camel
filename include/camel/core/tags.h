@@ -157,7 +157,8 @@ std::optional<TagId> find(std::string_view module, std::string_view ident);
 /// Declares the tags the language itself names, once per process: the numeric permissions of
 /// design principles 7.2 (`reassociate`, `contract`, `approx_math`, `change_precision`,
 /// `nondeterministic`, the four finite-math assumptions and their group `finite_math`), and
-/// `reads`, the declaration tag with which a Camel pass names the tags it reads. They are names
+/// `reads`, the declaration tag with which a Camel pass names the tags it reads, and the
+/// placement labels `gpu` and `cpu`, which both write the `tiles.placement` fact. They are names
 /// of the core, so a program writes them without importing anything. Idempotent.
 void declareStandardTags();
 
