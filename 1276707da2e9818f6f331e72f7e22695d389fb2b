@@ -1,0 +1,340 @@
+# H152 — 声明模块 4.6 ms 的启动开销，能不能在不改语义的前提下拿掉
+
+分支 `handover/H152-declaration-parse`，起点 `origin/develop` `4122a4ce0`。任务：H142 量出九个
+声明模块（`stdlib/<module>.cml`）在导入路径上要 parse 2.38 + gct 1.37 + declare 0.82 ≈ 4.6 ms，
+`math` 一个模块占 2.2 ms（96/182 条声明），每条约 23 µs；在**不改变任何可观察行为**的前提下把它
+拿掉，或者证明拿不掉并说清剩下的路要谁来定。
+
+报告里的每个数字都有命令和提交。机器是 Linux 主机 `88zjwei`（32 核，与别的任务共用），不是本机；
+每条测量的负载都写在旁边。构建与计划都走 `camel-remote.ps1`，没有在 Windows 上构建，没有推
+`origin`，没有动 `develop`/`main`。
+
+## 1 结论
+
+**这 4.6 ms 是 182 条声明 × 约 18–20 µs 的通用流水线工作，没有一处"白做"的东西大到值得改；不改
+编译器，交付度量与门禁。**
+
+- 现在的实测：`inspect --ops`（导入全部 22 个标准库模块）里，九个声明模块的 parse+gct+declare
+  是 **3.59–4.07 ms**（负载 20–47；H142 的 4.4–4.6 ms 是负载 148–215 下的同一份工作），即
+  **每条声明 19.6–19.9 µs**，占整次编译工作（所有模块的 parse+gct+declare）的 **18.3–19.7%**。
+  其中 parse 55%、GCT 28%、declare 17%；`math` 一个模块 96 条声明占 53%。
+- **归因**：parse 的 92% 是建 AST（`camel-parsecheck bench stdlib/math.cml 101`：lex 18 µs、
+  lex+cst 44 µs、lex+cst+ast 571 µs）；AST 阶段最大的一类开销是 `shared_ptr` 引用计数（22.3%），
+  其次是分配（12.6%，其中 `malloc` 自身 11.4%）和控制块构造（12.0%）——不是"解析了 96 行相似
+  文本"的语法分析；GCT 阶段是 `malloc`（16.1%）、源码 origin（11.2%）和类型构造；declare
+  阶段是算子名/URI 的字符串哈希（18.0%）。整次运行的 system CPU 占 45%，也就是首次触碰内存的
+  页错误。
+- **三个候选逐个量过，都不动数**：见 §4。
+  - (a) 每个模块一套前端：**没有可共享的 setup**。process 级的 `SourceContext`、`GIR::Builder`、
+    `OperatorTable` 本来就共享；每个模块自己的 parser、GCT 树、`ModuleUnit`、诊断是模块状态。
+    固定部分只占 0.3–0.5 ms。
+  - (b) 同一个函数签名建两遍：**第二遍是 interning 命中**，把它提前只是把成本从 declare 搬到
+    GCT（两棵树 A/B：`gct` +0.089 ms / `declare` −0.089 ms），总数不变。
+  - (c) 96 行几乎相同的声明：AST dump 每条声明 15 行（1445 行 / 96 条，含模块自身的节点），节点
+    构造是分配受限的；改节点形状就改 AST dump 和 GCT 的输入，不是"局部修法"。
+- 顺带量的三个小候选（读文件少两次拷贝、算子组从线性查找改成索引、AST 子节点预留）**都在噪声
+  里或更慢**（§4.4），所以一个都没有留下：这个分支对编译器源码**零改动**。
+- 交付的是**度量**：`perf.startup` 新增 `declaration.cost`，直接读编译器自己的 `--time-phases`
+  报告，给出每条声明的微秒数和它占编译工作的百分比；后者与负载无关，`declaration.cost` 回到
+  H142 的 4.6 ms 会读到约 45%（现在 18–19%），撞上 30% 的天花板。这回答了 H142 §6.1 留下的
+  "门禁分辨不了毫秒级回归"（H142 的 Q3），对这条成本而言不再需要 CPU 计时。
+
+## 2 方法
+
+### 2.1 主机与二进制
+
+- 主机 `88zjwei`，32 核，与别的任务共用；测量时 1 分钟负载 12–47，个别窗口到 30–47
+  （`cat /proc/loadavg`）。H142 的窗口是 35–215。
+- `before-out`：起点 `origin/develop` `4122a4ce0` 的 Release 构建（自报 `Build 261022_011441_4122a4ce`），
+  放在稳定的 `~/h152-bench/before-out`，`CAMEL_HOME` 指过去就能跑。
+- 当前树：同一提交 + 本分支的改动（只有 `test/`，见 §6），`camel-remote.ps1` 构建到 `out/latest`。
+- 构建：`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h152-declaration-parse`
+  （不带 `-NoBuild` 时先构建再收产物）；计划加 `-Plan <文件|目录> -Jobs 8`。
+
+### 2.2 四种测量，以及为什么需要四种
+
+| 工具 | 量什么 | 用途 |
+|---|---|---|
+| `measure152.py`（H142 的 `measure.py`，只改了 `imports_math` 的路径） | 进程墙钟 + `RUSAGE_CHILDREN` 的子进程 CPU，A/B 交替 101 次，中位数与配对比 | 进程级回归；H142 的同一方法 |
+| `phases3.py`（本分支新增，只在主机上） | 两次运行交替，读编译器自己的 `--time-phases`，按 (阶段, 模块) 做**配对中位数** | 阶段级 A/B：这是唯一能分辨 0.05 ms 的方法 |
+| 同一二进制里的开关（临时，已删） | 同一份代码两条路径，同一个进程布局 | 去掉"两次构建的代码布局差异"这个变量 |
+| `camel-parsecheck bench` + `benchmarks/compile/hotspots.py cpu` | 前端三段（lex / cst / ast）与 allocshim 采样剖析（按阶段、按原因、按函数） | 归因：钱花在哪 |
+
+**噪声地板**（这是本报告所有"不动数"结论的前提，先量了它）：
+
+- 同一个二进制自比（`measure152.py` 两边都指 `before-out`，51 次）：`inspect_ops` 的 CPU 比
+  0.971、`imports_all` 0.981——**同一个程序两次运行就能差 2–3%**。
+- 同一份源码两次构建（`cand-out` vs `out/latest`，都是"读一次 + 索引"那一版）：CPU 比 0.955 与
+  0.916，即**构建之间的代码布局差异就有 4–8%**。
+- 阶段级：一次 A/B 里未被改动的阶段，配对中位数仍在 ±0.02–0.04 ms（例如 §4.2 的 `gct` +0.089
+  对 `declare` −0.089 这种成对移动是真信号；而同一二进制里只改一个开关时，没动的 `gct` 也会
+  +0.02–0.04 ms）。
+
+所以在 24 ms 的 `inspect_ops` 上，进程级方法看不见 1 ms（4%），更看不见 0.1 ms；**本报告的结论
+只建立在阶段级和"同一二进制 A/B"上**，进程级数字只用来证明"没有回归"。
+
+## 3 归因：钱花在哪
+
+### 3.1 九个模块各自的账（起点二进制，`--time-phases`，单位 ms）
+
+`CAMEL_TIME_PHASES=- camel inspect --ops registry_all.cml`，取 `parse`/`gct`/`declare` 三个阶段里
+`detail` 是这九个模块的行，加起来：
+
+| 模块 | 声明条数 | 字节 | parse | gct | declare | 合计 | 每条声明 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| bytes | 6 | 1,301 | 0.091 | 0.046 | 0.021 | 0.158 | 26.3 µs |
+| str | 14 | 3,988 | 0.144 | 0.072 | 0.045 | 0.261 | 18.6 µs |
+| **math** | **96** | 12,397 | **0.979** | **0.482** | **0.347** | **1.808** | 18.8 µs |
+| json | 35 | 5,966 | 0.315 | 0.184 | 0.076 | 0.575 | 16.4 µs |
+| io | 5 | 1,482 | 0.061 | 0.036 | 0.021 | 0.118 | 23.6 µs |
+| re | 1 | 601 | 0.046 | 0.032 | 0.009 | 0.087 | 87.0 µs |
+| random | 7 | 4,009 | 0.130 | 0.053 | 0.039 | 0.222 | 31.7 µs |
+| fs | 15 | 5,108 | 0.154 | 0.065 | 0.044 | 0.263 | 17.5 µs |
+| time | 3 | 1,422 | 0.055 | 0.029 | 0.016 | 0.100 | 33.3 µs |
+| **合计** | **182** | 36,274 | **1.975** | **0.999** | **0.618** | **3.592** | **19.7 µs** |
+
+读数：
+
+- parse 1.975（55%）、gct 0.999（28%）、declare 0.618（17%）。
+- **每条声明的成本随模块变大而下降**：1 条的 `re` 87 µs、3 条的 `time` 33 µs、6 条的 `bytes`
+  26 µs，而 96 条的 `math` 18.8 µs、35 条的 `json` 16.4 µs。按 `math` 与 `time` 两点粗拟合：
+  固定约 **45 µs/模块** + **18.4 µs/条**，九个模块的固定部分合计 0.3–0.5 ms，其余 3.1–3.2 ms 与
+  条数成正比。拟合的残差是 ±30 µs/模块，也就是说在这台主机上"固定部分"只能给到这个精度。
+- 复测：本表来自 `before-out`（负载 30–47）；换到 51 次交替的 `phases3.py`（负载 20–47）合计是
+  3.59–4.07 ms，每条 19.6–19.9 µs。H142 的 4.6 ms 是同一份工作在负载 148–215 下的数——**两个数
+  是同一个量，差的是调度**。
+
+### 3.2 前端三段：AST 拿走 92%
+
+`camel-parsecheck bench stdlib/math.cml 101`（101 轮中位数，安静主机）：
+
+```
+BENCH stdlib/math.cml bytes=12397 lines=435 tokens=1752 cst-nodes=1539 rounds=101
+  lex: min=17us median=18us
+  lex+cst: min=43us median=44us
+  lex+cst+ast: min=492us median=571us
+```
+
+AST = 571 − 44 = 527 µs，占前端 92%。完整运行里 `parse math` 是 0.98–1.06 ms（同样的 AST 加上
+读文件、注册源码、诊断和负载），所以**声明模块的 parse 阶段基本就是"建 AST"**。
+
+AST 的形状：`camel inspect --ast stdlib/math.cml` 1445 行 / 96 条 = **每条声明约 15 行 dump**
+（`FuncDecl`、`TagUse`×2、`Data`×2、`FuncData`、`FuncType`、`NamedPair`×3、`RefType`×2、
+`DataExpr`、`Type`……其中 `NamedPair` 的空 `withParams`、`DataExpr`、`Type` 是为一般函数准备的
+wrapper）。GCT 侧是 386 行 dump / 96 条，每条 4 个节点。
+
+### 3.3 allocshim 剖析：分配与引用计数
+
+`benchmarks/compile/hotspots.py cpu ~/h152-bench/cases/imports_math.cml std::nvm --runs 200 --hz 1000`
+（200 次运行，1041 个样本；1.25 s user + 1.03 s system——**system 占 45%**，几乎全是首次触碰
+内存的页错误）：
+
+| 阶段 | 占比 | | 阶段内的原因（前几项） |
+|---|---:|---|---|
+| startup | 23.1% | | own 27.9%、allocate 22.5%、origins 12.5%、string hash 10.8% |
+| ast builder | 16.8% | | own 48.0%、**shared_ptr 引用计数 22.3%**、allocate 12.6%、libc 8.6% |
+| module load | 14.0% | | （`.cmo` 加载，不属本任务） |
+| gct builder | 13.7% | | own 44.8%、allocate 18.9%、**origins 11.2%**、string hash 4.9% |
+| gir builder | 12.3% | | own 43.0%、**string hash 18.0%**、allocate 10.9%、string compare 6.2% |
+| lexer+cst | 4.4% | | |
+| parse (other) | 2.0% | | |
+
+AST 阶段自己的函数榜：`_Sp_counted_ptr_inplace` 12.0%、`malloc` 11.4%、`__shared_count` 6.9%
+——**AST 的每一层都是"分配控制块 + 引用计数"，不是语法分析**。GCT 阶段自己：`malloc` 16.1%、
+`dl_new_hash` 7.0%（惰性 PLT 解析）、`visitModule` 4.2%。GIR 阶段：`string hash` 18.0%——算子
+名、URI、导出集合在哈希表里进出。
+
+**这三张表决定了"能不能便宜"**：每条约 18 µs 里，没有一项是"只为声明模块多做的一次性工作"，
+全是通用流水线为 15 个 AST 节点、4 个 GCT 节点、1 个算子组付的钱。
+
+## 4 三个候选，逐个量
+
+### 4.1 (a) 每个模块一套前端：没有可共享的 setup
+
+任务书的候选是"九个文件付九次前端 setup"。量下来：
+
+- 固定部分 0.3–0.5 ms（§3.1 拟合），不是 4.6 ms 的主体；而且它是**模块状态**：每个模块有自己的
+  `CamelParser`（token 树、AST、诊断器）、`GCT::Tree`、`GIR::ModuleUnit`、导出集合。process 级的
+  `SourceContext`（源码/span/origin 表）、`GIR::Builder`、`OperatorTable` 本来就是九次调用共用的
+  ——**没有第二份可省的 setup**。
+- 把九个文件当一次解析（或共享一个 parser）会改变"一个模块"是什么：诊断的 `(module)` 归属、
+  `--time-phases` 的 `detail`、每个模块的 AST/dump 边界都会变。这是语义/可观察变化，不是 setup
+  共享，按任务要求不做。
+- 所以 (a) 的答案是：**测过了，没有可拿的**（固定部分 0.3–0.5 ms 也是每个模块自己的状态）。
+
+### 4.2 (b) 同一个类型建两遍：第二遍是 interning 命中，提前只是搬家
+
+起点代码里，一条声明会建两次 `FunctionType`：
+
+1. GCT 的 `visitFuncData` 用 `visitFuncType` 建一个**开放**类型（参数名进符号表、分配）；
+2. GIR 的 `declareNativeOperator` 用 `DeclaredFuncTypeResolver` 把它**重建**成封闭的、interned 的
+   签名（`FunctionTypeFactory(...).build()`）。
+
+第二条看起来是"白做"，实测（临时作用域，`imports_math`，15 次）：
+
+| 子阶段 | 起点 | 改成"GCT 里直接建封闭类型" |
+|---|---:|---:|
+| `gct.functype`（96 条） | 0.157 ms（1.6 µs/条） | 0.288 ms（3.0 µs/条） |
+| declare 里的签名重建 | 0.059 ms（0.6 µs/条） | 0.020 ms（0.2 µs/条） |
+| 两处合计 | 0.216 ms | 0.308 ms |
+
+**成本搬家而不是消失**：`FunctionType::intern` 的键是全签名，而 C++ 模块注册算子时已经把同一个
+类型 intern 过一遍，所以 declare 侧的重建是一次**命中**（哈希 + 查表），不是重新构造；提前到 GCT
+只是让 GCT 付这笔钱。两次构建的 A/B 也给出同样的结论：`gct` +0.089 ms、`declare` −0.089 ms，
+`declaration all` −0.124 ms（其中 −0.048 是 §4.4 的读文件改动），在 ±5% 的构建间噪声里是**零**。
+
+留一条建设性结论：如果哪天要动，**唯一有意义的改法是少建一次开放类型**（省一次分配 + 一次参数名
+interning），这是 1 µs 量级/条；删除整条重建不是——它是命中。本次没有留下这个改动，因为量不出来
+（§4.4 的同款理由）。
+
+### 4.3 (c) 96 行几乎相同的声明：AST 才是成本，且不能局部修
+
+- AST 每条约 15 行 dump、parse 阶段 92% 在 AST（§3.2、§3.3），节点构造是"控制块 + 引用计数 + malloc"。
+- 试过**给每个节点的 children 预留两个槽**（`AbstractTreeNode` 构造里 `children_.reserve(2)`）：
+  同一二进制 A/B（两次构建，`inspect_ops`，21 轮）`declaration parse` 是 **+0.134 ms（更慢）**
+  ——叶节点本来不分配子节点数组，预留让每个叶节点都多一次分配。已回退。
+- 减少节点数（去掉空 `withParams`/`DataExpr`/`Type` wrapper）会改 AST dump、GCT 的输入形状和
+  dump 的行数；把 TYPE 节点在 GCT 里共享而不是 `clone` 会撞 `AbstractTreeNode::operator<<` 的
+  `parent_ == nullptr` 断言（一个节点只有一个父）并改 dump。这些是 AST/GCT 的形状改动，
+  属于"重构"而不是"局部修法"，按任务要求只记录、不做。
+- 一条**通用**（非声明专用）的线索留在这里给下一个任务：AST 阶段 22.3% 是 `shared_ptr` 引用
+  计数。其中有一部分是白付的——`AbstractTreeNode(load_t load) : load_(load)` 与
+  `Node(load_ptr_t load) : AbstractTreeNode(load)` 都是**拷贝**而不是移动（`createNodeAs` 传进来
+  的已经是右值），每个节点多两次原子操作。按 1450 节点估算约 20–40 µs/文件，是 1% 量级；
+  它是全 AST 的改动，收益又低于本主机的阶段噪声，本次没有做。
+
+### 4.4 顺带量的三件小事（都没留下）
+
+| 候选 | 量法 | 结果 |
+|---|---|---|
+| 读源码少两次拷贝（`stringstream` → 直接按块读进 `std::string`） | 同一二进制开关 A/B，51 轮，`parse.read` 一行 | 旧 0.030 ms/次 → 新 0.019 ms/次（**−37%**），但只占一次运行 0.2%：`declaration all` 的配对差 +0.02 ms（噪声） |
+| 算子组线性查找 → `unordered_map`（`declareNativeOperator`） | 同一二进制开关 A/B，41 轮 | `declare` **+0.012 ms**（每个模块都 +0.001–0.003），即索引本身比线性扫描贵；不划算 |
+| AST 子节点 `reserve(2)` | 两次构建 A/B，21 轮 | `declaration parse` **+0.134 ms**（见 §4.3） |
+
+读文件那条的"−37%"是**对被改的那段代码的直接测量**（作用域就包在读文件外面），不是对总成本的
+猜测；九模块 3.6 ms 里它是 0.011 ms（0.3%），低于阶段噪声，所以按"没有量到就不改"的规矩回退。
+三个改动都验证过 `inspect --ops` 与起点二进制逐字节相同（`diff -q`），也就是说它们确实不改行为，
+只是不值得为 0.3% 动核心路径。
+
+## 5 决定：不改编译器，交付度量
+
+**不动编译器源码。** 理由：4.6 ms（安静主机上 3.6 ms）里没有一处是"白做"的——它是 182 条声明 × 约
+18 µs 的通用工作，三个候选分别被证明是"没有可共享的"、"命中而不是重建"、"不能局部修"。能在噪声
+以上拿到的只有 0.3%（读文件），为它改 `CamelParser::readAndRegister` 不划算（这条路径每次编译
+都走）。
+
+**交付：把这条成本钉住。** `perf.startup` 的 `startup-cost.mjs` 新增 `declaration.cost`（§6）：读
+编译器自己的 `--time-phases` 报告，把九个声明模块的 parse+gct+declare 加起来，除以条数，并给出它
+占整次编译工作的百分比。这个测量的分辨力是**每条 ±0.3 µs**（同一窗口两次运行 19.6 / 19.6 µs），
+1 ms 的回归 = +5.5 µs/条，是这个分辨力的 18 倍——**H142 §6.1 说"门禁分辨不了毫秒级回归"，对这条
+成本而言已经不成立**；不需要子进程 CPU 时间（H142 的 Q3）。
+
+## 6 回归用例
+
+改动（只有 `test/`，共 2 个文件）：
+
+- `test/tools/startup-cost.mjs`：新增 `declarationCount()`（数九个 `stdlib/<m>.cml` 里的
+  `export func`，现在 182）、`phaseReport()`（从 stderr 取最后一份 `{"schema"...}` 报告）、
+  `declarationCost()`（跑 `inspect --ops`，按 (阶段, 模块) 求和）；默认跑法打印
+  `declaration.cost ...` 一行并对两个天花板设门禁，`--json` 带上 `declaration` 字段。
+- `test/plans/perf/startup.plan.toml`：`expect_stdout_contains` 增加
+  `declaration.cost declarations=182`（条数是这个测量的单位，标准库加了声明就该被看见），
+  头注释说明这一行是什么、天花板怎么定的。
+
+输出（安静主机，负载 14–30）：
+
+```
+declaration.cost declarations=182 per_declaration_us=19.6 p10=18.9 p90=20.4 min=18.5 max=21.3
+                 share=19.2% n=21 ceiling=60 us
+```
+
+- **每条声明 19.6 µs**，p10 18.9 / p90 20.4；同一个窗口两次运行 19.6 / 19.6，负载 47 时 22.3。
+- **share 18.3–19.7%**：load 越大，声明模块和整次编译一起变慢，所以这个比例**不随负载移动**
+  （每条 19.9 → 24.1 µs 的那几次运行，share 是 18.5 / 18.3 / 19.4 / 19.4%）。
+- 两个天花板：
+  - `per_declaration_us ≤ 60`：约三倍安静中位数，是"某条声明要几百微秒"的烟雾报警。
+  - `share ≤ 30%`：约 1.6 倍现在值，**H142 的 4.6 ms 回来会读到约 45%**，这才是能抓住毫秒级回归
+    的那一条。两个门禁都做了负例：把阈值临时改成 5，脚本分别以退出码 1 报
+    `median 19.5 us per declaration exceeds ceiling 5 us` 与
+    `the declaration modules are 19.7% of the compile work, over the ceiling of 5%`。
+- 它看不见什么：`--version` 与无 import 的程序（那里没有声明模块，本来就不该有）；`math` 以外
+  单个模块的变化（九个模块是一起求和的，单模块的回归会被别的模块摊薄）；以及"声明模块之外的
+  启动工作"（那四条 `startup.cost` 管）。
+
+`-Jobs 8` 跑 `perf.startup`：1/1 PASS，2.7–3.5 s（含构建 11.7 s 的那次是 21 s）。
+
+## 7 验证
+
+**提交**：
+
+| 提交 | 内容 |
+|---|---|
+| `002661166` | `test(perf): measure what a declaration costs, inside the compiler` — `declaration.cost` 与计划断言 |
+| 本报告的提交 | `docs(handover): record what the declaration modules cost, and that nothing safe moves it` — 本文件 + 任务板 H152 行 |
+
+编译器源码在这个分支上没有改动（`git diff 4122a4ce0 --stat` 只有 `test/` 与 `docs/`）。
+
+全部在 `origin/develop` `4122a4ce0` + 本分支（只有 `test/` 改动）的构建上：
+
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 声明用例 | `-Plan test/plans/feat/compile -Jobs 8` | **1045/1045 PASS** |
+| 解析计划 | `-Plan test/plans/feat/parse -Jobs 8` | 57/57 PASS |
+| 新增门禁 | `-Plan test/plans/perf/startup.plan.toml -Jobs 8` | 1/1 PASS |
+| 文档链接 / 退役拼写 | `-Plan test/plans/feat/docs_links.plan.toml -Jobs 8` | 2/2 PASS |
+| 算子参照 | `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the **385** registered operator overloads` |
+| 行为不变 | `diff <(camel inspect --ops registry_all.cml)` 与 `before-out` | 逐字节相同（713 行） |
+
+没有新增诊断（诊断目录 202 条未动），没有改 `.cml`、AST dump、GIR dump、`--verify-ops` 的 385 条。
+
+## 8 没做的事 / 作者问题
+
+- **Q1（缓存，H142 的）**：是否允许把编译好的声明模块缓存到磁盘（源码哈希 + 编译器版本 + `#op`
+  表版本校验）？收益上限仍是约 3.6 ms/进程（安静主机）或 4.4–4.6 ms（负载下的读数），是唯一能
+  把它降到接近零的路。影响：陈旧、信任边界、安装目录可写、`--verify-ops` 仍要读源码。
+- **Q2（惰性声明，H142 的）**：是否允许 `import` 时不解析 `.cml`，到第一次解析算子或
+  `inspect --ops` 时才解析？收益：不用算子的导入程序省全部 3.6 ms；用算子的省不下。影响：
+  错误报告时机。
+- **Q3（AST 分配的横切改动，新）**：本报告把 4.6 ms 归到 15 节点/条 × 182 条的分配上；要真正
+  便宜，需要动 AST 的节点构造（`shared_ptr` 引用计数占 AST 阶段 22.3%、控制块 12.0%、
+  malloc 11.4%），例如让 `load_` 移动而不是拷贝、给 AST 换一种所有权模型、或让声明模块的 AST
+  更小。这是全 AST 的改动（不是声明专用），收益 1% 量级起，需要一个独立的、以噪声地板为前提的
+  任务；本次只记录线索和数字。
+- **没做的微改**（量过、回退，写在这里免得下一个人重做）：读文件少两次拷贝（−0.011 ms/次运行）、
+  算子组索引（+0.012 ms）、AST 子节点 `reserve(2)`（+0.134 ms 的 parse）。三者都验证过不改变
+  `inspect --ops` 的输出。
+
+## 9 数字背后的命令（摘要）
+
+```bash
+# 起点二进制（稳定副本）
+cp -r out/latest ~/h152-bench/before-out
+
+# 每条声明：编译器官方的阶段报告
+CAMEL_HOME=$PWD/out/latest node test/tools/startup-cost.mjs        # declaration.cost 一行
+CAMEL_HOME=~/h152-bench/before-out node test/tools/startup-cost.mjs # 起点二进制上的同一个数
+
+# 阶段级 A/B（配对中位数）
+python3 ~/h152-bench/phases3.py A=$H Aroot=$R Aenv=CAMEL_H152_LEGACY_READ B=$H Broot=$R \
+        case=inspect_ops reps=51
+
+# 进程级（H142 的方法，101 次交替，CPU 列）
+python3 ~/h152-bench/measure152.py --home after=$R/out/latest --home before=$HOME/h152-bench/before-out \
+        --root after=$R --root before=$R --reps 101 --cases inspect_ops,imports_all,imports_math
+
+# 前端三段
+out/latest/bin/camel-parsecheck bench stdlib/math.cml 101
+
+# 剖析
+CAMEL_HOME=$PWD/out/latest python3 benchmarks/compile/hotspots.py cpu \
+        ~/h152-bench/cases/imports_math.cml std::nvm --runs 200 --hz 1000 --out ~/h152-bench/hot-final
+
+# 行为不变
+diff <(CAMEL_HOME=~/h152-bench/before-out ~/h152-bench/before-out/bin/camel inspect --ops \
+        test/cases/modules/stdlib/registry_all.cml) \
+     <(CAMEL_HOME=$PWD/out/latest out/latest/bin/camel inspect --ops \
+        test/cases/modules/stdlib/registry_all.cml)
+```
+
+`phases3.py`、`measure152.py`、`imports_math.cml` 都只在主机上（`~/h152-bench/`），不进仓库；
+它们是本报告的取证工具，不是交付物。
