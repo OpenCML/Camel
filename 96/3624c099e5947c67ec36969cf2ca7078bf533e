@@ -10,7 +10,7 @@
 - Notes were written with `--no-stripspace`; every artifact's content is contained in its note.
 - Read one with `git notes --ref=handover show <sha>`; board tokens are `note ⟨sha7⟩`.
 - Notes live in `refs/notes/handover` locally. Nothing was pushed, per instructions; the coordinator must push `refs/notes/handover` together with the branch.
-- The deleted plan and draft are not in notes; they stay reachable in earlier commits (e.g. `13a8f48^:docs/handover/plans/H51.md`).
+- The deleted plan and draft are not in notes; they stay reachable in earlier commits (e.g. `963624c^:docs/handover/plans/H51.md`).
 
 **Board**
 - 164 existing task rows kept one-for-one; their text outside report references is unchanged (checked by normalizing the references).
@@ -25,5 +25,5 @@
 - Guard counts unchanged: `check-doc-links` 31 documents (212 with `--all`), `check-doc-counts` 146 documents / 14 claims / 8 allowlisted, `check-retired-names` 410 files; snippets compile. No expectation was relaxed or disabled — neither guard scans `docs/handover`, and the deleted files were never in their scope.
 
 **Tests (Linux host, `-Jobs 8`)**
-- Final tree `13a8f48`: `feat/docs_links` + `smoke` = 14/14 pass, 0 fail, clean build (20 s build, 1.1 s plan).
-- Commits: `963624c09` (cleanup), `13a8f485e` (board row). Branch `handover/H187-cleanup`; no push, no history rewrite.
+- Final tree `17b996141`: `feat/docs_links` + `smoke` = 14/14 pass, 0 fail, clean build (21 s build, 2.9 s plan).
+- Commits: `963624c09` (cleanup), `13a8f485e` (board row), `17b996141` (row wording; removes the stale paths). Branch `handover/H187-cleanup`; no push, no history rewrite.
