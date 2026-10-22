@@ -3,7 +3,7 @@ Changes:
 - 标准库改名：`sys` 是 `env`、`os` 是 `process`、`crypto` 是 `hash`、`tree` 是 `ckpt`；旧名不再是模块，导入它只得到普通的 `ModuleNotFound`，没有别名，也没有指向新名的提示。
 - 终端算子从 `os` 移进 `io`：`set_terminal_raw_mode`、`has_input`、`get_char`、`get_chars`、`clear_input_buffer`；`process` 只有 `exit`、`sleep`、`whoami`、`cpu_count`，其中 `exit`、`sleep` 仍是内建，不用 import。
 - `str::bytes`/`str::from_bytes` 删除：字符串与 UTF-8 字节之间只经 `bytes::encode`/`bytes::decode`；非法 UTF-8 现在是 `decode` 返回的 `EncodingError` 错误值，不再是 `from_bytes` 的故障。
-- 标准库的签名改由声明给出：`stdlib/<模块>.cml` 里无函数体的 `export func` 就是签名，`str`、`bytes`、`tensor`、`math`、`statistics`、`algo`、`random`、`re`、`json`、`fs`、`time`、`io`、`para`、`this`、`graph`、`tiles` 共 16 个模块已迁；`ckpt`、`process`、`env`、`hash` 还没有声明文件（仍是 `stdlib/signatures/*.cml`），`globals` 是内建。`inspect --ops` 与 `docs/stdlib-reference.md` 由声明生成，错元数、错类型在调用处拒绝并列出声明里的签名（含参数名）。
+- 标准库的签名改由声明给出：`stdlib/<模块>.cml` 里无函数体的 `export func` 就是签名，26 个模块已迁（185 个声明名、301 条声明）；`stdlib/signatures/` 还剩 14 个文件，12 个是已迁模块里按类型计算的名字，2 个属于尚未迁移的模块（`ckpt` 和内建的 `globals`）。`inspect --ops` 与 `docs/stdlib-reference.md` 由声明生成，错元数、错类型在调用处拒绝并列出声明里的签名（含参数名）。
 - 结果类型随实参变的少数签名仍由 C++ 计算，声明文件里以 `// dynamic func` 或 `stdlib/signatures/<模块>.cml` 记下；`Tensor.shape` 这类限定名写不进声明，仍由 C++ 发布、指向声明的同一个算子，照常可用。
 - 资源名按设计原则 3.3 写平：`stdout`、`stdin`、`stderr`、`clock`、`env`、`rng`（原 `io:stdout`、`io:stdin`、`io:stderr`、`time:clock`、`process:environment`、`rand:generator`）；`process`、`fs`、`tensor:*`、`tiles:*`、`para:rendezvous`、`io:terminal` 不变。
 - ONNX 导出：只改名的聚合类型转换按目标类型标注、不生成算子——结构体字面量进入它命名的类型不再被拒，也不再写出 ONNX 没有的 `Cast`；循环体尾部的转换先脱掉，臂的叶子接受命名类型与字段顺序相同的匿名类型。
