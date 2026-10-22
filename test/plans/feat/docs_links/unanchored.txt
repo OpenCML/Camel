@@ -7,7 +7,6 @@ docs/design/arrays-memory/plan.cn.md|modules/tensor/module.cpp  # the sentence q
 docs/design/arrays-memory/plan.cn.md|src/compile/gct/builder.cpp  # the sentence quotes no text; cites 3788
 docs/design/arrays-memory/plan.cn.md|src/execute/entry_args.cpp  # the sentence quotes no text; cites 84
 docs/design/arrays-memory/plan.cn.md|src/parse/ast/type.cpp  # the sentence quotes no text; cites 83
-docs/design/arrays-memory/plan.cn.md|tools/format/fmt.cpp  # the sentence quotes no text; cites 1250
 docs/design/effects/plan.cn.md|builder_diagnostics.cpp  # the sentence quotes no text; cites 171-200
 docs/design/effects/plan.cn.md|builder_diagnostics.cpp  # the sentence quotes no text; cites 202-294
 docs/design/effects/plan.cn.md|builder_expr.cpp  # the sentence quotes no text; cites 370-426
@@ -29,8 +28,6 @@ docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.
 docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 286-287
 docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 302-320
 docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 333-352
-docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 362-364
-docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 362-364
 docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 601-610
 docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 601-610
 docs/design/effects/plan.cn.md|resources.cpp  # ambiguous short name: resources.cpp appears 2 times; cites 680-702
@@ -47,15 +44,7 @@ docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builde
 docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 65-73
 docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 972-1025
 docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 1009-1012
-docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 2799-2969
-docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 3574
-docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 5697-5798
-docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 5862-5910
-docs/design/graph-model/README.cn.md|builder.cpp  # ambiguous short name: builder.cpp appears 4 times; cites 6351-6356
 docs/design/graph-model/README.cn.md|builder.h  # ambiguous short name: builder.h appears 4 times; cites 221-280
-docs/design/graph-model/README.cn.md|draft_construct.cpp  # the sentence quotes no text; cites 255
-docs/design/graph-model/README.cn.md|draft_graph_builder.cpp  # the sentence quotes no text; cites 203
-docs/design/graph-model/README.cn.md|draft_graph_builder.h  # the sentence quotes no text; cites 205
 docs/design/graph-model/README.cn.md|draft.h  # the sentence quotes no text; cites 40-44
 docs/design/graph-model/README.cn.md|draft.h  # the sentence quotes no text; cites 80-82
 docs/design/graph-model/README.cn.md|graph_build.h  # the sentence quotes no text; cites 28
@@ -71,7 +60,6 @@ docs/design/graph-model/README.cn.md|graph.h  # ambiguous short name: graph.h ap
 docs/design/graph-model/README.cn.md|include/camel/compile/gir/types.h  # the sentence quotes no text; cites 28-44
 docs/design/graph-model/README.cn.md|include/camel/core/mm.h  # the sentence quotes no text; cites 25-35
 docs/design/graph-model/README.cn.md|include/camel/core/module/module.h  # the sentence quotes no text; cites 24-56
-docs/design/graph-model/README.cn.md|include/camel/core/operator_traits.h  # the sentence quotes no text; cites 44-97
 docs/design/graph-model/README.cn.md|include/camel/runtime/graph.h  # the sentence quotes no text; cites 118-281
 docs/design/graph-model/README.cn.md|nodevm.cpp  # the sentence quotes no text; cites 510-512
 docs/design/graph-model/README.cn.md|nodevm.cpp  # the sentence quotes no text; cites 592-596
@@ -81,9 +69,7 @@ docs/design/graph-model/README.cn.md|src/execute/graph_runtime_support.cpp  # th
 docs/design/graph-model/README.cn.md|src/parse/ast/builder.cpp  # the sentence quotes no text; cites 219-237
 docs/design/graph-model/README.cn.md|src/passes/opt/generic/rewrite.cpp  # the sentence quotes no text; cites 200-216
 docs/design/graph-model/README.cn.md|src/runtime/branch_arms.cpp  # the sentence quotes no text; cites 99
-docs/design/graph-model/README.cn.md|src/runtime/draft_inline.cpp  # the sentence quotes no text; cites 1988-1992
 docs/design/graph-model/README.cn.md|src/runtime/draft_session.cpp  # the sentence quotes no text; cites 727-782
-docs/design/graph-model/README.cn.md|src/runtime/graph.cpp  # the sentence quotes no text; cites 232
 docs/design/graph-model/README.cn.md|src/runtime/graph.cpp  # the sentence quotes no text; cites 574
 docs/design/graph-store/plan.cn.md|builder_helpers.h  # the sentence quotes no text; cites 425
 docs/design/graph-store/plan.cn.md|function_emitter.cpp  # the sentence quotes no text; cites 418-506
@@ -93,24 +79,6 @@ docs/design/graph-store/plan.cn.md|function_emitter.cpp  # the sentence quotes n
 docs/design/graph-store/plan.cn.md|function_emitter.cpp  # the sentence quotes no text; cites 1707
 docs/design/graph-store/plan.cn.md|gir.cpp  # the sentence quotes no text; cites 112-137
 docs/design/graph-store/plan.cn.md|pass.cpp  # the sentence quotes no text; cites 1764-1777
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 14-43
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 14-43
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 91-93
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 91-93
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 103-112
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 103-112
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 118-140
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 118-140
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 144-168
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 163-164
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 164
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 175-226
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 181-201
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 181-201
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 224
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 234-235
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 262-285
-docs/design/op-semantics/README.cn.md|codegen.cpp  # the sentence quotes no text; cites 271
 docs/design/op-semantics/README.cn.md|compiler.cpp  # the sentence quotes no text; cites 56
 docs/design/op-semantics/README.cn.md|compiler.cpp  # the sentence quotes no text; cites 139
 docs/design/op-semantics/README.cn.md|compiler.cpp  # the sentence quotes no text; cites 286-294
@@ -133,8 +101,6 @@ docs/design/op-semantics/README.cn.md|cuda.cpp  # the sentence quotes no text; c
 docs/design/op-semantics/README.cn.md|include/camel/runtime/graph.h  # the sentence quotes no text; cites 77-93
 docs/design/op-semantics/README.cn.md|modules/tensor/kernels/reduce.cpp  # the sentence quotes no text; cites 195-213
 docs/design/op-semantics/README.cn.md|modules/tensor/ops/registry.cpp  # the sentence quotes no text; cites 167-169
-docs/design/op-semantics/README.cn.md|modules/tiles/src/codegen.cpp  # the sentence quotes no text; cites 33-43
-docs/design/op-semantics/README.cn.md|modules/tiles/src/codegen.cpp  # the sentence quotes no text; cites 226
 docs/design/op-semantics/README.cn.md|reduce.cpp  # the sentence quotes no text; cites 129-143
 docs/design/op-semantics/README.cn.md|reduce.cpp  # the sentence quotes no text; cites 133
 docs/design/op-semantics/README.cn.md|reduce.cpp  # the sentence quotes no text; cites 147-158
@@ -143,6 +109,5 @@ docs/design/op-semantics/README.cn.md|stdlib/signatures/para.cml  # the sentence
 docs/design/tiles-route/README.cn.md|compiler.cpp  # the sentence quotes no text; cites 133
 docs/design/tiles-route/README.cn.md|graph_values.cpp  # the sentence quotes no text; cites 25
 docs/design/tiles-route/README.cn.md|region_outline.cpp  # the sentence quotes no text; cites 39
-docs/technical/50_pyplot_cpython_init.md|src/core/context/context.cpp  # the sentence quotes no text; cites 740
 modules/pyplot/module.cpp|src/compile/gir/builder_modules.cpp  # the sentence quotes no text; cites 369
 modules/python/module.cpp|src/compile/gir/builder_modules.cpp  # the sentence quotes no text; cites 369

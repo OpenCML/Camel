@@ -79,8 +79,8 @@
 | `BIND` | 注释写的是"部分应用" | — | — | — | **0：没有任何代码创建它** |
 | `DREF` | 建图期"还没定下来指谁"的名字占位 | — | — | — | 0：编码时遇到即报错 |
 
-- `BIND`：全仓库只有两处定义它的构造函数（`draft_graph_builder.cpp:203`、`draft_construct.cpp:255`），没有调用者；部分应用实际做成了闭包（见 3.5 的卡片）。后端里为它留着的分支都是死代码。【读码，检索 `addBindNode`】
-- `SYNC`：前端不产生，`inlineCallableInDraft` 在被内联体有多个入口时新建一个（`src/runtime/draft_inline.cpp:1988-1992`）。
+- `BIND`：已不再定义或使用；部分应用实际做成了闭包（见 3.5 的卡片）。
+- `SYNC`：前端不产生，`inlineCallableInDraft` 在被内联体有多个入口时新建一个（`src/runtime/draft_inline.cpp:1236-1245 # "DraftInlineResult inlineCallableInDraft("`）。
 - 每个节点头上还有：类型指针 `dataType`、槽位 `dataIndex`（正数是帧槽，负数是静态区下标，0 是没有值）、两个标志位（`macro`、`constant`）。【读码 `graph.h:101-132`】
 
 ### 1.3 边
@@ -97,7 +97,7 @@
 
 `GCGraph` 有三张图指针表与一个外层图指针【读码 `graph.h:312-314、459-465`】：
 
-- `dependencies`：`FUNC` 节点调用的图、分支臂的图；建图器在每次建 `FUNC` 节点或函数值时登记（`builder.cpp:3574`、`:5741`）。
+- `dependencies`：`FUNC` 节点调用的图、分支臂的图；建图器在每次建 `FUNC` 节点或函数值时登记（`src/compile/gir/builder_calls.cpp:165 # "currGraph_->addDependencyGraph(graph);"`、`src/compile/gir/builder_operators.cpp:1772 # "currGraph_->addDependencyGraph(targetGraph);"`）。
 - `subGraphs`：写在这张图"里面"的函数与臂，按词法归属。
 - `staticGraphRefs`：静态区里函数常量指向的图。
 - `outerGraph`：词法上的外层图。
@@ -109,7 +109,6 @@
 | 信息 | 建图期 | 运行期 |
 |---|---|---|
 | 图的名字 | `DraftGraphBuilder::name_`、`stableId_` | `GCGraphDebugRecord` 里三个 `std::string`：`stableId`、`mangledName`、`name`（`src/runtime/graph_build.h:23-29 # "std::string mangledName;"`） |
-| 节点的调试标识 | `nodeDebugIds_`：**每个节点一个 `std::string`**（`draft_graph_builder.h:205`） | 无 |
 | 端口名 | `nodePortNames_`（哈希表，节点指针 → 字符串） | 形参名在函数类型里；捕获端口没有名字 |
 | 字段名（`ACCS`） | `nodeAccsKeys_` | 内嵌在节点负载里；NodeVM 每次访问先构造一个 `std::string` 再查（`nodevm.cpp:592-596`） |
 | 算子 | `operTargets_`（节点指针 → `shared_ptr<OperatorIndex>`） | 内嵌在节点里的 URI 字符串 + 函数指针 |
@@ -126,15 +125,15 @@
 
 - **`sync` 块**：没有专门的节点。块内相邻表达式之间一条 `Ctrl` 边；块的值经一个 `GATE`（Norm 接值，Ctrl 接链尾）交出去。【实测，见 3.5】
 - **`wait` 与 `var`**：变量是一个单元（`:var/new` 建，`:var/get` 读，赋值算子写）；排序靠 `Ctrl` 边，依据是"谁用过这个变量"。【实测】
-- **纯度**：不在图上。算子的纯度在一张全局的、以 URI 字符串为键、带读写锁的注册表里（`OperatorTraitsRegistry`，`include/camel/core/operator_traits.h:44-97`），三个位：`pure`、`elementwise`、`stateOnly`；遍每问一次做一次字符串哈希查找。函数的效应：`sync` 修饰符在函数类型上；"这张图的出口是否依赖效应""它写了哪些捕获的变量"是建图器内部的表（`effectfulGraphs_`、`captures_`，`src/compile/gir/builder.h:164-209 # "std::vector<compile_graph_ptr_t> builtBodies;"`），建完就丢，遍看不到。
+- **纯度**：不在图上。算子的纯度在一张全局的、以 URI 字符串为键、带读写锁的注册表里（`OperatorTable` 的 `OperatorTraits`，`include/camel/core/operator_table.h:157-168 # "struct OperatorTraits {"`），三个位：`pure`、`elementwise`、`stateOnly`；遍每问一次做一次字符串哈希查找。函数的效应：`sync` 修饰符在函数类型上；"这张图的出口是否依赖效应""它写了哪些捕获的变量"是建图器内部的表（`effectfulGraphs_`、`captures_`，`src/compile/gir/builder.h:164-209 # "std::vector<compile_graph_ptr_t> builtBodies;"`），建完就丢，遍看不到。
 - **故障**：没有任何声明。哪些节点可能故障只能由读者自己按算子名判断。
 - **捕获**：闭包捕获的值是图上的一类端口（`closureNodes`）；函数第一次被直接调用时，捕获端口就地改成 `with` 端口，此后每个调用处按**名字**在调用处的作用域里再解析一次并连 `WITH` 边。【读码 `builder.cpp:972-1025`、`:3591-3625`；模块 root 设计稿 1.2】这段逻辑依赖"这张图用过没有"（`usedGraphs_`），函数被调用之后再发现新的捕获就是 `ClosureCaptureAfterSelfCall`。
 - **泛型**：模板是建图器里的一个对象（GCT 子树 + 声明处的四个作用域），不是图；每组类型建一张名为 `first<int>` 的普通图。【读码 `builder.h:221-280`；实测】
-- **分支臂是独立的图**：前端为每条臂建一张子图，外层图里是一个 `FUNC` 节点，既是臂头也是臂尾；臂用到的外层值是它的 `with` 端口。【读码 `builder.cpp:5697-5798`；实测】内联之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。
+- **分支臂是独立的图**：前端为每条臂建一张子图，外层图里是一个 `FUNC` 节点，既是臂头也是臂尾；臂用到的外层值是它的 `with` 端口。【读码 `src/compile/gir/builder_control.cpp:925-990 # "Builder::arm_ptr_t Builder::buildArm("`；实测】内联之后臂的节点并进外层图，成为 `BRCH` 与 `JOIN` 之间的一段。
 
 ### 1.7 "提交"是什么，校验哪些不变量
 
-提交有三处：前端编码（`encodeToRuntimeGraph`）、改写会话的 `commit()`、`GraphDraftGroup::encode()`。三处在每张图编码之后调用同一组校验，**所有构建模式都执行**，失败抛异常并被遍驱动转成 `PassInternalError`【读码 `src/runtime/graph.cpp:232、1175-1181`，`src/runtime/branch_arms.cpp:99`；`docs/technical/17_graph_rewrite_api_contracts.md` 第 4 节】：
+提交有三处：前端编码（`prepareGraph`）、改写会话的 `commit()`、`GraphDraftGroup::encode()`。三处在每张图编码之后调用同一组校验，**所有构建模式都执行**，失败抛异常并被遍驱动转成 `PassInternalError`【读码 `src/compile/gir/graph_encode.cpp:385 # "PreparedGraph prepareGraph(const graph_ptr_t &graph) {"`、`src/runtime/draft_session.cpp:1764 # "void GraphDraftGroup::encode() {"`，`src/runtime/branch_arms.cpp:99`；`docs/technical/17_graph_rewrite_api_contracts.md` 第 4 节】：
 
 1. 锚点、端口、闭包节点、所有边的节点引用有效；槽位在范围内；没有残留的 `DREF`；
 2. 邻接表双向一致；
@@ -176,8 +175,6 @@
 
 - NodeVM 对冻结图做 `const_cast`，把查到的算子函数指针写回 `OPER` 节点的负载（`nodevm.cpp:738-750 # "void NodeVMSchedPass::evalMarkedOperator_map_arr("`）。
 - 自动微分直接调 `GraphDraft::decode`，不经会话（`modules/autodiff/pullback.cpp`，2 处），并与内联引擎一样用 `mutablePayloadOf` 直接改节点负载字节。
-- 建图器建分支时先放一个空的 `BRCH`，再把它的六个邻接表逐个拷出来、连同新负载整体重写一遍（`builder.cpp:5862-5910`）。
-- 建图器导出值时 `new` 出一个裸的节点指针放进模块的导出表（`builder.cpp:6351-6356`）：这是一个存在图外面、指向某张图内部节点的指针。
 
 ### 1.9 模块、命名空间与缓存
 
@@ -1589,7 +1586,7 @@ AST/GCT 重构 ──► 6 ──► 7 ──► 8 ──┐
 
 "做了一半"的实际情况是：**路径这一半做完了，作用域这一半没做。**
 
-内部形式【读码】：命名空间不是一种对象。AST 建造时维护一个路径栈，把块里声明的函数与类型的名字加上前缀（`src/parse/ast/builder.cpp:219-237、786-815`）；之后各层看到的就是一个带路径的名字 `Tools::inc`。建图器把函数登记在以完整名字为键的作用域里。模块的导出表是一棵按路径分层的名字树（`include/camel/common/ns.h`）；`import m` 登记"本地前缀 `m` → 模块 `m`"的绑定，`using namespace m::Tools` 把匹配前缀的导出名逐个登记为本地名（`src/core/module/module.cpp:157-279 # "if (nsIt != importedNamespaceBindings_.end()) {"`）。名字解析的顺序在 `visitDRefNode`（`builder.cpp:2799-2969`）：局部值与捕获 → 泛型模板 → 带装饰器的函数 → 本模块的函数 → 导入的实体 → 报错。
+内部形式【读码】：命名空间不是一种对象。AST 建造时维护一个路径栈，把块里声明的函数与类型的名字加上前缀（`src/parse/ast/builder.cpp:219-237、786-815`）；之后各层看到的就是一个带路径的名字 `Tools::inc`。建图器把函数登记在以完整名字为键的作用域里。模块的导出表是一棵按路径分层的名字树（`include/camel/common/ns.h`）；`import m` 登记"本地前缀 `m` → 模块 `m`"的绑定，`using namespace m::Tools` 把匹配前缀的导出名逐个登记为本地名（`src/core/module/module.cpp:157-279 # "if (nsIt != importedNamespaceBindings_.end()) {"`）。名字解析的顺序在 `visitDRefNode`（`src/compile/gir/builder_expr.cpp:430-520 # "std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {"`）：局部值与捕获 → 泛型模板 → 带装饰器的函数 → 本模块的函数 → 导入的实体 → 报错。
 
 逐项【实测】（`pNN` 指 `test/cases/compile/namespace_rules/pNN_*.cml`）：
 

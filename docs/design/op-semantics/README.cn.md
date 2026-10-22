@@ -74,7 +74,7 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 ### 1.3 本稿与 IC 稿不同的地方（附理由）
 
 - **D1 数值策略。** IC 稿第 4 节拟议三个命名策略 `source`/`reproducible`/`relaxed`，并说"不把跨后端逐位相同的保证追加到现有的 `sum`、`matmul` 上"。负责人 7.1 的裁定取代了这一点：基准是规范算法，加减乘除与开方逐步正确舍入、按书写顺序、不收缩，**在这个范围内各后端、各设备逐位相同**；放宽是五项互不蕴含的显式许可。所以本稿没有命名策略，只有"原始语义 + 许可集合"；`sum`、`matmul` 各自要声明一个规范算法，现有的实现要按它审计（6.9）。IC 稿"测试的误差容限不是重排的许可""调度不能悄悄削弱数值许可"两条与裁定一致，照用。
-- **D2 映射的形式。** IC 稿把 `IndexMap` 定为"一张把下标元组与参数映射到坐标的纯子图"。本稿建议**主形式是一个封闭的准仿射表达式语言**（5.1），纯子图只作为"数据相关 / 不可分析"时的退路。理由：(1) 可分析——依赖、越界、单射、覆盖的判定落在线性整数算术上，有确定的算法与超时退回"未知"的分级（IC 5 自己也这样分级）；(2) 可序列化——描述是驻留的数据，进缓存键、比较相等都是常数时间，不占图的 65,535 容量，不需要图引用；(3) 可组合——Tiles 今天已经在把 transpose、slice、broadcast 的映射复合成一条地址式【读码：`modules/tiles/src/codegen.cpp:33-43`】，描述语言上的复合是代入。子图形式这三样都要另做一套。
+- **D2 映射的形式。** IC 稿把 `IndexMap` 定为"一张把下标元组与参数映射到坐标的纯子图"。本稿建议**主形式是一个封闭的准仿射表达式语言**（5.1），纯子图只作为"数据相关 / 不可分析"时的退路。理由：(1) 可分析——依赖、越界、单射、覆盖的判定落在线性整数算术上，有确定的算法与超时退回"未知"的分级（IC 5 自己也这样分级）；(2) 可序列化——描述是驻留的数据，进缓存键、比较相等都是常数时间，不占图的 65,535 容量，不需要图引用；(3) 可组合——Tiles 今天已经在把 transpose、slice、broadcast 的映射复合成一条地址式【读码：`modules/tiles/src/access.cpp:187-195 # "address = address + coordinate.value * IndexExpr(stride);"`】，描述语言上的复合是代入。子图形式这三样都要另做一套。
 - **D3 维度的第三种角色。** IC 稿的角色只有并行与归约。本稿加 **Sequential**（有序递推）：`LOOP` 的 `for`、`fold`、`scan` 的那一维。它不能并行、也不是归约（每一步都有可观察的中间状态），但它的下标映射与域照样有用（5.1、11.3）。
 - **D4 有序树与无序。** IC 稿区分"保持元素顺序、允许重新加括号"与"允许置换与重新加括号"。7.2 的许可 (a) 只有一项"改变归约的顺序或结合方式"。本稿的对应：许可 (a) 授予**重新加括号**；**置换**另外要求这个律在这个 dtype 上是**确切可交换**的（浮点加、乘、IEEE `maximum` 是，位置相关的 `max`、字符串连接、矩阵积不是）。不可交换的律在许可 (a) 下只能保序分组。这样不需要第六项许可，又不会把"可以改舍入"误读成"可以改数学结果"。
 - **D5 描述放在哪。** IC 稿说域、布局、输出规格、数值策略是"类型化的值或驻留的描述"。本稿：算子的**声明**是算子表里驻留的描述（不是图上的值）；一个节点上**实例化**后的域是可推导的事实（第 10 节的第 (ii) 类），按需算、带印记缓存；只有程序写下的、图上推不出来的东西（数值许可等）是图的内容。布局不进核心。
@@ -105,11 +105,11 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 | 纯度 | 要求 `def->traits.pure`，否则拒绝 | `compiler.cpp:321` |
 | 逐元素 | 两份写死的名字列表 `"|neg|abs|exp|log|sqrt|rsqrt|relu|"` 与二元的一份；与核心的 `elementwise` 位无关 | `compiler.cpp:412-413`、`schedule.cpp:36-42` |
 | 形状 | 复用张量模块的 `infer`，要求结果是静态形状的 f32 | `compiler.cpp:330-340` |
-| 下标映射 | `reindex` 节点：源地址 = 偏移 + Σ 输出坐标 × 步长（元素为单位）；transpose、permute、正步长 slice、`broadcast_like`、`expand_axis` 都翻译成它；广播另由 `broadcastIndex` 生成；reshape 是线性下标不变 | `compiler.cpp:361-391`、`:432-484`；`codegen.cpp:14-43` |
-| 归约 | `sum_axis`/`mean_axis`：每个输出串行、f64 累加；`sum_to`：f32、行主序累加（"与 `sum_axis` 的 f64 策略不同"）；`sum`/`mean` 全量：f64；`max_axis`：串行，或宽度 ≥ 128 时带原下标的块内并行，保留首个 NaN 与 ±0 的平局规则；空轴上的 `max` 拒绝 | `codegen.cpp:103-112`、`:118-140`、`:234-285`；`compiler.cpp:430` |
-| matmul | 16×16 共享内存分块；K 尾部按 `base+t<k` 排除；**累加用显式的 `fmaf`** | `codegen.cpp:144-168` |
-| 数值 | NVRTC 选项 `--fmad=false`（禁止收缩）；`expf`、`logf`、`sqrtf`；`rsqrt` 写成 `1.0f/sqrtf(a)`；`relu` 写成 `a<0.0f?0.0f:a`；融合时每个节点保留 f32 舍入点；"测试用容差比较浮点" | `cuda_backend.cpp:250`；`codegen.cpp:175-226`、`:310-318`；README |
-| 故障 | 标量 f64 除法：除数为 ±0 时 `atomicMin` 写一个设备上的故障字，完成时检查，发布结果之前报出；张量逐元素除法保持 IEEE 语义 | `codegen.cpp:91-93`；`cuda.cpp:95-194`；README |
+| 下标映射 | `reindex` 节点：源地址 = 偏移 + Σ 输出坐标 × 步长（元素为单位）；transpose、permute、正步长 slice、`broadcast_like`、`expand_axis` 都翻译成它；广播另由 `broadcastIndex` 生成；reshape 是线性下标不变 | `compiler.cpp:361-391`、`:432-484`；`modules/tiles/src/access.cpp:187-195 # "address = address + coordinate.value * IndexExpr(stride);"` |
+| 归约 | `sum_axis`/`mean_axis`：每个输出串行、f64 累加；`sum_to`：f32、行主序累加（"与 `sum_axis` 的 f64 策略不同"）；`sum`/`mean` 全量：f64；`max_axis`：串行，或宽度 ≥ 128 时带原下标的块内并行，保留首个 NaN 与 ±0 的平局规则；空轴上的 `max` 拒绝 | `modules/tiles/src/reduction_kernel.cpp:91-102 # "const auto &law = decl->laws[inst.law];"`、`modules/tiles/src/parallel_kernel.cpp:44 # "Canonical NaN and signed-zero rules make these merges bitwise order-independent."`、`modules/tiles/src/serial_kernel.cpp:151 # "const auto dtype"`；`compiler.cpp:430` |
+| matmul | 16×16 共享内存分块；K 尾部按 `base+t<k` 排除；**累加用显式的 `fmaf`** | `modules/tiles/src/matmul_kernel.cpp:85-155 # "launch.blockX = launch.blockY = 16;"` |
+| 数值 | NVRTC 选项 `--fmad=false`（禁止收缩）；`expf`、`logf`、`sqrtf`；`rsqrt` 写成 `1.0f/sqrtf(a)`；`relu` 走 `Maximum(a, 0)`；融合时每个节点保留 f32 舍入点；"测试用容差比较浮点" | `cuda_backend.cpp:250`；`modules/tiles/src/scalar_expr.cpp:493-510 # "return ScalarExpr::apply(operation, {a});"`；README |
+| 故障 | 标量 f64 除法：除数为 ±0 时 `atomicMin` 写一个设备上的故障字，完成时检查，发布结果之前报出；张量逐元素除法保持 IEEE 语义 | `modules/tiles/src/kernel_ir.cpp:191-193 # "atomicMin(reinterpret_cast<unsigned*>(v["`；`cuda.cpp:95-194`；README |
 | 调用 | 直接调用递归展开；用 `active` 集合检测递归，深度上限 64；值的上限 4,096 | `compiler.cpp:56`、`:139` |
 | 分支 | 只特化：条件在特化时已知才行，只翻译选中的臂 | `compiler.cpp` 的 `Brch`/`Join` |
 | 编译缓存 | 进程内、选定设备的上下文里，按**生成的源码文本**查，32 项，LRU | `cuda_backend.cpp:228-269` |
@@ -124,7 +124,7 @@ IC 稿（2026-10-15，`wzj-dev`）是一份**拟议的目标架构**：计算图
 - **GEMM 打开了收缩。** 全项目以 `-ffp-contract=off` 编译，但张量的 GEMM 与一元运算单元"opt back in"：`gemm_generic.cpp`、`unary_generic.cpp` 用 `-ffp-contract=on`，AVX2/AVX-512 单元用 `-mfma -ffp-contract=on`；注释说没有 FMA 的 x86-64 上通用单元"rounds twice"【读码：`CMakeLists.txt:48-54`、`modules/tensor/CMakeLists.txt:37-52`】。也就是说**今天 CPU 的 `matmul` 在不同的处理器上已经可能不逐位相同**。GEMM 是 Goto 式分块（KC 深度的块）【读码：`modules/tensor/kernels/gemm_blocked.inl:9-17 # "The arithmetic is the canonical algorithm of matmul (design principles"`】；每个输出元素沿 k 的累加次序是否严格递增、块与块之间是否从零开始再相加【未查】。
 - **`exp` 是自写的多项式**："few ulp over the normal float range"，"NaN inputs are not propagated faithfully"【读码：`modules/tensor/kernels/vmath.h:4-13 # "polynomial); tanh, sigmoid and"`】；`tanh`、`sigmoid`、`gelu` 由它导出，误差是绝对误差约 1e-7，不是 ulp。
 - **`max`/`min` 的特殊值规则是位置相关的**【实测，附录 A.1】：逐元素 `maximum(a, b)` 有 NaN 时返回 `a`、±0 平局时返回 `a`，所以 `maximum(a, b)` 与 `maximum(b, a)` 不同；`max(x, 0)` 只在**第一个元素**是 NaN 时得 NaN（`[1, NaN, 3]` 得 3，`[NaN, 1, 3]` 得 NaN），`[0, −0]` 得 0、`[−0, 0]` 得 −0。实现是 `std::max(a, b)` 与 `v > best`【读码：`modules/tensor/kernels/elementwise.cpp:247-250 # "return maximum(a, b); // IEEE 754-2019 maximum (minmax.h)"`、`reduce.cpp:147-158`】。
-- **`relu(NaN) = 0`、`relu(−0) = +0`**【实测】；实现是 `x > 0.0f ? x : 0.0f`【读码：`modules/tensor/kernels/unary_loops.inl` 的 `Relu` 分支】。**Tiles 写的是 `a<0.0f?0.0f:a`，给出 NaN 与 −0**【读码：`modules/tiles/src/codegen.cpp:226`】。两者在逐位相同的契约下不能并存（Q6）。
+- **`relu(NaN) = 0`、`relu(−0) = +0`**【实测】；实现是 `x > 0.0f ? x : 0.0f`【读码：`modules/tensor/kernels/unary_loops.inl` 的 `Relu` 分支】。**Tiles 的 `relu` 走 `Maximum(a, 0)`，NaN 规范化为 qNaN，−0 取 +0**【读码：`modules/tiles/src/scalar_expr.cpp:501-505 # "return ScalarExpr::apply("`】。两者在逐位相同的契约下不能并存（Q6）。
 - **融合的 `softmax` 内核与"max、减、exp、sum、除"的组合不是同一个算法**【读码：`modules/tensor/kernels/reduce.cpp:195-213`】：最大值从 −∞ 起用 `std::max` 累计（于是 NaN 一律被忽略，与 `max_axis` 的"首个 NaN 传播"不同）；`exp` 用 `vmath::exp`；和在 f64 里累加；最后乘以 f32 舍入过的倒数 `1/sum`，而不是除以和。Tiles 把 softmax 写成组合（README），所以"CPU 的 `tensor:softmax`"与"Tiles 的 softmax"在位上不同是预期的；问题在于 `tensor:softmax` 的规范算法到底是哪一个（第 9 节，Q10）。
 - **标量浮点除以零是故障**【实测：`let nan = zero / zero` 报 `RuntimeDiag::DivisionByZero`】，**张量逐元素除以零按 IEEE 得 NaN/±∞**【实测：附录 A.1 用 `m / m` 造出 NaN】。两者都与 3.9"除零是故障"的字面不完全一致，但这是张量算子既有的语义（Tiles README 也这样说），本稿不改；声明里如实写（4.2 的 `FaultSpec`）。
 
@@ -446,7 +446,7 @@ output   (o)  Combine(law 0)                     law 0 = 乘后加，累加 f32�
 IndexedInstance substitute(const IndexedInstance &inst, std::span<const DimSplit> splits);
 ```
 
-对 `matmul`（5.3）做 `m = 16·tm + lm`、`k = 16·tk + lk`：新的域是 `(tm, lm, tn, ln, tk, lk)`，`lm < 16` 等是新维的界，原来的 `m < M` 变成谓词 `16·tm + lm < M`，`k < K` 变成 `16·tk + lk < K`。前者是**写**的有效条件（尾部的线程不写），后者是**贡献**的有效条件：原声明里 `k` 维的越界贡献按律是 `Excluded`，所以尾部的 `k` 不参与累加。这正是 Tiles 今天的 `if(base+t<k)`【读码：`codegen.cpp:163-164`】。用 0 填充而不排除会改结果：`acc + (+0.0)` 把 −0 变成 +0，`∞ × 0` 是 NaN；排除才与规范算法逐位相同。
+对 `matmul`（5.3）做 `m = 16·tm + lm`、`k = 16·tk + lk`：新的域是 `(tm, lm, tn, ln, tk, lk)`，`lm < 16` 等是新维的界，原来的 `m < M` 变成谓词 `16·tm + lm < M`，`k < K` 变成 `16·tk + lk < K`。前者是**写**的有效条件（尾部的线程不写），后者是**贡献**的有效条件：原声明里 `k` 维的越界贡献按律是 `Excluded`，所以尾部的 `k` 不参与累加。这正是 Tiles 今天的 `if(base+t<k)`【读码：`modules/tiles/src/matmul_kernel.cpp:154 # "Predicate::less(base + t, IndexExpr(k))"`】。用 0 填充而不排除会改结果：`acc + (+0.0)` 把 −0 变成 +0，`∞ × 0` 是 NaN；排除才与规范算法逐位相同。
 
 ### 5.3 matmul 与归约的实例
 
@@ -479,7 +479,7 @@ output   (i, j)  Combine(law "sum_f32_via_f64")
 
 ### 5.5 访问映射与 traits 的关系
 
-`elementwise` 位是"每个访问都是恒等或广播"的一个缓存。有了实例之后，Tiles 不再需要自己的名字列表（2.2 的第 3 行）：逐元素的判定、融合时坐标的传递（Tiles 今天 `emit` 里的递归代入【读码：`codegen.cpp:181-201`】），都是在实例上做代入。
+`elementwise` 位是"每个访问都是恒等或广播"的一个缓存。有了实例之后，Tiles 不再需要自己的名字列表（2.2 的第 3 行）：逐元素的判定、融合时坐标的传递（Tiles 今天 `emit` 里的递归代入【读码：`modules/tiles/src/access.cpp:258-280 # "Predicate Predicate::substitute(const std::string &name, const IndexExpr &replacement) const {"`】），都是在实例上做代入。
 
 ### 5.6 gather 与 scatter
 
@@ -550,9 +550,9 @@ initial  base                                     // 输出从 base 开始；Com
 
 几个要写清楚的规范算法（第一批声明，第 12 节第 2 阶段）：
 
-- `rsqrt(x)` = `1 / sqrt(x)`，两步各自正确舍入。CPU 与 Tiles 今天恰好都这样做【读码：`unary_loops.inl` 的 `Rsqrt`；`codegen.cpp:224`】，所以它是 `CorrectlyRounded`，不是近似函数。
-- `sum_axis`（f32 输入）= 从 +0.0（f64）开始，按归约维的下标递增，每步把元素提升为 f64 后相加并在 f64 里舍入，最后一次舍入为 f32。`mean_axis` 在最后一步之前用 f64 除以个数。CPU 与 Tiles 一致【读码：`reduce.cpp:129-143`；`codegen.cpp:262-285`】。
-- `sum_to`（梯度用）= f32 累加、行主序；与 `sum_axis` 是**两个不同的规范算法**，Tiles 已经注意到并分别实现【读码：`codegen.cpp:234-235` 的注释】。
+- `rsqrt(x)` = `1 / sqrt(x)`，两步各自正确舍入。CPU 与 Tiles 今天恰好都这样做【读码：`unary_loops.inl` 的 `Rsqrt`；`modules/tiles/src/scalar_expr.cpp:506-510 # "ScalarOp::Divide,"`】，所以它是 `CorrectlyRounded`，不是近似函数。
+- `sum_axis`（f32 输入）= 从 +0.0（f64）开始，按归约维的下标递增，每步把元素提升为 f64 后相加并在 f64 里舍入，最后一次舍入为 f32。`mean_axis` 在最后一步之前用 f64 除以个数。CPU 与 Tiles 一致【读码：`reduce.cpp:129-143`；`modules/tiles/src/serial_kernel.cpp:141-166 # "const auto dtype"`】。
+- `sum_to`（梯度用）= f32 累加、行主序；与 `sum_axis` 是**两个不同的规范算法**，Tiles 已经注意到并分别实现【读码：`modules/tiles/src/serial_kernel.cpp:151 # "const auto dtype"` 的注释】。
 - 张量的 `divide` 按 IEEE 给出 ±∞ 与 NaN，不故障；标量 f64 的 `/` 除以 ±0 是故障（2.3）。
 
 `sensitiveTo` 让消费者知道某项许可对这个算子**没有作用**，从而不必找它：整数的 `sum` 在回绕加法下确切地可结合可交换，重排不需要许可 (a)；IEEE `maximum`（Q5 选 A 时）同理。
@@ -604,7 +604,7 @@ func caller(x: Tensor<f32, const [8, 3]>, w: Tensor<f32, const [3, 4]>): float {
 
 ### 6.7 `max`、`min` 的特殊值
 
-今天（2.3）：逐元素的 `maximum(a, b)` 有 NaN 或 ±0 平局时返回 `a`；`max_axis` 只在第一个元素是 NaN 时得 NaN，平局取先出现的【实测】。这个规则**可结合但不可交换**：结果取决于元素的位置，所以任何并行的最大值都要像 Tiles 那样带着原下标比较【读码：`codegen.cpp:118-140`】。
+今天（2.3）：逐元素的 `maximum(a, b)` 有 NaN 或 ±0 平局时返回 `a`；`max_axis` 只在第一个元素是 NaN 时得 NaN，平局取先出现的【实测】。这个规则**可结合但不可交换**：结果取决于元素的位置，所以任何并行的最大值都要能复现这个位置相关的规则。。
 
 三个候选（Q5）：
 
@@ -683,7 +683,7 @@ struct ReductionLaw {
 } // namespace camel::core::sem
 ```
 
-规范算法由 `init`、`order`、`kind` 与类型完全确定：例如 `sum_axis` 的律是 `{Add, f32, f64, f32, Constant(+0.0), Empty=Initial, Ascending, None}`（今天的 CPU 与 Tiles 都从 +0 开始【读码：`reduce.cpp:133`；`codegen.cpp:271`】，所以 `sum([−0.0]) = +0.0`；这是声明里写明的事实，不是 bug——但并行实现给每个分块补的初值必须与它一致，否则会出现不同的零号）。`matmul` 的律是 `{MulAdd 或 FmaChain（Q7）, f32, f32, f32, Constant(+0.0), Initial, Ascending, None}`。
+规范算法由 `init`、`order`、`kind` 与类型完全确定：例如 `sum_axis` 的律是 `{Add, f32, f64, f32, Constant(+0.0), Empty=Initial, Ascending, None}`（今天的 CPU 与 Tiles 都从 +0 开始【读码：`reduce.cpp:133`；`modules/tiles/src/serial_kernel.cpp:156 # "ScalarExpr::literal({dtype, op == "`】，所以 `sum([−0.0]) = +0.0`；这是声明里写明的事实，不是 bug——但并行实现给每个分块补的初值必须与它一致，否则会出现不同的零号）。`matmul` 的律是 `{MulAdd 或 FmaChain（Q7）, f32, f32, f32, Constant(+0.0), Initial, Ascending, None}`。
 
 ### 7.3 什么时候可以重排、换精度
 
@@ -1097,13 +1097,13 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 |---|---|---|
 | `OpRegistry::find(id)` 后按 `def->name` 的字符串分派（`compiler.cpp:320` 起） | `table.semantics(id)` 与 `key(id)`；分派的依据是声明的类与实例 | 名字仍可用于诊断 |
 | 逐元素名字列表（`compiler.cpp:412-413`、`schedule.cpp:36-42 # "std::numeric_limits<size_t>::max() / std::max(count, size_t(1)))"`） | `numeric.cls` 与实例的"全是恒等或广播"判定（5.5） | 新的逐元素算子不必改 Tiles |
-| `broadcastIndex`、`mappedIndex`、`reindex` 的偏移与步长（`codegen.cpp:14-43`；`compiler.cpp:361-391`、`:432-484`） | `instantiate` 得到逻辑映射，再与 Tiles 自己的行主序存储映射复合 | `reindex` 节点可以保留为 Tiles 的物理表示 |
-| 融合时的坐标代入（`codegen.cpp:181-201`） | 实例上的 `substitute`/复合 | |
-| `sum_axis` f64、`sum_to` f32、全量 f64 的选择（`codegen.cpp:103-112`、`:234-285`） | 读 `ReductionLaw` 的累加类型、初值、顺序 | 新的归约不必改 Tiles |
-| 并行最大值的合法性（`schedule.cpp`、`codegen.cpp:118-140`） | `reorderFreedom`：Q5 选 A 后最大值可以任意分组，不再需要带下标 | `argmax` 仍带下标 |
-| `fmaf`（`codegen.cpp:164`） | 有许可 (b) 才用，或按 Q7 | 6.9 审计项 1 |
+| `broadcastIndex`、`mappedIndex`、`reindex` 的偏移与步长（`modules/tiles/src/access.cpp:187-195 # "address = address + coordinate.value * IndexExpr(stride);"`；`compiler.cpp:361-391`、`:432-484`） | `instantiate` 得到逻辑映射，再与 Tiles 自己的行主序存储映射复合 | `reindex` 节点可以保留为 Tiles 的物理表示 |
+| 融合时的坐标代入（`modules/tiles/src/access.cpp:258-280 # "Predicate Predicate::substitute(const std::string &name, const IndexExpr &replacement) const {"`） | 实例上的 `substitute`/复合 | |
+| `sum_axis` f64、`sum_to` f32、全量 f64 的选择（`modules/tiles/src/reduction_kernel.cpp:91-102 # "const auto &law = decl->laws[inst.law];"`、`modules/tiles/src/serial_kernel.cpp:151 # "const auto dtype"`） | 读 `ReductionLaw` 的累加类型、初值、顺序 | 新的归约不必改 Tiles |
+| 并行最大值的合法性（`schedule.cpp`、`modules/tiles/src/parallel_kernel.cpp:44 # "Canonical NaN and signed-zero rules make these merges bitwise order-independent."`） | `reorderFreedom`：Q5 选 A 后最大值可以任意分组，不再需要带下标 | `argmax` 仍带下标 |
+| `fmaf`（`modules/tiles/src/scalar_expr.cpp:414 # "return call(f32 ? "`） | 有许可 (b) 才用，或按 Q7 | 6.9 审计项 1 |
 | `--fmad=false` 之外的精度选项 | 显式传入、进缓存键 | 6.9 审计项 4 |
-| 标量除法的故障字（`codegen.cpp:91-93`、`cuda.cpp`） | 机制留在 Tiles；**何时**要检查读 `FaultSpec{DivisionByZero, operand 1}` | 张量除法没有这条 `FaultSpec`，与今天一致 |
+| 标量除法的故障字（`modules/tiles/src/kernel_ir.cpp:191-193 # "atomicMin(reinterpret_cast<unsigned*>(v["`、`cuda.cpp`） | 机制留在 Tiles；**何时**要检查读 `FaultSpec{DivisionByZero, operand 1}` | 张量除法没有这条 `FaultSpec`，与今天一致 |
 | 空轴上的 `max` 拒绝（`compiler.cpp:430`） | 读律的 `Empty::Fault` | |
 | 递归检测与深度 64（`compiler.cpp:139`） | 不变（这是 Tiles 对直接调用的展开策略）；定义图的递归由核心在登记时拒绝 | |
 | 形状推断复用 `infer` | 不变 | |

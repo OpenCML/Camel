@@ -52,7 +52,7 @@
 | 效应以资源声明为准；签名里的 `var` 由资源声明检查，不一致是声明错误 | **已实现**（C++ 声明层） | `operator_table.cpp:182 # "if (auto problem = sem::checkVarParameters(resources, with, norm)) {"` 调 `checkVarParameters`（`resource_semantics.h:193-199`） | `modules/resources` 的 14 条拒绝（`var_param_not_written`、`written_without_var` 等） |
 | `pure` 是承诺，由编译器检查，可写在函数声明与函数类型上；函数类型参数默认对资源泛型；资源少的函数可用在要求资源多的地方 | **缺**（语言层）。C++ 侧有 `OperatorPurity`（`pure`/`effectful`/`state`/`undeclared`）与 `hasExternalEffect`；函数类型没有 `pure`，没有资源子类型 | `operator_table.h:307-308`、`:335-336`；`func.h` 无资源字段 | `stdlib_registry.purity_declared`（C++ 侧）；`native_declarations`（声明是模块的签名） |
 | 同一资源自动有序：同一函数体内真正执行的、用到同一资源的副作用按书写顺序（编译器生成控制边）；调用是调用处的"一个副作用"；不跨函数重排 | **部分**。`sync` 块内语句串成一条 ctrl 链；**块外**：读总是排在最后写者之后，写只在自己被 `wait` 时排在之前使用者之后；环境资源与环境效应在 `sync` 外没有**为保证副作用顺序而加**的边（只剩数据依赖碰巧给出的顺序） | `builder.cpp:820-954 # "be analysed further (its dropped effects, its result)."`（sync 链与返回 GATE）；`builder_expr.cpp:370-426`；`resources.cpp:706-734`（只查询，不建边） | `values.sync_order`、`compile/gir` 的 `sync.ctrl_dedup_snapshot`；`modules/resources` 的 `ORDER` 全在一个 `sync` 函数里（`test/cases/resources/effects.cml:20`），**没测过块外按资源排序** |
-| 算子纯度必须声明；没声明的按有副作用对待（最多少优化）；仓库标准库逐个声明；第三方漏了给提示 | **部分**。没声明→`pure=false`、`hasExternalEffect=true`、保守资源；仓库由 `purity_declared` 与启动日志守住；第三方只有一行日志，不是可过滤的诊断 | `resources.cpp:362-364`；`introspect.cpp:211-236`；`context.cpp:525-530` | `stdlib_registry.purity_declared`（`ops.length > 300`，且 `undeclared` 为空） |
+| 算子纯度必须声明；没声明的按有副作用对待（最多少优化）；仓库标准库逐个声明；第三方漏了给提示 | **部分**。没声明→`pure=false`、`hasExternalEffect=true`、保守资源；仓库由 `purity_declared` 与启动日志守住；第三方只有一行日志，不是可过滤的诊断 | `src/core/resource_semantics.cpp:91-101 # "conservativeResources("`；`introspect.cpp:211-236`；`context.cpp:525-530` | `stdlib_registry.purity_declared`（`ops.length > 300`，且 `undeclared` 为空） |
 | 可能故障不强制声明；没声明按可能故障 | **已实现** | `effects.cpp` 的 `mayFault` 保守合并；`include/camel/runtime/effects.h` | 无专门用例（随 `EffectSummary`） |
 | 无序资源 `resource net unordered`：其上的副作用不保持书写顺序；要顺序就写 `sync` 块或用句柄 | **缺**。`ResourceSpec` 没有无序标志，语言层没有这个词 | parser；`resource_semantics.h:146-160 # "struct ResourceSpec {"` | 无 |
 | 句柄类型：`#resource` 类型，每个值一个独立资源；签名写 `uses 形参名`；同一句柄按书写顺序，不同句柄互不约束；调用处推出是哪个值 | **缺**。没有 `#resource` 标签（`tags.cpp` 的标准标签表里没有它），函数类型没有资源，`ResourceClass::Foreign` 只是"模块包的对象" | `tags.cpp:159-166 # "on a function: its elements do not depend on each other (design"` 是标准标签的写法；`struct.h:118-205 # "(design effects plan 3.1): a value of the type is"` 是名词性类型的落点 | `tags.plan` 的 `independent.*` 是"声明→图属性"的现成范式；句柄无用例 |
@@ -201,7 +201,7 @@ export type Stream<T> = {
 
 ### 4.1 未知算子的默认
 
-今天已经是 3.3 要的默认：没有 `declare` 的算子 `isPure=false`、`hasExternalEffect=true`（`resources.cpp:362-364` 的 `conservativeResources` 给 Unknown 类、碰每个操作数、external），因此它与一切副作用冲突。缺的不是模型，是**建图时没用它**（步骤 6）。`uses`/`pure` 只是把这个默认变成可声明的：写了 `pure` 的算子不再保守，写了 `uses fs` 的只碰 `fs`。第三方漏写仍是"全局资源"。
+今天已经是 3.3 要的默认：没有 `declare` 的算子 `isPure=false`、`hasExternalEffect=true`（`src/core/resource_semantics.cpp:91-101 # "conservativeResources("` 给 Unknown 类、碰每个操作数、external），因此它与一切副作用冲突。缺的不是模型，是**建图时没用它**（步骤 6）。`uses`/`pure` 只是把这个默认变成可声明的：写了 `pure` 的算子不再保守，写了 `uses fs` 的只碰 `fs`。第三方漏写仍是"全局资源"。
 
 ### 4.2 推断能得出什么、不能得出什么
 
