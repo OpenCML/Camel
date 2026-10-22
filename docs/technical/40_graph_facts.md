@@ -83,6 +83,17 @@ on the next `obtain`; it is never reused silently. A `Cone` kind (`core.shape`) 
 read when a revision changed: when that is unchanged (the node's type) the fact stays valid with a
 new stamp (`revalidated`).
 
+A pass can also change declarations: loading a module declares its operators, and every
+declaration increments `OperatorTable::declarationEpoch()` (`operator_table.h`). A fact of a kind
+that reads declarations is therefore stale after any module load, even when the graph it is about
+did not change. `std::opt` does this: its algebra phase resolves `rules::simplify`, which imports
+the `rules` library, and that imports `math` (H100, `resolvePassWithModule` in
+`src/execute/pass.cpp`); the epoch moves on its first run. The stamp is conservative by design
+(10.3 lists the declaration epoch beside the graph revision, and a kind opts in with
+`readsDeclarations`), so this is invalidation, not a defect: the recompute path is reached and the
+facts are rebuilt. A case must not turn the resulting totals into the property — `FACTS epoch` and
+`FACTS revision` say *why* a fact went stale, and the per-kind lines say which facts did (H121).
+
 A detached copy (the working copy of autodiff) keeps the GraphId of its graphs; the graph that held a loop gets a new revision, so facts computed on the program are valid on the copy where nothing changed.
 
 Facts do not follow a pass on their own (design 10.5: "derived facts are not stale notes that
@@ -120,8 +131,11 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
   (`test/cases/facts/tensors_and_loops.cml`.)
 - `test/plans/feat/modules/graph_facts.plan.toml`: the registry and store rules
   (`test::facts`), facts across `std::opt::inline` and `std::opt` (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
-  and `inspect --facts`. The test passes are named in the pipeline; no environment variable gates
-  them.
+  and `inspect --facts`. The check pass prints the declaration epoch and the graph revisions it
+  finds (`FACTS epoch check=`, `FACTS check revision`), a per-kind tally per graph (`FACTS graph
+  kind <graph> <kind>`), and `FACTS after recompute valid=.. stale=.. gone=..`: after the stale
+  facts are computed again no fact a consumer can read is stale. The test passes are named in the
+  pipeline; no environment variable gates them.
 
 ## 7. Operators that read graphs
 
