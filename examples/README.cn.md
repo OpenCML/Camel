@@ -44,7 +44,7 @@ camel examples/text/word_frequency.cml
 
 | 文件 | 展示的内容 | 运行命令 |
 |------|------|------|
-| [`merge_sort.cml`](algorithms/merge_sort.cml) | 用递归写的归并排序，并与 `algo.sorted` 和 `array.sort_by` 的结果比较；程序中需要排序时调用的是这两个库函数 | `camel examples/algorithms/merge_sort.cml` |
+| [`merge_sort.cml`](algorithms/merge_sort.cml) | 用递归写的归并排序，并与 `array.sort` 和 `array.sort_by` 的结果比较；程序中需要排序时调用的是这两个库函数 | `camel examples/algorithms/merge_sort.cml` |
 | [`binary_search.cml`](algorithms/binary_search.cml) | 尾递归的二分查找；找不到时返回 `null`（`int?`）。任意顺序的数组可用 `array.index_of` | `camel examples/algorithms/binary_search.cml` |
 
 ### 函数: `functions/`

@@ -378,7 +378,7 @@ pump(s, open("b"))   同上：被调用者不知道 s 与新句柄不同，仍�
 - 每个无体声明补 `uses` 或 `pure`；`uses` 的名字用该模块的资源（`fs`、`stdout`、`rng`…）。
 - `--verify-ops` 升级为双向：声明的 `uses`/`pure` 必须与 C++ 的 `ResourceSpec` 一致（不多不少；`pure` ⇔ `spec.none()` 且 traits 纯）。
 - `registry.purity_declared` 改为读声明；`modules/resources` 的 `declared_resources` 从"C++ 文本"改为"声明文本"。
-- 建议顺序：`fs`、`io`、`time`、`random`、`env`、`process` 先（会碰环境），再 `algo`/`str`/`json`/`math` 等纯模块。每模块一个提交，跑一次 `--verify-ops`。
+- 建议顺序：`fs`、`io`、`time`、`random`、`env`、`process` 先（会碰环境），再 `array`/`str`/`json`/`math 等纯模块。每模块一个提交，跑一次 `--verify-ops`。
 
 ### 步骤 5：推断与承诺
 

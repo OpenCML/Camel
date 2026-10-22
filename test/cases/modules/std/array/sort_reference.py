@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Every operator of the algo module against Python's sorted(), on generated arrays (fixed seed).
+"""Every sorting operator of the array module against Python's sorted(), on generated arrays (fixed seed).
 
 Arrays of int and of float; random, with duplicates, already sorted, reversed, constant; lengths 1 to
 257. Each of sort/quick_sort/insert_sort/merge_sort (all return a new array and leave the input
@@ -84,10 +84,10 @@ def main() -> int:
         body += [f"    let m{k} = merge_sorted_arrays({lit(ref, is_float)}, {lit(other, is_float)})", f"    println('#', m{k})"]
         expected.append(sorted(ref + other))
     names = ", ".join(COPYING + ["merge_sorted_arrays"])
-    small = f"module algo_reference\nimport {{ {names} }} from algo\n\nfunc main(): int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
+    small = f"module array_reference\nimport {{ {names} }} from array\n\nfunc main(): int sync {{\n" + "\n".join(body) + "\n    return 0\n}\n"
     n = 200000
-    large = f"""module algo_large
-import {{ sort, merge_sort }} from algo
+    large = f"""module array_large
+import {{ sort, merge_sort }} from array
 
 func main(): int sync {{
     let up = range(0, {n})
@@ -122,7 +122,7 @@ func main(): int sync {{
         if code != 0 or got != [want]:
             print(f"large program: exit {code}; got {got}; {err.strip()[:300]}")
             wrong += 1
-    print(f"algo reference: seed 20261009, {len(expected)} results and one large program, {wrong} wrong")
+    print(f"array sorting reference: seed 20261009, {len(expected)} results and one large program, {wrong} wrong")
     print("PASS" if wrong == 0 else "FAIL")
     return 0 if wrong == 0 else 1
 

@@ -1,5 +1,5 @@
 module unused
-import { flatten } from algo
+import { flatten } from array
 import { Program, Node, Graph, NodeKind, graphs, nodes, kind, is_pure, is_constant, is_anchor, value_users, open, erase, commit } from graph
 
 /// Whether the node is no more than its value: a constant, a conversion, a copy, an access, a

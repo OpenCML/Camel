@@ -45,7 +45,6 @@ Not in this reference: the profiler (`perf`).
 | [array](#array) | `import { ... } from array` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ |
-| [algo](#algo) | `import { ... } from algo` | C++ |
 | [random](#random) | `import { ... } from random` | C++ |
 | [time](#time) | `import { ... } from time` | C++ |
 | [fs](#fs) | `import { ... } from fs` | C++ |
@@ -76,7 +75,6 @@ Not in this reference: the profiler (`perf`).
 | [array](#array) | `import { ... } from array` |  |
 | [math](#math) | `import { ... } from math` |  |
 | [statistics](#statistics) | `import { ... } from statistics` |  |
-| [algo](#algo) | `import { ... } from algo` |  |
 | [random](#random) | `import { ... } from random` |  |
 | [time](#time) | `import { ... } from time` |  |
 | [fs](#fs) | `import { ... } from fs` |  |
@@ -2124,12 +2122,12 @@ True when `T` is `bool`.
 
 <a id="array"></a>
 
-## `array`: arrays and higher-order functions
+## `array`: arrays, sorting and higher-order functions
 
 Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and three primitives of this module
-(flatten, unique, argsort), whose kernels are the C++ module's. Every function returns a new
-value; none changes its argument.
+operators (map, filter, reduce, range, zip, slice, len) and a few native primitives of this
+module (the sorts, argsort, flatten, unique). Every function returns a new value; none changes
+its argument.
 
 - The array a function works on is its ordinary argument; a function or a value that
   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
@@ -2140,9 +2138,11 @@ value; none changes its argument.
   (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
   several elements at once; the result is the same either way, and no call observes another.
   A function with side effects belongs in `foreach` or `reduce`, which run in order.
-- These are generic functions: there is one instance per set of element types in the whole
-  program, whichever module calls it (one root graph, design principles 10.1). `group_by`
-  is not here: it needs the map type.
+- The functions written here are generic: there is one instance per set of element types in
+  the whole program, whichever module calls it (one root graph, design principles 10.1).
+  `group_by` is not here: it needs the map type.
+
+### Sorting
 
 #### `argsort`
 
@@ -2155,10 +2155,72 @@ argsort: (keys: bool[]) => int[]
 argsort: (keys: string[]) => int[]
 ```
 
-The indices that sort the keys ascending; equal keys keep their order (stable).
+The positions of the keys in ascending order of key; equal keys keep their order (a stable
+sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
+primitive behind `sort_by`.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `argsort([3, 1, 2])` gives `[1, 2, 0]`
+- A native operator of this module: an opaque node, pure.
+- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
+
+#### `sort`
+
+```camel
+sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs (quicksort).
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `insert_sort`
+
+```camel
+insert_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by insertion sort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `quick_sort`
+
+```camel
+quick_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by quicksort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sort`
+
+```camel
+merge_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by merge sort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sorted_arrays`
+
+```camel
+merge_sorted_arrays: (left: T[], right: T[]) => T[]
+```
+
+The sorted array made of the elements of two sorted arrays of numbers.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
 
 ### Rearranging
 
@@ -2212,9 +2274,9 @@ Each element with its index.
 flatten: (xss: T[][]) => T[]
 ```
 
-The elements of the inner arrays, in order.
+The elements of the inner arrays, in order. The primitive behind `flat_map`.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
 
 #### `unique`
@@ -2223,9 +2285,10 @@ The elements of the inner arrays, in order.
 unique: (xs: T[]) => T[]
 ```
 
-The first occurrence of every value, in order; values are compared as `==` compares them.
+The first occurrence of every value, in order; values are compared as `==` compares them
+(a NaN equals nothing, so every NaN is kept).
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
 
 ### Searching
@@ -3069,119 +3132,6 @@ element is NaN.
 - Pure.
 - Failure: fault `InvalidArgument` when q is not between 0 and 1.
 - Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0` gives `2`
-
-<a id="algo"></a>
-
-## `algo`: sorting and array primitives
-
-Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
-returns a new array and leaves its argument unchanged (design principles 11.3); to sort a
-variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
-array in place when nothing else refers to it, an optimisation that does not change what the
-program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
-
-#### `argsort`
-
-```camel
-argsort: (keys: i32[]) => int[]
-argsort: (keys: int[]) => int[]
-argsort: (keys: f32[]) => int[]
-argsort: (keys: float[]) => int[]
-argsort: (keys: bool[]) => int[]
-argsort: (keys: string[]) => int[]
-```
-
-The positions of the keys in ascending order of key; equal keys keep their order (a stable
-sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
-primitive behind `sort_by` of the `array` module.
-
-- Pure.
-- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
-
-#### `sort`
-
-```camel
-sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs (quicksort).
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: T[], right: T[]) => T[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
-
-#### `flatten`
-
-```camel
-flatten: (xss: T[][]) => T[]
-```
-
-The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
-of the `array` module.
-
-- Pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
-
-#### `unique`
-
-```camel
-unique: (xs: T[]) => T[]
-```
-
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
-module.
-
-- Pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
 
 <a id="random"></a>
 
