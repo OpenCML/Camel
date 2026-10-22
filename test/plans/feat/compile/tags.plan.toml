@@ -289,7 +289,7 @@ expect_output_contains = ["The tag 'reassociate' is declared with the name of a 
 
 [[tests]]
 name = "placement.graph"
-desc = "`#gpu` and `#cpu` write the same fact, `tiles.placement`, as a Symbol: std::gir shows it as `body_attrs` of the body region of a tagged function, and as `attrs` of the nodes written in a tagged block, with the inner scope winning where blocks nest."
+desc = "`#gpu` and `#cpu` write the same fact, `tiles.placement`, as a Symbol: std::gir shows it as `body_attrs` of the body region of a tagged function, as a flat `region #N` line for a tagged block (the compact view keeps its layout), and as `attrs` of the nodes written in either scope, with the inner scope winning where blocks nest."
 kind = "behavior"
 case = "../../../cases/compile/tags/placement.cml"
 args = ["${case}", "std::gir"]
@@ -324,6 +324,14 @@ value(9, 'tiles.placement="gpu"')
 value(14, 'tiles.placement="cpu"')
 value(23, 'tiles.placement="gpu"')
 value(25, 'tiles.placement="cpu"')
+// The compact view prints a tagged region's fact without drawing a cluster: the outer block
+// is region 1, the inner one region 2.
+const regionLines = lines.filter((l) => l.includes('region #') && l.includes('attrs='))
+assert(regionLines.length === 2, regionLines.join('\n'))
+assert(regionLines[0].includes('region #1 block parent=0'), regionLines[0])
+assert(regionLines[0].includes('attrs="tiles.placement=\\"gpu\\""'), regionLines[0])
+assert(regionLines[1].includes('region #2 block parent=1'), regionLines[1])
+assert(regionLines[1].includes('attrs="tiles.placement=\\"cpu\\""'), regionLines[1])
 assert(label('main') && !lines[at('main') + 1].includes('body_attrs'), 'main has no body tag')
 }
 """
