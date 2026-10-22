@@ -11,6 +11,7 @@ Commits: `ab4467165` cleanup, `079d7d8ad` board row. No push.
 **Preserved**
 - Four new handover notes on the introducing commits `83d6558`, `f782b3d`, `97038f3`, `6db90c1`, written with `--no-stripspace` and byte-verified.
 - The existing 204 notes were not rewritten or reordered; with these four the ref has 208, plus this report's note on `ab44671` → 209.
+- Notes are local in `refs/notes/handover`; push that ref together with the branch (nothing was pushed here).
 - Read one with `git notes --ref=handover show <sha>`; the board's `note ⟨sha7⟩` is that argument.
 
 **References: 100 old report paths replaced in 4 files**
