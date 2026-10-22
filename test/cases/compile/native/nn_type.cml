@@ -1,0 +1,13 @@
+/**
+ * The second parameter of `nn:save_params` is the declaration's `string`: an `int` there is
+ * refused at the call, against the declaration in `stdlib/nn.cml`, while the first parameter's
+ * type variable still accepts the `string` argument (handover H19, step 10; H165).
+ */
+module nn_type
+
+import { save_params } from nn
+
+func main(): int sync {
+    save_params('params', 1)
+    return 0
+}

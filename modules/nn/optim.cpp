@@ -474,19 +474,9 @@ const std::vector<oper_group_ptr_t> &optimizerOperatorGroups() {
         OperatorGroup::create(
             "adam",
             {{"nn:adam", std::make_shared<OptimizerResolver>(Kind::Adam)}}),
-        OperatorGroup::create(
-            "save_params",
-            {{"nn:save_params",
-              camel::core::type::DynamicFuncTypeResolver::create(
-                  {{0, {}}, {2, {false, false}}},
-                  "(params: P, dir: string) => void",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (norm[1]->code() != TypeCode::String) {
-                          return std::nullopt;
-                      }
-                      return Type::Void();
-                  })}}),
+        // `save_params` is not here: its signature is declared in `stdlib/nn.cml` (handover H19,
+        // step 10; H165), and the C++ side keeps its kernel (`optimizerKernels`) and its
+        // resource and traits (`NnModule::load`).
     };
     return groups;
 }

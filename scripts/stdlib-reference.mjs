@@ -240,6 +240,29 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/python.cml',
     },
+    {
+        name: 'nn',
+        title: '`nn`: neural-network primitives',
+        kind: 'cpp',
+        // `save_params` is declared in stdlib/nn.cml; the eighteen operators whose signature C++
+        // computes from the tensors they receive (the convolution, pooling, batch-normalization,
+        // embedding and loss operators, and the three optimizers) keep their reference entries in
+        // the signature file named by `computed:` (handover H165).
+        source: 'nn.cml',
+        declaration: true,
+        computed: 'signatures/nn.cml',
+    },
+    {
+        name: 'autodiff',
+        title: '`autodiff`: gradients of functions',
+        kind: 'cpp',
+        // `stop_gradient` is declared in stdlib/autodiff.cml; `grad` and `with_grad` answer a
+        // function built from their argument's type, so their entries are in the signature file
+        // named by `computed:` (handover H165).
+        source: 'autodiff.cml',
+        declaration: true,
+        computed: 'signatures/autodiff.cml',
+    },
 ]
 
 function sourceOf(module) {
@@ -688,8 +711,8 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`)')
-    out.push('and the profiler (`perf`).')
+    out.push('Not in this reference: the `onnx` exporter, the simulation types of `sim` and the')
+    out.push('profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')
     out.push('|---|---|---|---|')

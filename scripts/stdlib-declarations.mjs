@@ -53,12 +53,14 @@
 // Two shapes that the tensor module writes are resolved rather than reported:
 //
 //   - A module that exports the groups of its operator registry
-//     (`for (g : OpRegistry::instance().operatorGroups("<module>"))`, `modules/tensor`). The
-//     names are the OpDef table, so the check reads the C++ skip list (`kDeclaredOperators`)
-//     and requires it to be exactly the declaration names, both ways; the loop then exports
-//     exactly the computed signatures, which `--verify-ops` proves is the rest of the
-//     registered operators. The loop must skip the declared names and publish the
-//     type-qualified alias.
+//     (`for (g : OpRegistry::instance().operatorGroups("<module>"))`, `modules/tensor` and
+//     `modules/nn`, where the registry is reached through `camel::tensor::ops::`). The names are
+//     the OpDef table, so the check reads the C++ skip list (`kDeclaredOperators`) and requires
+//     it to be exactly the declaration names, both ways; the loop then exports exactly the
+//     computed signatures, which `--verify-ops` proves is the rest of the registered operators.
+//     The loop must skip the declared names. A module that publishes a type-qualified alias must
+//     publish it for every registry operator, i.e. from this loop; a module that publishes no
+//     alias at all, like `nn`, need not invent one.
 //
 //   - A type-qualified alias (`exportEntity(Reference({"Tensor", name}), group)`). A
 //     declaration has no syntax for `Tensor.shape`, so C++ publishes it, and the compiler
@@ -66,6 +68,11 @@
 //     (`Module::replaceTypeQualifiedAliases`, handover H151). This is not a second signature:
 //     `--verify-ops` requires the alias to resolve to the same operator as the plain name
 //     (same URI, same parameter counts, which a stale C++ group would not report).
+//
+// A loop over a group factory (`for (g : getOperatorGroups())`, also when the call is qualified)
+// is resolved by reading the `OperatorGroup::create` calls in the factory's body. A module may
+// have both shapes: `nn` exports its tensor operators from the registry and its optimizers from
+// a literal group list.
 //
 // The output is one line per problem, each naming the file, the module and the operator, and a
 // final line starting `migrated modules stay migrated:`. Exit 1 when there is a problem.
@@ -459,9 +466,10 @@ function analyseCpp(dir) {
 
         // `for (g : OpRegistry::instance().operatorGroups("<module>"))`: the group names are the
         // module's operator table, which no text can list; the loop's body says whether the
-        // declared names are skipped and whether the type-qualified alias is exported.
+        // declared names are skipped and whether the type-qualified alias is exported. The
+        // registry may be reached through a namespace (`camel::tensor::ops::OpRegistry`, nn).
         for (const match of text.matchAll(
-            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*OpRegistry\s*::\s*instance\s*\(\s*\)\s*\.\s*operatorGroups\s*\(\s*"([^"]+)"\s*\)\s*\)/g,
+            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*(?:(?:[A-Za-z_]\w*)\s*::\s*)*OpRegistry\s*::\s*instance\s*\(\s*\)\s*\.\s*operatorGroups\s*\(\s*"([^"]+)"\s*\)\s*\)/g,
         )) {
             const brace = text.indexOf('{', match.index + match[0].length)
             const body = brace < 0 ? '' : text.slice(brace, matchDelimiter(text, brace) + 1)
@@ -478,7 +486,7 @@ function analyseCpp(dir) {
         }
 
         for (const match of text.matchAll(
-            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*([A-Za-z_]\w*)\s*\(\s*\)\s*\)\s*\{?\s*exportEntity\s*\(\s*\1\s*->\s*name\s*\(\s*\)\s*,\s*\1\s*\)/g,
+            /\bfor\s*\([^)]*?\b([A-Za-z_]\w*)\s*:\s*(?:(?:[A-Za-z_]\w*)\s*::\s*)*([A-Za-z_]\w*)\s*\(\s*\)\s*\)\s*\{?\s*exportEntity\s*\(\s*\1\s*->\s*name\s*\(\s*\)\s*,\s*\1\s*\)/g,
         )) {
             loops.push({ file: relativeFile, line: lineAt(text, match.index), fn: match[2] })
         }
@@ -631,6 +639,23 @@ function staticChecks() {
                 )
             }
         }
+        // A loop over a group factory names the groups it exports by reading the factory's
+        // `OperatorGroup::create` calls, whether or not the module also exports a registry (`nn`
+        // has one of each).
+        for (const loop of analysis.loops) {
+            const names = loopGroupNames(loop, analysis)
+            if (names === null) {
+                problems.push(
+                    `${loop.file}:${loop.line}: cannot resolve the operator groups the loop over ${loop.fn}() exports; ` +
+                        `give the groups literal names so the export group can be checked against '${module.name}'`,
+                )
+                continue
+            }
+            for (const name of names) exported.add(name)
+        }
+        // Whether the module publishes type-qualified aliases at all: `tensor` publishes
+        // `Tensor.<name>` for every operator, while `nn` publishes plain names only.
+        const publishesAliases = analysis.exports.some((exportedCall) => exportedCall.alias !== null)
         if (registryLoops.length > 0) {
             // The module exports the groups of its OpDef table: the names are not written in
             // C++, so the set is the declarations plus the computed signatures (--verify-ops
@@ -645,7 +670,7 @@ function staticChecks() {
                 )
             }
             for (const loop of registryLoops) {
-                if (!loop.alias) {
+                if (publishesAliases && !loop.alias) {
                     problems.push(
                         `${loop.file}:${loop.line}: the loop over the operator registry does not export the ` +
                             `type-qualified alias of a name; a module that publishes 'Type.name' must publish it ` +
@@ -675,18 +700,6 @@ function staticChecks() {
                 }
             }
             for (const name of computed.keys()) exported.add(name)
-        } else {
-            for (const loop of analysis.loops) {
-                const names = loopGroupNames(loop, analysis)
-                if (names === null) {
-                    problems.push(
-                        `${loop.file}:${loop.line}: cannot resolve the operator groups the loop over ${loop.fn}() exports; ` +
-                            `give the groups literal names so the export group can be checked against '${module.name}'`,
-                    )
-                    continue
-                }
-                for (const name of names) exported.add(name)
-            }
         }
         for (const exportedCall of analysis.exports) {
             if (exportedCall.alias || exportedCall.name || exportedCall.loopVariable) continue

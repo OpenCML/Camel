@@ -315,12 +315,14 @@ bab3430dab252a98 ok showcase/c2-mlp-mnist/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
 e0b5e276c052e5ee ok stdlib/algo.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
+700d7499f9bc23ce ok stdlib/autodiff.cml
 f8a426c8e96936da ok stdlib/bytes.cml
 dd4c782619481c22 ok stdlib/fs.cml
 5f1b2c71c5757202 ok stdlib/graph.cml
 81d50d711442ef6b ok stdlib/io.cml
 6020479adef220b0 ok stdlib/json.cml
 f234da727937674c ok stdlib/math.cml
+c21ebaf80603b717 ok stdlib/nn.cml
 ebb8e94036f7abd2 ok stdlib/para.cml
 173076cd43673a6b ok stdlib/perf.cml
 e16b29b55ac8a7b2 ok stdlib/pyplot.cml
@@ -336,11 +338,13 @@ baf632062421ca18 ok stdlib/this.cml
 34ac0521ab709cc5 ok stdlib/tiles.cml
 f26840bc30a7d5b4 ok stdlib/time.cml
 6451a1f63fbca717 ok stdlib/signatures/algo.cml
+62fdf24f59bff66c ok stdlib/signatures/autodiff.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
 3364937d4942b0ed no stdlib/signatures/globals.cml
 b465908c31d8462a ok stdlib/signatures/hash.cml
 df6e9b39c870578c ok stdlib/signatures/json.cml
+5c8c32730b1852f0 no stdlib/signatures/nn.cml
 a6332d59a0e18fb4 ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
 71655c7c19844d68 no stdlib/signatures/python.cml
@@ -805,6 +809,9 @@ aa6e3c1cddb68984 ok test/cases/compile/namespace_rules/p29_using_block.cml
 7d4b7d2cbe566da2 ok test/cases/compile/native/algo_arity.cml
 c3909d2fbc7c1025 ok test/cases/compile/native/algo_declaration_import.cml
 47020d9a3e7b57ce ok test/cases/compile/native/algo_type.cml
+5b76a5fba93101ea ok test/cases/compile/native/autodiff_arity.cml
+0c07bc19cf9fdf1a ok test/cases/compile/native/autodiff_declaration_import.cml
+c5b342036147478f ok test/cases/compile/native/autodiff_result_type.cml
 f2039bef9588c755 ok test/cases/compile/native/bytes_arity.cml
 a431cbcdbd666629 ok test/cases/compile/native/bytes_tag.cml
 a08398ab5e4ba3b7 ok test/cases/compile/native/bytes_type.cml
@@ -831,6 +838,9 @@ f1ac95a4e23d3d9f ok test/cases/compile/native/math_declaration_import.cml
 ed888d8dffa4e54c ok test/cases/compile/native/math_type.cml
 c7fe2aa20c0b534e ok test/cases/compile/native/missing.cml
 627cb2d4cbd33d70 ok test/cases/compile/native/missing_module.cml
+3b9f20c601a43032 ok test/cases/compile/native/nn_arity.cml
+723a09466e178b62 ok test/cases/compile/native/nn_declaration_import.cml
+b11882de059b8833 ok test/cases/compile/native/nn_type.cml
 90d9fbed9c717036 ok test/cases/compile/native/overlap.cml
 8274f3141730bc8e ok test/cases/compile/native/para_arity.cml
 d00f123e17d236e0 ok test/cases/compile/native/para_declaration_import.cml
@@ -1855,7 +1865,11 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
+<<<<<<< HEAD
 02afa2029ef65f3f ok test/cases/modules/stdlib/registry_all.cml
+=======
+1eb39e79dc2ba3cb ok test/cases/modules/stdlib/registry_all.cml
+>>>>>>> handover/H165-nn-autodiff
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml

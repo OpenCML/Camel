@@ -763,3 +763,74 @@ case = "../../../cases/compile/native/python_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "python_type.cml:11:5", "argument types: <> (int)", "<python:py_import>: (module_name: string) => PyObject"]
+
+# ---- The declarations of `nn` and `autodiff` (handover H165) ----
+#
+# `nn` exports nineteen names. `save_params` is the one with a fixed signature — any value and a
+# directory, returning nothing — so it is declared in `stdlib/nn.cml`; the fifteen tensor
+# operators and the three optimizers take their result type from their arguments (a tensor's
+# dtype and shape, the shape of each tensor of a result tuple, the parameter tree's own type, or
+# `OptimizerState`), and stay in C++ with their reference entries in `stdlib/signatures/nn.cml`.
+# `autodiff` exports three names: `stop_gradient` is the identity on its argument and is declared
+# in `stdlib/autodiff.cml`; `grad` and `with_grad` answer a function built from their argument's
+# type and stay in C++ (`stdlib/signatures/autodiff.cml`).
+#
+# Neither module needs PyTorch, a GPU or a Python interpreter to load, so all six cases run.
+
+[[tests]]
+name = "native.nn_declaration_import"
+desc = "`nn`'s declaration is what an importer sees: `save_params` takes a type-variable value and a `string` directory and returns `void`; the call reaches the C++ operator, which writes the value's tensor leaves as `.npy` files, and a non-tree value is accepted and ignored."
+kind = "behavior"
+case = "../../../cases/compile/native/nn_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\n"
+
+[[tests]]
+name = "native.nn_wrong_arity"
+desc = "`nn:save_params` is declared with two ordinary arguments: one is refused at the call, and the overload the message lists is the declaration's `(params: typeas P, dir: string) => void` — `stdlib/nn.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/nn_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "nn_arity.cml:11:5", "argument types: <> (string)", "<nn:save_params>: (params: typeas P, dir: string) => void"]
+
+[[tests]]
+name = "native.nn_wrong_type"
+desc = "The second parameter of `nn:save_params` is the declaration's `string`: an `int` there is refused at the call, and the listed overload is the declaration's; the first parameter's type variable accepts the `string` argument."
+kind = "negative"
+case = "../../../cases/compile/native/nn_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "nn_type.cml:11:5", "argument types: <> (string, int)", "<nn:save_params>: (params: typeas P, dir: string) => void"]
+
+[[tests]]
+name = "native.autodiff_declaration_import"
+desc = "`autodiff`'s declaration is what an importer sees: `stop_gradient` binds a type variable at its one parameter and gives that type back, so an `int`, a `string` and a tensor all pass through unchanged and reach the C++ operator."
+kind = "behavior"
+case = "../../../cases/compile/native/autodiff_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "7\ntext\n2\n"
+
+[[tests]]
+name = "native.autodiff_wrong_arity"
+desc = "`autodiff:stop_gradient` is declared with one ordinary argument: a second one is refused at the call, and the overload the message lists is the declaration's `(x: typeas T) => T` — `stdlib/autodiff.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/autodiff_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "autodiff_arity.cml:11:26", "argument types: <> (float, float)", "<autodiff:stop_gradient>: (x: typeas T) => T"]
+
+[[tests]]
+name = "native.autodiff_result_type"
+desc = "The result of `autodiff:stop_gradient` is the declaration's type variable instantiated with the argument's type: binding a `float` result to an `int` is refused with the value's type taken from the declaration. A type-variable parameter has no wrong-type case, so this is the type case the declaration can have."
+kind = "negative"
+case = "../../../cases/compile/native/autodiff_result_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::DeclaredTypeMismatch"
+expect_diagnostic_code = "0x03000110"
+expect_diagnostic_line = 12
+expect_diagnostic_column = 5
+expect_output_contains = ["This value has type 'float', which is not the declared type 'int'"]
