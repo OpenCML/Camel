@@ -1,0 +1,21 @@
+/**
+ * H217 probes: the escape table of a formatted string (`...`).
+ *
+ * The same probes as plain.cml, written in backticks. No line interpolates anything, so the
+ * pattern text is the whole string and every backslash pair reaches the one escape table.
+ */
+module escapes_formatted
+
+func main(): int sync {
+    println('101', len(`\101`))
+    println('0', len(`\0`))
+    println('x41', len(`\x41`), `\x41`)
+    println('u', len(`\u{1F600}`))
+    println('n', len(`\n`))
+    println('8', len(`\8`), `\8`)
+    println('0x', len(`\0x`))
+    println('01', len(`\01`))
+    println('012', len(`\012`))
+    println('033', len(`\033`))
+    return 0
+}

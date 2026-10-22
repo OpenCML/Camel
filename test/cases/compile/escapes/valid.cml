@@ -1,0 +1,13 @@
+/**
+ * H217: the escapes that stay valid, in the three string forms. Nothing here is an unknown
+ * escape, so the program compiles and runs without a warning.
+ */
+module escapes_valid
+
+func main(): int sync {
+    println('plain', len('\0'), len('\x41'), len('\u{1F600}'), len('\n'), len('\0x'))
+    println('formatted', len(`\0`), len(`\x41`), len(`\u{1F600}`), len(`\n`), len(`\0x`))
+    println('triple', len('''\0'''), len('''\x41'''), len('''\u{1F600}'''), len('''\n'''), len('''\0x'''))
+    println('\x41', '\u{4E2D}')
+    return 0
+}

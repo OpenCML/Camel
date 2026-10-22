@@ -361,7 +361,25 @@ Invalid escape sequence in string: {0}.
 Check and correct the escape sequence.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/escapes/plain.cml`, run as `camel test/cases/compile/escapes/plain.cml`)
+
+```camel
+module escapes_plain
+
+func main(): int sync {
+    println('101', len('\101'))
+    println('0', len('\0'))
+    println('x41', len('\x41'), '\x41')
+    println('u', len('\u{1F600}'))
+    println('n', len('\n'))
+    println('8', len('\8'), '\8')
+    println('0x', len('\0x'))
+    println('01', len('\01'))
+    println('012', len('\012'))
+    println('033', len('\033'))
+    return 0
+}
+```
 
 ## Syntax (`SyntaxDiag`)
 

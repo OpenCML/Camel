@@ -13,7 +13,7 @@ type Point = {
 }
 
 func render(snake: Point[]): void sync {
-    print('\033[2J\033[H')  // Clear screen
+    print('\x1B[2J\x1B[H')  // Clear screen
     let rows = range(0, HEIGHT)
 
     rows->foreach<(y: int) => sync {

@@ -9,7 +9,7 @@ module parse_constructs_literals
 func main(): int sync {
     let single = 'it\'s a string'
     let double = "a \"quoted\" word"
-    let escapes = "tab\tnl\nhex\x41oct\033nul\0"
+    let escapes = "tab\tnl\nhex\x41esc\x1Bnul\0"
     let unicode = "mid \u{4E2D} end"
     let spanning = "first
 second"

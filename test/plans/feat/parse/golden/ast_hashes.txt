@@ -4,7 +4,7 @@ d3a33132872dd146 ok test/cases/parse/constructs/comprehensions.cml
 11c6bdc4678327e6 ok test/cases/parse/constructs/constas.cml
 ce74d4080198588d ok test/cases/parse/constructs/enum.cml
 a0ff4481152866ba ok test/cases/parse/constructs/fstring.cml
-8b6319963647d58f ok test/cases/parse/constructs/literals.cml
+3bb4efc9848f9c19 ok test/cases/parse/constructs/literals.cml
 326168a4d17c030c ok test/cases/parse/constructs/operator_name.cml
 78c6cd93e2a03373 ok test/cases/parse/constructs/rest_signature.cml
 3986c998a3060a23 ok test/cases/parse/constructs/static_loop.cml

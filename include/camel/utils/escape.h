@@ -13,16 +13,20 @@
  *
  * Author: Zhenjie Wei
  * Created: Sep. 27, 2025
- * Updated: Oct. 19, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <iomanip>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "camel/utils/utf8.h"
 
@@ -89,10 +93,39 @@ inline std::string encodeEscapes(const std::string &input) {
 /// produces (`\x7B`, `\u{7B}`) is a literal brace of the pattern, and `format` reads an undoubled
 /// `{` as the start of a placeholder; the braces written in the text were already doubled by the
 /// AST builder, so the ones decoded here are doubled now. Every other string passes false.
-inline std::string decodeEscapes(const std::string &input, bool doubleBraces = false) {
+///
+/// The escapes are `\0`, `\xHH`, `\u{H…}` and the named ones (H89: the set is the one of Rust).
+/// Everything else is an unknown escape: it is kept as written and, when `unknownEscapes` is not
+/// null, its spelling (the backslash and the character, or the whole octal-looking run) is
+/// appended there, without repeats, for the caller to report as an unknown escape. In particular
+/// an octal escape is cancelled: `\101` is the four characters `\101`, and `\01` is not the byte
+/// 0x01 -- a `0` followed by another octal digit is an unknown escape too, not `\0` and a `1`.
+inline std::string decodeEscapes(
+    const std::string &input, bool doubleBraces = false,
+    std::vector<std::string> *unknownEscapes = nullptr) {
     std::ostringstream oss;
     size_t i   = 0;
     size_t len = input.length();
+
+    const auto noteUnknown = [unknownEscapes](std::string spelling) {
+        if (!unknownEscapes) {
+            return;
+        }
+        if (std::find(unknownEscapes->begin(), unknownEscapes->end(), spelling) ==
+            unknownEscapes->end()) {
+            unknownEscapes->push_back(std::move(spelling));
+        }
+    };
+    // `\` at `at` followed by up to three octal digits: the run an unknown octal escape is named
+    // by. Only ever called when the character after the backslash is 0 to 7.
+    const auto octalRun = [&input, len](size_t at) {
+        std::string run(1, '\\');
+        for (size_t j = at + 1; j < len && run.size() <= 3 && input[j] >= '0' && input[j] <= '7';
+             ++j) {
+            run += input[j];
+        }
+        return run;
+    };
 
     const auto put = [&oss, doubleBraces](char ch) {
         oss << ch;
@@ -160,21 +193,28 @@ inline std::string decodeEscapes(const std::string &input, bool doubleBraces = f
                 oss << '$';
                 i += 2;
                 break;
-            case '0': { // \0 followed by up to two more octal digits: one byte, 0 to 0o77
-                size_t j = i + 1;
-                std::string oct;
-                while (j < len && oct.length() < 3 && input[j] >= '0' && input[j] <= '7') {
-                    oct += input[j];
-                    ++j;
-                }
-                if (!oct.empty()) {
-                    char ch = static_cast<char>(std::stoi(oct, nullptr, 8));
-                    put(ch);
-                    i = j;
-                } else {
-                    oss << '\0'; // A standalone \0
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+                // An octal escape without the leading zero: unknown since H89. It is kept as
+                // written, and reported with the whole run it spells.
+                noteUnknown(octalRun(i));
+                oss << '\\' << next;
+                i += 2;
+                break;
+            case '0': { // a bare \0 is the null byte; \0 followed by an octal digit is unknown
+                if (i + 2 < len && input[i + 2] >= '0' && input[i + 2] <= '7') {
+                    noteUnknown(octalRun(i));
+                    oss << '\\' << next;
                     i += 2;
+                    break;
                 }
+                oss << '\0';
+                i += 2;
             } break;
 
             case 'x': { // \xHH hexadecimal
@@ -222,6 +262,8 @@ inline std::string decodeEscapes(const std::string &input, bool doubleBraces = f
             } break;
 
             default:
+                // Any other backslash pair is an unknown escape: kept as written, reported.
+                noteUnknown(std::string(1, '\\') + next);
                 oss << '\\' << next;
                 i += 2;
                 break;
