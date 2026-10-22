@@ -1,0 +1,28 @@
+/**
+ * `_` in the head of a `static for` or a `static loop` is the wildcard of `match`: the round is
+ * walked and that position binds nothing. `(n, _)` keeps the field name and drops the type name,
+ * `(_, F)` the other way round: `F` is still a bound type, passed here as an explicit type
+ * argument, and the field name has no value to shadow.
+ */
+module static_for_wildcard
+
+/// The field names of `T`, in order; the type name is not bound.
+func names_of::<T>(t: T) {
+    return ( static for (n, _) in fields T => n )
+}
+
+/// The number of fields: the field name is not bound, and `F` is still a type.
+func arity_of::<T>(t: T): int {
+    return static loop n = 0 for (_, F) in fields T do {
+        let empty: F[] = []
+        n + 1
+    }
+}
+
+func main(): int sync {
+    println(names_of({a: 1, b: (2, 3)}))
+    println(names_of((4, 5)))
+    println(arity_of({a: 1, b: (2, 3)}))
+    println(arity_of((4, 5)))
+    return 0
+}

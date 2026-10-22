@@ -4203,7 +4203,7 @@ The key '{0}' of a 't.[...]' access is not known when the function is compiled.
 **Help**
 
 ```text
-The key is a string or integer literal, or the 'n' of an enclosing 'static for'. A runtime value cannot choose a field, because only the selected field is built into the graph.
+The key is a string or integer literal, the 'n' of an enclosing 'static for', or an expression whose value is known at compile time, such as a 'let' bound once to such a value. A run-time value (a 'var', a parameter) cannot choose a field, because only the selected field is built into the graph.
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_access_not_constant.cml`, run as `camel test/cases/compile/static_expansion/static_access_not_constant.cml`)
@@ -5112,7 +5112,7 @@ The 'when' condition of '{0}' is not a bool (it is '{1}').
 **Help**
 
 ```text
-A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: write one of the compiler's type queries ('is_numeric::<T>()', 'is_function::<F>()'), possibly combined with '!', '&&' and '||'. It is not a runtime value.
+A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: write one of the standard type queries ('is_numeric::<T>()', 'is_function::<F>()') or call a pure function of the library ('has_field::<T>('w')'), possibly combined with '!', '&&' and '||'. It is not a runtime value.
 ```
 
 **Example** (`test/cases/compile/when/non_bool.cml`, run as `camel test/cases/compile/when/non_bool.cml`)

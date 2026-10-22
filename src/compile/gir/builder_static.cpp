@@ -119,10 +119,12 @@ void Builder::walkStaticBodyNames(
     }
     case GCT::NodeKind::SFOR: {
         // `n` is bound in the body only. The type name `F` is not a value, so a use of it in
-        // a value position stays unresolved, as it should.
+        // a value position stays unresolved, as it should. `_` (the wildcard of `match`) binds
+        // nothing, so a use of it stays unresolved too.
         locals.emplace_back();
-        if (!node->staticForValueName().empty()) {
-            locals.back().insert(node->staticForValueName());
+        const std::string &valueName = node->staticForValueName();
+        if (!valueName.empty() && valueName != "_") {
+            locals.back().insert(valueName);
         }
         walkStaticBodyNames(node->staticForBody(), locals);
         locals.pop_back();
@@ -135,7 +137,10 @@ void Builder::walkStaticBodyNames(
             walkStaticBodyNames(node->staticLoopInitial(j), locals);
         }
         locals.emplace_back();
-        locals.back().insert(node->staticLoopValueName());
+        const std::string &valueName = node->staticLoopValueName();
+        if (valueName != "_") {
+            locals.back().insert(valueName);
+        }
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             locals.back().insert(node->staticLoopStateName(j));
         }
@@ -342,7 +347,11 @@ node_handle_t Builder::visitStaticForNode(
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         }
         staticValueScopes_.emplace_back();
-        staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        if (valueName != "_") {
+            // `_` is a place that binds nothing (the wildcard of `match`): a use of it must not
+            // find a value. Every other name of the head becomes a compile-time value here.
+            staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        }
         enterBlockScope();
         const GCT::Node *outerUnused = std::exchange(unusedStatement_, body);
         const GCT::Node *outerSyncedBlock =
@@ -461,7 +470,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     // (n, F)` would read the state where it meant the field.
     {
         std::unordered_set<std::string> names;
-        names.insert(valueName);
+        if (valueName != "_") {
+            names.insert(valueName);
+        }
         for (size_t j = 0; j < k; ++j) {
             if (!names.insert(gct->staticLoopStateName(j)).second) {
                 diags_->of(SemanticDiag::LoopNameRepeated)
@@ -506,7 +517,9 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         }
         staticValueScopes_.emplace_back();
-        staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        if (valueName != "_") {
+            staticValueScopes_.back().push_back({valueName, entryName, indexNode});
+        }
         enterBlockScope();
         for (size_t j = 0; j < k; ++j) {
             // The state names read the previous round's value; each round has its own block
@@ -772,9 +785,10 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
     ENTER("SACC");
     const GCT::node_ptr_t keyNode = gct->staticAccessKey();
 
-    // The key is a compile-time constant: a literal, the `n` of an enclosing `static for`, or an
-    // expression whose value is known at build time (`field_names::<S>()[0]` in the library is
-    // such an expression: a comprehension over the field names, indexed at 0).
+    // The key is a compile-time constant: a literal, the `n` of an enclosing `static for`, a
+    // name bound once to a constant (`let first = ( static for ... ).[0]`), or an expression
+    // whose value is known at build time (`( static for (n, F) in fields S => n ).[0]` in the
+    // library is such an expression: a comprehension over the field names, indexed at 0).
     const auto keyOfData = [](const data_ptr_t &data) -> std::optional<std::string> {
         if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
             return text->data();
@@ -790,8 +804,18 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
     std::optional<std::string> key;
     if (keyNode->type() == GCT::NodeKind::DATA) {
         key = keyOfData(keyNode->data());
-    } else if (keyNode->type() == GCT::NodeKind::DREF && !nodeAt(keyNode->name()).has_value()) {
-        key = staticValueNamed(keyNode->name());
+    } else if (keyNode->type() == GCT::NodeKind::DREF) {
+        const auto bound = nodeAt(keyNode->name());
+        if (!bound.has_value()) {
+            key = staticValueNamed(keyNode->name());
+        } else if (!isVariable(*bound)) {
+            // A `let` bound to a value the compiler knows is a constant too: the binding is
+            // immutable, and `first_leaf` in the library names the first field once this way.
+            // A `var` is not: it can be assigned another key before the access.
+            if (data_ptr_t data = constantOfNode(*bound)) {
+                key = keyOfData(data);
+            }
+        }
     }
     if (!key.has_value() && keyNode->type() != GCT::NodeKind::DATA &&
         keyNode->type() != GCT::NodeKind::DREF) {

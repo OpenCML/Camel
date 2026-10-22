@@ -8,7 +8,10 @@
  * `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
  * `static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
  * expanded at each call into ordinary access and fill nodes, with no function of its own per
- * leaf type.
+ * leaf type. Each exported function recurses itself. `paths_at` and `unzip_at` stay because
+ * they carry a value the exported signature does not have (the path built so far, the component
+ * of the leaf tuple): a default argument would fold the first one into `tree_paths` (the
+ * language has none yet), and the second is not a hand-off but the walk of one component.
  *
  * `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
  * leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
@@ -29,12 +32,13 @@ export func tree_paths::<T>(t: T) {
     return paths_at(t, '')
 }
 
+/// `here` is the path of `t` itself; the public one starts it as the empty string.
 func paths_at::<T>(t: T, here: string) {
     return match type T {
         // `T { ... }`: the result has the field names and the kind of `T`, and a string at each
         // one. The old spelling needed one branch for structs and one for tuples.
         case struct | tuple =>
-            T { static for (n, F) in fields T => paths_at(t.[n], dotted(here, n)) }
+            T { static for (n, _) in fields T => paths_at(t.[n], dotted(here, n)) }
         case _ => here
     }
 }
@@ -52,14 +56,9 @@ func dotted(a: string, b: string): string {
 /// @example tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
 with <f: F>
 export func tree_map::<T, F>(t: T, ..ts) {
-    return map_at<f>(t, ..ts)
-}
-
-with <f: F>
-func map_at::<T, F>(t: T, ..ts) {
     return match type T {
-        case struct | tuple => T { static for (n, G) in fields T =>
-            map_at<f>(t.[n], ..( static for (j) in indices ts => ts.[j].[n] )) }
+        case struct | tuple => T { static for (n, _) in fields T =>
+            tree_map<f>(t.[n], ..( static for (j) in indices ts => ts.[j].[n] )) }
         case _ => f(t, ..( static for (j) in indices ts => ts.[j] ))
     }
 }
@@ -69,15 +68,10 @@ func map_at::<T, F>(t: T, ..ts) {
 /// @example tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)    // 6
 with <f: (acc: R, leaf: A) => R>
 export func tree_reduce::<T, R, A>(t: T, init: R): R {
-    return reduce_at<f>(t, init)
-}
-
-with <f: (acc: R, leaf: A) => R>
-func reduce_at::<T, R, A>(t: T, acc: R): R {
     return match type T {
         case struct | tuple =>
-            static loop a = acc for (n, G) in fields T do reduce_at<f>(t.[n], a)
-        case _ => f(acc, t)
+            static loop a = init for (n, _) in fields T do tree_reduce<f>(t.[n], a)
+        case _ => f(init, t)
     }
 }
 
@@ -86,30 +80,25 @@ func reduce_at::<T, R, A>(t: T, acc: R): R {
 /// @pure
 /// @example tree_unzip({ a: (1, 2.0) }, { a: 0 })    // ({ a: 1 }, { a: 2.0 })
 export func tree_unzip::<R, S>(r: R, s: S) {
-    return unzip_trees(r, s)
+    return ( static for (j, _) in fields typeof(first_leaf(r, s)) => unzip_at(r, s, j) )
 }
 
-/// Any leaf of `r`: its type is the leaf tuple. The first field is taken by position, from the
-/// field names the walk over `S` already gives: no `return` inside a `static for` is needed.
+/// Any leaf of `r`: its type is the leaf tuple. The first field name is bound once, as a
+/// compile-time constant, and used for both trees.
 func first_leaf::<R, S>(r: R, s: S) {
     return match type S {
-        case struct | tuple => first_leaf(
-            r.[( static for (n, G) in fields S => n ).[0]],
-            s.[( static for (n, G) in fields S => n ).[0]])
+        case struct | tuple => {
+            let first = ( static for (n, _) in fields S => n ).[0]
+            first_leaf(r.[first], s.[first])
+        }
         case _ => r
     }
-}
-
-/// One tree per component of the leaf tuples. The leaf type is `typeof(first_leaf(r, s))`:
-/// there is no sample argument, and the number of trees is read from the type at the call.
-func unzip_trees::<R, S>(r: R, s: S) {
-    return ( static for (j, C) in fields typeof(first_leaf(r, s)) => unzip_at(r, s, j) )
 }
 
 /// The tree of one component of the leaf tuples: `j` names the component everywhere.
 func unzip_at::<R, S>(r: R, s: S, constas j: string) {
     return match type S {
-        case struct | tuple => S { static for (n, G) in fields S => unzip_at(r.[n], s.[n], j) }
+        case struct | tuple => S { static for (n, _) in fields S => unzip_at(r.[n], s.[n], j) }
         case _ => r.[j]
     }
 }

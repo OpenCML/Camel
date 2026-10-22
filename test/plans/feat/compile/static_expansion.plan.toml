@@ -308,7 +308,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_access_shadowed_key"
-desc = "A local named like the field name shadows the static `n`; the key is then a runtime value, not a constant."
+desc = "A `var` named like the field name shadows the static `n`: its value can change before the access, so the key is a run-time value even though it starts as a literal."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/static_access_shadowed_key.cml"
 args = ["${case}"]
@@ -762,5 +762,38 @@ case = "../../../cases/compile/static_expansion/shape_not_composite.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionNotComposite"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_for_wildcard"
+desc = "`_` in the head of `static for`/`static loop` is the wildcard of `match`: `(n, _)` keeps the field name and drops the type name, `(_, F)` keeps the type name while the field name binds nothing, and each is walked once per field."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_for_wildcard.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "(a, b)\n(0, 1)\n2\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_named_constant"
+desc = "A `let` bound once to a compile-time constant is a key of `t.[...]`: the first field name is written once and used on every tree, which is what `first_leaf` in the tree library does."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_access_named_constant.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_access_var_is_not_constant"
+desc = "A `var` that starts as a literal is still a run-time value: it can hold another key at the access, so `t.[k]` is refused like any other run-time key."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_access_not_constant_var.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticAccessNotConstant"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

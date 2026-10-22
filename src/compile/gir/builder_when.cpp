@@ -10,19 +10,24 @@
  * a false condition makes the declaration inapplicable rather than erroneous. A condition the
  * compiler cannot answer is reported, never taken for `true`.
  *
- * The predicates are the compiler's own type queries (`is_numeric::<T>()` and the others),
- * not functions of the library: the standard library is compiled by the same compiler, and a
- * query has to be answered before a body can be built for the type it asks about.
+ * The predicates are compile-time functions: the standard type queries (`is_numeric::<T>()` and
+ * the others), which name properties no Camel type expression writes and so are answered by the
+ * compiler, and any pure function of the library, answered when the declaration is instantiated.
+ * A `match type` predicate the user writes (`has_field::<T>('w')` and the like) is the second
+ * kind: its body is Camel, and it is folded over the constants the condition gives.
  */
 
 #include "builder.h"
 #include "builder_support.h"
 
 #include "camel/core/data/primary.h"
+#include "camel/core/type/tree.h"
 #include "camel/core/type/typevar.h"
 
+#include <format>
 #include <optional>
 #include <string_view>
+#include <unordered_map>
 
 #define DEBUG_LEVEL -1
 
@@ -72,6 +77,272 @@ bool isTypeQuery(const std::string &name) {
            name == "is_ordered" || name == "is_function" || name == "is_string" ||
            name == "is_bool";
 }
+
+/// A condition may call a function of the library: a `match type` predicate is one, and its
+/// body is ordinary Camel. The instance's graph answers it when the result is a constant of the
+/// graph (the common case: every arm of `match type` ends in `true` or `false`). A body that
+/// computes the answer from a value argument (`has_field::<T>('w')` folds the field names of T)
+/// leaves a graph of operators instead; the same GCT the graph is built from is then walked
+/// here, over the constants the call gives. Only pure forms are walked: data, names, blocks,
+/// `match type`, `static for`/`static loop`, branches and the comparison operators.
+struct EvalFailure {
+    std::string why;
+};
+
+struct EarlyReturn {
+    data_ptr_t value = nullptr;
+};
+
+data_ptr_t makeBool(bool value) {
+    return std::make_shared<PrimaryData<bool>>(value);
+}
+
+bool asBool(const data_ptr_t &data, bool &value) {
+    auto primary = std::dynamic_pointer_cast<PrimaryData<bool>>(data);
+    if (primary == nullptr) {
+        return false;
+    }
+    value = primary->data();
+    return true;
+}
+
+class GctConstantEvaluator {
+  public:
+    GctConstantEvaluator(
+        const GCT::node_ptr_t &func, camel::core::type::type_bindings_t vars,
+        std::vector<data_ptr_t> args)
+        : func_(func), vars_(std::move(vars)) {
+        FunctionType *type = tt::as_ptr<FunctionType>(func->at(0)->dataType());
+        const size_t with  = type->withTypesCount();
+        for (size_t i = 0; i < type->normTypesCount() && i < args.size(); ++i) {
+            env_[std::string(type->argNameAt(with + i))] = std::move(args[i]);
+        }
+    }
+
+    data_ptr_t run() {
+        try {
+            eval(func_->at(1));
+        } catch (const EarlyReturn &early) {
+            return early.value;
+        }
+        return nullptr;
+    }
+
+  private:
+    Type *bound(Type *type) const {
+        return camel::core::type::substituteTypeVars(type, vars_);
+    }
+
+    data_ptr_t eval(const GCT::node_ptr_t &node) {
+        if (node == nullptr) {
+            return nullptr;
+        }
+        using Kind = GCT::NodeKind;
+        switch (node->type()) {
+        case Kind::DATA:
+            return node->data();
+        case Kind::TYPE:
+            return nullptr;
+        case Kind::DREF: {
+            const auto found = env_.find(node->name());
+            if (found == env_.end()) {
+                throw EvalFailure{
+                    "the predicate reads '" + node->name() +
+                    "', which this compile-time evaluation does not have"};
+            }
+            return found->second;
+        }
+        case Kind::NREF:
+        case Kind::VARI: {
+            data_ptr_t value = eval(node->size() > 0 ? node->at(0) : nullptr);
+            env_[node->name()] = value;
+            return value;
+        }
+        case Kind::EXEC: {
+            data_ptr_t last = nullptr;
+            for (size_t i = 0; i < node->size(); ++i) {
+                last = eval(node->at(i));
+            }
+            return last;
+        }
+        case Kind::EXIT:
+            throw EarlyReturn{eval(node->size() > 0 ? node->at(0) : nullptr)};
+        case Kind::CAST:
+            return eval(node->size() > 0 ? node->at(0) : nullptr);
+        case Kind::TMTCH:
+            return evalTypeMatch(node);
+        case Kind::SFOR:
+            return evalStaticFor(node);
+        case Kind::SLOOP:
+            return evalStaticLoop(node);
+        case Kind::BRCH:
+            return evalBranch(node);
+        case Kind::CASE:
+            return eval(node->size() > 0 ? node->at(0) : nullptr);
+        case Kind::LINK:
+            return evalCall(node);
+        case Kind::TAPP:
+            throw EvalFailure{
+                "the predicate calls another generic function; only a direct call or the "
+                "standard predicates are evaluated at compile time"};
+        default:
+            throw EvalFailure{
+                "the predicate uses a construct this compile-time evaluation does not read (kind " +
+                std::to_string(static_cast<int>(node->type())) + ")"};
+        }
+    }
+
+    data_ptr_t evalTypeMatch(const GCT::node_ptr_t &node) {
+        Type *subject = bound(node->at(0)->dataType());
+        uint16_t shape = 0;
+        if (subject->code() == TypeCode::Struct) {
+            shape = GCT::typeCaseBit(GCT::TypeCaseKind::Struct);
+        } else if (subject->code() == TypeCode::Tuple && tree::isInternal(subject)) {
+            shape = GCT::typeCaseBit(GCT::TypeCaseKind::Tuple);
+        } else {
+            shape = GCT::typeCaseBit(GCT::TypeCaseKind::Leaf);
+        }
+        const uint16_t wildcard = GCT::typeCaseBit(GCT::TypeCaseKind::Wildcard);
+        for (size_t i = 1; i < node->size(); ++i) {
+            const GCT::node_ptr_t &arm = node->at(i);
+            if ((arm->typeCasePatterns() & (shape | wildcard)) != 0) {
+                return eval(arm->size() > 0 ? arm->at(0) : nullptr);
+            }
+        }
+        throw EvalFailure{"no case of the predicate's 'match type' matches " + subject->toString()};
+    }
+
+    data_ptr_t evalStaticFor(const GCT::node_ptr_t &node) {
+        Type *subject = bound(node->staticForOperand()->dataType());
+        if (!tree::isInternal(subject)) {
+            throw EvalFailure{
+                "the predicate walks the fields of a type that is not a struct or a tuple"};
+        }
+        const std::string valueName = node->staticForValueName();
+        const std::string typeName  = node->staticForTypeName();
+        const auto saved            = env_;
+        for (size_t i = 0; i < tree::arity(subject); ++i) {
+            env_ = saved;
+            env_[valueName] = std::make_shared<StringData>(tree::childName(subject, i));
+            if (!typeName.empty()) {
+                typeEnv_[typeName] = tree::childType(subject, i);
+            }
+            eval(node->staticForBody());
+        }
+        env_ = saved;
+        return nullptr;
+    }
+
+    data_ptr_t evalStaticLoop(const GCT::node_ptr_t &node) {
+        Type *subject = bound(node->staticLoopOperand()->dataType());
+        if (!tree::isInternal(subject)) {
+            throw EvalFailure{
+                "the predicate walks the fields of a type that is not a struct or a tuple"};
+        }
+        const size_t count = node->staticLoopStateCount();
+        std::vector<std::string> names;
+        std::vector<data_ptr_t> state;
+        for (size_t j = 0; j < count; ++j) {
+            names.push_back(node->staticLoopStateName(j));
+            state.push_back(eval(node->staticLoopInitial(j)));
+        }
+        const std::string valueName = node->staticLoopValueName();
+        const std::string typeName  = node->staticLoopTypeName();
+        const auto saved            = env_;
+        for (size_t i = 0; i < tree::arity(subject); ++i) {
+            env_ = saved;
+            for (size_t j = 0; j < count; ++j) {
+                env_[names[j]] = state[j];
+            }
+            env_[valueName] = std::make_shared<StringData>(tree::childName(subject, i));
+            if (!typeName.empty()) {
+                typeEnv_[typeName] = tree::childType(subject, i);
+            }
+            data_ptr_t round = eval(node->staticLoopBody());
+            if (count == 1) {
+                state[0] = round;
+            } else {
+                throw EvalFailure{"a 'static loop' with several states is not evaluated here"};
+            }
+        }
+        env_ = saved;
+        return count == 0 ? nullptr : state[0];
+    }
+
+    data_ptr_t evalBranch(const GCT::node_ptr_t &node) {
+        const GCT::BranchKind kind = node->branchKind();
+        if (kind == GCT::BranchKind::LogicalAnd || kind == GCT::BranchKind::LogicalOr) {
+            bool left = false;
+            if (!asBool(eval(node->at(0)), left)) {
+                throw EvalFailure{"the left side of a logical operator is not a bool"};
+            }
+            if (kind == GCT::BranchKind::LogicalAnd && !left) {
+                return makeBool(false);
+            }
+            if (kind == GCT::BranchKind::LogicalOr && left) {
+                return makeBool(true);
+            }
+            for (size_t i = 1; i < node->size(); ++i) {
+                const GCT::node_ptr_t &arm = node->at(i);
+                const bool wanted = kind == GCT::BranchKind::LogicalAnd
+                                        ? arm->caseType() == GCT::CaseType::True
+                                        : arm->caseType() == GCT::CaseType::Else;
+                if (wanted) {
+                    return eval(arm->size() > 0 ? arm->at(0) : nullptr);
+                }
+            }
+            throw EvalFailure{"a logical branch has no arm for the side taken"};
+        }
+        if (kind == GCT::BranchKind::Cond) {
+            bool test = false;
+            if (!asBool(eval(node->at(0)), test)) {
+                throw EvalFailure{"the condition of an 'if' is not a bool"};
+            }
+            for (size_t i = 1; i < node->size(); ++i) {
+                const GCT::node_ptr_t &arm = node->at(i);
+                const bool wanted = test ? arm->caseType() == GCT::CaseType::True
+                                         : arm->caseType() == GCT::CaseType::Else;
+                if (wanted) {
+                    return eval(arm->size() > 0 ? arm->at(0) : nullptr);
+                }
+            }
+            return nullptr;
+        }
+        throw EvalFailure{"the predicate branches on a value this compile-time evaluation cannot compare"};
+    }
+
+    data_ptr_t evalCall(const GCT::node_ptr_t &node) {
+        const GCT::node_ptr_t &callee = node->at(0);
+        const std::string name = callee->type() == GCT::NodeKind::DREF ? callee->name() : "";
+        std::vector<data_ptr_t> args;
+        for (size_t i = 1; i < node->size(); ++i) {
+            args.push_back(eval(node->at(i)));
+        }
+        if (name == "__eq__" || name == "__ne__") {
+            if (args.size() != 2) {
+                throw EvalFailure{"a comparison does not have two sides"};
+            }
+            const bool equal = args[0] != nullptr && args[1] != nullptr &&
+                               args[0]->equals(args[1]);
+            return makeBool(name == "__eq__" ? equal : !equal);
+        }
+        if (name == "__not__") {
+            bool value = false;
+            if (args.size() != 1 || !asBool(args[0], value)) {
+                throw EvalFailure{"'!' is applied to something that is not a bool"};
+            }
+            return makeBool(!value);
+        }
+        throw EvalFailure{
+            "the predicate calls '" + (name.empty() ? std::string("an expression") : name) +
+            "', which this compile-time evaluation cannot run"};
+    }
+
+    GCT::node_ptr_t func_;
+    camel::core::type::type_bindings_t vars_;
+    std::unordered_map<std::string, data_ptr_t> env_;
+    std::unordered_map<std::string, Type *> typeEnv_;
+};
 
 } // namespace
 
@@ -196,33 +467,136 @@ WhenResult Builder::evaluateWhenCondition(
             // `is_numeric::<T>()`: the type application is the callee; there are no runtime
             // arguments.
             if (callee->type() == GCT::NodeKind::TAPP) {
-                if (node->size() != 1) {
+                if (callee->size() < 2 || callee->at(0)->type() != GCT::NodeKind::DREF) {
                     local.outcome = WhenOutcome::NotEvaluable;
-                    local.detail  = "a type query takes no value arguments";
-                    return local;
-                }
-                if (callee->size() != 2 || callee->at(0)->type() != GCT::NodeKind::DREF ||
-                    callee->at(1)->type() != GCT::NodeKind::TYPE) {
-                    local.outcome = WhenOutcome::NotEvaluable;
-                    local.detail  = "a type query takes one type argument";
+                    local.detail  = "a type application in a condition names no function";
                     return local;
                 }
                 const std::string name = queryName(callee->at(0)->name());
-                if (!isTypeQuery(name)) {
+                // The standard predicates are still the compiler's own (see the note below);
+                // anything else is an ordinary function of the library, run at compile time.
+                if (isTypeQuery(name)) {
+                    if (node->size() != 1) {
+                        local.outcome = WhenOutcome::NotEvaluable;
+                        local.detail  = "a type query takes no value arguments";
+                        return local;
+                    }
+                    if (callee->size() != 2 || callee->at(1)->type() != GCT::NodeKind::TYPE) {
+                        local.outcome = WhenOutcome::NotEvaluable;
+                        local.detail  = "a type query takes one type argument";
+                        return local;
+                    }
+                    Type *asked = substituteTypeVars(callee->at(1)->dataType(), bindings);
+                    if (asked == nullptr || containsTypeVar(asked)) {
+                        local.outcome = WhenOutcome::TypeNotConcrete;
+                        local.subject = name;
+                        local.detail  = asked != nullptr ? asked->toString() : std::string("?");
+                        return local;
+                    }
+                    local.outcome = answersTypeQuery(name, asked) ? WhenOutcome::Holds
+                                                                 : WhenOutcome::Fails;
+                    return local;
+                }
+                // A predicate of the library: a generic function instantiated with the types
+                // written between `::<` and `>`, and answered by its own body. Its result must
+                // be a constant of the graph the instance builds -- a `match type` predicate
+                // is one, and so is a function that returns such a value.
+                const template_ptr_t tmpl = templateScope_ != nullptr
+                                                ? templateScope_->get(name).value_or(nullptr)
+                                                : nullptr;
+                if (tmpl == nullptr) {
                     local.outcome = WhenOutcome::NotEvaluable;
-                    local.subject = callee->at(0)->name();
-                    local.detail  = "only the compiler's type queries can be evaluated here";
-                    return local;
-                }
-                Type *asked = substituteTypeVars(callee->at(1)->dataType(), bindings);
-                if (asked == nullptr || containsTypeVar(asked)) {
-                    local.outcome = WhenOutcome::TypeNotConcrete;
                     local.subject = name;
-                    local.detail  = asked != nullptr ? asked->toString() : std::string("?");
+                    local.detail =
+                        "no compile-time function of that name is visible here; a condition "
+                        "calls the standard predicates or a generic function of this module";
                     return local;
                 }
-                local.outcome = answersTypeQuery(name, asked) ? WhenOutcome::Holds
-                                                              : WhenOutcome::Fails;
+                std::vector<std::string> parameters = typeParameterNames(tmpl);
+                std::vector<Type *> arguments;
+                for (size_t i = 1; i < callee->size(); ++i) {
+                    if (callee->at(i)->type() != GCT::NodeKind::TYPE) {
+                        local.outcome = WhenOutcome::NotEvaluable;
+                        local.detail  = "a type argument here is not a type";
+                        return local;
+                    }
+                    arguments.push_back(substituteTypeVars(callee->at(i)->dataType(), bindings));
+                }
+                if (arguments.size() != parameters.size()) {
+                    local.outcome = WhenOutcome::NotEvaluable;
+                    local.subject = name;
+                    local.detail  = std::format(
+                        "the condition gives {} type argument(s) and the predicate declares {}",
+                        arguments.size(),
+                        parameters.size());
+                    return local;
+                }
+                for (Type *argument : arguments) {
+                    if (argument == nullptr || containsTypeVar(argument)) {
+                        local.outcome = WhenOutcome::TypeNotConcrete;
+                        local.subject = name;
+                        local.detail  = argument != nullptr ? argument->toString() : std::string("?");
+                        return local;
+                    }
+                }
+                // A value argument has to be a constant; the instance's body may read it, and
+                // only a constant is available while the declaration is being selected.
+                std::vector<data_ptr_t> valueArgs;
+                for (size_t i = 1; i < node->size(); ++i) {
+                    const GCT::node_ptr_t &argument = node->at(i);
+                    if (argument->type() != GCT::NodeKind::DATA) {
+                        local.outcome = WhenOutcome::NeedsWithValue;
+                        local.subject = name;
+                        local.detail =
+                            "the predicate is called with a value that is not a compile-time "
+                            "constant";
+                        return local;
+                    }
+                    valueArgs.push_back(argument->data());
+                }
+                type_bindings_t callBindings = tmpl->outerBindings;
+                for (size_t i = 0; i < parameters.size(); ++i) {
+                    callBindings.emplace_back(parameters[i], arguments[i]);
+                }
+                compile_graph_ptr_t graph =
+                    instantiateGeneric(tmpl, callBindings, {}, {}, callee);
+                if (graph == nullptr || graph->draft().returnNode() ==
+                                             camel::runtime::kInvalidNodeRef) {
+                    local.outcome = WhenOutcome::NotEvaluable;
+                    local.subject = name;
+                    local.detail  = "the predicate's instance has no result";
+                    return local;
+                }
+                node_handle_t returned = graph->draft().ref(graph->draft().returnNode());
+                const data_ptr_t result = constantOfNode(returned);
+                std::optional<bool> value;
+                if (result != nullptr && boolOf(result, value)) {
+                    local.outcome = *value ? WhenOutcome::Holds : WhenOutcome::Fails;
+                    return local;
+                }
+                // The instance's result is computed rather than written (`has_field` folds the
+                // field names of T against the argument). The same GCT the graph came from is
+                // walked over the constants the call gave; a body this evaluation cannot read
+                // says why, and the declaration stays inapplicable rather than becoming false.
+                try {
+                    GctConstantEvaluator evaluator(tmpl->func, callBindings, valueArgs);
+                    data_ptr_t folded = evaluator.run();
+                    std::optional<bool> foldedValue;
+                    if (folded != nullptr && boolOf(folded, foldedValue)) {
+                        local.outcome = *foldedValue ? WhenOutcome::Holds : WhenOutcome::Fails;
+                        return local;
+                    }
+                } catch (const EvalFailure &failure) {
+                    local.outcome = WhenOutcome::NotEvaluable;
+                    local.subject = name;
+                    local.detail  = failure.why;
+                    return local;
+                }
+                local.outcome = WhenOutcome::NotEvaluable;
+                local.subject = name;
+                local.detail =
+                    "the predicate's result is not a compile-time constant; a condition can "
+                    "call a function only where its body reduces to one over the types";
                 return local;
             }
             if (callee->type() == GCT::NodeKind::DREF) {

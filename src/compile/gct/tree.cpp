@@ -170,6 +170,20 @@ const Tree::WhenClause *Tree::whenOf(const Node *func) const {
     return it == whenClauses_.end() ? nullptr : &it->second;
 }
 
+void Tree::setHeadTypeParams(const Node *func, std::vector<std::string> names) {
+    if (func != nullptr && !names.empty()) {
+        headTypeParams_[func] = std::move(names);
+    }
+}
+
+const std::vector<std::string> *Tree::headTypeParamsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = headTypeParams_.find(func);
+    return it == headTypeParams_.end() ? nullptr : &it->second;
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -562,6 +576,9 @@ node_ptr_t Tree::clone(const Node *node) {
         // with the same rules.
         if (const auto *when = Tree::of(node)->whenOf(node)) {
             whenClauses_[copy] = WhenClause{clone(when->condition), when->text, when->origin};
+        }
+        if (const auto *head = Tree::of(node)->headTypeParamsOf(node)) {
+            headTypeParams_[copy] = *head;
         }
     }
     return copy;

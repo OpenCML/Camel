@@ -241,6 +241,13 @@ class Tree {
     void setWhen(const Node *func, WhenClause clause);
     const WhenClause *whenOf(const Node *func) const;
 
+    /// The type parameters a declaration put at its head (`func f::<T, U>`), in order. They
+    /// make the declaration generic even when its signature writes none of them: a predicate
+    /// such as `func is_plain::<T>(): bool { match type T { ... } }` is instantiated by its
+    /// explicit type arguments, and its body is where the names occur (design principles 5.5).
+    void setHeadTypeParams(const Node *func, std::vector<std::string> names);
+    const std::vector<std::string> *headTypeParamsOf(const Node *func) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -301,6 +308,7 @@ class Tree {
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     std::unordered_map<const Node *, WhenClause> whenClauses_;
+    std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>
