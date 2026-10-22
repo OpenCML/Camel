@@ -1,0 +1,48 @@
+id = "docs.headers"
+order = 924
+tier = "fast"
+tags = ["feat", "docs"]
+desc = "Every hand-written source file carries the two-line header of docs/design/public-repo/README.cn.md 4.5 (copyright, SPDX, one blank line, then the file's own note); scripts/headers.mjs --fix writes it and --check reports every file whose header is not canonical"
+
+# docs/design/public-repo/README.cn.md 4.5 replaces the old `/** ... */` licence block -- the MIT
+# text restated, Author, Created, Updated, Supported by and a year -- with two lines, and keeps the
+# responsibility note below them. scripts/headers.mjs owns both directions: `--fix` rewrites an old
+# header and is idempotent, `--check` changes nothing and names every file that is wrong.
+#
+# Membership is a path allow/deny list in the script, with a reason on every rule: C/C++ under
+# src/, include/, tools/, modules/ and stdlib/*/native/; the standard library's .cml; and
+# .js/.mjs/.ts/.py/.cmake scripts, except the denied trees (third_party/, docs/, examples/,
+# showcase/, test/cases/, test/plans/). A source file whose extension no rule covers is reported
+# as undecided rather than skipped, which is why the fixture carries a .rs file.
+#
+# The guard is red for a missing header, a header line that is not the canonical text, a year in a
+# header line, a header that is not followed by one blank line, an element of the old header that
+# came back (MIT restatement, Author, Created, Updated, Supported by, a second SPDX line), and an
+# undecided file. The second case runs the same guard on test/plans/feat/headers/fixture, whose six
+# files are broken one way each, so the red conditions are pinned instead of being inferred from
+# the first case's green.
+
+[[tests]]
+name = "docs.headers.canonical"
+desc = "Every member file of the tree carries the two-line header: --check exits 0 and names the count per kind; it writes nothing, so --fix has nothing to do on the same tree."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/headers.mjs"
+args = ["${case}", "--check"]
+expect_exit = 0
+expect_stdout_contains = ["every one of", "carries the two-line header"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.headers.report"
+desc = "The guard is red for each way a header can be wrong: missing, a year in a header line, an element that came back, no blank line after the header, the old block form, and an extension no rule covers; a canonical file in the same tree is not reported."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/headers.mjs"
+args = ["${case}", "--check", "--root", "test/plans/feat/headers/fixture"]
+expect_exit = 1
+expect_stdout_contains = ["missing_header.h: missing the two-line header", "year_in_header.h: header line 1 is", "a header line carries a year", "author_came_back.h: line 4", "came back", "no_blank_line.h: the header is not followed by a blank line", "legacy_block.h: legacy header", "tool.rs: undecided", "5 of 6 member files"]
+expect_stdout_not_contains = ["good.h:"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000

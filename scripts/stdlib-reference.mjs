@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The standard library reference, read from the signature files and the library sources.
 //
 //   node scripts/stdlib-reference.mjs --write       regenerate docs/stdlib-reference.md
@@ -743,10 +746,12 @@ function parseDeclarations(module) {
     return entries
 }
 
-// The comment at the top of the file, without the note that it is not compiled.
+// The comment at the top of the file, without the two-line header, the blank line after it and the
+// note that the file is not compiled.
 function parseHeader(module) {
     const text = fs.readFileSync(sourceOf(module), 'utf8').replace(/\r\n/g, '\n')
-    const match = text.match(/^\/\*\*\n([\s\S]*?)\n \*\//)
+    const body = text.replace(/^(?:\/\/[^\n]*\n){2}\n/, '')
+    const match = body.match(/^\/\*\*\n([\s\S]*?)\n \*\//)
     if (!match) return []
     const lines = match[1].split('\n').map((l) => l.replace(/^ \* ?/, ''))
     const stop = lines.findIndex((l) => l.startsWith('For reference only'))
