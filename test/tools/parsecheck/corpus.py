@@ -35,6 +35,20 @@ SKIP_DIRS = {".git", "node_modules", "build", "out", "tmp", "third_party", "dist
 PARSE_ROOT = Path("test/cases/parse")
 
 
+def walk(root: Path, suffix: str):
+    for base, dirs, files in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS and not d.startswith("out_lr"))
+        for name in sorted(files):
+            if name.endswith(suffix):
+                yield Path(base) / name
+
+
+def parse_cases():
+    """The parse corpus: every .cml case under test/cases/parse/. The AST snapshot hashes these
+    and the probes: the snapshot is a snapshot of the tests that own the parser (H188)."""
+    return walk(PARSE_ROOT, ".cml")
+
+
 def doc_blocks(out: Path):
     fence = re.compile(r"^(\s*)```(cml|camel)\s*$")
     written = []

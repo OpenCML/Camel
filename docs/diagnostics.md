@@ -5973,30 +5973,12 @@ Module '{0}' provides no pass '{1}'; it provides {2}.
 A pass of a module is one of its exported functions of type `(p: Program) => Program!`; check the name. The module named here is the one the pass name resolved to: a file of the entry directory with that name shadows the library one.
 ```
 
-**Example** (`test/cases/linear/byref/wait_direct_user.cml`, run as `camel --output-format json test/cases/linear/byref/wait_direct_user.cml std::nvm hash::nosuchpass`)
+**Example** (`test/cases/modules/graph_pass/tiny.cml`, run as `camel test/cases/modules/graph_pass/tiny.cml identity::nosuch std::nvm`)
 
 ```camel
-module wait_direct_user
-
-func before(x: int): int {
-    return x
-}
-
-sync func modify(var x: int): int sync {
-    wait x += 10
-    return 0
-}
-
-func run(): int {
-    var i = 1
-    let a = before(i + 1)
-    wait modify(i)
-    let b = i
-    return a * 1000 + b
-}
-
+module tiny
 func main(): int sync {
-    println(run())
+    println(21 * 2)
     return 0
 }
 ```
