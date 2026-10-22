@@ -4404,7 +4404,9 @@ Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an a
 values to a `Program`, `check` tests rules on random programs, and the four readers report a
 `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
 round budget explicit and the cost kept: it answers a `Run`, the program and what the
-application cost (H226). A rule that stops a rewrite without changing the program is a fault,
+application cost (H226). Its fifth parameter opens the attribution record, and `explain` prints
+it as the chain of rewrites, each with the rule, round, graph and nodes that made it (rewrite
+design 8.7). A rule that stops a rewrite without changing the program is a fault,
 and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
@@ -4467,15 +4469,34 @@ that fails, or that all of them hold.
 
 ```camel
 run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run<Program>!
+run: (p: Program, rules: Rule[], rounds: int, strict: bool, explain: bool) => Run<Program>!
 ```
 
 Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
 and what the application cost. This is `rewrite` with the round budget explicit and the cost
-kept (H226).
+kept (H226). The fifth parameter of the same call opens the attribution record (rewrite design
+8.7): `explain` then reads back the rule that made each rewrite, its round, its graph and the
+nodes it matched, produced and erased. Recording is off unless it is asked for, so a plain
+application pays nothing for it.
 
 - With effects: runs the rules' functions, and nothing else.
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
 - Example: `run(p, rules, 16, false)` gives `the run`
+
+#### `explain`
+
+```camel
+explain: (r: Run<Program>) => Proof!
+```
+
+The proof of the run `r`: the chain of the rewrites it made, in the order it made them, each
+naming the rule that made it, the round and the graph it was made in, and the nodes that
+matched, were produced and were erased (rewrite design 8.7). A run that applied nothing is
+explained as such, not as an empty table.
+
+- Pure.
+- Failure: error value `NoAttribution` when the run was made without `explain: true`.
+- Example: `explain(r)` gives `the chain of rewrites`
 
 #### `rule_name`
 

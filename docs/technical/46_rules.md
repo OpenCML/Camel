@@ -98,6 +98,7 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 | `extract(p, cost)` | one writing per value by the named cost model |
 | `check(rules, samples, seed)` | the check of section 4 |
 | `run(p, rules, rounds, strict)` | `rewrite` with the round budget explicit, as a `Run` with its cost (section 3.1) |
+| `run(p, rules, rounds, strict, explain)` | the same, with the attribution record open; `explain(r)` reads it (section 3.2) |
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
 `__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
@@ -129,19 +130,63 @@ parameters, so they are written in the angle brackets of the call:
 
 Each answers a `Run<Program>`: `result` is the program, and `rewrites`, `rounds`, `visited`,
 `erased`, `fixpoint` and `seconds` are what the schedule cost, summed over the stages (`fixpoint`
-is the last application's). The functions are written with `loop ... for ... while` and `?->`; no
+is the last application's; `proof` is described in section 3.2). The functions are written with
+`loop ... for ... while` and `?->`; no
 helper carries an index or an accumulator. A combinator never reorders a stage's rules and never
 drops a match: a stage that applies nothing leaves the count at zero.
 
 `run(p, rules, rounds, strict)` is the same engine with the round budget explicit and the cost
 kept in a `Run` value. `Run` is a plain Camel struct declared in `stdlib/rewrite.cml`; the native
-kernel fills its seven fields in that order, so a field is read as `r.rewrites` and the program is
+kernel fills its eight fields in that order, so a field is read as `r.rewrites` and the program is
 `r.result`. `seconds` is the wall time of one application: compiling the rules, matching,
 rewriting the graphs and the commit; it is measured in the kernel with
 `std::chrono::steady_clock`. `visited` is the number of alive nodes that take part in a rewrite,
 summed over rounds and graphs (`DraftWritings::rewrite` increments it for every node it
 considers); `rewrites` is the number of replacements actually made. The numbers are ordinary
 values, so a benchmark prints them from Camel and the plan can pin them.
+
+### 3.2 Attribution, and `explain`
+
+A rewrite is only useful to a reader if it can be attributed to the rule that made it (rewrite
+design 8.7). The record is kept where the application happens: `DraftWritings::rewrite` sees the
+rule, the round, the match and the nodes it erases, and it is the only place that sees an erased
+node before the draft forgets it. `rewrite` takes a `RewriteLog *` (null means no record); for
+each rewrite it appends one `RewriteStep` with:
+
+- the rule's source name and compiled id, and the round of the graph's rewrite;
+- the graph, filled in by `applyRewrite` from the graph the step was made in;
+- the node the left side matched and the nodes its variables bound, with the text each node had
+  at that moment (`%id kind [operator] : type`, plus the value of a scalar constant);
+- the node the right side was built as, with its text;
+- the nodes the rewrite left unread and erased, with their text.
+
+The text is taken at recording time because a node that is erased or renumbered has no later text
+to read. With a null log the engine allocates nothing and takes no branch in the per-node match:
+`rewrite` and `saturate` keep their H226 cost, which `bench::compare` measures side by side with
+the recording on.
+
+`run`'s fifth parameter decides whether the application passes a log. With it, the kernel builds
+one `Proof` from the log and stores it in the `proof` field of the `Run` (a finalizer releases the
+steps); without it the field is null, nothing was recorded, and `explain` refuses the run with the
+error value `NoAttribution`, rather than answering with an empty chain. `explain(r)` gives the
+`Proof` back, and its printing is the derivation:
+
+```
+2 rewrites in 2 rounds, 9 nodes visited
+  g round 1: %3 :op/add_l : int
+  = %0 port : int  by add_zero
+    matched %3 :op/add_l : int; %0 port : int;
+    erased %3 :op/add_l : int; %2 data 0 : int;
+  g round 1: %5 :op/add_l : int
+  = %1 port : int  by add_zero
+    matched %5 :op/add_l : int; %1 port : int;
+    erased %5 :op/add_l : int; %4 data 0 : int;
+```
+
+A run that applied nothing prints one sentence (`no rewrite matched in 1 round: the program is
+unchanged`), not an empty table. The order of the lines is the order of the applications: graph by
+graph, round by round, nodes in id order, rules in the order of the array, which is what makes a
+`seq` schedule's proof follow the schedule.
 
 ## 4. The check
 
