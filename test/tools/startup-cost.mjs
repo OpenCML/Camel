@@ -1,6 +1,6 @@
 // The cost of everything `camel` does before the program runs (handover H142).
 //
-// Three commands, each a fresh process, timed with `process.hrtime.bigint()` around the whole
+// Four commands, each a fresh process, timed with `process.hrtime.bigint()` around the whole
 // child, and each gated on a ceiling that is a few times the median measured on the Linux host.
 // The gate is deliberately generous: it catches "the standard library is now loaded before the
 // program runs" or "a declaration module costs milliseconds", not a few percent of noise on a
@@ -76,9 +76,14 @@ function measure(argv, warmup, reps) {
     return summarize(samples)
 }
 
-// The ceilings. Each is about three times the median measured on the Linux host at H142
-// (21-31 samples; the numbers and their spread are in docs/handover/reports/H142.md).
-// `--version` is dominated by loading libcamel, so its ceiling is in the same unit as the others.
+// The ceilings. The medians they are built on, measured on the Linux host at H142 (21-101
+// samples, the numbers and their spread are in docs/handover/reports/H142.md): 5.0 / 8.5 / 26.1 /
+// 23.6 ms on a quiet host. Each ceiling is about four times that, because the same medians were
+// 16.5 / 19.3 / 53.4 / 51.5 ms at load average 150 and 20 / 36 / 87 / 72 ms at load average 215,
+// and a gate that flakes when the host is busy is worse than no gate. The gate is a smoke alarm
+// ("the standard library is loaded before the program runs", "a declaration module costs
+// milliseconds"), not a percentage budget; it cannot see the 4.6 ms the declaration modules cost
+// today, and docs/handover/reports/H142.md is where that number is recorded.
 const CASES = [
     {
         name: 'version',
@@ -88,17 +93,17 @@ const CASES = [
     {
         name: 'imports_nothing',
         argv: () => [camelExe(), IMPORTS_NOTHING, 'std::nvm'],
-        ceilingMs: 120,
+        ceilingMs: 45,
     },
     {
         name: 'inspect_ops',
         argv: () => [camelExe(), 'inspect', '--ops', REGISTRY_ALL],
-        ceilingMs: 300,
+        ceilingMs: 100,
     },
     {
         name: 'imports_all',
         argv: () => [camelExe(), REGISTRY_ALL, 'std::nvm'],
-        ceilingMs: 300,
+        ceilingMs: 90,
     },
 ]
 
