@@ -264,6 +264,27 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::PassNotProvidedByModule,
+            {
+                "PassNotProvidedByModule",
+                "Module '{0}' provides no pass '{1}'; it provides {2}.",
+                "A pass of a module is one of its exported functions of type "
+                "`(p: Program) => Program!`; check the name. The module named here is the one the "
+                "pass name resolved to: a file of the entry directory with that name shadows the "
+                "library one.",
+            },
+        },
+        {
+            RuntimeDiag::PassNotExportedByModule,
+            {
+                "PassNotExportedByModule",
+                "Module '{0}' declares '{1}' but does not export it, so it cannot be named as a "
+                "pass; it provides {2}.",
+                "Write `export func {1}(...)` in module {0}, or name a pass it exports. A pass is "
+                "an exported function `(p: Program) => Program!`.",
+            },
+        },
+        {
             RuntimeDiag::PassInternalError,
             {
                 "PassInternalError",

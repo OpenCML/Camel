@@ -55,6 +55,35 @@ using camel::core::module::UserDefinedModule;
 
 namespace {
 
+/// The first line of a module diagnostic.
+std::string firstLine(const std::string &message) {
+    return message.substr(0, message.find('\n'));
+}
+
+/// The reason a library could not be loaded, as a pass specification states it: the first line of
+/// the module diagnostic, without the "Module 'm' not found." lead (the specification already
+/// names the pass and its library, and a module the loader found is not "not found") and without
+/// a trailing lead-in to a list that the one-line form does not show ("Search paths tried:").
+std::string loadFailureReason(const std::string &name, const std::string &message) {
+    std::string reason     = firstLine(message);
+    const std::string lead = std::format("Module '{}' not found. ", name);
+    if (reason.starts_with(lead)) {
+        reason.erase(0, lead.size());
+    }
+    if (reason.ends_with(':')) {
+        const size_t cut = reason.rfind(". ");
+        reason           = cut == std::string::npos ? std::string{} : reason.substr(0, cut + 1);
+    }
+    if (reason.empty()) {
+        reason = firstLine(message);
+    }
+    // The template that carries this reason ends the sentence with a period of its own.
+    while (!reason.empty() && reason.back() == '.') {
+        reason.pop_back();
+    }
+    return reason;
+}
+
 /// The first error of a module's diagnostics, as one line.
 std::string firstError(const UserDefinedModule &module) {
     if (const auto diags = module.diagnostics()) {
@@ -188,52 +217,48 @@ std::vector<core::OperId> DefinitionStore::cycleThrough(core::OperId oper) {
     return reaches(oper) ? path : std::vector<core::OperId>{};
 }
 
-std::shared_ptr<UserDefinedModule>
-DefinitionStore::importLibrary(const std::string &name, std::string &problem) {
+const DefinitionStore::LibraryEntry &
+DefinitionStore::importLibrary(const std::string &name) {
     if (auto it = libraries_.find(name); it != libraries_.end()) {
-        if (!it->second) {
-            problem = std::format("its library '{}' does not compile", name);
-        }
         return it->second;
     }
-    std::shared_ptr<UserDefinedModule> module;
+    LibraryEntry entry;
     try {
         // The program may have imported the library itself (it was then built with the
         // program); otherwise the import finds the file and the library is compiled on its own.
-        module = std::dynamic_pointer_cast<UserDefinedModule>(context_.importModule(name));
-        if (!module) {
-            problem = std::format("its library '{}' is not a module written in Camel", name);
-            absentLibraries_.insert(name);
+        entry.module = std::dynamic_pointer_cast<UserDefinedModule>(context_.importModule(name));
+        if (!entry.module) {
+            entry.problem = std::format("its library '{}' is not a module written in Camel", name);
+            entry.absent  = true;
         }
     } catch (const core::error::Diagnostic &d) {
-        problem = std::format(
-            "its library '{}' cannot be loaded: {}",
-            name,
-            d.message.substr(0, d.message.find('\n')));
-        if (d.type == core::error::DiagType::SemanticDiag &&
-            d.specific == static_cast<uint32_t>(core::error::SemanticDiag::ModuleNotFound)) {
-            absentLibraries_.insert(name);
-        }
-        module.reset();
+        entry.problem = std::format(
+            "its library '{}' cannot be loaded: {}", name, loadFailureReason(name, d.message));
+        // A module that is not there and one that is there and refused are both reached here
+        // (a `.cmo` that will not load, a file that does not declare itself). The second has a
+        // reason the user needs (H130): only a name with no file behind it is absent.
+        entry.absent = !context_.moduleFileExists(name);
     } catch (const std::exception &e) {
-        problem = std::format("its library '{}' cannot be loaded: {}", name, e.what());
-        module.reset();
+        entry.problem = std::format("its library '{}' cannot be loaded: {}", name, e.what());
+        entry.absent  = !context_.moduleFileExists(name);
     }
-    libraries_.emplace(name, module);
-    return module;
+    return libraries_.emplace(name, std::move(entry)).first->second;
 }
 
 std::shared_ptr<UserDefinedModule>
 DefinitionStore::library(const std::string &name, std::string &problem) {
-    auto module = importLibrary(name, problem);
+    const LibraryEntry &entry = importLibrary(name);
+    problem                   = entry.problem;
+    auto module               = entry.module;
     if (!module) {
         return nullptr;
     }
     if (!module->compileAsLibrary()) {
         problem = std::format("its library '{}' does not compile: {}", name, firstError(*module));
-        // Remembered as refused: the module is not compiled again (as before).
+        // Remembered as refused: the module is not compiled again (as before), and a pass that
+        // names it gets the reason rather than "not found".
         libraries_.erase(name);
-        libraries_.emplace(name, nullptr);
+        libraries_.emplace(name, LibraryEntry{nullptr, problem, false});
         return nullptr;
     }
     return module;
@@ -241,41 +266,59 @@ DefinitionStore::library(const std::string &name, std::string &problem) {
 
 std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction(
     const std::string &moduleName, const std::string &functionName, std::string &problem,
-    bool &absent, std::optional<core::error::DiagLabel> *errorLocation) {
+    std::optional<core::error::DiagLabel> *errorLocation, LibraryLookup *lookup) {
     std::lock_guard lock(mutex_);
     const std::string key = moduleName + "::" + functionName;
     if (auto it = functions_.find(key); it != functions_.end()) {
         problem = it->second.problem;
-        absent  = it->second.absent;
+        if (lookup != nullptr) {
+            *lookup = it->second.lookup;
+        }
         if (errorLocation != nullptr) {
             *errorLocation = it->second.errorLocation;
         }
         return it->second.found;
     }
-    const auto remember = [&](std::optional<LibraryFunction> found, bool isAbsent,
-                              std::optional<core::error::DiagLabel> location = std::nullopt) {
-        absent  = isAbsent;
+    const auto remember = [&](
+                              std::optional<LibraryFunction> found, bool isAbsent,
+                              std::optional<core::error::DiagLabel> location,
+                              const LibraryLookup &what) {
+        if (lookup != nullptr) {
+            *lookup = what;
+        }
         if (errorLocation != nullptr) {
             *errorLocation = location;
         }
-        functions_[key] = {found, problem, isAbsent, location};
+        functions_[key] = {found, problem, isAbsent, location, what};
         return found;
     };
-    const auto module = importLibrary(moduleName, problem);
-    if (!module) {
-        return remember(std::nullopt, absentLibraries_.contains(moduleName));
+    const LibraryEntry &library = importLibrary(moduleName);
+    problem                     = library.problem;
+    if (!library.module) {
+        LibraryLookup what;
+        what.moduleFound = !library.absent;
+        what.absent      = library.absent;
+        return remember(std::nullopt, library.absent, std::nullopt, what);
     }
+    const auto &module = library.module;
     // The tool program is the library module as a program whose entry is the function: its root
     // graph computes the module-level values and calls the function, so the function's capture
     // ports are bound from values that were computed (design principles 10.1). The graph the
     // caller runs is that program's root; its signature is the function's.
     std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rootGraph;
     const auto status = module->compileAsProgram(functionName, problem, rootGraph);
+    LibraryLookup what;
+    what.moduleFound = true;
+    what.module      = module;
     if (status == UserDefinedModule::ProgramStatus::NoSuchFunction) {
-        return remember(std::nullopt, true);
+        // The module is there and compiles; the name is what is wrong. Say which function it
+        // declares without exporting, and which ones it does export (H130).
+        what.absent             = true;
+        what.declaresUnexported = module->declaresFunction(functionName);
+        return remember(std::nullopt, true, std::nullopt, what);
     }
     if (status == UserDefinedModule::ProgramStatus::NotAFunction) {
-        return remember(std::nullopt, false);
+        return remember(std::nullopt, false, std::nullopt, what);
     }
     if (status != UserDefinedModule::ProgramStatus::Built) {
         // The library's own first error becomes a secondary location, so the pipeline's
@@ -289,17 +332,17 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
             problem = std::format(
                 "its library '{}' does not compile: {}", moduleName, firstError(*module));
         }
-        return remember(std::nullopt, false, std::move(location));
+        return remember(std::nullopt, false, std::move(location), what);
     }
     Program *program = context_.reserveProgram();
     camel::compile::gir::encodeToRuntimeProgram(rootGraph, *program, &context_.graphIds());
     context_.pinRuntimeProgram(program);
     if (program->root() == nullptr) {
         problem = std::format("'{}::{}' could not be encoded", moduleName, functionName);
-        return remember(std::nullopt, false);
+        return remember(std::nullopt, false, std::nullopt, what);
     }
     problem.clear();
-    return remember(LibraryFunction{program, program->root()}, false);
+    return remember(LibraryFunction{program, program->root()}, false, std::nullopt, what);
 }
 
 DefinitionStore::Entry &DefinitionStore::build(core::OperId oper) {

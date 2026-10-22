@@ -25,7 +25,12 @@
 
 #include "camel/parse/parse.h"
 
+#include <string>
 #include <vector>
+
+namespace camel::core::type {
+class FunctionType;
+}
 
 namespace camel::runtime {
 class GCGraph;
@@ -87,6 +92,22 @@ class UserDefinedModule : public Module {
 
     /// The graph construction tree, or null before the module reached that stage.
     const GCT::Tree *gct() const { return gct_.get(); }
+
+    /// A function the module exports: the name it has and the type it was declared with.
+    struct ExportedFunction {
+        std::string name;
+        const camel::core::type::FunctionType *type = nullptr;
+    };
+    /// The functions the module exports, in declaration order: its export list read against its
+    /// declarations, so that a caller can name what the module offers (H130: the passes a
+    /// `module::pass` could have named). Only the construction tree is read — no graph is built
+    /// — so this answers for a module that is parsed even when it does not compile; empty
+    /// before the tree exists.
+    std::vector<ExportedFunction> exportedFunctions() const;
+    /// Whether the module declares a top-level function `name`, exported or not. A name that is
+    /// declared but not exported is a different mistake from a name that is not there, and the
+    /// difference is what the user has to change.
+    bool declaresFunction(const std::string &name) const;
     camel::core::error::diagnostics_ptr_t diagnostics() const { return diagnostics_; }
     camel::parse::parser_ptr_t parser() const { return parser_; }
     virtual bool loaded() const override { return stage_ == CompileStage::Done; }
