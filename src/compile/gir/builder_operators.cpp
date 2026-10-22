@@ -1274,7 +1274,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         boundWithArgs_.erase(bound);
         boundWithCallee_.erase(targetNode);
     }
-
     // Call results take the callee's current exit type (a recursive callee's
     // exit type is only final after its body is built), unless the node was
     // deliberately widened as a `var` binding (see visitVariNode).
@@ -1361,13 +1360,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                                                        : std::string("expression"),
                 gct);
             for (const node_handle_t &element : elements) {
-                normInputs.push_back({element, operand});
+                normInputs.push_back({element, operand, std::nullopt});
                 normInputTypes.push_back(valueTypeOf(callableValueType(element)));
             }
             continue;
         }
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
-        normInputs.push_back({inputNode, gct->at(i)});
+        normInputs.push_back({inputNode, gct->at(i), std::nullopt});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
@@ -1376,12 +1375,24 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         }
     }
+    // A `with` argument may be written by name, and a `with` parameter may have a default
+    // (design principles 4.4). The binding puts the arguments in the declaration's order and
+    // fills the parameters the call leaves out, so that from here on an index into
+    // `withInputs` is a `with` parameter's index. That is the one order everything below
+    // reads: `parameterOf(i)` is the i-th `with` parameter, the deferred argument at `i` is
+    // typed by that parameter, and `withInputTypes` is built from the same list once, at its
+    // own place, after the deferred arguments have their nodes (the typing h245 defers to the
+    // call). A default is a static node the declaration already computed: it is in place
+    // here and is never deferred.
+    bindWithArguments(withInputs, targetNode, gct, argumentSignature);
+
     // A with-argument whose parameter still had type variables when the callee was visited was
     // left for this point (visitWithNode): the ordinary arguments are typed now, so the
     // signature's variables have their types. `reduce<(a, b) => a + b, 0>`: the element type
     // comes from the array and the accumulator type from the position the call stands at. A
     // variable that nothing binds stays open, and the argument is built without an expected
     // type, as it was before.
+
     bool hasDeferredWith = false;
     for (const Argument &input : withInputs) {
         hasDeferredWith = hasDeferredWith || input.node == nullptr;
@@ -1397,6 +1408,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 unifyTypeVars(argumentSignature->exitType(), expectedResult, bindings);
             }
         }
+        // `i` is a `with` parameter's index: the binding above put `withInputs` in the
+        // declaration's order, so the argument at `i` is the value for parameter `i`.
         const auto parameterOf = [&](size_t i) -> Type * {
             return argumentSignature != nullptr && i < argumentSignature->withTypesCount()
                        ? argumentSignature->withTypeAt(i)
@@ -1455,6 +1468,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
         }
     }
+    // The one place the call's `with` types are built: from the nodes, in the declaration's
+    // order the binding put them in, after the deferred arguments above have theirs (h245).
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
@@ -1486,7 +1501,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             node_handle_t location                 = currGraph_->addStaticDataNode(
                 tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
             registerNodeOrigin(context_, location, gct, "gir.data");
-            normInputs.push_back({location, gct});
+            normInputs.push_back({location, gct, std::nullopt});
             normInputTypes.push_back(Type::String());
         }
     }

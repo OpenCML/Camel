@@ -1,0 +1,15 @@
+/**
+ * A default is a constant of a type the declaration fixes: `T` is not known where the template
+ * is registered, so a default of that type cannot be a compile-time constant (design principles
+ * 4.4).
+ */
+module with_default_type_parameter
+
+with <v: T = 1>
+func first::<T>(x: T): T {
+    return x
+}
+
+func main(): int sync {
+    return first::<int>(1)
+}

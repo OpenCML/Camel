@@ -1,0 +1,19 @@
+/**
+ * A `with` argument written by name needs a callee that is one declaration: with two overloads
+ * of `f`, a name does not say which declaration's parameter it means (design principles 4.4).
+ */
+module with_argument_callee
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+with <rounds: int = 8>
+func f(x: string): string {
+    return x
+}
+
+func main(): int sync {
+    return f<rounds: 2>(1)
+}

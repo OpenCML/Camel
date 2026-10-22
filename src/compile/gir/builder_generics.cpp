@@ -201,6 +201,10 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (const auto *usings = GCT::Tree::of(child)->usingsOf(child)) {
             tmpl->usingFrames.push_back(usings);
         }
+        // The defaults of the declaration's `with` parameters are evaluated where the
+        // declaration is written, once, and every instance takes the same values: a default is
+        // a compile-time constant (design principles 4.4, handover H235).
+        evaluateWithDefaults(child, tmpl->funcType, tmpl.get(), false);
         if (isOperator) {
             operatorTemplates_[name].push_back({templateScope_, tmpl});
         } else {
@@ -1334,6 +1338,11 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                 declaring != units_.end() ? declaring->second.get() : unit_;
         }
         tmpl->instances.push_back({bindings, constas, extents, graph, false});
+        // The instance takes the declaration's `with`-parameter defaults as they are: they are
+        // constants, the same for every instance, and a call of the instance fills them.
+        if (const auto found = withDefaults_.find(tmpl.get()); found != withDefaults_.end()) {
+            withDefaults_[graph.get()] = found->second;
+        }
         // Scopes are kept by name under the scope they were entered from, here the scope the
         // function was declared in: two functions written in place, which have no name to
         // tell them apart, need two scopes; so do two generic overloads of one operator,

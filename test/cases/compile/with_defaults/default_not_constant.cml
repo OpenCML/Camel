@@ -1,0 +1,15 @@
+/**
+ * A default that reads another `with` parameter of the same declaration is not a compile-time
+ * constant (design principles 4.4): a default is evaluated where the declaration is, before any
+ * call gives the parameter a value.
+ */
+module with_default_not_constant
+
+with <a: int = 1, b: int = a + 1>
+func f(x: int): int {
+    return x + b
+}
+
+func main(): int sync {
+    return f(1)
+}

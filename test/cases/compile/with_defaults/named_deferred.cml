@@ -1,0 +1,18 @@
+/**
+ * A `with` argument given by name is bound to its parameter before it is typed, so a literal whose
+ * type the signature still leaves open is typed by the parameter it names, not by the position it
+ * was written at (design principles 4.4, 5.9). `pick`'s `v` is the second `with` parameter and is
+ * written first; `T` comes from the ordinary argument.
+ */
+module with_default_named_deferred
+
+with <tag: int, v: T>
+func pick::<T>(x: T): string {
+    return string(tag) + ':' + string(v) + ':' + string(x)
+}
+
+func main(): int sync {
+    println(pick<v: 7, tag: 1>(2))
+    println(pick<v: 'a', tag: 2>('b'))
+    return 0
+}
