@@ -295,6 +295,14 @@ def module_names(report: dict) -> List[str]:
     return names
 
 
+def module_split(entry: dict) -> Optional[Tuple[int, int]]:
+    """(user, total) module counts of a results entry, or None for a file written before the
+    phase report's module names were kept (rendering it must not claim 0 / 0)."""
+    if "modules_loaded" not in entry:
+        return None
+    return len(entry.get("modules_user", [])), len(entry["modules_loaded"])
+
+
 def entry_module(report: dict) -> Optional[str]:
     """The name of the program's entry module, from the `gir` phase.
 
@@ -468,9 +476,10 @@ def phase_table(columns: List[dict], stat: str) -> str:
     rows.append(["peak RSS (MB)"] + [f"{r['peak_rss_kb'] / 1024:.1f}" for r in columns])
     # Both module numbers: the program's own modules are what the input set varies, and the
     # library modules are what the pipeline cost on top of it. Neither may disappear.
-    rows.append(["modules (user / total)"] + [
-        f"{len(r.get('modules_user', []))} / {len(r.get('modules_loaded', []))}" for r in columns])
-    rows.append(["library modules"] + [", ".join(r.get("modules_library", [])) or "—" for r in columns])
+    split = [module_split(r) for r in columns]
+    rows.append(["modules (user / total)"] + ["—" if s is None else f"{s[0]} / {s[1]}" for s in split])
+    rows.append(["library modules"] + [
+        "—" if "modules_library" not in r else (", ".join(r["modules_library"]) or "—") for r in columns])
     return table(["phase (self, ms)"] + [f"{r['input']} ({r['lines']} lines)" for r in columns], rows)
 
 
@@ -542,8 +551,9 @@ def render(data: dict) -> str:
                     p = r["phases_ms"]
                     cell = lambda k: fmt_ms(p[k]["min"]) if k in p else ""  # noqa: E731
                     alloc = fmt_count(r["alloc"]["allocations"]) if "alloc" in r else ""
-                    rows.append([str(r["modules"]), str(len(r.get("modules_user", []))),
-                                 str(len(r.get("modules_loaded", []))), fmt_ms(r["wall_ms"]["min"]),
+                    split = module_split(r)
+                    rows.append([str(r["modules"]), "—" if split is None else str(split[0]),
+                                 "—" if split is None else str(split[1]), fmt_ms(r["wall_ms"]["min"]),
                                  fmt_ms(r["wall_ms"]["median"]), cell("resolve"), cell("parse"), cell("gct"),
                                  cell("gir"), cell("import"), cell("encode"), cell("teardown"), alloc,
                                  f"{r['peak_rss_kb'] / 1024:.1f}"])
