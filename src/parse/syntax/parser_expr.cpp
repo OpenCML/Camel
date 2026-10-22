@@ -381,8 +381,15 @@ void ParserImpl::parseComp() {
 /// a struct literal follows a variant path, never a name that could be a value.
 void ParserImpl::parseAnno() {
     const size_t m = mark();
-    parseAccess();
-    bool any = false;
+    bool any       = false;
+    if (shapeCompAhead()) {
+        // `T { static for ... }` is a value: the same-shape comprehension. Read before the
+        // access chain, so `T` is not taken for a name.
+        parseShapeComp();
+        any = true;
+    } else {
+        parseAccess();
+    }
     while (!panic_) {
         if (adjacent()) {
             if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
@@ -533,6 +540,38 @@ bool ParserImpl::lambdaAhead() const {
         return t3 == TK::FatArrow || t3 == TK::Colon;
     }
     return false;
+}
+
+/// shapeComp : typeExpr '{' staticForExpr '}'
+/// The shape comprehension reads a type first (`T`, `module::T`), then fills it from the
+/// rounds of a `static for` in the same block spelling as the other comprehensions. Only a name
+/// path is looked for ahead: a value followed by `{` is not a shape.
+bool ParserImpl::shapeCompAhead() const {
+    if (cur_ != TK::Identifier) {
+        return false;
+    }
+    uint32_t i = 1;
+    while (peek(i) == TK::ColonColon && peek(i + 1) == TK::Identifier) {
+        i += 2;
+    }
+    return peek(i) == TK::LBrace && peek(i + 1) == TK::KwStatic && peek(i + 2) == TK::KwFor;
+}
+
+void ParserImpl::parseShapeComp() {
+    const size_t m = mark();
+    {
+        // The type before `{` is a type position: `(` there always opens a type.
+        TypeHeadScope typeHead(*this);
+        parseType();
+    }
+    if (panic_ || !expect(TK::LBrace)) {
+        return close(m, NK::ShapeComp);
+    }
+    parseStaticFor();
+    if (!panic_) {
+        expectListEnd(TK::RBrace);
+    }
+    close(m, NK::ShapeComp);
 }
 
 /// primaryData : identRef | constasData | literal | arrayData | structData | tupleData

@@ -424,7 +424,7 @@ func duplicate::<T>(t: T) {
 - The type after `fields` is a type position too: a `(` there is always the start of a type, so the empty tuple is written `fields ()` without a `type EmptyTuple = ()` first; a function type takes one more pair of parentheses, `fields ((x: int) => int)`.
 - Fields are expanded in declaration order, each with its own block scope. An empty struct or tuple expands zero times and the block is not built at all.
 - As a statement, `static for` always drops the value of the block, and the construct has type `void`; where a value is needed, write the comprehension form (below).
-- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, or the `n` of an enclosing `static for`. Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
+- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, the `n`/`j` of an enclosing `static for`, or an expression whose value is known at compile time (such as `( static for (n, F) in fields S => n ).[0]`). Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
 - A struct without that field reports `SemanticDiag::StaticAccessUnknownField`; a tuple index past the end (or a key that is not an index) reports `SemanticDiag::StaticAccessIndexOutOfRange`; a target that is not a struct or an ordinary tuple reports `SemanticDiag::StaticAccessNotInternal`. For a tuple, `t.["0"]` and `t.[0]` are the same element.
 - When the field's value is dropped (a `t.[n];` statement on its own), the field is checked but no `ACCS` is built; the target expression is still evaluated, so its effects remain.
 
@@ -463,6 +463,7 @@ func positions(t: (int, string)): (int, int) {
 
 - The **value of the block is the round's value**: unlike the statement form, it is not dropped. The block may use `let`, and its last statement's value is the field's value; a block that gives none (an empty block, or one ending in a statement without a value) reports `SemanticDiag::StaticComprehensionVoidElement`.
 - Each field's or element's **type comes from that round's value**, not from `F`: with `F` an `int` and the value a `float`, the result field is a `float`. The field names and their order still come from `T` in declaration order, which is what lets an expansion such as `tree_map` change the leaves and keep the shape.
+- **The same shape is written `T { ... }`**: `T { static for (n, F) in fields T => e }` takes both the field names and the kind (struct or tuple) from the one type `T`, so one `case struct | tuple` branch is enough. `T` must be the type the generator walks, or the comprehension reports `SemanticDiag::SameShapeComprehensionMismatch`; a leaf `T` (no fields) reports `SemanticDiag::SameShapeComprehensionNotComposite`. `{ ... }` and `( ... )` still pack a struct and a tuple only.
 - An empty struct or tuple has no round; the value is `{}` / `()` (a `FILL` with no slot).
 - The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and the comprehension leaves no node of its own. A tuple comprehension first stays a compile-time tuple: used only by `indices`, `..` or `.[j]`, its elements stay separate and no `FILL` is built; used as a value (printed, returned, assigned to a runtime position), one `FILL` at the use packs the rounds' values into the same shape. A struct comprehension always packs one `FILL`. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
 - `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for (n, F) in fields T => block`.
@@ -475,8 +476,7 @@ func doubled(t: {a: int, b: int}): {a: int, b: int} {
 
 func rebuild::<T>(t: T) {
     return match type T {
-        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
-        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case struct | tuple => T { static for (n, F) in fields T => rebuild(t.[n]) }
         case _ => t
     }
 }

@@ -30,6 +30,8 @@ enum class DataType {
     // back into a struct (`StructComp`) or a tuple (`TupleComp`) of the same shape.
     TupleComp,
     StructComp,
+    // `T { static for ... }`: the declared shape `T` gives the field names and the kind.
+    ShapeComp,
     Func,
     Ref,
     ConstAs,
@@ -400,6 +402,16 @@ class StructCompLoad : public DataLoad {
     StructCompLoad() : DataLoad(DataType::StructComp) {}
 
     const std::string toString() const override { return "StructComp" + this->status(); }
+    const std::string geneCode() const override;
+};
+
+/// `T { static for (n, F) in fields T => e }`: child 0 is the type `T`, child 1 the generator.
+/// The result has the field names and the kind of `T`, and the rounds' value types.
+class ShapeCompLoad : public DataLoad {
+  public:
+    ShapeCompLoad() : DataLoad(DataType::ShapeComp) {}
+
+    const std::string toString() const override { return "ShapeComp" + this->status(); }
     const std::string geneCode() const override;
 };
 

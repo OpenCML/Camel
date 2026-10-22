@@ -175,6 +175,7 @@ compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+shapeComp          : typeExpr '{' staticForExpr '}'
 primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
                      | funcData
 constasData        : 'constas' identDef
@@ -295,7 +296,7 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | A slice subscript that slices a dimension other than the first, `xs[:, 0]`, `xs[a:b, c]` | `SemanticDiag::ConstructNotSupported` (the diagnostic names H17) | Take the rows with `take`, or slice one dimension at a time |
 | A slice subscript whose step is not 1, `xs[a:b:s]` | Array: the run-time `RuntimeDiag::InvalidArgument`; tensor: the compile-time `ArgumentsRejected` (both name H17) | `xs->slice<0, a, b, s>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
-| `typeof e`, `name of T` | `FeatureNotSupported` | None |
+| `name of T` | `FeatureNotSupported` | None |
 | `keyof` | Syntax error | None |
 
 In addition there is one thing that "can be written but cannot be used at present": a declaration with a function type `let f: (x: int) => int = g`.

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-227 diagnostics: 208 errors, 19 warnings.
+231 diagnostics: 212 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,6 +189,10 @@ prints one entry.
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
 | `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
+| `0x030001A7` | [SemanticDiag::TypeOfNotAValue](#typeofnotavalue) | Error |
+| `0x030001A8` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error |
+| `0x030001A9` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error |
+| `0x030001AA` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5036,6 +5040,130 @@ Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a m
 ```
 
 *No example: no test small enough to show raises it.*
+
+### TypeOfNotAValue
+
+`0x030001A7` · Error · `SemanticDiag::TypeOfNotAValue`
+
+**Message**
+
+```text
+typeof {0} has no value type: {1}.
+```
+
+**Help**
+
+```text
+`typeof` takes the type of a value. Write an expression that produces one, or name the type directly.
+```
+
+**Example** (`test/cases/compile/static_expansion/typeof_void.cml`, run as `camel test/cases/compile/static_expansion/typeof_void.cml`)
+
+```camel
+module typeof_void
+
+func nothing(): void {
+}
+
+func main(): int sync {
+    static for (j, C) in fields typeof(nothing()) => println(j)
+    return 0
+}
+```
+
+### TypeOfNotWholeType
+
+`0x030001A8` · Error · `SemanticDiag::TypeOfNotWholeType`
+
+**Message**
+
+```text
+typeof is written inside the larger type {0}.
+```
+
+**Help**
+
+```text
+`typeof` stands for a whole type. Bind the value in a `let` and name its type, or write the enclosing type out.
+```
+
+**Example** (`test/cases/compile/static_expansion/typeof_inside_type.cml`, run as `camel test/cases/compile/static_expansion/typeof_inside_type.cml`)
+
+```camel
+module typeof_inside_type
+
+func main(): int sync {
+    static for (j, C) in fields typeof(1)[] => println(j)
+    return 0
+}
+```
+
+### SameShapeComprehensionNotComposite
+
+`0x030001A9` · Error · `SemanticDiag::SameShapeComprehensionNotComposite`
+
+**Message**
+
+```text
+{0} is not a struct or a tuple, so it has no shape to fill.
+```
+
+**Help**
+
+```text
+A same-shape comprehension names a struct or a tuple type; a leaf has no fields.
+```
+
+**Example** (`test/cases/compile/static_expansion/shape_not_composite.cml`, run as `camel test/cases/compile/static_expansion/shape_not_composite.cml`)
+
+```camel
+module shape_not_composite
+
+type N = int
+
+func build(t: int) {
+    return N { static for (n, F) in fields N => t }
+}
+
+func main(): int sync {
+    println(build(1))
+    return 0
+}
+```
+
+### SameShapeComprehensionMismatch
+
+`0x030001AA` · Error · `SemanticDiag::SameShapeComprehensionMismatch`
+
+**Message**
+
+```text
+The shape {0} is filled from the fields of {1}.
+```
+
+**Help**
+
+```text
+Write `T { static for (n, F) in fields T => ... }`: the generator must walk the shape the comprehension constructs.
+```
+
+**Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
+
+```camel
+module shape_mismatch
+
+type A = {a: int}
+type B = {b: int, c: int}
+
+func build(u: B) {
+    return A { static for (n, F) in fields B => u.[n] }
+}
+
+func main(): int sync {
+    println(build({b: 1, c: 2}))
+    return 0
+}
+```
 
 ### VarParamInAsyncFunction
 

@@ -175,6 +175,7 @@ compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+shapeComp          : typeExpr '{' staticForExpr '}'
 primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
                      | funcData
 constasData        : 'constas' identDef
@@ -295,7 +296,7 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | 切片下标切的是第一维以外的维度 `xs[:, 0]`、`xs[a:b, c]` | `SemanticDiag::ConstructNotSupported`（诊断里点名 H17） | 先用 `take` 取行，或一次只切一维 |
 | 切片下标的步长不是 1 `xs[a:b:s]` | 数组是运行时 `RuntimeDiag::InvalidArgument`，张量是编译期的 `ArgumentsRejected`（都点名 H17） | `xs->slice<0, a, b, s>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
-| `typeof e`、`名字 of T` | `FeatureNotSupported` | 无 |
+| `名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof` | 语法错误 | 无 |
 
 此外有一处“能写出来但目前用不了”：带函数类型的声明 `let f: (x: int) => int = g`。

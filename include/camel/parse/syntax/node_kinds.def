@@ -118,6 +118,7 @@ CAMEL_NODE(Literal, Expr)              // ('+' | '-')? (INTEGER | REAL) | STRING
 CAMEL_NODE(ArrayData, Expr)            // '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)? ']'
 CAMEL_NODE(StructData, Expr)           // '{' (pairedValues ','?)? '}'
 CAMEL_NODE(TupleData, Expr)            // '(' dataList? ','? ')'; with one element and no comma, the parenthesized expression
+CAMEL_NODE(ShapeComp, Expr)            // typeExpr '{' staticForExpr '}'
 CAMEL_NODE(FuncData, Expr)             // modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 
 CAMEL_NODE(TypeExpr, Type)             // interType ('?' | '!')*

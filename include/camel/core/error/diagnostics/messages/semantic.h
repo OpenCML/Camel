@@ -245,6 +245,17 @@ enum class SemanticDiag : uint32_t {
     // not determine (design principles 5.9). 0x17E and up.
     LambdaParameterWithoutType = 0x00017E,
 
+    // `typeof` and the same-shape comprehension (design principles 5.6, generic-structure
+    // README R3). 0x1A7 and up.
+    /// The expression after `typeof` has no value, so the type it stands for cannot be taken.
+    TypeOfNotAValue = 0x0001A7,
+    /// `typeof` is written inside a larger type (`typeof e[]`, `(typeof e, int)`).
+    TypeOfNotWholeType = 0x0001A8,
+    /// `T { static for ... }` names a type that is not a struct or a tuple.
+    SameShapeComprehensionNotComposite = 0x0001A9,
+    /// `T { static for (n, F) in fields U }` walks a type other than the shape `T`.
+    SameShapeComprehensionMismatch = 0x0001AA,
+
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
     IgnoredSideEffect            = 0x100002,

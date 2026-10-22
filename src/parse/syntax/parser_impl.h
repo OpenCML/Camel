@@ -327,6 +327,7 @@ class ParserImpl {
     void parseArrayData();
     void parseStructData();
     void parseTupleData();
+    void parseShapeComp();
     void parseFuncData();
     void parseIf();
     void parseMatch();
@@ -369,6 +370,8 @@ class ParserImpl {
         return peek(n) == TK::Identifier && peek(n + 1) == TK::Colon;
     }
     bool lambdaAhead() const;
+    /// A shape comprehension is ahead: a name path, `{`, and the `static for` that fills it.
+    bool shapeCompAhead() const;
 
     // ---- Types (parser_type.cpp) ----
     bool typeStartsAt(uint32_t n) const;

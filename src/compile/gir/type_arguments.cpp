@@ -60,7 +60,7 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 std::static_pointer_cast<core::data::StringData>(gct->at(i)->data())->data());
             ++i;
         }
-        types.push_back(boundType(gct->at(i)->dataType()));
+        types.push_back(resolveTypeNode(gct->at(i)->dataType(), gct->at(i)));
     }
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         const auto tmpl = found->second;
