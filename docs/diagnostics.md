@@ -4901,17 +4901,18 @@ The name '{0}' appears only in the return type and no type answers it.
 A type variable binds where it first appears in a parameter type, including the type of a 'with' parameter; a name first written in the return type has no argument to take a type from. Write it in a parameter type, or declare it explicitly as 'typeas {0}' when only the expected result determines it (design principles 5.9).
 ```
 
-**Example** (`test/cases/effects/err_pure_and_uses.cml`, run as `camel test/cases/effects/err_pure_and_uses.cml`)
+**Example** (`test/cases/compile/generic_auto_bind/err_return_only.cml`, run as `camel test/cases/compile/generic_auto_bind/err_return_only.cml`)
 
 ```camel
-// `pure` says a call touches no resource at all; `uses` names the resources it touches. A
-// signature cannot say both (PureAndUses).
-func f(): int pure uses fs {
-    return 0
+module err_return_only
+
+func make(x: int): T {
+    return x
 }
 
-func main(): int {
-    return f()
+func main(): int sync {
+    println(make(1))
+    return 0
 }
 ```
 
@@ -4991,17 +4992,15 @@ The resource group '{0}' contains itself: {1}.
 A group names resources, or other groups that name resources. Expand them in an order: a group cannot be one of its own members.
 ```
 
-**Example** (`test/cases/effects/native_clause_wrong.cml`, run as `camel test/cases/effects/native_clause_wrong.cml`)
+**Example** (`test/cases/effects/err_group_cycle.cml`, run as `camel test/cases/effects/err_group_cycle.cml`)
 
 ```camel
-module fs
+// A group names resources, or other groups that name resources, in an order: `a` contains itself
+// through `b` (ResourceGroupCycle).
+resource a = [b]
+resource b = [a]
 
-import { read_text } from fs
-
-export func exists(path: string): bool pure
-
-func main(): int sync {
-    println(exists("no/such/file"))
+func main(): int {
     return 0
 }
 ```

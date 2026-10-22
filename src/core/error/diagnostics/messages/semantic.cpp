@@ -1471,7 +1471,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-<<<<<<< HEAD
             SemanticDiag::DimensionAfterAnyRank,
             {
                 "DimensionAfterAnyRank",
@@ -1479,7 +1478,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "be written.",
                 "A pack stands for the dimensions the type does not name, so nothing can follow "
                 "it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.",
-=======
+            },
+        },
+        {
             SemanticDiag::UnknownResource,
             {
                 "UnknownResource",
@@ -1527,7 +1528,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A body-less declaration is the whole signature of a C++ operator, its resources "
                 "included: write the clause the operator declares, or remove the clause and let "
                 "the operator's declaration be the one the module publishes.",
->>>>>>> handover/h238-effects-syntax
             },
         },
         {
