@@ -163,13 +163,27 @@ timeout_ms = 30000
 
 [[tests]]
 name = "saturate.deterministic"
-desc = "The same rules, graph and budget give the same saturation: the number of rounds, matches, writings and unions of each function are fixed numbers (the matches are found in node order and applied in the order found; no hash table is walked)."
+desc = "Saturation is asserted as a property, not as a snapshot of its counters: on every function of the algebra corpus the run terminates at a fixed point within the budget (`saturated=1`), saturating the same writings again adds no writing and no union (`SATURATE-AGAIN ... writings=0 unions=0 saturated=1`), and a second run over the same program finds the same rounds, matches, writings and unions (`SATURATE-STABLE ... same=1`, the matches are found in node order and applied in the order found; no hash table is walked). The operators the rules leave are what the rules exist for, so they are asserted as well: a rule that stopped firing changes an operator count even though the counters would stay stable. All of it holds on every back end; the differential case below repeats the run in a second process."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
-args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "std::nvm"]
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_props", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
 
 expect_exit = 0
-expect_stdout_contains = ["SATURATE-INFO strict rounds=3 matches=17 writings=4 unions=3 saturated=1", "SATURATE-INFO strict_coefficients rounds=3 matches=23 writings=6 unions=5 saturated=1", "SATURATE-INFO integer_chain rounds=3 matches=26 writings=6 unions=6 saturated=1", "SATURATE-INFO mixed_permissions rounds=2 matches=9 writings=3 unions=3 saturated=1"]
+expect_stdout_contains = ["SATURATE-PROPS targets=10 saturated=10 fixpoint=10 stable=10", "SATURATE-AGAIN integer_chain writings=0 unions=0 saturated=1", "SATURATE-STABLE integer_chain same=1", "SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "saturate.deterministic.again"
+desc = "The same saturation in a second process: the counters, the fixed point and the operators left are identical, so nothing in the engine depends on an address or a hash order that only survives one run."
+kind = "differential"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_props", "std::nvm"]
+expect_exit = 0
+compare_to = "saturate.deterministic.nvm"
+compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
