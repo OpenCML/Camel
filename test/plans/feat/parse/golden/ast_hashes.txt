@@ -1287,6 +1287,8 @@ b6fd085d2a312641 ok test/cases/definitions/grad.cml
 ece491c607145dbc ok test/cases/definitions/kernels.cml
 003aeab5eb88102c ok test/cases/definitions/mean_empty.cml
 71e675dcf74e46ea ok test/cases/definitions/numel_shape.cml
+6c3b3c640f091368 ok test/cases/facts/cost_many_builtin.cml
+db4da878a08cc2be ok test/cases/facts/cost_many_tensor.cml
 740dbf2c5ffc7cb4 ok test/cases/facts/tensors_and_loops.cml
 61acf4b4dcd0d842 ok test/cases/facts/two_functions.cml
 00fb02a946aa1af0 ok test/cases/feat/mm/blocks.cml
@@ -1583,6 +1585,8 @@ e717022e42281990 ok test/cases/modules/graph_pass/camel_import_values.cml
 ae8e5ab8cf85f6b6 ok test/cases/modules/graph_pass/libvals.cml
 17a6b002b231d45e ok test/cases/modules/graph_pass/monomorphic.cml
 1bd49613078f4bc8 ok test/cases/modules/graph_pass/neutral.cml
+5f90d539bc5be6d5 ok test/cases/modules/graph_pass/neutral_identities.cml
+eedc84102e08a973 ok test/cases/modules/graph_pass/neutral_kept.cml
 bfd2fa5618e8d247 ok test/cases/modules/graph_pass/neutral_target.cml
 b0e6d4af9676f7c6 ok test/cases/modules/graph_pass/neutral_var_target.cml
 112f6d8c035fed01 ok test/cases/modules/graph_pass/params.cml
