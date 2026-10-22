@@ -54,7 +54,7 @@ func main(): int sync {
 | 模块 | 内容 |
 |---|---|
 | `str` | 字符串：按字节的切分、修剪、大小写、替换、查找、截取；按码点的计数、读取、编解码 |
-| `array` | 数组：`reverse`、`take`、`drop`、`unique`、`find`、`sum`、`min`、`max`、`sort_by`、`flat_map` 等（用 Camel 写的泛型函数） |
+| `array` | 数组：`sort`、`merge_sort`、`quick_sort`、`insert_sort`、`merge_sorted_arrays`、`argsort`、`reverse`、`take`、`drop`、`unique`、`find`、`sum`、`min`、`max`、`sort_by`、`flat_map` 等（大部分是用 Camel 写的泛型函数，排序的内核是原生算子） |
 | `math` | 常量 `pi`、`e`、`inf`、`nan`（值）；初等函数、取整、`min`/`max`/`clamp`、`gcd`/`lcm`、进制转换、位运算 `bit_and` 等 |
 | `random` | 类型 `Key`；`seed`、`rand`、`randint`、`randn`、`choice`、`sample`、`shuffle`，以及纯的键式随机 `key`、`split`、`permutation` |
 | `time` | `now`、`strftime`、`strptime` |
@@ -64,7 +64,6 @@ func main(): int sync {
 | `re` | `test` |
 | `hash` | `sha256`、`sha256_rounds` |
 | `this` | `zen` |
-| `algo` | `sort`、`merge_sort`、`merge_sorted_arrays` 等排序函数（都返回新数组，每种只有一个名字） |
 | `statistics` | `mean`、`stdev`、`variance`、`median`、`quantile` |
 | `para` | `unordered_foreach`、`unordered_reduce` |
 | `tensor`、`nn`、`autodiff`、`onnx` | 张量、网络层与优化器、求梯度、ONNX 导出；取行 `take`、`one_hot`，按目标类型重载的 `softmax_cross_entropy`（独热分布或整数类标） |

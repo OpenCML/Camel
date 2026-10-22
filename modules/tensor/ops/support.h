@@ -12,6 +12,7 @@
 #pragma once
 
 #include "../kernels/elementwise.h"
+#include "camel/core/error/runtime.h"
 #include "op_def.h"
 
 namespace camel::tensor::ops {
@@ -54,6 +55,10 @@ template <typename Fn> slot_t runKernel(std::string_view op, Fn &&body) {
         return body();
     } catch (const ShapeError &e) {
         reportShapeError(op, e.what());
+    } catch (const core::error::RuntimeFault &) {
+        // A kernel that refuses an argument type raises a runtime fault already naming the
+        // operator, the argument and what it takes; it passes through as it was raised.
+        throw;
     } catch (const std::exception &e) {
         reportKernelError(op, e.what());
     }

@@ -297,7 +297,7 @@ generational collector as it was.
 Found clean: every `onMoved` (arrays re-derive `dataPtr_`, tensors their shape and data
 pointers; the others have no pointer into themselves); every `updateRefs` for typed slots; no
 `static`, `thread_local`, module-state member or stored lambda holds a reference; the built-in
-operators and the operators of `algo`, `hash`, `fs`, `io`, `math`, `process`, `para`, `re`, `sim`,
+operators and the operators of `array`, `hash`, `fs`, `io`, `math`, `process`, `para`, `re`, `sim`,
 `statistics`, `env`, `this`, `time`, `pyplot`, `nn`, `autodiff` (run time) keep to rule 1; the
 higher-order operators of all three schedulers re-read after every element call; no address of
 auto-space memory is given to NumPy, DLPack or Python (they copy).
@@ -306,10 +306,10 @@ Not read line by line (covered by pattern searches and by the poisoned test runs
 `modules/onnx/exporter.cpp` and `lowering*.cpp`, `modules/autodiff/pullback.cpp`, the tensor
 kernels.
 
-**The standard library added since** (`modules/str`, the additions to `algo`, `math` and
-`statistics`, `stdlib/array.cml`, `rtdata::Table` and its operators, `json.decode_as`): 98
-operator bodies under 151 registered names, the 15 table functions and the 21 functions of
-`array.cml` were read. No violation of rules 2, 3, 5 or 6: every reference store goes into an
+**The standard library added since** (`modules/str`, the additions to `math` and `statistics`,
+`stdlib/array.cml`, `rtdata::Table` and its operators, `json.decode_as`): 98 operator bodies
+under 151 registered names, the 15 table functions and the functions of `array.cml` were read.
+No violation of rules 2, 3, 5 or 6: every reference store goes into an
 object created in the same call, the only in-place operators (`sort` and its variants) admit
 scalar elements only, no operator calls Camel code (the higher-order functions are Camel
 source on top of `map` and `reduce`, and `argsort` takes a key array, not a function), no
@@ -320,8 +320,8 @@ here and left to the standard-library work:
 
 | # | Where | What | Effect |
 |---|---|---|---|
-| 22 | `modules/algo/sequence.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `==` and `contains` on such values do the same |
-| 23 | `modules/algo/sequence.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` were deduplicated by address (an instance of 21); gone with `any` |
+| 22 | `src/builtin/operators/array.cpp` (`unique`, composite elements) | `equals(..., deep=false)` compares nested references by address | two equal `(string, int)` or `string[]` elements are both kept; built-in `==` and `contains` on such values do the same |
+| 23 | `src/builtin/operators/array.cpp` (`unique`, element type `any`) | slots hashed as integers | references in an `any[]` were deduplicated by address (an instance of 21); gone with `any` |
 | 24 | `rtdata/collection.cpp` (`Table::equals`, `deep == false`) | values compared with `memcmp` | reachable through 22 and through `contains` on an array of maps |
 
 ## 8. Tools

@@ -70,7 +70,7 @@ func gather_loss(): float {
 
 func main(): int sync {
     let model = {
-        weights: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0], [2, 3]),
+        weights: reshape([1.0, 2.0, 3.0, -4.0, 5.0, -6.0] as f32[], [2, 3]),
         labels: cast([1, 0], 'int64'),
     }
     let (v1, g1) = with_grad(one_hot_loss)<model>()

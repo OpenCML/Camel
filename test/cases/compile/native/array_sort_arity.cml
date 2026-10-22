@@ -1,10 +1,10 @@
 /**
- * `algo:sort` is declared with one array argument: a second one is refused at the call, and the
+ * `array:sort` is declared with one array argument: a second one is refused at the call, and the
  * overload the message lists is the declaration's (handover H202; H194 bucket 1).
  */
-module algo_sort_arity
+module array_sort_arity
 
-import { sort } from algo
+import { sort } from array
 
 func main(): int sync {
     println(sort([3, 1, 2], 1))

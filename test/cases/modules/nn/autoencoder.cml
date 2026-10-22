@@ -27,9 +27,9 @@ func reconstruction_loss(x: Tensor, target: Tensor): float {
 
 func init(): AutoEncoder {
     return {
-        enc_w: full([2, 2], 0.1),
+        enc_w: full([2, 2], f32(0.1)),
         enc_b: zeros([2]),
-        dec_w: full([2, 2], 0.1),
+        dec_w: full([2, 2], f32(0.1)),
         dec_b: zeros([2])
     }
 }
@@ -40,7 +40,7 @@ func train(model: AutoEncoder, x: Tensor, steps: int): AutoEncoder {
 
 func main(): int sync {
     let model = init()
-    let x = full([4, 2], 1.0)
+    let x = full([4, 2], f32(1.0))
 
     let before = reconstruction_loss<model>(x, x)
     let vg = with_grad(reconstruction_loss)<model>(x, x)

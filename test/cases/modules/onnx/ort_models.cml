@@ -22,7 +22,7 @@ func forward(x: Tensor, w: Tensor): Tensor {
 
 func main(): int sync {
     let x = load_npy(get_env('X'))
-    let w = reshape([1.0, 0.0, 2.0, 0.0, 1.0, -1.0], [2, 3])
+    let w = reshape([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[], [2, 3])
     let isGate = get_env('MODEL') == 'gate'
     let y = if isGate then gate(x) else forward(x, w)
     save_npy(y, get_env('Y'))

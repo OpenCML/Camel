@@ -32,8 +32,8 @@ func where_loss(w: Tensor): f32 {
 }
 
 func main(): int sync {
-    let multiplied = new([[1.0, 2.0, 3.0]])
-    let selected = new([[1.0, -2.0, 3.0]])
+    let multiplied = new([[1.0, 2.0, 3.0]] as f32[][])
+    let selected = new([[1.0, -2.0, 3.0]] as f32[][])
     let (v1, g1) = with_grad(multiply_loss)<f32(2.0)>(multiplied)
     let (v2, g2) = with_grad(where_loss)<f32(0.5)>(selected)
     'grad_scalar_width multiply=({:.1f},{:.1f}) where=({:.1f},{:.1f})'->format<v1, g1, v2, g2>->println

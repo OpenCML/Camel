@@ -1,0 +1,13 @@
+/**
+ * A named argument names a parameter of the callee: `z` is not one (design principles 4.4,
+ * handover H276).
+ */
+module param_argument_unknown
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1, z: 2)
+}

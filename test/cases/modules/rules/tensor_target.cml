@@ -43,7 +43,7 @@ func i64_distribute(a: Tensor<i64>, b: Tensor<i64>, c: Tensor<i64>): Tensor<i64>
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(combine(x))
     println(combine_mixed(x))
     println(combine_mixed_granted(x))

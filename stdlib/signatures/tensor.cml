@@ -352,7 +352,8 @@ export func cast(t: Tensor | number[], dtype: string): Tensor
 
 /// A tensor of the given shape made of little-endian elements. The element type is the explicit
 /// type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-/// is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+/// is `f32`, `f64`, `i32`, `i64` or `bool`, exactly the type given. A byte count that does not fit
+/// the shape is a fault.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type
 /// @example from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])

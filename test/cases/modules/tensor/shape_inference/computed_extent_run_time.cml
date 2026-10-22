@@ -9,6 +9,6 @@ func g(y: Tensor<f32, [6]>, n: int): float {
 }
 func main(): int sync {
     println('ran')
-    println(g(reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [6]), 3))
+    println(g(reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [6]), 3))
     return 0
 }

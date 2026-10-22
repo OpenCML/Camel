@@ -694,6 +694,14 @@ LinkedBytecodeResult compileAndLinkGraphs(
         if (known(runtimeGraph)) {
             continue;
         }
+        // A generic declaration leaves a placeholder graph behind while its instances are the
+        // graphs that are built. When a call site folds the call to a constant, nothing else
+        // builds the placeholder, and it reaches this pass with no node at all: it has no
+        // bytecode and no call it can serve, so it is skipped rather than reported as an
+        // internal error.
+        if (runtimeGraph->nodeCount() == 0) {
+            continue;
+        }
         camel::runtime::validateRuntimeGraphPayload(program, runtimeGraph);
         size_t start = baseOffset + linked.size();
         std::unordered_map<size_t, camel::source::origin_id_t> localPcOrigins;

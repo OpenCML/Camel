@@ -1676,18 +1676,6 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TensorElementTypeNotStored,
-            {
-                "TensorElementTypeNotStored",
-                "'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this "
-                "declaration would silently run with '{1}'. Tensors that keep the element type "
-                "they are written with are not implemented yet.",
-                "Write '{1}' and convert the values explicitly where they enter the tensor; "
-                "element-type-exact tensor storage (design/arrays-memory, P4) removes this "
-                "restriction. 'zeros' and 'ones' already build f32 tensors.",
-            },
-        },
-        {
             SemanticDiag::WhenConditionNotBool,
             {
                 "WhenConditionNotBool",
@@ -1853,6 +1841,132 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "function value.",
                 "A function value binds the 'with' arguments it is given in order; name a "
                 "parameter only in a call, 'f<name: value>(x)'.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentUnknown,
+            {
+                "ParamArgumentUnknown",
+                "'{0}' is not a parameter of '{1}'.",
+                "A named argument is written as in a struct literal, 'name: value', and must "
+                "be one of the callee's ordinary parameters.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentDuplicate,
+            {
+                "ParamArgumentDuplicate",
+                "The parameter '{0}' of '{1}' is given twice.",
+                "Give each parameter once: positionally, or by name after the positional "
+                "arguments.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentMissing,
+            {
+                "ParamArgumentMissing",
+                "The call gives no value for the parameter '{0}' of '{1}', and it has no "
+                "default.",
+                "Give the parameter, or write a default where the parameter is declared "
+                "('name: type = value').",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentCallee,
+            {
+                "ParamArgumentCallee",
+                "The argument '{0}' is given by name, and the signature of '{1}' is not known "
+                "where the call is written.",
+                "Name one function, or give the arguments positionally.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentPositionalAfterNamed,
+            {
+                "ParamArgumentPositionalAfterNamed",
+                "A positional argument follows a named one in the call of '{0}'.",
+                "Write the positional arguments first, then the named ones ('f(1, by: 2)').",
+            },
+        },
+        {
+            SemanticDiag::ParamDefaultNotConstant,
+            {
+                "ParamDefaultNotConstant",
+                "The default of the parameter '{0}' is not a compile-time constant: {1}.",
+                "A default is evaluated where the declaration is, not at each call, so it can "
+                "only be a constant expression.",
+            },
+        },
+        {
+            SemanticDiag::ParamDefaultWrongType,
+            {
+                "ParamDefaultWrongType",
+                "The default of the parameter '{0}' has type '{1}', not '{2}'.",
+                "The default is a value of the parameter's type, as an argument at the call "
+                "would be.",
+            },
+        },
+        {
+            SemanticDiag::ParamAfterDefault,
+            {
+                "ParamAfterDefault",
+                "The parameter '{0}' has no default and follows '{1}', which has one.",
+                "Write a default here too, so that a call that leaves '{1}' out can still give "
+                "'{0}' by name.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallArgumentNotConstant,
+            {
+                "FoldCallArgumentNotConstant",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "A call in a place that needs a compile-time constant is evaluated only when "
+                "every argument is a constant itself: a literal, the 'n' of a 'static for', a "
+                "'constas' value, or an expression the compiler can evaluate. Make the argument "
+                "a constant, or move the call to a place where a runtime value is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallHasEffects,
+            {
+                "FoldCallHasEffects",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "Only a pure call is evaluated: a function with no effects and no reads of "
+                "mutable state. Remove the effect from the declaration, or call it where a "
+                "runtime value is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallTooDeep,
+            {
+                "FoldCallTooDeep",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "A call that recurses without reaching a value for the constants it is given "
+                "is not a compile-time constant. Give the recursion a base case that the "
+                "constants reach, or move the call to a place where a runtime value is "
+                "accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallResultNotConstant,
+            {
+                "FoldCallResultNotConstant",
+                "The call of '{0}' cannot be used as a compile-time constant: {1}.",
+                "A compile-time value is a number, a bool, a string or a character. Return one "
+                "of those from the function, or move the call to a place where a runtime value "
+                "is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallNotEvaluable,
+            {
+                "FoldCallNotEvaluable",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "The body of a folded call is read from the same constructs a 'when' condition "
+                "reads: data, names, blocks, 'match type', 'static for'/'static loop', branches, "
+                "fields, arithmetic and comparisons, and calls of other pure functions. Rewrite "
+                "the body with those, or move the call to a place where a runtime value is "
+                "accepted.",
             },
         },
     };

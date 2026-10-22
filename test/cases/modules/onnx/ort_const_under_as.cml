@@ -20,8 +20,8 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 
 func affine(x: Tensor<f32, [2, 3]>): Tensor {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, [2, 3]>
-    let k = reshape([0.5, -0.5, 0.25, -0.25, 1.5, -1.5], [6]) as Tensor<f32, [?]>
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
+    let k = reshape([0.5, -0.5, 0.25, -0.25, 1.5, -1.5] as f32[], [6]) as Tensor<f32, [?]>
     return x * w + reshape(k, [2, 3])
 }
 
@@ -33,7 +33,7 @@ func checked(x: Tensor): Tensor {
 
 with <x: Tensor>
 func loss(): float {
-    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) as Tensor<f32, [2, 3]>
+    let w = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
     let y = (x * x) as Tensor<f32, [2, 3]>
     return sum(y * w)
 }
@@ -43,7 +43,7 @@ func step(x: Tensor): (float, Tensor) {
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3]) as Tensor<f32, [2, 3]>
+    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3]) as Tensor<f32, [2, 3]>
     export_model(affine, ex, 'affine.onnx')
     export_model(checked, ex, 'checked.onnx')
     export_model(step, ex, 'step.onnx')

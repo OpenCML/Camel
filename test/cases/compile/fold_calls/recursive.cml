@@ -1,0 +1,18 @@
+/**
+ * A pure function that recurses to a base case is folded over its constant argument: the
+ * build-time evaluator runs the recursion. `depth(2)` is the index of the third element, so the
+ * result is a constant in the two places that need one.
+ */
+module fold_call_recursive
+
+/// The depth of `n` by counting down: a pure recursion with a base case.
+func depth(n: int): int {
+    return if n == 0 then 0 else depth(n - 1) + 1
+}
+
+func main(): int sync {
+    println(depth(3))
+    let xs = (10, 20, 30)
+    println(xs.[depth(2)])
+    return 0
+}

@@ -71,7 +71,7 @@ with no path between them that are each worth a task: a higher-order operator (`
 an item. Every other scope runs inline on the calling thread, in the linear order.
 
 A graph is heavy when its body, or the body of a graph it calls directly or indirectly,
-contains a higher-order operator, an operator of a module (`tensor:matmul`, `algo:sort`: any
+contains a higher-order operator, an operator of a module (`tensor:matmul`, `array:sort`: any
 operator that is not one of the built-in `:...` operators), or a call of a function value (whose
 callee is not known when the plan is built). A graph that only does built-in arithmetic and
 comparisons and calls such graphs, like the body of `fib`, is light: a task per call costs more

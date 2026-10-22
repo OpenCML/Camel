@@ -1,9 +1,9 @@
-// `Tensor<f32>` is the element type this build stores, so it keeps working everywhere: as a cast
-// target, as a parameter type, in creation, arithmetic, reduction and the byte view. The expected
-// bytes below are what f32 has always stored for these values.
+// `Tensor<f32>` is a real element type: the literal it is built from is f32, and the tensor keeps
+// working everywhere — as a parameter type, in arithmetic, reduction and the byte view. The
+// expected bytes below are what f32 has always stored for these values.
 module tensor_dtype_f32_works
 
-import { Tensor, new, zeros, ones, multiply, sum, to_bytes } from tensor
+import { Tensor, new, reshape, zeros, ones, multiply, sum, to_bytes } from tensor
 import { to_array } from bytes
 
 func twice(x: Tensor<f32>): Tensor {
@@ -11,8 +11,9 @@ func twice(x: Tensor<f32>): Tensor {
 }
 
 func main(): int sync {
-    let a = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f32>
-    let z = zeros([2, 2]) as Tensor<f32>
+    let values: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let a = reshape(new(values), [2, 2])
+    let z = zeros([2, 2])
     println(sum(a))
     println(sum(twice(a)))
     println(sum(z))
