@@ -4113,7 +4113,16 @@ A field cannot be taken from '{0}' by a compile-time key.
 't.[key]' names a field of a struct or an element of an ordinary tuple. A 'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or an array has no fields.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/tree_shape_error.cml`, run as `camel test/cases/modules/tree_shape_error.cml std::nvm`)
+
+```camel
+module tree_shape_error
+import { tree_map } from tree
+func main(): int sync {
+    println(tree_map<(a: int, b: int): int => a + b>({ block: (1, 2) }, { block: 3 }))
+    return 0
+}
+```
 
 ### StaticAccessUnknownField
 

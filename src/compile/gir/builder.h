@@ -1006,11 +1006,11 @@ class Builder {
         const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, const GCT::node_ptr_t &call,
         Type *expectedResult);
-    // Type-directed tree intrinsics expand to ordinary accesses, calls and fills.
+    /// The leaves of a tree as one flat tuple: the one tree intrinsic still expanded here, because
+    /// the result type is a concatenation of the leaves of every field (see tree.cpp).
     node_handle_t expandTreeCall(
         const oper_group_ptr_t &ops, const std::vector<Argument> &with,
         const std::vector<Argument> &norm, const GCT::node_ptr_t &call);
-    void registerTreeOrigin(node_handle_t node, const GCT::node_ptr_t &origin, const char *kind);
     compile_graph_ptr_t instantiateGeneric(
         const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
         const camel::core::type::ExtentValues &extents, const ConstasValues &constas,
@@ -1349,9 +1349,9 @@ class Builder {
     /// once per field, in the current graph, with the state names bound to the previous round's
     /// values; the value is the last state (a tuple FILL when there are several).
     node_handle_t visitStaticLoopNode(const GCT::node_ptr_t &gct);
-    /// The pack the C++ `tree_map` expansion makes: a static value of `values.size()` slots and a
-    /// FILL whose type has the fields of `shape` (a tuple of the values' types when `shape` is not
-    /// a struct). The origins are recorded against `origin` under `originKind`.
+    /// The pack a `static for` over a struct or tuple makes: a static value of `values.size()`
+    /// slots and a FILL whose type has the fields of `shape` (a tuple of the values' types when
+    /// `shape` is not a struct). The origins are recorded against `origin` under `originKind`.
     node_handle_t packStaticValues(
         bool isStruct, Type *shape, const std::vector<node_handle_t> &values,
         const GCT::node_ptr_t &origin, const char *originKind);
