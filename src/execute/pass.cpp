@@ -34,6 +34,7 @@
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/execute/entry_args.h"
+#include "camel/execute/observer.h"
 #include "camel_pass.h"
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/edges.h"
@@ -1686,18 +1687,23 @@ PassApplyResult applyPassesDetailed(
             EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit(p.c_str(), program->root()); });
             camel::utils::phase::Scope phaseScope("pass", p);
             auto pass = factory(ctx);
+            // The debugger's observer is told which pass runs: only a scheduling pass runs the
+            // program it debugs; a rewrite or translation pass may evaluate graphs of its own.
+            const bool schedules = dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr;
+            if (auto *observer = camel::execute::executionObserver()) {
+                observer->passStarting(schedules, program->root());
+            }
             // Diagnostics raised while this pass runs carry its stage: "run" for a scheduling
             // pass (the program executes), "pass:<name>" for rewrite and translation passes.
             struct StageScope {
                 explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
                 ~StageScope() { setPipelineStage(""); }
             } stageScope(
-                dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr ? std::string("run")
-                                                                         : "pass:" + specName(p));
+                schedules ? std::string("run") : "pass:" + specName(p));
             // A program runs only when every parameter of `main` has a value. Parameters
             // left open are fine for rewriting and translation (they are the inputs of what
             // is translated); nothing may execute with a slot nobody filled.
-            if (dynamic_cast<GraphSchedulePass *>(pass.get()) != nullptr) {
+            if (schedules) {
                 const auto open = camel::execute::unboundEntryParameters(program->root());
                 if (!open.empty()) {
                     std::string names;

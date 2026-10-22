@@ -116,6 +116,7 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     void tailCall() override;
     void beforeInstruction(const camel::execute::InstructionSite &site) override;
     void faultRaised(const camel::core::error::RuntimeFault &fault, bool isolated) override;
+    void passStarting(bool schedules, camel::runtime::GCGraph *root) override;
 
   private:
     DebugCore() = default;
@@ -345,6 +346,8 @@ class DebugCore final : public camel::execute::ExecutionObserver {
     // Serialized only while stopped at a pipeline boundary; no retained GC pointers.
     std::string pipelineGir_;
     bool runIndexed_       = false;
+    /// True only while a scheduling pass runs the program (see passStarting).
+    bool observingRun_     = false;
     bool entryStopPending_ = false;
     Step step_;
     uint64_t seenConfig_ = 0;

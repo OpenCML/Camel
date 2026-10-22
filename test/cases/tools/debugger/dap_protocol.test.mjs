@@ -224,7 +224,15 @@ await runTest(async (t) => {
             'opt: the folded sum loses its breakpoint with the constant-only reason',
             folded,
         )
+        // The passes evaluate graphs of their own (the rules library's). That work is not the
+        // program's run: a breakpoint on code that survives the passes must stay verified, or a
+        // pass would wipe out every breakpoint of the file before the program starts (H150).
         const stop = await dap.waitStop()
+        check(
+            !dap.events.some((e) => e.event === 'breakpoint' && e.body.breakpoint?.id === s.breakpoints[CALLS][2].id),
+            'opt: a pass running its own graphs does not withdraw the breakpoint that survives',
+            dap.events.filter((e) => e.event === 'breakpoint'),
+        )
         checkEq(stop?.line, printLine, 'opt: the surviving effect stops at its source line')
         checkEq(stop?.body.hitBreakpointIds, [s.breakpoints[CALLS][2].id], 'opt: only the surviving breakpoint is hit')
         const locals = await dap.variables(stop.top.id)
