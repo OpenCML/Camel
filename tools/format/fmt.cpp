@@ -2011,6 +2011,14 @@ any Formatter::visit(syn::Node context) {
         return "(" + any_cast<string>(visit(context.type())) + ")";
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
+    case NK::ShapeComp: {
+        // `T { static for (n, F) in fields U => e }`: the shape is written as a type, and the
+        // generator prints as it does on its own; the braces are tokens, so the generator is
+        // taken by kind and not by child index.
+        const auto generator = context.get<cst::StaticForExpr>();
+        return formatTypeInTypePosition(context.type()) + " { " +
+               any_cast<string>(visitStaticForExpr(generator)) + " }";
+    }
     case NK::ConstasData:
         return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::SliceIndices:
