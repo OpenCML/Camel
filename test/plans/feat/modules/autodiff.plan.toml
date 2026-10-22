@@ -2586,6 +2586,19 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
+name = "refuse_cast_array"
+desc = "`cast` takes a numeric array as well as a tensor, and an array's tangent is the array of its elements' tangents (design principles 9.9): the gradient of the tensor it returns would have to go back into an array, which no operator here builds from a tensor's gradient. The rule used to drop it and the pass materialized the array's zero -- [0.0, 0.0, 0.0] for a loss whose gradient is [1, 1, 1], the silent zero this class of defect is about. It is refused by name at the cast call (line 18), like new, reshape and concat, naming the operator and the array's type. A constant array is not refused: it starts no gradient flow."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_cast_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 18
+expect_output_contains = ["cannot differentiate operator 'tensor:cast'", "numeric array of type 'float[]'", "would be dropped silently"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
 name = "slice_open_end.runtime.nvm"
 desc = "The open-ended slice `x[3:]`: the end was not written, so the adjoint recovers it as dim(x, 0), the length of the parent along the sliced dimension, instead of reading it from the call. Checked against the adjoint written out by hand for sum(x[3:] * [2, 3]), which is [0, 0, 0, 2, 3]: `dot` with c = [0, 0, 0, 1, 2] is 8.0 (0.0 if the rule returned the zero tensor, and 0.0 again if the gradient landed a place to the left), `sq` is 13.0 and `sum` 5.0. (grad built at run time)"
 kind = "behavior"
@@ -2619,4 +2632,61 @@ expect_diagnostic_line = 28
 expect_stdout_contains = ["concat_array_part sum=5.0 sq=13.0"]
 expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_scalar_width.runtime.nvm"
+desc = "A gradient handed to the accumulator is of the parameter's own element type, and this is where the scalar path used to break it. `w * x` on an f32 parameter runs tensor:multiply, whose rule reduces the scalar operand's gradient with tensor:sum -- a float64 operator. Stored as it was, the float64 node sat in the f32 parameter's tangent and was read at f32's width: 6.0 is 0x4018000000000000, whose low half is 0x00000000, so the program printed a gradient of 0.0 with nothing faulting. The rules now convert the gradient to the value's width (:op/dtof) and the accumulator refuses any gradient still of another element type, so the multiply prints 6.0 and a `where` branch prints 1.0 -- their real derivatives. Red if a gradient of another element type is accepted again (both numbers are integral, so read at f32's width they are 0.0) and red if a rule stops converting and the accumulator refuses instead (the line is missing and the process exits 1). (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_scalar_width.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "grad_scalar_width multiply=(12.0,6.0) where=(4.5,1.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "grad_scalar_width.macro.fvm"
+desc = "The same f32 scalar widths when std::macro builds the gradient ahead of time and the FastVM runs it: the :op/dtof conversion the rules add is in the compiled gradient graph too, and the numbers are the same bits."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/grad_scalar_width.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "grad_scalar_width multiply=(12.0,6.0) where=(4.5,1.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "refuse_gradient_element_type_rule"
+desc = "The report's own shape: a hand-written rule for a gather that answers with a gradient of the other float width. pick_rule declares f32 and returns f32(0.0) for a float[] parameter; an f32 zero read as f64 is exactly 0.0, so the derivative of xs[1] (which is [0, 1, 0]) used to come back as the zero a discrete input may legitimately have. The build refuses it at the pick call (line 31), naming the value's element type (float[]), the gradient's (f32) and that the derivative rule produced it. Red if the accumulator accepts the mismatch again: the program then runs and prints grad=0.0."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_gradient_element_type_rule.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GradientElementTypeMismatch"
+expect_diagnostic_line = 31
+expect_output_contains = ["of type 'float[]'", "element type 'f32'", "the derivative rule produced it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gather_discrete_index_zero.runtime.nvm"
+desc = "The zero the refusal must leave alone (design principles 9.9): a gather whose index array is discrete. take never accumulates into its indices, so what the accumulator materializes for them is the zero of their own type, and the rows the indices name get their real gradient. Printed together: the weights' gradient sums to 6.0 and the labels' to exactly 0.0, so neither a pass that produced nothing nor a rule that leaked the weights' gradient into the indices passes. Red if the new check starts refusing a discrete input's zero or if it is replaced by a converted gradient."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/gather_discrete_index_zero.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "gather_discrete_index_zero value=1.0 weights_grad=6.0 index_grad=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "gather_discrete_index_zero.macro.fvm"
+desc = "The same discrete zero when std::macro builds the gradient ahead of time and the FastVM runs it: the zero is decided by take's rule in the compiled gradient graph too, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/gather_discrete_index_zero.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "gather_discrete_index_zero value=1.0 weights_grad=6.0 index_grad=0.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
