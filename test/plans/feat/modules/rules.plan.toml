@@ -866,3 +866,48 @@ expect_exit = 1
 expect_output_contains = ["GraphPassFailed", "NoAttribution", "the run was made without attribution"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "rules.accuracy_check_compares_error"
+desc = "A rule that asks for `refine_accuracy` is checked by error, not by bits (rewrite design 2 (second version) 8.10): `log(1 + x) => log1p(x)` passes, the same law written the other way is worse near zero and fails with the sample printed, and the softmax rule is checked on a rank-1 tensor, a matrix and a rank-3 tensor with axis 2, each sampled from the axis operand rather than a fixed rank-1 shape."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_accuracy.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok accurate_log1p: 100 samples, worst error ratio", "FAIL worse_log1p: the right side is worse at (", "ok softmax_vector: 100 samples, worst error ratio", "shapes [3]", "ok softmax_matrix: 100 samples, worst error ratio", "shapes [2, 3]", "ok softmax_axis2: 100 samples, worst error ratio", "shapes [2, 2, 2]", "axes -1 0 1 2"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rules.accuracy_rejects_naive_softmax"
+desc = "The naive softmax is not in the licensed set, and the refusal is visible: `check` measures `exp(x) / sum(exp(x), axis, true) => softmax(x, axis)` on f32 `[-1e-16, 27.004, -33.563]` and fails it, printing the sample, both errors (1.91128e-06 against 7.75714e-08) and the ratio. The stable form subtracts the maximum before exp, so exp's argument-scaling error grows with |x - max|."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_rejected_softmax.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["FAIL tensor_softmax_naive: the right side is worse at (tensor<f32> [3] {-1e-16, 27.004, -33.563}, 0)", "1.91128e-06", "7.75714e-08", "ratio 8.01648"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rules.accuracy_library_passes_the_check"
+desc = "Every rule of `rules::accuracy` passes the error check: the scalar log1p and expm1 laws in f64 and f32, and the log-of-softmax rule over vectors, matrices and rank-3 tensors (overflow, underflow, denormals and the near-zero log). The report carries the worst-case error ratio."
+kind = "behavior"
+case = "../../../cases/modules/rules/check_accuracy_library.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["ok float_log1p: 100 samples, worst error ratio", "ok f32_log1p: 100 samples, worst error ratio", "ok float_expm1: 100 samples, worst error ratio", "ok f32_expm1: 100 samples, worst error ratio", "ok tensor_log_softmax_of_softmax: 100 samples, worst error ratio"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rules.accuracy_licence_gates_simplify"
+desc = "The accuracy rules are in `rules::simplify`'s set but fire only where the node grants `refine_accuracy`: `plain` keeps `log(1 + x)` and returns 0 at 1e-30, `licensed` is rewritten to `log1p(x)` and returns 1e-30, and `guarded`, which grants the permission and is `#strict`, keeps its form because no permission applies under `#strict` (rewrite 8.10; design principles 7.4)."
+kind = "behavior"
+case = "../../../cases/modules/rules/accuracy_licence_target.cml"
+args = ["${case}", "accuracy_counts::report", "rules::simplify", "accuracy_counts::report", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["plain 1 0", "licensed 1 0", "guarded 1 0", "plain 1 0", "licensed 0 1", "guarded 1 0", "0.0 1e-30 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

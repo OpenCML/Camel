@@ -11,18 +11,22 @@ module accuracy_scalar_target
 
 import { exp, expm1, log1p, log } from math
 
+#[refine_accuracy]
 func naive_log1p(x: float): float {
     return log(1.0 + x)
 }
 
+#[refine_accuracy]
 func naive_expm1(x: float): float {
     return exp(x) - 1.0
 }
 
+#[refine_accuracy]
 func naive_log1p32(x: f32): f32 {
     return log(1.0 + x)
 }
 
+#[refine_accuracy]
 func naive_expm1_32(x: f32): f32 {
     return exp(x) - 1.0
 }

@@ -1,0 +1,28 @@
+/**
+ * The measured rejection that keeps `tensor_softmax_naive` out of `rules::accuracy`.
+ *
+ * The naive form exponentiates values near zero, where exp's argument-scaling error is
+ * negligible. The stable form subtracts the maximum first, so for an element far below the
+ * maximum it exponentiates `x - max` (about -27 here), and exp's relative error grows with
+ * |x - max|: the f32 argument scaling carries an absolute error of about |x| * 2^-24, which
+ * becomes a relative error of about 1e-6 at 27. On this sample the naive form's tiny
+ * probability has error 4.98e-8 and the stable form's 1.91e-6, so `check` refuses the rewrite.
+ *
+ * The rule is local: a candidate that fails the check is not exported by the library. The
+ * full mechanism and the two options for the reviewer are in
+ * `docs/handover/reports/accuracy-softmax-trade.md`.
+ */
+module check_rejected_softmax
+
+import { check } from rewrite
+import { Tensor, exp, softmax, sum } from tensor
+
+#requires<refine_accuracy>
+rule tensor_softmax_naive(x: Tensor<f32, [3]>, const axis: int) {
+    exp(x) / sum(exp(x), axis, true) => softmax(x, axis)
+}
+
+func main(): int sync {
+    println(check([tensor_softmax_naive], 100, 7))
+    return 0
+}
