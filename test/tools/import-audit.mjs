@@ -122,15 +122,12 @@ function bracedBody(text, from) {
     return { body: text.slice(open), start: open, source: text }
 }
 
-// `ckpt` is built from `modules/tree` (its CMake target is named ckpt); every other `.cmo`
-// module has a directory of its own, and `array` is Camel only.
-const MODULE_SOURCE_DIR = { ckpt: 'tree' }
-
+// Every `.cmo` module has a directory of its own named after the module; `array` and `tree`
+// are Camel only and have no `module.cpp`.
 function moduleSource(module) {
-    const dir = MODULE_SOURCE_DIR[module] || module
     const candidates = [
-        path.join(REPO_ROOT, 'modules', dir, 'module.cpp'),
-        path.join(REPO_ROOT, 'modules', dir, 'src', 'module.cpp'),
+        path.join(REPO_ROOT, 'modules', module, 'module.cpp'),
+        path.join(REPO_ROOT, 'modules', module, 'src', 'module.cpp'),
     ]
     for (const candidate of candidates) {
         if (fs.existsSync(candidate)) {

@@ -192,8 +192,8 @@
         },
         {
             "comment": "Checkpoint trees.",
-            "paths": ["modules/tree/"],
-            "plans": ["feat/modules/checkpoints.plan.toml"]
+            "paths": ["modules/ckpt/"],
+            "plans": ["feat/modules/ckpt.plan.toml", "feat/modules/checkpoints.plan.toml"]
         },
         {
             "comment": "I/O: the module's plan and the std facade that wraps it.",
