@@ -179,7 +179,10 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
 
 - `run_preferred_resident<fn>(inputs)` specializes a function graph for actual input
   shapes, compiles CUDA with NVRTC and executes on the device when a program can be
-  made for it; the host prepares a resident program otherwise. It returns
+  made for it; the host prepares a resident program otherwise. A reusable graph-bound
+  template is used when the signature fixes the shapes; a shape-generic signature is
+  specialized from the call's arguments on the same device, not moved to the host
+  merely because the template cannot be made. It returns
   `Device<Tensor<...>>` or `Device<float>` leaves in the result's original tuple/struct
   structure. Outputs retain their allocations instead of downloading; feed them
   directly into subsequent graph calls and use `download` only when host values are
