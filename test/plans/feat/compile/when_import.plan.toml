@@ -1,0 +1,76 @@
+id = "compile.when_import"
+order = 329
+tier = "fast"
+tags = ["feat", "compile", "generics", "overloads", "modules", "import"]
+desc = "A `when` condition resolves a predicate call where its declaration is written (design principles 5.13, 10.2): the module's own names, then what its imports bring (a module prefix, a selective import, an alias), then the prelude. An imported predicate is instantiated and constant-folded exactly as a local one; a name that is not a predicate, two imports of one name, and a predicate in a module that is not imported each have their own report."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "when_import.qualified_true"
+desc = "A predicate in module `predicates`, called through its module prefix from the `when` of a declaration in another module, applies: the instance is constant-folded from the imported template."
+kind = "behavior"
+case = "../../../cases/compile/when_import/qualified_true.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "compound\n"
+
+[[tests]]
+name = "when_import.qualified_false"
+desc = "The same imported predicate where it does not hold: the call site lists the condition (`predicates::is_compound::<T>()`) and no candidate applies."
+kind = "negative"
+case = "../../../cases/compile/when_import/qualified_false.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
+expect_output_contains = ["predicates::is_compound::<T>()", "every candidate's 'when' condition is false"]
+
+[[tests]]
+name = "when_import.selective"
+desc = "The same through a selective import (`import { has_field }`), with a body that folds `fields T`, a `static loop` and `==` at compile time."
+kind = "behavior"
+case = "../../../cases/compile/when_import/selective.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
+[[tests]]
+name = "when_import.alias"
+desc = "The same through `import ... as`: the alias names the module the predicate comes from."
+kind = "behavior"
+case = "../../../cases/compile/when_import/alias.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "compound\n"
+
+[[tests]]
+name = "when_import.not_predicate"
+desc = "An imported name that exists but is not a compile-time predicate (`ready` is an ordinary function): the condition reports it and is never taken for true."
+kind = "negative"
+case = "../../../cases/compile/when_import/not_predicate.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenPredicateNotCompileTime"
+expect_output_contains = ["'ready' is not a compile-time predicate", "'when_import_predicates'"]
+
+[[tests]]
+name = "when_import.not_imported"
+desc = "A predicate in a module the condition's module does not import: the report says it is not imported, and names the declaring module, rather than calling the name unknown."
+kind = "negative"
+case = "../../../cases/compile/when_import/not_imported.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenPredicateNotImported"
+expect_output_contains = ["'is_compound' is declared in module 'when_import_predicates'", "not imported"]
+
+[[tests]]
+name = "when_import.ambiguous"
+desc = "Two selective imports bring a predicate of one name: neither is chosen, and the report lists the modules."
+kind = "negative"
+case = "../../../cases/compile/when_import/ambiguous.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WhenPredicateAmbiguous"
+expect_output_contains = ["ambiguous", "'when_import_predicates'", "'when_import_predicates_other'"]

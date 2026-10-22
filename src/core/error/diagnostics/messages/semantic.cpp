@@ -1729,6 +1729,41 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "satisfies a condition, or write another overload for this call.",
             },
         },
+        {
+            SemanticDiag::WhenPredicateNotImported,
+            {
+                "WhenPredicateNotImported",
+                "'{1}' is declared in module '{2}', but that name is not imported where the "
+                "'when' condition of '{0}' is written.",
+                "A condition resolves names where its declaration is written, as a call in its "
+                "body does: the module's own names, then what it imports by name, selectively "
+                "or as a module prefix, then the prelude. Import the module that declares the "
+                "predicate, or move the predicate into the module that uses it.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateNotCompileTime,
+            {
+                "WhenPredicateNotCompileTime",
+                "'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can "
+                "call: {2}.",
+                "A condition calls a generic function whose body reduces to a constant over the "
+                "types it is given: a 'match type', a 'static for' or a 'static loop' over "
+                "'fields T', and the comparison operators. An ordinary function runs at run "
+                "time, and a value is read there too.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateAmbiguous,
+            {
+                "WhenPredicateAmbiguous",
+                "The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is "
+                "imported from {2}.",
+                "Two imports that bring one name do not choose between them. Import the "
+                "predicate by another name ('import {{ p as q }} from m') or qualify it with the "
+                "module it comes from ('m::p').",
+            },
+        },
     };
 
     return infoMap;

@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-238 diagnostics: 219 errors, 19 warnings.
+241 diagnostics: 222 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -199,6 +199,9 @@ prints one entry.
 | `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error |
 | `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error |
 | `0x030001B6` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error |
+| `0x030001BF` | [SemanticDiag::WhenPredicateNotImported](#whenpredicatenotimported) | Error |
+| `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error |
+| `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5374,6 +5377,102 @@ func build(u: B) {
 
 func main(): int sync {
     println(build({b: 1, c: 2}))
+    return 0
+}
+```
+
+### WhenPredicateNotImported
+
+`0x030001BF` · Error · `SemanticDiag::WhenPredicateNotImported`
+
+**Message**
+
+```text
+'{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written.
+```
+
+**Help**
+
+```text
+A condition resolves names where its declaration is written, as a call in its body does: the module's own names, then what it imports by name, selectively or as a module prefix, then the prelude. Import the module that declares the predicate, or move the predicate into the module that uses it.
+```
+
+**Example** (`test/cases/compile/when_import/not_imported.cml`, run as `camel test/cases/compile/when_import/not_imported.cml`)
+
+```camel
+module when_import_not_imported
+
+import predicates
+import unimported_user
+
+func main(): int sync {
+    println(unimported_user::describe((1, 2)))
+    return 0
+}
+```
+
+### WhenPredicateNotCompileTime
+
+`0x030001C0` · Error · `SemanticDiag::WhenPredicateNotCompileTime`
+
+**Message**
+
+```text
+'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can call: {2}.
+```
+
+**Help**
+
+```text
+A condition calls a generic function whose body reduces to a constant over the types it is given: a 'match type', a 'static for' or a 'static loop' over 'fields T', and the comparison operators. An ordinary function runs at run time, and a value is read there too.
+```
+
+**Example** (`test/cases/compile/when_import/not_predicate.cml`, run as `camel test/cases/compile/when_import/not_predicate.cml`)
+
+```camel
+module when_import_not_predicate
+
+import { ready } from predicates
+
+func bad(x: int): int when ready() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenPredicateAmbiguous
+
+`0x030001C1` · Error · `SemanticDiag::WhenPredicateAmbiguous`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}.
+```
+
+**Help**
+
+```text
+Two imports that bring one name do not choose between them. Import the predicate by another name ('import { p as q } from m') or qualify it with the module it comes from ('m::p').
+```
+
+**Example** (`test/cases/compile/when_import/ambiguous.cml`, run as `camel test/cases/compile/when_import/ambiguous.cml`)
+
+```camel
+module when_import_ambiguous
+
+import { is_compound } from predicates
+import { is_compound } from predicates_other
+
+func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
     return 0
 }
 ```

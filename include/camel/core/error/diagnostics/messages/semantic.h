@@ -246,6 +246,14 @@ enum class SemanticDiag : uint32_t {
     /// No candidate of a call applies: every condition that could take it is false.
     WhenConditionUnmet = 0x0001AC,
 
+    // Predicate lookup in a `when` condition (design principles 5.13, 10.2). 0x1BF and up.
+    /// A predicate another module declares, but this module does not import it.
+    WhenPredicateNotImported = 0x0001BF,
+    /// A name an import brings exists, but it is not a generic function answered at compile time.
+    WhenPredicateNotCompileTime = 0x0001C0,
+    /// Two imports bring a predicate of the same name, and neither is chosen.
+    WhenPredicateAmbiguous = 0x0001C1,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,

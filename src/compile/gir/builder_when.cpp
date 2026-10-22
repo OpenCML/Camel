@@ -15,6 +15,12 @@
  * compiler, and any pure function of the library, answered when the declaration is instantiated.
  * A `match type` predicate the user writes (`has_field::<T>('w')` and the like) is the second
  * kind: its body is Camel, and it is folded over the constants the condition gives.
+ *
+ * A condition is written in a declaration, and it resolves names where that declaration is
+ * written, as a call in its body would (design principles 10.2): the module's own generic
+ * functions first, then the ones its imports bring by name, selectively or as a module prefix,
+ * then the prelude. A predicate in another module therefore works exactly as a local one, and
+ * the module a call in another module selects it from does not change what its condition means.
  */
 
 #include "builder.h"
@@ -23,11 +29,14 @@
 #include "camel/core/data/primary.h"
 #include "camel/core/type/tree.h"
 #include "camel/core/type/typevar.h"
+#include "core/module/entity_internal.h"
 
+#include <algorithm>
 #include <format>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #define DEBUG_LEVEL -1
 
@@ -37,6 +46,8 @@ using namespace camel::core::error;
 using namespace camel::core::type;
 
 namespace camel::compile::gir {
+
+using camel::core::module::ImportLayer;
 
 namespace {
 
@@ -76,6 +87,12 @@ bool isTypeQuery(const std::string &name) {
     return name == "is_numeric" || name == "is_integer" || name == "is_float" ||
            name == "is_ordered" || name == "is_function" || name == "is_string" ||
            name == "is_bool";
+}
+
+/// The name a module shows itself by (design principles 10.2: the name it declares, or else
+/// the name it was loaded under).
+std::string shownModuleName(const camel::core::module::Module &module) {
+    return module.declaredName().empty() ? module.name() : module.declaredName();
 }
 
 /// A condition may call a function of the library: a `match type` predicate is one, and its
@@ -346,16 +363,272 @@ class GctConstantEvaluator {
 
 } // namespace
 
+/// The condition is answered in the declaration's module, not in the module that selects it:
+/// the names it may call are the ones that module can see. The builder's "where it is" is
+/// saved and put back, so a condition evaluated while another module calls the declaration
+/// still reads the declaration's own names, imports and `using namespace`.
+class Builder::ConditionContext {
+  public:
+    ConditionContext(
+        Builder &builder, const template_ptr_t &declaring, const ModuleUnit *contextUnit)
+        : self_(builder), module_(builder.module_), unit_(builder.unit_),
+          nodeScope_(builder.nodeScope_), graphScope_(builder.graphScope_),
+          decoratedScope_(builder.decoratedScope_), templateScope_(builder.templateScope_),
+          namespacePath_(builder.namespacePath_), usingFrames_(builder.usingFrames_) {
+        ModuleUnit *target = const_cast<ModuleUnit *>(contextUnit);
+        if (target == nullptr && declaring != nullptr) {
+            const auto found = builder.units_.find(declaring->module.get());
+            if (found != builder.units_.end()) {
+                target = found->second.get();
+            }
+        }
+        // A non-generic declaration selected from its own module is evaluated where it already
+        // is; nothing has to move.
+        if (target == nullptr && declaring == nullptr) {
+            return;
+        }
+        if (target == builder.unit_ && declaring == nullptr) {
+            return;
+        }
+        if (target != nullptr) {
+            self_.module_         = target->module;
+            self_.unit_           = target;
+            self_.nodeScope_      = target->nodeScope;
+            self_.graphScope_     = target->graphScope;
+            self_.decoratedScope_ = target->decoratedScope;
+            self_.templateScope_  = target->templateScope;
+        } else {
+            // Known only through its template (a module this builder did not declare, if any).
+            self_.module_        = declaring->module;
+            self_.unit_          = nullptr;
+            self_.templateScope_ = declaring->templateScope;
+        }
+        if (declaring != nullptr) {
+            self_.namespacePath_ = declaring->namespacePath;
+            self_.usingFrames_   = declaring->usingFrames;
+        } else {
+            self_.namespacePath_.clear();
+            self_.usingFrames_.clear();
+            if (target != nullptr && target->tree != nullptr &&
+                target->tree->root() != nullptr) {
+                if (const auto *usings = target->tree->usingsOf(target->tree->root())) {
+                    self_.usingFrames_.push_back(usings);
+                }
+            }
+        }
+        active_ = true;
+    }
+
+    ~ConditionContext() {
+        if (!active_) {
+            return;
+        }
+        self_.module_         = module_;
+        self_.unit_           = unit_;
+        self_.nodeScope_      = nodeScope_;
+        self_.graphScope_     = graphScope_;
+        self_.decoratedScope_ = decoratedScope_;
+        self_.templateScope_  = templateScope_;
+        self_.namespacePath_  = std::move(namespacePath_);
+        self_.usingFrames_    = std::move(usingFrames_);
+    }
+
+    ConditionContext(const ConditionContext &)            = delete;
+    ConditionContext &operator=(const ConditionContext &) = delete;
+
+  private:
+    Builder &self_;
+    camel::core::module::module_ptr_t module_;
+    ModuleUnit *unit_;
+    node_scope_ptr_t nodeScope_;
+    graph_scope_ptr_t graphScope_;
+    decorated_scope_ptr_t decoratedScope_;
+    template_scope_ptr_t templateScope_;
+    std::vector<std::string> namespacePath_;
+    std::vector<const std::vector<Reference> *> usingFrames_;
+    bool active_ = false;
+};
+
+auto Builder::unitOfFunction(const compile_graph_ptr_t &graph) const -> const ModuleUnit * {
+    const auto owner = rootSubGraphOwners_.find(graph.get());
+    return owner == rootSubGraphOwners_.end() ? nullptr : owner->second;
+}
+
+bool Builder::whenPredicateAmbiguous(const std::string &written, WhenResult &problem) {
+    if (module_ == nullptr) {
+        return false;
+    }
+    using camel::core::module::detail::EntityAccess;
+    const auto templateOf = [](const camel::core::module::entity &ent) -> template_ptr_t {
+        if (!EntityAccess::isGenericTemplate(ent)) {
+            return nullptr;
+        }
+        return std::static_pointer_cast<GenericTemplate>(EntityAccess::genericTemplate(ent));
+    };
+    for (const auto &[ref, imports] : module_->namesImportedMoreThanOnce()) {
+        if (ref.toString() != written) {
+            continue;
+        }
+        std::vector<template_ptr_t> predicates;
+        std::vector<std::string> modules;
+        bool ordinary = false;
+        for (const auto &import : imports) {
+            const auto entity = exports_->exportedEntity(*import.mod, import.remote);
+            if (!entity.has_value()) {
+                continue;
+            }
+            if (const template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+                if (std::ranges::find(predicates, tmpl) == predicates.end()) {
+                    predicates.push_back(tmpl);
+                    modules.push_back(shownModuleName(*import.mod));
+                }
+            } else {
+                ordinary = true;
+            }
+        }
+        if (predicates.size() < 2 && !(predicates.size() == 1 && ordinary)) {
+            continue;
+        }
+        problem.outcome = WhenOutcome::PredicateAmbiguous;
+        problem.subject = written;
+        std::string brought;
+        for (size_t i = 0; i < modules.size(); ++i) {
+            brought += (i == 0 ? "" : ", ") + std::format("'{}'", modules[i]);
+        }
+        if (ordinary) {
+            brought += brought.empty() ? "an ordinary name" : " and an ordinary name";
+        }
+        problem.detail = brought;
+        return true;
+    }
+    return false;
+}
+
+auto Builder::whenPredicateNamed(
+    const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem)
+    -> std::optional<template_ptr_t> {
+    using camel::core::module::detail::EntityAccess;
+    const auto templateOf = [](const camel::core::module::entity &ent) -> template_ptr_t {
+        if (!EntityAccess::isGenericTemplate(ent)) {
+            return nullptr;
+        }
+        return std::static_pointer_cast<GenericTemplate>(EntityAccess::genericTemplate(ent));
+    };
+    // 1. The declaration's own module, from its innermost namespace out, its own name allowed
+    // as a prefix (design principles 10.2, layers 1 and 2).
+    const std::string own = moduleLevelName(written);
+    if (const auto tmpl = templateScope_->get(own); tmpl.has_value()) {
+        return *tmpl;
+    }
+    // The module declares the name itself, as something that is not a generic function: the
+    // name is resolved, and the ordinary report says why a condition cannot call it.
+    if (const ModuleUnit *unit = currentModuleUnit();
+        unit != nullptr && declaredAtTopLevel(*unit, own)) {
+        return std::nullopt;
+    }
+    // 2. What its imports bring by name, selectively (`import { p as q }`) or through a module
+    // prefix (`import m`, `import m as x`; `m::p`, `x::p`).
+    if (!isOperatorName(written) && module_->hasImportedRef(written, ImportLayer::Named)) {
+        if (whenPredicateAmbiguous(written, problem)) {
+            return std::nullopt;
+        }
+        const auto entity = importedEntity(written, ImportLayer::Named);
+        if (!entity.has_value()) {
+            problem.outcome = WhenOutcome::NotCompileTime;
+            problem.subject = written;
+            problem.detail  = "the import brings no name of that spelling";
+            return std::nullopt;
+        }
+        if (const template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+            return tmpl;
+        }
+        problem.outcome = WhenOutcome::NotCompileTime;
+        problem.subject = written;
+        if (const auto source = module_->importedSource(written, ImportLayer::Named)) {
+            problem.detail = std::format(
+                "module '{}' brings it, and it is not a generic function answered at compile "
+                "time",
+                shownModuleName(*source->first));
+        } else {
+            problem.detail = "it is not a generic function answered at compile time";
+        }
+        return std::nullopt;
+    }
+    // 3. What a `using namespace` in force where the declaration is written brings.
+    if (const auto match = throughUsing(written, at); match.has_value()) {
+        if (!match->ownName.empty()) {
+            if (const auto tmpl = templateScope_->get(match->ownName); tmpl.has_value()) {
+                return *tmpl;
+            }
+            problem.outcome = WhenOutcome::NotCompileTime;
+            problem.subject = written;
+            problem.detail  = "it is an ordinary function of this module";
+            return std::nullopt;
+        }
+        if (!match->entity.has_value()) {
+            return std::nullopt;
+        }
+        if (const template_ptr_t tmpl = templateOf(*match->entity); tmpl != nullptr) {
+            return tmpl;
+        }
+        problem.outcome = WhenOutcome::NotCompileTime;
+        problem.subject = written;
+        problem.detail  = "the imported name is not a generic function answered at compile time";
+        return std::nullopt;
+    }
+    // 4. The prelude: the names the built-in module brings unasked (design principles 10.2,
+    // layer 5). The compiler's own type queries are asked after this, by the caller.
+    if (module_->hasImportedRef(written, ImportLayer::Ambient)) {
+        const auto entity = importedEntity(written, ImportLayer::Ambient);
+        if (entity.has_value()) {
+            if (const template_ptr_t tmpl = templateOf(*entity); tmpl != nullptr) {
+                return tmpl;
+            }
+            problem.outcome = WhenOutcome::NotCompileTime;
+            problem.subject = written;
+            problem.detail  = "the prelude brings it, and it is not a generic function answered "
+                              "at compile time";
+            return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+std::string Builder::whenPredicateElsewhere(const std::string &written) const {
+    const camel::core::module::Module *here = module_ != nullptr ? module_.get() : nullptr;
+    for (const auto &[module, unit] : units_) {
+        if (module == here || unit == nullptr) {
+            continue;
+        }
+        std::string candidate = written;
+        if (const size_t separator = written.find("::"); separator != std::string::npos) {
+            const std::string prefix = written.substr(0, separator);
+            if (prefix != module->name() && prefix != module->declaredName()) {
+                continue;
+            }
+            candidate = written.substr(separator + 2);
+        }
+        if (unit->templateScope->get(candidate).has_value()) {
+            return shownModuleName(*module);
+        }
+    }
+    return {};
+}
+
 WhenResult Builder::evaluateWhenCondition(
     const GCT::node_ptr_t &condition, FunctionType *signature,
     const type_bindings_t &bindings,
-    const std::unordered_map<std::string, data_ptr_t> &withValues) {
+    const std::unordered_map<std::string, data_ptr_t> &withValues,
+    const template_ptr_t &declaring, const ModuleUnit *contextUnit) {
     WhenResult result;
     if (condition == nullptr) {
         result.outcome = WhenOutcome::NotEvaluable;
         result.detail  = "the declaration has no condition";
         return result;
     }
+    // Where the declaration is written, not where the call that selects it is: the predicate
+    // lookup below is the declaration's own.
+    ConditionContext context(*this, declaring, contextUnit);
 
     // The condition's arms are `EXEC` blocks; a compile-time expression has exactly one value.
     const auto soleValue = [](const GCT::node_ptr_t &node) -> GCT::node_ptr_t {
@@ -472,10 +745,20 @@ WhenResult Builder::evaluateWhenCondition(
                     local.detail  = "a type application in a condition names no function";
                     return local;
                 }
-                const std::string name = queryName(callee->at(0)->name());
+                const std::string written = callee->at(0)->name();
+                const std::string name    = queryName(written);
+                // The name is resolved where the declaration is written, as any call is: the
+                // module's own generic functions, then what its imports bring, then the
+                // prelude. A predicate imported from another module is one of the library's.
+                WhenResult problem;
+                const std::optional<template_ptr_t> resolved =
+                    whenPredicateNamed(written, callee->at(0), problem);
+                if (!resolved.has_value() && problem.outcome != WhenOutcome::NotEvaluable) {
+                    return problem;
+                }
                 // The standard predicates are still the compiler's own (see the note below);
                 // anything else is an ordinary function of the library, run at compile time.
-                if (isTypeQuery(name)) {
+                if (!resolved.has_value() && isTypeQuery(name)) {
                     if (node->size() != 1) {
                         local.outcome = WhenOutcome::NotEvaluable;
                         local.detail  = "a type query takes no value arguments";
@@ -501,15 +784,23 @@ WhenResult Builder::evaluateWhenCondition(
                 // written between `::<` and `>`, and answered by its own body. Its result must
                 // be a constant of the graph the instance builds -- a `match type` predicate
                 // is one, and so is a function that returns such a value.
-                const template_ptr_t tmpl = templateScope_ != nullptr
-                                                ? templateScope_->get(name).value_or(nullptr)
-                                                : nullptr;
+                const template_ptr_t tmpl = resolved.value_or(nullptr);
                 if (tmpl == nullptr) {
+                    // Not found by the declaration's own names: name the module that declares
+                    // it without being imported, rather than call the name unknown.
+                    const std::string elsewhere = whenPredicateElsewhere(written);
+                    if (!elsewhere.empty()) {
+                        local.outcome = WhenOutcome::NotImported;
+                        local.subject = written;
+                        local.detail  = elsewhere;
+                        return local;
+                    }
                     local.outcome = WhenOutcome::NotEvaluable;
                     local.subject = name;
                     local.detail =
                         "no compile-time function of that name is visible here; a condition "
-                        "calls the standard predicates or a generic function of this module";
+                        "calls the standard predicates or a generic function of this module or "
+                        "of one it imports";
                     return local;
                 }
                 std::vector<std::string> parameters = typeParameterNames(tmpl);
@@ -600,7 +891,8 @@ WhenResult Builder::evaluateWhenCondition(
                 return local;
             }
             if (callee->type() == GCT::NodeKind::DREF) {
-                const std::string op = queryName(callee->name());
+                const std::string written = callee->name();
+                const std::string op      = queryName(written);
                 const auto argument = [&](size_t index) -> GCT::node_ptr_t {
                     return node->size() > index + 1 ? soleValue(node->at(index + 1)) : nullptr;
                 };
@@ -625,6 +917,25 @@ WhenResult Builder::evaluateWhenCondition(
                                                        : left.holds() || right.holds();
                     local.outcome = value ? WhenOutcome::Holds : WhenOutcome::Fails;
                     return local;
+                }
+                // A direct call of an imported ordinary function is a condition that cannot be
+                // answered: say that, rather than that the name is not one of `!`, `&&`, `||`.
+                // A generic predicate written without its type arguments is named as such.
+                if (!isOperatorName(written)) {
+                    WhenResult problem;
+                    const std::optional<template_ptr_t> resolved =
+                        whenPredicateNamed(written, callee, problem);
+                    if (resolved.has_value()) {
+                        local.outcome = WhenOutcome::NotEvaluable;
+                        local.subject = written;
+                        local.detail  = "a predicate is called with its type arguments, as "
+                                        "'" +
+                                        written + "::<...>(...)'";
+                        return local;
+                    }
+                    if (problem.outcome != WhenOutcome::NotEvaluable) {
+                        return problem;
+                    }
                 }
                 local.outcome = WhenOutcome::NotEvaluable;
                 local.subject = callee->name();
@@ -709,6 +1020,21 @@ void Builder::reportWhenProblem(
         diags_->of(SemanticDiag::WhenConditionNotConstant)
             .atOrigin(at)
             .commit(name, result.detail);
+        break;
+    case WhenOutcome::NotImported:
+        diags_->of(SemanticDiag::WhenPredicateNotImported)
+            .atOrigin(at)
+            .commit(name, result.subject, result.detail);
+        break;
+    case WhenOutcome::NotCompileTime:
+        diags_->of(SemanticDiag::WhenPredicateNotCompileTime)
+            .atOrigin(at)
+            .commit(name, result.subject, result.detail);
+        break;
+    case WhenOutcome::PredicateAmbiguous:
+        diags_->of(SemanticDiag::WhenPredicateAmbiguous)
+            .atOrigin(at)
+            .commit(name, result.subject, result.detail);
         break;
     case WhenOutcome::Fails:
     case WhenOutcome::Holds:

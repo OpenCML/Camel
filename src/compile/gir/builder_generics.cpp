@@ -335,7 +335,7 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
         // A function value has no `with` arguments of its own, so a condition that reads one
         // cannot be answered here; a false one makes this candidate inapplicable.
         const WhenResult verdict =
-            evaluateWhenCondition(when->condition, signature, bindings, {});
+            evaluateWhenCondition(when->condition, signature, bindings, {}, tmpl);
         if (verdict.fails()) {
             why = std::format("its 'when' condition is false: when {}", when->text);
             return nullptr;
@@ -789,7 +789,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             }
         }
         const WhenResult verdict =
-            evaluateWhenCondition(when->condition, signature, bindings, withValues);
+            evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
         if (verdict.fails()) {
             std::vector<Type *> all(withTypes);
             all.insert(all.end(), normTypes.begin(), normTypes.end());

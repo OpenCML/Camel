@@ -1,0 +1,16 @@
+/**
+ * The same through `import ... as`: the alias is the name the condition qualifies the
+ * predicate with, and the declaration applies.
+ */
+module when_import_alias
+
+import predicates as preds
+
+func describe::<T>(x: T): string when preds::is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
+    return 0
+}

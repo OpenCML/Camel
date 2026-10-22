@@ -581,6 +581,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 node_ptr_t declNode = tree_->makeDecl(node->name(), true);
                 node_ptr_t typeNode = node->at(0);
                 *declNode << tree_->clone(typeNode);
+                // The head type parameters are the declaration's: `func p::<T>()` with T in
+                // the head alone is still a template, and a declaration node that does not say
+                // so has a graph built for it beside the template.
+                if (const auto *head = tree_->headTypeParamsOf(node)) {
+                    tree_->setHeadTypeParams(declNode, *head);
+                }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
                     // makes an operator rule of it instead of a graph (handover H19 step 1),

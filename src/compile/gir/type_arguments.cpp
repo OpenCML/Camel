@@ -126,7 +126,7 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         }
         if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
             const WhenResult verdict =
-                evaluateWhenCondition(when->condition, tmpl->funcType, bindings, {});
+                evaluateWhenCondition(when->condition, tmpl->funcType, bindings, {}, tmpl);
             if (verdict.fails()) {
                 diags_->of(SemanticDiag::WhenConditionUnmet)
                     .atOrigin(gct->origin())
