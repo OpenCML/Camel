@@ -1274,14 +1274,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         boundWithArgs_.erase(bound);
         boundWithCallee_.erase(targetNode);
     }
-for (const Argument &input : withInputs) {
-        withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
-    }
-    // A `with` argument may be written by name and a parameter may have a default (design
-    // principles 4.4): bind what the call writes to the callee's parameters, filling the
-    // parameters it leaves out. This happens before the call is resolved, because it is the
-    // parameters, not the written order, that tell which argument is which.
-    bindWithArguments(withInputs, withInputTypes, targetNode, gct);
 
     // Call results take the callee's current exit type (a recursive callee's
     // exit type is only final after its body is built), unless the node was
@@ -1466,6 +1458,13 @@ for (const Argument &input : withInputs) {
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
+    // A `with` argument may be written by name and a parameter may have a default (design
+    // principles 4.4): bind what the call writes to the callee's parameters, filling the
+    // parameters it leaves out. This happens once every argument is built (a deferred lambda is
+    // only a node now), and before the call is resolved, because it is the parameters, not the
+    // written order, that tell which argument is which. `bindWithArguments` replaces the types
+    // with the ones it ordered, so the loop above is only what a call with nothing to bind keeps.
+    bindWithArguments(withInputs, withInputTypes, targetNode, gct);
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         // An operator that declares it takes the position of its call at this many arguments
         // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it

@@ -1,27 +1,55 @@
 /**
  * The attribution passes of `explain_target.cml` and `explain_twice.cml` (rewrite design 8.7):
- * each runs a rule set with `run(..., explain: true)` and prints the proof `explain` gives. The
- * four cases are the ones the design asks a proof to get right: two rules that could both match
- * (only the one that fired is named), a `seq` schedule (the chain follows the schedule), a rule
- * that fires twice in one round (two steps), and a run where nothing matched (said plainly).
+ * `explain_all` prints every rewrite of a run, `explain` only the shortest chain between two
+ * values, and `why_not` the reason a rule did not fire at one. The cases are the ones the design
+ * asks a proof to get right: two rules that could both match (only the one that fired is named),
+ * a `seq` schedule (the chain follows the schedule), a rule that fires twice in one round (two
+ * steps), a run where nothing matched (said plainly), a chain through a value that was rewritten
+ * away, a chain read backwards, a pair no chain connects, and the three answers `why_not` gives
+ * (a different operator, a false condition, a rule that did fire).
  *
  * No function here holds a pattern a rule matches, so a proof never counts this module's own
  * code: there is no sum, product or `+ 1` in it.
  */
 module explain_pass
 
-import { Program } from graph
-import { Run, explain, run } from rewrite
+import { Graph, Node, NodeKind, Program, graphs, kind, name, nodes } from graph
+import { Run, explain, explain_all, run, why_not } from rewrite
 
 rule zero_to_one(x: int) { x + 0 => x + 1 }
 rule zero_to_two(x: int) { x + 0 => x + 2 }
 rule bump_one(x: int) { x + 1 => x + 2 }
 rule add_zero(x: int) { x + 0 => x }
 rule mul_zero(x: int) { x * 0 => 0 }
+rule add_zero_when(x: int) { x + 0 => x } when never(x)
 
-/// Prints the proof of `r` and gives the program it produced.
-func show(r: Run<Program>): Program! sync {
-    return match explain(r) {
+/// A condition that is false at every match: the left side matches, the condition refuses.
+func never(n: Node): bool { return false }
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+/// The operations of `f`: the values the cases chain.
+func addsOf(p: Program): Node[] {
+    return nodesOf(p, 'f')->filter<(n: Node): bool => kind(n) == NodeKind::Oper>
+}
+
+/// The one addition of `f` in the program a pass gets.
+func addOf(p: Program): Node {
+    return addsOf(p)[0]
+}
+
+/// The parameter of `f`: a value no rewrite made, so no chain starts there.
+func portOf(p: Program): Node {
+    let ports = nodesOf(p, 'f')->filter<(n: Node): bool => kind(n) == NodeKind::Port>
+    return ports[0]
+}
+
+/// Prints every rewrite of `r` and gives the program it produced.
+func showAll(r: Run<Program>): Program! sync {
+    return match explain_all(r) {
         case error e => { throw e }
         case proof => sync {
             println(proof)
@@ -32,24 +60,24 @@ func show(r: Run<Program>): Program! sync {
 
 /// The first of two rules that match the same site: only `zero_to_one` may be named.
 export func two_rules(p: Program): Program! sync {
-    return match run(p, [zero_to_one, zero_to_two], 16, false, true) {
+    return match p->run<[zero_to_one, zero_to_two], explain: true> {
         case error e => { throw e }
-        case r => show(r)
+        case r => showAll(r)
     }
 }
 
 /// `seq`: `zero_to_one`'s stage, then `bump_one`'s. The two proofs print in that order, and each
 /// stage runs to a fixpoint before the next one starts (rewrite design 8.5).
 export func seq_order(p: Program): Program! sync {
-    return match run(p, [zero_to_one], 16, false, true) {
+    return match p->run<[zero_to_one], explain: true> {
         case error e => { throw e }
         case first => sync {
-            match show(first) {
+            match showAll(first) {
                 case error e => { throw e }
                 case staged => sync {
-                    return match run(staged, [bump_one], 16, false, true) {
+                    return match staged->run<[bump_one], explain: true> {
                         case error e => { throw e }
-                        case second => show(second)
+                        case second => showAll(second)
                     }
                 }
             }
@@ -59,25 +87,139 @@ export func seq_order(p: Program): Program! sync {
 
 /// One rule, one round, two sites: the proof must carry two steps, both of round 1.
 export func twice_one_round(p: Program): Program! sync {
-    return match run(p, [add_zero], 16, false, true) {
+    return match p->run<[add_zero], explain: true> {
         case error e => { throw e }
-        case r => show(r)
+        case r => showAll(r)
     }
 }
 
 /// A rule set that matches nothing: the proof says so instead of printing an empty table.
 export func nothing(p: Program): Program! sync {
-    return match run(p, [mul_zero], 16, false, true) {
+    return match p->run<[mul_zero], explain: true> {
         case error e => { throw e }
-        case r => show(r)
+        case r => showAll(r)
     }
 }
 
 /// A run made without attribution has no proof to read, and saying so is the point of the
 /// optional record: the plain run paid nothing.
 export func without_attribution(p: Program): Program! sync {
-    return match run(p, [add_zero], 16, false) {
+    return match p->run<[add_zero]> {
         case error e => { throw e }
-        case r => show(r)
+        case r => showAll(r)
+    }
+}
+
+/// One rewrite, read forwards: the addition of the input and the one that replaced it.
+export func chain_forward(p: Program): Program! sync {
+    let before = addOf(p)
+    return match p->run<[zero_to_one], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            let after = addOf(r.result)
+            return match explain(r, before, after) {
+                case error e => { throw e }
+                case proof => sync {
+                    println(proof)
+                    return r.result
+                }
+            }
+        }
+    }
+}
+
+/// Two rewrites chained through a value that was rewritten away: `x + 0` became `x + 1` and then
+/// `x + 2`, so the chain names the intermediate even though the final program no longer has it.
+export func chain_through(p: Program): Program! sync {
+    let before = addOf(p)
+    return match p->run<[zero_to_one, bump_one], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            let after = addOf(r.result)
+            return match explain(r, before, after) {
+                case error e => { throw e }
+                case proof => sync {
+                    println(proof)
+                    return r.result
+                }
+            }
+        }
+    }
+}
+
+/// The same chain from the other end: every step is read backwards, and the print says so.
+export func chain_backwards(p: Program): Program! sync {
+    let before = addOf(p)
+    return match p->run<[zero_to_one, bump_one], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match explain(r, addOf(r.result), before) {
+                case error e => { throw e }
+                case proof => sync {
+                    println(proof)
+                    return r.result
+                }
+            }
+        }
+    }
+}
+
+/// A value no rewrite made: the run cannot chain the parameter to the rewritten addition, and
+/// says why instead of printing an empty chain.
+export func chain_none(p: Program): Program! sync {
+    return match p->run<[zero_to_one], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match explain(r, portOf(r.result), addOf(r.result)) {
+                case error e => sync {
+                    println(e)
+                    return r.result
+                }
+                case proof => sync {
+                    println('unexpected chain:', proof)
+                    return r.result
+                }
+            }
+        }
+    }
+}
+
+/// The pattern's root is a product and the value is an addition: the answer names the operator
+/// the pattern writes and the node the program has.
+export func why_not_operator(p: Program): Program! sync {
+    return match p->run<[mul_zero], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match why_not(r, mul_zero, addOf(r.result)) {
+                case error e => sync { println(e); return r.result }
+                case reason => sync { println(reason); return r.result }
+            }
+        }
+    }
+}
+
+/// The left side matches and the condition is false: the answer names the values it read.
+export func why_not_condition(p: Program): Program! sync {
+    return match p->run<[add_zero_when], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match why_not(r, add_zero_when, addOf(r.result)) {
+                case error e => sync { println(e); return r.result }
+                case reason => sync { println(reason); return r.result }
+            }
+        }
+    }
+}
+
+/// A rule that did fire: the answer says which rewrite it made, not "no chain".
+export func why_not_fired(p: Program): Program! sync {
+    return match p->run<[zero_to_one], explain: true> {
+        case error e => { throw e }
+        case r => sync {
+            return match why_not(r, zero_to_one, addOf(r.result)) {
+                case error e => sync { println(e); return r.result }
+                case reason => sync { println(reason); return r.result }
+            }
+        }
     }
 }

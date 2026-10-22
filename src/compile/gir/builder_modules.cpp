@@ -471,6 +471,16 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         funcType = funcType->withResources(camel::core::sem::signatureOf(
             *declaredFacts->resources, funcType->withTypesCount()));
     }
+    // A declaration may give its `with` parameters defaults, exactly as a function with a body
+    // does (design principles 4.4): the declaration is where they are written, and the rule the
+    // call resolves to is what names them. Evaluated here, once, so that a call that leaves a
+    // parameter out takes the one value (H235).
+    if (GCT::Tree::of(gct)->withDefaultsOf(gct) != nullptr) {
+        evaluateWithDefaults(gct, funcType, funcType, false);
+        if (const auto found = withDefaults_.find(funcType); found != withDefaults_.end()) {
+            nativeWithDefaults_[uri] = found->second;
+        }
+    }
     auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
     // A declaration stands for an operator of this module (design principles 10.1; handover
     // H94, ruling 5): the prefix of its URI is the name the module declares, or one of the
@@ -760,3 +770,6 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
 }
 
 } // namespace camel::compile::gir
+
+
+

@@ -569,6 +569,12 @@ class Builder {
         GCT::node_ptr_t expr;
     };
     std::unordered_map<const void *, std::vector<std::optional<WithDefaultValue>>> withDefaults_;
+    /// A body-less declaration of an operator has no graph to keep its defaults under, and the
+    /// signature a reference answers with is built from the operator group rather than from the
+    /// declaration: the defaults are kept under the operator's URI, which a rule of the group
+    /// names (`declareNativeOperator`).
+    std::unordered_map<std::string, std::vector<std::optional<WithDefaultValue>>>
+        nativeWithDefaults_;
     /// A function value made by explicit type arguments (`f::<int>`) is instantiated where it is
     /// written, so the call cannot reach the declaration's graph: the defaults are kept under
     /// the value here. A value that is then bound to a name carries no defaults, as any function

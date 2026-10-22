@@ -794,7 +794,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "rules.explain_names_the_rule_that_fired"
-desc = "Attribution (rewrite design 8.7): two rules match the same `x + 0` and only the first fires. The proof of the run names `zero_to_one`, the rule that made the rewrite, and never `zero_to_two`, the rule that could have matched but did not."
+desc = "Attribution (rewrite design 8.7): two rules match the same `x + 0` and only the first fires. The record `explain_all` prints names `zero_to_one`, the rule that made the rewrite, and never `zero_to_two`, the rule that could have matched but did not."
 kind = "behavior"
 case = "../../../cases/modules/rules/explain_target.cml"
 args = ["${case}", "explain_pass::two_rules", "std::nvm"]
@@ -826,7 +826,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.explain_reports_a_rule_twice_in_one_round"
-desc = "Two `x + 0` sites in one function: the zero law fires twice in round 1, and the proof carries two steps for that rule in that round. A proof that collapsed them into one would be missing a rewrite the run counted."
+desc = "Two `x + 0` sites in one function: the zero law fires twice in round 1, and the record carries two steps for that rule in that round. A record that collapsed them into one would be missing a rewrite the run counted."
 kind = "behavior"
 case = "../../../cases/modules/rules/explain_twice.cml"
 args = ["${case}", "explain_pass::twice_one_round", "std::nvm"]
@@ -846,7 +846,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.explain_says_nothing_matched"
-desc = "A rule set that matches nothing: the proof says in words that no rewrite matched and the program is unchanged, instead of printing an empty step table. The run still counts one round, the round that proved the fixpoint."
+desc = "A rule set that matches nothing: the record says in words that no rewrite matched and the program is unchanged, instead of printing an empty step table. The run still counts one round, the round that proved the fixpoint."
 kind = "behavior"
 case = "../../../cases/modules/rules/explain_target.cml"
 args = ["${case}", "explain_pass::nothing", "std::nvm"]
@@ -858,7 +858,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.explain_refuses_a_run_without_attribution"
-desc = "The record is optional: a run made without `explain: true` pays nothing and keeps nothing, so `explain` refuses it with `NoAttribution` and the name of the parameter that would have recorded it, rather than answering with an empty chain."
+desc = "The record is optional: a run made without `explain: true` pays nothing and keeps nothing, so `explain_all` refuses it with `NoAttribution` and the name of the parameter that would have recorded it, rather than answering with an empty log."
 kind = "negative"
 case = "../../../cases/modules/rules/explain_target.cml"
 args = ["${case}", "explain_pass::without_attribution", "std::nvm"]
@@ -866,3 +866,105 @@ expect_exit = 1
 expect_output_contains = ["GraphPassFailed", "NoAttribution", "the run was made without attribution"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_chains_forward"
+desc = "8.7's question is `why are these two values equal`, not `what did the run do`: `explain(r, a, b)` prints the shortest chain between the addition the input had and the addition that replaced it, one step with its rule, round and graph, and nothing else of the record."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::chain_forward", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["chain %2 :op/add_l : int = %4 :op/add_l : int: 1 rewrite", "by zero_to_one", "round 1, graph f", "\n6\n"]
+expect_output_not_contains = ["nodes visited"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_chain_through_a_rewritten_value"
+desc = "`x + 0` became `x + 1` and then `x + 2`: the chain between the input addition and the final one has two steps and names the intermediate `%4`, a value the final program no longer has. A chain that skipped it would not be a chain, and a chain that stopped at the first step would not connect the two values."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::chain_through", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["2 rewrites", "= %4 :op/add_l : int  by zero_to_one", "= %6 :op/add_l : int  by bump_one", "\n7\n"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const count = (text, needle) => text.split(needle).length - 1
+assert(count(out, '  = ') === 2, `a two-step chain prints two equations: ${JSON.stringify(out)}`)
+const mid = out.indexOf('= %4 :op/add_l : int  by zero_to_one')
+const last = out.indexOf('= %6 :op/add_l : int  by bump_one')
+assert(mid >= 0 && last >= 0, `both steps must be in the chain: ${JSON.stringify(out)}`)
+assert(mid < last, `the chain runs from the input value to the result: ${JSON.stringify(out)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_chain_reads_backwards"
+desc = "The same pair asked from the final value to the input one: each step is read against its direction and marked `(backwards)`, and the chain still names both rewrites, in reverse order of the schedule. Reading a chain backwards must not invent a rewrite that never happened in that direction."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::chain_backwards", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["2 rewrites", "(backwards)", "by bump_one", "by zero_to_one", "\n7\n"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const bump = out.indexOf('by bump_one')
+const zero = out.indexOf('by zero_to_one')
+assert(bump >= 0 && zero >= 0, `both steps must be in the chain: ${JSON.stringify(out)}`)
+assert(bump < zero, `read from the result, bump_one is the first step: ${JSON.stringify(out)}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.explain_refuses_unconnected_values"
+desc = "A value no rewrite made (the parameter of `f`) and the addition a rewrite produced: no chain connects them, and `explain` refuses it with `NoChain` and says what it looked for, rather than printing an empty chain that would read as `equal`."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::chain_none", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["NoChain", "no chain of rewrites connects %0 and %4"]
+expect_stdout_contains = ["\n6\n"]
+expect_output_not_contains = ["unexpected chain"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.why_not_names_the_operator_mismatch"
+desc = "`why_not` answers the other question 8.7 names: why a rule did not fire at a value. `mul_zero` at an addition: the pattern writes `:op/mul_l` where the value is `:op/add_l`, and the answer names both."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::why_not_operator", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["`mul_zero` did not fire at %2 :op/add_l : int", "where the pattern writes the operator :op/mul_l", "\n5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.why_not_names_the_false_condition"
+desc = "`add_zero_when` matches the addition `x + 0` and its condition is false: the answer says the left side matched, names the values it bound, and says the condition is false. It must not stop at `the pattern does not match`, which would be wrong."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::why_not_condition", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["the left side matches (%0 port : int)", "the condition is false", "\n5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.why_not_reports_the_rule_that_fired"
+desc = "At a value the rule did make, `why_not` does not answer `no chain`: it says the rule fired, in which round, in which graph, and from which value, so a user asking the wrong rule at the right value gets a correction rather than a silence."
+kind = "behavior"
+case = "../../../cases/modules/rules/explain_target.cml"
+args = ["${case}", "explain_pass::why_not_fired", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["the rule fired here in round 1 of graph f", "%4 :op/add_l : int was made from %2 :op/add_l : int", "\n6\n"]
+expect_output_not_contains = ["did not fire"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+

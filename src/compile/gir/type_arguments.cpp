@@ -31,10 +31,45 @@ FunctionType *Builder::signatureForArgumentContext(node_handle_t target) const {
         }
     } else if (std::holds_alternative<oper_group_ptr_t>(named)) {
         const auto ops = std::get<oper_group_ptr_t>(named);
-        if (ops->resolvers().size() == 1) {
-            if (FunctionType *fixed = ops->resolvers()[0].second->fixedSignature()) {
-                return fixed;
+        // The parameters of a native operator, when its signature does not depend on the call: an
+        // overload set whose fixed entries declare the same parameters still has one signature to
+        // give the arguments expected types (`p->run<[]>`: the empty array is a `Rule[]` because
+        // the operator's `rules` parameter says so). A name whose entries differ, or whose
+        // signature is computed from its arguments, gives none and its arguments are typed as
+        // they were. Two entries with equal parameters are one signature even when the
+        // declarations made two `FunctionType`s.
+        const auto sameParameters = [](FunctionType *a, FunctionType *b) {
+            if (a == nullptr || b == nullptr || a->withTypesCount() != b->withTypesCount() ||
+                a->normTypesCount() != b->normTypesCount()) {
+                return false;
             }
+            for (size_t i = 0; i < a->withTypesCount(); ++i) {
+                if (!a->withTypeAt(i)->equals(b->withTypeAt(i))) {
+                    return false;
+                }
+            }
+            for (size_t i = 0; i < a->normTypesCount(); ++i) {
+                if (!a->normTypeAt(i)->equals(b->normTypeAt(i))) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        FunctionType *same = nullptr;
+        bool mixed         = false;
+        for (const auto &[uri, resolver] : ops->resolvers()) {
+            FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
+            if (fixed == nullptr) {
+                continue;
+            }
+            if (same == nullptr) {
+                same = fixed;
+            } else if (!sameParameters(same, fixed)) {
+                mixed = true;
+            }
+        }
+        if (same != nullptr && !mixed) {
+            return same;
         }
     }
     return nullptr;

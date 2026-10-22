@@ -663,7 +663,8 @@ func plus(r: Run<Program>, next: Run<Program>): Run<Program> {
 
 /// One application of `rules` on the result of `r`, at most `rounds` rounds, its cost added.
 func stage(r: Run<Program>, rules: Rule[], rounds: int, strict: bool): Run<Program>! {
-    return run(r.result, rules, rounds, strict) ?-> (next: Run<Program>) => plus(r, next)
+    return r.result->run<rules, rounds: rounds, strict: strict> ?->
+               (next: Run<Program>) => plus(r, next)
 }
 
 /// Whether the last application reached a fixpoint. An error stops the loop that asks, and the

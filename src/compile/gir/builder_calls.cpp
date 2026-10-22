@@ -834,6 +834,20 @@ const std::vector<std::optional<Builder::WithDefaultValue>> *Builder::withDefaul
     }
     const auto &target = nodeGraphOf(callee)->drefTarget(callee);
     if (!std::holds_alternative<graph_vec_ptr_t>(target)) {
+        // A body-less declaration of an operator: it has no graph, and its defaults are kept
+        // under the signature the declaration publishes (`declareNativeOperator`). The type the
+        // reference answers with is a signature built from the group, not that pointer, so the
+        // declaration's own resolver is what names it.
+        if (std::holds_alternative<oper_group_ptr_t>(target)) {
+            // Keyed by the operator's URI: the group's resolver may be a rebuilt one whose
+            // signature the declaration's pointer does not name.
+            for (const auto &rule : std::get<oper_group_ptr_t>(target)->resolvers()) {
+                const auto found = nativeWithDefaults_.find(rule.first);
+                if (found != nativeWithDefaults_.end()) {
+                    return &found->second;
+                }
+            }
+        }
         return nullptr;
     }
     const auto graphs = std::get<graph_vec_ptr_t>(target);
