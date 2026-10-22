@@ -2266,7 +2266,7 @@ af9cae3548b41112 no test/plans/feat/parse/golden/rules_format.cml
 9949ea76f2a5db62 ok test/tools/jitcov/workloads.cml
 f5a4ae9c5b8cfcfd ok test/tools/selftest/benchmark_failure.cml
 382e4f4981ff7cd6 ok test/tools/selftest/sweep/probe.cml
-280b4e5172c4af27 ok test/tools/selftest/sweep_names/reuse_sources/reuse.cml
+7bd7c0d0e216a3c5 ok test/tools/selftest/sweep_names/reuse_sources/reuse.cml
 f34beebb378e7d39 ok test/tools/selftest/sweep_names/sources/alpha.cml
 437689d6c8f49c3d ok test/tools/selftest/sweep_names/sources/beta.cml
 4c6b6e3195b9ef66 ok probes/probe_d000.cml
