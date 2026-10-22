@@ -323,6 +323,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **A generic function is instantiated by the types of its arguments.** A generic function is a subgraph template; each call with a set of concrete types instantiates a subgraph whose types are all concrete, and the body is checked at that time. Only concrete types are on the graph, and the runtime needs no type information.
 - **Type variables follow the same rule as dimension names and bind automatically**: a name that first appears in a parameter type (including the type of a `with` parameter) and is not an existing type name binds a type variable, and later occurrences refer to it; a name that appears only in the return type is an error; one that appears only once draws a warning (a misspelt type name usually appears once). `typeas T` stays as the explicit binding form, for a name that coincides with an existing type and must say "this is a new binding".
 
+  <!-- camel-snippet: fragment: the type variables are the notation this section defines; the compiler does not yet bind them automatically, so the sketch is not compiled -->
   ```camel
   func first(xs: T[]): T { return xs[0] }
   with <key: (x: T) => K>
