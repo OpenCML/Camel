@@ -988,8 +988,28 @@ class ModelBuilder {
             }
         }
         for (const auto &[prefix, mod] : spaces) {
-            if (!mod || !mod->loaded()) {
+            if (!mod) {
                 continue;
+            }
+            // The members are the module's exports: what a C++ module registers, and — for a
+            // module whose signatures are declared in `stdlib/<m>.cml` — the declarations the
+            // loader compiles beside it (`Context::loadModuleFrom` returns one module with
+            // both; `Module::inheritExportsFrom` copies the C++ facts in, the declarations are
+            // exported on top). Those declarations are readable before the module's bodies are
+            // built, so a module a text imports but never calls is not `loaded()`: ask for
+            // them, as `camel inspect --ops` does before it reads a module's entities and as
+            // `ProgramExports::importedEntity` does before it resolves an imported name.
+            // Requiring `loaded()` here was the hole of handover H145: a migrated module
+            // registers no signature in C++ (`exportEntity` is gone for every declared name),
+            // so completion after `math::` was empty.
+            if (!mod->loaded()) {
+                try {
+                    mod->declareEntities();
+                } catch (...) {
+                    // A declaration module in error is reported where the file that imports it
+                    // is compiled; the other namespaces still list their members.
+                    continue;
+                }
             }
             model_->namespaces_[prefix];
             const auto visitEntity = [&](const Reference &ref,

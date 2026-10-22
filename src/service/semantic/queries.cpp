@@ -397,16 +397,10 @@ SemanticModel::Target SemanticModel::targetAt(uint32_t offset) const {
             }
             if (s + 1 == ref.path.size()) {
                 const RefFacts &facts = file.refFacts[i];
-                if (facts.isOperator) {
-                    target.kind               = Target::Kind::External;
-                    target.operatorSignatures = facts.operatorSignatures;
-                    target.external = ref.path.size() == 1 ? external(ref.name()) : nullptr;
-                    return target;
-                }
-                // A name of the built-in module or of an imported namespace.
-                if (ref.path.size() == 1) {
-                    target.external = external(ref.name());
-                } else {
+                // The member of the namespace the path names, when the namespace is known:
+                // `math::sqrt` is the export `sqrt` of module `math`.
+                const ExternalName *member = nullptr;
+                if (ref.path.size() > 1) {
                     std::string prefix;
                     for (size_t k = 0; k + 1 < ref.path.size(); ++k) {
                         prefix += (k ? "::" : "") + ref.path[k].name;
@@ -414,11 +408,27 @@ SemanticModel::Target SemanticModel::targetAt(uint32_t offset) const {
                     if (auto ns = namespaces_.find(prefix); ns != namespaces_.end()) {
                         for (const ExternalName &ext : ns->second) {
                             if (ext.name == ref.name()) {
-                                target.external = &ext;
+                                member = &ext;
                                 break;
                             }
                         }
                     }
+                }
+                if (facts.isOperator) {
+                    // The signature here is the one the call resolved to (the operator the
+                    // compiler chose); the member only names the module. A call of an
+                    // operator of an imported module is that module's, not the built-in
+                    // module's.
+                    target.kind               = Target::Kind::External;
+                    target.operatorSignatures = facts.operatorSignatures;
+                    target.external = ref.path.size() == 1 ? external(ref.name()) : member;
+                    return target;
+                }
+                // A name of the built-in module or of an imported namespace.
+                if (ref.path.size() == 1) {
+                    target.external = external(ref.name());
+                } else {
+                    target.external = member;
                 }
                 // A name in a type is a type: `int` there is not the conversion function.
                 if (target.external != nullptr &&
