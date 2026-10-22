@@ -1,0 +1,18 @@
+/**
+ * A type an earlier case already selects cannot be selected again: the second `case int` is
+ * dead, and it is reported rather than silently ignored (design principles 5.5).
+ */
+module type_identity_shadowed
+
+func twice::<T>(t: T): int {
+    return match type T {
+        case int => 1
+        case int => 2
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println(twice(1))
+    return 0
+}

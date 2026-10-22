@@ -9,6 +9,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/executor.h"
 #include "camel/utils/type.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
@@ -415,9 +416,10 @@ slot_t __contains_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // 9.9): `T[]` has the tangent `tangent(T)[]`, and an array of a type without a tangent has
 // none at all. These three operators are how a gradient graph adds two such arrays, makes a
 // zero one shaped like a primal array, and adds one element's gradient at an index (the
-// reverse of `xs[i]`, a scatter-add). They are structural: they recurse on the tangent type,
-// so an array of structs, tuples or arrays works as well as an array of floats. A tangent
-// type owned by a module (a tensor) has no structural definition here yet; that is H17.
+// reverse of `xs[i]`, a scatter-add). They recurse on the tangent type, so an array of
+// structs, tuples or arrays works as well as an array of floats. A tangent type owned by a
+// module (a tensor) is not defined here: the registry says how to make its zero and how to
+// add two, and those are operators the module published, reached by URI.
 
 namespace {
 
@@ -431,10 +433,46 @@ using type::TupleType;
         std::format("autodiff: {} is not defined for tangent type '{}'", what, type->toString()));
 }
 
+/// Arguments of a call to another operator, made of slots and their types. A tangent type owned
+/// by a module is handled by that module's own operator (`zeros_like`, `add`), so the builtin
+/// module never has to know which module owns a type.
+class SlotArgs final : public ArgsView {
+  public:
+    SlotArgs(std::vector<slot_t> slots, std::vector<Type *> types)
+        : slots_(std::move(slots)), types_(std::move(types)) {}
+    size_t size() const override { return slots_.size(); }
+    slot_t slot(size_t index) const override { return slots_[index]; }
+    void setSlot(size_t index, slot_t value) override { slots_[index] = value; }
+    TypeCode code(size_t index) const override { return types_[index]->code(); }
+    Type *type(size_t index) const override { return types_[index]; }
+
+  private:
+    std::vector<slot_t> slots_;
+    std::vector<Type *> types_;
+};
+
+/// Calls the operator `uri` on `slots`: the tangent-space operator of a module-owned type.
+slot_t callTangentOperator(
+    Context &ctx, std::string_view uri, Type *resultType, std::vector<slot_t> slots,
+    std::vector<Type *> types) {
+    const auto op = ctx.execMgr().find(std::string(uri));
+    if (!op) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "autodiff: the operator '{}' a tangent space names has no implementation", uri));
+    }
+    SlotArgs norm(std::move(slots), std::move(types));
+    SlotArgs with({}, {});
+    norm.setResultType(resultType);
+    with.setResultType(resultType);
+    return (*op)(with, norm, ctx);
+}
+
 // The zero tangent of a value of primal type `primalType`, whose tangent type is
 // `tangentType`. `primal` is the primal value: an array's zero has the array's length, and a
 // struct or tuple's fields line up with the primal's, so the shape is taken from it.
-slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
+slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(0.0);
@@ -453,7 +491,7 @@ slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
             }
             zero->set<slot_t>(
                 position,
-                zeroTangent(primalStruct->typeAt(i), fieldTangent, value->get<slot_t>(i)),
+                zeroTangent(ctx, primalStruct->typeAt(i), fieldTangent, value->get<slot_t>(i)),
                 tangentStruct);
             ++position;
         }
@@ -472,7 +510,7 @@ slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
             }
             zero->set<slot_t>(
                 position,
-                zeroTangent(primalTuple->typeAt(i), elementTangent, value->get<slot_t>(i)),
+                zeroTangent(ctx, primalTuple->typeAt(i), elementTangent, value->get<slot_t>(i)),
                 tangentTuple);
             ++position;
         }
@@ -487,19 +525,33 @@ slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
             zero->set<slot_t>(
                 i,
                 zeroTangent(
-                    primalArray->elemType(), tangentArray->elemType(),
+                    ctx, primalArray->elemType(), tangentArray->elemType(),
                     value->get<slot_t>(i)),
                 tangentArray);
         }
         return rtdata::toSlot(zero);
     }
     default:
+        break;
+    }
+    // A leaf whose tangent type a module owns (a tensor): the module says how to make the zero
+    // of a value of its type, and the registry passes that operator's URI on.
+    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(primalType);
+    if (space == nullptr) {
         noStructuralTangent("a zero tangent", tangentType);
     }
+    if (space->zero) {
+        return *space->zero;
+    }
+    if (space->zerosLikeUri.empty()) {
+        noStructuralTangent("a zero tangent", tangentType);
+    }
+    return callTangentOperator(
+        ctx, space->zerosLikeUri, tangentType, {primal}, {primalType});
 }
 
 // The sum of two tangents of `tangentType`. Both have the same shape.
-slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
+slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(fromSlot<Float64>(lhsSlot) + fromSlot<Float64>(rhsSlot));
@@ -516,7 +568,7 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
         for (size_t i = 0; i < structType->size(); ++i) {
             sum->set<slot_t>(
                 i,
-                addTangent(structType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+                addTangent(ctx, structType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
                 structType);
         }
         return rtdata::toSlot(sum);
@@ -532,7 +584,7 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
         for (size_t i = 0; i < tupleType->size(); ++i) {
             sum->set<slot_t>(
                 i,
-                addTangent(tupleType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+                addTangent(ctx, tupleType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
                 tupleType);
         }
         return rtdata::toSlot(sum);
@@ -546,14 +598,22 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
         for (size_t i = 0; i < lhs->size(); ++i) {
             sum->set<slot_t>(
                 i,
-                addTangent(arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+                addTangent(ctx, arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
                 arrayType);
         }
         return rtdata::toSlot(sum);
     }
     default:
+        break;
+    }
+    // A leaf whose tangent type a module owns (a tensor): the module published the operator that
+    // adds two of them, and the registry passes its URI on.
+    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(tangentType);
+    if (space == nullptr || space->addUri.empty()) {
         noStructuralTangent("a sum of tangents", tangentType);
     }
+    return callTangentOperator(
+        ctx, space->addUri, tangentType, {lhsSlot, rhsSlot}, {tangentType, tangentType});
 }
 
 } // namespace
@@ -561,7 +621,6 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
 // `tangent/add_arr(lhs, rhs)`: the elementwise sum of two tangent arrays.
 slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    (void)ctx;
     auto *arrayType = tt::as_ptr<ArrayType>(norm.type(0));
     auto *lhs       = norm.get<Array *>(0);
     auto *rhs       = norm.get<Array *>(1);
@@ -574,7 +633,7 @@ slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < lhs->size(); ++i) {
         sum->set<slot_t>(
             i,
-            addTangent(arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+            addTangent(ctx, arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
             arrayType);
     }
     return rtdata::toSlot(sum);
@@ -584,7 +643,6 @@ slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // the zero tangents of the elements of `xs`.
 slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    (void)ctx;
     Type *primalType  = norm.type(0);
     Type *tangentType = norm.resultType();
     if (tangentType == nullptr) {
@@ -602,7 +660,8 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < value->size(); ++i) {
         zero->set<slot_t>(
             i,
-            zeroTangent(primalArray->elemType(), tangentArray->elemType(), value->get<slot_t>(i)),
+            zeroTangent(
+                ctx, primalArray->elemType(), tangentArray->elemType(), value->get<slot_t>(i)),
             tangentArray);
     }
     return rtdata::toSlot(zero);
@@ -612,7 +671,6 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // `xs[i]`: the gradient of one element goes back to its place in the array's gradient.
 slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    (void)ctx;
     auto *arrayType   = tt::as_ptr<ArrayType>(norm.type(0));
     auto *base        = norm.get<Array *>(0);
     const Int64 index = norm.get<Int64>(1);
@@ -626,7 +684,7 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     }
     const size_t at = static_cast<size_t>(index);
     result->set<slot_t>(
-        at, addTangent(arrayType->elemType(), base->get<slot_t>(at), delta), arrayType);
+        at, addTangent(ctx, arrayType->elemType(), base->get<slot_t>(at), delta), arrayType);
     return rtdata::toSlot(result);
 }
 

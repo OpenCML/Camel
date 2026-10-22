@@ -15,6 +15,7 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/typevar.h"
 #include "camel/parse/ast/type.h"
 #include "camel/utils/escape.h"
@@ -70,6 +71,15 @@ bool usesTypeVar(const node_ptr_t &node, const std::string &name) {
     case NodeKind::CAST:
         if (inType(node->targetType())) {
             return true;
+        }
+        break;
+    case NodeKind::TCASE:
+        // An identity pattern names its type in the payload, not as a child node, so the walk
+        // below does not reach it.
+        for (size_t i = 0; i < node->typeCaseTypeCount(); ++i) {
+            if (inType(node->typeCaseTypeAt(i))) {
+                return true;
+            }
         }
         break;
     default:
@@ -581,6 +591,12 @@ node_ptr_t Builder::visitModule(const AST::node_ptr_t &ast) {
                 node_ptr_t declNode = tree_->makeDecl(node->name(), true);
                 node_ptr_t typeNode = node->at(0);
                 *declNode << tree_->clone(typeNode);
+                // The declaration record is the same declaration: a head type the signature
+                // never writes (`func is_numeric::<T>(): bool`) makes it a template there too,
+                // so the graph builder does not give the declaration an empty graph of its own.
+                if (const auto *head = tree_->headTypeParamsOf(node)) {
+                    tree_->setHeadTypeParams(declNode, *head);
+                }
                 if (node->nativeDeclaration()) {
                     // The declaration keeps what makes it one: no body, so the graph builder
                     // makes an operator rule of it instead of a graph (handover H19 step 1),
@@ -3312,10 +3328,55 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
     for (const auto &caseAst : *ast->atAs<AST::RepeatedLoad>(1)) {
         const auto &caseLoad = caseAst->loadAs<AST::TypeCaseLoad>();
         uint16_t patterns    = 0;
-        for (const AST::TypeCaseKind kind : caseLoad->patterns()) {
-            patterns |= typeCaseBit(static_cast<GCT::TypeCaseKind>(kind));
+        std::vector<Type *> identities;
+        bool catchAll         = false;
+        bool unreachableSeen  = false;
+        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
+            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+            if (kind == GCT::TypeCaseKind::Identity) {
+                Type *patternType = visitType(pattern.type);
+                if (patternType == nullptr) {
+                    continue;
+                }
+                const std::string written = pattern.type->load()->geneCode();
+                if (patternType->code() == TypeCode::Void) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(pattern.type->load()->origin())
+                        .commit(written, "'void' is not the type of a value");
+                    throw BuildAbortException();
+                }
+                if (patternType->code() == TypeCode::TypeOf) {
+                    diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                        .atOrigin(pattern.type->load()->origin())
+                        .commit(written, "a 'typeof' expression is not a type identity");
+                    throw BuildAbortException();
+                }
+                for (Type *earlier : identities) {
+                    if (earlier == patternType || typeEquals(earlier, patternType)) {
+                        diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
+                            .atOrigin(pattern.type->load()->origin())
+                            .commit(
+                                written,
+                                "the same type is already written earlier in this case");
+                        throw BuildAbortException();
+                    }
+                }
+                if (catchAll && !unreachableSeen) {
+                    // `#leaf` and `_` select every type, so nothing after them can be selected.
+                    diags_->of(SemanticDiag::StaticMatchUnreachableCase)
+                        .at(caseAst->load()->tokenRange())
+                        .commit("this case");
+                    unreachableSeen = true;
+                }
+                identities.push_back(patternType);
+                continue;
+            }
+            patterns |= typeCaseBit(kind);
+            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+                catchAll = true;
+            }
         }
-        node_ptr_t caseNode = tree_->makeTypeCase(patterns);
+        node_ptr_t caseNode = tree_->makeTypeCase(patterns, identities);
         setOriginFromAst(
             context_, caseNode, caseAst, camel::source::OriginKind::GctNode, "gct.match.type.case");
         node_ptr_t bodyNode = visitStmtBlock(caseAst->atAs<AST::StmtBlockLoad>(0));

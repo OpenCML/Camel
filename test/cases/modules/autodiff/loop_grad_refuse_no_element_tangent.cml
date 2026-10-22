@@ -1,0 +1,21 @@
+/**
+ * Verifies the refusal of a loop that iterates over an array whose element type has no tangent and
+ * whose array value depends on the differentiated parameter: an array's tangent is the array of
+ * its elements' tangents, so `string[]` has none, and the reverse pass has nothing to scatter each
+ * round's element gradient into. The diagnostic names the loop, the array, its element type and
+ * where the array is written; it is not a silent zero.
+ */
+module loop_grad_refuse_no_element_tangent
+
+import { grad } from autodiff
+
+with <w: float>
+func f(): float {
+    let xs = ['w={}'->format<w>]
+    return loop acc = 0.0 for s in xs do acc + float(len(s))
+}
+
+func main(): int sync {
+    'loop_grad_refuse_no_element_tangent d={}'->format<grad(f)<2.0>()>->println
+    return 0
+}

@@ -1,0 +1,22 @@
+/**
+ * Verifies that the gradient of a loop over an array of records of floats is the hand-computed
+ * one: ps = [{a: w, b: 1}, {a: 2w, b: 3}] and f = a*b summed over the array is 7w, so at w = 2
+ * the value is 14 and the gradient is 7. The elements are structs, so the structural zero and sum
+ * of tangents run one level down from the array.
+ */
+module loop_grad_iterable_records
+
+import { grad } from autodiff
+
+type P = { a: float, b: float }
+
+with <w: float>
+func f(): float {
+    let ps = [{ a: w, b: 1.0 }, { a: 2.0 * w, b: 3.0 }]
+    return loop acc = 0.0 for p in ps do acc + p.a * p.b
+}
+
+func main(): int sync {
+    'loop_grad_iterable_records v={} d={}'->format<f<2.0>(), grad(f)<2.0>()>->println
+    return 0
+}

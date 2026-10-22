@@ -1190,9 +1190,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StaticMatchNotExhaustive",
                 "No case of this 'match type' selects the type '{0}'.",
-                "The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a "
-                "structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every "
-                "type. Add the case for this shape, or end with '#leaf' or '_'.",
+                "The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is "
+                "not a structure or an ordinary tuple, including 'T?' and 'T!'), '_' for every "
+                "type, and a type's identity ('int', 'MyStruct', T). Add the case for this type, "
+                "or end with '#leaf' or '_'.",
             },
         },
         {
@@ -1201,7 +1202,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticMatchUnreachableCase",
                 "The case '{0}' selects every type the cases after it could select.",
                 "'#leaf' and '_' select every type, so they must be the last case of a "
-                "'match type'.",
+                "'match type'. An identity pattern that repeats a type an earlier case already "
+                "selects is the same kind of dead case.",
             },
         },
         {
@@ -1559,6 +1561,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StaticMatchPatternCannotMatch,
+            {
+                "StaticMatchPatternCannotMatch",
+                "The identity pattern '{0}' cannot select a type here: {1}.",
+                "An identity pattern is exact: it selects only the type it names, after the "
+                "declaration's type variables are bound. Name a concrete type, do not write the "
+                "same type twice in one case, and put a pattern an earlier case already selects "
+                "before that case or remove it.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationNotLoaded,
             {
                 "NativeDeclarationNotLoaded",
@@ -1680,10 +1693,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "WhenConditionNotBool",
                 "The 'when' condition of '{0}' is not a bool (it is '{1}').",
                 "A 'when' is a compile-time predicate over the declaration's type parameters "
-                "and 'with' parameters: write one of the standard type queries "
-                "('is_numeric::<T>()', 'is_function::<F>()') or call a pure function of the "
-                "library ('has_field::<T>('w')'), possibly combined with '!', '&&' and '||'. "
-                "It is not a runtime value.",
+                "and 'with' parameters: call a generic function this module declares that "
+                "reduces to a constant over its type arguments ('is_numeric::<T>()' is one, "
+                "written in the standard module 'types'), possibly combined with '!', '&&' "
+                "and '||'. It is not a runtime value.",
             },
         },
         {
@@ -1715,8 +1728,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "WhenTypeQueryNotConcrete",
                 "The type query '{0}' cannot be answered for '{1}' in the 'when' condition of "
                 "'{2}': the type still has a type variable.",
-                "A query is answered when the declaration is instantiated, where every type "
-                "parameter has a type. Write the query on a type parameter the call binds, or "
+                "A predicate is evaluated when the declaration is instantiated, where every type "
+                "parameter has a type. Give the predicate a type parameter the call binds, or "
                 "guard the declaration so that it is only instantiated for a concrete type.",
             },
         },
@@ -1729,6 +1742,41 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "A 'when' that is false makes its declaration inapplicable, not erroneous, and "
                 "the call goes on to the other candidates. Pass an argument or a type that "
                 "satisfies a condition, or write another overload for this call.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateNotImported,
+            {
+                "WhenPredicateNotImported",
+                "'{1}' is declared in module '{2}', but that name is not imported where the "
+                "'when' condition of '{0}' is written.",
+                "A condition resolves names where its declaration is written, as a call in its "
+                "body does: the module's own names, then what it imports by name, selectively "
+                "or as a module prefix, then the prelude. Import the module that declares the "
+                "predicate, or move the predicate into the module that uses it.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateNotCompileTime,
+            {
+                "WhenPredicateNotCompileTime",
+                "'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can "
+                "call: {2}.",
+                "A condition calls a generic function whose body reduces to a constant over the "
+                "types it is given: a 'match type', a 'static for' or a 'static loop' over "
+                "'fields T', and the comparison operators. An ordinary function runs at run "
+                "time, and a value is read there too.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateAmbiguous,
+            {
+                "WhenPredicateAmbiguous",
+                "The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is "
+                "imported from {2}.",
+                "Two imports that bring one name do not choose between them. Import the "
+                "predicate by another name ('import {{ p as q }} from m') or qualify it with the "
+                "module it comes from ('m::p').",
             },
         },
     };

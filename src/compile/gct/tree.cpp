@@ -355,9 +355,18 @@ node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
 
 node_ptr_t Tree::makeTypeMatch() { return makeNode(NodeKind::TMTCH); }
 
-node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
+node_ptr_t Tree::makeTypeCase(uint16_t patterns, const std::vector<Type *> &types) {
     Node *node = makeNode(NodeKind::TCASE);
     node->tag_ = patterns;
+    if (!types.empty()) {
+        auto *list =
+            static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(types.size())));
+        list->count = types.size();
+        for (size_t i = 0; i < types.size(); ++i) {
+            list->items[i] = types[i];
+        }
+        node->payload_.types = list;
+    }
     return node;
 }
 
@@ -543,6 +552,18 @@ node_ptr_t Tree::clone(const Node *node) {
             copy->payload_.name = intern(*node->payload_.name);
         }
         break;
+    case NodeKind::TCASE:
+        if (node->typeCaseTypeCount() > 0) {
+            const size_t count = node->typeCaseTypeCount();
+            auto *list =
+                static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(count)));
+            list->count = count;
+            for (size_t i = 0; i < count; ++i) {
+                list->items[i] = node->typeCaseTypeAt(i);
+            }
+            copy->payload_.types = list;
+        }
+        break;
     case NodeKind::EXPT:
     case NodeKind::LOOP:
     case NodeKind::SFOR:
@@ -690,7 +711,7 @@ std::string Node::toString() const {
         std::string text = "TCASE: (";
         bool first       = true;
         for (const TypeCaseKind kind :
-             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Leaf,
+             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Func, TypeCaseKind::Leaf,
               TypeCaseKind::Wildcard}) {
             if ((typeCasePatterns() & typeCaseBit(kind)) == 0) {
                 continue;
@@ -704,13 +725,23 @@ std::string Node::toString() const {
             case TypeCaseKind::Tuple:
                 text += "tuple";
                 break;
+            case TypeCaseKind::Func:
+                text += "func";
+                break;
             case TypeCaseKind::Leaf:
                 text += "#leaf";
                 break;
             case TypeCaseKind::Wildcard:
                 text += "_";
                 break;
+            case TypeCaseKind::Identity:
+                break;
             }
+        }
+        for (size_t i = 0; i < typeCaseTypeCount(); ++i) {
+            text += first ? "" : " | ";
+            first = false;
+            text += typeCaseTypeAt(i)->toString();
         }
         return text + ")";
     }

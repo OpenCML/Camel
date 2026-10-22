@@ -1,0 +1,25 @@
+/**
+ * The predicates a `when` condition in another module calls: one that matches the shape of a
+ * type, one that folds a field name over `fields T`, and an ordinary function that is not a
+ * predicate at all.
+ */
+module when_import_predicates
+
+export func is_compound::<T>(): bool {
+    return match type T {
+        case struct => true
+        case tuple => true
+        case _ => false
+    }
+}
+
+export func has_field::<T>(name: string): bool {
+    return match type T {
+        case struct => static loop found = false for (n, F) in fields T do found || n == name
+        case _ => false
+    }
+}
+
+export func ready(): bool {
+    return true
+}

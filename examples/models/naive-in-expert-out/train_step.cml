@@ -67,12 +67,12 @@ type Block = {
     b2: Tensor<f32, [64]>
 }
 
-// The blocks are one value, not two fields.  They are a tuple because H17 cannot yet
-// differentiate a loop that iterates an array of tensors (an array element has no zero tangent),
-// while a tuple is an ordinary aggregate the derivative and the optimizer already walk.  The
-// loop below therefore walks the tuple at instantiation; no block is named in the forward pass.
+// The blocks are one value, not two fields: an array of blocks, walked by an ordinary `loop`.
+// An array's tangent is the array of its elements' tangents, and the reverse of a read by index
+// is a scatter-add at that round's index, so the loop that walks the array differentiates
+// (design principles 9.9); the optimizer and `save_params` walk the array element by element.
 type Model = {
-    blocks: (Block, Block),
+    blocks: Block[],
     norm_f: Tensor<f32, [64]>,
     head: Tensor<f32, [64, 32]>
 }
@@ -112,10 +112,9 @@ func block_forward(b: Block, x: TokenStates): TokenStates {
 }
 
 // The logits of every position: every block in turn, a final RMSNorm and a projection to the
-// vocabulary.  The loop walks the blocks value; no block is named in this function.
+// vocabulary.  The loop walks the blocks array; no block is named in this function.
 func logits(m: Model, x: TokenStates): Logits {
-    let h = static loop h = x
-        for (i, B) in fields (Block, Block) do block_forward(m.blocks.[i], h)
+    let h = loop h = x for b in m.blocks do block_forward(b, h)
     return rmsnorm(h, m.norm_f) @ m.head
 }
 
@@ -153,7 +152,7 @@ func init_block(std: float): Block {
 func init_model(): Model {
     let std = 0.02
     return {
-        blocks: (init_block(std), init_block(std)),
+        blocks: [init_block(std), init_block(std)],
         norm_f: randn([d_model], 1.0, 0.0) as Tensor<f32, [64]>,
         head: randn([d_model, vocab], 0.0, std) as Tensor<f32, [64, 32]>
     }
@@ -170,8 +169,8 @@ func count_block(b: Block): int {
 }
 
 func param_count(m: Model): int {
-    return static loop n = shape(m.norm_f)[0] + shape(m.head)[0] * shape(m.head)[1]
-        for (i, B) in fields (Block, Block) do n + count_block(m.blocks.[i])
+    return loop n = shape(m.norm_f)[0] + shape(m.head)[0] * shape(m.head)[1]
+        for b in m.blocks do n + count_block(b)
 }
 
 func main(bench: bool, init_dir: string, final_dir: string): int sync {

@@ -1,0 +1,16 @@
+/**
+ * An imported name that exists but is not a compile-time predicate: `ready` is an ordinary
+ * function, so the condition cannot call it, and the report says that rather than taking the
+ * condition for true.
+ */
+module when_import_not_predicate
+
+import { ready } from predicates
+
+func bad(x: int): int when ready() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}

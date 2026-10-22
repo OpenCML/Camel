@@ -1,11 +1,28 @@
 /**
  * A `when` condition that holds: the declaration applies.
  *
- * `double` asks a query about a written type, `twice` asks about its own type parameter T,
- * which the call binds (int and float here). The condition is evaluated when the declaration
- * is instantiated, before its body is built (design principles 5.13).
+ * `double` asks about a written type, `twice` about its own type parameter T, which the call
+ * binds (int and float here). The condition is evaluated when the declaration is instantiated,
+ * before its body is built (design principles 5.13).
+ *
+ * The predicates are written here as any user predicate is; the standard ones with these names
+ * live in the standard module `types`.
  */
 module when_applied
+
+func is_integer::<T>(): bool {
+    return match type T {
+        case int | i32 => true
+        case _ => false
+    }
+}
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | c64 | c128 => true
+        case _ => false
+    }
+}
 
 /// `is_integer::<int>()` is true: `double` is selectable.
 func double(x: int): int when is_integer::<int>() {
