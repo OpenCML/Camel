@@ -1,0 +1,238 @@
+# H64：把优化器的一步做成一次遍历
+
+本报告对应 `docs/handover/README.cn.md` 的 H64，分支 `handover/H64-adam`（基于 `origin/develop`
+`043ac0eb`）。作者的原话：
+
+> `nn:adam` 是 C2 训练步里最大的一笔开销，而它是标量的：101770 个参数，每个约 11 ns，每步
+> 1.16 ms，占整步 62%。让这一步的开销等于算术本身该有的开销。
+
+结论：11 ns 里有 5.6 ns 是每个参数一次 libm `sqrt` 调用（它还挡住了向量化），其余是 baseline
+ISA 上的标量 double 四则运算；现在是一次对整张量的遍历，每参数 1.56 ns（AVX2 单元）或 3.08 ns
+（可移植单元），值逐位不变。C2 训练步的中位数 0.96 → 0.63 ms，`mlp_step.nvm` 48.24 → 31.38 ms。
+
+## 1. 11 ns 在哪
+
+先说结论：**全部在一次逐元素的标量循环里，没有分摊在分配、`std::function` 或「每个参数一张图」
+上**。三件事都是实测的，不是推断。
+
+### 1.1 发出去的代码：每参数一次 `call sqrt@plt`
+
+`build/modules/nn/Release/nn.cmo` 里 `adamLeaf(...)::$_0::_M_invoke`（优化器的叶子更新）的反汇编：
+
+- 没有一条 `ymm`／`zmm` 指令，全是 `movss`/`cvtss2sd`/`mulsd`/`addsd`/`divsd`（4 条 `divsd`）；
+- 每处理一个元素，**一条 `call sqrt@plt`**（`1de1d`，第二个在 `1e131`）。
+
+`std::sqrt` 是 libm 调用：它要按 C 标准可能置 `errno`，所以编译器不能把它换成 `sqrtsd` 指令，
+更不能把循环向量化——一条不透明的调用就足以让整个循环留在标量状态。而 `.cmo` 又是按 baseline
+x86-64（SSE2）编译的（`build/compile_commands.json` 里 elementwise 单元的 Release 命令行只有
+`-m64 -O3 -DNDEBUG -std=gnu++23 -fPIC -ffp-contract=off`，没有 `-march`），所以即使没有这次
+调用，上限也只是两路 double。
+
+### 1.2 拆开量：6.36 ns 里的 5.6 ns 是这次调用
+
+在参考主机上把**完全相同的循环体**拎出来做微基准（101770 个元素，`-O3`，load 18–25，中位数）：
+
+| 形式 | ns/参数 | 101770 个参数 |
+| --- | --- | --- |
+| 旧循环（`std::sqrt`，逐元素 double） | **6.36** | 647 µs |
+| 同上，`sqrt` 换成一次乘法 | 0.75 | 76 µs |
+| 只读四个流、写三个流（内存地板） | 0.46 | 47 µs |
+| 同上循环加 `-fno-math-errno`（调用变成 `sqrtsd`） | 1.58 | 160 µs |
+| `__builtin_elementwise_sqrt` + AVX2（`vsqrtpd`，无调用） | 1.58 | 160 µs |
+| 同上再开 `-ffast-math`（**不可用**：改舍入） | 1.01 | 100 µs |
+| 模块的 baseline ISA 下、计划中的精确循环体 | 3.08 | 313 µs |
+| 同上加 `-mavx2 -mfma` | **1.56** | 159 µs |
+
+两件事一眼可见：
+
+1. `sqrt` 从调用换成指令：6.36 → 1.58 ns，**5.6 ns 是这次调用**（它同时是循环不能向量化的原因）。
+2. 剩下 1.58 ns 里还有一半是 baseline ISA 的宽度：同一份代码在 AVX2 单元里是 1.56 ns，在可移植
+   单元里是 3.08 ns。一个 `.cmo` 不能带 `-march=native`（模块必须可移植），所以这半个差距只能
+   靠「按 ISA 分文件 + 运行时派发」拿回来，和 `unary_avx2.cpp` 同一个做法。
+
+C2 步里量到的是 **11.7 ns**（`nn:adam` 每次 1.19 ms ÷ 101770），比微基准的 6.36 ns 高，原因是
+当时主机 load 65：同一段代码在忙的机器上就是慢一倍。两者是同一件事，不是两个缺陷。
+
+### 1.3 不是分配、不是 `std::function`、不是「每个参数一张图」
+
+- **每参数分配**：没有。`adamLeaf` 每次叶子调用分配 3 张输出张量（`newLike`，图空间的 bump
+  分配），C2 模型 4 个叶子 = 每步 12 张、共 1.2 MB。把这些全部算进去，新的叶子是 170 µs
+  （101770 个参数），其中内核本身 157 µs，**分配加 walk 约 13 µs，即 0.13 ns/参数**。
+- **`std::function`**：`walk()` 每次算子调用构造一个 `LeafUpdate`（每步 4 个），每个几十纳秒。
+  不是每参数。
+- **「每个参数一张图」**：不存在。`nn:adam` 一次调用就是图里的一个节点，逐参数的是那个 C 循环。
+
+也就是说，11 ns 里 99% 是那个循环的算术，而那个算术比它该有的样子贵了 4–7 倍。
+
+### 1.4 为什么不能用现成的逐元素算子拼
+
+拼得出来的形式是 5–7 趟整张量（`m*beta1`、`g*(1-beta1)`、相加、平方、`v*beta2`、…、`sqrt`、
+两次除法、`p - lr*…`），有两个问题：
+
+1. **位不同**。张量只存 f32，每一趟的中间结果都会被舍入成 f32；这个公式在 double 里算、只在
+   写回时舍入一次。f32 的 `m`、`v` 拿去算 `p` 会改最后几位。任务要求逐位不变。
+2. **现有算子的返回类型不允许**。`tensor:sqrt`、`tensor:divide` 的输入输出都是 f32（`dtype.h`
+   里没有 f64 张量），拿不到 double 中间量。
+
+所以这是一次真正的融合：四个张量进、三个张量出，逐元素在 double 里按原顺序算。
+
+## 2. 现在的一次遍历
+
+### 2.1 内核
+
+新增 `modules/tensor/kernels/update.{h,cpp}`、`update_loops.inl`、`update_generic.cpp`、
+`update_avx2.cpp`，写法与该目录的其它逐元素算子一致：
+
+- **公式只写一遍**（`update.h` 的 `adaptiveUpdateOne`）：逐元素循环和非张量叶子（一个 float 的
+  模型字段）都调它，所以不存在「两处实现可能漂移」的问题。
+
+```cpp
+const double m = r.beta1 * moment1 + (1.0 - r.beta1) * grad;
+const double v = r.beta2 * moment2 + (1.0 - r.beta2) * grad * grad;
+nextParam      = param - r.lr * (m / r.correct1) /
+                        (__builtin_elementwise_sqrt(v / r.correct2) + r.eps);
+```
+
+- **按 ISA 分单元**：`update_generic.cpp`（可移植，SSE2）与 `update_avx2.cpp`
+  （`-mavx2;-mfma`），`update.cpp` 用 `cpuFeatures().avx2Fma` 在第一次调用时选定，
+  `CAMEL_TENSOR_ISA=generic` 仍然能强制可移植单元。AVX-512 单元故意没写：参考主机没有
+  AVX-512，写了也测不了。
+- **`-ffp-contract=off` 保持不变**（与该目录的 unary 单元相反，那里没有可融合的乘加）。这一条是
+  位相同的必要条件：`beta1 * m + (1-beta1) * g` 一融合就成了 FMA，结果会变。
+- **grain 用同一套策略**：`parallelFor(count, grainForWork(unit.nsPerElement), …)`，每元素
+  1.56 ns（AVX2）或 3.08 ns（可移植），一个 chunk 是 40 µs 的串行工作；不足两个 chunk 的范围走
+  H54 的内联路径，不建池、不碰锁。捕获只留一个指针，所以拆分路径的那一次 `std::function` 也不
+  超 SBO（H54 从内联路径里拿掉的那次分配，这里连拆分路径也没有）。
+- `nn:optim.cpp` 只改 `adamLeaf`：张量叶子走内核，非张量叶子走同一个 `adaptiveUpdateOne`，
+  `sgd` 没动。
+
+### 2.2 逐位不变
+
+- 中间量仍是 double，仍然只在写回时各舍入一次；
+- 运算顺序原样：`((1-beta1)*g)*g`、`(m/c1)/(sqrt(v/c2)+eps)`、`p - lr*…`；
+- 全局 `-ffp-contract=off`，没有 FMA；
+- `__builtin_elementwise_sqrt` 是 IEEE 正确舍入的平方根指令，与 `std::sqrt` 给出同一个数（只有
+  负数输入的 NaN payload 可能不同，而 Camel 不打印 payload）；
+- 只有内联（1 chunk）与拆分两条路径，元素之间独立，拆到几个线程都是同样的位。
+
+验证：`test/cases/modules/nn/adam_update_bits.cml` + `test/plans/feat/modules/nn.plan.toml` 的
+`adam_update_bits`（4 个后端 nvm/fvm/jit/prl，同时要求后端一致）。固定输入上走 3 步，用
+「能唯一确定一个 float 的最短十进制」（设计原则 7.7）打印 5 个值并**按位比较**：
+
+```
+adam_update_bits w0=0.02799990028142929 w3=-0.029898999258875847 w5=-0.02849988080561161 b1=0.06099998205900192 scale=0.2799999993999999
+```
+
+这 5 个值是**改前**的二进制跑出来的，改后逐字相同；另外手工核对过改后的二进制在
+`CAMEL_NUM_THREADS=1`（纯内联）与 `CAMEL_TENSOR_ISA=generic`（可移植单元）下也是同一串数字，
+即拆分与 ISA 都不改位。`mlp_step` 自己打印的 `w1=6782.31672668457` 改前改后也一致。
+
+## 3. 数字
+
+环境：Linux 主机，32 核 EPYC 7343，Release。所有对比都是**同一窗口内交替跑改前/改后**（改前的
+二进制是同一提交的 `out/latest` 副本），10 次取中位数，窗口前后各记 load average。
+
+### 3.1 验收计划（load 31–32）
+
+| 测试 | 改前 | 改后 | 变化 |
+| --- | --- | --- | --- |
+| `dependency_chain.nvm` | 8.78 ms | 8.82 ms | 0% |
+| `dependency_chain.fvm` | 8.74 ms | 8.78 ms | 0% |
+| `mlp_step.nvm` | 48.24 ms | **31.38 ms** | **−35%（1.54×）** |
+| `mlp_step.fvm` | 48.79 ms | **33.36 ms** | **−32%（1.46×）** |
+| `transformer_step.nvm` | 6.15 ms | 5.89 ms | −4% |
+
+`dependency_chain` 不跑优化器，本来就不该动；`transformer_step` 的张量都是 8×8 量级，更新在
+那一步里只占 12%（见 4），所以只降 4%。`training_steps.plan.toml` 的 6 条全部通过，
+`perf_budget_mean_ms = 500` 未改。
+
+第二个窗口（load 41 → 30，同样交替、10 次中位数）读数一致：`mlp_step.nvm` 48.46 → 31.94 ms、
+`mlp_step.fvm` 48.26 → 36.17 ms、`transformer_step.nvm` 5.70 → 5.60 ms、链 8.80 → 8.85 ms。
+
+一处新的方差：改前 `mlp_step.nvm` 的 10 次是 48.1–49.2 ms，改后是 28.3–45.7 ms。中位数降了
+35%，但单次之间散得更开——那是 3.3 节那条边界（拆分把一部分时间换成了等待），不是内核本身的
+抖动：同一窗口内联跑时每步是 455–459 µs，八次一分不差。
+
+### 3.2 每步
+
+| | 改前 | 改后 |
+| --- | --- | --- |
+| `mlp_step` 每步（计划 50 步） | 0.965 ms | **0.628 ms** |
+| `mlp_step` 每步（`std::profile` 的墙钟中位数，load 31–36） | 930.9 µs | 705.9 µs |
+| 其中 `nn:adam` | 1.19 ms/次（load 65），占算子时间 69% | **0.157 ms/次**（纯算术，load 13） |
+| `transformer_step` 每步 | 0.123 ms（6.15/50） | 0.118 ms（5.89/50） |
+
+更新本身：101770 个参数 157 µs，即 **1.54 ns/参数**，对比改前的 6.36 ns（微基准，load 20）与
+11.7 ns（C2 步内，load 65）。
+
+### 3.3 拆不拆：策略给出的 3 块，实测是什么
+
+按 `grainForWork(1.56)` 的 grain，C2 的 101770 个参数是 3 块（每块 53 µs）。实测（同一窗口交替，
+每次 200 步，取 `std::profile` 的每步墙钟中位数）：
+
+- load 13：内联 157 µs vs 拆分 147 µs（更新自己，打平），但**整个 C2 步内联 458 µs、拆分
+  781 µs**——拆分在这台机器上给这一步加了约 320 µs，比更新本身省下的还多；
+- load 70：更新自己 163.7 µs vs 拆分 95.7 µs（1.7× 收益）。
+
+按模型大小的扫描（load 70，内联 / 拆分，µs）：
+
+| 参数个数 | chunk 数 | 内联 | 拆分 |
+| --- | --- | --- | --- |
+| 20000 | 1 | 34.5 | 34.7 |
+| 60000 | 2 | 98.9 | 65.5 |
+| 100000 | 3 | 163.7 | 95.7 |
+| 130000 | 5 | 212.8 | 121.2 |
+| 200000 | 7 | 328.2 | 194.4 |
+
+结论：更新自己在 2 块以上就能赚（1.5–1.7×），只有在安静机器上 3 块才打平；而**整个 C2 步在安静
+机器上偏好内联**——一个 160 µs 的区域付不起池的固定开销（唤醒 + 抢块 + join，这台机器上
+200–400 µs），而那笔开销记在「谁在等」上，不记在更新头上。这是 H54 的阈值（`kMinWorkPerWorkerNs
+= 40 µs`，按块的工作量定的）在这里的边界，不是这次改动能定的：本文按策略原样提交（3 块），
+把「整步在 load 13 反而偏好内联」作为发现留给阈值的负责人，因为改它会同时影响所有算子。
+
+## 4. 这一步里还剩什么
+
+改后 C2 步的算子时间构成（`std::profile`，200 步，默认线程数；占比是它的均值，含主机抖动，
+用来做相对比较而不是绝对时间）：
+
+| 算子 | 占比 |
+| --- | --- |
+| `nn:adam` | 55%（其中更新本体 ~160 µs，其余是 12 张输出张量的分配与 walk） |
+| `tensor:matmul_grad_lhs` + `matmul_grad_rhs` + `matmul` | 40% |
+| `tensor:gt`、`tensor:multiply`、`tensor:relu`、`tensor:add`、softmax 交叉熵 | ~4% |
+| `nn:adam_state`（每步一次状态张量的零） | <1% |
+
+也就是说，优化器已经从「一步的 69%」降到「一步的一小半」，**剩下的大头是 6 次 matmul（前向 2 次、
+两个输入的梯度各 2 次）**。下一个候选很明确：它们每步 6 个区域、每个 3 块左右，正好也是 3.3 节那
+条边界；把 `gemm` 的 grain 与池的固定开销重新对一次，比继续压优化器更值。
+
+还剩在 `nn:adam` 内部的两笔小钱：每叶子 3 张输出张量（每步 12 张、1.2 MB，约 13 µs）、
+`std::pow` 两次（每步一次，可忽略）。第一次 `adam` 调用现在付建池的 2.4–4.7 ms（H54 把建池从
+`tensor:add` 移走之后，C2 步里第一个真的要拆的区域变成了优化器）。
+
+## 5. 复现
+
+```bash
+# 每参数成本与 ISA 宽度：微基准是临时程序（不进仓库），把计划中的循环体放进一个 .cpp，
+# 101770 个元素跑 300 轮取中位数，两个 ISA 各编一次：
+clang++ -O3 -std=gnu++23 -ffp-contract=off             upd.cpp -o upd_generic
+clang++ -O3 -std=gnu++23 -ffp-contract=off -mavx2 -mfma upd.cpp -o upd_avx2
+
+# 逐位不变
+camel test/cases/modules/nn/adam_update_bits.cml --arg steps=3 --arg lr=0.01 std::macro std::nvm
+CAMEL_NUM_THREADS=1 camel test/cases/modules/nn/adam_update_bits.cml --arg steps=3 --arg lr=0.01 std::macro std::nvm
+CAMEL_TENSOR_ISA=generic camel test/cases/modules/nn/adam_update_bits.cml --arg steps=3 --arg lr=0.01 std::macro std::nvm
+
+# 验收（同一窗口交替，10 次中位数）
+node scripts/test.js test/plans/perf/training_steps.plan.toml --jobs 2
+```
+
+## 6. 改动的文件
+
+- `modules/tensor/kernels/update.h`、`update.cpp`、`update_loops.inl`、`update_generic.cpp`、
+  `update_avx2.cpp`（新增）
+- `modules/tensor/CMakeLists.txt`（源文件与 AVX2 单元的编译选项）
+- `modules/nn/optim.cpp`（`adamLeaf` 走内核）
+- `test/cases/modules/nn/adam_update_bits.cml`（新增）、`test/plans/feat/modules/nn.plan.toml`
+  （`adam_update_bits`）、`test/plans/perf/training_steps.plan.toml`（只加 H64 的注释段落）
+- 本报告与 `docs/handover/README.cn.md` 的 H54 行
