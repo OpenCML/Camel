@@ -301,21 +301,26 @@ resolver（`modules/tree/module.cpp:30-60`），没有执行器；声明要求
 | 策略（`sum`/`mean`/`range`） | 策略 | 0 | 改“一处签名” | 不建议 |
 | 计算签名 74 | 设计 | 0 | 无 | — |
 
-## 6. 缺陷（记在这里，不改文档）
+## 6. 缺陷（H176 核对：第 1、6 条交作者；第 2–5 条已改文档）
 
-1. **语言参考 7.5 与代码冲突**：`typeas` “不能作为模块类型的实参”，但 `Device<typeas T>`
-   装载成功（`typeArguments()` 覆写；`builder.cpp:4871` 的注释明确允许“实参是普通类型”的
-   模块类型）。要么补例外句，要么收回 `Device` 的行为。Q-M 的裁定依赖这句话的准确写法。
+1. **语言参考 7.5 与代码冲突**（交作者）：`typeas` “不能作为模块类型的实参”，但 `Device<typeas T>`
+   装载成功（`typeArguments()` 覆写；`src/compile/gct/builder.cpp:4871-4884` 只拦没有覆写
+   `typeArguments()` 的模块类型；`modules/tiles/include/tiles/device.h:78`）。要么补例外句，要么
+   收回 `Device` 的行为。Q-M 的裁定依赖这句话的准确写法。
 2. **H151 §3.2 把 `show` 记成“计算”**，实际是“伞形参数”；它有一条固定 `void` 的结果，
-   P3 可以写。H151 §3.4 标题写“2 条”，列的是 3 个名字（`range`、`sum`、`mean`）。
-3. **`stdlib/signatures/tensor.cml` 头部**说“一个名字一条签名”，同文件的 `dim` 有两条
-   （`int`/`i32`），是它自己的反例。
+   P3 可以写。H151 §3.4 标题写“2 条”，列的是 3 个名字（`range`、`sum`、`mean`）。**H176 已改**：
+   H151 的标题、§0、§3.2 与 §3.4 按 53 个计算 / 55 条签名更正，`show` 单列为可声明未迁。
+3. ~~**`stdlib/signatures/tensor.cml` 头部**说“一个名字一条签名”，同文件的 `dim` 有两条
+   （`int`/`i32`），是它自己的反例。~~ **已由 `5a6dc71c0` 修好**：`dim` 已迁到 `stdlib/tensor.cml`，
+   当前 `signatures/tensor.cml` 头部写的是“computed signatures”，文件里没有 `dim`。
 4. **H157 §7 写“声明没有 `with` 写法”**，与约定 §2 `docs/stdlib-conventions.cn.md:32`、`stdlib/str.cml:21` 冲突；
-   `regions` 的阻塞点是函数类型。
-5. **H157 §10 的“任意函数类型 3 个”不含 `tiles` 的 5 个**（§7 单列），合起来是 8；它把
-   `py_print`/`py_println` 记成纯变参，实际结果还取自第一个实参。
-6. **语言参考 7.4.3 第 155 行**“泛型函数不能与其他函数同名”与约定 §2 `docs/stdlib-conventions.cn.md:44`“固定的声明
-   比泛型的声明更具体”措辞冲突；对象不同（带函数体的函数 / 声明），但 7.4.3 没有限定。
+   `regions` 的阻塞点是函数类型。**H176 已改** H157 §7 的那一行。
+5. **H157 §10 的“任意函数类型 3 个”只数六个模块**（`tiles` 的 5 个在 §7 单列），合起来是 8；
+   它把 `py_print`/`py_println` 记成纯变参，实际结果还取自第一个实参。**H176 已改**：H157 §0/§10
+   写明范围，§6.2 两行补上结果类型（`modules/python/module.cpp:450`/`:467`）。
+6. **语言参考 7.4.3 第 155 行**（交作者）“泛型函数不能与其他函数同名”与约定 §2
+   `docs/stdlib-conventions.cn.md:44`“固定的声明比泛型的声明更具体”措辞冲突；对象不同（带函数体的
+   函数 / 声明），但 7.4.3 没有限定。
 
 ## 7. 顺序
 

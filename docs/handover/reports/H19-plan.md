@@ -371,6 +371,10 @@ export native func decode(bytes: Bytes): string! = 'bytes:decode'
 
 按这个顺序，一个模块一次提交：`str`、`math`、`fs`、`time`、`env`、`process`、`json`、`re`、`random`、`hash`、`io`。
 
+> **H140/H176 注（2026-10-22）**：`ckpt` 不参与第 10 步。它没有固定签名：5 个 `tree_*` intrinsic 没有
+> 执行器；`save_tree` 写成声明会丢掉编译期叶子检查；`load_tree` 的结果类型来自 `::<T>`。证据与
+> 选项见 `reports/H140.md` §0/§8.2；H148 D3 记录了这处清单遗漏。`tree` 归 H51。
+
 每个模块：
 
 1. `stdlib/signatures/<m>.cml` 搬到 `stdlib/<m>.cml`，每个函数加 `native`，URI 与重载逐个对齐（`math` 的 `min_i`/`min_f` 等逐个写；`stats` 那种四个重载共用一个 URI 的保持共用）。
