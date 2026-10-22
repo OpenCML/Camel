@@ -529,6 +529,13 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += " " + any_cast<string>(visitResourceClause(clause));
     }
 
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        // The declaration's applicability condition, after the signature and before the body
+        // (design principles 5.13): it is part of the declaration, so leaving it out changes
+        // the AST the text parses to and, with it, the names synthesized from positions.
+        result += " when " + any_cast<string>(visitExpr(whenClause->expr()));
+    }
+
     if (!stmtBlock) {
         // A body-less declaration of a C++ operator: the signature is the whole of it (design
         // principles 6.4; handover H19, step 1).
