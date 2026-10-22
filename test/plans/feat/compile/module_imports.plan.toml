@@ -431,6 +431,107 @@ args = ["-E", "short", "${case}"]
 expect_exit = 1
 expect_output_contains = ["name=SyntaxDiag::UnexpectedToken", "Unexpected '/'", "expected a name"]
 
+# ---- H232: a relative spelling is a name, never a path ----
+# The grammar writes a relative module name as one to three leading dots before a dotted name
+# (`moduleName : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)*`), and the dots drop that many
+# components from the importing module's own name (design principles 10.2). The resolved name is
+# looked up in the importing module's own directory and then the module roots; a spelling that
+# drops more components than the name has names nothing. Its spelling then reached the lookup as
+# a path: `..lib` became `//lib`, so the diagnostic reported `/` and `/lib` among the directories
+# it tried (and omitted `/` once a lib.* could be found there), and `moduleFileExists` could see a
+# file at the root. Measured with a module placed at `/lib.cml`: the import still failed and
+# loaded nothing, because an unresolved spelling produced no candidate at all. The pins below
+# therefore assert that the diagnostic never names those paths; the file at `/` was used for the
+# measurement only and is not a fixture. Fixtures
+# live under import_order/relative_name/; the `lib.cml` beside the programs makes the difference
+# between "no such name" and "found beside the importer" visible.
+
+[[tests]]
+name = "imports.relative_name_too_deep_is_not_a_path"
+desc = "`import ..lib` in the entry program (`main`, one component) names nothing: ModuleNotFound explains that the prefix drops more components than the name has and that no directory was searched. It must not name / or /lib, the filesystem paths the spelling produced when read as a path."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotdot.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["main_dotdot.cml:8:1", "Module '..lib' not found", "name=SemanticDiag::ModuleNotFound", "drops 2 name component(s)", "no directory was searched"]
+expect_output_not_contains = ["/: no file", "/lib: no file", "//lib"]
+
+[[tests]]
+name = "imports.relative_name_too_deep_ignores_include_root"
+desc = "The same spelling with an -I root that holds lib.cml: the root is not a file to fall back to either, because `..lib` is not `lib`. The root's value is never printed and no directory is named, so the lookup cannot drift to a different module."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotdot.cml"
+args = ["-E", "short", "-I", "roots/one", "${case}"]
+expect_exit = 1
+expect_output_contains = ["drops 2 name component(s)", "no directory was searched"]
+expect_output_not_contains = ["root1-lib", "relative_name/roots/one"]
+
+[[tests]]
+name = "imports.relative_name_three_dots"
+desc = "`...lib`: three dots drop three components, and the entry's name has one, so the same explanation and still no filesystem path."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_3dot.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Module '...lib' not found", "drops 3 name component(s)", "no directory was searched"]
+expect_output_not_contains = ["/: no file", "/lib: no file"]
+
+[[tests]]
+name = "imports.relative_name_dot_is_a_name"
+desc = "`.x` can be formed: one dot drops `main`, so the name is `x`, and x.cml beside the program supplies local-x. The prefix is resolved before the lookup, so this is the ordinary own-directory lookup, not the path /x."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_dotx.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "local-x\n"
+
+[[tests]]
+name = "imports.relative_name_trailing_dot_is_syntax_error"
+desc = "`import x.` is not a module name: the parser stops at `x` and the dot is an unexpected token."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_xdot.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Unexpected '.'", "expected a declaration or the end of the file", "name=SyntaxDiag::UnexpectedToken"]
+
+[[tests]]
+name = "imports.relative_name_missing_directory"
+desc = "`import pkg.lib` with no pkg/: an ordinary dotted name. ModuleNotFound lists the directories actually tried, starting with the importing module's own directory and then the module roots; the list does not begin at /."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_pkgdot.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["Module 'pkg.lib' not found", "name=SemanticDiag::ModuleNotFound", "relative_name/pkg: path does not exist", "relative_name/pkg/lib: path does not exist"]
+expect_output_not_contains = ["/: no file"]
+
+[[tests]]
+name = "imports.relative_name_formed_in_library"
+desc = "`level.helper` has two name components, so its `import ..lib` is the name `lib`, looked for in its own directory first: level/lib.cml (helper+level-lib). A prefix that can be formed is resolved against the loaded name and then looked up by the ordinary rule."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_level.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "helper+level-lib\n"
+
+[[tests]]
+name = "imports.relative_name_too_deep_in_library"
+desc = "The same spelling in a library loaded as `short` (one component) names nothing there either: its ModuleNotFound names the importing module `short` and no directory, and the entry reports the imported module's failure after it."
+kind = "negative"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_short.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_output_contains = ["short.cml:5:1", "Module '..lib' not found", "importing module's name 'short' has 1", "name=SemanticDiag::ModuleNotFound", "name=SemanticDiag::ImportedModuleHasErrors"]
+expect_output_not_contains = ["/: no file", "/lib: no file"]
+
+[[tests]]
+name = "imports.relative_name_ordinary_case"
+desc = "The ordinary relative case that must keep working: `import lib` takes lib.cml beside the program (local-lib)."
+kind = "behavior"
+case = "../../../cases/compile/module_imports/import_order/relative_name/main_lib.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "local-lib\n"
+
 # ---- D6: port names of a function that captures, in std::rgir ----
 
 [[tests]]

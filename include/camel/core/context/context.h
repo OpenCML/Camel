@@ -162,10 +162,21 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, DirectoryListing> directoryListings_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
-    std::vector<std::string>
-    getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
-    std::string
-    resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
+    /// The module names an import spelling stands for, in the order they are looked up. The
+    /// grammar allows a relative prefix before a dotted name (`.`/`..`/`...`; see
+    /// docs/language/08_top_level_and_grammar.md): its dots drop that many components from the
+    /// importing module's own name, so the names returned here are resolved names, never the
+    /// spelling itself (design principles 10.2: an import names a module, not a path). `problem`
+    /// is set instead when the prefix drops more components than the name has; no candidate and
+    /// no directory lookup exists then.
+    std::vector<std::string> getModuleNameCandidates(
+        const std::string &currentModule,
+        const std::string &rawImportName,
+        std::string &problem);
+    /// The resolved name a relative spelling stands for (`..lib` in `a.b` is `lib`), or empty and
+    /// `problem` set when it drops more components than `currentModule` has.
+    std::string resolveRelativeModuleName(
+        const std::string &currentModule, const std::string &importName, std::string &problem);
     /** Look up the file for a module. Any suffix other than .cmo is treated as source code; .cmo is
      * treated as a dynamic library. An empty first value means not found. This searches the
      * module roots only; the importing module's own directory comes first in `resolveModulePath`.
@@ -179,7 +190,10 @@ class Context : public std::enable_shared_from_this<Context> {
     resolveModulePath(const std::string &moduleName, const std::string &importerDir);
     /** `findModuleUnder` for one search root: `base/<name>.cmo` or `base/<name>.*`, then the
      * same inside `base/<name>/`. Used for the directory of the importing module, before the
-     * global search paths (H112). */
+     * global search paths (H112). `moduleName` is a resolved module name (`IDENT ('.' IDENT)*`),
+     * not an import spelling and not a path: a spelling with an empty component (the relative
+     * prefix of `..lib`) names no file here, because dots become separators and a leading dot
+     * would mean the filesystem root. */
     std::pair<std::string, bool>
     findModuleUnder(const std::string &baseDir, const std::string &moduleName);
     /// The directory of the importing module: the directory of the file it was loaded from, or

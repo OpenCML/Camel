@@ -1,0 +1,9 @@
+/// H232: the same prefix in a library whose loaded name has one component (`short`): `..lib`
+/// cannot be formed there either, and the failure is the same ModuleNotFound, not a path.
+module helper_short
+
+import ..lib
+
+export func name(): string {
+    return lib::name()
+}
