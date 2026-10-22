@@ -1,0 +1,244 @@
+# H91：常量不是捕获
+
+**任务**：作者对 H75 第 3 项的裁定（`docs/handover/reviews/H24-H25-H26.md` 第 240 行）：
+
+> 3：**常量不是捕获**，核心的循环降低（host、fvm）与 Tiles 一致，常量就地求值，
+> `externalInputs` 的默认改为不含常量。
+
+H75 的第 1、2 项（`run`、`@gpu`）不在本任务内（`run` 由 H49 删除）。分支
+`handover/H91-constants-not-captures`，自 `origin/develop` `950b690f5`。
+
+本任务只动核心的循环降低与 `LoopView`/`LoopDraftView` 的接口语义，不改 Tiles 的循环降低
+（H75 已把它改成 `externalInputs(false)`），不改 `develop`/`main`，不 push。
+
+## 1 结论
+
+1. **核心的循环降低本来就没有捕获表。** 自 H43（`60ab76198`，"Loops are regions of the
+   graph that has the LOOP node"）起，条件与循环体是当前图的两个控制区域（`LoopCond`、
+   `LoopBody`），与图共用帧；`LOOP` 节点的 With 输入只有两个区域的结果和轮次端口
+   （`body result`、`cond result`、`round port`），没有捕获数组，也没有"把常量绑进循环"的
+   路径。`std::nvm`/`std::fvm`/`std::jit`/`std::prl` 按 `ExecPlan` 的槽在同一个帧里执行区域
+   节点，循环只绑定元素、状态和轮次（`src/execute/exec_plan.cpp` 的 `ExecLoop` 收集，
+   第 250–270 行）；`std::cpp` 的 `lowerLoop`（`src/passes/trans/cpp/function_emitter.cpp`
+   第 980 行起）把循环写成 `for`，常量在函数里求值或在使用处内联，也没有捕获表。所以
+   **"与 Tiles 一致、常量就地求值"在核心已经成立**，H91 不需要改执行器的 lowering。
+2. **`externalInputs` 的默认从 H43 起就是 `false`**（`60ab76198` 引入时即
+   `bool constants = false`；`914c0eda7` 重写时保留）。也就是说"默认不含常量"这一条在
+   接口上已经成立；H75 只是把 Tiles 的两处显式 `true` 改成 `false`。
+3. **H91 改的是"常量"的判据和声明上的语义**：`LoopView::externalInputs` 与
+   `LoopDraftView::externalInputs` 原来只排除 `kind == Data` 的节点，现在排除
+   "值在构建期已知"的节点——`DATA`，或图把 `kGCNodeFlagConstant` 打上的节点
+   （`GCNode::isConstant()`）。今天所有 `DATA` 都带这个标记、也没有非 `DATA` 的常量，所以
+   **今天图的形状逐字节不变**；改的是规则本身，以及以后"构建期已知但非 `DATA`"的值也自动
+   不算捕获。默认值在两处声明上写明（`include/camel/runtime/loop.h` 第 124–134、220–231 行）。
+4. **第三类（只由常量构成的纯函数）裁定没有落定，本任务不动。** `let m = k * 3` 的 `OPER`
+   和 `(k, 3)` 的 `FILL` 仍然出现在 `externalInputs` 里（`h`/`t2` 的 `captures=2`）。
+   §7 把问题交给作者，没有替作者决定。
+5. **Tiles 的行为不变。** H75 修过的多状态/结构体循环用例全部通过；`loops` 计划 124/124。
+   `modules/tiles/src/graph_regions.cpp` 仍以 `externalInputs(true)` 做区域依赖分析——那是
+   "这个读是否在循环外算过"，不是捕获表，见 §5。
+
+## 2 这里的"捕获"指什么
+
+`LoopView::externalInputs`（`src/runtime/loop.cpp` 第 315 行起）的定义是：
+
+> 两个区域之外的节点，被区域内的节点（含区域内的嵌套区域）读到，按第一次读到的顺序。
+
+这些值是消费方把循环提升成另一份表示（Tiles 把循环提成 device/host 程序、autodiff 把
+body 提成前向/反向图）时必须传进这份表示的"每轮不变、又不是端口"的值。循环自己的端口
+（元素、状态）不是捕获；**常量也不需要传**：它的值在构建期已知，消费方在使用处就地求值。
+
+`LOOP` 节点的 With 输入与这件事无关：它们固定是 `body result`、`cond result`（有条件的
+形式）和 `round port`，是"区域算出来的值怎样被节点读到"，从来不是捕获表。
+
+## 3 三类"常量"的判别与实测
+
+裁定要求区分三类；实测（`std::jgir` + 新增的 `test::loop_inputs`，见 §4、§6）：
+
+| 类别 | 例子 | H91 前是否外部输入 | H91 后 | 判据 |
+|---|---|---|---|---|
+| 1. `DATA`/字面量 | `let k = 7`、`[1, 2, 3]`、折叠后的纯字面量表达式 | 否 | 否 | `kind == Data` |
+| 2. 构建期已知、但不是 `DATA` 的节点 | 今天没有来源能产生；判据是 `GCNode::isConstant()`（`kGCNodeFlagConstant`） | **是**（判据只认 `DATA`） | 否 | `isConstant()` |
+| 3. 只由常量构成的纯函数 | `let m = k * 3`（`OPER`）、`let t = (k, 3)`（`FILL`） | 是 | **仍是** | 未定，见 §7 |
+
+第 1 类里 `(2, 3)` 这种全字面量元组被折成一个 `DATA`；`(k, 3)` 因为有一个具名元素，是
+`DATA` 模板 + `FILL`，`FILL` 没有常量标记——这是第 3 类最容易被误当成第 1 类的地方。
+
+第 2 类今天没有实例：`GraphDraft::materializeStaticValue`、`addDataNode` 的调用者
+（`builder_calls.cpp:222`、`draft_graph_builder.cpp:159`）都只给 `DATA` 打标记。H91 把判据
+写成 `kind == Data || isConstant()`，让"值在构建期已知"这个语义先于"节点恰好是 DATA"这个
+实现事实；不会改变今天的任何图。
+
+## 4 就地求值为什么安全，和"循环不变量"的区别
+
+- **常量**没有副作用、没有顺序依赖，值在构建期已知；在区域的帧里读静态槽/立即数，重复
+  求值结果相同。`std::cpp` 的 `lowerLoop` 里，区域外的常量在进入 `for` 之前已经求值，
+  区域内的常量在每轮里内联；`nvm`/`fvm`/`jit` 把它当普通槽/字节码常量读。三者都安全。
+- **循环不变量（不是常量）**是运行时才有的值：函数参数（`PORT`）、模块值经捕获端口传下来
+  的值、`var` 的单元（图里是 `OPER`，类型 `var int`）、外层状态（内层循环读它）。它们每轮
+  不变，但值不在构建期，仍是 `externalInputs` 的输入。`test/cases/loops/captures.cml` 里
+  `bias` 的单元正是这一类：`test::loop_inputs` 打印 `input OPER constant=0 type=var int`。
+- **代码里可见**：`src/runtime/loop.cpp` 里唯一的判据是两个 `constantValue` 重载
+  （`GCNode` 与 `DraftNodeHeader`），两处 `externalInputs` 都用它，注释写明
+  "a constant is not a capture"。`GRAPH` 的 `constant` 标记是数据，不是某个后端的临时约定。
+
+## 5 图的前后对照
+
+### 5.1 方法
+
+- "前"是基线 `950b690f5` 的图；本分支对 `src/compile`、`include/camel/compile` 的 diff
+  为空（`git diff --stat 950b690f5 -- src/compile include/camel/compile` 无输出），jgir 由
+  builder 产生，所以图按构造相同。另用宿主上 `verify` 检出的二进制（`51459c69c`，含 H88，
+  未改循环 builder）对照运行 `std::jgir`，三个程序的 JSON `diff -q` 都是 `IDENTICAL`。
+- "后"是本分支。值用 `std::nvm` 在两边各跑一次，输出相同。
+- "外部输入"用 H91 新增的 `test::loop_inputs` 打印：`with` 是 `LOOP` 的 With 输入个数，
+  `captures` 是默认（不含常量）列表，`constants` 是 `externalInputs(true)` 比默认多出来的
+  节点数。
+
+### 5.2 `test/cases/loops/captures_constants.cml`（新增，两个循环）
+
+`with_runtime`：12 节点 / 11 边，`LOOP g2n10`，`with=3`（`g2n9` body、`g2n5` cond、
+`g2n11` round）；`n` 是参数（`PORT`），`k = 7` 是 `DATA`。
+
+```
+LOOP_INPUTS graph=with_runtime loop=10 kind=for-while state=1 with=3 captures=1 constants=1
+  input PORT constant=0 type=int
+  constant DATA constant=1 type=int
+```
+
+`constants_only`：9 节点 / 8 边，`LOOP g3n7`，`with=2`（body、round）；没有捕获。
+
+```
+LOOP_INPUTS graph=constants_only loop=7 kind=for state=1 with=2 captures=0 constants=1
+  constant DATA constant=1 type=int
+```
+
+`externalInputs(true)` 在这两个循环上分别是 `[n, k]` 和 `[k]`；默认分别是 `[n]` 和 `[]`。
+`LOOP` 的 With 输入始终只是结果和轮次，没有 `k`。前后值：`21 70`（基线）与 `21 70`
+（本分支）。
+
+### 5.3 `test/cases/loops/captures.cml`（既有用例）
+
+73 节点 / 78 边，6 个循环（含嵌套）。`a` 的条件读 `limit`，体读 `step`、`scale`：
+
+```
+LOOP_INPUTS graph=main loop=9 kind=while state=1 with=3 captures=0 constants=3
+  constant DATA constant=1 type=int   (limit)
+  constant DATA constant=1 type=int   (step)
+  constant DATA constant=1 type=int   (scale)
+```
+
+`b` 读 `var bias`（非恒定）：
+
+```
+LOOP_INPUTS graph=main loop=21 kind=for state=1 with=2 captures=1 constants=0
+  input OPER constant=0 type=var int
+```
+
+嵌套循环读外层状态（`PORT`），是捕获；`scale` 仍是常量。输出前后都是
+`24 306 42 25 4`。
+
+### 5.4 `pure_of_const.cml`（探针，第三类）
+
+`h`：14 节点 / 13 边，`let m = k * 3` 的 `OPER` 在区域外；`t2`：17 节点 / 17 边，
+`let pair = (k, 3)` 的 `FILL` 在区域外。
+
+```
+LOOP_INPUTS graph=h  loop=12 kind=for-while state=1 with=3 captures=2 constants=0
+  input PORT constant=0 type=int
+  input OPER constant=0 type=int
+LOOP_INPUTS graph=t2 loop=15 kind=for-while state=1 with=3 captures=2 constants=0
+  input PORT constant=0 type=int
+  input FILL constant=0 type=(int, int)
+```
+
+图逐字节相同，值 `36 21` 前后相同。这两行是 §7 的问题：如果作者认为"只由常量构成的纯
+函数"也是常量，它们应当变成 0 个捕获；如果只认"节点本身的值在构建期已知"，它们保持输入。
+
+## 6 由哪个用例钉住
+
+- 新测试遍 `test::loop_inputs`（`src/passes/test/loop_inputs.cpp`，注册在
+  `src/execute/pass.cpp`）对每个 `LOOP` 打印 With 形状、默认捕获列表和常量列表。它不自己
+  重算"什么是常量"：列表的差就是常量，所以钉的是 `LoopView` 的实现。
+- 新用例 `test/cases/loops/captures_constants.cml` 与计划行
+  `loops.constant_is_not_a_capture`：一次运行同时断言
+  `with_runtime` 的 `captures=1 constants=1`（`PORT n` 入、`DATA 7` 不入）、
+  `constants_only` 的 `captures=0 constants=1`，以及两边值 `21 70`。一个图测试钉住"常量
+  不是捕获"，同一个用例里的参数钉住"循环不变量仍是输入"。
+- `loops.captures` 的描述与用例注释同步改成"常量就地读，`var` 单元和值是捕获"。
+
+## 7 待决：第三类
+
+裁定说"常量不是捕获"，但没有说"只由常量构成的纯函数"算不算常量。三个问题请作者定：
+
+1. 构建期是否把 `OPER`/`FILL` 这类"全部输入都是常量"的节点折叠成 `DATA`（或给它打
+   `kGCNodeFlagConstant`）？如果折叠，第 3 类自动消失，`externalInputs` 不需要做纯度分析。
+2. 如果不折叠，`externalInputs` 是否应当做"纯函数 + 常量输入"的闭包判定？这要处理
+   `FILL` 的模板、跨区域读、`var`/效应算子、以及优化后又变成常量的节点；对 autodiff 的
+   capture 集合和 Tiles 的输入表都有影响。
+3. `GRAPH` 的"值在构建期已知"是否包括"函数值/闭包常量"？`let f = inc` 是 `DATA` 函数
+   常量，今天按第 1 类排除；这与第 3 类不是一回事，但同属"构建期已知"的边界。
+
+在作者答复前，H91 保持第 3 类为输入（只把判据从 `DATA` 扩到 `isConstant()`，不扩到纯
+函数），也没有为它加断言。
+
+## 8 改动清单
+
+- `include/camel/runtime/loop.h`：`LoopView::externalInputs`、`LoopDraftView::externalInputs`
+  的声明上写明"常量不是捕获；默认不含；循环不变量仍是输入"。
+- `src/runtime/loop.cpp`：新增 `constantValue(GCNode)` / `constantValue(DraftNodeHeader)`
+  （`DATA` 或 `isConstant()`），两处 `externalInputs` 改用它；注释写明裁定。
+- `src/passes/test/loop_inputs.cpp`、`include/camel/passes/test/loop_inputs.h`、
+  `src/execute/pass.cpp`：新增测试遍 `test::loop_inputs`。
+- `test/cases/loops/captures_constants.cml`、`test/plans/feat/linear/loops.plan.toml`：新用例
+  与 `loops.constant_is_not_a_capture`；`loops.captures` 描述更新。
+- `test/cases/loops/captures.cml`：注释更新。
+- `modules/tiles/src/graph_regions.cpp`：`externalInputs(true)` 处注明这是依赖分析，不是
+  捕获表。
+- `modules/tiles/src/compiler.cpp`：`Compiler::loop` 的注释把"DATA"改成"常量（DATA 或构建
+  期已知）"。
+- `docs/technical/39_loops.md` §2：补"常量不是捕获，默认 `externalInputs` 不含"。
+- `docs/handover/reports/H75.md` §9 第 3 项、`docs/handover/README.cn.md` H75 行：标为
+  H91 已完成。
+
+### 8.1 为了让 `gpu/tiles` 在 H81 之后仍绿的两处测试修正（与 H91 语义无关）
+
+- `test/plans/gpu/tiles.plan.toml` 的 `numeric_permissions_moving_gc`：H81 把
+  `CAMEL_GC=generational` 机械改成 `args = ["--gc", "generational", "${case}"]`，但这条的
+  `tool = "python"`，`args` 是给 python 的，`--gc` 被 python 当成未知选项，9 ms 即退出 2。
+  改回 `args = ["${case}"]`；脚本内部自己起 camel，默认收集器就是 generational，语义不变。
+- `loop_boundaries_faults_permissions` 的计划预算 180 s → 360 s（同 H75 对
+  `multi_state_loop_boundaries` 的处理：driver 里 16 个子进程，单独约 50 s，八路并行下
+  需要更长）。
+- `test/cases/modules/tiles/loop_multi_boundaries.py` 的单次子进程预算 90 s → 240 s：这条
+  在全量扫描里曾在第一个 `tiles::compile std::nvm` 上 `TimeoutExpired`（宿主 loadavg 约
+  80–100/32 核，另一棵检出正在全量编译），单独跑 114.7 s 通过。预算仍小于计划的 360 s。
+
+## 9 验收
+
+宿主：Linux，Release，`camel-remote.ps1 -Jobs 8`（`-NoBuild` 复用构建）。数字见下：
+
+| 计划 | 结果 |
+|---|---|
+| `feat/linear/loops` | 124 / 124，含 `loops.constant_is_not_a_capture`、`loops.captures` 四后端 |
+| `smoke` | 11 / 11 |
+| `feat/compile` | 952 / 952 |
+| `feat/mm` | 169 / 169（fast 层，含 `gc_poison_sweep` 116） |
+| `gpu/tiles`（5 个 plan） | 129 / 129 |
+
+全量 GPU/Tiles 的第一遍（修正 H81 的两处测试之前）是 127 / 129：`numeric_permissions_moving_gc`
+的 python 参数错误与 `loop_boundaries_faults_permissions` 的 180 s 超时；修正后第二遍
+128 / 129，唯一的红是 `multi_state_loop_boundaries` 在 90 s 的**子进程**超时（traceback 是
+`subprocess.TimeoutExpired`，不是断言），同一用例单独跑 114.72 s 通过。把子进程预算提到
+240 s 后第三遍 129 / 129（wall 342.4 s，`loop_boundaries_faults_permissions` 227.54 s、
+`multi_state_loop_boundaries` 231.21 s，宿主当时 loadavg 约 80/32 核，另一棵检出仍在编译）。
+
+`loops.captures` 的四后端输出仍是 `24 306 42 25 4`；`multi_state_loop_boundaries` 单独
+114.72 s 通过；`numeric_permissions_moving_gc` 单独 9.09 s 通过（修正参数前 9 ms 退出 2）。
+
+## 10 记录下来的文档缺陷（不改）
+
+`docs/design-principles.cn.md` §3.10 第 202 行仍写"循环体是独立的子图……条件子图与循环体
+子图共用一份捕获表"。这与 H43 之后的实现（两个控制区域、共用一个帧、没有捕获表）以及本次
+裁定冲突。设计原则是规范文件，H91 不改它的语义表述，只在这里记为缺陷，交给作者或后续任务
+改正。
