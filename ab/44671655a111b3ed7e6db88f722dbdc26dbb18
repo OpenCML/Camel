@@ -1,0 +1,34 @@
+# H192 — the reports that landed after H187
+
+Branch `handover/H192-report-delta`, from `origin/develop` `0d0a3033d`.
+Commits: `ab4467165` cleanup, `079d7d8ad` board row. No push.
+
+**Deleted (still reachable at `0d0a3033d:`)**
+- `H177`, `H180`, `H181`, `H182` under `docs/handover/reports/`: 865 lines, 82,394 bytes.
+- `docs/handover/` is now 16 files: `README.cn.md` + `reviews/` (14 notes + `.gitkeep`). No `plans/` or `assets/` entries were left.
+- Kept: the author's `reviews/` untouched.
+
+**Preserved**
+- Four new handover notes on the introducing commits `83d6558`, `f782b3d`, `97038f3`, `6db90c1`, written with `--no-stripspace` and byte-verified.
+- The existing 204 notes were not rewritten or reordered; with these four the ref has 208, plus this report's note on `ab44671` → 209.
+- Read one with `git notes --ref=handover show <sha>`; the board's `note ⟨sha7⟩` is that argument.
+
+**References: 100 old report paths replaced in 4 files**
+- Board 51 — the H167–H182 rows, the H19 module ledger, and a bare `H137.md`.
+- `docs/technical/48_declaration_migration.md` 45 — link targets now read `handover note ⟨sha7⟩ (Hxxx)`; this page is authored, not generated, so no generator change was needed.
+- `test/plans/perf/startup.plan.toml` 2 and `test/tools/startup-cost.mjs` 2 — the H177 citations.
+- No generated page contained a report path, so no regeneration was necessary.
+- `git grep` for `handover/(reports|plans|assets)`, `reports/H*.md` and bare `Hxxx.md` returns nothing (author's `reviews/` excluded).
+- 189 distinct note tokens are referenced; all resolve once this report's note is attached.
+
+**Board**
+- 174 rows; H192 added after H188. H187/H188 were already clean.
+- The purpose paragraph still holds. §3 already says reports go in the final message, not a file; no other document tells an agent to write a report file (`agents/branching.md` only covers staging branches).
+
+**Guards**
+- `check-doc-links` 31 docs; `check-doc-counts` 147 docs / 15 claims / 8 allowlisted; `check-retired-names` 411 files. No expectation was changed: neither guard scans `docs/handover`, and the counts reflect documents merged after H187.
+
+**Tests (Linux host, `-Jobs 8`)**
+- Final `079d7d8ad`: `feat/docs_links` + `smoke` = 14/14 pass, 0 fail, clean build.
+
+**Board row: H192.**
