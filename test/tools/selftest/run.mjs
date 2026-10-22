@@ -596,7 +596,7 @@ const RULELESS_ALLOWED = [
         why: 'CI and editor configuration; no test plan reads it',
     },
     {
-        match: /^(LICENSE|ABOUT|ZEN|changes\.log|conanfile\.txt|package-lock\.json|hello\.cml|export_matrix\.(csv|md))$/,
+        match: /^(LICENSE|ABOUT|ZEN|changes\.log|conanfile\.txt|package-lock\.json|export_matrix\.(csv|md))$/,
         why: 'repository metadata and generated release artifacts; no plan reads them',
     },
     {

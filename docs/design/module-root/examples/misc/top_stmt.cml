@@ -1,3 +1,4 @@
+// @refused-example top-level statements are a syntax error (module-root README section 1.2 names examples/misc/top_stmt.cml)
 func noisy(tag: string): int sync {
     println(tag)
     return 7

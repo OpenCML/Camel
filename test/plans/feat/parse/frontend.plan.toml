@@ -41,6 +41,18 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
 [[tests]]
+name = "frontend.examples_parse"
+desc = "Every .cml under docs/design/*/examples/ and seven named programs (hello.cml, workloads.cml and the five selftest fixtures) parses. A file that is deliberately refused says so on its first line with `// @refused-example <reason>`; the reason is required, a marked file must still fail to parse, and an unmarked file must parse. Both directions fail the check, every marked file is printed with its reason, and the selection is the tree's glob (never a count)."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/parsecheck/check.py"
+args = ["${case}", "examples"]
+expect_exit = 0
+expect_stdout_contains = ["examples: ", "0 failure(s)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
 name = "frontend.fuzz_lossless_tree"
 # Slow layer: measured 9.7 s in the full serial run (handover note ⟨617198c⟩ (H10)).
 tier = "slow"

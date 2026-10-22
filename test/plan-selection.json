@@ -39,6 +39,11 @@
     ],
     "rules": [
         {
+            "comment": "The example parse sweep (H211): frontend.examples_parse reads the design examples, hello.cml, workloads.cml and the five selftest fixtures. The files the sweep reads are named before the generic harness rule so an edit there runs the parse plan; the plan entry is layered so its slow fuzz test is filtered under --tier fast, while smoke and the runner self-test still run for the selftest harness.",
+            "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/"],
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+        },
+        {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
             "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "test/vars.toml", "scripts/test.js", "package.json"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
@@ -304,6 +309,16 @@
             "comment": "The generated diagnostics catalog: compile.diag_catalog.catalog.doc_is_generated re-runs --verify-doc.",
             "paths": ["docs/diagnostics.md"],
             "plans": ["feat/compile/diag_catalog.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "The design examples are parsed by frontend.examples_parse (H211): a page and its examples are edited together, so a docs/design change selects the parse plan along with the documentation checks the general docs rule runs. The parse plan is layered: --tier fast keeps its slow fuzz test out.",
+            "paths": ["docs/design/"],
+            "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+        },
+        {
+            "comment": "hello.cml is one of the seven programs frontend.examples_parse parses (H211): it is a program, not repository metadata, so it is no longer a rule-less file.",
+            "paths": ["hello.cml"],
+            "plans": [{ "plan": "feat/parse/frontend.plan.toml", "layer": true }]
         },
         {
             "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",

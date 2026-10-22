@@ -59,7 +59,7 @@
 | [48_declaration_migration.md](48_declaration_migration.md) | 声明迁移的结果与边界（H186）：22 个模块的账本（声明 / 计算 / 阻塞 / 注册重载）、机制与检查器、剩余项与 owner、迁移下一个模块的七步配方；缺口分类见 47 |
 | [49_computed_signatures.md](49_computed_signatures.md) | `stdlib/signatures/` 的逐条账本（H194）：14 个文件 224 条条目按四桶分类（今天可声明 22 / 差一条机制 104 / 永久只读 98 / 不是签名 0）、每条的证据与迁移任务、该先问作者的一件事、目录的下界与检查器第 7 条 |
 | [50_pyplot_cpython_init.md](50_pyplot_cpython_init.md) | `pyplot` 的 CPython 初始化能否推迟到首次 `plot`（H203）：H191 的 `cmo_load` 数字、边际导入测量、为什么导入期错误码与“第一个初始化者”设置使推迟可见，以及需要作者裁定的 P1/P2 |
-| [51_unchecked_examples.md](51_unchecked_examples.md) | 设计稿示例的解析现状（H206）：203 个 `examples/` 程序加 7 个其它文件在 `e543f8198` 的解析结果（206 干净 / 3 故意拒绝 / 1 已坏；基点 `880ee74b1` 是 205 / 3 / 2）、每个失败文件的依据与损坏起点、它们各自被文档围栏或计划引用的情况，以及一次 15 行扫描会抓到什么、会误报什么 |
+| [51_unchecked_examples.md](51_unchecked_examples.md) | 设计稿示例的解析现状与扫描（H206 / H211）：203 个 `examples/` 程序加 7 个其它文件在 `e543f8198` 的解析结果（206 干净 / 3 故意拒绝 / 1 已坏；基点 `880ee74b1` 是 205 / 3 / 2）、每个失败文件的依据与损坏起点、它们各自被文档围栏或计划引用的情况；H211 建成的 `check.py examples`（选择取自树上的 glob 加 7 个具名文件）、文件首行的 `// @refused-example <原因>` 标记规则（标记过必须仍不解析、未标记必须解析、两个方向都红）与计划接线 |
 | [nn-autograd.md](nn-autograd.md) | `nn` / `tensor` 自动求导架构：`nn.apply_gradients` 的图合成、helper 调用与参数别名、公共 API、内置 VJP 覆盖范围与已知限制 |
 | [jit/README.md](jit/README.md) | FastVM JIT 实现级注解的目录索引 |
 | [jit/bytecode-to-asm.md](jit/bytecode-to-asm.md) | JIT 字节码到机器码翻译注解：槽模型、调用约定、逐条字节码经 MIR（V* 虚拟寄存器）与寄存器分配生成 x64 汇编 |
