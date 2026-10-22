@@ -38,6 +38,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/range.h"
+#include "camel/core/module/dynamic.h"
 #include "camel/core/module/userdef.h"
 #include "camel/core/type.h"
 #include "camel/core/type/enum.h"
@@ -540,6 +541,22 @@ class ModelBuilder {
         }
         if (parsed && failure.empty()) {
             try {
+                // Editing a declaration module must use the same native implementation and
+                // exports as importing its sibling .cmo. Compile the editor buffer itself,
+                // so unsaved declarations still receive the compiler's real validation.
+                const fs::path implementation =
+                    camel::utils::pathFromUtf8(path).replace_extension(".cmo");
+                std::error_code ec;
+                if (fs::is_regular_file(implementation, ec) && !ec) {
+                    auto native = camel::core::module::loadCmoModule(
+                        camel::utils::pathToUtf8(implementation.stem()),
+                        camel::utils::pathToUtf8(implementation), ctx);
+                    if (native && native->load()) {
+                        mainModule->setDeclarationModule(true);
+                        mainModule->setImplementation(native);
+                        mainModule->inheritExportsFrom(*native);
+                    }
+                }
                 compiled = mainModule->compile(camel::core::module::CompileStage::Done);
             } catch (const Diagnostic &d) {
                 diagnostics->add(Diagnostic(d));

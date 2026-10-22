@@ -35,7 +35,7 @@ C++ 的 `exportEntity` 不再写签名，`inspect --ops` 的注册行不变。`k
 
 | 项 | 数字 | 来源 |
 |---|---:|---|
-| 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | **22** | `--check` |
+| 声明模块（`stdlib/<m>.cml` + C++ `BuiltinModule`） | **23** | `--check` |
 | 声明名 / 声明条数（`export func`） | **170 / 283** | 读 22 个声明文件 |
 | 计算名（C++ 算签名） | **112** | `--check` |
 | 其中因语言机制写不出（阻塞） | **14** | 本页 §2.4 的口径，逐条见表 |
@@ -234,7 +234,7 @@ C++ 不能导出声明名，计算条目也必须有导出组。
 
 | 命令 | 今天打印 |
 |---|---|
-| `node scripts/stdlib-declarations.mjs --check` | `22 declaration module(s), 112 computed signature(s) ... 0 problem(s)`，并确认 `522 registered operator overloads` |
+| `node scripts/stdlib-declarations.mjs --check` | `23 declaration module(s), 112 computed signature(s) ... 0 problem(s)`，并确认 `522 registered operator overloads` |
 | `node scripts/stdlib-reference.mjs --verify-ops` | `the declarations agree with the 522 registered operator overloads` |
 | `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | 354 个公开名（其中 `<builtin>` 50 个）/ 522 条公开重载（其中 `<builtin>` 96 条），另含 `__` 组与 `::` 别名 |
 | `node scripts/check-doc-counts.mjs` | `no stale count in ...` |
