@@ -255,6 +255,9 @@ class Adapter {
         if (port_ == 0) {
             return json{{"ok", false}, {"error", "No program is being debugged: launch first."}};
         }
+        // See workerCallMutex_: the end of the run must not kill the worker between this POST
+        // and its answer.
+        std::lock_guard<std::mutex> inFlight(workerCallMutex_);
         httplib::Client client("127.0.0.1", port_);
         client.set_connection_timeout(5, 0);
         client.set_read_timeout(timeoutSec, 0);
@@ -423,7 +426,12 @@ class Adapter {
                 programExit_ = code;
             }
             // The worker has flushed the program's output before it reported the end; what is
-            // still in the pipes is forwarded before the exit callback runs.
+            // still in the pipes is forwarded before the exit callback runs. The answer to the
+            // command that let the program finish may still be on its way: let it land before
+            // the worker goes (see workerCallMutex_).
+            {
+                std::lock_guard<std::mutex> inFlight(workerCallMutex_);
+            }
             killWorker();
             return true;
         }
@@ -1095,6 +1103,12 @@ class Adapter {
     bool invalidatedEvent_ = false; // the client takes the `invalidated` event
 
     std::mutex stateMutex_;
+    /// Held across a command of the worker (the POST and its answer). The end of the run
+    /// takes it before it kills the worker: the worker writes the answer to `continue` or
+    /// `nextPass` on its server thread at the same moment the program finishes, and killing
+    /// it first would cut that answer off, telling the client the program had ended instead
+    /// of answering the command that ended it (H150).
+    std::mutex workerCallMutex_;
     std::shared_ptr<ChildProcess> worker_;
     std::optional<int> programExit_; // set when the end of the worker is expected
     bool started_ = false;
