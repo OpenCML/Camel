@@ -591,3 +591,32 @@ case = "../../../cases/compile/native/para_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "para_type.cml:11:23", "argument types: <> (string, int)", "<para:rendezvous>: (parties: int, timeout_ms: int) => int"]
+
+# ---- The declaration of `this` (handover H146) ----
+
+[[tests]]
+name = "native.this_declaration_import"
+desc = "`this:zen` is declared with no parameters and a `string` result; the importer reads both from `stdlib/this.cml`, and the call reaches the C++ operator."
+kind = "behavior"
+case = "../../../cases/compile/native/this_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\n"
+
+[[tests]]
+name = "native.this_wrong_arity"
+desc = "`this:zen` is declared with no ordinary argument: extra ones are refused at the call, and the overload the message lists is the declaration's `() => string`."
+kind = "negative"
+case = "../../../cases/compile/native/this_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_arity.cml:10:16", "argument types: <> (int, int)", "<this:zen>: () => string"]
+
+[[tests]]
+name = "native.this_wrong_type"
+desc = "An `int` where the declaration takes no value parameter: the call is refused at the declaration's type, and the message's argument types and overload are the declaration's `() => string`. With no value parameter the wrong type and the wrong count coincide; this case still shows the declared type being applied."
+kind = "negative"
+case = "../../../cases/compile/native/this_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "this_type.cml:13:16", "argument types: <> (int)", "<this:zen>: () => string"]

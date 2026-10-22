@@ -178,7 +178,14 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/para.cml',
     },
-    { name: 'this', title: '`this`', kind: 'cpp' },
+    {
+        name: 'this',
+        title: '`this`',
+        kind: 'cpp',
+        // The declaration, not a signature file: it is what the module compiles (H19, H146).
+        source: 'this.cml',
+        declaration: true,
+    },
     { name: 'graph', title: '`graph`: a program as a value', kind: 'cpp' },
 ]
 
