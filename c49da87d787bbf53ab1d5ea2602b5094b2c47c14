@@ -1,0 +1,316 @@
+# H142 — 声明模块在启动路径上的开销
+
+分支 `handover/H142-declaration-cost`，起点 `origin/develop` `21c88aee4`。任务：量 H19 的声明化
+（`stdlib/<module>.cml` 成为 C++ 模块的声明模块）是否让 `camel` 在真正运行程序之前变慢，以及
+`inspect --ops` 是否变慢；把差距归因到解析 `.cml`、编译 `.cml`，还是"标准库模块现在要在启动时
+编译而不是只注册"；如果回归真实且可观，给出最便宜的修法；最后用一个回归用例把结论钉住。
+
+报告里的每个数字都有命令和提交。机器是 Linux 主机 `88zjwei`，不是本机；测的时候主机**不空闲**
+（别的任务在同时构建和跑测试，1 分钟负载 35–215，32 核）。每条命令都写明了当时的负载。
+
+## 1 结论
+
+**启动路径没有回归，导入路径有。**
+
+- `camel --version`：当前 5.39 ms CPU，基线 5.27 ms（+2.3%，在噪声内）。它不建 `Context`、
+  不碰标准库，声明模块与它无关。
+- `camel prog.cml std::nvm`（一行、无 import）：当前 8.10 ms CPU，基线 7.80 ms（+3.8%，
+  +0.30 ms）。阶段报告里没有任何标准库模块的 `parse`/`cmo_load`/`import`，只有 `main`；声明
+  模块不可能出现在这条路径上。这点差别是运行时本身的漂移，不是声明化。
+- `camel inspect --ops`（导入全部 22 个标准库模块）：当前 24.96 ms CPU，基线 18.83 ms
+  （**+32.6%**，+6.13 ms）；墙钟中位数 53.35 ms vs 40.59 ms（负载 148–215，配对差 +11.5 ms）。
+- `camel registry_all.cml std::nvm`（同一组 import，走运行路径）：当前 23.92 ms CPU，基线
+  18.12 ms（**+32.0%**，+5.80 ms）；墙钟 51.45 ms vs 38.98 ms（配对差 +12.1 ms）。
+- 只导入 `math` 一个模块：当前 10.83 ms CPU，基线 8.39 ms（**+29.1%**，+2.44 ms）。
+
+这 +5.8～6.1 ms 里，**4.4～4.6 ms 就是 9 个声明模块的 `parse` + `gct` + `declare`**（见 §4）：
+解析约 2.4 ms、编译成 GCT 约 1.2–1.4 ms、声明成 native entity 约 0.8 ms；其中 `math` 一个模块
+占 2.2 ms（96 条声明，占 182 条的 53%）。C++ 侧的 `cmo_load` 没有变便宜（同一组模块 2.35 →
+2.71 ms，+0.35 ms），所以"只注册"那一侧的节省并没有发生；这 4.6 ms 是净增。
+
+**决定：不实施修改。** 全量导入路径的 +32% 超过了 10% 的线，但最便宜且能真正消掉它的两条路都
+改变语义或磁盘契约，按任务要求先交作者裁定（§5 的 Q1、Q2）：编译声明的磁盘缓存（读 9 个声明源
+实测 0.19 ms，可省约 4.4 ms），以及惰性声明（用到才算，可省全部 4.6 ms，但错误报告时机变）。
+不改变行为、只省 GCT 的修法最多省 1.2–1.4 ms，不到三分之一，不值得为它动声明路径。回归用例
+`perf.startup` 已加（§6），阈值是安静主机中位数的 4–8 倍；它在这台共享主机上看不见 4.6 ms
+（§6.1 说明为什么），4.6 ms 这个数由本报告记录。
+
+## 2 基线怎么找的
+
+任务书说迁移从 `bytes`/`str` 开始。沿这条线核对历史：
+
+| 证据 | 内容 |
+|---|---|
+| 任务板 H76 | 分支 `handover/H76-stdlib-step1`，起点 `origin/develop` `60c39d4e`，`bytes` 试点 |
+| `git log --oneline -- stdlib/bytes.cml` | 只有一条：`b15298c2e stdlib/bytes: declare the operators in stdlib/bytes.cml` |
+| `b15298c2e` 的父提交 | `f5ce20507 loader: a .cml beside a .cmo declares that module's operators` |
+| 该批合并进 develop | `c08ff3a3b Merge H76: a body-less export func is the native operator, and the module's .cml declares it` |
+| 合并的第一父提交 | **`fea0c9d8e`**（H75 的合并），即迁移之前的 develop |
+
+`git ls-tree -r --name-only fea0c9d8e stdlib/` 里没有 `stdlib/<module>.cml`（只有 `array.cml`、
+`perf.cml`、`rules.cml`、`tensor_definitions.cml` 与 `signatures/`）；当前 `origin/develop` 有 9 个：
+`bytes`、`str`、`math`、`json`、`io`、`re`、`random`、`fs`、`time`。所以**基线是 `fea0c9d8e`**，
+`git log --oneline -1 fea0c9d8e` 是 H75 的合并提交，构建自报 `Build 261022_003752_fea0c9d8`。
+
+没有做"构建二分"，因为二分要找的是"从哪一次提交开始启动变了"；第 4 节的阶段计时证明无 import 的
+程序从来不会加载任何声明模块，两端的这条路径没有可二分的差异。真正会变的只有"导入了模块"的
+路径，而那条路径上第一个声明模块就是 `fea0c9d8e` 之后 H76 合入的 `bytes`。
+
+基线树的构建方式（本地临时分支，不推送 origin）：
+
+```powershell
+cd D:\Projects\Camel-wt\h142-declaration-cost
+git switch -c h142-baseline-tmp fea0c9d8e
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h142-declaration-cost
+```
+
+主机上当前树一次 Release 构建 324.0 s，基线树 438.9 s（`camel-remote` 的 `build=` 字段；
+主机当时负载 100–215，别的任务在同时构建）。
+
+## 3 方法
+
+### 3.1 机器与负载
+
+| 项 | 值 |
+|---|---|
+| 主机 | `88zjwei`：EPYC 7343（32 核），503 GB，Ubuntu 22.04 |
+| 构建 | Release（clang），`camel-remote.ps1` |
+| 负载 | **不空闲**。101 次 A/B：1 分钟负载 148（开始）→138（结束）；31 次 A/B 与阶段计时：150–215；安静窗口的 21 次：35–60；`-Jobs 8` 计划：20–35。别的任务同时在这台机器上构建/跑测试 |
+| 工具 | 主机没有 `hyperfine`（`which hyperfine` 无输出），所以用固定次数的循环，见 3.2 |
+
+### 3.2 计时与统计
+
+`hyperfine` 未安装，改用 `~/h142-bench/measure.py`：Python 3 的 `time.perf_counter()` 包住整个
+子进程（`subprocess.run`，stdout/stderr 丢弃），每个命令在每个版本上先跑 3 次预热，再跑
+**101 次**（主表）或 51 次（一模块/内建对照）计时；每一轮里两个版本顺序随机，因此共享主机的
+负载变化对两边一样。报告**中位数、p10、p90、最小、最大**，以及每一轮配对的比值（当前/基线）的
+中位数与配对差（每轮"当前−基线"的中位数）。
+
+每次还从 `getrusage(RUSAGE_CHILDREN)` 取子进程自己的 CPU 时间（user+sys）。主机负载 200 时墙钟
+主要是等核，CPU 时间才是"这件事本身花了多少"；下表两列都给，**判定用 CPU**，墙钟用来说明在那
+台机器上用户实际等多久。CPU 时间在两次独立运行里复现得比墙钟好得多（`inspect_ops` 24.96 /
+25.31 ms，基线 18.83 / 19.28 ms，两次相隔约 10 分钟，负载 148 和 215）。
+
+命令（当前树与基线树各一份；`CAMEL_HOME` 指向各自的 `out/latest`，`LD_LIBRARY_PATH` 带 clang 运行时）：
+
+| 名字 | 命令 | 说明 |
+|---|---|---|
+| `version` | `camel --version` | 只有进程加载、libcamel、参数解析；不建 `Context`，不碰标准库 |
+| `imports_nothing` | `camel test/cases/perf/startup/imports_nothing.cml std::nvm` | 一行程序、无 import；`Context` + 内建模块 + 入口模块编译 + 一次 `std::nvm` |
+| `imports_math` | `camel test/cases/perf/startup/imports_math.cml std::nvm` | 只 `import math`，不调用任何算子 |
+| `inspect_ops` | `camel inspect --ops test/cases/modules/stdlib/registry_all.cml` | 导入全部 22 个标准库模块，9 个声明模块都在这里被解析/编译 |
+| `imports_all` | `camel test/cases/modules/stdlib/registry_all.cml std::nvm` | 同一组 import，走运行路径（不是列算子） |
+| `inspect_ops_min` | `camel inspect --ops test/cases/perf/startup/imports_nothing.cml` | 只列内建模块的算子，用来算"标准库加载"这一段的净开销 |
+| `verify_ops` | `node scripts/stdlib-reference.mjs --verify-ops` | H137 的门禁命令；它是 Node + `camel inspect --ops`，Node 启动占大头 |
+
+基线与当前的 `registry_all.cml` 不是逐字相同：H114 把模块改名了（基线 `crypto`/`os`/`sys`/`tree`，
+当前 `hash`/`env`/`process`/`ckpt`），但两版都导入 22 个"不需要外部运行时"的模块；当前
+`inspect --ops` 693 行、基线 667 行（算子集合后来增加了 26 个，不是声明化带来的）。两棵树各自用
+自己的 `registry_all.cml`，基线的那份放在 `~/h142-bench/baseline-repo/`。
+
+复现 A/B 的命令（主机上，`~/h142-bench/`）：
+
+```bash
+C=$HOME/camel-work/h142-declaration-cost/out/latest
+B=$HOME/h142-bench/baseline-out/latest
+CR=$HOME/camel-work/h142-declaration-cost
+BR=$HOME/h142-bench/baseline-repo
+python3 measure.py --home current=$C --home baseline=$B \
+  --root current=$CR --root baseline=$BR \
+  --reps 101 --cases version,imports_nothing,inspect_ops,imports_all --out ab3.json
+```
+
+### 3.3 阶段归因
+
+`camel --time-phases`（`CAMEL_TIME_PHASES=-`）给每个阶段一次 JSON；阶段可嵌套，报告里给的是
+阶段自己的墙钟。声明模块的加载在 `UserDefinedModule::compile` 里是四段：
+`parse`（AST）→ `gct` → `declare`（`declareModule`，把导出变成 native entity）→ 不建 GIR
+（只有入口模块建 GIR）。基线里没有这四段，只有 `cmo_load`（加载 `.cmo`，C++ 侧注册签名）。
+所以"解析 `.cml`"= `parse`，"编译 `.cml`"= `gct` + `declare`，"现在要编译而不是只注册"=
+这四段减去基线 `cmo_load` 的差值。每个版本跑 9 次，按模块取中位数再相加（不是逐轮求和：
+逐轮求和会把偶发的 4–8 ms 文件读/调度尖峰算进去，见 §4.2 的例子）。
+
+## 4 数字
+
+### 4.1 主命令与对照（当前 vs 基线）
+
+101 次（负载 148→138；另一次 31 次在负载 215，结论相同）。墙钟中位数 [p10, p90]；CPU 是子进程
+user+sys 的中位数。配对差是每轮"当前−基线"的中位数（比两个边际中位数之差更不受漂移影响）。
+
+| 命令 | 基线墙钟 ms | 当前墙钟 ms | 配对差 ms | 墙钟比值 | 基线 CPU ms | 当前 CPU ms | CPU 差 |
+|---|---|---|---|---|---|---|---|
+| `--version` | 17.11 [8.5, 35.6] | 16.54 [9.9, 29.1] | +0.17 | 1.011 | 5.27 | 5.39 | +0.12（+2.3%） |
+| `imports_nothing` | 19.19 [14.3, 53.1] | 19.32 [13.8, 54.2] | +0.30 | 1.017 | 7.80 | 8.10 | +0.30（+3.8%） |
+| `inspect_ops` | 40.59 [18.3, 120.4] | 53.35 [24.2, 167.1] | +11.53 | 1.317 | 18.83 | 24.96 | **+6.13（+32.6%）** |
+| `imports_all` | 38.98 [24.5, 74.0] | 51.45 [29.7, 106.1] | +12.08 | 1.313 | 18.12 | 23.92 | **+5.80（+32.0%）** |
+| `imports_math` | 17.96 [9.0, 22.9] | 22.90 [11.3, 26.8] | +3.89 | 1.250 | 8.39 | 10.83 | **+2.44（+29.1%）** |
+| `inspect_ops_min` | 8.38 [6.4, 50.1] | 7.51 [6.9, 54.0] | +0.27 | 1.040 | 6.61 | 6.84 | +0.23（+3.5%） |
+
+`imports_math` / `inspect_ops_min` 是 51 次，其余 101 次。墙钟的 p90 在负载 148–215 时能到中位数
+的 2–5 倍（`inspect_ops` 167–214 ms），所以墙钟只作参考；CPU 列的两次独立运行相差不到 3%。
+
+还有一处墙钟的混杂要说明：基线 `inspect --ops` 的墙钟比同版本的 `imports_all` 多约 20 ms
+（列算子/打印路径后来被改快），所以 `inspect --ops` 的墙钟差不能整个记在声明模块上。CPU 与
+`imports_all` 两条独立的路径都给出约 +32%，归因用它们，不用 `inspect --ops` 的墙钟。
+
+安静窗口（负载 35–60）的 21 次测量，用新增的性能用例脚本直接跑：
+
+| 命令 | 中位数 ms | p10 | p90 |
+|---|---|---|---|
+| `--version` | 5.0–5.8 | 4.2–4.7 | 7.1–10.6 |
+| `imports_nothing` | 7.4–8.5 | 6.4–7.2 | 10.3–11.5 |
+| `inspect_ops` | 25.2–27.8 | 20.2–23.5 | 28.6–35.1 |
+| `imports_all` | 23.6–25.4 | 21.0–22.5 | 25.3–27.8 |
+
+两个窗口的差就是"共享主机让你多等多久"：安静时 `inspect_ops` 约 26 ms，负载 150 时 53 ms，
+负载 215 时 87 ms；CPU 时间基本不变（24.9–25.3 ms）。
+
+### 4.2 归因：4.4–4.6 ms 是解析 + 编译 + 声明
+
+当前树、`inspect_ops`、9 次、按模块取中位数（ms）：
+
+| 模块 | parse | gct | declare | 小计 | 占声明段 | 基线 `cmo_load`（同模块） |
+|---|---|---|---|---|---|---|
+| `math` | 1.063 | 0.736 | 0.429 | **2.228** | 48.7% | 0.395 |
+| `json` | 0.331 | 0.201 | 0.086 | 0.618 | 13.5% | 0.360 |
+| `str` | 0.364 | 0.083 | 0.051 | 0.498 | 10.9% | 0.248 |
+| `bytes` | 0.125 | 0.105 | 0.114 | 0.344 | 7.5% | 0.174 |
+| `fs` | 0.166 | 0.081 | 0.048 | 0.295 | 6.5% | 0.259 |
+| `random` | 0.141 | 0.059 | 0.044 | 0.244 | 5.3% | 0.269 |
+| `io` | 0.086 | 0.037 | 0.021 | 0.144 | 3.1% | 0.127 |
+| `time` | 0.057 | 0.035 | 0.016 | 0.108 | 2.4% | 0.212 |
+| `re` | 0.046 | 0.037 | 0.011 | 0.094 | 2.1% | 0.309 |
+| **合计** | **2.379** | **1.374** | **0.820** | **4.573** | 100% | **2.353** |
+
+`imports_all` 的同一组数是 2.431 / 1.187 / 0.787 = 4.405 ms，所以声明段是 **4.4–4.6 ms**；
+`math` 一个模块 2.1–2.2 ms。当前这 9 个模块的 `cmo_load` 合计 2.71 ms，基线 2.35 ms，净增
+**+0.35 ms**——声明化没有让 C++ 侧的加载变便宜（至少在这几个模块上没有）。因此：
+
+**声明化净增 ≈ 4.57 + 0.35 = 4.9 ms**，与 CPU 实测的 +5.8/+6.1 ms 相差约 1 ms；那 1 ms 是基线到
+当前之间与声明化无关的改动（算子多了 26 个、`tree`→`ckpt` 等），不作为声明成本。
+
+关于尖峰：`parse` 里有文件读。同一台主机上 `math` 的 `parse` 是双峰的——大约 1.0–1.1 ms，或者
+4.1、6.1、7.8 ms（重复跑同一个二进制）。高的那些是 12 KB 文件没在页缓存里、读盘加调度，不是
+解析器本身；所以表里用"每个模块的中位数再相加"，而不是"每轮先求和再取中位数"（后者在负载 200
+时会把 9 个模块里偶发的一个尖峰算进去，得到 5.3 ms 的 parse）。**归因用中位数，不用尖峰。**
+
+### 4.3 排除了什么
+
+- **`--version`**：5.27 → 5.39 ms CPU，+2.3%，两次独立运行都在噪声内；它不建 `Context`，
+  没有标准库模块可加载。
+- **无 import 的程序**：阶段报告只有 `startup`（其中 `context` 0.96 ms、`builtin_module`
+  0.83 ms）、`parse main`、`gct/declare/gir main`、`pass`、`teardown`，没有任何标准库模块的
+  `parse`/`cmo_load`/`import`。声明模块不在这条路径上；+0.30 ms 是运行时本身的漂移。
+- **内建模块 / `Context`**：`builtin_module` 0.73–0.82（基线）→ 0.83–0.86 ms（当前），`context`
+  0.84–0.90 → 0.94–0.96 ms（两种命令的读数），没有随声明化变化。`inspect_ops_min` 的 CPU
+  6.61 → 6.84 ms（+3.5%），也说明"只建内建模块"没变慢。
+- **C++ 的 `.cmo` 注册**：没有变便宜，见上表的 +0.35 ms。
+- **`--verify-ops`**：基线 342 条、当前 365 条；墙钟 270 → 333 ms（31 次，比值 1.12），但它是
+  Node 启动 + `camel inspect --ops`，Node 占大头，且两个版本的 Node 脚本不同（H126/H131 改过
+  `stdlib-reference.mjs`），不能拿它归因；没有为它设门禁。
+- **文档注释**：把 9 个 `.cml` 去掉 60% 的字节（36,274 → 14,575，删掉所有 `///` 与开头块注释）
+  后，`parse` 反而从 2.38 变成 5.16 ms（`math` 一个文件 4.0 ms，是页缓存未命中的读盘尖峰），
+  声明段总量没有下降。这条实验被 I/O 尖峰盖住，**不能**据此说"注释可省"；它只说明注释不是
+  这 4.6 ms 里可以稳定摘掉的一块。
+- **`std::stats` / `--log-level=trace`**：`std::stats` 统计的是图，不是启动；Release 下
+  `CAMEL_LOG_TRACE` 站点被编译掉，打开也看不到声明路径的内部耗时。用 `--time-phases` 才有
+  每个模块的 `parse`/`gct`/`declare`。
+
+## 5 决定
+
+**回归是真实的，但只在"导入标准库"这条路径上；启动路径（`--version`、无 import 的程序）没有。**
+全量导入 +5.8–6.1 ms CPU（+32%），导入一个 `math` +2.44 ms（+29%），都超过 10% 的线；来源是
+9 个 `.cml` 的 parse + GCT + declare（4.4–4.6 ms），其中 `math` 占 2.2 ms。
+
+**不实施修改。** 理由和最便宜的候选：
+
+1. **编译声明的磁盘缓存**（最便宜且能真正消掉）：把 `parse + gct + declare` 换成读取一份带源码
+   哈希/版本校验的编译结果。实测读 9 个声明源（36,274 字节，页缓存）0.19 ms，所以上限是省约
+   **4.4 ms**（从 4.6 ms 降到 0.2 ms）；对 `inspect_ops`/`imports_all` 就是把 +32% 降到约 +8%。
+   但它改变"磁盘上的 stdlib 是什么"（陈旧、信任边界、安装目录要可写、`--verify-ops` 仍读源码），
+   按任务要求作为**作者问题 Q1**，本次不实现。
+2. **惰性声明**（import 时不解析 `.cml`，第一次解析算子或 `inspect --ops` 时才解析）：对
+   `imports_all`/`imports_math` 这种"导入了但不用"的程序能省全部 4.6 ms（`math` 2.2 ms），对
+   真正调用算子的程序省不下。它改变错误报告时机（导入成功、`.cml` 坏要到使用时才报），也是
+   **作者问题 Q2**。
+3. **从 AST 直接建 native entity、跳过 GCT**（不改变可观察行为）：最多省 `gct` 的 1.2–1.4 ms
+   （约 30%），parse 的 2.4 ms 还在；要改 `declareModule` 的入口，是结构改动，不是"便宜"，本次
+   不做。
+
+所以本次的交付是：**数字、归因、缓存/惰性的作者问题、以及一个不会在共享主机上乱响的门禁**。
+如果作者批准 Q1，实施顺序建议是：先做"声明模块的编译结果缓存"（校验源码哈希 + 编译器版本 +
+`#op` 表版本），用本报告的 4.4 ms 上限验收；Q2 单独评估，因为它动的是错误报告语义。
+
+## 6 回归用例
+
+新增：
+
+- `test/plans/perf/startup.plan.toml`：`perf.startup`，`tier = "slow"`，一条测试；
+- `test/tools/startup-cost.mjs`：跑四条命令、各 3 次预热 + 21 次计时，打印中位数/p10/p90/最小/
+  最大/n 和天花板，只有中位数越过天花板才失败；`--json` 只打印数字、不设门禁；
+- `test/cases/perf/startup/imports_nothing.cml`：一行程序，无 import。
+
+天花板：`--version` 40 ms、`imports_nothing` 45 ms、`inspect_ops` 100 ms、`imports_all` 90 ms。
+安静主机（负载 35–60）的中位数是 5.0–5.8 / 7.4–8.5 / 25.2–27.8 / 23.6–25.4 ms：后两条是
+3.8–3.9 倍，前两条是 5–8 倍（5–8 ms 的安静中位数低于这台主机的调度噪声，3 倍只有 15/25 ms，
+负载 215 时的 20/36.5 ms 会偶发失败）。负载 150 时是 16.5 / 19.3 / 53.4 / 51.5 ms，负载 215 时
+是 20 / 36 / 87 / 72 ms，都在天花板下。
+
+`-Jobs 8`：`perf.startup` 只有一条测试，`-Jobs 8` 不会把它内部再并行，但会和别的计划共享主机；
+在负载 20–35 时跑 `test/plans/perf/startup.plan.toml` 是 1.4–1.6 s，PASS。直接跑脚本（同一窗口）
+得到 5.8 / 8.0 / 25.2 / 24.1 ms，全部在天花板下。
+
+### 6.1 这个门禁能看见什么，看不见什么
+
+它是**烟雾报警**，不是百分比预算：能看见"标准库在程序运行前被加载"（`--version`/`imports_nothing`
+会从 5/8 ms 跳到几十 ms）、"声明模块每进程要几十毫秒"、"某个模块被加载两次"；看不见今天这
+4.6 ms——在负载 150–215 的主机上，墙钟的调度噪声（p90 到中位数的 2–5 倍）比 4.6 ms 大一个
+数量级。所以 4.6 ms 这个数记在本报告里，不用门禁去分辨；要用门禁分辨它，需要 CPU 时间或
+"同一进程里 A/B"，而 `process.hrtime` 只有墙钟、跨平台拿不到子进程 CPU，这一层本次没有做。
+
+## 7 提交
+
+| 提交 | 内容 |
+|---|---|
+| `cf6196c20` | `test(perf): pin what camel does before the program runs` — 计划、脚本、一行 fixture |
+| `b33fd916d` | `test(perf): set the startup ceilings from the measured spread` — 阈值按安静/负载两个窗口定 |
+| `8fedb172b` | `test(perf): describe how the startup ceilings were chosen` — 说明为什么前两条不是 3 倍 |
+| 本报告的提交 | `docs(handover): record what the declaration modules cost at startup` — 本文件 + 任务板 H142 行 |
+
+基线与当前的二进制：当前 `21c88aee4` + 性能用例（不改编译器），自报 `Build 261022_003003_21c88aee`；
+基线 `fea0c9d8e`，自报 `Build 261022_003752_fea0c9d8`。基线临时分支 `h142-baseline-tmp` 只用于
+构建和对比，完成后删除；没有推送到 `origin`（只随 `camel-remote` 进了主机上的裸仓库）。
+
+## 8 遗留 / 作者问题
+
+- **Q1（缓存）**：是否允许把已编译的声明模块缓存到磁盘（`CAMEL_HOME` 下或旁边），用源码哈希、
+  编译器版本和 `#op` 表版本校验？影响：陈旧（源码改了缓存没失效）、信任边界（缓存文件是代码）、
+  安装目录可写、`--verify-ops` 仍必须读源码。若批准，收益上限是 4.4 ms/进程（全量导入）。
+- **Q2（惰性声明）**：是否允许 `import` 时不解析 `.cml`，到第一次解析算子或 `inspect --ops` 时
+  才解析？影响：错误报告时机（`import` 成功但声明文件坏的诊断推迟）、`--verify-ops` 要显式强制
+  全部加载。收益：不用算子的导入程序省全部 4.6 ms；用算子的程序省不下。
+- **Q3（门禁的分辨率）**：如果作者希望门禁能分辨毫秒级回归，需要一个跨平台拿子进程 CPU 时间的
+  办法（Linux 的 `wait4`/`RUSAGE_CHILDREN`，Windows 的 `GetProcessTimes`），或者在同一进程里
+  做 A/B；本次按任务要求只用了墙钟中位数 + 宽阈值。
+
+## 9 数字背后的命令（摘要）
+
+```bash
+# 当前树（分支 handover/H142-declaration-cost，二进制自报 21c88aee）
+# 基线树（fea0c9d8e，构建后把 out/ 与 scripts/ stdlib/ test/ 复制到稳定路径）
+python3 measure.py --home current=... --home baseline=... --root current=... --root baseline=... \
+  --reps 101 --cases version,imports_nothing,inspect_ops,imports_all --out ab3.json
+python3 measure.py ... --reps 51 --cases inspect_ops_min --out ab2.json
+python3 measure.py ... --reps 51 --cases imports_math --out ab-math.json
+python3 phases.py --home current=... --root current=... --case inspect_ops --reps 9 --out ph.json
+python3 phases.py --home current=... --home baseline=... --root current=... --root baseline=... \
+  --case imports_all --reps 9 --out ph-ab.json
+CAMEL_TIME_PHASES=- camel test/cases/modules/stdlib/registry_all.cml std::nvm
+node test/tools/startup-cost.mjs
+pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h142-declaration-cost \
+  -Plan test/plans/perf/startup.plan.toml -NoBuild -Jobs 8
+```
+
+`measure.py` 的核心是 `time.perf_counter()` + `subprocess.run` + `getrusage(RUSAGE_CHILDREN)`
+的差值；`phases.py` 解析 `CAMEL_TIME_PHASES=-` 打到 stderr 的最后一个 `{"schema":...}` JSON。
+两个脚本在主机 `~/h142-bench/` 下，是这次的量具，不进仓库。
