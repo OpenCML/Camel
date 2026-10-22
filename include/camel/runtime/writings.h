@@ -213,6 +213,38 @@ struct RewriteStats {
     bool fixpoint  = false; // a round applied nothing
 };
 
+/// One rewrite the engine made, attributed to the rule that made it (rewrite design 8.7:
+/// `explain`). The nodes are named by their id in the draft and by the text they had when the
+/// rewrite was made: a node the rewrite erased has no later text to read, and a node the draft
+/// goes on to renumber would lose the id the step was about.
+///
+/// A log is kept only when the caller asks for it (`run`'s `explain` parameter). `rewrite`
+/// records nothing when it is given no log, so the plain engines pay nothing for attribution
+/// nobody reads.
+struct RewriteStep {
+    /// The source name of the rule that fired, and the id its compiled rules carry.
+    std::string rule;
+    uint16_t ruleId = 0;
+    /// The round of the graph's rewrite the step belongs to, counting from 1.
+    size_t round = 0;
+    /// The graph the rewrite was made in; the application that drove the graph fills these in.
+    std::string graph;
+    GraphId graphId = kInvalidGraphId;
+    /// The node the left side matched, then the nodes its variables were bound to, in variable
+    /// order and without repeats.
+    std::vector<gc_node_ref_t> matched;
+    std::vector<std::string> matchedText;
+    /// The node the right side was built as (an existing one or a new one).
+    gc_node_ref_t produced = kInvalidNodeRef;
+    std::string producedText;
+    /// The nodes the rewrite left unread and the engine erased, the replaced one first.
+    std::vector<gc_node_ref_t> erased;
+    std::vector<std::string> erasedText;
+};
+
+/// The attributed rewrites of one application, in the order the engine made them.
+using RewriteLog = std::vector<RewriteStep>;
+
 struct SaturateStats {
     size_t rounds       = 0;
     size_t matches      = 0;
@@ -291,7 +323,12 @@ class DraftWritings : private WritingObserver {
     /// its right side, the nodes nothing reads any more are erased. Rounds are repeated until a
     /// round applies nothing or `maxRounds` is reached. A rule that holds both ways is refused
     /// (std::invalid_argument).
-    RewriteStats rewrite(std::span<const Rule> rules, size_t maxRounds = 16);
+    ///
+    /// `log`, when given, collects one `RewriteStep` per rewrite, in the order they were made
+    /// (rewrite design 8.7). It is also where the erased nodes are noted, before the draft
+    /// forgets them. With no log the recording is skipped and nothing is allocated for it.
+    RewriteStats rewrite(
+        std::span<const Rule> rules, size_t maxRounds = 16, RewriteLog *log = nullptr);
     /// The constant node `value` of `type` in this region with these permissions: the one there
     /// is, or a new one.
     gc_node_ref_t constantNode(slot_t value, camel::core::type::Type *type, camel::core::sem::PermissionMask perms, uint32_t region);
