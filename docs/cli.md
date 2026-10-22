@@ -67,6 +67,8 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 
 A compile error or a run-time fault is printed on standard output, a warning on standard error. An error value nobody handled that reaches the exit of `main` is printed on standard error as well (`UnhandledError`, see "Programs whose `main` takes parameters or returns a value"). See [diagnostics.md](diagnostics.md) for every diagnostic and `camel --explain <name or code>` for one of them.
 
+When a command asks whether the modules it compiled or loaded failed, a run, a `check` and a `--timeit` iteration ask about the modules the program depends on — its entry module and the modules it imports, transitively — while `inspect --ops` asks about every module in the context, because its listing is that inventory; a pass library loaded by the pass list is not a dependency of the program, so a pass that cannot be resolved is reported as `RuntimeDiag::InvalidPassParameter` naming the pass, with the library's own error as a secondary location.
+
 Both streams carry the same bytes on every platform: a line ends with a line feed (`\n`), also on Windows, where the C runtime would otherwise write `\r\n`. The same holds for files a program writes with `fs.write_text`: the file holds the bytes of the string.
 
 - `-E`, `--error-format`, `--output-format <text|short|json>`: how diagnostics are written (default: `text`; `--timeit` reuses the option for its own output).

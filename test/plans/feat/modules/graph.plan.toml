@@ -605,6 +605,22 @@ golden = "golden/graph_pass_unparsable_diagnostic.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
+# The scope's other direction: an import is a dependency of the program, so a module that does
+# not compile makes the program fail at the compile step with that module's diagnostic, before any
+# pass runs. A pass library is not a dependency and is handled by pass resolution instead.
+
+[[tests]]
+name = "imported_module_that_does_not_compile"
+desc = "A program importing a module that does not parse fails at the compile step with that module's parse diagnostic, not with a pass diagnostic."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["ModuleParseFailed", "SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:8:5"]
+expect_output_not_contains = ["InvalidPassParameter", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The `with` parameters of a pass function are the pass parameters written on the pipeline.
 
 [[tests]]

@@ -468,8 +468,14 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             invocation->mainModule->compile(CompileStage::Done);
             // The same question every output path asks (module_failures.h): a program that did
             // not compile has no time to report, and a declaration module that did not load is
-            // an error in a module's diagnostics like any other.
-            if (camel_cli::findModuleFailures(invocation->ctx).any) {
+            // an error in a module's diagnostics like any other. The scope is the program's
+            // dependencies: a pass library the pass list loaded is not part of the program the
+            // iteration times, and its failure belongs to pass resolution, not to the compile.
+            const bool compileFailed =
+                camel_cli::findModuleFailures(
+                    invocation->ctx, camel_cli::ModuleScope::ProgramDependencies)
+                    .any;
+            if (compileFailed) {
                 reportTimeitIterationFailure(
                     os,
                     useJsonFormat,
