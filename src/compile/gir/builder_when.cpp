@@ -10,17 +10,18 @@
  * a false condition makes the declaration inapplicable rather than erroneous. A condition the
  * compiler cannot answer is reported, never taken for `true`.
  *
- * The predicates are compile-time functions: the standard type queries (`is_numeric::<T>()` and
- * the others), which name properties no Camel type expression writes and so are answered by the
- * compiler, and any pure function of the library, answered when the declaration is instantiated.
- * A `match type` predicate the user writes (`has_field::<T>('w')` and the like) is the second
- * kind: its body is Camel, and it is folded over the constants the condition gives.
+ * The predicates are compile-time functions: any pure function of the library, answered when the
+ * declaration is instantiated. A `match type` predicate (`is_numeric::<T>()`,
+ * `has_field::<T>('w')`) is the common case: its body is Camel, and it is folded over the
+ * constants the condition gives. The standard predicates are written in the standard library
+ * this way, not answered by the compiler.
  */
 
 #include "builder.h"
 #include "builder_support.h"
 
 #include "camel/core/data/primary.h"
+#include "camel/core/type/text.h"
 #include "camel/core/type/tree.h"
 #include "camel/core/type/typevar.h"
 
@@ -40,42 +41,14 @@ namespace camel::compile::gir {
 
 namespace {
 
-/// `$builtin::is_numeric` and `is_numeric` are the same query; a name a module qualified
-/// (`m::is_numeric`) is that module's own function, not a query.
-std::string queryName(const std::string &written) {
+/// `$builtin::not` and `not` name the same operator; a name a module qualified is that
+/// module's own.
+std::string plainName(const std::string &written) {
     constexpr std::string_view builtin = "$builtin::";
     if (written.rfind(builtin, 0) == 0) {
         return written.substr(builtin.size());
     }
-    return written.find("::") == std::string::npos ? written : std::string{};
-}
-
-bool answersTypeQuery(const std::string &name, Type *type) {
-    switch (type->code()) {
-    case TypeCode::Int32:
-    case TypeCode::Int64:
-        return name == "is_integer" || name == "is_numeric" || name == "is_ordered";
-    case TypeCode::Float32:
-    case TypeCode::Float64:
-        return name == "is_float" || name == "is_numeric" || name == "is_ordered";
-    case TypeCode::Complex64:
-    case TypeCode::Complex128:
-        return name == "is_numeric";
-    case TypeCode::String:
-        return name == "is_string" || name == "is_ordered";
-    case TypeCode::Bool:
-        return name == "is_bool" || name == "is_ordered";
-    case TypeCode::Function:
-        return name == "is_function";
-    default:
-        return false;
-    }
-}
-
-bool isTypeQuery(const std::string &name) {
-    return name == "is_numeric" || name == "is_integer" || name == "is_float" ||
-           name == "is_ordered" || name == "is_function" || name == "is_string" ||
-           name == "is_bool";
+    return written;
 }
 
 /// A condition may call a function of the library: a `match type` predicate is one, and its
@@ -183,8 +156,8 @@ class GctConstantEvaluator {
             return evalCall(node);
         case Kind::TAPP:
             throw EvalFailure{
-                "the predicate calls another generic function; only a direct call or the "
-                "standard predicates are evaluated at compile time"};
+                "the predicate calls another generic function; only a direct call is evaluated at "
+                "compile time"};
         default:
             throw EvalFailure{
                 "the predicate uses a construct this compile-time evaluation does not read (kind " +
@@ -200,12 +173,22 @@ class GctConstantEvaluator {
         } else if (subject->code() == TypeCode::Tuple && tree::isInternal(subject)) {
             shape = GCT::typeCaseBit(GCT::TypeCaseKind::Tuple);
         } else {
+            // Every other type, a function included, is a leaf: `#leaf` still selects it.
             shape = GCT::typeCaseBit(GCT::TypeCaseKind::Leaf);
         }
+        const bool isFunc       = subject->code() == TypeCode::Function;
         const uint16_t wildcard = GCT::typeCaseBit(GCT::TypeCaseKind::Wildcard);
         for (size_t i = 1; i < node->size(); ++i) {
             const GCT::node_ptr_t &arm = node->at(i);
-            if ((arm->typeCasePatterns() & (shape | wildcard)) != 0) {
+            bool selected              = (arm->typeCasePatterns() & (shape | wildcard)) != 0 ||
+                            (isFunc && (arm->typeCasePatterns() &
+                                        GCT::typeCaseBit(GCT::TypeCaseKind::Func)) != 0);
+            for (size_t k = 0; !selected && k < arm->typeCaseTypeCount(); ++k) {
+                Type *pattern = bound(arm->typeCaseTypeAt(k));
+                selected      = pattern != nullptr && !containsTypeVar(pattern) &&
+                           typeEquals(subject, pattern);
+            }
+            if (selected) {
                 return eval(arm->size() > 0 ? arm->at(0) : nullptr);
             }
         }
@@ -472,35 +455,10 @@ WhenResult Builder::evaluateWhenCondition(
                     local.detail  = "a type application in a condition names no function";
                     return local;
                 }
-                const std::string name = queryName(callee->at(0)->name());
-                // The standard predicates are still the compiler's own (see the note below);
-                // anything else is an ordinary function of the library, run at compile time.
-                if (isTypeQuery(name)) {
-                    if (node->size() != 1) {
-                        local.outcome = WhenOutcome::NotEvaluable;
-                        local.detail  = "a type query takes no value arguments";
-                        return local;
-                    }
-                    if (callee->size() != 2 || callee->at(1)->type() != GCT::NodeKind::TYPE) {
-                        local.outcome = WhenOutcome::NotEvaluable;
-                        local.detail  = "a type query takes one type argument";
-                        return local;
-                    }
-                    Type *asked = substituteTypeVars(callee->at(1)->dataType(), bindings);
-                    if (asked == nullptr || containsTypeVar(asked)) {
-                        local.outcome = WhenOutcome::TypeNotConcrete;
-                        local.subject = name;
-                        local.detail  = asked != nullptr ? asked->toString() : std::string("?");
-                        return local;
-                    }
-                    local.outcome = answersTypeQuery(name, asked) ? WhenOutcome::Holds
-                                                                 : WhenOutcome::Fails;
-                    return local;
-                }
-                // A predicate of the library: a generic function instantiated with the types
-                // written between `::<` and `>`, and answered by its own body. Its result must
-                // be a constant of the graph the instance builds -- a `match type` predicate
-                // is one, and so is a function that returns such a value.
+                const std::string name = callee->at(0)->name();
+                // Every predicate is a function of the library now: the standard type
+                // predicates are written in Camel with `match type`, so they arrive here like
+                // any other generic function and are answered by their own body.
                 const template_ptr_t tmpl = templateScope_ != nullptr
                                                 ? templateScope_->get(name).value_or(nullptr)
                                                 : nullptr;
@@ -509,7 +467,7 @@ WhenResult Builder::evaluateWhenCondition(
                     local.subject = name;
                     local.detail =
                         "no compile-time function of that name is visible here; a condition "
-                        "calls the standard predicates or a generic function of this module";
+                        "calls a generic function this module declares";
                     return local;
                 }
                 std::vector<std::string> parameters = typeParameterNames(tmpl);
@@ -600,7 +558,7 @@ WhenResult Builder::evaluateWhenCondition(
                 return local;
             }
             if (callee->type() == GCT::NodeKind::DREF) {
-                const std::string op = queryName(callee->name());
+                const std::string op = plainName(callee->name());
                 const auto argument = [&](size_t index) -> GCT::node_ptr_t {
                     return node->size() > index + 1 ? soleValue(node->at(index + 1)) : nullptr;
                 };
@@ -636,8 +594,8 @@ WhenResult Builder::evaluateWhenCondition(
             return local;
         }
         case GCT::NodeKind::DREF: {
-            const std::string plain = queryName(node->name());
-            if (!isTypeQuery(plain) && node->name().find("::") == std::string::npos) {
+            const std::string plain = plainName(node->name());
+            if (node->name().find("::") == std::string::npos) {
                 // A `with` parameter is in scope; its value is a compile-time constant only
                 // when the call wrote one.
                 if (signature != nullptr) {

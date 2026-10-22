@@ -1,0 +1,14 @@
+/**
+ * The standard type-predicate module is a library module like any other: importing it compiles
+ * its declarations, seven generic functions written with `match type` identity cases. A program
+ * cannot call one through the import yet (a generic function whose type parameter appears only
+ * at the head, and a `when` condition, are both resolved in the declaring module today), so this
+ * case pins that the module itself loads and builds.
+ */
+module when_types_module
+
+import types
+
+func main(): int sync {
+    return 0
+}

@@ -272,6 +272,12 @@ enum class SemanticDiag : uint32_t {
     /// `T { static for (n, F) in fields U }` walks a type other than the shape `T`.
     SameShapeComprehensionMismatch = 0x0001B6,
 
+    // Type identity in `match type` (`case int`, `case T`; design principles 5.5). 0x1C2.
+    /// An identity pattern names a type that cannot select the subject: `void`, a `typeof`
+    /// expression, an open type variable, a type written twice in one case, or a type that an
+    /// earlier case already selects.
+    StaticMatchPatternCannotMatch = 0x0001C2,
+
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
     IgnoredSideEffect            = 0x100002,

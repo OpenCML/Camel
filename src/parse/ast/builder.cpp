@@ -2637,6 +2637,9 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     if (text == "tuple") {
         return TypeCaseKind::Tuple;
     }
+    if (text == "func") {
+        return TypeCaseKind::Func;
+    }
     if (text == "#leaf") {
         return TypeCaseKind::Leaf;
     }
@@ -2651,9 +2654,18 @@ typeCase
 */
 Value Builder::visitTypeCase(cst::TypeCase context) {
     ENTER("TypeCase");
-    std::vector<TypeCaseKind> patterns;
+    std::vector<TypeCasePattern> patterns;
     for (const auto pattern : context->all<cst::TypeCasePattern>()) {
-        patterns.push_back(typeCaseKindOf(pattern));
+        TypeCasePattern entry;
+        // A pattern with a type child is an identity pattern (`case int`, `case T`); the
+        // shape words carry no type.
+        if (const auto typeNode = pattern.type()) {
+            entry.kind = TypeCaseKind::Identity;
+            entry.type = any2node(visitType(typeNode));
+        } else {
+            entry.kind = typeCaseKindOf(pattern);
+        }
+        patterns.push_back(std::move(entry));
     }
     node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
     setNodeTokenRangeByContext(caseNode, context);

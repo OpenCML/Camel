@@ -79,9 +79,18 @@ enum class BranchKind : uint8_t { Cond, NullThen, ErrorThen, ErrorPass, LogicalA
 ///    the type of the value matched.
 enum class CaseType : uint8_t { Value, True, Else, Bind, Error, Enum };
 
-/// The shape a `match type` case selects, in the same order as the AST (design principles
-/// 5.5, R3). A TCASE node holds a mask of them: `case struct | tuple` selects either.
-enum class TypeCaseKind : uint8_t { Struct = 0, Tuple = 1, Leaf = 2, Wildcard = 3 };
+/// What a `match type` case selects, in the same order as the AST (design principles 5.5, R3).
+/// Struct, Tuple, Func, Leaf and Wildcard are shapes and a TCASE holds a mask of them:
+/// `case struct | tuple` selects either. Identity (`case int`, `case T`) is not a shape: the
+/// TCASE holds the type to compare the subject with, exactly, in a separate list.
+enum class TypeCaseKind : uint8_t {
+    Struct   = 0,
+    Tuple    = 1,
+    Leaf     = 2,
+    Wildcard = 3,
+    Func     = 4,
+    Identity = 5
+};
 inline constexpr uint16_t typeCaseBit(TypeCaseKind kind) {
     return static_cast<uint16_t>(1u << static_cast<uint8_t>(kind));
 }
