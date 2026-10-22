@@ -32,8 +32,9 @@ await runTest(async t => {
 
     const consumed = await t.dap()
     await consumed.launch(program, { passes: ['std::gir'], stopOnPassEntry: true })
-    await consumed.waitEvent('stopped')
-    check((await consumed.request('camel/nextPass')).success, 'step a consuming translation pass')
+    const boundary = await consumed.waitEvent('stopped')
+    const stepped = await consumed.request('camel/nextPass')
+    check(stepped.success, 'step a consuming translation pass', { boundary: boundary?.body, stepped })
     check(await consumed.waitEvent('terminated'), 'consumed graph ends without a fake after snapshot')
 
     const failed = await t.dap()
