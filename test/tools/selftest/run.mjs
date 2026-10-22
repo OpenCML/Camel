@@ -28,12 +28,14 @@
 //     CAMEL_TEST_BASE override;
 //   * every tracked file is selected by a rule or names an allowed rule-less class: a new kind
 //     of file (a new extension under a new path) cannot be dropped from `--changed` silently
-//     (H182).
+//     (H182);
+//   * every plan file under test/plans/ is selected by at least one case path it names, and a
+//     target may omit the `.plan.toml` suffix of a plan file (H201).
 import fs from 'fs'
 import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
-import { changedBase, plansForChanges } from '../../runner.mjs'
+import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
@@ -48,6 +50,18 @@ fs.mkdirSync(probeLogDir, { recursive: true })
 
 function runRunner(args, extraEnv = {}) {
     const proc = spawnSync(process.execPath, [runner, ...args], {
+        encoding: 'utf8',
+        cwd: repoRoot,
+        env: { ...process.env, ...extraEnv },
+    })
+    return { status: proc.status, output: stripAnsi(`${proc.stdout}${proc.stderr}`), pid: proc.pid }
+}
+
+// `test/runner.mjs` is the command `node scripts/test.js` runs: target resolution, `--changed`
+// and `--list` live there, above the plan runner. A check of a target shorthand has to go
+// through it, not through run-tests.mjs, or it would test a different parser (H201).
+function runTestCli(args, extraEnv = {}) {
+    const proc = spawnSync(process.execPath, [path.join(repoRoot, 'test', 'runner.mjs'), ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
         env: { ...process.env, ...extraEnv },
@@ -594,6 +608,10 @@ const RULELESS_ALLOWED = [
         why: 'the manual perf baseline (H167); a change here must not select a perf plan',
     },
     {
+        match: /^test\/cases\/opt\/progen\/(README\.md|findings\.json)$/,
+        why: 'the progen corpus documentation and its findings index are read by the manual progen tool (H167); the finding and judgement programs next to them are named by rules',
+    },
+    {
         match: /^test\/cases\/perf\//,
         why: 'the perf cases are run by perf plans only, and perf is manual (H167)',
     },
@@ -647,6 +665,123 @@ for (const entry of RULELESS_ALLOWED) {
     if (!trackedFiles.some((file) => entry.match.test(file))) {
         problems.push(`plan-selection: allowlist entry matches no tracked file (${entry.why})`)
     }
+}
+
+// --- every plan file is reachable from a case path (H201) -------------------------------------
+// `--changed` selects plans through files, never through a plan's existence. A plan that no case
+// path selects is a plan the change that breaks its cases never runs, and the H182 per-file check
+// cannot see it: the case files themselves are covered, they just select another plan. Both sides
+// are derived from the tree (no count is written down): the plan files under test/plans/, the
+// `case` entries each one names (resolved the way the runner resolves them), and the selection
+// `plansForChanges` returns for every case path and its directory. A plan is selected when the
+// selection resolves to its file, or to a directory that contains it.
+const SELFTEST_PLANS_ROOT = path.join(repoRoot, 'test', 'plans')
+function walkPlanFiles(dir, out = []) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) walkPlanFiles(full, out)
+        else if (entry.name.endsWith('.plan.toml')) out.push(full)
+    }
+    return out
+}
+const relFromRepo = (candidate) => path.relative(repoRoot, candidate).split(path.sep).join('/')
+function planCasePaths(planFile) {
+    const text = fs.readFileSync(planFile, 'utf8')
+    const cases = []
+    for (const match of text.matchAll(/^[ \t]*case[ \t]*=[ \t]*"([^"]*)"/gm)) {
+        // `${case}` and the other variables are the runner's, not a path in this tree.
+        if (match[1].includes('${')) continue
+        cases.push(path.resolve(path.dirname(planFile), match[1].replace(/\\/g, '/')))
+    }
+    return cases
+}
+function selectionSelects(selection, planFile) {
+    if (!selection) return false
+    for (const target of resolvedSelection(selection)) {
+        const stat = fs.statSync(target, { throwIfNoEntry: false })
+        if (!stat) continue
+        if (stat.isFile()) {
+            if (path.resolve(target) === planFile) return true
+            continue
+        }
+        const inside = path.relative(target, planFile)
+        if (inside && !inside.startsWith('..') && !path.isAbsolute(inside)) return true
+    }
+    return false
+}
+const selectionByPath = new Map()
+function selectionForPath(candidate) {
+    if (!selectionByPath.has(candidate)) selectionByPath.set(candidate, plansForChanges([candidate]))
+    return selectionByPath.get(candidate)
+}
+// The plans an ordinary change must not run are not holes when no case path selects them: the
+// policy names them on purpose. The exemptions are derived from the selection file and the plan
+// text, so a new plan of one of these classes is covered without a list of plans here.
+const selfRuleForHoles = (selectionDoc.rules || []).find((rule) => rule.self === true)
+const selfExcepted = ((selfRuleForHoles && selfRuleForHoles.except) || [])
+    .map((entry) => String(entry).replace(/\\/g, '/'))
+function planExemption(planFile, planText) {
+    const rel = relFromRepo(planFile)
+    if (rel.startsWith('test/plans/perf/')) {
+        return 'the perf layer is manual (H167): a change there must not select a perf plan'
+    }
+    if (selfExcepted.some((entry) => rel === entry || rel.startsWith(entry))) {
+        return 'the test/plans self rule deliberately excludes it (GC stress, progen)'
+    }
+    const topLevel = planText.split(/^\[\[/m)[0]
+    if (/^[ \t]*tier[ \t]*=[ \t]*"debug"/m.test(topLevel)) {
+        return 'it is in the debug layer, which `--changed` never runs'
+    }
+    if (planCasePaths(planFile).length === 0 && /^\[\[sweeps\]\]/m.test(planText)) {
+        return 'it has no cases of its own: it sweeps the cases of other plans, and only its plan file selects it'
+    }
+    return null
+}
+const allPlanFiles = walkPlanFiles(SELFTEST_PLANS_ROOT)
+const unreachablePlans = []
+for (const planFile of allPlanFiles) {
+    const planText = fs.readFileSync(planFile, 'utf8')
+    if (planExemption(planFile, planText)) continue
+    const casePaths = planCasePaths(planFile)
+    const candidates = []
+    for (const casePath of casePaths) {
+        candidates.push(relFromRepo(casePath))
+        candidates.push(`${relFromRepo(path.dirname(casePath))}/`)
+    }
+    if (candidates.length === 0) {
+        unreachablePlans.push(`${relFromRepo(planFile)} (names no case)`)
+        continue
+    }
+    if (!candidates.some((candidate) => selectionSelects(selectionForPath(candidate), planFile))) {
+        const where = relFromRepo(path.dirname(casePaths[0]))
+        unreachablePlans.push(`${relFromRepo(planFile)} (its cases are under ${where}/)`)
+    }
+}
+if (unreachablePlans.length > 0) {
+    problems.push(
+        `plan-selection: ${unreachablePlans.length} plan file(s) no case path selects, so --changed can never run them: `
+        + `${unreachablePlans.join('; ')}. Add a rule that names the plan for the directory its cases live in (H201).`
+    )
+}
+
+// --- a plan target may omit its `.plan.toml` suffix (H201) ------------------------------------
+// `node scripts/test.js test/plans/feat/exemplars` used to resolve to a directory that does not
+// exist and exit ENOENT, although the plan file next to it does; two agents lost time on it in
+// one day. A target that is neither a directory nor a file resolves to `<target>.plan.toml`, and
+// a bare plan id keeps working. `--list` prints the resolved target without running the plan.
+for (const target of ['test/plans/feat/exemplars', 'feat.exemplars']) {
+    const listed = runTestCli([target, '--list'])
+    if (listed.status !== 0 || !listed.output.includes('exemplars.plan.toml')) {
+        problems.push(
+            `target shorthand: '${target} --list' did not resolve to exemplars.plan.toml: ${listed.output.trim()}`
+        )
+    }
+}
+// The suffix-less target must also run: naming a plan file runs it in full, so the tier fixture's
+// four tests (fast, default, slow, debug) all run whatever the tier says.
+const shorthand = runTestCli([path.join(here, 'tier', 'tier')])
+if (shorthand.status !== 0 || !shorthand.output.includes('[SUMMARY] total: 4, pass: 4, fail: 0')) {
+    problems.push(`target shorthand: a plan target without its suffix did not run in full (${summaryLine(shorthand.output)})`)
 }
 
 // The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.

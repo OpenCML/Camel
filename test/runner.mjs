@@ -84,7 +84,13 @@ function resolveNamedTarget(name) {
 function resolveTarget(input) {
     const named = resolveNamedTarget(input)
     if (named) return named
-    return path.resolve(process.cwd(), input)
+    const absolute = path.resolve(process.cwd(), input)
+    // A plan file's name ends in `.plan.toml`, but saying the whole suffix is noise: the target
+    // `test/plans/feat/exemplars` names `exemplars.plan.toml` when no such directory exists.
+    // Only a target that is neither a directory nor a file is left alone, so a path that does
+    // not exist still reaches the runner as the ENOENT the caller must see (H201).
+    if (!fs.existsSync(absolute) && fs.existsSync(`${absolute}.plan.toml`)) return `${absolute}.plan.toml`
+    return absolute
 }
 
 function parseArgs(argv) {
@@ -350,6 +356,19 @@ function resolveSelectionTarget(name) {
     throw new Error(`plan-selection.json names '${name}', which is not under ${PLANS_ROOT}`)
 }
 
+/**
+ * The absolute targets a selection resolves to: the named plans (resolved to a file or a
+ * directory under test/plans) plus the targets a directory rule or the self rule supplied.
+ * `--changed` runs exactly these, and the self-test asks whether a plan is among them (H201).
+ */
+export function resolvedSelection(plans) {
+    const resolved = new Map()
+    for (const target of [...plans.names.map(resolveSelectionTarget), ...plans.targets]) {
+        resolved.set(path.resolve(target), target)
+    }
+    return [...resolved.values()]
+}
+
 function selectChangedTargets() {
     const base = changedBase()
     const files = changedFiles()
@@ -374,11 +393,7 @@ function selectChangedTargets() {
         const rest = plans.unmatched.length > 8 ? ` and ${plans.unmatched.length - 8} more` : ''
         console.warn(`[WARN] --changed: ${plans.unmatched.length} changed file(s) match no rule: ${shown}${rest}`)
     }
-    const resolved = new Map()
-    for (const target of [...plans.names.map(resolveSelectionTarget), ...plans.targets]) {
-        resolved.set(path.resolve(target), target)
-    }
-    const targets = [...resolved.values()]
+    const targets = resolvedSelection(plans)
     const layered = [...new Set(plans.layered.map(resolveSelectionTarget).map((target) => path.resolve(target)))]
     const tierNote = layered.length > 0 ? `, ${layered.length} follow --tier` : ''
     console.log(`[INFO] --changed: ${files.length} changed file(s) select ${targets.length} plan(s)${tierNote}`)
