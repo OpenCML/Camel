@@ -103,7 +103,7 @@ expect_stdout_contains = ["migrated modules stay migrated"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
-# ---- The account pages' numbers are the tree's (H200) ----
+# ---- The account pages' numbers are the tree's (H200), or say which build they are (H213) ----
 #
 # docs/technical/48_declaration_migration.md is the ledger of the migration: the declaration
 # modules, their declared names and declarations, their computed names, the registered overloads
@@ -115,21 +115,49 @@ timeout_ms = 60000
 # while the table kept the old numbers. `--check-ledger` reads each number from both pages and
 # compares it with the tree, naming the file, so this test is red when a number is edited (it
 # prints "<file>:<line>: <what>: page says X, tree has Y"), when a row or a fact is dropped, and
-# when the rows and the totals disagree. The registered counts come from `camel inspect --ops` on
-# the same probe `--verify-ops` reads, and the bucket and per-file counts from the classification
-# `--check` rule 7 already trusts, so a change in either is red too.
+# when the rows and the totals disagree.
+#
+# The numbers split by where their truth comes from (H213):
+#   * the tree decides 48's declaration modules (26), declared names / declarations (185 / 301),
+#     computed names (112), signature files (14), each module's declared and computed columns, and
+#     49's files / entries / names / four buckets / per-file rows / size predictions. Those are read
+#     from `stdlib/`, `modules/`, the signature files and `scripts/computed-gaps.mjs`; a worktree
+#     with no build still checks them, and the red proof is setting 26 -> 27 in 48 §2.1.
+#   * the binary decides `camel inspect --ops` on registry_all.cml: the 794 OPERATOR lines, the 354
+#     public names (50 builtin), the 524 public overloads (96 builtin), 48's per-module public-name
+#     and overload columns, its §2.4 split, the §6 quotes of --check / --verify-ops / inspect --ops,
+#     and 49 §1's operator-line count. Those need `out/latest` built from this commit.
+#
+# The plan runs after `camel-remote.ps1` has built (a -NoBuild run is already guarded by H149), and
+# it passes --require-build: without a build-info.json that names this HEAD the checker exits 5
+# instead of quietly passing the tree half, so the build-dependent numbers cannot go unchecked by
+# a run that forgot to build. `node scripts/stdlib-declarations.mjs --check-ledger` without that
+# flag still exits 0 on a no-build tree, with the nine skipped claims listed; the guard itself is
+# exercised by `registry.ledger_build_stamp` below.
 
 [[tests]]
 name = "registry.ledger_matches_tree"
-desc = "Every number docs/technical/48_declaration_migration.md and docs/technical/49_computed_signatures.md state is the tree's number: 48's declaration modules, declared names and declarations, computed names, overloads, public names, signature files, per-module rows and re-check quotes; 49's files, entries, names, four buckets, per-file rows, size predictions and operator-line count. A hand edit fails with '<file>:<line>: <what>: page says X, tree has Y', and a dropped row or fact fails instead of passing over a hole."
+desc = "Every number docs/technical/48_declaration_migration.md and docs/technical/49_computed_signatures.md state is the tree's number, and the binary's numbers are read only from a build of this commit: 48's declaration modules, declared names and declarations, computed names, overloads, public names, signature files, per-module rows and re-check quotes; 49's files, entries, names, four buckets, per-file rows, size predictions and operator-line count. A hand edit fails with '<file>:<line>: <what>: page says X, tree has Y', and a dropped row or fact fails instead of passing over a hole. --require-build makes a run without a build of this commit exit 5, so the binary half cannot pass unchecked."
 kind = "behavior"
 tool = "node"
 case = "../../../../scripts/stdlib-declarations.mjs"
-args = ["${case}", "--check-ledger"]
+args = ["${case}", "--check-ledger", "--require-build"]
 expect_exit = 0
 expect_stdout_contains = ["the ledgers agree with the tree"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
+
+[[tests]]
+name = "registry.ledger_build_stamp"
+desc = "A no-build tree still checks the tree-decidable ledger claims and lists the nine build-dependent ones it skipped (exit 0); a build-info.json naming another commit is refused with exit 4 and one line naming that commit, HEAD and camel-remote.ps1; --allow-stale-build prints the warning and continues; --require-build without a build exits 5. The scratch installs are named through CAMEL_EXE, so the real out/latest is never touched."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/ledger_build_stamp.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 180000
 
 # ---- A declaration file that failed to load is an error, not a shorter list (H172) ----
 
