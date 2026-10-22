@@ -2367,13 +2367,11 @@ The sum of the elements, 0 for an empty array. Integers wrap around on overflow,
 min: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
-The smallest value, or null for an empty array. Numbers compare by the IEEE 754 minimum (a
-NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
-prefix first), and false is below true.
+The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
++0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `min([3, 9, 2]) ?? 0` gives `2`
-- Example: `min(['b', 'a']) ?? ''` gives `'a'`
 
 #### `max`
 
@@ -2381,13 +2379,11 @@ prefix first), and false is below true.
 max: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
-The largest value, or null for an empty array. Numbers compare by the IEEE 754 maximum (a
-NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
-prefix first), and false is below true.
+The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
+-0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `max([3, 9, 2]) ?? 0` gives `9`
-- Example: `max(['a', 'b']) ?? ''` gives `'b'`
 
 ### Transforming
 

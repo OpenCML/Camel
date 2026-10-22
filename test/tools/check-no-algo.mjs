@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The `algo` module is gone: its algorithms are `array`'s, and the module that only loaded their
  * kernels was deleted (docs/handover/reviews/stdlib-array.md, item 2). This guard is what keeps
