@@ -64,6 +64,11 @@ class VjpBuilder {
     virtual std::optional<vjp_node_t> gradientOf(vjp_node_t primal) const = 0;
     /// Adds `gradient` to the gradient of `primal`. Ignored for values without a tangent space.
     virtual void accumulateGradient(vjp_node_t primal, vjp_node_t gradient) = 0;
+    /// True when a differentiated input flows into `node`, so a gradient reaching it must be
+    /// carried back. False for a compile-time constant and for anything computed from data
+    /// alone. A rule uses it to tell an input whose contribution has to be returned from one
+    /// that is a constant: the two have the same type and the same shape.
+    virtual bool isActive(vjp_node_t node) const = 0;
 
     vjp_node_t addStaticFloat(double value);
 };
@@ -77,6 +82,10 @@ struct VjpCall {
     /// gradient flows through them, but an operator may take a value this way (`append`).
     std::span<const vjp_node_t> withInputs;
     vjp_node_t output;
+    /// Source origin of the operator node, so that a rule which cannot carry this call's
+    /// gradient can refuse at the operator instead of at the `grad` call that ran the
+    /// transformation (`kInvalidOriginId` when unknown). See `tensor::ops::refuseVjp`.
+    uint64_t origin = 0;
 };
 
 /// Emits the backward computation of `call`: reads the gradient of its output and accumulates

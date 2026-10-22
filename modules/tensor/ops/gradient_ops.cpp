@@ -457,6 +457,13 @@ std::vector<OpDef> gradientOps() {
     setVjp(defs, "slice_grad", &sliceGradVjp);
     setVjp(defs, "zeros_like", &camel::core::noGradient);
     setVjp(defs, "ones_like", &camel::core::noGradient);
+    // numel and dim answer with an integer, and a discrete value's derivative is zero by
+    // definition (design principles 9.9): reading a shape is locally constant in the tensor it
+    // reads. Without a rule the backward pass, which visits any operator one of whose inputs is
+    // active, refused them with "no derivative rule" — a shape query in a loss was refused
+    // although its contribution is exactly zero, exactly as `shape` already was.
+    setVjp(defs, "numel", &camel::core::noGradient);
+    setVjp(defs, "dim", &camel::core::noGradient);
     return defs;
 }
 

@@ -380,10 +380,21 @@ Precedence, most specific first:
    the abstract `VjpBuilder`.
 
 Operators without a rule are an error on differentiated paths. Structurally
-non-differentiable operators (`shape`, `zeros`, comparisons, integer arithmetic)
-stop gradients silently. The builder interface and the rule registry move from
-the nn module to core, beside the operator table (`OperatorTable`), because the transform
-is a core pass and must not depend on nn.
+non-differentiable operators (`shape`, `numel`, `dim`, `zeros`, comparisons,
+integer arithmetic) stop gradients silently. The builder interface and the rule
+registry move from the nn module to core, beside the operator table
+(`OperatorTable`), because the transform is a core pass and must not depend on
+nn.
+
+A rule that knows the mathematics of its input but has no operator with which
+to express it refuses instead of returning a zero: `tensor::ops::refuseVjp`
+reports a fault located at the operator's own origin (`VjpCall::origin`) and
+naming it, and asks the builder `isActive` whether the input it cannot handle
+depends on a differentiated parameter at all (a constant array is skipped; a
+float array is continuous, design principles 9.9, and is refused). `t[a:b]`
+(`tensor:slice_sub`) is a selection of indices, so its adjoint is the upstream
+gradient scattered back into the parent's shape at those indices, padded with
+zeros — `tensor:slice_grad` is that scatter.
 
 Correctness is checked mechanically: every rule gets a finite-difference test,
 and the benchmark models are compared parameter by parameter with PyTorch

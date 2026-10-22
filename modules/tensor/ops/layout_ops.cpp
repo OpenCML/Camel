@@ -614,9 +614,27 @@ void transposeVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-/// reshape, flatten, unsqueeze: the gradient takes the input's shape back.
+/// reshape, flatten, unsqueeze: the gradient takes the input's shape back. `reshape` also
+/// accepts a numeric array, and a float array is a continuous value with a tangent (design
+/// principles 9.9): its adjoint would be the elements of dy in order, which no operator of this
+/// module produces, so a gradient into an array that depends on a differentiated input is
+/// refused by name instead of being dropped (a constant array has no gradient and is skipped).
 void reshapeLikeVjp(VjpBuilder &b, const VjpCall &call) {
-    if (auto dy = b.gradientOf(call.output); dy && isTensorNode(b, call.inputs[0])) {
+    if (!isTensorNode(b, call.inputs[0])) {
+        if (b.isActive(call.inputs[0])) {
+            refuseVjp(
+                call,
+                std::format(
+                    "its input is a numeric array of type '{}', not a tensor, and this module "
+                    "has no operator that carries a tensor's gradient back into an array; the "
+                    "array's gradient would be dropped silently. Build the tensor directly "
+                    "(a tensor parameter, a slice of one, or `new` of an array that does not "
+                    "depend on a differentiated value) instead of reshaping an array",
+                    b.nodeType(call.inputs[0])->toString()));
+        }
+        return;
+    }
+    if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t shape = b.addOper(
             ArrayType::create(Type::Int64()),
             "tensor:shape",
@@ -634,7 +652,10 @@ void permuteVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// concat(a, b, axis): each part receives its slice of dy.
+// concat(a, b, axis): each part receives its slice of dy. A part may be a numeric array
+// instead of a tensor; a float array is continuous, and its adjoint (the elements of its slice
+// of dy) has no operator here, so an array part that depends on a differentiated input is
+// refused rather than dropped. A constant array part takes no gradient and is skipped.
 void concatVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 3);
     auto dy = b.gradientOf(call.output);
@@ -642,8 +663,20 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
         return;
     }
     const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1], axis = call.inputs[2];
+    for (const vjp_node_t part : {lhs, rhs}) {
+        if (!isTensorNode(b, part) && b.isActive(part)) {
+            refuseVjp(
+                call,
+                std::format(
+                    "a part of it is a numeric array of type '{}', not a tensor, and this "
+                    "module has no operator that carries a tensor's gradient back into an "
+                    "array; that part's gradient would be dropped silently. Concatenate "
+                    "tensors that come from a differentiable value instead",
+                    b.nodeType(part)->toString()));
+        }
+    }
     if (!isTensorNode(b, lhs) || !isTensorNode(b, rhs)) {
-        return; // numeric array parts take no gradient
+        return; // constant numeric array parts take no gradient
     }
     const std::array<vjp_node_t, 2> lhsAxis{lhs, axis};
     const vjp_node_t split = b.addOper(Type::Int64(), "tensor:dim", lhsAxis);
@@ -665,6 +698,43 @@ void sliceVjp(VjpBuilder &b, const VjpCall &call) {
             call.inputs[0],
             b.addOper(vjpTensorType(), "tensor:slice_grad", inputs));
     }
+}
+
+// slice_sub(t, start, end, step, written): `t[a:b]` on a tensor. A slice is a selection of
+// indices along the first axis, so its adjoint is the zero-padded scatter of dy back into the
+// parent's shape at those same indices — `slice_grad` is that scatter. The forward operator
+// states a step of 1 (any other is refused at the call, before a gradient is built), and the
+// rule passes the step through so the adjoint follows the forward if that ever widens.
+// `written` bit 0 says whether the end was written: when it was not, `t[a:]` ran to the extent,
+// which is `dim(t, 0)` here.
+void sliceSubVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 5, 5);
+    auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const vjp_node_t parent = call.inputs[0], start = call.inputs[1], step = call.inputs[3];
+    const auto written = b.staticValueOf(call.inputs[4]);
+    if (!written) {
+        // The mask is a literal the compiler writes with the call (globals.cpp, `__slice__`):
+        // without it the end the forward used cannot be named, and guessing would return a
+        // gradient padded with zeros at the wrong places.
+        refuseVjp(
+            call,
+            "the bounds mask of the call is not a constant, so the end the slice ran to "
+            "cannot be recovered when the gradient is built");
+    }
+    vjp_node_t end = call.inputs[2];
+    if ((static_cast<int64_t>(*written) & 1) == 0) {
+        const std::array<vjp_node_t, 2> axisInputs{parent, staticInt(b, 0)};
+        end = b.addOper(Type::Int64(), "tensor:dim", axisInputs);
+    }
+    b.accumulateGradient(
+        parent,
+        addTensorOper(
+            b,
+            "tensor:slice_grad",
+            {*dy, parent, staticInt(b, 0), start, end, step}));
 }
 
 // take(t, indices): rows are selected with repetition, so the reverse scatters dy back and
@@ -810,6 +880,9 @@ std::vector<OpDef> layoutOps() {
     setVjp(defs, "concat", &concatVjp);
     setVjp(defs, "slice", &sliceVjp);
     setVjp(defs, "take", &takeVjp);
+    // `t[a:b]` is `slice` along the first axis, and shares its adjoint: the zero-padded
+    // scatter of the slice_grad operator.
+    setVjp(defs, "slice_sub", &sliceSubVjp);
     setVjp(defs, "shape", &camel::core::noGradient);
     // The subscript forms are differentiated by the same rule as the calls they name: the
     // indices of `t[idx]` take no gradient, and t's receives the scatter-add (takeVjp).

@@ -1,0 +1,37 @@
+/**
+ * The sigmoid chain, the operators next to it, and the two forms the fusion rule must leave
+ * alone. `chain` and `sigmoid` print the same bits before and after the pass -- they are the
+ * definition and the kernel of the same operator -- while the cost line shows four kernels
+ * becoming one. `after_matmul` is the barrier case: the elementwise chain that follows a matmul
+ * fuses into `sigmoid`, and the matmul stays a node of its own (the cost line counts it).
+ */
+module fusion_target
+
+import { Tensor, reshape, abs, exp, sigmoid, sum } from tensor
+
+func chain(x: Tensor<f32>): Tensor<f32> {
+    return 1.0 / (1.0 + exp(-x))
+}
+
+func doubled(x: Tensor<f32>): Tensor<f32> {
+    return 2.0 / (1.0 + exp(-x))
+}
+
+func positive(x: Tensor<f32>): Tensor<f32> {
+    return 1.0 / (1.0 + exp(x))
+}
+
+func after_matmul(x: Tensor<f32>, w: Tensor<f32>): Tensor<f32> {
+    return 1.0 / (1.0 + exp(-(x @ w)))
+}
+
+func main(): int sync {
+    let x = reshape([0.3, -1.2, 0.5, 2.0, 1.1, 0.4], [2, 3])
+    let w = reshape([0.1, -0.2, 0.3, 0.4, -0.5, 0.6], [3, 2])
+    // The definition against its kernel: zero means bit for bit, at every element.
+    println('chain minus sigmoid', sum(abs(chain(x) - sigmoid(x))))
+    println('doubled sum        ', sum(doubled(x)))
+    println('positive sum       ', sum(positive(x)))
+    println('after matmul minus sigmoid', sum(abs(after_matmul(x, w) - sigmoid(x @ w))))
+    return 0
+}
