@@ -61,6 +61,7 @@
 | [50_pyplot_cpython_init.md](50_pyplot_cpython_init.md) | `pyplot` 的 CPython 初始化能否推迟到首次 `plot`（H203）：H191 的 `cmo_load` 数字、边际导入测量、为什么导入期错误码与“第一个初始化者”设置使推迟可见，以及需要作者裁定的 P1/P2 |
 | [51_unchecked_examples.md](51_unchecked_examples.md) | 设计稿示例的解析现状与扫描（H206 / H211）：203 个 `examples/` 程序加 7 个其它文件在 `e543f8198` 的解析结果（206 干净 / 3 故意拒绝 / 1 已坏；基点 `880ee74b1` 是 205 / 3 / 2）、每个失败文件的依据与损坏起点、它们各自被文档围栏或计划引用的情况；H211 建成的 `check.py examples`（选择取自树上的 glob 加 7 个具名文件）、文件首行的 `// @refused-example <原因>` 标记规则（标记过必须仍不解析、未标记必须解析、两个方向都红）与计划接线 |
 | [52_cmc_cache_cost.md](52_cmc_cache_cost.md) | `.cmc` 模块缓存的成本模型（H224）：`registry_all` 28 个模块的 parse / gct / declare / GIR 与 `.cmo` 装载、冷启动 / 全部命中 / 单模块编辑三种情形在 41 ms 与 8 ms 程序上的比例、失效面里能散列与必须重算的部分，以及为什么在这些数字上完整缓存不值得实现 |
+| [53_import_cost_audit.md](53_import_cost_audit.md) | `import` 不执行任何代码的逐模块审计（H222）：标准库 28 个模块导入时除声明名字外还做什么、a/b/c 分类（a=0 / b=2 / c=26）、每行的探针与源码扫描两份证据、`python` 与 `pyplot` 的 CPython 初始化价格、搜索根与目录扫描和声明模块整份编译的价格，以及为什么模块顶层 `let` 的探针只能断言"不依赖就永不发生" |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |

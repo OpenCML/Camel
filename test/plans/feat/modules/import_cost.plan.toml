@@ -1,0 +1,51 @@
+id = "modules.import_audit"
+order = 372
+tier = "fast"
+tags = ["feat", "modules", "import", "cost"]
+desc = "`import` executes no code (design principles 3.1, ruling of 2026-10-22): every module's import declares names and nothing else, the module-level `let` probes show the root graph running only when depended on, and the modules that still work at import time are named with their class and price (H222)."
+
+# The audit of H222, one probe per module of the standard library: a program that imports the
+# module and does nothing else must exit 0, print nothing and create no file. The tool also scans
+# each module's `load()` and constructor for the shapes that make import execute code (an
+# environment read, a file or directory read, CPython initialisation, a thread, an exit hook) and
+# fails when one appears in a row the table calls declaration only. `python` and `pyplot` are the
+# two rows that do work at import; they are class b (docs/technical/50_pyplot_cpython_init.md,
+# docs/technical/53_import_cost_audit.md) and are named in the tool, not silenced here.
+[[tests]]
+name = "import.audit"
+desc = "Every module imports cleanly (exit 0, no output, no file) and does no import-time work beyond name declaration, except the rows class b names with their reason and price."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/import-audit.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["import.audit modules=28 a=0 b=2 c=26", "import.audit pyplot", "import.audit python", "import.audit array ", "import.audit resolution", "import.audit declaration"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000
+
+# The ruling itself, in the two directions the table row states (design principles 3.1, row
+# 模块顶层的 `let`): a module imported and never used runs nothing at all — the flag its top-level
+# `write_text` would leave never appears — and naming that top-level `let` is a dependency, so the
+# flag appears. A later change that made module-level `let`s eager at import fails the first, and
+# one that dropped the dependency fails the second.
+[[tests]]
+name = "import.unused_import_runs_nothing"
+desc = "A module imported by a program that never names its exports runs nothing at all: the flag its top-level `let` would write never appears."
+kind = "behavior"
+case = "../../../cases/modules/import_audit/unused_let/main.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["unused import, flag exists = false"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "import.dependent_module_let_runs"
+desc = "Naming a module-level `let` is a dependency, and the value is evaluated: the flag the module's top-level `write_text` writes exists after the use."
+kind = "behavior"
+case = "../../../cases/modules/import_audit/use_let/main.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["after use, flag exists = true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

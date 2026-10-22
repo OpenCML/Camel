@@ -1,0 +1,23 @@
+/**
+ * The import that must execute nothing, in the sharpest form the language allows (H222).
+ *
+ * `import unused_let_writer` is the only thing this program does with the module: `wrote` is
+ * never named, so the module's top-level `let` — a `write_text` of a flag file — has no dependent
+ * and must not be evaluated. Nothing in the program can check the state before the import (the
+ * import is resolved at compile time), so the check is the state after the run: `false` means the
+ * root graph of an imported-but-unused module never ran.
+ *
+ * The dependent direction is `../use_let/main.cml`; the two together separate "import runs
+ * nothing" from "depend, and it runs" (design principles 3.1: 被依赖才求值).
+ */
+module unused_let_main
+
+import { get_env } from env
+import { exists } from fs
+import unused_let_writer
+
+func main(): int sync {
+    let path = get_env('CAMEL_TEST_TMPDIR') + '/h222_unused_let_flag.txt'
+    println("unused import, flag exists =", exists(path))
+    return 0
+}
