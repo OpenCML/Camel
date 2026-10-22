@@ -10,9 +10,9 @@
  * the import of this module itself. The engines, `rewrite`, `run`, `saturate` and `extract`, take
  * the rules as an array.
  *
- * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run` and its
- * readers, H226); this file keeps their kernels, the executor and their purity. The three
- * reserved groups the language's
+ * The callable operators are declared in `stdlib/rewrite.cml` (handover H183; `run`, H226); this
+ * file keeps their kernels, the executor and their purity. The three reserved groups the
+ * language's
  * `rule` and `analysis` declarations compile to (`__rule`, `__rule_when`, `__analysis`) have no
  * callable Camel name, so they stay exported from here.
  */
@@ -20,7 +20,6 @@
 #include "rule.h"
 
 #include "analysis.h"
-#include "run.h"
 
 #include "../graph/handle.h"
 
@@ -31,6 +30,7 @@
 #include "camel/core/operator_traits.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/string.h"
+#include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
@@ -282,15 +282,25 @@ slot_t rewriteKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     }
 }
 
-/// `run(p, rules, rounds, strict)`: one application of the rules, with what it cost. This is
-/// `rewrite` with the round budget explicit and the counters kept: `run_rewrites`, `run_rounds`,
-/// `run_visited`, `run_erased`, `run_fixpoint` and `run_seconds` read them (H226). The program it
-/// produced is `run_program`.
+/// `run(p, rules, rounds, strict)`: one application of the rules, with what it cost (H226). It
+/// answers the `Run<Program>` that `stdlib/rewrite.cml` declares: a struct with the program, the
+/// rewrites applied, the rounds, the nodes visited, the nodes erased, whether the last round
+/// reached a fixpoint, and the wall time in seconds. The fields are built in the declaration's
+/// order, which is the only place their names and positions are decided together with `Run`.
 slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     const auto *base     = norm.get<const camel::runtime::Program *>(0);
     const int64_t rounds = norm.get<Int64>(2);
     const bool strict    = norm.size() > 3 && norm.get<Bool>(3);
-    const TupleType *resultType = TupleType::fallible(camel::rewritemod::RunType::get());
+    StructTypeFactory factory;
+    factory.add("result", norm.type(0));
+    factory.add("rewrites", Type::Int());
+    factory.add("rounds", Type::Int());
+    factory.add("visited", Type::Int());
+    factory.add("erased", Type::Int());
+    factory.add("fixpoint", Type::Bool());
+    factory.add("seconds", Type::Float64());
+    StructType *runType         = factory.build();
+    const TupleType *resultType = TupleType::fallible(runType);
     try {
         const auto start    = std::chrono::steady_clock::now();
         const auto compiled = engineRules(ctx, norm, 1);
@@ -301,13 +311,17 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
             rounds < 0 ? 0 : static_cast<size_t>(rounds));
         const double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
-        // The run object is rooted while the fallible box is made: that allocation can collect.
-        auto *run = camel::rewritemod::RunObject::create(
-            application.program, application.stats, seconds, mm::autoSpace());
-        mm::RootHandle root(
-            mm::autoSpace(), run, camel::rewritemod::RunType::get(), "rewrite.run");
-        const slot_t value = toSlot(root.getAs<camel::rewritemod::RunObject>());
-        return makeOk(value, resultType);
+        // The struct is rooted while the fallible box is made: that allocation can collect.
+        Struct *run = Struct::create(7, mm::autoSpace());
+        run->set(0, toSlot(const_cast<camel::runtime::Program *>(application.program)));
+        run->set(1, toSlot<Int64>(static_cast<int64_t>(application.stats.applied)));
+        run->set(2, toSlot<Int64>(static_cast<int64_t>(application.stats.rounds)));
+        run->set(3, toSlot<Int64>(static_cast<int64_t>(application.stats.visited)));
+        run->set(4, toSlot<Int64>(static_cast<int64_t>(application.stats.erased)));
+        run->set(5, toSlot<Bool>(application.stats.fixpoint));
+        run->set(6, toSlot<Float64>(seconds));
+        mm::RootHandle root(mm::autoSpace(), run, runType, "rewrite.run");
+        return makeOk(toSlot(root.getAs<Struct>()), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::run>");
     } catch (const std::invalid_argument &e) {
@@ -317,39 +331,6 @@ slot_t runKernel(ArgsView &, ArgsView &norm, Context &ctx) {
     } catch (const std::exception &e) {
         return makeError("RewriteInvalid", e.what(), "<rewrite::run>");
     }
-}
-
-slot_t runProgramKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot(const_cast<camel::runtime::Program *>(
-        norm.get<camel::rewritemod::RunObject *>(0)->program()));
-}
-
-slot_t runRewritesKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Int64>(
-        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->rewrites()));
-}
-
-slot_t runRoundsKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Int64>(
-        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->rounds()));
-}
-
-slot_t runVisitedKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Int64>(
-        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->visited()));
-}
-
-slot_t runErasedKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Int64>(
-        static_cast<int64_t>(norm.get<camel::rewritemod::RunObject *>(0)->erased()));
-}
-
-slot_t runFixpointKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Bool>(norm.get<camel::rewritemod::RunObject *>(0)->fixpoint());
-}
-
-slot_t runSecondsKernel(ArgsView &, ArgsView &norm, Context &) {
-    return toSlot<Float64>(norm.get<camel::rewritemod::RunObject *>(0)->seconds());
 }
 
 /// `saturate(p, rules, rounds)` and `saturate(p, rules, rounds, strict)`: the program with the
@@ -1054,13 +1035,6 @@ class RewriteExecutor final : public Executor {
             {"consts", constsKernel},
             {"rewrite", rewriteKernel},
             {"run", runKernel},
-            {"run_program", runProgramKernel},
-            {"run_rewrites", runRewritesKernel},
-            {"run_rounds", runRoundsKernel},
-            {"run_visited", runVisitedKernel},
-            {"run_erased", runErasedKernel},
-            {"run_fixpoint", runFixpointKernel},
-            {"run_seconds", runSecondsKernel},
             {"saturate", saturateKernel},
             {"extract", extractKernel},
             {"check", checkKernel},
@@ -1073,7 +1047,6 @@ class RewriteModule final : public BuiltinModule {
   public:
     explicit RewriteModule(context_ptr_t ctx) : BuiltinModule("rewrite", std::move(ctx)) {
         exportType(Reference("Rule"), RuleType::get());
-        exportType(Reference("Run"), camel::rewritemod::RunType::get());
         exportEntity(
             "__rule",
             OperatorGroup::create(
@@ -1164,7 +1137,7 @@ class RewriteModule final : public BuiltinModule {
                           }
                           return initial->exitType();
                       })}}));
-        // The eight callable operators (`rewrite`, `saturate`, `extract`, `check` and the four
+        // The callable operators (`rewrite`, `saturate`, `extract`, `check`, `run` and the four
         // rule readers) are declared in `stdlib/rewrite.cml`; the declarations are the one source
         // of their signatures, so the module exports none of them itself (handover H183).
     }
@@ -1191,13 +1164,6 @@ class RewriteModule final : public BuiltinModule {
              {"consts", true},
              {"rewrite", false},
              {"run", false},
-             {"run_program", true},
-             {"run_rewrites", true},
-             {"run_rounds", true},
-             {"run_visited", true},
-             {"run_erased", true},
-             {"run_fixpoint", true},
-             {"run_seconds", true},
              {"saturate", false},
              {"extract", false},
              {"check", false},

@@ -116,27 +116,31 @@ it needs from a rule object before the next allocation; a condition still runs t
 ### 3.1 Scheduling, and what an application costs
 
 The scheduling combinators are ordinary Camel functions in `stdlib/rules.cml`, over stages (a
-stage is a `Rule[]` applied by `rewrite` to a fixpoint):
+stage is a `Rule[]` applied by `run` to a fixpoint). The rule sets and the choices are `with`
+parameters, so they are written in the angle brackets of the call:
 
 | combinator | semantics |
 |---|---|
-| `seq(p, stages, strict)` | the stages once each, in the written order; a failing stage fails the sequence |
-| `first(p, stages, strict)` | the stages in the written order, the first one that rewrites something is the result; a stage that matches nothing does not stop the choice |
-| `repeat(p, rules, rounds, strict)` | one round at a time until a round applies nothing or `rounds` rounds; the round that proves the fixpoint is made and counted |
-| `until(p, rules, done, rounds, strict)` | one round at a time while `done(p)` is false, until a fixpoint or `rounds` rounds |
-| `alternate(p, a, b, rounds, strict)` | one round of `a`, then one of `b`, until a full pair applies nothing or `rounds` pairs |
+| `seq<stages, strict>(p)` | the stages once each, in the written order; a failing stage fails the sequence |
+| `first<stages, strict>(p)` | the stages in the written order, the first one that rewrites something is the result; a stage that matches nothing does not stop the choice |
+| `repeat<rules, rounds, strict>(p)` | one round at a time until a round applies nothing or `rounds` rounds; the round that proves the fixpoint is made and counted |
+| `until<rules, done, rounds, strict>(p)` | one round at a time while `done(p)` is false, until a fixpoint or `rounds` rounds |
+| `alternate<left, right, rounds, strict>(p)` | one round of `left`, then one of `right`, until a full pair applies nothing or `rounds` pairs |
 
-Each answers `(Program, int, int, int)!`: the program, the rewrites applied, the rounds made and
-the nodes visited, summed over the stages. A combinator never reorders a stage's rules and never
+Each answers a `Run<Program>`: `result` is the program, and `rewrites`, `rounds`, `visited`,
+`erased`, `fixpoint` and `seconds` are what the schedule cost, summed over the stages (`fixpoint`
+is the last application's). The functions are written with `loop ... for ... while` and `?->`; no
+helper carries an index or an accumulator. A combinator never reorders a stage's rules and never
 drops a match: a stage that applies nothing leaves the count at zero.
 
-`run` is the same engine with the round budget explicit and the counters kept in a `Run` value.
-Its readers are `run_program`, `run_rewrites`, `run_rounds`, `run_visited`, `run_erased`,
-`run_fixpoint` and `run_seconds`. `run_seconds` is the wall time of one application: compiling
-the rules, matching, rewriting the graphs and the commit; it is measured in the kernel with
-`std::chrono::steady_clock`. `run_visited` is the number of alive nodes that take part in a
-rewrite, summed over rounds and graphs (`DraftWritings::rewrite` increments it for every node it
-considers); `run_rewrites` is the number of replacements actually made. The numbers are ordinary
+`run(p, rules, rounds, strict)` is the same engine with the round budget explicit and the cost
+kept in a `Run` value. `Run` is a plain Camel struct declared in `stdlib/rewrite.cml`; the native
+kernel fills its seven fields in that order, so a field is read as `r.rewrites` and the program is
+`r.result`. `seconds` is the wall time of one application: compiling the rules, matching,
+rewriting the graphs and the commit; it is measured in the kernel with
+`std::chrono::steady_clock`. `visited` is the number of alive nodes that take part in a rewrite,
+summed over rounds and graphs (`DraftWritings::rewrite` increments it for every node it
+considers); `rewrites` is the number of replacements actually made. The numbers are ordinary
 values, so a benchmark prints them from Camel and the plan can pin them.
 
 ## 4. The check
