@@ -1,0 +1,217 @@
+# H14 报告
+
+分支：`handover/H14-fstring`，工作树 `D:\Projects\Camel-wt\h14-fstring`（HEAD `37e447a6`）。
+本报告覆盖：反引号字符串插值的词法、AST 降低、工具（格式化器、语法高亮、语言服务器）、测试、文档，以及期望输出的每一处变更。改动全部留在工作树，未提交。
+
+## 1. 结论
+
+任务书五项的完成情况：
+
+1. **词法**：`FString` 记号内记录每个 `${EXPR[:SPEC]}` 的字节范围；`${` 到匹配的 `}`（跳过字符串、注释、嵌套花括号）结束；`:(格式说明)` 在括号外的第一个 `:` 处切开；普通 `{}` 是字面字符；`\${`、`` \` `` 是转义；可跨行。
+2. **语义**：`visitFStringData` 把格式化字符串**直接建成** `'...'->format<...>` 的同一棵 AST：文字里的 `{}` 加倍、`${EXPR}` 变占位符，`format` 的 with 实参就是各插值表达式。GCT/GIR 及之后的所有调度器和 `std::cpp` 看到的只是 `format` 调用；格式说明与类型不符沿用 `format` 的 `checkFormat`，错误位置由 GIR 从生成的模式串按占位符顺序找回对应表达式，报告在**那个插值**上。
+3. **工具**：格式化器保留反引号字符串原文（插值内代码不改写）；VS Code TextMate 语法把 `${...}` 识别为 `meta.interpolation.camel` 并继续高亮其中的表达式；语言服务器在 `${...}` 内提供悬停、转到定义与补全（补全不再被“在字符串里”提前返回）。
+4. **测试**：新增 `test/cases/compile/fstring/` 五个用例，四个调度器逐字节一致，`std::cpp` 与 `std::fvm` 输出一致；格式化器、语言服务器、语法表、文档链接、示例、exemplar、smoke、parse 计划均已运行（见第 6 节）。
+5. **文档**：语言参考 2.5.3.1（中英）、6.2.1（中英）、3.3.4 表、8 的“未实现”表、技术参考 2.4；并把若干示例/文档里的 `format` 改成插值。
+
+## 2. 词法设计
+
+### 2.1 记号与 `TokenBuffer`
+
+`include/camel/parse/syntax/token.h`：
+
+- 新增 `FStringInterpolation { token, open, exprBegin, exprEnd, specBegin, specEnd, close, hasSpec }`，记录一段插值在文件中的字节范围；`token` 是它所属 `FString` 记号在 `TokenBuffer::tokens()` 中的下标。
+- `TokenBuffer` 新增 `interpolations_`、`interpolations()`、`interpolationsOf(token)`。**记号本身不变**：一个反引号字符串仍是一个 `FString`，宽度、行列、CST 都是原来的，格式化器与既有工具不受影响。
+
+### 2.2 扫描
+
+`src/parse/syntax/lexer.cpp`：
+
+- `skipQuoted` / `skipFString` / `scanInterpolation`：找插值的 `}` 时按 Camel 源码扫描——跳过 `'...'`、`"..."`、`'''...'''`、`` `...` ``（可嵌套）、`//`、`/* */`，并维护 `{}` 深度；因此 `${ { a: 1 } }`、`${ '}' }`、`` `${`c ${n} d`}` `` 都在正确的位置结束。
+- `\${` 是字面的 `${`，不开始插值；`` \` `` 不结束字符串；`\\` 消耗两个字节。其他 `\x` 原样留给 `decodeEscapes`，与普通字符串一致。
+- 未闭合的格式化字符串退化为 `Error` 记号并记 `UnclosedString`（沿用字符串的行为），不会让整个文件无法继续。
+- 行表：全量词法时与以前一样在扫描过程中记录换行；区间词法（见 2.3）在区间前预建前缀、区间后补后缀，因此诊断的行列仍是文件中的行列。
+
+### 2.3 把插值当普通表达式词法/语法
+
+- `Lexer::tokenizeRange(source, begin, end)`：仍持有**整个源文件**（token 偏移、行表都是文件的），但只对 `[begin, end)` 生成记号，并以 `Eof` 结束。这样插值里的表达式得到的 AST 节点，其 origin/位置就是文件里的真实位置。
+- `Parser::parseExpression(TokenBuffer)` / `ParserImpl::runExpression()`：解析一条表达式并要求读到 `Eof`；失败时把语法/词法诊断按子缓冲区的真实偏移报告。
+- `splitInterpolation`：对 `${EXPR:SPEC}` 的区间先整体词法化，在 `LParen/LBracket/LBrace/LAngle` 深度为 0 的**第一个 `:`** 处分开表达式与格式说明（`Gt` 参与深度，因此 `Map<string, int>` 里的 `,`、`>` 不会误切）。`specBegin/specEnd` 为空时 `hasSpec=false`。
+- 已知限制见第 8 节：顶层 `:` 出现在带类型标注的 lambda 返回处会被当成格式说明分隔符。
+
+## 3. AST 降低
+
+### 3.1 生成的树
+
+`src/parse/ast/builder.cpp`，`Builder::visitFStringData`：
+
+```text
+`a ${x} b ${y:.2f} {c}`     ==>     'a {} b {:.2f} {{c}}'->format<x, y>
+```
+
+- **模式串**：按源文本逐段拼接；`${EXPR}` 写成 `{}`，`${EXPR:SPEC}` 写成 `{:SPEC}`；文字里的 `{`、`}` 各写两遍（`escapeFormatBraces`）；`\${` 解成 `${`，`` \` `` 解成 `` ` ``；其余转义保留给 GCT 的 `decodeEscapes`。换行原样保留。
+- **实参**：每个插值用 `Lexer::tokenizeRange` + `Parser::parseExpression` 得到子 AST，再 `visitExpr(sub.root())`。因此插值表达式在**它写的位置**、按**它所在的词法作用域**求值；`if` 块、结构体字面量、元组、嵌套格式化字符串、调用、字段访问都可以。
+- **调用**：`Call(Bind(Ref(format), args...), [Literal(pattern)])`，与手写长形式生成的节点同构、同语义；`format` 用 `qualifyRef` 限定，命名空间/导入规则与长形式相同。子节点的 token 范围是文件里的真实范围；`setTokenRangeDeep` 只在子缓冲区有错时把范围指回 `FString` 记号（诊断提示用，origin 不变）。
+- **错误**：插值内的词法/语法错误原样上报（`bad_expr.cml` 得到 `SyntaxDiag::UnexpectedEndOfFile`，位置在文件第 3 行第 26 列，即插值内）；子解析失败时仍返回一个空字符串字面量占位，避免二次崩溃。
+- 模式位置（`visitLiteral`，用于 pattern/常量）遇到 `FString` 时给出 `ConstructNotSupported`：“a formatted string is not a constant, so it cannot be a pattern”。表达式位置不再经过这条路径。
+
+### 3.2 格式说明的编译期检查与定位
+
+- AST→GCT：`LiteralLoad` 增加 `fromFormattedString_`（`include/camel/parse/ast/data.h`）；GCT `DATA` 节点用未用的 `kFlagA` 记同一个事实（`include/camel/compile/gct/node.h`、`src/compile/gct/builder.cpp`）。**GCT 的 FString 分支保留**为不可达的防御（真正的格式化字符串已是 Call，不会走到那里）。
+- GIR（`src/compile/gir/builder.cpp`）：`format` 的 `checkFormat` 失败时，若模式 DATA 带此标记，就用 `formatPlaceholders` 依次取出 `{...}`，对第 i 个占位符单独调用 `checkFormat`，第一个失败的对应 `withInputs[i]`（插值表达式），诊断报在 `arguments[i].expr->origin()`：
+
+```text
+error[SemanticDiag::ArgumentsRejected]: Invalid call to 'format' with argument types
+format specifier '{:d}' of an interpolation: invalid format specifier.
+  --> bad_spec.cml:3:23
+ 3 |     println(`value: ${'text':d}`)
+   |                       ^^^^^^
+```
+
+- 非格式化字符串的 `format`/`print` 仍走原来的整串消息（`format string '...'`），行为不变。生成的模式总是按书写顺序的 `{}`/`{:spec}`，不含显式下标，因此按顺序扫描是可靠的。
+
+## 4. 工具
+
+### 4.1 格式化器（`tools/format/fmt.cpp`）
+
+- `FString` 分支原样输出记号文本：反引号字符串整体是一个 token，缩进/换行/插值内代码都保持书写形式；格式化器不会也不能改写插值表达式（报告为待决问题）。
+- 顺带修了一个被本特性暴露出来的旧缺陷：三引号字符串以前会被 `trim` 后重新放到独立行上，导致字符串值多出前导/尾随换行（`frontend.format_keeps_ast` 因此失败）。现在三引号字符串与含两种引号的字符串一样**原样保留**。这是语义修复，见第 7 节。
+- 新增 `test/cases/format/fstring.cml` 与 golden；断言反引号字符串内容不变、外围代码照常格式化。
+
+### 4.2 语法高亮（`editors/vscode/syntaxes/camel.tmLanguage.json`）
+
+- 反引号规则内新增 `#fstring-escape`（`\${`、`` \` ``、普通字符串转义）与 `#fstring-interpolation`。
+- `fstring-interpolation`：`begin "\\$\\{"`、`end "\\}"`，内部先识别 `:格式说明`（`constant.other.placeholder.camel`），再 `include: "$self"` 继续高亮任意表达式；格式说明必须以说明符字符开头（`[<>=^+\-0-9.#,]`），以免把结构体字面量的 `: x` 当成说明。
+- 已知限制（写在 grammar 的 comment 里）：TextMate 不能配对花括号，插值表达式里**嵌套块/结构体的 `}`** 会提前结束高亮；编译器没有这个限制。没有安装 `vscode-textmate`/`vscode-oniguruma` 时 scope 快照测试按计划跳过（本机未安装，未联网安装）。
+
+### 4.3 语言服务器（`src/service/semantic`）
+
+- `SyntaxIndex` 新增 `fstringExpressions`：`walk` 到 `Literal` 时，对每个插值记下表达式范围，并用 `Lexer::tokenizeRange` + `Parser::parseExpression` 建子树、继续 `walk`，因此插值内的名字引用/声明进入索引——悬停、转到定义、语义记号本来就走这些引用。
+- `queries.cpp` 的 `completions` 在“光标在注释/字符串里就返回空”的检查前，先看光标是否落在某个 `fstringExpressions` 范围内；是则继续补全。于是插值内可以补全作用域名，即使插值表达式还没写完（主 CST 仍然有效，因为整个字符串是一个 token）。
+- 另加 `test/cases/tools/lsp/fstring.test.mjs` 与 fixture：悬停局部变量、被调函数、字段，转到定义，`${n/*c*/}` 处补全（11 项检查）。
+
+## 5. 测试
+
+### 5.1 新增用例
+
+`test/cases/compile/fstring/`：
+
+| 用例 | 内容 | 期望 |
+| --- | --- | --- |
+| `basic.cml` | 局部变量、算术、`{:.2f}`、括号表达式、嵌套反引号、字面 `{}`、`\${`、`` \` `` | 7 行逐字节一致 |
+| `multiline.cml` | 跨三行的格式化字符串，中间插值 | 换行原样 |
+| `nested.cml` | `if` 块、结构体字面量、`${'{'}`、元组 | 4 行 |
+| `bad_spec.cml` | `${'text':d}` | `SemanticDiag::ArgumentsRejected`，3:23，消息含 `format specifier '{:d}' of an interpolation` |
+| `bad_expr.cml` | `${1 +}` | `SyntaxDiag::UnexpectedEndOfFile`，3:26 |
+
+另：`test/cases/trans/cpp/fstring.cml` 加入 `test/tools/cppexec/expect.txt`；`test/cases/format/fstring.cml` + golden；`test/cases/tools/lsp/fixtures/fstring.cml` + `fstring.test.mjs`。
+
+### 5.2 运行结果（最终二进制，逐项）
+
+| 命令 | 结果 |
+| --- | --- |
+| `node scripts/test.js test/plans/feat/compile/fstring.plan.toml` | **14/14**（basic/multiline/nested × nvm/fvm/jit/prl + 两个 negative） |
+| `node scripts/test.js test/plans/feat/compile/not_supported.plan.toml` | **16/16**（删除了 formatted_string 一项） |
+| `node scripts/test.js test/plans/feat/compile/literals.plan.toml` | **27/27** |
+| `node scripts/test.js test/plans/feat/compile/diag_catalog.plan.toml` | **3/3** |
+| `node scripts/test.js test/plans/feat/format/core.plan.toml` | **10/10** |
+| `node scripts/test.js test/plans/feat/tools/lsp.plan.toml` | **8/8**（含 `lsp.fstring`，11 checks） |
+| `node scripts/test.js test/plans/feat/trans/cpp.plan.toml` | **7/7**（`agree_with_fvm` 覆盖 `fstring.cml`） |
+| `python test/tools/cppexec/run.py test/cases/trans/cpp/fstring.cml` | `1 same`，`not the same:` 为空 |
+| `node scripts/test.js smoke` | **10/10** |
+| `node scripts/test.js test/plans/feat/examples.plan.toml` | **111/111** |
+| `node scripts/test.js test/plans/feat/exemplars.plan.toml` | **8/8** |
+| `node scripts/test.js test/plans/feat/docs_links.plan.toml` | **1/1** |
+| `node scripts/test.js test/plans/feat/parse` | 47/48；唯一失败是 `frontend.ast_snapshot` 的 91 处**基线已有**差异（见 5.4）。`frontend.format_keeps_ast`、`fuzz_lossless_tree`、`grammar.reference_in_step` 全过 |
+| `node scripts/test.js test/plans/feat/tools/grammar.plan.toml` | 1 pass / 1 fail / 10 skip；`grammar.files` 过，`grammar.tables` 失败于基线缺 `constas` 关键字（见 5.5），scope 快照因缺依赖跳过 |
+| `node scripts/test.js test/plans/feat/compile`（整目录） | 曾运行一次：737 项 732 过、5 失败；5 项在最终二进制上已分别验证通过：`fstring_basic` 4 项（当时二进制还没有 `` \` `` 解码）与 `catalog.doc_is_generated`（当时还没重新生成文档）。按协调者要求未再整目录重跑 |
+
+### 5.3 四个调度器逐字节一致，以及 `std::cpp`
+
+对 `basic.cml`、`multiline.cml`、`nested.cml` 分别用 `std::nvm`、`std::fvm`、`std::jit`、`std::prl` 运行，保存 stdout 后取 SHA-256：
+
+```text
+basic     identical=True 33619FE585B3689911E83C91B41BF97BC5518AF40B22168F598062BECC800E07
+multiline identical=True 56496B827C72C0B4532C356B28820EE700045582AAA4865646678A06451AFE68
+nested    identical=True 7CD47F9851CA1656B57CA64A846F20BEAFA67D760BE23722CD308AEA029E64CE
+```
+
+`std::cpp`：`test/tools/cppexec/run.py` 用系统 `clang++` 编译生成的 C++ 并运行，与 `std::fvm` 的输出和退出码比较，结果为 `same`；`fstring_cpp.cml` 的输出（含 `${3.14159:.2f}`）逐字节一致。
+
+### 5.4 AST 快照
+
+- 新增文件不要求进快照（“not in the snapshot yet”）。
+- 修改了 6 个含代码的文件（4 个 example、1 个 exemplar、教程 `12_stdlib.cml`），加上 `test/cases/tools/grammar/literals.cml`（现在能建立 AST），共 7 行；删除 `test/cases/compile/not_supported/formatted_string.cml` 一行。快照只更新这 8 行，没有 `--update` 全量重写。`literals.cml` 的哈希在最终二进制（`` \` `` 解码）上重新算过，最终值为 `64a3f16ccaa182a6`。
+- 运行结果：**91 difference(s)**。这个数字与基线提交 `ffb25e16` 的说明“the snapshot update was not run wholesale (91 differences predate this change)”完全一致；差集里没有任何本任务的文件。为确认，逐项核对了 91 个路径均不在本次改动内，未触碰它们。
+
+### 5.5 预期失败（基线问题，非本任务引入）
+
+- `frontend.ast_snapshot`：见 5.4，91 处基线差异。
+- `grammar.tables`：报 `keyword 'constas' ... is matched by no pattern`。`constas` 是 HEAD 的 H4a 合并带进来的关键字，本次只改了 fstring 相关的 grammar 规则，`git diff` 的 keywords 规则未变。未修改该关键字（属于 H4a 的 grammar 工作）。
+- `grammar.scopes.*`：`vscode-textmate`/`vscode-oniguruma` 未安装，按计划跳过；不联网安装依赖。
+
+## 6. 期望输出/快照的变更（逐条）
+
+| 变更 | 依据 |
+| --- | --- |
+| 删除 `not_supported.formatted_string` 测试与 `formatted_string.cml` | 该用例断言“反引号字符串 `ConstructNotSupported`”；本任务实现后不再成立。覆盖移到 `compile/fstring.plan.toml` |
+| `test/plans/feat/format/golden/fstring.cml` 新增；`core.plan.toml` 增加 `format.fstring_snapshot` | 新功能 |
+| `test/plans/feat/parse/golden/ast_hashes.txt`：7 个转换过的文件 + `tools/grammar/literals.cml` 换行；删除 `formatted_string.cml` 一行 | 插值降低为 `format` 调用后，这些文件的 AST 结构/记号范围按预期变化；`literals.cml` 从“reject”变“ok”。其余 91 行基线差异不动 |
+| `docs/diagnostics.md` 重新生成 | 诊断目录按测试挑示例：`ArgumentsRejected` 的示例改为 `fstring/bad_spec.cml`，`UnexpectedEndOfFile` 的示例改为 `fstring/bad_expr.cml`（原先“无示例”）。这是生成器的正常结果 |
+| 三引号字符串格式化行为 | 旧行为重排内容、改变字符串值（`frontend.format_keeps_ast` 失败）；新行为原样保留，与“内容是值”一致 |
+| `test/cases/tools/grammar/literals.cml` 的注释由“compiler rejects it”改为“AST builder makes it a `format` call” | 事实变化；该注释变动使该文件的 AST 哈希再变一次（快照已更新） |
+| 文档中 `format` 改为插值 | 任务书第 5 条；输出都保持不变（`format` 与插值同树） |
+
+## 7. 文档改动
+
+- `docs/language/02_lexical.md`、`en/02_lexical.md`：新增 2.5.3.1 “格式化字符串/Formatted strings”，写清插值、`:格式说明`、字面 `{}`、`\${`、`` \` ``、跨行、与 `format` 同树，并给出例子与输出。2.5.3 的“尚未实现”删除。
+- `docs/language/06_expressions.md`、`en/06_expressions.md`：新增 6.2.1，说明降低规则、求值位置/顺序、编译期检查与定位、错误不被吞、四个调度器/`std::cpp` 一致、格式化器不改写插值；把管道例子里的 `'total = {}'->format<total>` 改成 `` `total = ${total}` ``。
+- `docs/language/03_data_model.md`、`en/03_data_model.md`：字符串内建表增加插值一行。
+- `docs/language/04_execution_model.md`、`en/04_execution_model.md`：`greet` 例子改为插值。
+- `docs/language/08_top_level_and_grammar.md`、`en/08_top_level_and_grammar.md`：删除“格式化字符串 → ConstructNotSupported”一行。
+- `docs/technical/00_language_reference.md`：FSTRING 条目改为插值语法与 2.5.3.1/6.2.1 的引用。
+- `docs/tutorial/examples/12_stdlib.cml`：`'{:.4f}'->format<pi>` → `` `${pi:.4f}` ``（输出不变）。
+- `examples/cli/exit_status.cml`、`examples/data/records.cml`、`examples/data/validate_input.cml`、`examples/text/word_frequency.cml`、`exemplars/06_loop_carried_state/program.cml`：把合适的 `format` 改为插值；examples/exemplars 计划全过，输出未变。
+- `docs/diagnostics.md`：生成器重生成（见第 6 节）。
+
+## 8. 待决问题
+
+1. **插值表达式顶层的 `:`**：词法在括号外第一个 `:` 处切分格式说明，因此带类型标注的 lambda 返回类型会被误读：`` `${(x: int): int => x}` `` 把 `: int => x` 当成格式说明。加一层括号（`` `${((x: int): int => x)}` ``）可避开，或用 `format` 长写法。更稳的规则（试解析整段、失败再按合法格式说明回退）会把词法变成“先解析”，需要语言作者定夺；本次未改。
+2. **格式化器不格式化插值内的代码**：反引号字符串整体作为一个 token 原样保留（与普通字符串内容一致）。要格式化 `${...}` 里的表达式，需要重新拼接 token 文本并保持偏移/换行，属于新的格式化策略；本次未做。
+3. **TextMate 无法配对插值里的花括号**：嵌套块/结构体的 `}` 会提前结束高亮。语法文件里已注明；彻底解决需要编辑器侧的括号配对或语义高亮（语义记号已由语言服务器提供）。
+4. **`{}` 的字面含义**：在格式化字符串里普通 `{`/`}` 是字面字符（任务书要求），而 `format` 的模式串仍要把它们写成 `{{`/`}}`。降低时自动加倍，用户不需要知道；但把同一段文字在“插值”与“长形式 `format`”之间搬动时，长形式仍需手写双括号。文档已说明两者同树。
+5. **`\`` 的解码**：本实现把 `` \` `` 解成字面反引号（否则无法在格式化字符串里写反引号）；普通字符串里 `` \` `` 仍按原样保留（`decodeEscapes` 不处理它）。这是本次定下的行为，已写入 2.5.3.1；若语言作者希望普通字符串也解码，需要单独统一。
+6. **GCT 的 FString 分支**：保留为不可达的防御（`src/compile/gct/builder.cpp` 的 `LiteralType::FString`），因为 AST 降低后不再产生该类型的 DATA。若以后有别的路径直接构造 FString 字面量，需要重新决定其含义（常量？模式？）。
+7. **`${}` 空插值**：当前按语法错误报告（子表达式为空，`UnexpectedEndOfFile`/`UnexpectedToken`）；是否需要专门的消息，待语言作者决定。
+
+---
+
+## 9. 复核（2026-10-21，HEAD `6a1c40c0`）
+
+本任务已由 `119195dc`（合并 `2f4e413b`）落在 develop 上；本工作树从 develop 创建，所以复核时已包含全部 H14 改动，**本轮没有再改源码或测试**。以下是构建、计划与边界探测的结果，作为实现经过后续合并（分支臂、复数、规则声明、pass 模块等）之后的回归确认。
+
+### 9.1 构建与计划
+
+构建：`camel-build.ps1 -Path D:\Projects\Camel-wt\h14-fstring`，exit 0（614 步）。
+
+| 计划 | 结果 |
+| --- | --- |
+| `test/plans/feat/compile/fstring.plan.toml` | 14/14 |
+| `test/plans/feat/compile`（整目录） | 832/832 |
+| `test/plans/feat/format` | 10/10（含 `format.fstring_snapshot`） |
+| `test/plans/feat/trans/cpp.plan.toml` | 8/8（`agree_with_fvm` 覆盖 `fstring.cml`） |
+| `smoke` | 10/10 |
+| `test/plans/feat/parse` | 53/54，唯一失败 `frontend.ast_snapshot`（见 9.3） |
+| `test/plans/feat/tools/lsp.plan.toml` | 8/8（含 `lsp.fstring`） |
+| `test/plans/feat/tools/grammar.plan.toml` | 1 过 / 1 失败 / 10 跳过（见 9.3） |
+| `test/plans/feat/examples.plan.toml` | 111/111 |
+| `test/plans/feat/exemplars.plan.toml` | 8/8 |
+| `test/plans/feat/docs_links.plan.toml` | 1/1 |
+
+### 9.2 边界复测
+
+`D:\Temp\h14-probe.cml` 在 `std::nvm`、`std::fvm`、`std::jit`、`std::prl` 上输出逐字节一致，覆盖：相邻插值；单引号、双引号（含转义引号）与反引号字符串里的 `}`；块注释里的 `}`；嵌套反引号字符串里的 `}`；`${({ k: 9 }).k:d}` 里结构体字面量的 `:` 不误当格式说明；`${a < b}` 的 `<` 不误当类型实参；对齐说明 `${x:<4}`；数组下标；`\\${x}`（转义反斜杠后接插值）。另测 `${}` 报 `UnexpectedEndOfFile`（位置在 `}`），未闭合反引号报 `UnclosedStringLiteral`，均无崩溃。`test/tools/cppexec/run.py`（`clang++`）对 basic、multiline、nested 与上述探测程序共 4 个程序全部 `same`（std::cpp 与 std::fvm 的标准输出和退出码逐字节一致）。第 8 节第 1 条的顶层 `:` 限制仍在。
+
+### 9.3 基线失败（非 H14，未改期望）
+
+- `frontend.ast_snapshot`：`test/cases/definitions/bad_definitions.cml` 现哈希 `06c3b5c40ca60348`，golden 仍为 `7a250294764c09f9`。该用例在 `5c40c184`（H37）增加了 8 行而没有随之更新哈希，与本任务无关。
+- `grammar.tables`：`c64`、`c128` 未列入语法文件的 `builtin-types`，来自 H15 复数（`92ea1d60`）；原先的 `constas` 一项已由其他改动修好。scope 快照仍因未安装 `vscode-textmate`/`vscode-oniguruma` 跳过。
