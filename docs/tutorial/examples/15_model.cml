@@ -5,7 +5,7 @@ module model
 
 import { Tensor, ones, relu, sum } from tensor
 
-func main(x: Tensor<f32, const [2, 3]>): Tensor {
+func main(x: Tensor<f32, [2, 3]>): Tensor {
     let w = ones([3, 1])
     return relu(x @ w)
 }

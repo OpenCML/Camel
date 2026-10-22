@@ -22,6 +22,34 @@
 
 namespace camel::parse::ast {
 
+namespace {
+
+/// One `[extent, ...]` as it is written: `[]` for the unknown dimension, `?` for an unknown
+/// extent next to others, `..name` for a pack (design principles 5.4).
+std::string dimGroupCode(const DimGroup &group) {
+    if (group.empty()) {
+        return "[]";
+    }
+    std::string result = "[";
+    bool first         = true;
+    for (const node_ptr_t &extent : group.extents) {
+        if (!first) {
+            result += ", ";
+        }
+        first = false;
+        result += extent ? extent->load()->geneCode() : "?";
+    }
+    if (group.pack != DimPack::None) {
+        if (!first) {
+            result += ", ";
+        }
+        result += group.pack == DimPack::Named ? ".." + group.packName : "..";
+    }
+    return result + "]";
+}
+
+} // namespace
+
 std::string to_string(TypeType type) {
     switch (type) {
     case TypeType::Null:
@@ -30,6 +58,8 @@ std::string to_string(TypeType type) {
         return "Expr";
     case TypeType::Array:
         return "List";
+    case TypeType::ArrayDim:
+        return "ArrayDim";
     case TypeType::Struct:
         return "Struct";
     case TypeType::Tuple:
@@ -95,11 +125,13 @@ const std::string SpecTypeLoad::geneCode() const { return "<>"; }
 
 const std::string ArrayTypeLoad::geneCode() const {
     std::string result = "";
-    for (size_t i = 0; i < dims_; i++) {
-        result += "[]";
+    for (const DimGroup &group : dims_) {
+        result += dimGroupCode(group);
     }
     return result;
 }
+
+const std::string ArrayDimLoad::geneCode() const { return dimGroupCode(dim_); }
 
 const std::string StructTypeLoad::geneCode() const { return "{}"; }
 

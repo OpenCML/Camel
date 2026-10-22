@@ -11,9 +11,9 @@ func shaped(rows: int, cols: int): Tensor {
 
 func main(): int sync {
     println('before')
-    let a = shaped(2, 3) as Tensor<f32, const [2, 3]>
+    let a = shaped(2, 3) as Tensor<f32, [2, 3]>
     println(a)
-    let b = shaped(3, 2) as Tensor<f32, const [2, 3]>
+    let b = shaped(3, 2) as Tensor<f32, [2, 3]>
     println(b)
     println('not reached')
     return 0

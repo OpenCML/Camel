@@ -7,7 +7,7 @@ module tensor_target
 
 import { Tensor, reshape } from tensor
 
-type Vec = Tensor<f32, const [3]>
+type Vec = Tensor<f32, [3]>
 
 func combine(x: Vec): Vec { return x * 3.0 + x * 5.0 }
 func combine_mixed(x: Vec): Vec { return x * 3.0 + x * -5.0 }

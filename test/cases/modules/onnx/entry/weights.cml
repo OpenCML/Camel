@@ -7,7 +7,7 @@ module weights
 
 import { Tensor, tanh } from tensor
 
-type Linear = { w: Tensor<f32, const [3, 4]>, b: Tensor<f32, const [4]> }
+type Linear = { w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]> }
 type Model = { fc: Linear }
 
 with <p: Linear>
@@ -16,6 +16,6 @@ func linear(x: Tensor): Tensor {
 }
 
 with <p: Model>
-func main(x: Tensor<f32, const [-1, 3]>): Tensor {
+func main(x: Tensor<f32, [?, 3]>): Tensor {
     return x->linear<p.fc>->tanh
 }

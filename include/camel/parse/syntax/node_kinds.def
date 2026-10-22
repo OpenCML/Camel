@@ -123,7 +123,9 @@ CAMEL_NODE(DiffType, Type)             // keyUnionDiffType ('\\' keyUnionDiffTyp
 CAMEL_NODE(KeyUnionDiffType, Type)     // keyInterType (('+' | '-') keyInterType)*
 CAMEL_NODE(KeyInterType, Type)         // typeUnit ('^' typeUnit)*
 CAMEL_NODE(TypeUnit, Type)             // identDef 'of' arrayType
-CAMEL_NODE(ArrayType, Type)            // specType ('[' ']')+
+CAMEL_NODE(ArrayType, Type)            // specType arrayDim+
+CAMEL_NODE(ArrayDim, Type)             // '[' (']' | arrayDimItem (',' arrayDimItem)*) ']'
+                                       //   arrayDimItem: '?' | '..' identDef? | dataExpr
 CAMEL_NODE(SpecType, Type)             // primaryType '<' typeOrData (',' typeOrData)* '>'
 CAMEL_NODE(ConstData, Type)            // 'const' dataExpr (a typeOrData that is data)
 CAMEL_NODE(StructType, Type)           // '{' (keyTypePair (',' keyTypePair)*)? ','? '}'

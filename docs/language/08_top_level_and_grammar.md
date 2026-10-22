@@ -84,7 +84,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
 - `typeas T`：[7.5](07_statements.md#75-泛型函数)。
-- `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参只能写在函数声明的形参表最前面。
+- `constas n`：函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)），写在形参表最前面。形状里的维度名不再写 `constas`：名字在形参类型里第一次出现时自动绑定，之后直接写 `n`（见 [3.1](03_data_model.md) 的数组一栏）。
 - `enum`：[3.5](03_data_model.md#35-枚举-enum)。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 
@@ -217,9 +217,11 @@ diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
 keyInterType       : typeUnit ('^' typeUnit)*
 typeUnit           : (identDef 'of')? arrayType
-arrayType          : specType ('[' ']')*
+arrayType          : specType arrayDim+
+arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-typeOrData         : typeExpr | 'const' dataExpr
+typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
                      | 'typeof' dataExpr | 'typeas' identDef
 tupleType          : '(' typeList? ','? ')'

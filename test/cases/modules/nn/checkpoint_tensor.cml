@@ -14,7 +14,7 @@ func main(mode: int, dir: string): int sync {
         let _ = println(load_tree::<Tensor<int>>(dir))
         return 0
     } else if mode == 2 then sync {
-        let _ = println(load_tree::<Tensor<f32, const [3]>>(dir))
+        let _ = println(load_tree::<Tensor<f32, [3]>>(dir))
         return 0
     } else if mode == 3 then sync {
         let loaded: Tensor<f32>! = load_tree(dir)

@@ -10,7 +10,7 @@ import { Tensor, reshape } from tensor
 import { Program } from graph
 import { rewrite } from rewrite
 
-type Vec = Tensor<f32, const [3]>
+type Vec = Tensor<f32, [3]>
 
 /// The f32 sum of the coefficients overflows: at x = 0 the products are 0, but a coefficient of
 /// f32 infinity makes the rewrite 0 * inf = NaN.

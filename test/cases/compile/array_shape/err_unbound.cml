@@ -1,0 +1,11 @@
+// The return type writes `n`, but no parameter binds it: the caller has no argument that
+// could say what it is.
+module array_shape_err_unbound
+
+func bad(x: f32[]): f32[n] {
+    return x
+}
+
+func main(): int sync {
+    return 0
+}

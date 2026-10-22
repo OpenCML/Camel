@@ -4278,6 +4278,12 @@ Type *Builder::visitType(const AST::node_ptr_t &ast) {
     case AST::TypeType::Array:
         res = visitArrayType(ast);
         break;
+    case AST::TypeType::ArrayDim:
+        // A shape is an argument of a type, never a type of its own.
+        diags_->of(SemanticDiag::InvalidTypeArgument)
+            .at(ast->load()->tokenRange())
+            .commit("a shape", "a shape is written after the element type, as in 'f32[3]'");
+        throw BuildAbortException();
     case AST::TypeType::Struct:
         res = visitStructType(ast);
         break;
@@ -4474,18 +4480,40 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
 }
 
 /*
-ArrayType(siz dim) : Type type ;
+ArrayType() : Type type, extent* ;
+One `[...]` is one dimension, also when it is empty: `T[][]` is an array of arrays, and `T[3]`
+is one dimension of three. The pack makes the rank open after the extents written before it.
 */
 Type *Builder::visitArrayType(const AST::node_ptr_t &ast) {
     ENTER("ArrayType");
     ASSERT(ast->type() == AST::LoadType::Type, "Expected TypeLoad type for ArrayType");
-    // `T[][]` reaches here as one node of two dimensions: an array of arrays of T. One array
-    // type per dimension; a single one made `T[][]` mean `T[]`.
     const auto &arrayTypeLoad = ast->loadAs<AST::ArrayTypeLoad>();
     Type *type                = visitType(ast->atAs<AST::TypeLoad>(0));
-    type                      = ArrayType::create(type);
-    for (size_t dim = 1; dim < arrayTypeLoad->dims(); ++dim) {
-        type = ArrayType::create(type);
+    for (const AST::DimGroup &group : arrayTypeLoad->dims()) {
+        const bool pack = group.pack != AST::DimPack::None;
+        if (pack && (group.packRepeated || group.packItem + 1 != group.itemCount)) {
+            // A pack is the trailing dimensions the type does not name; it can only be last,
+            // and only once (design principles 5.4).
+            diags_->of(SemanticDiag::DimensionAfterAnyRank).at(ast->load()->tokenRange()).commit();
+            throw BuildAbortException();
+        }
+        const auto extents = visitExtents(group, ast);
+        if (!extents) {
+            throw BuildAbortException();
+        }
+        try {
+            if (!pack) {
+                type = ArrayType::create(type, *extents);
+            } else if (group.pack == AST::DimPack::Anonymous) {
+                type = ArrayType::openRank(type, *extents);
+            } else {
+                type = ArrayType::create(type, *extents, group.packName);
+            }
+        } catch (const std::invalid_argument &) {
+            // A negative extent is not a dimension; `?` is the unknown extent.
+            diags_->of(SemanticDiag::InvalidExtentExpression).at(ast->load()->tokenRange()).commit();
+            throw BuildAbortException();
+        }
     }
     LEAVE("ArrayType");
     return type;
@@ -4554,44 +4582,34 @@ FuncType(Modifier[] modifiers, string uri)
 */
 namespace {
 
-/// The dimension names a parameter type binds with `constas` (design principles 5.4).
-void collectDimensionNames(const AST::node_ptr_t &ast, std::set<std::string> &names) {
-    if (!ast) {
-        return;
-    }
-    if (ast->type() == AST::LoadType::Data) {
-        const auto &data = ast->loadAs<AST::DataLoad>();
-        if (data->dataType() == AST::DataType::ConstAs) {
-            names.insert(ast->loadAs<AST::ConstAsLoad>()->ref().ident());
-            return;
-        }
-    }
-    for (size_t i = 0; i < ast->size(); ++i) {
-        collectDimensionNames(ast->at(i), names);
-    }
-}
-
 /// Whether `name` is one of the extents of `type`, anywhere in it.
 bool typeMentionsExtent(Type *type, const std::string &name) {
     if (type == nullptr) {
         return false;
     }
+    const auto formMentions = [&](const ExtentForm &form) {
+        return std::any_of(
+            form.terms().begin(), form.terms().end(), [&](const auto &term) {
+                return term.first == name;
+            });
+    };
     if (type->isOtherType()) {
         std::vector<ExtentForm> forms;
         if (static_cast<OtherType *>(type)->extentForms(forms)) {
-            for (const auto &form : forms) {
-                for (const auto &[term, coefficient] : form.terms()) {
-                    (void)coefficient;
-                    if (term == name) {
-                        return true;
-                    }
-                }
+            if (std::any_of(forms.begin(), forms.end(), formMentions)) {
+                return true;
             }
         }
     }
     switch (type->code()) {
-    case TypeCode::Array:
-        return typeMentionsExtent(static_cast<ArrayType *>(type)->elemType(), name);
+    case TypeCode::Array: {
+        auto *array = static_cast<ArrayType *>(type);
+        const auto extents = array->extents();
+        if (std::any_of(extents.begin(), extents.end(), formMentions)) {
+            return true;
+        }
+        return typeMentionsExtent(array->elemType(), name);
+    }
     case TypeCode::Tuple: {
         const auto types = static_cast<TupleType *>(type)->types();
         return std::any_of(types.begin(), types.end(), [&](Type *member) {
@@ -4657,41 +4675,36 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         Builder &self;
         std::shared_ptr<std::set<std::string>> names;
         std::shared_ptr<std::set<std::string>> bound;
+        std::shared_ptr<std::set<std::string>> packs;
+        std::shared_ptr<std::map<std::string, size_t>> uses;
         bool bind;
         explicit DimGuard(Builder &builder)
             : self(builder), names(builder.dimNames_), bound(builder.boundDims_),
-              bind(builder.dimBindAllowed_) {}
+              packs(builder.dimPacks_), uses(builder.dimUses_), bind(builder.dimBindAllowed_) {}
         ~DimGuard() {
             self.dimNames_       = names;
             self.boundDims_      = bound;
+            self.dimPacks_       = packs;
+            self.dimUses_        = uses;
             self.dimBindAllowed_ = bind;
         }
     } dimGuard(*this);
     if (signature) {
         dimNames_  = std::make_shared<std::set<std::string>>();
         boundDims_ = std::make_shared<std::set<std::string>>();
+        dimPacks_  = std::make_shared<std::set<std::string>>();
+        dimUses_   = std::make_shared<std::map<std::string, size_t>>();
     }
     dimBindAllowed_ = false;
     if (signature) {
-        // A `constas n: int` parameter binds the name `n` for the signature, like the `constas`
-        // of a `const [constas n]` shape: the parameter types and the result type may use it.
-        // The name is bound before any parameter type is read, so a parameter may write it
-        // before the parameter that declares it (the order is checked below).
+        // A `constas n: int` parameter is a value the signature uses, not a dimension the
+        // types bind; its name is known to the types from the start. It is counted as used
+        // twice so the one-use suggestion below belongs to dimension names only.
         for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
             const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
             if (paramLoad->isConstas()) {
                 dimNames_->insert(paramLoad->getRef().ident());
-            }
-        }
-        // A name is bound by the `constas` occurrence anywhere in the parameters, the way
-        // `typeas T` declares a type variable for the whole signature: an extent may write the
-        // name before the parameter that binds it.
-        for (size_t group = 0; group < 2; ++group) {
-            for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(group)) {
-                // An untyped rest parameter has no type child to scan for `constas`.
-                if (paramPair->size() > 0) {
-                    collectDimensionNames(paramPair->atAs<AST::TypeLoad>(0), *dimNames_);
-                }
+                (*dimUses_)[paramLoad->getRef().ident()] = 2;
             }
         }
     }
@@ -4953,6 +4966,17 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
     }
+    // A dimension name written once constrains nothing: another parameter (or the return type)
+    // would have to write it to make it a relation (design principles 5.4).
+    if (signature && dimUses_) {
+        for (const auto &[name, uses] : *dimUses_) {
+            if (uses == 1) {
+                diags_->of(SemanticDiag::DimensionNameUsedOnce)
+                    .at(ast->load()->tokenRange())
+                    .commit(name);
+            }
+        }
+    }
     return built;
 }
 
@@ -5043,21 +5067,46 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     std::vector<TypeArgument> arguments;
     const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
     for (const auto &child : *argsNode) {
-        if (child->type() == AST::LoadType::Type) {
-            arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
-            continue;
-        }
-        if (namesDimension(child)) {
-            // A shape written over dimension names: the extents stay compile-time forms over
-            // the names the signature binds, not a runtime array constant.
+        if (child->type() == AST::LoadType::Type &&
+            child->loadAs<AST::TypeLoad>()->typeType() == AST::TypeType::ArrayDim) {
+            // A shape argument: the extents stay compile-time forms over the names the
+            // signature binds, not a runtime array constant (plan P3, 4.1).
+            const AST::DimGroup &group = child->loadAs<AST::ArrayDimLoad>()->dim();
+            if (group.pack != AST::DimPack::None) {
+                // `Tensor<f32, [..s]>` would make the element type's rank open; only an array
+                // type takes a pack, and a shape argument is not a type.
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(child->load()->tokenRange())
+                    .commit(base->toString(), "a shape argument has no trailing pack (`..`)");
+                throw BuildAbortException();
+            }
             std::shared_ptr<const std::vector<camel::core::type::ExtentForm>> extents =
-                visitNamedExtents(child);
+                visitExtents(group, child);
             if (!extents) {
                 throw BuildAbortException();
             }
             arguments.push_back(
                 TypeArgument{.type = nullptr, .data = nullptr, .extents = std::move(extents)});
             continue;
+        }
+        if (child->type() == AST::LoadType::Type) {
+            arguments.push_back(TypeArgument{.type = visitType(child), .data = nullptr});
+            continue;
+        }
+        if (child->type() == AST::LoadType::Data) {
+            const auto &dataLoad = child->loadAs<AST::DataLoad>();
+            if (dataLoad->dataType() == AST::DataType::Array && base->toString() == "Tensor") {
+                // `const [3]` is the spelling a shape had before the array type took shapes
+                // over; a shape argument is written without `const` (plan P3, 4.1).
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(child->load()->tokenRange())
+                    .commit(
+                        base->toString(),
+                        std::format(
+                            "a shape is written without 'const': '{}<f32, [3]>'",
+                            base->toString()));
+                throw BuildAbortException();
+            }
         }
         const data_ptr_t data = extractStaticDataFromNode(visitData(child));
         if (!data) {
@@ -5180,56 +5229,42 @@ ExtentForm addExtents(const ExtentForm &a, const ExtentForm &b, int64_t sign) {
 
 } // namespace
 
-bool Builder::namesDimension(const AST::node_ptr_t &ast) const {
-    if (!ast || ast->type() != AST::LoadType::Data) {
-        return false;
-    }
-    const auto &load = ast->loadAs<AST::DataLoad>();
-    if (load->dataType() == AST::DataType::ConstAs) {
-        return true;
-    }
-    if (load->dataType() != AST::DataType::Array || ast->size() != 1) {
-        return false;
-    }
-    // An array of extents written with a plain name anywhere is read as a shape over dimension
-    // names. That is how a name that no parameter binds (a typo, or one written only in the
-    // return type) is reported as a name rather than as a constant the type cannot read.
-    std::function<bool(const AST::node_ptr_t &)> names = [&](const AST::node_ptr_t &node) {
-        if (!node) {
-            return false;
-        }
-        if (node->type() == AST::LoadType::Data) {
-            const auto &data = node->loadAs<AST::DataLoad>();
-            if (data->dataType() == AST::DataType::ConstAs) {
-                return true;
-            }
-            if (data->dataType() == AST::DataType::Ref) {
-                return node->loadAs<AST::RefDataLoad>()->ref().plain();
-            }
-        }
-        for (size_t i = 0; i < node->size(); ++i) {
-            if (names(node->at(i))) {
-                return true;
-            }
-        }
-        return false;
-    };
-    return names(ast);
-}
-
 std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
-Builder::visitNamedExtents(const AST::node_ptr_t &ast) {
+Builder::visitExtents(const AST::DimGroup &group, const AST::node_ptr_t &ast) {
     using camel::core::type::ExtentForm;
-    const auto &load = ast->loadAs<AST::DataLoad>();
-    // `[]` is a scalar tensor's shape; a comprehension is not a shape.
-    if (load->dataType() != AST::DataType::Array || ast->size() != 1) {
-        diags_->of(SemanticDiag::InvalidExtentExpression).at(ast->load()->tokenRange()).commit();
-        return nullptr;
+    if (group.pack == AST::DimPack::Named) {
+        // A pack name lives in its own namespace: it may be reused, but it may not name a
+        // dimension too (design principles 5.4).
+        if (dimBindAllowed_) {
+            if (dimNames_ != nullptr && dimNames_->contains(group.packName)) {
+                diags_->of(SemanticDiag::DimensionNameAlreadyBound)
+                    .at(ast->load()->tokenRange())
+                    .commit(group.packName);
+                return nullptr;
+            }
+            if (dimPacks_ != nullptr) {
+                dimPacks_->insert(group.packName);
+            }
+        } else if (dimPacks_ == nullptr || !dimPacks_->contains(group.packName)) {
+            diags_->of(SemanticDiag::DimensionNameNotBound)
+                .at(ast->load()->tokenRange())
+                .commit(".." + group.packName);
+            return nullptr;
+        }
     }
-    auto extents      = std::make_shared<std::vector<ExtentForm>>();
-    const auto &items = ast->atAs<AST::RepeatedLoad>(0);
-    for (const auto &item : *items) {
+    auto extents = std::make_shared<std::vector<ExtentForm>>();
+    extents->reserve(group.extents.size());
+    for (const auto &item : group.extents) {
+        if (!item) {
+            extents->push_back(ExtentForm::unknown());
+            continue;
+        }
         extents->push_back(visitExtent(item));
+    }
+    if (group.extents.empty() && group.pack == AST::DimPack::None) {
+        // `[]` is one unknown dimension (`T[]` = `T[?]`); only the pack makes an empty list
+        // mean an open rank.
+        extents->push_back(ExtentForm::unknown());
     }
     return extents;
 }
@@ -5256,25 +5291,35 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
         }
         return ExtentForm::constant(parsed.value);
     }
-    case AST::DataType::ConstAs: {
-        const Reference &ref   = ast->loadAs<AST::ConstAsLoad>()->ref();
-        const std::string name = ref.plain() ? ref.ident() : ref.toString();
-        if (!dimBindAllowed_ || boundDims_ == nullptr) {
-            diags_->of(SemanticDiag::ConstasNotAllowed).at(ast->load()->tokenRange()).commit(name);
-            throw BuildAbortException();
-        }
-        if (!boundDims_->insert(name).second) {
-            diags_->of(SemanticDiag::DimensionNameAlreadyBound)
-                .at(ast->load()->tokenRange())
-                .commit(name);
-            throw BuildAbortException();
-        }
-        return ExtentForm::linear({{name, 1}});
-    }
+    case AST::DataType::ConstAs:
+        // `constas` is no longer written in a shape; the token is a syntax error there.
+        return report();
     case AST::DataType::Ref: {
         const Reference &ref = ast->loadAs<AST::RefDataLoad>()->ref();
-        if (ref.plain() && dimNames_ != nullptr && dimNames_->contains(ref.ident())) {
-            return ExtentForm::linear({{ref.ident(), 1}});
+        if (!ref.plain()) {
+            diags_->of(SemanticDiag::DimensionNameNotBound)
+                .at(ast->load()->tokenRange())
+                .commit(ref.toString());
+            throw BuildAbortException();
+        }
+        const std::string name = ref.ident();
+        if (dimNames_ != nullptr && dimNames_->contains(name)) {
+            if (dimBindAllowed_ && dimUses_ != nullptr) {
+                ++(*dimUses_)[name];
+            }
+            return ExtentForm::linear({{name, 1}});
+        }
+        if (dimBindAllowed_ && dimNames_ != nullptr) {
+            // The first plain name in a parameter type binds the dimension; the ones after it
+            // in the same signature write the same extent (design principles 5.4).
+            dimNames_->insert(name);
+            if (boundDims_ != nullptr) {
+                boundDims_->insert(name);
+            }
+            if (dimUses_ != nullptr) {
+                ++(*dimUses_)[name];
+            }
+            return ExtentForm::linear({{name, 1}});
         }
         diags_->of(SemanticDiag::DimensionNameNotBound)
             .at(ast->load()->tokenRange())

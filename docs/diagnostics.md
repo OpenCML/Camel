@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-224 diagnostics: 207 errors, 17 warnings.
+226 diagnostics: 208 errors, 18 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -188,6 +188,7 @@ prints one entry.
 | `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
+| `0x0300019E` | [SemanticDiag::DimensionAfterAnyRank](#dimensionafteranyrank) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -200,6 +201,7 @@ prints one entry.
 | `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
 | `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
+| `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -1653,19 +1655,19 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/collections/err_bare_name.cml`, run as `camel test/cases/compile/collections/err_bare_name.cml`)
+**Example** (`test/cases/compile/array_shape/err_const_shape.cml`, run as `camel test/cases/compile/array_shape/err_const_shape.cml`)
 
 ```camel
-module main
+// A shape argument is written without `const`; the old spelling is refused and the message
+// gives the new one.
+module array_shape_err_const
+import { Tensor } from tensor
 
-// `Map` is always written with its key and value types.
-
-func size(m: Map): int {
+func bad(x: Tensor<f32, const [3]>): int {
     return 0
 }
 
 func main(): int sync {
-    println("never printed")
     return 0
 }
 ```
@@ -1692,10 +1694,10 @@ A type that leaves open what a parameter fixes is never accepted implicitly, and
 module shape_inference_computed_extent_stays_open
 import { Tensor, reshape, sum } from tensor
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
-func exact(a: Tensor<f32, const [2, 3]>): float {
+func exact(a: Tensor<f32, [2, 3]>): float {
     return sum(a)
 }
-func f(x: Tensor<f32, const [-1, 3]>, n: int): float {
+func f(x: Tensor<f32, [?, 3]>, n: int): float {
     return exact(reshape(x, [n, 3]))
 }
 func main(): int sync {
@@ -1726,7 +1728,7 @@ A type that leaves open what the declared return type fixes is never accepted im
 module shape_inference_recursion_leaf
 import { Tensor, slice, reshape, sum } from tensor
 // That the vector has one element where the recursion ends is known when the program runs.
-func tree(x: Tensor<f32, const [-1]>, n: int): Tensor<f32, const [1]> {
+func tree(x: Tensor<f32, [?]>, n: int): Tensor<f32, [1]> {
     return if n <= 1 then x else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
 }
 func main(): int sync {
@@ -1908,7 +1910,7 @@ A type variable takes the type of the argument found at its 'typeas' position, o
 module constas_argument_shape
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -3428,23 +3430,10 @@ The dimension name '{0}' is bound here, but only a parameter type can bind one.
 **Help**
 
 ```text
-Write 'constas n' where the dimension first appears in a parameter type, 'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
+A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_constas_return.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_return.cml`)
-
-```camel
-module named_dims_err_constas_return
-import { Tensor, ones } from tensor
-// A return type uses the names its parameters bound; it binds none.
-func bad(x: Tensor<f32>): Tensor<f32, const [constas n]> {
-    return x as Tensor<f32, const [-1]>
-}
-func main(): int sync {
-    println(bad(ones([3])))
-    return 0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### DimensionNameNotBound
 
@@ -3459,20 +3448,21 @@ The dimension name '{0}' is not bound by any parameter of this signature.
 **Help**
 
 ```text
-A name in a type's extents is bound by 'constas name' where it first appears in a parameter type. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
+A name in a type's extents is bound by its first plain occurrence in a parameter type, 'x: f32[n]', and later occurrences write it. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_unbound_name.cml`, run as `camel test/cases/modules/tensor/named_dims/err_unbound_name.cml`)
+**Example** (`test/cases/compile/array_shape/err_unbound.cml`, run as `camel test/cases/compile/array_shape/err_unbound.cml`)
 
 ```camel
-module named_dims_err_unbound_name
-import { Tensor, ones } from tensor
-// A name that only the return type writes is an error: no parameter binds it.
-func only_return(x: Tensor<f32>): Tensor<f32, const [n]> {
-    return x as Tensor<f32, const [-1]>
+// The return type writes `n`, but no parameter binds it: the caller has no argument that
+// could say what it is.
+module array_shape_err_unbound
+
+func bad(x: f32[]): f32[n] {
+    return x
 }
+
 func main(): int sync {
-    println(only_return(ones([3])))
     return 0
 }
 ```
@@ -3484,25 +3474,16 @@ func main(): int sync {
 **Message**
 
 ```text
-The dimension name '{0}' is already bound; write '{0}' here instead of 'constas {0}'.
+The dimension name '{0}' is already bound; write '{0}' here.
 ```
 
 **Help**
 
 ```text
-Only the first occurrence of a dimension name in the parameter types binds it ('constas n'). Writing 'constas' again would ask for a second binding of the same name.
+Only the first occurrence of a dimension name in the parameter types binds it; later occurrences write it. Dimension names and pack names are separate namespaces, so one name cannot be both.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_constas_twice.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_twice.cml`)
-
-```camel
-module named_dims_err_constas_twice
-import { Tensor } from tensor
-// Only the first occurrence binds; a second `constas` of the same name would bind it again.
-func bad(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [constas n]>): float {
-    return 0.0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### DimensionMismatch
 
@@ -3525,7 +3506,7 @@ The dimensions a signature names are one value for the whole call: every argumen
 ```camel
 module named_dims_err_mismatch
 import { Tensor, ones, sum } from tensor
-func pair(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [n]>): float {
+func pair(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
     return sum(a) + sum(b)
 }
 func main(): int sync {
@@ -3541,16 +3522,29 @@ func main(): int sync {
 **Message**
 
 ```text
-This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('const [n, 3]').
+This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]').
 ```
 
 **Help**
 
 ```text
-Each extent is an integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown.
+Each extent is a non-negative integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown, and an unknown extent is written '?'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/array_shape/err_negative.cml`, run as `camel test/cases/compile/array_shape/err_negative.cml`)
+
+```camel
+// A negative extent is not a dimension: `?` is the unknown extent.
+module array_shape_err_negative
+
+func bad(x: f32[-1]): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### NotDifferentiable
 
@@ -4732,7 +4726,7 @@ module constas_type_not_int
 import { Tensor, ones } from tensor
 
 // The value becomes an extent, and extents are integers.
-func bad(constas n: float, x: Tensor<f32, const [3]>): float {
+func bad(constas n: float, x: Tensor<f32, [3]>): float {
     return 0.0
 }
 
@@ -4764,7 +4758,7 @@ The value selects the instance of the declaration, so it must be known before th
 module constas_value_not_constant
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4800,7 +4794,7 @@ A 'constas' value is an extent of a type, so the call must give an integer.
 module constas_value_not_int
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4897,7 +4891,7 @@ The value must be known where the call is written. Call the declaration directly
 module constas_as_value
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4936,7 +4930,7 @@ import { Tensor } from tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time
 // value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): Tensor<f32, const [n]>
+func zeros(constas n: int): Tensor<f32, [n]>
 
 func main(): int sync {
     println(zeros(3))
@@ -4966,7 +4960,7 @@ A 'constas' value is bound at the call, like any other argument, but it is not a
 module constas_missing_argument
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -5036,6 +5030,37 @@ func both(x: int): int {
 
 func main(): int {
     return both(1)
+}
+```
+
+### DimensionAfterAnyRank
+
+`0x0300019E` · Error · `SemanticDiag::DimensionAfterAnyRank`
+
+**Message**
+
+```text
+A dimension pack ('..') must be the last item of its '[...]', and only one may be written.
+```
+
+**Help**
+
+```text
+A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.
+```
+
+**Example** (`test/cases/compile/array_shape/err_pack_not_last.cml`, run as `camel test/cases/compile/array_shape/err_pack_not_last.cml`)
+
+```camel
+// A pack stands for the trailing dimensions, so nothing may follow it.
+module array_shape_err_pack_not_last
+
+func bad(x: f32[..rest, 3]): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
 }
 ```
 
@@ -5446,6 +5471,38 @@ func f(x: int): int {
 
 func main(): int {
     println(f(1))
+    return 0
+}
+```
+
+### DimensionNameUsedOnce
+
+`0x03100161` · Warn · `SemanticDiag::DimensionNameUsedOnce`
+
+**Message**
+
+```text
+The dimension name '{0}' is written once in this signature, so it relates nothing.
+```
+
+**Help**
+
+```text
+A name relates the extents that write it. If the size is not a relation, write '?' instead; if it is, write the name in another parameter or in the return type.
+```
+
+**Example** (`test/cases/compile/array_shape/warn_once.cml`, run as `camel test/cases/compile/array_shape/warn_once.cml std::nvm`)
+
+```camel
+// A name written once in the signature relates nothing, so the compiler suggests `?`.
+module array_shape_warn_once
+
+func first(x: f32[n]): f32 {
+    return x[0]
+}
+
+func main(): int sync {
+    println(first([1.0, 2.0]))
     return 0
 }
 ```

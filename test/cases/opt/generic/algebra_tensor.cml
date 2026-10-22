@@ -8,7 +8,7 @@ module algebra_tensor
 
 import { Tensor, reshape } from tensor
 
-type Vec = Tensor<f32, const [3]>
+type Vec = Tensor<f32, [3]>
 
 func merged(x: Vec): Vec {
     return x * 3.0 + x * 5.0

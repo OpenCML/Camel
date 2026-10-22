@@ -4434,17 +4434,29 @@ Value Builder::visitTypeUnit(cst::TypeUnit context) {
 
 /*
 arrayType
-    : specType ('[' ']')*
+    : specType arrayDim+
     ;
 */
 Value Builder::visitArrayType(cst::ArrayType context) {
     ENTER("ArrayType");
     node_ptr_t res = any2node(visitType(context->type()));
-    if (context->childCount() > 1) {
-        size_t dims              = (context->childCount() - 1) / 2;
-        node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(dims);
+    std::vector<DimGroup> groups;
+    for (const auto dim : context->all<cst::ArrayDim>()) {
+        groups.push_back(dimGroupOf(dim));
+    }
+    if (!groups.empty()) {
+        node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(std::move(groups));
         setNodeTokenRangeByContext(arrayTypeNode, context);
         *arrayTypeNode << res;
+        // The extent expressions stay children of the node as well: everything written is in
+        // the tree, and a reader that walks it sees `?` as the one item that has no node.
+        for (const DimGroup &group : arrayTypeNode->loadAs<ArrayTypeLoad>()->dims()) {
+            for (const auto &extent : group.extents) {
+                if (extent) {
+                    *arrayTypeNode << extent;
+                }
+            }
+        }
         res = arrayTypeNode;
     }
     LEAVE("ArrayType");
@@ -4452,7 +4464,62 @@ Value Builder::visitArrayType(cst::ArrayType context) {
 }
 
 /*
-typeOrData : typeExpr | CONST dataExpr ;
+arrayDim
+    : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+    ;
+arrayDimItem : '?' | '..' identDef? | dataExpr
+*/
+Value Builder::visitArrayDim(cst::ArrayDim context) {
+    node_ptr_t res = createNodeAs<ArrayDimLoad>(dimGroupOf(context));
+    setNodeTokenRangeByContext(res, context);
+    for (const auto &extent : res->loadAs<ArrayDimLoad>()->dim().extents) {
+        if (extent) {
+            *res << extent;
+        }
+    }
+    return res;
+}
+
+DimGroup Builder::dimGroupOf(cst::ArrayDim context) {
+    DimGroup group;
+    bool packNameNext = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            if (child.token().is(TK::Question)) {
+                group.extents.push_back(nullptr);
+                ++group.itemCount;
+                packNameNext = false;
+            } else if (child.token().is(TK::DotDot)) {
+                if (group.pack != DimPack::None) {
+                    group.packRepeated = true;
+                } else {
+                    group.pack     = DimPack::Anonymous;
+                    group.packItem = group.itemCount;
+                }
+                ++group.itemCount;
+                packNameNext = true;
+            }
+            continue;
+        }
+        const auto node = child.node();
+        if (packNameNext && node.is(NK::IdentDef)) {
+            group.pack     = DimPack::Named;
+            group.packName = node.text();
+            packNameNext   = false;
+            continue;
+        }
+        packNameNext = false;
+        if (node.isExpr()) {
+            group.extents.push_back(any2node(visitExpr(node)));
+            ++group.itemCount;
+        }
+    }
+    return group;
+}
+
+/*
+typeOrData : typeExpr | arrayDim | CONST dataExpr ;
 The tree has a node for the second alternative only.
 */
 Value Builder::visitConstData(cst::ConstData context) { return visitExpr(context->expr()); }
@@ -4473,6 +4540,18 @@ Value Builder::visitSpecType(cst::SpecType context) {
         node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");
         setNodeTokenRangeBetween(repeatNode, types[1], types[count - 1]);
         for (size_t i = 1; i < count; ++i) {
+            if (types[i].is(NK::ConstData) &&
+                types[i].get<cst::ConstData>()->expr().is(NK::ArrayData)) {
+                // A shape is the constant it is made of; `const` was how the shape of a module
+                // type was written before array types took it over (plan P3, 4.1).
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(rangeOf(types[i].firstToken(), types[i].lastToken()))
+                    .commit(
+                        types[0].text(),
+                        std::format(
+                            "a shape is written without 'const': '{}<f32, [3]>'",
+                            types[0].text()));
+            }
             *repeatNode << any2node(visitType(types[i]));
         }
         *specTypeNode << res << repeatNode;
@@ -4761,6 +4840,8 @@ Value Builder::visitType(syn::Node context) {
         return visitTypeUnit(cst::TypeUnit(context));
     case NK::ArrayType:
         return visitArrayType(cst::ArrayType(context));
+    case NK::ArrayDim:
+        return visitArrayDim(cst::ArrayDim(context));
     case NK::SpecType:
         return visitSpecType(cst::SpecType(context));
     case NK::ConstData:

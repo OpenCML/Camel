@@ -226,7 +226,8 @@ false
 
 - entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!` (not needed where the target type is known, see [3.4](03_data_model.md));
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
-- checked conversion of module types: `t as Tensor<f32, const [3]>`, where the shape is checked at the conversion.
+- checked conversion of module types: `t as Tensor<f32, [3]>`, where the shape is checked at the conversion.
+- checked conversion of arrays: `a as f32[4]`, where the shape is checked at the conversion.
 
 `as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
 
@@ -530,7 +531,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
   - **Array**: the element itself; `range(a, b)` is one.
   - **String**: by code point, each element the one-character string of that code point, as `s[i]` gives it (11.1): the two rounds of `for c in '中文'` are `'中'` and `'文'`, and a multi-byte character counts once.
   - **Map**: the `(key, value)` pairs in key order (the traversal order of 11.3, as `items(m)` gives them), not insertion order: in `for kv in m` the keys are strictly ascending, and `kv.0` and `kv.1` take the pair apart.
-  - **Tensor**: along the first dimension, each element the sub-tensor with the first dimension dropped (sharing that slice of the data, not copied): a rank-2 `Tensor<f32, const [2, 3]>` gives two `Tensor<f32, const [3]>`, and a rank-1 tensor gives rank-0 sub-tensors (`sum(x)` is its number). The element type of a `Tensor` whose shape is unknown is `Tensor`. A rank-0 tensor has no first dimension and is not a sequence.
+  - **Tensor**: along the first dimension, each element the sub-tensor with the first dimension dropped (sharing that slice of the data, not copied): a rank-2 `Tensor<f32, [2, 3]>` gives two `Tensor<f32, [3]>`, and a rank-1 tensor gives rank-0 sub-tensors (`sum(x)` is its number). The element type of a `Tensor` whose shape is unknown is `Tensor`. A rank-0 tensor has no first dimension and is not a sequence.
   An empty array, empty string, empty map, or a tensor whose first extent is 0 runs no round, and the loop's value is the first state. **`while c`** goes on as long as the condition holds; the condition is a `bool` (`SemanticDiag::LoopConditionNotBool`). With both, each round looks at the condition first and then takes the next element: the loop ends when the condition fails or the elements are used up. At least one of them is written.
 - **No `break` and no `continue`**: ending early is written as the `while` condition, skipping the rest of a round as an `if`.
 - **Scope.** The first values and the sequence are evaluated once, where the loop is, and do not see the names of the head; the condition sees the names of the state, the body those and the name of `for`. A name of the head is given once (`SemanticDiag::LoopNameRepeated`). The condition and the body see the names around the loop (a `var` is read anew in every round).

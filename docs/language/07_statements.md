@@ -323,7 +323,7 @@ func main(): int sync {
 ```cml
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -339,14 +339,14 @@ func main(): int sync {
 5.0
 ```
 
-- **值进入实例键。** 每个不同的常量值实例化出一张子图（`total<3>`、`total<5>`），同一组类型和值只实例化一次。`n` 用在该声明的类型里：形参类型、返回类型，写法与类型里的具名维度相同（`Tensor<f32, const [n]>`；`[n]` 也行）。
+- **值进入实例键。** 每个不同的常量值实例化出一张子图（`total<3>`、`total<5>`），同一组类型和值只实例化一次。`n` 用在该声明的类型里：形参类型、返回类型，写法与类型里的具名维度相同（`Tensor<f32, [n]>`，或数组写法 `f32[n]`）。
 - **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。`n` 因此也不能当函数体里的运行时值使用。
 - 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`），且是 `int`（`SemanticDiag::ConstasValueNotInt`）。目前只支持一个 `constas` 参数（`SemanticDiag::ConstasParameterOnlyOne`），且必须在普通形参的最前面（`SemanticDiag::ConstasParameterNotFirst`），类型只支持 `int`（`SemanticDiag::ConstasTypeNotInt`），类型不能省（`SemanticDiag::ConstasTypeRequired`）。
 - **值必须真的决定一个类型。** 没有任何类型用到 `n` 的声明会被拒绝（`SemanticDiag::ConstasNotUsedInType`）：两个只有值不同的实例若类型完全相同，这个值就只是装饰。
 - 带 `constas` 参数的声明**没有函数值**：常量必须在写调用时给出，不能赋给变量或作为实参传走（`SemanticDiag::ConstasFunctionNeedsCall`）。无体声明（C++ 算子的声明）也不能带 `constas`（`SemanticDiag::ConstasInNativeDeclaration`）；和剩余参数组合暂不支持（`SemanticDiag::ConstasWithRest`），要等类型级元组（`StaticTuple`）。
-- 目前 `n` 只绑定在声明的形参类型和返回类型里；函数体里的类型位置（`let z: Tensor<f32, const [n]>`）还没有这个作用域。`f32[n]` 这种数组维度也还没落地（见 [7.5 的限制](#75-泛型函数)）；今天能用的是 `Tensor<f32, const [n]>`。
+- 目前 `n` 只绑定在声明的形参类型和返回类型里；函数体里的类型位置（`let z: Tensor<f32, [n]>`）还没有这个作用域；形参类型与返回类型里的 `f32[n]` 已经可用。
 
-**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明、剩余参数组合，`f32[n]` 数组维度尚未实现。
+**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明、剩余参数组合。
 
 ## 7.6 标注
 
@@ -543,7 +543,7 @@ id
 - 实参只能是类型，个数必须与参数一致；不带实参使用是错误。
 - 右侧只能引用已经声明的类型，所以类型函数不能引用自身。
 - 可以 `export`，在别的模块里以 `模块::Pair<int>` 使用。
-- 模块类型（如 `Tensor<f32, const [2, 3]>`）的尖括号由该类型自己解释，实参可以是类型或 `const 数据`。
+- 模块类型（如 `Tensor<f32, [2, 3]>`）的尖括号由该类型自己解释，实参可以是类型，或 `[extent, ...]` 形状（不带 `const`）。
 
 类型表达式里保留、尚未实现的部分：类型运算 `&`、`\`、`+`、`-`、`^`，以及 `typeof`、`keyof`、`名字 of T`（`SemanticDiag::FeatureNotSupported` 或语法错误），它们的含义尚未决定。
 

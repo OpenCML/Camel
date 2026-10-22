@@ -9,7 +9,7 @@ import { Tensor, tanh, mean } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 
-type Linear = { w: Tensor<f32, const [3, 4]>, b: Tensor<f32, const [4]> }
+type Linear = { w: Tensor<f32, [3, 4]>, b: Tensor<f32, [4]> }
 
 with <p: Linear>
 func loss(x: Tensor, y: Tensor): float {
@@ -18,7 +18,7 @@ func loss(x: Tensor, y: Tensor): float {
 }
 
 with <p: Linear>
-func main(x: Tensor<f32, const [5, 3]>, y: Tensor<f32, const [5, 4]>): (float, Linear) {
+func main(x: Tensor<f32, [5, 3]>, y: Tensor<f32, [5, 4]>): (float, Linear) {
     let vg = with_grad(loss)<p>(x, y)
     return (vg.0, sgd(p, vg.1, 0.1))
 }

@@ -1,6 +1,6 @@
 module shape_call_mismatch
 import { Tensor, zeros, ones, reshape, sum, tanh, load_npy } from tensor
-func f(b: Tensor<const [3]>): float {
+func f(b: Tensor<[3]>): float {
     return sum(b)
 }
 func main(): int sync {

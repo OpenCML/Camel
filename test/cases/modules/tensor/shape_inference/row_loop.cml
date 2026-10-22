@@ -2,13 +2,13 @@ module shape_inference_row_loop
 import { Tensor, reshape, slice, concat, zeros, sum, dim } from tensor
 // A loop written as a recursion carries a [3] accumulator over the rows of a [?, 3] input: the
 // carried shape is invariant, and every type on the way is inferred.
-func spin(i: int, n: int, acc: Tensor<f32, const [3]>, x: Tensor<f32, const [-1, 3]>): Tensor<f32, const [3]> {
+func spin(i: int, n: int, acc: Tensor<f32, [3]>, x: Tensor<f32, [?, 3]>): Tensor<f32, [3]> {
     return if i >= n then acc else spin(i + 1, n, acc + reshape(slice(x, 0, i, i + 1), [3]), x)
 }
-func rows(x: Tensor<f32, const [-1, 3]>): Tensor<f32, const [3]> {
+func rows(x: Tensor<f32, [?, 3]>): Tensor<f32, [3]> {
     return spin(0, dim(x, 0), zeros([dim(x, 1)]), x)
 }
-func twice(x: Tensor<f32, const [-1, 3]>, n: int): Tensor<f32, const [-1, 3]> {
+func twice(x: Tensor<f32, [?, 3]>, n: int): Tensor<f32, [?, 3]> {
     return concat(reshape(x, [n, 3]), x, 0)
 }
 func main(): int sync {

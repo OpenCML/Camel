@@ -2,7 +2,7 @@ module constas_type_not_int
 import { Tensor, ones } from tensor
 
 // The value becomes an extent, and extents are integers.
-func bad(constas n: float, x: Tensor<f32, const [3]>): float {
+func bad(constas n: float, x: Tensor<f32, [3]>): float {
     return 0.0
 }
 

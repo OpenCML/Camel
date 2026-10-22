@@ -595,6 +595,8 @@ class Formatter {
 
     std::any visitArrayType(cst::ArrayType context);
 
+    std::any visitArrayDim(cst::ArrayDim context);
+
     std::any visitConstData(cst::ConstData context);
 
     std::any visitSpecType(cst::SpecType context);

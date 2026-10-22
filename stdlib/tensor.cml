@@ -49,7 +49,7 @@ export func to_bytes(t: Tensor): Bytes
 /// the program runs (check them with `as`, or read them with `shape`).
 /// @effect reads a file
 /// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read
-/// @example load_npy('x.npy') as Tensor<f32, const [2, 2]>
+/// @example load_npy('x.npy') as Tensor<f32, [2, 2]>
 export func load_npy(path: string): Tensor
 
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
