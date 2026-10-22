@@ -662,3 +662,40 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RestArgumentNotTuple"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_forward"
+desc = "`..ts` forwards a rest parameter's build-time tuple as its remaining argument nodes: the elements pass on with no FILL, and both rest calls are expanded into `main`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_forward.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_forward_builds_no_value_node"
+desc = "Forwarding `..ts` builds no value node for the build-time tuple: `main` has no FILL, no ACCS and no call to either rest function, only the three argument nodes and the three additions."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_forward.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const at = lines.findIndex((line) => line.includes('label="main"'))
+assert(at > 0, "the graph of main is missing")
+const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+assert(end > at, "the graph of main has no end")
+const body = lines.slice(at, end)
+assert(!body.some((line) => line.includes('type="FILL"')), "a FILL was built for the forwarded tuple")
+assert(!body.some((line) => line.includes('type="ACCS"')), "an ACCS was built for a forwarded element")
+assert(!body.some((line) => line.includes('label="forward"') || line.includes('label="sum"')), "a rest function was not expanded")
+const adds = body.filter((line) => line.includes('label=":op/add_l"'))
+assert(adds.length === 3, `the expansion lost an addition: ${adds.length}`)
+}
+"""
+timeout_ms = 8000

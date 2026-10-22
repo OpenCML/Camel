@@ -1,0 +1,19 @@
+/**
+ * `..ts` forwards a rest parameter's build-time tuple (H51 step 6): the elements are passed on
+ * as they are, with no FILL for `ts` and no ACCS for an element. Both rest calls are expanded,
+ * so `main` is the hand-written sum of the three arguments.
+ */
+module static_tuple_forward
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func forward(..ts): int {
+    return sum(..ts)
+}
+
+func main(): int sync {
+    println(forward(1, 2, 3))
+    return 0
+}
