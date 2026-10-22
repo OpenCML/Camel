@@ -1202,3 +1202,107 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["std::nvm: async public exact bits, completed results and eager faults PASS", "std::fvm: async public exact bits, completed results and eager faults PASS", "std::jit: async public exact bits, completed results and eager faults PASS", "std::prl: async public exact bits, completed results and eager faults PASS"]
 timeout_ms = 180000
+
+# --- No host fallback inside `#gpu` (GPU design 6.1, review of the GPU plan) -------------
+# A `#gpu` scope promises the device runs everything written in it and in the functions it
+# calls. An operator without a device program at this use is a compile-time error, never a host
+# run; the cases below pin the promise, the refusal, the host behaviour outside a scope
+# (temporary), and the shape retry that must keep working (h251).
+
+[[tests]]
+name = "nofallback.supported_runs_on_device"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/supported.cml"
+# Every operator in the scope has a device program for its static shapes: the pass accepts it and
+# the region runs on the device (one kernel), not on the host.
+args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "tiles::compile", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+assert(input.stdout.includes('14.0'), input.stdout)
+assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "nofallback.operator_without_a_program_is_a_compile_error"
+kind = "negative"
+case = "../../cases/gpu/nofallback/refused_operator.cml"
+# `tanh` is written in a function the scope calls, and the scope covers what it calls. No device
+# needs to exist for the refusal: it is the compiler's, and it names the scope and the operator.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_output_contains = ["`#gpu` scope 'step'", "operator 'tensor:tanh'", "the module provides none"]
+timeout_ms = 30000
+
+[[tests]]
+name = "nofallback.shape_without_a_program_is_a_compile_error"
+kind = "negative"
+case = "../../cases/gpu/nofallback/refused_shape.cml"
+# The operator has a device program, but not for a rank-1 right operand, and the static types make
+# the shape known at compile time. The host would compute it; the scope may not fall back there.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_output_contains = ["`#gpu` scope 'product'", "operator 'tensor:matmul'", "no device program for this shape"]
+timeout_ms = 30000
+
+[[tests]]
+name = "nofallback.outside_a_scope_host_path_is_temporary"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/host.cml"
+# The same program without the tag: no placement fact, and the matmul runs on the host. Pinned
+# as it is today; the host side of the preference path is scheduled for deletion.
+args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "tiles::compile", "std::nvm"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+assert(input.stdout.includes('21.0'), input.stdout)
+assert(!input.stdout.includes('TILES_PLACEMENT'), input.stdout)
+const row = report.operator_rows.find((r) => r.uri === 'tensor:matmul')
+assert(row && row.device === 'cpu', JSON.stringify(report.operator_rows))
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "nofallback.shape_generic_call_still_retries"
+kind = "behavior"
+case = "../../cases/gpu/nofallback/shape_generic.cml"
+# h251: the type-only template cannot fix the shapes, so the run retries with the actual arguments
+# and still gets a device program. A refusal here would break a call the device can serve.
+args = ["${case}", 'std::profile(json="${test_tmp}/profile.json")', "tiles::compile", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+verify_script = """
+async ({ input, assert }) => {
+const fs = await import('node:fs')
+const report = JSON.parse(fs.readFileSync(input.test_tmp + '/profile.json', 'utf8'))
+assert(input.stdout.includes('14.0'), input.stdout)
+assert(report.device_work.kernels >= 1, JSON.stringify(report.device_work))
+}
+"""
+timeout_ms = 60000
+
+[[tests]]
+name = "nofallback.run_time_shape_is_refused_not_host_ran"
+kind = "negative"
+case = "../../cases/gpu/nofallback/runtime_refusal.cml"
+# The signature does not fix the rank, so the compile pass defers; the actual arguments are rank 1
+# and the device refuses them. The run reports it instead of replaying the graph on the host.
+args = ["${case}", "tiles::compile", "std::nvm"]
+# A run with no device is not a refusal: it is the host path `--devices cpu` names on purpose.
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeNoDeviceProgram"
+expect_output_contains = ["`#gpu` scope 'product'", "operator 'tensor:matmul'", "no device program for this shape"]
+timeout_ms = 60000

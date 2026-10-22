@@ -1,0 +1,20 @@
+/// (e) The runtime side of the same promise: `product` is `#gpu` but its signature is generic,
+/// so the compile pass cannot see the rank until the call site. The actual arguments are rank 1,
+/// the device back end refuses the shape, and the run reports it instead of replaying the graph
+/// on the host (GPU design 6.1). The compile pass defers this case on purpose: h251 shows that a
+/// shape the types do not fix may still compile with the actual arguments.
+module gpu_nofallback_runtime
+
+import { Tensor, reshape } from tensor
+import { run_preferred_resident, download } from tiles
+
+#gpu
+func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
+    return a @ b
+}
+
+func main() {
+    let a = reshape([1.0, 2.0, 3.0], [3])
+    let b = reshape([1.0, 1.0, 1.0], [3])
+    println(download(run_preferred_resident<product>((a, b))))
+}
