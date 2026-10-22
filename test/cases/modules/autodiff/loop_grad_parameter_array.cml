@@ -1,9 +1,9 @@
 /**
  * The twin of `loop_grad_literal_array.cml`: the same loop body, but over an array built from the
  * parameter. The array depends on a differentiated value, so the reverse pass carries its
- * gradient -- an array site port, a zero array and one scatter per round -- and `std::stats`
- * prints a larger node count than the literal twin's (design principles 9.9). f(w) is
- * w + w * (w + 2w + 3w), so the gradient at 2 is 25.
+ * gradient -- a zero array and one scatter per round -- and both appear in the graph `std::jgir`
+ * prints after `std::macro` as `:tangent/zeros_arr` and `:tangent/scatter_add_arr` (design
+ * principles 9.9). f(w) is w + w * (w + 2w + 3w), so the gradient at 2 is 25.
  */
 module loop_grad_parameter_array
 
