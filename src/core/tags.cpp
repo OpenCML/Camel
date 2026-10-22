@@ -104,6 +104,10 @@ void declareStandardTags() {
         add("no_signed_zeros", sem::kNoSignedZeros, on);
         add("flush_subnormals", sem::kFlushSubnormals, on);
         add("nondeterministic", sem::kNonDeterministic, on);
+        // `refine_accuracy` (rewrite 8.10): a rewrite may replace a form with one whose error is
+        // not larger, even though the bits change. Not granted by default; `#strict` revokes it
+        // with every other permission.
+        add("refine_accuracy", sem::kRefineAccuracy, on);
         // `finite_math` is the group of the four assumptions (design principles 7.2), not a
         // permission of its own.
         Decl finite;
