@@ -13,6 +13,7 @@
 
 ```
 README.md  LICENSE  CONTRIBUTING.md  CODE_OF_CONDUCT.md  SECURITY.md  CHANGELOG.md
+ABOUT  ZEN                                         Camel 的标识：`camel --about` 的横幅与语言的八条禅（保留在根目录）
 CMakeLists.txt  conanfile.txt  package.json        构建入口（package.json 只承担脚本）
 cmake/                                             构建辅助
 include/camel/                                     libcamel 的公开头文件（模块 ABI）
@@ -28,7 +29,7 @@ docs/                                              公开文档（见 4）
 internal/                                          内部协作，公开时删除（见 1）
 ```
 
-**根目录只留上面这些。** 删除或移走：`ABOUT`（并入 CLI 的 `camel --about` 资源）、`ZEN`（并入 `docs/` 与 CLI）、`hello.cml`（进 `examples/`）、`export_matrix.*`（生成物，不入库）、根目录的 `logo.png`（`assets/` 已有，`assets/` 移入 `docs/assets/`）、`changes.log`（改为 `CHANGELOG.md`，Keep a Changelog 格式）、`.vscode/`（个人设置）、`AGENTS.md` 与 `agents/`（移入 `internal/`）、`ROADMAP.md`（公开版只留一页方向，不含任务编号）。
+**根目录只留上面这些。** 删除或移走：`hello.cml`（进 `examples/`）、`export_matrix.*`（生成物，不入库）、根目录的 `logo.png`（`assets/` 已有，`assets/` 移入 `docs/assets/`）、`changes.log`（改为 `CHANGELOG.md`，Keep a Changelog 格式）、`.vscode/`（个人设置）、`AGENTS.md` 与 `agents/`（移入 `internal/`）、`ROADMAP.md`（公开版只留一页方向，不含任务编号）。
 
 ## 3. 源码
 
