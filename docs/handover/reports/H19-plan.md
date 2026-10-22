@@ -363,6 +363,8 @@ export native func decode(bytes: Bytes): string! = 'bytes:decode'
 - 新前奏 `eprintln`（URI `:io/eprintln`）：写 `stderr`，效果与 `println` 同类；`print`/`println` 写 `stdout`，`input` 读 `stdin`。`std::cpp` 增加 `:io/eprintln` 的翻译（`fprintf(stderr, ...)`），`feat/trans/cpp` 覆盖。
 - `resources.plan` 的期望表逐条改；`registry` 的纯度清单加 `:io/eprintln`；`docs/technical/18_sync_control_semantics.md` 等提到旧资源名的地方改。
 
+> **H134 的实施情况（2026-10-22）**：资源名部分已完成，但 `io:terminal`→`stdin` 没有做：它是资源集变化（raw mode 的写会开始与 `stdin` 的读冲突），按“拼写才改、集合变化留下并报告”的规则留给作者。`stderr` 不是新增的，`ckpt:load_tree` 早已写 `io:stderr`，本步只是把它拼成 `stderr`。`eprintln` 仍未实现（不在 H134 的编号范围内）。详见 `reports/H134.md`。
+
 **验收。** `test/plans/feat/modules/resources.plan.toml`；一个把 stdout/stderr 分开捕获的用例（`eprintln` 只出现在 stderr）；`feat/trans/cpp`；`inspect --ops` 显示新名字。
 
 ### 第 10 步：其余固定签名模块声明化

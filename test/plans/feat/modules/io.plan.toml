@@ -49,7 +49,7 @@ assert(node.roles.includes('effect'), `io:get_chars roles: ${JSON.stringify(node
 
 [[tests]]
 name = "declared_resources"
-desc = "`inspect --ops` reports the resources the module registered: the readers touch `io:stdin` (read or read-modify-write) and raw mode writes `io:terminal`, all external."
+desc = "`inspect --ops` reports the resources the module registered: the readers touch `stdin` (read or read-modify-write) and raw mode writes `io:terminal`, all external. Raw mode keeps its own resource: folding it into `stdin` would be a change of the resource set (H134)."
 kind = "behavior"
 case = "../../../cases/modules/io/resources.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -62,9 +62,9 @@ const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPER
 const byUri = Object.fromEntries(ops.map((o) => [o.uri, o]))
 const resources = (uri) => byUri[uri] && byUri[uri].semantics && byUri[uri].semantics.resources
 assert(resources('io:set_terminal_raw_mode') === 'write ambient io:terminal; external', resources('io:set_terminal_raw_mode'))
-assert(resources('io:has_input') === 'read ambient io:stdin; external', resources('io:has_input'))
-assert(resources('io:get_char') === 'rmw ambient io:stdin; external', resources('io:get_char'))
-assert(resources('io:get_chars') === 'rmw ambient io:stdin; external', resources('io:get_chars'))
-assert(resources('io:clear_input_buffer') === 'rmw ambient io:stdin; external', resources('io:clear_input_buffer'))
+assert(resources('io:has_input') === 'read ambient stdin; external', resources('io:has_input'))
+assert(resources('io:get_char') === 'rmw ambient stdin; external', resources('io:get_char'))
+assert(resources('io:get_chars') === 'rmw ambient stdin; external', resources('io:get_chars'))
+assert(resources('io:clear_input_buffer') === 'rmw ambient stdin; external', resources('io:clear_input_buffer'))
 }
 """

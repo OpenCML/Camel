@@ -56,8 +56,13 @@ bool IOModule::load() {
             {"clear_input_buffer", false},
         });
     // What each touches (docs/design/op-semantics 8): raw mode writes the terminal, the readers
-    // read or read-modify-write stdin. They keep the registered names until H19 step 9 renames
-    // resources, so that they stay ordered against `:io/input`.
+    // read or read-modify-write stdin, so that they stay ordered against `:io/input`.
+    //
+    // The stdin readers use the `stdin` name (design principles 3.3). Raw mode keeps its own
+    // `io:terminal` resource: H19 step 9 proposed folding it into `stdin` ("raw mode is a write
+    // mode of stdin"), but that is not a spelling change -- it would make raw mode conflict with
+    // every stdin read, where today the two resources are independent. A set change is the
+    // language author's call (H134 report section 3), so it is left as it is.
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
@@ -65,10 +70,10 @@ bool IOModule::load() {
             "io",
             {
                 {"set_terminal_raw_mode", externalAmbient("io:terminal", AccessMode::Write)},
-                {"has_input", externalAmbient("io:stdin", AccessMode::Read)},
-                {"get_char", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
-                {"get_chars", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
-                {"clear_input_buffer", externalAmbient("io:stdin", AccessMode::ReadModifyWrite)},
+                {"has_input", externalAmbient("stdin", AccessMode::Read)},
+                {"get_char", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
+                {"get_chars", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
+                {"clear_input_buffer", externalAmbient("stdin", AccessMode::ReadModifyWrite)},
             });
     }
     loaded_ = true;

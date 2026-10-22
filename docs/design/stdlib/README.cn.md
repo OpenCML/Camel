@@ -7,7 +7,7 @@
 - **几乎全是 C++**：30 个模块中只有 3 个用 Camel 写（约 270 行），标准库约 98% 在 C++。与设计原则 10.5"原语用 C++、组合用 Camel"相反，也使"自己的库尽量用 Camel 写、暴露语言不足"（第 1 节）无从谈起。
 - **重复与不一致**：`sleep` 在全局与 `process` 各一份；`algo` 有四个排序名（11.3 只留 `sort`）；`Set` 同时有 `has` 与 `contains`；`min`/`max`/`sum`/`mean`/`exp` 在 `math`、`array`、`tensor`、`statistics` 各有一份；`from_bytes` 有三种含义，`str` 里的"字节"是 `int[]` 而不是 `Bytes`。
 - **约定不一**：参数的顺序与尖括号的用法违背 4.4（`format<args>` 把数据放进尖括号、`re::test(pattern, text)` 把数据放在后面）；错误的约定违背 3.9（`fs` 几乎全是故障，`get_env` 缺变量是故障，`strptime` 失败是故障而 `parse_int` 返回 `int!`）；故障种类笼统（大量 `RuntimeError`）。
-- **资源名不一致**：C++ 侧已声明资源，但名字（`io:stdout`、`rand:generator`、`process:environment`）与 3.3 约定的 `stdout`、`fs`、`clock`、`env` 不一致；没有输出到 `stderr` 的函数。
+- **资源名不一致**：C++ 侧已声明资源，但旧名字（`io:stdout`、`rand:generator`、`process:environment` 等）与 3.3 约定的 `stdout`、`fs`、`clock`、`env` 不一致；没有输出到 `stderr` 的函数。（H134 已把可拼写的改名统一到 3.3 的名字；`io:terminal` 并入 `stdin` 是资源集变化，留给作者裁定；`eprintln` 仍未实现。）
 - **同一事实写三处**：算子的签名、纯度、资源在 C++ 注册、算子表、`stdlib/signatures/*.cml` 各写一份；签名文件只覆盖 18 个模块，且不参与编译。
 - **残留**：`io` 是空壳；`this`（彩蛋）、`sim`（基准内核）、`para::rendezvous`（测试设施）混在标准库里；没有用命名空间；没有版本号。
 - **缺口**：网络与 HTTP、并发与取消、流、键式随机数、数据加载、优化器、CSV/Parquet/Arrow、压缩、日期时间、完整的正则、进程、日志、目录操作。

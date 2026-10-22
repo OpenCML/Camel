@@ -1,0 +1,22 @@
+/**
+ * Imports every standard library module that declares a resource, so that `camel inspect --ops`
+ * lists their operators and `modules.resources` can pin the resource set (H134).
+ */
+module resource_names
+
+import algo
+import ckpt
+import env
+import fs
+import io
+import nn
+import para
+import process
+import random
+import tensor
+import tiles
+import time
+
+func main(): int {
+    return 0
+}

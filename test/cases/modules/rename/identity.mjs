@@ -1,7 +1,10 @@
 // The graph identity of a module rename (handover H114): `std::jgir` of a sample program is
 // compared after the module name is replaced in every string of the document, so the graph may
 // differ from the graph before the rename in that name and in nothing else. The expected digest
-// was recorded from the same sample on `origin/develop` before the rename.
+// was recorded from the same sample on `origin/develop` before the rename; H134 recorded the
+// values below again because `std::jgir` prints each operator's resources and these samples call
+// `println`, whose resource was renamed from `io:stdout` to `stdout` (the module rename itself
+// still changes only the module name; the samples differ from their `_old` twins in that only).
 //
 // The sample programs hold literals only and `std::jgir` is a translation pass: no environment
 // read, hash or machine query is executed, so the graph is the same on every machine.
@@ -23,17 +26,17 @@ const CASES = {
     env: {
         old: 'sys',
         now: 'env',
-        expected: 'e25ec979452a20c9cc3eaaa82733755c84c855ae93edf92908e5999050807eab',
+        expected: '54e1abbb5e4e7b962ab272488cf179593fddb9c4d43c0b3fb22e863106592163',
     },
     process: {
         old: 'os',
         now: 'process',
-        expected: '01e668a034a724c249cdbf147322958c7a425cd8dbb38a73583d50e436b0d758',
+        expected: 'ae6a65cd43954ef1d85f7595be4cd92f342be933b25ba76e96839df833dee6dc',
     },
     hash: {
         old: 'crypto',
         now: 'hash',
-        expected: '29ae6c2ed66a698bcaeeb3113261c57b556b58cdaafa9b2968f05ce615c453a2',
+        expected: 'b872dbfc27e1fc2107605c53f3b0545b761c78e561dc9cf97c590086f71a3525',
     },
 }
 

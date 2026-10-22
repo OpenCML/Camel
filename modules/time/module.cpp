@@ -61,9 +61,9 @@ bool TimeModule::load() {
         camel::core::OperatorTable::instance().declareResources(
             "time",
             {
-                {"now", externalAmbient("time:clock", AccessMode::Read)},
-                {"strftime", externalAmbient("process:environment", AccessMode::Read)},
-                {"strptime", externalAmbient("process:environment", AccessMode::Read)},
+                {"now", externalAmbient("clock", AccessMode::Read)},
+                {"strftime", externalAmbient("env", AccessMode::Read)},
+                {"strptime", externalAmbient("env", AccessMode::Read)},
             });
     }
     loaded_ = true;

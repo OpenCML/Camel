@@ -714,7 +714,7 @@ granted = 节点的许可列 ∪ (law.order == Unordered ? {a} : ∅)
 
 > **实施状态（2026-10-16，`lane/opsem-p4`）**：8.1 的声明是 `sem::ResourceSpec`（`camel/core/resource_semantics.h`），作为 `OperatorSemantics::resources`，由 `OperatorTable::declareResources` 登记（没有记录的算子得到 `uri@1.0`，已有记录的次版本加一）；登记检查的第 5 条拒绝自身不一致的声明与和 traits 矛盾的声明。与下文的差别（都是窄读）：
 >
-> - **资源的类**：`Variable`（`var` 单元）、`Object`（就地改的对象）、`Foreign`（模块包装的对象，带名字，如 `tiles:device`）之外，加了 **`Ambient`**：没有值指名的状态（文件系统 `fs`、控制台 `io:stdout`/`io:stdin`、模块的随机数发生器 `rand:generator`、时钟、进程环境），以名字为身份。下文的 `Binding` 只有三类有身份的值；文件与随机数状态没有值指名它，不加这一类就无法声明（任务要求声明它们）。`Unknown` 只是未声明时的保守读法，不能声明。
+> - **资源的类**：`Variable`（`var` 单元）、`Object`（就地改的对象）、`Foreign`（模块包装的对象，带名字，如 `tiles:device`）之外，加了 **`Ambient`**：没有值指名的状态（文件系统 `fs`、控制台 `stdout`/`stdin`、模块的随机数发生器 `rng`、时钟、进程环境），以名字为身份。下文的 `Binding` 只有三类有身份的值；文件与随机数状态没有值指名它，不加这一类就无法声明（任务要求声明它们）。`Unknown` 只是未声明时的保守读法，不能声明。
 > - **区域**：`Mapped` 不另存表达式，而是指明节点下标实例里的哪一张映射（某个操作数的访问映射或写映射），区域就是该映射在域上取到的元素；`regionBounds` 给出包围盒，`regionsMayOverlap` 判断重叠（算不出就按整体）。今天没有声明 `Mapped` 区域的算子（张量没有就地算子），由测试用手造的实例覆盖。
 > - **结果**：`ResultAlias` 照 8.1；另有 `allocates`：结果是新的资源（`:var/new` 新建单元，`tiles:upload` 新建设备内存）。
 > - **外部效应与 traits**：声明的 `externalEffect` 只能在 traits 允许外部效应时为真（不是 pure、不是 stateOnly）；反过来可以细化：赋值族在 traits 里算外部效应（没有"写变量"这一位），资源声明说它只写程序自己的单元。效应摘要（`effectSummaryOf`）仍由 traits 算出，不变（8.3）。随机数的生成照 8.1 的注释算外部效应，见 14.4 的待问。
@@ -1297,7 +1297,7 @@ namespace rt = camel::runtime;
 rt::NodeResources r = rt::resourcesOf(*graph, node);
 for (const rt::NodeAccess &a : r.accesses) {
     a.resource.cls;    // Variable / Object / Foreign / Ambient / Unknown（未声明的保守读法）
-    a.resource.name;   // "tiles:device"、"fs"、"rand:generator"
+    a.resource.name;   // "tiles:device"、"fs"、"rng"
     a.mode;            // Read / Write / ReadModifyWrite
     a.value;           // 同一张图里指名这个资源的节点（anyValue 时为 kInvalidNodeRef）
     a.region;          // Whole / Mapped（某个下标映射取到的元素）/ Unknown
@@ -1336,7 +1336,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 保留高层算子（映射到自己的内核）与展开后融合都可以，二者都必须与定义一致：`softmax`、`mean`、`relu`、`sigmoid` 在 CPU 上已逐位一致，Tiles 的实现按同一标准对照（`exp`/`log` 按声明的上界）。Tiles 今天把 softmax 写成组合，正与定义同形；注意定义里"没有元素的张量就是自己的结果"这一分支，以及 `max_axis` 用 IEEE `maximum`（14.1）。
 
 **待问（给负责人）**：
-1. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rand:generator`）。
+1. 随机数生成器的效应：按 8.1 的注释算外部效应，于是它与打印、文件之间也保持先后；若定为"程序内部的状态"，调度器就可以让抽样与输出交换次序（它们彼此仍保持先后，因为都读改写 `rng`）。
 2. ~~`mean` 对空张量：内核与定义的故障种类不同~~ 已按 7.1（"故障也包括在内"）改：内核也报 `DivisionByZero`，与定义的除法相同的诊断（`definitions` 计划的 `mean_empty_fault*` 对照两边的故障种类与消息）。
 3. 定义库在第一次被问到时编译，而不是模块装载时（第 9 节开头的理由）；若要"装载时建出"，每个导入 `tensor` 的程序都要多编一个库。
 
