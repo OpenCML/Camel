@@ -57,6 +57,9 @@ CORPUS = [
 GENERATED = re.compile(r"^(cml|p|w)\d+$")
 # The compiler names a lambda's graph after its own id; recompiling may allocate another id.
 ANONYMOUS_GRAPH = re.compile(r"^__g_\d+__$")
+# A name a source declaration can actually spell. A loop's state port may carry a path (`p.x`)
+# or a compiler marker (`$tagged0`); those are not source names, and the printer may replace them.
+SOURCE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 # What the printed text must spell, per corpus program. The checker proves equivalence; these
 # assert that the program was reached through the construct it exists to pin.
@@ -125,10 +128,11 @@ def check_names(source, printed, printed_path):
     recompiled = named_nodes(printed_path)
     original_names = set().union(*original.values()) if original else set()
     recompiled_names = set().union(*recompiled.values()) if recompiled else set()
+    required = {name for name in original_names if SOURCE_NAME.match(name)}
 
-    missing = original_names - recompiled_names
+    missing = required - recompiled_names
     assert not missing, (source.name, sorted(missing))
-    for name in original_names:
+    for name in required:
         assert re.search(rf"\b{re.escape(name)}\b", printed), (source.name, name)
 
     # A named graph is a source function and keeps its identity; a lambda's graph name is an
@@ -137,10 +141,10 @@ def check_names(source, printed, printed_path):
         if ANONYMOUS_GRAPH.match(graph):
             continue
         assert graph in recompiled, (source.name, graph, sorted(recompiled))
-        absent = names - recompiled[graph]
+        absent = {name for name in names if SOURCE_NAME.match(name)} - recompiled[graph]
         assert not absent, (source.name, graph, sorted(absent))
 
-    extra = recompiled_names - original_names
+    extra = recompiled_names - required
     unexpected = {name for name in extra if not GENERATED.match(name)}
     assert not unexpected, (source.name, sorted(unexpected))
 
