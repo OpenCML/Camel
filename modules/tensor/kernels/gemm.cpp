@@ -210,6 +210,17 @@ Array *matmul(
     const auto gemm = library ? &sgemmLibrary : &sgemm;
     const MatmulPlan plan  = planMatmul(lhs->shapeSpan(), rhs->shapeSpan());
     const TypeCode outType = promoteTensorTypes(lhs->dtype(), rhs->dtype());
+    // A bf16 or f16 matmul is the f32 multiplication of the exactly widened operands, rounded
+    // once into the element type when the result is stored: the same one arithmetic path as
+    // the elementwise operators (dtype.h), with f32 as the accumulator the declaration states.
+    // The result type stays the element type the program wrote.
+    if (outType == TypeCode::BFloat16 || outType == TypeCode::Float16) {
+        Array *wideLhs = lhs->dtype() == TypeCode::Float32 ? const_cast<Array *>(lhs)
+                                                           : cast(lhs, TypeCode::Float32, allocator);
+        Array *wideRhs = rhs->dtype() == TypeCode::Float32 ? const_cast<Array *>(rhs)
+                                                           : cast(rhs, TypeCode::Float32, allocator);
+        return cast(matmul(wideLhs, wideRhs, allocator, library), outType, allocator);
+    }
     const TypeCode compute = outType == TypeCode::Bool ? TypeCode::Int64 : outType;
     const Array *a  = lhs->dtype() == compute ? lhs : cast(lhs, compute, allocator);
     const Array *b  = rhs->dtype() == compute ? rhs : cast(rhs, compute, allocator);

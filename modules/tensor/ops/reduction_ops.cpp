@@ -49,10 +49,13 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
         const bool keepDims           = ctx.has(2) ? ctx.constBool(2).value_or(false) : false;
         std::optional<TypeCode> dtype = in.dtype;
         if (op == k::ReduceOp::Mean) {
-            // A mean of floats keeps the element type (f64 stays f64); a mean of integers and
-            // bools has always been f32.
-            dtype = dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
-                                               : std::optional(TypeCode::Float32);
+            // A mean of floats keeps the element type (f64 stays f64, bf16 and f16 stay
+            // themselves and round once when the mean is stored); a mean of integers and bools
+            // has always been f32.
+            dtype = (dtype == TypeCode::Float64 || dtype == TypeCode::BFloat16 ||
+                     dtype == TypeCode::Float16)
+                        ? dtype
+                        : std::optional(TypeCode::Float32);
         } else if (op == k::ReduceOp::ArgMax || op == k::ReduceOp::ArgMin) {
             dtype = TypeCode::Int64;
         } else if (op == k::ReduceOp::Sum && dtype == TypeCode::Bool) {
