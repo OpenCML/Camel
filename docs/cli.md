@@ -469,6 +469,8 @@ Errors are printed on standard output and warnings on standard error, in the sam
 - `-p`, `-P`, `--pass-until <n>`: Execute up to a specified graph optimization stage  
 - Available global options: `-v` / `-vv` / `-vvv` / `-vvvv`, `--verbose`, `--log-level`, `--log-preset`, `--log-include`
 
+`inspect` exits 1 when what it prints depends on a program that did not compile. A `--gir` / `--tns` / `--instances` / `--facts` / `--tags` dump reads the program graph, so a failed build reports its diagnostics and dumps nothing. `--ops` loads every module the program imports and lists its operators; if one of those modules failed to compile — most importantly a declaration file (a `.cml` beside a `.cmo`) that exists and could not be loaded — the listing would be missing that module's operators, so the diagnostics go to standard error with a line naming the module and its declaration file, no listing is printed, and the exit code is 1. A module the program does not import is not loaded and cannot fail the listing.
+
 ---
 
 ## Related Tools
