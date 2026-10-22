@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Test drivers for camel-db: its HTTP API (the gateway and its workers), its debug adapter, and
 // its REPL.
 //

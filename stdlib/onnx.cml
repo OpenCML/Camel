@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Exporting Camel programs as ONNX models: `export_model` writes the model of a function applied
  * to an example argument, and `supported_operators` lists the operator URIs the backend can

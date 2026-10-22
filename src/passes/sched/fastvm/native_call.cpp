@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 16, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // Native operators re-enter this VM through the same frames and recursion counters as HOFs.
+
 #include "camel/core/operator_table.h"
 #include "camel/execute/function_call.h"
 #include "fastvm.h"

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Where the time and the memory of a Camel run go, phase by phase.
 
     python3 benchmarks/compile/bench.py run [--out DIR] [--rounds N] [--cpu K] [--sets LIST]

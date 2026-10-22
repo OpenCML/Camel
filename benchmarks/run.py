@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Benchmark driver: runs every (model, configuration) pair and writes a CSV.
 
 Pipeline:

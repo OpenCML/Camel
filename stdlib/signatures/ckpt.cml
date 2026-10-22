@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Signatures of the native module ckpt: what a checkpoint saves (a parameter tree, a value made
 // of structs and tuples, design principles 13.5) and the directory that holds it. These
 // declarations are reference metadata.

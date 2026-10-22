@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Export-time capability check versus load-time failure (exemplar ORT_007).
 
 The same small model, ``relu(int64(x) - 2)``, goes to ONNX Runtime's CPU

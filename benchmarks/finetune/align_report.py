@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E1 alignment report: three-party loss/weight agreement tables and curves.
 
 Compares the loss sequences and per-step updated parameters of the three

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E15/T11 continual-learning data: FIVE users arriving in order, each an MNIST
 sub-distribution rotated by a fixed angle {0, +15, +30, +45, -15} deg — the
 make_mnist_user.py pattern (E9) replicated per user with per-user seeds.

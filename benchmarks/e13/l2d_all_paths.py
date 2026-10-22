@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E13/T5 L2d full-path validation of the exported gated-GRU forward.
 
 The exported l2d_fwd graph is a full binary decision tree over the T = 3 gate

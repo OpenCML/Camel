@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E12 thin translator: a Camel-exported ONNX forward graph -> a Relax function.
 
 This is the "second exit" translator (MLSys task T8): the simplified Camel

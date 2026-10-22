@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The computed signatures of the `json` module: `encode` and `decode_as`, whose types come from
  * a type rule rather than from a written signature. The C++ resolvers in `modules/json` are the

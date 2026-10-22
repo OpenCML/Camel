@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Random and differential tests of the built-in collections `Map<K, V>` and `Set<T>`.
 
 A generated program is a sequence of operations on maps and sets: construction with `as`

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """ORT Training baseline for the E2 training-step benchmark (CPU).
 
 Same workload as ``train.py``: the loss is ``mean(y * y)`` of the model output

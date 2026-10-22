@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T13 account (torch side): wall-clock segmentation of the PyTorch eager
 training step into forward, backward, and SGD-update phases.
 

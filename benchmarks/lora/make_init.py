@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E9: build artifacts/lora/weights/ = mlp backbone (copied) + deterministic LoRA
 adapter init (A ~ N(0, 0.01), B = 0 so the adapter is an exact identity at init;
 rank r = 8, scale alpha/r = 2.0). Deterministic via numpy default_rng(2001).

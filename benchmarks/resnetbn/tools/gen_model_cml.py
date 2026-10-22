@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Generates ../model.cml (run: python tools/gen_model_cml.py > ../model.cml).
 
 The resnetbn model is mechanical — 20 conv+batch_norm layers with the running statistics

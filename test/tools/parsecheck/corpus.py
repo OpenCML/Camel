@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Assembles the corpus the parser harness (camel-parsecheck) runs on.
 
     python3 test/tools/parsecheck/corpus.py --out DIR [--scope parse|repository]

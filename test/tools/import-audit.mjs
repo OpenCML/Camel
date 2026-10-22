@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // What `import m` does today, for every module of the standard library (handover H222).
 //
 // The language author ruled on 2026-10-22 that `import` executes no code (design principles

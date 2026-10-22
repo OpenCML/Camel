@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Classifies pipeline-runner records against the "agree or refuse" contract.
 
 The rules are frozen in CLASSIFIER-RULES.md (artifacts/x1a/ of the paper repository); this

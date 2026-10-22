@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Compare two canonical JSON GIR documents for graph equivalence.
 
 The definition of equivalence is the one of `docs/design/graph-store/plan.cn.md` section 2.2:

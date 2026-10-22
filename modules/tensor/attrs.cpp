@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license:
- * you may not use this software except in compliance with the License.
- * You may obtain a copy of the License at:
- * [https://opensource.org/license/mit]
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions or
- * limitations under the License.
- *
- * Author: Camel Contributors
- * Created: Oct. 22, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "attrs.h"
 

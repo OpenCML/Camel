@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E1 PyTorch reference: same initial weights, same batches, same SGD (lr 0.01).
 
 Replicates the Camel models exactly (LayerNorm eps 1e-5, GELU tanh, explicit

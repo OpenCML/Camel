@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """TensorFlow implementation of the ``gru`` benchmark model (see README.md).
 
 Explicit GRU cell loop with PyTorch gate equations (the reset gate is applied

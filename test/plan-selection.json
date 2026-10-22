@@ -281,6 +281,11 @@
             "plans": ["feat/compile/diag_catalog.plan.toml"]
         },
         {
+            "comment": "The header sweep: docs.headers runs headers.mjs --check over the tree, and --check --root over its own fixture (test/plans/feat/headers/fixture).",
+            "paths": ["scripts/headers.mjs"],
+            "plans": ["feat/docs_headers.plan.toml"]
+        },
+        {
             "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]

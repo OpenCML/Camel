@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E12 prepare: fresh Camel artifacts for the MLP forward graph.
 
 Runs benchmarks/mlp/model.cml twice with the shared camel_bench protocol

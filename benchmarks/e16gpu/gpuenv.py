@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Shared plumbing for the T12 GPU deployment-overhead measurements (MLSys 2027).
 
 Framing (applies to every T12 sub-item): all GPU numbers describe "ONNX Runtime

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T13 acceptance core: assemble the per-model attribution tables from the raw
 measurements and check that the parts sum to the measured step times (<15%).
 

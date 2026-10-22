@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Measure one (model, configuration) pair inside a fresh process.
 
 Invoked by run.py as ``python common/worker.py --model M --config C ...`` with

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """TensorFlow implementation of the ``lenet`` benchmark model (see README.md).
 
 The contract is NCHW with [out_c, in_c, kh, kw] kernels; TF CPU kernels require

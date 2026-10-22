@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Pipeline sets for the pipeline-invariance experiments (X1).
 
 A pipeline is the list of pass names given to `camel <file> <pass>...`.

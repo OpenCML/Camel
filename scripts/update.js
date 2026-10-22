@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import fs from 'fs'
 import fsp from 'fs/promises'
 import readline from 'readline'

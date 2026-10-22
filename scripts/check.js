@@ -1,6 +1,51 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import { spawn } from 'child_process'
+import path from 'path'
 import ora from 'ora'
+import { fileURLToPath } from 'url'
 import { logDone, logFail } from './common.js'
+
+// Every hand-written source carries the two-line header (scripts/headers.mjs). Checked first: it
+// is the cheapest step, and the failure names the files instead of a formatter rewriting them.
+async function checkHeaders() {
+    const headersScript = path.join(path.dirname(fileURLToPath(import.meta.url)), 'headers.mjs')
+    const spinner = ora('Checking the source headers...').start()
+    const proc = spawn(process.execPath, [headersScript, '--check'])
+    let output = ''
+
+    const success = await new Promise((resolve) => {
+        proc.stdout.on('data', (data) => {
+            output += data.toString()
+            const lines = data.toString().split('\n')
+            lines.forEach((line) => {
+                let l = line.trim()
+                if (l) {
+                    spinner.text = l
+                }
+            })
+        })
+
+        proc.stderr.on('data', (data) => {
+            spinner.fail(`Error: ${data.toString().trim()}`)
+        })
+
+        proc.on('close', (code) => {
+            if (code === 0) {
+                spinner.succeed('Source headers are canonical!')
+                resolve(true)
+            } else {
+                spinner.fail('Source header check failed!')
+                console.log(output.trimEnd())
+                console.log('Run `node scripts/headers.mjs --fix` to rewrite them.')
+                resolve(false)
+            }
+        })
+    })
+
+    return success
+}
 
 async function formatCode() {
     const spinner = ora('Initializing code format...').start()
@@ -100,7 +145,12 @@ async function countCode() {
 }
 
 ;(async () => {
-    let success = await formatCode()
+    let success = await checkHeaders()
+    if (!success) {
+        logFail('Header check failed!')
+        return
+    }
+    success = await formatCode()
     if (!success) {
         logFail('Formatting task failed!')
         return

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T12a GPU memory footprint contrast (MLSys 2027 eval, A.4/A.5 discipline).
 
 Question: for one deployed training step, what GPU memory does the *artifact*

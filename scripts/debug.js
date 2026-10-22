@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import { execSync } from 'child_process'
 import { runCmakeBuild, copyBuildArtifacts, logDone, BASEDIR } from './common.js'
 import { getCmakeOptionFlags } from './cmake-opts.js'

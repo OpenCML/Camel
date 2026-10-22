@@ -193,7 +193,7 @@ const out = input.normalized.stdout
 assert(input.normalized.stderr.includes('EXPANDED tensor:mean 2\n'), input.normalized.stderr)
 assert(out.startsWith('0.0\n'), out)
 assert(out.includes('[Error]: Attempted division by zero.') && out.includes('(name=RuntimeDiag::DivisionByZero,'), out)
-assert(out.includes('tensor_definitions.cml:52:'), `located at the division of the definition: ${out}`)
+assert(out.includes('tensor_definitions.cml:55:'), `located at the division of the definition: ${out}`)
 }
 """
 

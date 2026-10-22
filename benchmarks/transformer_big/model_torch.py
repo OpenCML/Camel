@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E5-W1 upscaled transformer: one pre-LN encoder block, d_model=256, 8 heads,
 FFN 1024, GELU(tanh), batch [16,64,256]. Mirrors ``transformer`` with a wider
 head count; attention is explicit (no fused SDPA) as in the small model.

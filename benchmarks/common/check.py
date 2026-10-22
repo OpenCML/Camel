@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Numerical agreement check of every available configuration vs the NumPy reference.
 
 For each model, runs every applicable configuration once on ``input.npy`` and

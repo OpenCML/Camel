@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Plots: draw an array of numbers with matplotlib, and fall back to an SVG file when matplotlib
  * is not installed. The operator writes an image file and is never folded or dropped by a pass.

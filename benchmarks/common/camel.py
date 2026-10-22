@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Plug-in driver for native Camel configurations (camel_native / camel_fvm / camel_jit).
 
 Runs ``camel <benchmarks/<model>/model.cml> [passes...]`` from ``benchmarks/<model>/``

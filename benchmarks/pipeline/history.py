@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Reclassifies one set of records under each rule set of classify.py, one rule change at a
 time, and reports how many cells each change moved from which outcome to which.
 
