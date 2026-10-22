@@ -53,12 +53,18 @@ class Context;
 using context_ptr_t = std::shared_ptr<Context>;
 using module_ptr_t  = std::shared_ptr<module::Module>;
 
+/// The worker threads a run may use when nothing gave a number: the machine's core count, at least
+/// 1. Reading it creates nothing.
+size_t hardwareThreadCount();
+
 struct EntryConfig {
     std::string entryDir;                 // root path of the context, used for loading modules
     std::string entryFile;                // entry module path
     std::vector<std::string> searchPaths; // search paths for modules
-    // Upper bound on worker threads of parallel schedulers (`-t` on the command line); 0 means
-    // not given: the scheduler uses the number of hardware threads.
+    // The thread limit of the run (`-t` on the command line); 0 means not given. It is the one
+    // number every pool of the run takes its size from: Context::threadLimit() resolves it, the
+    // parallel schedulers use it directly and a module installs it into its own pool when it
+    // loads. There is no environment variable for it (design principles 9.3).
     size_t maxThreads = 0;
     // Limit on non-tail recursion (`--max-recursion-depth`) and on nested calls of the macro
     // evaluator (`--max-macro-depth`); 0 means not given: see camel/execute/limits.h for the
@@ -223,6 +229,9 @@ class Context : public std::enable_shared_from_this<Context> {
     }
     const std::string &entryDir() const { return entryConfig_.entryDir; }
     size_t maxThreads() const { return entryConfig_.maxThreads; }
+    /// The threads the run may use: `maxThreads()` when `-t` gave one, else the hardware
+    /// concurrency. The value of record for every pool of the run.
+    size_t threadLimit() const;
     size_t maxRecursionDepth() const { return entryConfig_.maxRecursionDepth; }
     size_t maxMacroDepth() const { return entryConfig_.maxMacroDepth; }
     size_t maxMacroRounds() const { return entryConfig_.maxMacroRounds; }

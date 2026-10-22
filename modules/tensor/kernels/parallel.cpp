@@ -20,7 +20,6 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
-#include <cstdlib>
 #include <exception>
 #include <mutex>
 #include <thread>
@@ -55,12 +54,6 @@ struct RegionScope {
 };
 
 int defaultThreadCount() {
-    if (const char *env = std::getenv("CAMEL_NUM_THREADS")) {
-        const int requested = std::atoi(env);
-        if (requested > 0) {
-            return requested;
-        }
-    }
     const unsigned hw = std::thread::hardware_concurrency();
     return hw == 0 ? 1 : static_cast<int>(hw);
 }

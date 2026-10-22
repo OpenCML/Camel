@@ -56,7 +56,7 @@ def prepare_data(data: Path, profile: dict) -> None:
 
 def camel_command(camel: Path, data: Path, model: str, profile: dict, passes: list[str]) -> list[str]:
     return [
-        str(camel), str(HERE / "train.cml"),
+        str(camel), "-t", "1", str(HERE / "train.cml"),
         "--arg", f"data={data / model}",
         "--arg", f"model={model}",
         "--arg", f"steps={profile['steps']}",
@@ -148,7 +148,7 @@ def main() -> int:
     runs = {}
     for model in ("linear", "logistic"):
         c = run_command(camel_command(camel, data, model, profile, ["std::macro", "std::nvm"]),
-                        camel_env(REPO, 1))
+                        camel_env(REPO))
         t = run_command(torch_command(data, model, profile), python_env(1))
         if c["exit"] != 0:
             sys.stderr.write(c["stdout"] + c["stderr"])
@@ -161,7 +161,7 @@ def main() -> int:
     compile_times = []
     for _ in range(3):
         c = run_command(camel_command(camel, data, "linear", profile,
-                                      ["std::macro", "std::stats", "std::null"]), camel_env(REPO, 1))
+                                      ["std::macro", "std::stats", "std::null"]), camel_env(REPO))
         compile_times.append(c["seconds"])
     compile_time = statistics.median(compile_times)
 
@@ -173,7 +173,7 @@ def main() -> int:
         all_rows.append((model, rows))
         failures += sum(1 for row in rows if not row[-1])
 
-    version = run_command([str(camel), "--version"], camel_env(REPO, 1))
+    version = run_command([str(camel), "--version"], camel_env(REPO))
     camel_version = version["stdout"].strip() or version["stderr"].strip()
 
     lines = []
