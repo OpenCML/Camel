@@ -91,11 +91,16 @@ function parseArgs(argv) {
     const runnerArgs = []
     const targets = []
     let changed = false
+    let list = false
 
     for (let i = 0; i < argv.length; ++i) {
         const arg = argv[i]
         if (arg === '--changed') {
             changed = true
+        } else if (arg === '--list') {
+            // Print the plans a selection resolves to instead of running them. `--changed --list`
+            // is the answer to "what would this change run?" without paying for the run.
+            list = true
         } else if (
             arg === '--all' ||
             arg === '--smoke' ||
@@ -141,6 +146,7 @@ function parseArgs(argv) {
                     ? [PLANS_ROOT]
                     : DEFAULT_TARGETS,
         changed,
+        list,
     }
 }
 
@@ -167,28 +173,53 @@ export function changedFiles() {
     return [...new Set(files)]
 }
 
+/** A plan entry of a file rule: `"feat/opt"`, or `{ "plan": "...", "layer": true }`. */
+function selectionPlan(entry, ruleLayer) {
+    if (entry !== null && typeof entry === 'object') {
+        return {
+            name: String(entry.plan || ''),
+            layer: entry.layer === undefined ? ruleLayer : entry.layer === true,
+        }
+    }
+    return { name: String(entry), layer: ruleLayer }
+}
+
 export function loadSelectionRules() {
     const doc = JSON.parse(fs.readFileSync(SELECTION_PATH, 'utf8'))
-    return (doc.rules || []).map((rule) => ({
-        paths: (rule.paths || []).map((entry) => String(entry).replace(/\\/g, '/')),
-        plans: (rule.plans || []).map((entry) => String(entry)),
-        // A rule may name no plans but select the changed plan file itself (`test/plans/`).
-        self: rule.self === true,
-    }))
+    return (doc.rules || []).map((rule) => {
+        // `layer` on the rule is the default for its entries: a layered plan file follows
+        // `--tier` even though a named file normally runs in full. A rule about a plan with slow
+        // entries that must not run (the PyTorch comparisons of autodiff/onnx) marks them,
+        // instead of silently selecting a file whose slow cases then never execute.
+        const layer = rule.layer === true
+        return {
+            paths: (rule.paths || []).map((entry) => String(entry).replace(/\\/g, '/')),
+            plans: (rule.plans || []).map((entry) => selectionPlan(entry, layer)).filter((plan) => plan.name),
+            // A rule may name no plans but select the changed plan file itself (`test/plans/`).
+            self: rule.self === true,
+            // Plans the selection must not reach by the self rule (perf, GC stress, progen): a
+            // change there falls back to the fast layer instead of running the excluded plan.
+            except: (rule.except || []).map((entry) => String(entry).replace(/\\/g, '/')),
+        }
+    })
 }
 
 /**
- * The plans a set of changed files selects. The first rule whose path prefix matches a file
- * names the plans for that file (`plans`), or is the changed plan file itself (`self`); the
- * union over all files is run in plan order by the runner. Null when no rule matched anything
- * (the caller then runs the whole fast layer).
+ * The plans a set of changed files selects. For each file the directory rule supplies the plan
+ * that mirrors its path, and the first matching file rule adds the plans outside that tree that
+ * can catch the same change (the gpu plans of tiles, the exporter of onnx, autodiff for tensor).
+ * Their union is run in plan order by the runner. A rule may mark a plan `layer: true`: it stays
+ * a named target but follows `--tier` like a directory, so the slow cases that must not run from
+ * an ordinary change (the PyTorch comparisons of autodiff/onnx) are filtered while the fast ones
+ * still run. Null when no rule matched anything (the caller then runs the whole fast layer).
  */
 /**
  * The directory rules: a changed file under one of these roots is first looked up by its
  * directory, so `modules/tensor/ops.cpp` selects `test/plans/feat/modules/tensor` (and
  * `test/cases/compile/enum/x.cml` selects `test/plans/feat/compile`) without a per-subsystem
  * mapping. The deepest plan directory or plan file that matches wins; the file rules below are
- * the fallback for a path no plan directory mirrors (a pass, the standard library, docs).
+ * the complement for a path no plan directory mirrors (a pass, the standard library, docs) and
+ * for the plans outside the mirrored tree that a component needs (H161).
  */
 export function loadDirectoryRules() {
     const doc = JSON.parse(fs.readFileSync(SELECTION_PATH, 'utf8'))
@@ -219,29 +250,44 @@ function planForDirectory(file) {
 export function plansForChanges(files) {
     const rules = loadSelectionRules()
     const names = new Set()
+    const layered = new Set()
     const targets = new Set()
     let matched = false
     for (const file of files) {
-        // Directory first. When it finds a plan, the file rules do not add a broader set: the
-        // narrow selection is the point of the order.
+        // Directory first: the plan that mirrors the changed path is the narrow selection. The
+        // file rules do not replace it, they add the plans that live outside that mirrored tree
+        // (a `modules/tiles/` change needs `gpu/**`, which no directory rule can reach).
         const byDirectory = planForDirectory(file)
         if (byDirectory) {
             matched = true
             targets.add(byDirectory)
-            continue
         }
         const rule = rules.find((candidate) =>
             candidate.paths.some((prefix) => file === prefix || file.startsWith(prefix))
         )
-        if (!rule) continue
-        matched = true
-        for (const plan of rule.plans) names.add(plan)
-        if (rule.self && file.endsWith('.plan.toml')) {
-            const target = path.join(REPO_ROOT, ...file.split('/'))
-            if (fs.existsSync(target)) targets.add(target)
+        if (rule) {
+            let added = false
+            for (const plan of rule.plans) {
+                if (plan.layer) layered.add(plan.name)
+                else names.add(plan.name)
+                added = true
+            }
+            const excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
+            if (rule.self && file.endsWith('.plan.toml') && !excluded) {
+                const target = path.join(REPO_ROOT, ...file.split('/'))
+                if (fs.existsSync(target)) {
+                    targets.add(target)
+                    added = true
+                }
+            }
+            if (added) matched = true
         }
     }
-    return matched ? { names: [...names], targets: [...targets] } : null
+    if (layered.size > 0) matched = true
+    // A plan named both by a rule and by the directory still follows the tier: layering is the
+    // narrower statement, and `--changed` must not run the cases it just said are out.
+    for (const name of layered) names.delete(name)
+    return matched ? { names: [...names], targets: [...targets], layered: [...layered] } : null
 }
 
 /** A plan named by the selection file, relative to test/plans (a directory or a *.plan.toml). */
@@ -258,26 +304,46 @@ function selectChangedTargets() {
     const files = changedFiles()
     if (files === null) {
         console.log(`[INFO] --changed: cannot read ${base}; running the whole fast layer`)
-        return []
+        return { targets: [], layered: [] }
     }
     if (files.length === 0) {
         console.log(`[INFO] --changed: no change against ${base}; running the whole fast layer`)
-        return []
+        return { targets: [], layered: [] }
     }
     const plans = plansForChanges(files)
-    if (!plans || (plans.names.length === 0 && plans.targets.length === 0)) {
+    if (!plans || (plans.names.length === 0 && plans.targets.length === 0 && plans.layered.length === 0)) {
         console.log(`[INFO] --changed: no rule matches ${files.length} changed file(s); running the whole fast layer`)
-        return []
+        return { targets: [], layered: [] }
     }
-    const targets = [...plans.names.map(resolveSelectionTarget), ...plans.targets]
-    console.log(`[INFO] --changed: ${files.length} changed file(s) select ${targets.length} plan(s)`)
-    return targets
+    const resolved = new Map()
+    for (const target of [...plans.names.map(resolveSelectionTarget), ...plans.targets]) {
+        resolved.set(path.resolve(target), target)
+    }
+    const targets = [...resolved.values()]
+    const layered = [...new Set(plans.layered.map(resolveSelectionTarget).map((target) => path.resolve(target)))]
+    const tierNote = layered.length > 0 ? `, ${layered.length} follow --tier` : ''
+    console.log(`[INFO] --changed: ${files.length} changed file(s) select ${targets.length} plan(s)${tierNote}`)
+    return { targets, layered }
 }
 
 export function main(argv = process.argv.slice(2)) {
     const options = parseArgs(argv)
-    const targets = options.changed && options.targets.length === 0 ? selectChangedTargets() : options.targets
-    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...targets], {
+    const selection = options.changed && options.targets.length === 0
+        ? selectChangedTargets()
+        : { targets: options.targets, layered: [] }
+    if (options.list) {
+        // `--changed --list`: the selection without the run. It is how a change's plan list is
+        // checked (and recorded in a report) without paying for the plans.
+        for (const target of selection.targets) console.log(target)
+        if (selection.targets.length === 0 && selection.layered.length === 0) {
+            console.log('(the whole fast layer: smoke + feat)')
+        }
+        return
+    }
+    const layeredArgs = selection.layered.length > 0
+        ? ['--selection-layer', selection.layered.join(',')]
+        : []
+    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...selection.targets, ...layeredArgs], {
         cwd: REPO_ROOT,
         stdio: 'inherit',
         env: process.env
