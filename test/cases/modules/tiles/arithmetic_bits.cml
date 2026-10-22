@@ -1,6 +1,6 @@
 module tiles_arithmetic_bits
 import { Tensor, load_npy, save_npy, sqrt } from tensor
-import { run } from tiles
+import { run_preferred_resident, download } from tiles
 import { get_env } from env
 func arithmetic(a: Tensor<f32>, b: Tensor<f32>): (Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>, Tensor<f32>) {
     return (a + b, a - b, a * b, a / b, sqrt(a), a * b + a)
@@ -10,7 +10,7 @@ func main(): int sync {
     let a = load_npy(folder + '/a.npy') as Tensor<f32>
     let b = load_npy(folder + '/b.npy') as Tensor<f32>
     let cpu = arithmetic(a, b)
-    let gpu = run<arithmetic>((a, b))
+    let gpu = download(run_preferred_resident<arithmetic>((a, b)))
     save_npy(cpu.0, folder + '/cpu0.npy')
     save_npy(cpu.1, folder + '/cpu1.npy')
     save_npy(cpu.2, folder + '/cpu2.npy')

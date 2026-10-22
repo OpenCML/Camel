@@ -1,6 +1,6 @@
 module tiles_vector_add
 import { Tensor, reshape, sum } from tensor
-import { run, device } from tiles
+import { device, run_preferred_resident, download } from tiles
 
 func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> {
     return x + y
@@ -10,7 +10,7 @@ func main(): int sync {
     println(device())
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0], [5])
     let y = reshape([10.0, 20.0, 30.0, 40.0, 50.0], [5])
-    let z = run<add>((x, y))
+    let z = download(run_preferred_resident<add>((x, y)))
     println(z)
     println(sum(z))
     return 0

@@ -69,7 +69,7 @@ kind = "behavior"
 case = "../../cases/gpu/profile/device_region.cml"
 args = ["${case}", "std::profile", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["PROFILE camel", "tiles:run_device", "device kernels"]
+expect_stdout_contains = ["PROFILE camel", "tiles:run_preferred_resident", "device kernels"]
 timeout_ms = 120000
 
 # The whole-program profile is not printed twice: without the pass, nothing changes.

@@ -236,7 +236,7 @@ another `if`, are the same: each loop's condition and body are regions of where 
 the commit refuses a graph where they are not (`17_graph_rewrite_api_contracts.md`, 4.1).
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
-function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
+function value it receives instead of calling it (Tiles' `run_preferred_resident`, `source`,
 `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
 `OperatorTraits::readsGraphs`. It sees a function's LOOP and its regions (`modules.tiles`
 `loop_structure_*`), and the ONNX export refuses it where it is written (`linear.loops`

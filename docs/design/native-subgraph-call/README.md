@@ -134,9 +134,10 @@ runtime faults are not silently converted into CPU execution.
 
 This does not replace explicit boundary transfers, device-resident values,
 symbolic compilation or cache identities required by the route. Those remain
-part of the production pass. `run` currently retains explicit GPU semantics. The user-directed multi-target
-redesign makes `@gpu` a GPU preference with capability-based CPU fallback; this
-policy now uses this invocation service in NVM, FVM, JIT and Taskflow. See [the multi-target design](../tiles-targets/README.md).
+part of the production pass. The user-directed multi-target design makes `#gpu` a placement label read by
+`tiles::compile`, with capability-based CPU fallback outside the scope; the
+`@gpu` decorator and the explicit `run`/`run_device` operators were removed
+(H218). This policy now uses this invocation service in NVM, FVM, JIT and Taskflow. See [the multi-target design](../tiles-targets/README.md).
 
 ## Acceptance tests
 

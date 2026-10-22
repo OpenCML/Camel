@@ -1,0 +1,13 @@
+module tiles_gpu_scope_supported
+import { Tensor, reshape, sum } from tensor
+
+// Every operator in this `#gpu` scope has a device implementation, so `tiles::compile` accepts
+// it; without a device the region pass still falls back to the host at run time.
+#gpu
+func scale(x: Tensor<f32>): Tensor<f32> { return x * 2.0 }
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(sum(scale(x)))
+    return 0
+}

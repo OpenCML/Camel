@@ -112,7 +112,6 @@ const FORBIDDEN = [
     { file: 'test/plans/feat/mm/gc_elder_exhaustion.plan.toml', reason: 'elder-generation exhaustion (`gc_elder_*`; agents/test.md)' },
     { file: 'test/plans/feat/opt/progen.plan.toml', reason: 'progen random-program check (agents/test.md)' },
     { file: 'test/plans/gpu/tiles_regions.plan.toml', reason: 'region run under GC stress (`CAMEL_GC_STRESS_SAFEPOINT=1` + `CAMEL_GC_VERIFY`)' },
-    { file: 'test/plans/gpu/tiles_decorator.plan.toml', reason: '`@gpu` decorator: ten GC-stress subprocesses per case' },
     // Files whose slow entries are forbidden; the whole file is skipped (the runner cannot select
     // a test by name, so naming the file would start the forbidden tests).
     { file: 'test/plans/feat/modules/autodiff.plan.toml', reason: 'its 5 slow tests compare against PyTorch (`*_vs_torch64`)' },

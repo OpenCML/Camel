@@ -4,7 +4,7 @@
 module tiles_layout_grad
 import { Tensor, reshape, permute, sum, abs } from tensor
 import { grad } from autodiff
-import { source, run } from tiles
+import { source, run_preferred_resident, download } from tiles
 
 with <x: Tensor<f32>>
 func layout_loss(): float {
@@ -29,9 +29,9 @@ func main(run_gpu: bool): int sync {
     if len(first) == 0 || len(second) == 0 || len(third) == 0 || first == second then sync { exit(1) }
     println('layout_grad shape specialization PASS')
     if run_gpu then sync {
-        let e1 = sum(abs(run<derivative>(x) - x * 2.0))
-        let e2 = sum(abs(run<derivative>(changed) - changed * 2.0))
-        let e3 = sum(abs(run<negative_derivative>(changed) - changed * 2.0))
+        let e1 = sum(abs(download(run_preferred_resident<derivative>(x)) - x * 2.0))
+        let e2 = sum(abs(download(run_preferred_resident<derivative>(changed)) - changed * 2.0))
+        let e3 = sum(abs(download(run_preferred_resident<negative_derivative>(changed)) - changed * 2.0))
         println('layout_grad errors={} {} {}'->format<e1, e2, e3>)
         if e1 > 0.000001 || e2 > 0.000001 || e3 > 0.000001 then sync { exit(1) }
     }

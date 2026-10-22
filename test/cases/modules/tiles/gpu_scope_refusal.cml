@@ -1,0 +1,13 @@
+module tiles_gpu_scope_refusal
+import { Tensor, reshape, tanh, sum } from tensor
+
+// `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
+// scope that is a compile error, not a silent fallback to the host.
+#gpu
+func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(sum(activate(x)))
+    return 0
+}

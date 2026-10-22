@@ -253,6 +253,16 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::GpuScopeUnsupported,
+            {
+                "GpuScopeUnsupported",
+                "`#gpu` scope '{0}': {1} cannot run on the device ({2}).",
+                "The `#gpu` tag promises that the device runs everything written in the function "
+                "or block. Remove the tag, or rewrite the scope so that every operator in it has "
+                "a device implementation; `--devices cpu` runs the whole program on the host.",
+            },
+        },
+        {
             RuntimeDiag::PassNeedsExtraction,
             {
                 "PassNeedsExtraction",

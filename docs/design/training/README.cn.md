@@ -37,7 +37,7 @@ export func stepFF(p: FF, g: FF, m: FF, v: FF, rate: float, bc1: float, bc2: flo
 - 值层面：没有"对结构的每个叶子做同一件事"的写法；
 - 类型层面：没有办法从 `FF` 得到"每个字段都在设备上的 `FF`"。
 
-而核心内部早已理解这种树：`with_grad(loss)<m>` 对整个 `Model` 求梯度并返回同构的梯度；`run_device` 按原结构返回设备值。缺的只是让用户也能写。
+而核心内部早已理解这种树：`with_grad(loss)<m>` 对整个 `Model` 求梯度并返回同构的梯度；`run_preferred_resident` 按原结构返回设备值。缺的只是让用户也能写。
 
 ### 1.2 一个训练步在主机与设备之间往返
 
@@ -48,8 +48,8 @@ let clean = read_batch('data/train-images-idx3-ubyte', offset, batch)   // 主�
 let t = randint(0, len(s.beta) - 1)                                      // 主机随机数
 let noise = randn([batch, 784])                                          // 主机随机数
 let noisy = q_sample(clean, noise, s.abar[t])                            // 主机加噪
-let vg = run_device<differentiate>((m, noisy, noise, ...))               // 上传、GPU 求梯度
-let next = run_device<update>((m, vg.1, mu, nu, ...))                    // 第二次 GPU 调用
+let vg = run_preferred_resident<differentiate>((m, noisy, noise, ...))               // 上传、GPU 求梯度
+let next = run_preferred_resident<update>((m, vg.1, mu, nu, ...))                    // 第二次 GPU 调用
 ```
 
 数据、随机数、加噪都在主机上，每步上传两个批量张量，前向反向与更新是两次独立的调用。潜变量扩散的入口更甚：潜变量下载到主机加噪再上传。根本原因是随机数只能在主机上生成：现有的 `randn`、`randint` 读写进程级的生成器状态，是外部效应，不能编进 GPU 内核。
@@ -120,7 +120,7 @@ let next = run_device<update>((m, vg.1, mu, nu, ...))                    // 第�
 Device<{ a: A, b: (B, C) }>  ≡  { a: Device<A>, b: (Device<B>, Device<C>) }
 ```
 
-两边是同一个类型（类型构造时规范化），不是两个可以互相转换的类型。`upload`、`download` 接受树；`run_device` 的结果类型本来就是这个形式，现在有了名字。叶子必须是 `Device` 支持的类型（张量或 `float`），否则编译错误并指出路径。
+两边是同一个类型（类型构造时规范化），不是两个可以互相转换的类型。`upload`、`download` 接受树；`run_preferred_resident` 的结果类型本来就是这个形式，现在有了名字。叶子必须是 `Device` 支持的类型（张量或 `float`），否则编译错误并指出路径。
 
 一般的"映射类型"（对任意类型函数按字段分配）属于尚未决定的类型表达式语言（设计原则第 15 节），本稿只定 `Device`。
 
@@ -161,7 +161,7 @@ export func sq_norm(p: typeas P): float {
 ### 3.6 与自动微分、Tiles 的关系
 
 - `with_grad` 已对结构参数返回同构梯度；树操作展开为逐叶节点后，梯度照常通过。
-- `@gpu` 与 `run_device` 已按结构传递参数；`Device<P>` 规范化后，用户写的类型与 Tiles 返回的类型一致。
+- `#gpu` 与 `run_preferred_resident` 已按结构传递参数；`Device<P>` 规范化后，用户写的类型与 Tiles 返回的类型一致。
 - 展开在类型确定之后、自动微分之前进行（技术选择，实现时与 `std::macro` 的位置一起确定）。
 
 ---
@@ -197,12 +197,12 @@ let t     = randint(fold(ks, 1), 0, 999)
 
 ### 4.3 一个函数完成一步
 
-<!-- camel-snippet: fragment: a design proposal; Device, @gpu and the body are not current syntax -->
+<!-- camel-snippet: fragment: a design proposal; Device, #gpu and the body are not current syntax -->
 
 ```cml
 type State = { params: Params, m: Params, v: Params, ema: Params, key: Key, step: int }
 
-@gpu
+#gpu
 func train_step(s: Device<State>, data: Device<Tensor<f32>>, cfg: Config): (Device<State>, Device<float>) {
     let k     = fold(s.key, s.step)
     let idx   = randint(fold(k, 0), 0, cfg.count, [cfg.batch])
@@ -345,7 +345,7 @@ DDPM 现在每存一次检查点就重启 Camel。要先查清原因：若是内
 
 - 核心：集合通信算子的声明（`all_reduce` 等，含资源声明与按卡号顺序的规范语义）；一个卡上出故障时所有卡以同一诊断失败；检查点在多卡下只由一个进程发布。
 - Tiles：NCCL 后端、参数复制、批量切分、梯度平均、流与事件、单卡等价性测试（同一全局批量下与单卡结果在规约重排的误差内一致）。
-- 对外形式（如 `@gpu(devices: 4)` 或独立的 `data_parallel<step>`）由 Tiles 在多目标设计中定，不是语言语法。
+- 对外形式（如 `#gpu` 加设备列表，或独立的 `data_parallel<step>`）由 Tiles 在多目标设计中定，不是语言语法。
 
 ---
 

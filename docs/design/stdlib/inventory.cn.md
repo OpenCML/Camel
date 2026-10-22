@@ -38,7 +38,7 @@
 | nn | 网络层、损失、优化器 | 约 19 + 类型 OptimizerState | conv2d/max_pool2d/avg_pool2d/batch_norm/batch_norm_train/embedding/softmax_cross_entropy 及各 `_grad`；sgd/adam_state/adam/save_params | 37 / 30 | 链接 tensor |
 | autodiff | 自动微分 | 4 | grad/with_grad/vjp/stop_gradient | 95 / 34 | |
 | onnx | 导出 ONNX | 2 | export_model/supported_operators | 75 / 31 | 链接 tensor；export_matrix.md 由脚本生成 |
-| tiles | GPU/CUDA 区域编译（实验） | 约 12 + 类型 Device | run/run_device/upload/download/available/device/gpu/regions/inspect 等；`tiles::compile` 遍 | 72 / 0 | README 标明 experimental；协作线另一台机器 |
+| tiles | GPU/CUDA 区域编译（实验） | 约 12 + 类型 Device | run_preferred_resident/upload/download/available/device/regions/inspect 等；`#gpu` 标签；`tiles::compile` 遍 | 72 / 0 | README 标明 experimental；协作线另一台机器 |
 | math | 常量与数值函数、位运算、进制 | 41 个函数 + 4 个常量（pi/e/inf/nan） | sqrt/exp/log*/三角双曲/floor/ceil/round/trunc/abs/sign/min/max/clamp/pow/hypot/gcd/lcm/is_nan/is_inf/bit_*/shl/shr/hex/bin/oct | 30 / 9 | 算子没有数值声明（评审第 15 条） |
 | statistics | 描述统计 | 5（每个 4 份类型重载） | mean/stdev/variance/median/quantile | 6 / 3 | |
 | algo | 排序与数组原语 | 8 | sort/insert_sort/quick_sort/merge_sort/merge_sorted_arrays；flatten/unique/argsort（array 的原语） | 11 / 4 | |
@@ -93,7 +93,7 @@
 - `format<args...>`：被格式化的数据放在尖括号里，格式串是主输入（`'{} is {}'->format<a, b>`），与 4.4 相反；`print<fmt>(...)` 方向正确。
 - `re::test(pattern, text)`：被处理的文本在第二位，不能写成 `text->test(...)`；其余库都是"数据第一"。
 - `fs` 全部用普通参数且路径在前：`read_chunk(path, offset, size)`、`write_text(path, content)`；`time::strftime(ts, format)`、`strptime(text, format)`；`random::sample(xs, n)`；`hash::sha256_rounds(s, rounds)`；`json::encode(value, indent)`；`math::clamp(x, lo, hi)`；这些"配置"用的是普通参数。同一库里 `str::repeat<count>`、`array::take<n>` 却用 with。
-- tensor 的配置全是普通参数：`sum(x, axis, keepdim)`、`reshape(x, shape)`、`max(x, axis, true)`（见 tensor_definitions.cml）。`tiles::run<f>(args)`、`attempt(f, args)` 把函数放在不同位置。
+- tensor 的配置全是普通参数：`sum(x, axis, keepdim)`、`reshape(x, shape)`、`max(x, axis, true)`（见 tensor_definitions.cml）。`tiles::run_preferred_resident<f>(args)`、`attempt(f, args)` 把函数放在不同位置。
 - 原则 4.4 末句"标准库各函数的归属在示例写出来后逐个确定"：这项审查尚未做。
 
 ### 2.4 错误约定（原则 3.9：可能失败的操作返回 `T!`，故障是程序错误）

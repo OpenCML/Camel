@@ -59,7 +59,7 @@ camel --arg run_gpu=true test/cases/modules/tiles/batch_matmul.cml std::macro st
 
 The experiment's own tests additionally compare its GPU gradients and Camel Adam
 implementation with the CPU autodiff and `nn.adam` implementations. GPU capability
-checks use explicit Tiles `run`/`run_device`; they cannot silently fall back to CPU.
+checks use the explicit resident call (`run_preferred_resident`) or the compiled-region path; they cannot silently fall back to CPU.
 
 ## Explicit BF16 matrix products
 

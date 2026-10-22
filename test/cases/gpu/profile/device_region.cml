@@ -7,16 +7,16 @@
 module profile_device_region
 
 import { Tensor, new, sum } from tensor
-import { upload, download, run_device } from tiles
+import { upload, download, run_preferred_resident } from tiles
 
 func step(x: Tensor<f32>): Tensor<f32> { return x * 2.0 + 1.0 }
 
 func main(): int sync {
     let x = new([1.0, 2.0, 3.0, 4.0])
     let d = upload(x)
-    let y = run_device<step>(d)
+    let y = run_preferred_resident<step>(d)
     let first = download(y)
-    let again = download(run_device<step>(y))
+    let again = download(run_preferred_resident<step>(y))
     println(int(sum(first) + sum(again)))
     return 0
 }

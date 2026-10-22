@@ -1,6 +1,6 @@
 module tiles_resident_compute
 import { Tensor, reshape, sum, abs, zeros } from tensor
-import { upload, download, run, inspect } from tiles
+import { upload, download, inspect, run_preferred_resident } from tiles
 func square(x: Tensor<f32>): Tensor<f32> { return x * x + 1.0 }
 func identity(x: Tensor<f32>): Tensor<f32> { return x }
 func pair(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a + b }
@@ -9,13 +9,13 @@ func aggregate(x: Input): Tensor<f32> { return x.a + x.b.0 * x.b.1 }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
     let d = upload(x)
-    println(sum(abs(run<square>(d) - square(x))))
+    println(sum(abs(download(run_preferred_resident<square>(d)) - square(x))))
     println(sum(abs(download(d) - x)))
-    println(sum(abs(run<identity>(d) - x)))
-    println(sum(abs(run<pair>((d, x)) - (x + x))))
-    println(sum(abs(run<pair>((d, d)) - (x + x))))
-    println(sum(abs(run<aggregate>({a: d, b: (x, d)}) - (x + x * x))))
-    println(sum(run<identity>(upload(zeros([0, 3])))))
+    println(sum(abs(download(run_preferred_resident<identity>(d)) - x)))
+    println(sum(abs(download(run_preferred_resident<pair>((d, x))) - (x + x))))
+    println(sum(abs(download(run_preferred_resident<pair>((d, d))) - (x + x))))
+    println(sum(abs(download(run_preferred_resident<aggregate>({a: d, b: (x, d)})) - (x + x * x))))
+    println(sum(download(run_preferred_resident<identity>(upload(zeros([0, 3]))))))
     println(sum(abs(download(d) - x)))
     println(inspect<square>(d))
     return 0

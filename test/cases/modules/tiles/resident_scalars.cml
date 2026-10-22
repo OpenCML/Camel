@@ -1,7 +1,7 @@
 module tiles_resident_scalars
 import { Tensor, reshape, sum, abs, zeros } from tensor
 import { with_grad } from autodiff
-import { Device, upload, download, run, run_device } from tiles
+import { Device, upload, download, run_preferred_resident } from tiles
 with <x: Tensor<f32>>
 func loss(): float { return sum(x * x) }
 func total(x: Tensor<f32>): float { return sum(x) }
@@ -14,17 +14,17 @@ func read(x: Device<float>): float { return download(x) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0], [3])
     let vg = (v: Tensor<f32>): (float, Tensor<f32>) => with_grad(loss)<v>()
-    let result = run_device<vg>(upload(x))
+    let result = run_preferred_resident<vg>(upload(x))
     println(read(result.0) - 14.0)
     println(sum(abs(download(result.1) - x * 2.0)))
-    println(sum(abs(download(run_device<scale>((result.1, result.0))) - x * 28.0)))
+    println(sum(abs(download(run_preferred_resident<scale>((result.1, result.0))) - x * 28.0)))
     let exact = reshape([16777216.0, 1.0], [2])
-    let p = run_device<mixed>(exact)
+    let p = run_preferred_resident<mixed>(exact)
     println(read(p.0) - 16777217.0)
     println(read(p.2) - 1.0000000000000002)
-    println(read(run_device<identity>(p.0)) - 16777217.0)
-    println(run<identity>(p.0) - 16777217.0)
+    println(read(run_preferred_resident<identity>(p.0)) - 16777217.0)
+    println(download(run_preferred_resident<identity>(p.0)) - 16777217.0)
     println(read(upload(1.0000000000000002)) - 1.0000000000000002)
-    println(read(run_device<total>(zeros([0]))))
+    println(read(run_preferred_resident<total>(zeros([0]))))
     return 0
 }

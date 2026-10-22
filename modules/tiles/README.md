@@ -8,13 +8,12 @@ not an implementation of its complete language, scheduling, or optimization mode
 
 ```cml
 import { Tensor, reshape } from tensor
-import { run } from tiles
 
 func add(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a + b }
 
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0], [3])
-    println(run<add>((x, x)))
+    println(add(x, x))    // camel program.cml tiles::compile std::fvm
     return 0
 }
 ```
@@ -42,26 +41,26 @@ through the current scheduler. Compiled CPU kernels, device cost-based placement
 and shape-polymorphic compilation are not yet implemented. Use `tiles::compile std::gir`
 or `tiles::compile std::jgir` to inspect the rewritten graph.
 
-`gpu` is a function decorator that prefers GPU execution:
+A `#gpu` label asks for the device explicitly (design principles 13.4):
 
 ```cml
 import { Tensor } from tensor
-import { gpu } from tiles
 
-@gpu
+#gpu
 func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x + y }
-// add(x, y) now executes through Tiles and returns host tensors.
 ```
 
-It preserves the function signature and wraps the original function as a traced
-capture. Unary and multiple arguments, function values, aggregate results and
-nested decorated calls are supported. Inside a GPU compilation, a nested dispatch
-is lowered as the underlying computation, without host execution or a nested GPU
-launch. Numeric permissions remain attached to the original operator nodes.
-For statically shaped eligible tensor regions, decorating the function uses the
-same region extraction and resident transfers as `tiles::compile`. Unsupported nodes
-stay on CPU while supported regions prefer GPU; captures and CPU effects are
-preserved. Partitioning happens once when the decorated function value is built.
+`#gpu` marks a function or a block with a compile-time fact; it names no card. The card (or the
+host) is chosen at run time with `--devices`. `tiles::compile` reads the label as a promise: every
+operator written in the scope must have a device implementation, and one that does not is the
+compile error `GpuScopeUnsupported`, located at the operator and naming the scope. Without
+`tiles::compile` in the pipeline nothing reads the label, and the compiler warns that the tag has
+no reader (design principles 9.4). Outside a `#gpu` scope, a node the device cannot take is left on
+the host, as before.
+
+For statically shaped eligible tensor regions, `tiles::compile` uses region extraction and resident
+transfers. Unsupported nodes stay on CPU while supported regions prefer GPU; captures and CPU
+effects are preserved. Partitioning happens once, when the pass rewrites the program.
 Static regions now generate their launch plans and CUDA source from parameter types
 when outlined, without allocating placeholder input tensors or initializing CUDA.
 The core context's process-local `tiles.compiled_region` target fact associates the
@@ -83,24 +82,21 @@ existing fresh-extraction path; captured region boundaries are fresh parameters.
 Symbolic and unknown shapes do not use this regional path.
 The outlined execution entry explicitly requests a static template, so a cache
 clear or another fact reader dropping a stale entry cannot permanently disable
-reuse. General `run` specialization does not infer eligibility from a cache miss.
+reuse. The per-call specialization (`source`, `inspect`, `benchmark`,
+`run_preferred_resident`) does not infer eligibility from a cache miss.
 
 Templates live until replacement, explicit fact invalidation/clear, or destruction
 of their execution context. Replacing a revision reuses its graph's fact entry.
 The source LRU remains bounded separately; the graph-fact store has no LRU, so
-repeated construction of distinct decorated graphs in one long-lived context can
+repeated construction of distinct outlined graphs in one long-lived context can
 retain additional templates until that context or its facts are released.
-When no static region can be extracted, the existing whole-function, call-site
-specialization remains: an unavailable backend or unsupported computation runs
-the original function on the current CPU execution backend. Regional execution
-also falls back independently when its backend is unavailable. This is graph
-execution, not a fused CPU JIT kernel. Configuration errors, malformed graphs,
-compilation failures and device execution faults are reported; an executed GPU
-region is never replayed on CPU. `run` continues to require the GPU. Functions with mutable parameters, unbound context parameters or
-no ordinary inputs are currently rejected. This is separate from the planned
-`@kernel` block-kernel validation annotation.
-The annotation also supports local functions with captured values. Use `gpu(lambda)`
-when constructing a GPU-dispatched function value directly.
+A region that cannot be extracted is left on the host and runs through the
+ordinary scheduler; this is graph execution, not a fused CPU JIT kernel.
+Configuration errors, malformed graphs, compilation failures and device execution
+faults are reported; an executed GPU region is never replayed on CPU.
+`run_preferred_resident` chooses the host the same way when no device program can
+be made for its function. Functions with mutable parameters, unbound context
+parameters or no ordinary inputs are still refused by the compiled-region path.
 
 CPU fallback may change the last bits of transcendental results such as `exp`
 and `log`: each backend must satisfy the operator's declared ulp bound, rather
@@ -135,8 +131,9 @@ disabled. Matmul's normative increasing-k FMA chain needs no relaxation grant.
 The benchmark's existing numerical gate compares against unfused execution with
 a tolerance. Contraction can legitimately exceed that tolerance for cancellation
 cases; such a benchmark still refuses to report a speedup. A reference for each
-selected relaxed algorithm is needed before relaxing this gate. `run` and
-`run_device` execute the granted contraction independently of that benchmark gate.
+selected relaxed algorithm is needed before relaxing this gate. A compiled-region
+call, and `run_preferred_resident`, execute the granted contraction independently
+of that benchmark gate.
 
 `inspect` also lists `operator_contracts`: stable operator keys and their numeric
 classification, or an explicit undeclared/opaque dependency for a known lowering
@@ -180,23 +177,25 @@ It retains at most 32 entries and 16 MiB of
 accounted entry payload (excluding allocator overhead), with synchronized access.
 This is not a persistent semantic fingerprint or a cache of graph compilation.
 
-- `run_device<fn>(inputs)` executes the same graph and returns `Device<Tensor<...>>` or `Device<float>`
-  leaves in the result's original tuple/struct structure. Outputs retain their
-  allocations instead of downloading; feed them directly into subsequent graph
-  calls and use `download` only when host values are needed. Returned inputs and
-  repeated leaves share native ownership. Completion is synchronous. Scalar leaves
-  retain f64 storage, including mixed loss/gradient results. Device scalar inputs
-  and ordinary host `float` inputs are runtime values with exact f64 payloads.
-- `run<fn>(inputs)` specializes a function graph for actual input shapes, compiles
-  CUDA with NVRTC, executes on the GPU, and returns host `Tensor<f32>` or `float` leaves
-  in the function's original tuple/struct structure. Nested nonempty tuples and
-  structs of these values are supported as parameters and results. Host `float`
-  arguments and captured floats are uploaded as runtime inputs, so changing their
-  values does not change generated code. Graph DATA literals remain constants;
-  integer attributes and static branch conditions still specialize the graph. Pass the single
-  parameter directly for a unary function, or a tuple for multiple parameters.
+- `run_preferred_resident<fn>(inputs)` specializes a function graph for actual input
+  shapes, compiles CUDA with NVRTC and executes on the device when a program can be
+  made for it; the host prepares a resident program otherwise. It returns
+  `Device<Tensor<...>>` or `Device<float>` leaves in the result's original tuple/struct
+  structure. Outputs retain their allocations instead of downloading; feed them
+  directly into subsequent graph calls and use `download` only when host values are
+  needed. Returned inputs and repeated leaves share native ownership. Completion is
+  synchronous. Scalar leaves retain f64 storage, including mixed loss/gradient
+  results. Device scalar inputs and ordinary host `float` inputs are runtime values
+  with exact f64 payloads. Nested nonempty tuples and structs of these values are
+  supported as parameters and results. Host `float` arguments and captured floats are
+  uploaded as runtime inputs, so changing their values does not change generated
+  code. Graph DATA literals remain constants; integer attributes and static branch
+  conditions still specialize the graph. Pass the single parameter directly for a
+  unary function, or a tuple for multiple parameters. This is the operator
+  `tiles::compile` inserts for an outlined region.
 - `source<fn>(inputs)` returns generated CUDA without initializing CUDA or
-  executing the function body. It performs the same graph validation as `run`.
+  executing the function body. It performs the same graph validation as
+  `run_preferred_resident`.
 - `inspect<fn>(inputs)` returns a versioned JSON plan summary without CUDA:
   semantic values, kernel groups, materialized values, physical allocations,
   logical bytes, allocated bytes and ordered output node IDs. Repeated output
@@ -225,10 +224,11 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
   driver lifetime, and contains no moving-heap pointers.
   Graph APIs accept these values as inputs, including mixed host/device tensor
   leaves in tuples and structs. The function keeps its ordinary tensor signature:
-  `run<square>(upload(x))` borrows the existing device allocation without copying
-  the input back to the host. Borrowed inputs are never writable temporary storage.
-  `inspect` reports `borrowed_inputs` and `borrowed_bytes`; `allocated_bytes`
-  excludes them. Results from `run` still return to the host.
+  `run_preferred_resident<square>(upload(x))` borrows the existing device allocation
+  without copying the input back to the host. Borrowed inputs are never writable
+  temporary storage. `inspect` reports `borrowed_inputs` and `borrowed_bytes`;
+  `allocated_bytes` excludes them. Its result stays resident; `download` brings it
+  back to the host.
 
 The function context is ordinary Camel context, not a compile-time modifier.
 The module inspects the supplied function graph at invocation. It never traces
@@ -282,8 +282,9 @@ reassociation or contraction.
 
 `while`, `for ... while`, dynamic domains, mixed recurrent lane domains, nested loops, integer
 element arithmetic, shape-changing state, reductions and non-pointwise accesses
-inside the body remain unsupported. These are computation boundaries for `@gpu`
-fallback; explicit `run` and `source` report an unsupported computation. Scalar
+inside the body remain unsupported. These are computation boundaries for the
+compiled-region path; `source` reports an unsupported computation, and a `#gpu`
+scope refuses one at compile time. Scalar
 division faults during device execution are reported without CPU replay. Region
 analysis reads the body to establish the supported subset. A selected loop region
 owns that body, and `tiles::compile` does not outline it independently. Unsupported

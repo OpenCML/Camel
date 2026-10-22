@@ -141,6 +141,6 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
 
 Independent of the store, but part of the same work for Tiles: an operator that reads the graph
 of a function value it receives declares `OperatorTraits::readsGraphs` (Tiles' `run`,
-`run_device`, `source`, `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`,
+`run_preferred_resident`, `source`, `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`,
 `with_grad`). Every back end runs the program's own graph, so such an operator sees the LOOP of a
 function and its regions wherever it runs (`docs/technical/39_loops.md` section 4).

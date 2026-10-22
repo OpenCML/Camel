@@ -365,11 +365,8 @@ export const LEDGER = [
         file: 'stdlib/signatures/tiles.cml',
         evidence: 'modules/tiles/src/module.cpp:486-592',
         entries: [
-            ['gpu', 'tiles:gpu', 'needs-one-feature', 'arbitrary-function-type', 'modules/tiles/src/module.cpp:486-500; modules/tiles/include/tiles/device.h:78'],
             ['upload', 'tiles:upload', 'needs-one-feature', 'structural-type-function'],
             ['download', 'tiles:download', 'needs-one-feature', 'structural-type-function'],
-            ['run', 'tiles:run', 'needs-one-feature', 'result-from-argument'],
-            ['run_device', 'tiles:run_device', 'needs-one-feature', 'result-from-argument'],
             ['run_preferred_resident', 'tiles:run_preferred_resident', 'needs-one-feature', 'result-from-argument'],
             ['source', 'tiles:source', 'needs-one-feature', 'arbitrary-function-type'],
             ['inspect', 'tiles:inspect', 'needs-one-feature', 'arbitrary-function-type'],

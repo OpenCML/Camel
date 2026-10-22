@@ -552,8 +552,7 @@ const forbiddenPlan = (name) =>
     name.startsWith('feat/mm/gc_') ||
     name === 'feat/opt/progen' ||
     name.startsWith('feat/opt/progen.') ||
-    name.includes('tiles_regions') ||
-    name.includes('tiles_decorator')
+    name.includes('tiles_regions')
 for (const rule of selectionDoc.rules || []) {
     for (const entry of rule.plans || []) {
         const name = typeof entry === 'string' ? entry : entry.plan

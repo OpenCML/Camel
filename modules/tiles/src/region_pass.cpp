@@ -32,7 +32,8 @@ class RegionPass final : public RuntimeGraphRewritePass {
             preferred_.execute,
             preferred_.executeUri,
             count,
-            &preferred_);
+            &preferred_,
+            /*refuseGpuScopes=*/true);
     }
 };
 } // namespace

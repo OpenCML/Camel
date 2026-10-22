@@ -70,8 +70,8 @@ result may be any of them, and it has an external effect when its traits say so.
 | `process:exit` | read-modify-write `process`, external |
 | `:profiler/*`, `para:rendezvous`, `tensor:(set_)num_threads` | their ambient state, external |
 | `tiles:upload` | allocates `tiles:device`; read-modify-write `tiles:driver`, external |
-| `tiles:download`, `tiles:run`, `tiles:benchmark` | read the device values among operand 0; `tiles:driver`, external |
-| `tiles:run_device` | as `run`, allocates `tiles:device`, the result may alias operand 0 |
+| `tiles:download`, `tiles:run_preferred_resident`, `tiles:benchmark` | read the device values among operand 0; `tiles:driver`, external |
+| `tiles:run_preferred_resident` (resident form) | allocates `tiles:device`, the result may alias operand 0 |
 | `tiles:source`, `inspect`, `available`, `device` | `tiles:driver`, external |
 
 The higher-order `:mark/` operators (they run the functions they are given), `python`, `pyplot`,
