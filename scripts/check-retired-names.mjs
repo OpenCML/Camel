@@ -20,7 +20,8 @@
 // Markdown of editors/, tools/ and scripts/. Fenced code in a language other than Camel is
 // skipped, so a Python `import os` in a doc is not a Camel import.
 //
-// Exit status 1 when a use is found.
+// Exit status 1 when a use is found, 2 when the scope is empty or names a missing entry: a check
+// of nothing is refused, never reported as a pass.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -60,7 +61,7 @@ const RULES = [
 ]
 
 const EXTENSIONS = new Set(['.md', '.cml', '.asdl'])
-const ROOTS = ['README.md', 'README.cn.md', 'docs', 'examples', 'editors', 'tools', 'scripts']
+const ROOTS = ['README.md', 'docs', 'examples', 'editors', 'tools', 'scripts']
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'out', 'build', 'tmp', 'dist', '.venv'])
 // A fence in one of these is not Camel code; its `import`/`from` lines are another language's.
 const OTHER_LANGUAGES = new Set([
@@ -158,9 +159,21 @@ function checkFile(abs) {
 
 const args = process.argv.slice(2).filter((arg) => !arg.startsWith('--'))
 const entries = process.argv.includes('--default-roots') || args.length === 0 ? ROOTS : args
+// A scope entry that no longer exists used to vanish: the guard then checked fewer pages, or
+// none, and still said "no retired spelling". Refuse that instead.
+const missing = entries.filter((entry) => !fs.existsSync(path.resolve(ROOT, entry)))
+if (missing.length > 0) {
+    for (const entry of missing) console.log(`${entry}: no such file or directory`)
+    console.log(`${missing.length} scope entr${missing.length === 1 ? 'y does' : 'ies do'} not exist; refusing to check a smaller tree`)
+    process.exit(2)
+}
 const files = []
 for (const entry of entries) collect(entry, files)
 const unique = [...new Set(files)].sort()
+if (unique.length === 0) {
+    console.log('no reader-facing file in the given scope: nothing was checked')
+    process.exit(2)
+}
 
 const problems = []
 const skipped = []
@@ -177,6 +190,10 @@ for (const problem of problems) {
     console.log(`${problem.file}:${problem.line}: ${problem.what}: ${problem.text}`)
 }
 const checked = unique.length - skipped.length
+if (checked === 0) {
+    console.log('every file in the scope is allowlisted: nothing was checked')
+    process.exit(2)
+}
 if (problems.length > 0) {
     console.log(`${problems.length} retired spelling(s) in ${checked} reader-facing file(s)`)
     process.exit(1)

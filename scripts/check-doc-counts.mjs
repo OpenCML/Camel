@@ -561,7 +561,13 @@ function collect() {
             }
         }
     }
-    for (const root of ROOTS) walk(root)
+    for (const root of ROOTS) {
+        if (!fs.existsSync(path.join(ROOT, root))) {
+            console.error(`[doc-counts] scope entry '${root}' does not exist; refusing to check a smaller tree`)
+            process.exit(2)
+        }
+        walk(root)
+    }
     return [...new Set(files)].sort()
 }
 
@@ -590,12 +596,14 @@ async function main() {
     const files = collect()
     const problems = []
     const allowed = []
+    const matched = new Map(RULES.map((rule) => [rule.id, 0]))
     let checked = 0
 
     for (const file of files) {
         const text = read(file)
         for (const rule of RULES) {
             for (const finding of rule.check(file, text)) {
+                matched.set(rule.id, matched.get(rule.id) + 1)
                 if (isAllowed(file, rule.id)) {
                     allowed.push({ file, rule: rule.id, line: finding.line })
                     continue
@@ -620,6 +628,30 @@ async function main() {
                 `${checked} claim(s) checked, ${allowed.length} allowlisted (dated snapshot)`,
         )
         process.exit(1)
+    }
+
+    // A rule that matches nothing no longer checks an assertion: the page was reworded, the
+    // pattern rotted, or the rule's page went away. It has to say so, not pass. `declaration-modules`
+    // is the one documented exception: no reader-facing page states that number today, and the
+    // rule is kept for the page that does (its own comment above).
+    const silent = RULES.filter((rule) => rule.id !== 'declaration-modules' && matched.get(rule.id) === 0).map(
+        (rule) => rule.id,
+    )
+    if (files.length === 0) {
+        console.log('no reader-facing document in the scope: nothing was checked')
+        process.exit(2)
+    }
+    if (silent.length > 0) {
+        console.log(
+            `rule(s) ${silent.join(', ')} matched no claim in ${files.length} document(s): ` +
+                'the assertion they check is no longer stated where this guard can see it; ' +
+                'fix the rule, restate the claim, or remove the rule',
+        )
+        process.exit(2)
+    }
+    if (checked === 0) {
+        console.log(`no live claim in ${files.length} document(s) (${allowed.length} allowlisted): nothing was checked`)
+        process.exit(2)
     }
 
     console.log(

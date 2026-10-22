@@ -54,6 +54,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { parseTomlFile } from '../test/tools/toml-lite.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PLANS_ROOT = path.join(ROOT, 'test', 'plans')
@@ -227,6 +228,49 @@ function walkPlans(entry) {
 
 const FORBIDDEN_BY_REL = new Map(FORBIDDEN.map((entry) => [entry.file, entry]))
 
+// Every plan file of the tree belongs to one of four fates: a fast target runs its fast tests, a
+// SLOW_PLANS entry runs it in full, FORBIDDEN names it as skipped by policy, or the debug layer is
+// out of the release gate and says so. A plan outside those four would have tests that no layer
+// runs and no line calls UNKNOWN; the list would keep saying "200 cases skipped" while the tree
+// grew. This used to be unchecked (H185): a renamed FORBIDDEN file was printed as skipped, and a
+// new slow plan under feat/ vanished from both layers.
+function planInventoryProblems() {
+    const problems = []
+    for (const entry of FORBIDDEN) {
+        if (!fs.existsSync(path.join(ROOT, entry.file))) {
+            problems.push(`the forbidden plan '${entry.file}' does not exist; the skip list is stale`)
+        }
+    }
+    const slowSet = new Set(SLOW_PLANS)
+    const forbiddenSet = new Set(FORBIDDEN.map((entry) => entry.file))
+    const fastReaches = (key) =>
+        FAST_TARGETS.some((target) => {
+            if (target === 'smoke') return key.startsWith('test/plans/smoke/')
+            if (target.endsWith('.plan.toml')) return key === target
+            return key === target || key.startsWith(`${target}/`)
+        })
+    for (const abs of walkPlans('test/plans') ?? []) {
+        const key = rel(abs)
+        if (slowSet.has(key) || forbiddenSet.has(key)) continue
+        const plan = parseTomlFile(abs)
+        const planTier = plan.tier ?? 'fast'
+        if (planTier === 'debug') continue
+        const slowTests = (plan.tests ?? []).filter((test) => (test.tier ?? planTier) === 'slow').length
+        if (!fastReaches(key)) {
+            problems.push(
+                `${key}: no layer reaches it (not a fast target, a SLOW_PLANS file, FORBIDDEN, or a debug plan); ` +
+                    `its ${plan.tests?.length ?? 0} test(s), ${slowTests} slow, are UNKNOWN, not green`,
+            )
+        } else if (slowTests > 0) {
+            problems.push(
+                `${key}: ${slowTests} slow test(s) but the fast layer runs only its fast tests and SLOW_PLANS ` +
+                    'does not name it; those tests are UNKNOWN, not green',
+            )
+        }
+    }
+    return problems
+}
+
 function checkIncludes(include) {
     const extra = []
     const refused = []
@@ -351,8 +395,23 @@ function readSummary(text) {
     return summary
 }
 
+// The slow tests the skip list covers, from the plans themselves: the printed accounting follows
+// the tree, so a plan that grows a slow test is counted the day it lands (it used to print the
+// literal 200 H154 §2 measured).
+function forbiddenSlowTests() {
+    let total = 0
+    for (const entry of FORBIDDEN) {
+        const file = path.join(ROOT, entry.file)
+        if (!fs.existsSync(file)) continue
+        const plan = parseTomlFile(file)
+        const planTier = plan.tier ?? 'fast'
+        total += (plan.tests ?? []).filter((test) => (test.tier ?? planTier) === 'slow').length
+    }
+    return total
+}
+
 function printSkipList() {
-    console.log(`[gate] skipped by policy: ${FORBIDDEN.length} plan files, the 200 cases H154 §2 measured`)
+    console.log(`[gate] skipped by policy: ${FORBIDDEN.length} plan files, ${forbiddenSlowTests()} slow cases`)
     console.log(`[gate]   ${POLICY}`)
     for (const entry of FORBIDDEN) console.log(`[gate]   ${entry.file} -- ${entry.reason}`)
     console.log('[gate]   These cases are UNKNOWN, not green. This gate never runs them; the names are printed')
@@ -409,6 +468,10 @@ async function main() {
     for (const file of SLOW_PLANS) {
         if (!fs.existsSync(path.join(ROOT, file))) die(`the slow plan '${file}' does not exist; the gate list is stale`, 1)
     }
+    const inventoryProblems = planInventoryProblems()
+    if (inventoryProblems.length > 0) {
+        for (const problem of inventoryProblems) die(problem, 1)
+    }
 
     const identity = treeIdentity()
     console.log('[gate] Camel release gate')
@@ -426,7 +489,7 @@ async function main() {
     console.log(`[gate]   fast: ${FAST_TARGETS.join(' ')} (--tier fast: slow tests of those directories are the slow layer's)`)
     console.log(`[gate]   slow: ${slowPlans.length} named plan file(s), in full -- naming the file is what makes a slow test run`)
     if (extra.length > 0) console.log(`[gate]   extra: ${extra.join(', ')} (caller-requested, not in the H154 §3 list)`)
-    console.log('[gate]   the 11 slow files that are also fast plans are run in full, so their fast tests appear in both phases')
+    console.log('[gate]   the slow files that are also fast plans are run in full, so their fast tests appear in both phases')
     printSkipList()
 
     if (options.dryRun) {
@@ -476,7 +539,7 @@ async function main() {
         }
         if (!phase.ok) failedPhases++
     }
-    console.log(`[gate] skipped   ${FORBIDDEN.length} plan files / 200 cases (policy; UNKNOWN, not green)`)
+    console.log(`[gate] skipped   ${FORBIDDEN.length} plan files / ${forbiddenSlowTests()} slow cases (policy; UNKNOWN, not green)`)
     if (partial) console.log('[gate] PARTIAL   this run did not cover every layer; it is not a gate result')
     console.log(`[gate] GATE: ${failedPhases === 0 ? 'all selected phases passed' : `FAILED (${failedPhases} phase(s))`}`)
     if (failedPhases === 0 && !partial) {

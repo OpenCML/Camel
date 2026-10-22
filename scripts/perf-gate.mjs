@@ -9,7 +9,7 @@
 // measurement to be repeated.
 //
 //   node scripts/perf-gate.mjs                  measure and compare against test/perf-baseline.json
-//   node scripts/perf-gate.mjs --list            the ten perf plans, and why each is in or out
+//   node scripts/perf-gate.mjs --list            every perf plan, and why each is in or out
 //   node scripts/perf-gate.mjs --update          measure and rewrite the baseline (seed it on the host)
 //   node scripts/perf-gate.mjs --reps 9 --threshold 20
 //   node scripts/perf-gate.mjs --plans perf.startup --json
@@ -86,7 +86,8 @@ const POLICY =
     'plans are heavy: they saturate every core for minutes and are worth running only at a ' +
     'milestone, by the coordinator, on a quiet machine."'
 
-// The ten plans of test/plans/perf (H167 classified them): what each one measures, what it costs
+// The plans of test/plans/perf (H167 classified them; the list is checked against the directory,
+// H185): what each one measures, what it costs
 // on the shared host, whether it already has a baseline or a ceiling of its own, and whether this
 // gate can take it. `cases` exist only for the gateable plans: the argv is the plan's own command,
 // so the number the gate reads is the number the plan reads. The costs are the plan comments' own
@@ -118,7 +119,7 @@ const PLANS = [
             },
             {
                 name: 'startup.inspect_ops',
-                // Where the nine declaration modules (stdlib/<module>.cml) are parsed and compiled.
+                // Where the declaration modules (stdlib/<module>.cml) are parsed and compiled.
                 argv: (camel) => [camel, 'inspect', '--ops', REGISTRY_ALL],
                 minReps: MIN_REPS_WALL_CASE,
             },
@@ -328,7 +329,7 @@ function selectPlans(options) {
     for (const id of wanted) {
         const plan = PLANS.find((entry) => entry.id === id)
         if (!plan) {
-            usage(`no plan "${id}"; --list prints the ten plans of test/plans/perf`)
+            usage(`no plan "${id}"; --list prints the plans of test/plans/perf`)
         }
         if (!plan.gateable) {
             refuse(plan)
@@ -784,8 +785,30 @@ function printConditions(caseCount, options, revision, build, host, load) {
     }
 }
 
+// The plan files the tree holds, and how that set differs from PLANS. The list is a classification,
+// not a count: a new perf plan has to say whether this gate takes it (and why not, if not), the
+// same way stdlib-declarations.mjs makes a new operator module name itself (H173).
+function perfPlanFiles() {
+    const directory = path.join(REPO_ROOT, 'test', 'plans', 'perf')
+    return fs
+        .readdirSync(directory)
+        .filter((name) => name.endsWith('.plan.toml'))
+        .map((name) => `test/plans/perf/${name}`)
+        .sort()
+}
+
+function planInventory() {
+    const onDisk = perfPlanFiles()
+    const listed = PLANS.map((plan) => plan.file).sort()
+    return {
+        onDisk,
+        missing: onDisk.filter((file) => !listed.includes(file)),
+        stale: listed.filter((file) => !onDisk.includes(file)),
+    }
+}
+
 function printList(options) {
-    const count = PLANS.length
+    const count = perfPlanFiles().length
     const gateable = PLANS.filter((plan) => plan.gateable)
     console.log(
         `perf-gate: ${count} plans in test/plans/perf; ${gateable.length} are gateable here ` +
@@ -838,6 +861,19 @@ function log(message) {
 
 function main() {
     const options = parseArgs(process.argv.slice(2))
+    const inventory = planInventory()
+    if (inventory.missing.length > 0 || inventory.stale.length > 0) {
+        for (const file of inventory.missing) {
+            console.error(
+                `perf-gate: ${file} is a perf plan but PLANS does not classify it: add it as gateable ` +
+                    'or name the reason it is refused',
+            )
+        }
+        for (const file of inventory.stale) {
+            console.error(`perf-gate: PLANS lists ${file}, which is not in test/plans/perf`)
+        }
+        return 2
+    }
     if (options.list) {
         printList(options)
         return 0

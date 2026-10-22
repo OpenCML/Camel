@@ -144,10 +144,22 @@ function runOne(dir, run, update, log) {
 }
 
 function checkExemplar(dir, update) {
-    const manifest = parseTomlFile(path.join(dir, 'exemplar.toml'))
+    const manifestPath = path.join(dir, 'exemplar.toml')
+    if (!fs.existsSync(manifestPath)) {
+        console.log(`FAIL ${path.basename(dir)}: no exemplar.toml; nothing was checked`)
+        return false
+    }
+    const manifest = parseTomlFile(manifestPath)
+    const runs = manifest.runs || []
+    // A manifest whose `[[runs]]` were removed (or never written) used to print "all checks
+    // passed": an exemplar with no run asserts nothing.
+    if (runs.length === 0) {
+        console.log(`FAIL ${path.basename(dir)}: the manifest lists no [[runs]]; nothing was checked`)
+        return false
+    }
     const log = [`# ${manifest.title}`, `# recorded by exemplars/check.mjs --update`, '']
     let ok = true
-    for (const run of manifest.runs || []) {
+    for (const run of runs) {
         const failures = runOne(dir, run, update, log)
         const label = `${path.basename(dir)}/${run.name}`
         if (failures.length) {
@@ -172,6 +184,10 @@ const dirs = named.length
           .map((d) => path.join(HERE, d))
           .filter((d) => fs.existsSync(path.join(d, 'exemplar.toml')))
           .sort()
+if (dirs.length === 0) {
+    console.log('exemplars: no exemplar.toml found under exemplars/; nothing was checked')
+    process.exit(1)
+}
 let allOk = true
 for (const dir of dirs) allOk = checkExemplar(dir, update) && allOk
 console.log(allOk ? 'exemplars: all checks passed' : 'exemplars: FAILED')
