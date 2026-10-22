@@ -26,7 +26,10 @@ When adding a new feature or test case, manually run the case from the command l
 - `node scripts/test.js <plan file>` runs that plan in full: naming the file is the intent, so
   its slow tests run whatever `--tier` says. A **directory** target selects test by test and
   follows `--tier`; add `--tier all` to include the slow tests of a directory or of the whole
-  tree.
+  tree. A target that is not a directory but names a plan may omit the suffix:
+  `test/plans/feat/exemplars` resolves to `test/plans/feat/exemplars.plan.toml`, and a bare plan
+  id such as `feat.exemplars` resolves the same way. A path that is neither a directory nor a
+  plan is still an error.
 - `node scripts/test.js --tier debug` runs the debug layer (see "The Debug Build And The Debug
   Layer"); it builds nothing and refuses to run without a Debug binary.
 - `--build release|debug` picks the build a run addresses: `release` is `out/latest` (the
@@ -42,7 +45,9 @@ the job count and layer.
 `node test/tools/selftest/run.mjs` checks the runner itself: the back-end matrix, the per-test
 scratch directories and the run root, parallel versus serial output, the tier filter and the
 named-plan rule, the risk-based sweep sample, and the `--changed` mapping (directory rule, file
-rules, the layered plans, `CAMEL_TEST_BASE`).
+rules, the layered plans, `CAMEL_TEST_BASE`). It also walks every plan file under `test/plans/`
+and fails, by name, when no case path a plan names selects it, and it checks the suffix-less plan
+target (H201).
 
 ## Layers: fast, slow And debug
 
@@ -173,6 +178,23 @@ full whatever `--tier` says; the three GPU plans are the case that needs this, b
 `tier = "slow"` as a whole and a `--tier fast` run of the `gpu` directory would execute none of
 their 88 tests.
 
+The rules are checked in the other direction too (H201): `test/tools/selftest/run.mjs` walks every
+plan file under `test/plans/`, resolves the `case` paths it names the way the runner does, and
+feeds each path and its directory to the same selection function `--changed` uses. A plan that no
+case path selects is a plan whose cases nobody runs on the change that breaks them, and the
+self-test fails by name. Only the plans the project deliberately keeps out of an ordinary change
+are exempt: `perf/**`, the GC-stress/`progen` plans on the self rule's `except` list, plans in the
+debug layer, and a sweep-only plan (`feat/mm/gc_poison_sweep`), which has no cases of its own. The
+rules that came out of that check name the plans a directory mirror cannot reach: the linear plans
+whose cases are under `test/cases/loops/` and `test/cases/macro/` (`hof_declared`,
+`loops_in_arms`, `loop_collect`), the JSON cases under `test/cases/modules/std/json/` (the three
+JSON plans and the std facade), the unicode-path case (`feat/modules/unicode_paths`),
+`feat/consistency/print_formats`, the compiler benchmark (`feat/tools/compile_bench`), and the
+progen finding cases (`progen_simplify` with `capacity`). That last rule also stops those cases
+from resolving, through the generic `test/cases/` rule, to `feat/opt/progen.plan.toml`, the slow
+random-program check an ordinary change must not run: a narrower directory rule for
+`test/cases/opt/progen/` comes first and selects no plan for the finding directory by itself.
+
 What a rule deliberately does **not** select, because the project forbids it on a shared host:
 
 - `test/plans/perf/**` (benchmarks and the PyTorch showcase comparisons);
@@ -203,6 +225,8 @@ visible. `--changed` prints a `[WARN]` naming every changed file no rule matched
 the policy excludes are not called holes). And the self-test `test/tools/selftest/run.mjs` walks
 every file in the index plus the untracked, not ignored files, and fails on a class that neither
 a directory rule nor a file rule selects, unless the class is on its allowlist with a reason. The
+plan side is checked the same way: every plan file must be selected by a case path it names, or
+the self-test fails and names the plan (H201). The
 allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
 comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
 metadata). A new kind of file therefore cannot appear without a rule or a reason: add
@@ -213,7 +237,9 @@ That check is why the file rules now cover the classes the first rule set could 
 halves in `stdlib/signatures/` (the registry plan, which runs `--verify-ops` and `--verify-doc`),
 the documentation and release-gate scripts (`feat/docs_links`), the debugger race harness
 (`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
-`include/` (mirroring `src/`), the rest of `src/` and the test harnesses. `test/perf-baseline.json`
+`include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The plan-reachability
+check added the case directories whose plans live elsewhere: the loop, macro, JSON, unicode-path,
+print-format and compiler-benchmark cases (H201). `test/perf-baseline.json`
 and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
 (the rule that perf is manual), so a change there must not select a perf plan.
 
