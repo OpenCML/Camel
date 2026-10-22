@@ -2234,6 +2234,20 @@ A NaN. It equals nothing, itself included: test with is_nan.
 
 ### Elementary functions
 
+#### `sqrt`
+
+```camel
+sqrt: (x: i32) => f32
+sqrt: (x: int) => float
+sqrt: (x: f32) => f32
+sqrt: (x: float) => float
+```
+
+The square root. An integer argument is converted: i32 gives f32, int gives float.
+
+- Pure.
+- Example: `sqrt(9.0)` gives `3`
+
 #### `abs`
 
 ```camel
@@ -2286,20 +2300,6 @@ The conjugate of a complex number: the imaginary part is negated.
 
 - Pure.
 - Example: `conj(3+4i)` gives `3-4i`
-
-#### `sqrt`
-
-```camel
-sqrt: (x: i32) => f32
-sqrt: (x: int) => float
-sqrt: (x: f32) => f32
-sqrt: (x: float) => float
-```
-
-The square root. An integer argument is converted: i32 gives f32, int gives float.
-
-- Pure.
-- Example: `sqrt(9.0)` gives `3`
 
 #### `exp`
 
@@ -2724,6 +2724,33 @@ The digits of x in base 16, in upper case, with the prefix 0x.
 Bit operations are functions, not operators. Integers are two's complement: `int` has 64
 bits, `i32` has 32.
 
+#### `shl`
+
+```camel
+shl: (x: i32, count: i32) => i32
+shl: (x: int, count: int) => int
+```
+
+x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+change. The count may be of either integer type.
+
+- Pure.
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
+- Example: `shl(1, 4)` gives `16`
+
+#### `shr`
+
+```camel
+shr: (x: i32, count: i32) => i32
+shr: (x: int, count: int) => int
+```
+
+x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
+
+- Pure.
+- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
+- Example: `shr(256, 4)` gives `16`
+
 #### `bit_and`
 
 ```camel
@@ -2771,33 +2798,6 @@ Every bit of x inverted; the same as the operator ~.
 
 - Pure.
 - Example: `bit_not(0)` gives `-1`
-
-#### `shl`
-
-```camel
-shl: (x: i32, count: i32) => i32
-shl: (x: int, count: int) => int
-```
-
-x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
-change. The count may be of either integer type.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32).
-- Example: `shl(1, 4)` gives `16`
-
-#### `shr`
-
-```camel
-shr: (x: i32, count: i32) => i32
-shr: (x: int, count: int) => int
-```
-
-x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
-
-- Pure.
-- Failure: fault `InvalidArgument` when count is negative or not below the width of x.
-- Example: `shr(256, 4)` gives `16`
 
 <a id="statistics"></a>
 
