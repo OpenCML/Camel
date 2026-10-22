@@ -616,6 +616,54 @@ Benchmark tests may use:
 
 The case must emit the expected JSON benchmark payload format used by the runner.
 
+## Performance Measurement
+
+The ten plans under `test/plans/perf/` are measured on purpose, never by a gate. They are not in
+`npm run test` (which runs `--tier fast`), editing one of them does not select it from `--changed`
+(see "Selecting Plans From A Change"), and no CI job runs them. That is the policy, not an
+oversight: `agents/test.md` calls the perf/timeit plans heavy -- "they saturate every core for
+minutes and are worth running only at a milestone, by the coordinator, on a quiet machine" -- and
+[H154](handover/reports/H154.md) section 2 records what running the whole layer on the shared host
+would cost. The price of the exclusion is that nothing notices a performance regression, so the
+measurement has one manual entry point:
+
+```bash
+node scripts/perf-gate.mjs --list        # the ten plans, what each measures, and why it is in or out
+node scripts/perf-gate.mjs               # measure the gateable subset and compare with the baseline
+node scripts/perf-gate.mjs --update      # reseed test/perf-baseline.json on the host that measured it
+node scripts/perf-gate.mjs --reps 9 --threshold 20
+```
+
+It measures only the two plans whose commands can be repeated: `perf.startup` (a few seconds per
+repetition) and `perf.fib` (about 11 s). `perf.para` is refused as too expensive per repetition;
+`perf.gc`, `perf.collections_fuzz`, `perf.training_steps` and the four showcase plans are refused
+by name, with the policy quoted. Running one of those stays a milestone decision: name the plan
+file to the runner yourself.
+
+How the numbers are read:
+
+- one fresh `camel` process per repetition, with the repetitions interleaved and the order rotated;
+- the wall clock, and on Linux the child's own CPU time (user+system, from `/proc/self/stat`).
+  A case whose CPU median is at least 250 ms is judged on CPU, which does not grow when the host
+  is busy; the millisecond cases are judged on the wall clock, where the spread is the protection;
+- the median and its p10..p90 spread per case. A regression is never claimed when the spreads
+  overlap;
+- the host's 1-minute load is recorded. A wall-clock case is compared only when the run is inside
+  the baseline's band (`load + 2 + 10%`); outside it the case is **inconclusive**, never a pass:
+  it says "measured at load N", and the next step is to rerun inside the band. The CPU-judged
+  cases compare at any load, because child CPU time does not grow with the host's load. A gate
+  that reds for being busy is worse than no gate.
+
+`test/perf-baseline.json` is data, not a ceiling: the medians, both spreads, the exact command of
+every case, the commit, the build's own stamp, the repetition count and the host load. Seed it on
+the host whose numbers it records; a baseline from another machine is not comparable. H167's
+[report](handover/reports/H167.md) has the cost of each of the ten plans and the evidence for the
+split. The plans left out keep the measurement they already have: `perf.startup` carries its own
+ceilings and `declaration.cost` share ([H142](handover/reports/H142.md),
+[H152](handover/reports/H152.md)), `perf.gc` asserts what must not grow with the length of the
+run, the showcases compare against PyTorch, and `docs/performance/graph-store-baseline.md` is a
+separate manual baseline of the graph store.
+
 ## Variable Expansion
 
 `args` tokens support `${name}` interpolation from:
