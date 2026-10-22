@@ -269,15 +269,15 @@
 
 设计稿：[规则语言第二版](../design/rewrite/v2.cn.md)（已定）。类型泛型与值语义、算子变量、多根模式、条件与右边调用 Camel 函数、代价函数、结合交换匹配、控制区域上的模式、`check` 覆盖带条件的规则。按设计稿第 9 节的顺序实施；第 1 步与 H230 的 `rules` 评审（reviews/stdlib-rules.md）合并做。实现上有结构性选择的步骤（多根匹配的连接顺序、AC 匹配的规范形、区域模式的替换合法性）先交计划。列入主线。
 
-### 5.12 H233 对一个函数施加遍（决策者 2026-10-22，负责人要求）
+### 5.12 H233 遍就是函数变换（决策者 2026-10-22，负责人要求；先交计划）
 
-今天能做（`docs/technical/45_graph_module.md`"函数到函数"），但写法别扭：`to_function(t, 样本)` 要传一个哑的样本函数告诉它结果类型，与 `constant(c, f32(0.0))` 是同一个毛病；捕获了值的函数直接拒绝（`ClosureNotEmpty`）。
+负责人："我希望的就是要做普通的函数变换，这才是最直观最优雅的；作为图原生语言还要包裹来包裹去，那为啥不直接用 Python。" 设计原则 9.3 已改：**遍是 `(f: F) => F!`**，接收一个函数、返回同类型的函数，与 `with_grad` 同一类；整个程序就是根函数；`Program` 只是内部表示。
 
-1. **`graph::optimize<pass>(f: F): F!`**：把任意遍（C++ 的 `std::opt`、Camel 写的 `rules::simplify`、`mylib::simplify`）施加到函数值 `f` 上，返回**同类型**的函数值；运行中的程序不变。类型由 `f` 流到结果，不需要样本。
-2. **事务带函数类型**：`open_function(f: F): FuncTxn<F>`，`to_function(t: FuncTxn<F>): F!`；删去样本参数。
-3. **闭包保留**：捕获的值随新函数一起带上（捕获在优化后仍是同样的值），不再拒绝。
-4. 与 `with_grad`（函数 → 带梯度的函数）同为"函数变换"，文档里放在一起讲：`loss->optimize<rules::simplify>->with_grad`。
-5. 用例：对一个捕获了张量的函数施加 `std::opt` 与一个 Camel 写的遍，结果在四个后端与原函数一致。
+1. **`graph` 模块的公开接口以函数为中心**：`open(f: F): Txn<F>`、`commit(t: Txn<F>): F!`、`graph_of(f)`、`nodes`、`users` 等照旧；`Program`、`current()`、`root(p)`、`open_function`/`to_function`（及其样本参数）从公开接口删除。程序级的信息（声明、标签、事实、特化表）经函数所在的程序读取，接口上不出现快照。
+2. **流水线**：`camel f.cml mylib::simplify std::fvm` 把遍施加在程序的根函数上；Camel 写的遍签名为 `(f: F) => F!`（泛型，`F` 自动绑定），不再是 `(Program) => Program!`。
+3. **对单个函数就是普通调用**：`loss->simplify`、`loss->rules::simplify->with_grad`；不需要 `optimize<pass>` 一类的包装。捕获了值的函数（闭包）照样可以变换，捕获随新函数带上。
+4. **`rewrite` 模块**同样改为函数变换：`f->saturate<rules>`、`f->extract<cost>`；`stdlib/rules.cml` 的 `simplify` 等随之改签名。
+5. C++ 的遍内部仍按快照工作；只有写遍的公开接口与流水线的约定变化。规则语言第二版（v2.cn.md 8.5）已按此改写。
 
 ### 5.0 调度
 
