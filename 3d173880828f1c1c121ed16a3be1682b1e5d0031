@@ -1,0 +1,224 @@
+# H94 — H76 的六条裁定：声明模块就是模块、声明的重叠与归属
+
+分支 `handover/H94-declaration-module`，起点 `origin/develop` `0a4161ec4`。裁定原文是
+`reviews/H24-H25-H26.md` 末尾「追加：H71、H73、H76、H81」的六条；问题清单是 `reports/H76.md`
+第 6 节。第 1 条是迁移 `tensor` 的前提，所以它先做、单独一个提交，后五条各一个提交。
+
+每条按「改了什么／怎么判／哪个用例证明／对 `tensor` 意味着什么」写。约定页
+`docs/stdlib-conventions.cn.md` 的第 1、2 节随每条一起改。
+
+## 1. `.cml` 与 `.cmo` 是一个模块，不是两个
+
+### 改了什么
+
+载入一个 C++ 模块时，如果它旁边有同名的 `.cml`，现在的顺序是：
+
+1. `Module::load()` 读 C++ 的导出（类型、常量、算子组、标签、默认导入）；
+2. `Module::inheritExportsFrom(*impl)` 把这些**真的搬进**声明模块：`exportedTypeNS_` 逐个
+   `insert`，`nativeEntityNS_` 逐个 `exportEntity`（同时按 URI 登记算子组），`declaredTags_`
+   复制，`defaultImportedRefs_` 复制；
+3. 再编译 `.cml`，它的 `export type`／`export let`／`export func` 写进同一个模块。
+
+第 2 步不是可选的装饰：`ProgramExports::forEachExportedEntity`、`importAllRefsFromMod`、
+`inspect --ops`、语义服务都直接读 `nativeEntityNS_`／`exportedTypeNS_`，只在 GIR 里加"虚拟回退"
+它们看不见。
+
+为此加了三个小原语：
+
+- `Namespace::assign(ref, v)`（`include/camel/common/ns.h`）：`insert` 是不覆盖的，声明模块要
+  在已继承的表上再写；
+- `Module::replaceEntity(ref, ent)`（`module.h`／`module.cpp`）：声明模块写一个 C++ 也导出的
+  算子组时，**以声明为准**（声明是签名的唯一来源），并重登 `nativeOperatorGroups_`；撞上的是
+  常量或标签则报 `Redeclaration`；
+- `Module::inheritExportsFrom`：上面第 2 步。
+
+GIR 侧两处补全"同一个模块"的语义：
+
+- `builder_expr.cpp` 的自身实体查找在导入之前，且**常量（`isValue()`）也认**：`math.cml` 里写
+  `pi` 就是 `math` 的常量，不再要求 `import math`；
+- `gct/builder.cpp` 的 `lookupType` 在自己 `typeScope_` 之后、导入之前加一层"本模块导出的
+  **类型**"（名字去过模块前缀）：`json.cml` 里写 `Json`、`decode(...)` 的返回类型，都不导入。
+
+### 怎么判
+
+`export let` 的值仍然是"程序实体"（`ProgramExports` 里按模块与名字），`exportEntity` 的 native
+回退让它照样可达；一个模块对象同时装着两套表。同名类型（C++ 已导出、`.cml` 又 `export type`）
+按 `Namespace::insert` 的语义**不覆盖**，是已知限制：类型不重名即可，真要改写类型是另一条裁定。
+
+### 证明
+
+`test/cases/compile/native/one_module.mjs`（计划 `native.one_module`）：把 `json`、`math` 的
+`.cmo` 拷到临时目录，写 `json.cml`（声明 `kind_of`，`export type Tag`）、`math.cml`
+（`export let tau`）、`main.cml`（`import { kind_of } from json`、`let tag: json::Tag`、
+`println(math::tau)`、`println(json::encode([1, 2]))`）。一条用例同时证明：C++ 的类型在 `.cml`
+里可见、`.cml` 的 `export type` 导入方可见、C++ 的常量在 `.cml` 里可写、C++ 的算子组与声明
+共存于一个模块。
+
+### 对 `tensor` 意味着什么
+
+`tensor.cml` 可以直接写 `Tensor`、`Shape` 这类 C++ 导出的类型，也可以 `export type` 自己的
+辅助类型，不需要"影子模块"或双重导入。**但**：`replaceEntity` 会把 C++ 的整个算子组换成声明
+的那组规则，所以签名是**算出来**的算子（`DynamicFuncTypeResolver`：元素类型、形状随实参变）
+不能声明，否则形状计算就丢了。`tensor` 的迁移要按算子分：固定签名的写进 `.cml`，算出来的留在
+C++。
+
+## 2. 泛型声明之间的重叠按固定签名一样检查
+
+### 改了什么
+
+- `declareNativeOperator`：读到第二条同名声明时，如果两条都是泛型（`fixedSignature()` 为空），
+  用**结构比较**看是否存在一次调用两条都可能接受；是则 `NativeDeclarationOverlap`
+  （`0x000180`），位置在第二条声明。
+- 比较是保守的：`T` 能是任何东西；`T?`／`T!` 与普通值可以同一个实参（普通值能进这两种位置）；
+  数组、元组、结构、函数逐层比；没看懂的形状（如类型函数的应用）算"可以同意"。宁可漏报，
+  不误报。
+- 固定的声明比泛型的更具体（设计原则 4.3）：两者同名时都保留，`OperatorGroup` 里固定的排前面，
+  一次调用两者都能接受时用固定的那条。
+- `operatorOverloadsOf`：本模块**自己声明的**算子规则也进候选集（与它自己写的 `operator +`
+  同等），所以"更具体"的比较数得到声明。
+
+### 怎么判
+
+判据来自设计原则，不需要额外裁定：5.1「先精确、再进入，歧义绝不由声明顺序决定」——两条规则
+一次调用都能进，就没有理由让先写的那条赢，这是声明的错，不是调用的错。固定 vs 泛型没有歧义
+（4.3 的"用户重载比内置更具体"同理：更具体的赢），所以只有泛型↔泛型之间报错。
+
+`uses`（3.3 的资源）不在 `FunctionType` 里，因此不参与类型选择；两个签名相同、`uses` 不同的
+声明在类型上就是同一个调用，重叠检查也看不见资源差异。这是设计原则的现状，不是本条的疏漏。
+
+### 证明
+
+`test/cases/compile/native/overlap.mjs`（计划 `native.generic_declaration_overlap`）：一个
+模块里两条 `pick(xs: (typeas T/U)[], i: int)`，用同一个 `:op/idx_arr`。改之前两条合成一组、
+第一条静默胜出（`pick([10,20,30],1)` 打出 `1`）；改之后在第二条声明处报 `0x03000180`，消息里
+两条签名都在。用例检查诊断名、码、位置与消息，不需要 C++ 模块参与。
+
+### 对 `tensor` 意味着什么
+
+`tensor` 里同名多族的写法（`+` 对张量、对标量）将来若都改成声明，两族的参数形状必须能区分
+（例如 `(Tensor, Tensor)` 与 `(Tensor, float)`）；分不开就是这条诊断。反过来，一族声明 + 一族
+C++ 动态签名是允许的（固定的赢），这正是渐进迁移需要的样子。
+
+## 3. 没有 `export` 的无体函数是模块私有的原生算子
+
+### 改了什么
+
+- `ModuleUnit` 多了 `nativeOperatorGroups`（名字 → 组），`exportNativeOperators(exportList)`
+  先读模块的导出表（`EXPT`），导出的组照旧 `exportEntity`／`replaceEntity`，**没导出的留在
+  这张表里**，不进模块的实体表；
+- `Builder::ownNativeEntity(ref)`：按"正在编译哪个模块"（`module_`，不是调用方的 `unit_`——
+  泛型实例在声明它的模块里建）查上面那张表，再退回 `getNativeEntity`；`builder_expr.cpp` 与
+  `operatorOverloadsOf` 都改走它。
+
+### 怎么判
+
+设计原则 10.2：模块导出的名字是它的承诺，没导出的不是。声明是给"模块自己的 Camel 包装"用的
+（10.2、6.4 的写法），包装之外不该看见。私有组不是模块的实体，所以 `module::name`、`import`、
+`inspect --ops` 都到不了；而 `ownNativeEntity` 在**导入之前**查，模块自己的函数照常调用。
+
+### 证明
+
+- `private.cml`（`native.private_declaration`）：`private_module.cml` 里 `func at`（私有）+
+  `export func second`（包装），`second([4,5,6])` 打出 `5`；
+- `private_import.cml`（`native.private_declaration_not_imported`）：`import { at }` 报
+  `ImportNameNotExported`（`0x03000015`），位置在导入方。
+
+### 对 `tensor` 意味着什么
+
+`tensor` 有一批只给自家包装用的算子（中间步、形状辅助）；它们可以写成不 `export` 的声明，
+不污染模块的导出面。这也是 H76 待决问题里"声明是否必须导出"的答案：不必。
+
+## 4. 入口模块的声明用 `module` 名作 URI 前缀
+
+### 改了什么
+
+`declareNativeOperator` 的默认 URI 前缀从 `module->name()`（入口是 `main`）改成
+`module->declaredName()`，空则退回 `name()`。
+
+### 怎么判
+
+设计原则 10.1：模块的算子答在模块名下。入口文件的运行时名字是 `main`（进程入口），但文件里
+写 `module bytes` 就是说"这些声明属于 `bytes`"；用 `main:size` 时执行器永远找不到它，声明在
+自己的文件里都不可用，没有第二种解释。
+
+### 证明
+
+`entry_uri.cml`（`native.entry_uri_prefix`）：入口文件开头 `module bytes`、`import { encode }
+from bytes`、`export func size(content: Bytes): int`，`size(encode('abc'))` 打出 `3`。改之前
+URI 是 `main:size`，报 `NativeDeclarationNotLoaded`。
+
+### 对 `tensor` 意味着什么
+
+`tensor` 的示例、benchmark 若在入口文件里声明算子，前缀就是 `tensor`，与 `.cml` 里的写法一致，
+不用为"入口特殊"记一条规则。
+
+## 5. 一个模块只能声明自己的算子
+
+### 改了什么
+
+`declareNativeOperator` 在"算子已加载"两项检查之后，取 URI 的协议部分，要求它属于本模块：
+
+- 等于模块声明的名字，或运行时名字；或
+- 是这个模块**实现的算子**用过的前缀（`random` 的算子答在 `rand:` 下，迁移中的模块仍可这样
+  写）；或
+- 为空（编译器自己命名的核心算子，如 `:op/idx_arr`）。
+
+否则 `NativeDeclarationForeignOperator`（`0x000181`），位置在声明处。放在"已加载"之后是有意的：
+`nowhere:absent` 这种"根本没有这个模块"仍报 `NativeDeclarationNotLoaded`（更准确），
+`bytes_tag` 那种"有，但是别人的"才报新码。
+
+### 怎么判
+
+设计原则 10.1／10.2：签名是模块的承诺，一个模块不能替另一个模块写承诺。原来的 `#op` 是一个
+无限制的后门：任何模块都能用 `#op<'bytes:size'>` 替换 `bytes:size` 的 resolver
+（`OperatorGroup::publishResolvers` 是 `setResolver`，覆盖），一个模块的错误可以在另一个模块
+里生效。`#op` 保留的用途只剩"本模块的算子名不是 Camel 标识符，或用别的前缀"。
+
+### 证明
+
+- `foreign_operator.cml`（`native.foreign_operator_refused`）：导入 `bytes_tag`，后者
+  `#op<'bytes:size'>` 声明别人家的算子 → `0x03000181`，位置在 `bytes_tag.cml` 的声明行；
+- `generic_qualified.cml`（`native.declaration_qualified`）：`generic_module::at` 仍可达——
+  拒绝的是"声明别人的"，不是"限定名访问"；
+- 原 `native.tag_exception`（期望 `3\n3\n`）与 `native.tag_exception_qualified`（期望 `4\n`）
+  的正是被这条裁定禁止的写法，**按裁定改成拒绝用例**，不是回归。
+
+### 对 `tensor` 意味着什么
+
+`tensor.cml` 只能写 `tensor:` 前缀的算子。核心算子（`angles` 下标、`:op/idx_arr` 这类）即使
+`tensor` 想声明，前缀也是空协议，仍允许，但那会**程序级**替换 resolver（`publishResolvers`
+覆盖），`tensor` 迁移时应优先避免；这条留给 `tensor` 的负责人按调用面判断。
+
+## 6. 带参数名的签名文本
+
+不改代码：声明的 `FunctionType` 本来就带参数名，`toString()`／诊断消息原样打印，
+`bytes_type.cml` 的期望文本 `<bytes:size>: (content: Bytes) => int` 就是它。约定页明确"声明上方
+的 `///` 与参数名都是给读者的，选择只看类型"。
+
+## 验证
+
+全部在 Linux 主机上跑（`camel-remote.ps1 -Jobs 8`，`-NoBuild` 复用同一份构建）：
+
+- `feat/compile`、`feat/modules`、`feat/linear`、`smoke`：**2733 条，2732 通过，1 条跳过，0 失败**
+  （跳过的 `modules.unicode_paths` 只在 Windows 上有意义）；
+- 声明计划 `test/plans/feat/compile/native_declarations.plan.toml`：**14/14**——六条裁定各有
+  用例：`native.one_module`、`native.generic_declaration_overlap`、
+  `native.private_declaration` 与 `native.private_declaration_not_imported`、
+  `native.entry_uri_prefix`、`native.foreign_operator_refused`、`native.declaration_qualified`；
+- `node scripts/stdlib-reference.mjs --verify-ops`：声明与 **343** 条已注册算子签名一致；
+- 诊断目录：`docs/diagnostics.md` 由 `scripts/diagnostics-catalog.mjs --write` 重新生成（199 条：
+  182 错误、17 警告），`feat/compile/diag_catalog` 的 `catalog.check` 与
+  `catalog.doc_is_generated` 通过。
+
+一个与本次无关的边界：`feat/compile/return_type` 的 `nested_return.compile_time` 没有写
+`timeout_ms`（默认 5 s），在满负荷时实测 4.9–5.0 s，曾在一次并行跑里被 5 s 超时打断；单跑
+1.8 s 通过。它不经过本次改动的路径，留给计划维护者。
+
+## 剩下的、与 `tensor` 有关的
+
+1. **算出来的签名不能声明**（第 1 条的后果）：`DynamicFuncTypeResolver` 的算子留在 C++，否则
+   形状／元素类型的计算丢失。`tensor.cml` 里的声明只覆盖固定签名的那批。
+2. **核心算子前缀为空**：声明 `:op/idx_arr` 会程序级替换 resolver（第 5 条），`tensor` 若需要
+   自己的下标语义，应走"第 5.7 条：算子在操作数类型的声明模块里找"，而不是再声明核心算子。
+3. **`uses` 不进类型**：声明只能写签名，资源仍是 C++ 的 `declareResources`；声明不改变资源。
+4. **类型重名**：`.cml` 的 `export type` 与 C++ 同名类型不覆盖（第 1 条），迁移时避免同名。
