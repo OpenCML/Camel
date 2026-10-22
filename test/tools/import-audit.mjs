@@ -382,7 +382,8 @@ function baselineWall(reps) {
 }
 
 // `CAMEL_PACKAGES` and `-I` add search roots. Each root is a directory listing the first time
-// the context looks a module up, cached afterwards (doc 38, section 8 item 5). The price is the
+// the context looks a module up, cached afterwards (docs/technical/53_import_cost_audit.md,
+// 53.3.2). The price is the
 // `resolve` phase of the first import, with and without the roots.
 function resolutionCost(reps) {
     const dir = caseDir()

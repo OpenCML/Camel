@@ -18,8 +18,8 @@
  */
 
 /*
- * A graph a rewrite encoded and no program bound is released by the collector (the debt of
- * store-and-rules, item 2): a pass that specializes a call encodes a graph version on the way,
+ * A graph a rewrite encoded and no program bound is released by the collector (a debt of the
+ * graph store's release rules): a pass that specializes a call encodes a graph version on the way,
  * and a commit may replace it with a copy of its own before anything binds it. The version no
  * program holds must not outlive the pass in the graph space.
  *

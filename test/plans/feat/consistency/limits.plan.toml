@@ -362,7 +362,7 @@ expect_output_contains = ["Maximum recursion depth (10000) exceeded"]
 
 [[tests]]
 name = "limit.raised.native.no_crash.100000.50000"
-desc = "Limits of 100000 and 1000000 with recursions of 50000, 100000 and 900000 levels in native code and under std::jit: each ends with the result or with MaxRecursionDepthExceeded at the recursive call, never by a signal. (A native recursion of 100000 levels under a limit of 1000000 was a segmentation fault: issue 21 of docs/issues/2026-10-12-language-surface-findings.md.)"
+desc = "Limits of 100000 and 1000000 with recursions of 50000, 100000 and 900000 levels in native code and under std::jit: each ends with the result or with MaxRecursionDepthExceeded at the recursive call, never by a signal. (A native recursion of 100000 levels under a limit of 1000000 was a segmentation fault.)"
 backends = ["jit", "inline_jit"]
 backends_agree = []
 timeout_ms = 120000

@@ -7,7 +7,9 @@
 //   node scripts/check-doc-links.mjs --all      every tracked *.md of the repository
 //   node scripts/check-doc-links.mjs --technical-index  every page under docs/technical is listed
 //                                               in docs/technical/README.md (the list is the tree)
-//   node scripts/check-doc-links.mjs a.md b/    the given files and directories
+//   node scripts/check-doc-links.mjs --citations  every *.md path cited anywhere in the tree — in a
+//                                               document, a code or .cml comment, a plan — exists
+//   node scripts/check-doc-links.mjs FILE DIR  the given files and directories
 //
 // Exit status 1 when a link is broken, 2 when the scope is empty or names a missing entry: a
 // check of nothing is refused, never reported as a pass. External links (http, mailto) are not fetched.
@@ -165,7 +167,132 @@ function checkTechnicalIndex() {
     return 0
 }
 
+// A link check reads Markdown links and nothing else, which is how a deleted page could stay
+// cited in code comments, .cml comments, plan descriptions and README prose. This mode reads every
+// page, every plan and every code comment in the tree and resolves every `*.md` path it finds there.
+// A reference to a file that does not exist is a defect, not a style issue.
+//
+// Not every `*.md` string is a citation: a script that writes its report names a run output. Only
+// the files listed above are read, and in code only a comment line is (a string literal that names
+// an output is not a citation). The records (docs/handover, docs/reviews, changes.log) are history
+// and are not scanned. EXTERNAL_CITATIONS names files of other repositories: TSE2027 is the paper
+// repository, docs/debugger-migration.md is in OpenCML-Ext.
+const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
+const C_LIKE = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.cml', '.js', '.mjs', '.ts'])
+const HASH_COMMENT = new Set(['.py', '.sh', '.ps1'])
+const SCANNED = new Set(['.md', '.toml', ...C_LIKE, ...HASH_COMMENT])
+
+const EXTERNAL_CITATIONS = ['TSE2027/', 'docs/debugger-migration.md']
+// Names the measurement harness writes at run time; they are outputs, not files of the tree.
+const RUN_OUTPUTS = new Set([
+    'CLASSIFIER-RULES.md', 'HARNESS-CHANGES.md', 'HARNESS-CHANGES-2.md', 'RESULTS.md', 'perf-baseline.md',
+    'latency.md', 'memory.md', 'export.md',
+])
+
+function allFiles(directory = root) {
+    const out = []
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const full = path.join(directory, entry.name)
+        if (entry.isDirectory()) {
+            if (SKIP_DIRS.has(entry.name)) continue
+            out.push(...allFiles(full))
+        } else if (entry.isFile()) {
+            out.push(full)
+        }
+    }
+    return out
+}
+
+function scannedFiles(directory = root) {
+    const out = []
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const full = path.join(directory, entry.name)
+        const rel = path.relative(root, full).replace(/\\/g, '/')
+        if (entry.isDirectory()) {
+            if (SKIP_DIRS.has(entry.name) || RECORD_DIRS.has(rel)) continue
+            out.push(...scannedFiles(full))
+        } else if (entry.isFile() && rel !== 'changes.log' && SCANNED.has(path.extname(entry.name).toLowerCase())) {
+            out.push(full)
+        }
+    }
+    return out
+}
+
+function isComment(file, text, index) {
+    const extension = path.extname(file).toLowerCase()
+    const lineStart = text.lastIndexOf('\n', index - 1) + 1
+    const prefix = text.slice(lineStart, index)
+    if (C_LIKE.has(extension)) return prefix.includes('//') || /^\s*\*/.test(prefix) || prefix.includes('/*')
+    if (HASH_COMMENT.has(extension)) return prefix.includes('#')
+    return true
+}
+
+// A fenced block shows an example, often of a file that a plan *will* create; it is not a citation.
+function inFence(text, index) {
+    const fences = (text.slice(0, index).match(/^(?:```|~~~)/gm) || []).length
+    return fences % 2 === 1
+}
+
+function checkCitations() {
+    const files = scannedFiles()
+    const byName = new Map()
+    for (const file of allFiles()) {
+        const name = path.basename(file)
+        if (!byName.has(name)) byName.set(name, [])
+        byName.get(name).push(file)
+    }
+    const citation = /(?<![\w./*-])((?:\.{1,2}\/|[\w@-]+\/)*[\w-][\w.-]*\.md)\b/g
+    const problems = []
+    let examined = 0
+    for (const file of files) {
+        const text = fs.readFileSync(file, 'utf8')
+        const markdown = path.extname(file).toLowerCase() === '.md'
+        for (const m of text.matchAll(citation)) {
+            const target = m[1]
+            if (EXTERNAL_CITATIONS.some((prefix) => target.startsWith(prefix))) continue
+            let start = m.index
+            // A path inside a URL is not a citation of a file of this repository.
+            while (start > 0 && /[\w:/?=&%#+.-]/.test(text[start - 1])) start--
+            if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text.slice(start, m.index))) continue
+            if (!isComment(file, text, m.index)) continue
+            if (markdown && inFence(text, m.index)) continue
+            let decoded = target
+            try {
+                decoded = decodeURIComponent(target)
+            } catch {
+                // A malformed escape is still resolved as written.
+            }
+            if (decoded.startsWith('tmp/') || RUN_OUTPUTS.has(path.basename(decoded))) continue
+            const line = text.slice(0, m.index).split('\n').length
+            const local = path.resolve(path.dirname(file), decoded)
+            const fromRoot = path.resolve(root, decoded)
+            const byTailName = byName.get(path.basename(decoded))
+            // A name that exists somewhere resolves the citation even when the path was written for
+            // another directory: the exact path is the link check's business, existence is this
+            // check's.
+            if (!fs.existsSync(local) && !fs.existsSync(fromRoot) && !(byTailName && byTailName.length > 0)) {
+                problems.push(`${path.relative(root, file).replace(/\\/g, '/')}:${line}: '${target}': no such file`)
+            }
+            examined++
+        }
+    }
+    if (examined === 0) {
+        console.log(`no .md citation in ${files.length} file(s): nothing was checked`)
+        return 2
+    }
+    for (const problem of problems) console.log(problem)
+    if (problems.length > 0) {
+        console.log(`${problems.length} missing citation target(s) in ${examined} citation(s)`)
+        return 1
+    }
+    console.log(`no missing citation target in ${examined} citation(s) across ${files.length} file(s)`)
+    return 0
+}
+
 const args = process.argv.slice(2)
+if (args.includes('--citations')) {
+    process.exit(checkCitations())
+}
 if (args.includes('--technical-index')) {
     process.exit(checkTechnicalIndex())
 }

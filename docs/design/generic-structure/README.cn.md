@@ -8,7 +8,7 @@
 
 ## 1. 问题
 
-现状（审查 `frontend.cn.md` 1、2、4，`modules.cn.md` 1、8）：
+现状：
 
 - `src/compile/gir/tree.cpp`（236 行）在建图时按字符串 `tree:tree_map` 等认出五个操作并自己展开。`tree` 模块是空壳，它们的 resolver 恒为空，因此这些名字不能当函数值用，`inspect --ops` 与悬停也拿不到签名。
 - "什么是内部节点、叶子顺序、路径怎么写"在 `tree.cpp`、`nn/checkpoint.cpp`、`tiles/device.cpp`、`tree_transfer.cpp`、`module.cpp` 各写一份，已经不一致：有的把 `T?` 内部的元组当树递归，有的拒绝空结构体，有的以 `$` 为根。

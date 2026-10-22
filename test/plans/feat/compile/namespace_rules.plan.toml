@@ -5,7 +5,7 @@ tags = ["feat", "compile", "semantic", "modules", "namespace"]
 desc = "Namespaces and imports by the rulings of 2026-10-14: lookup in namespace blocks, scoped using, one precedence rule, import forms, values in namespaces, own-module qualification"
 
 # Design principles 10.2 ("模块与命名空间"); docs/design/graph-model/README.cn.md section 8.
-# p01-p26 are the probes of the table in 8.1 (docs/design/graph-model/examples/ns), one test per
+# p01-p26 are the probes of the table in 8.1 (test/cases/compile/namespace_rules), one test per
 # row, with the outcome the rulings give; p27-p32 are new.
 
 [defaults]

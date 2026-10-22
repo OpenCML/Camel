@@ -52,8 +52,8 @@
  *     (type::CollectionType), which every function here is handed, and the header of the
  *     table.
  *   - No function here keeps a pointer to a table after it returns. Within a call, pointers are
- *     held across allocations, which are not safepoints (docs/technical/23, "Phase 2 Safepoint
- *     Contract").
+ *     held across allocations, which are not safepoints (docs/technical/23_gc_runtime_lifetime.md,
+ *     "Phase 2 Safepoint Contract").
  *
  * The shape of a tree depends on the history of the value and is never observable: order,
  * equality and printing are those of the entries.
