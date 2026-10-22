@@ -152,7 +152,17 @@ const MODULES = [
     },
     { name: 'para', title: '`para`: unordered iteration', kind: 'cpp' },
     { name: 'this', title: '`this`', kind: 'cpp' },
-    { name: 'graph', title: '`graph`: a program as a value', kind: 'cpp' },
+    {
+        name: 'graph',
+        title: '`graph`: a program as a value',
+        kind: 'cpp',
+        // The declarations, not a signature file: they are what the module compiles (H19). The
+        // operators whose type C++ computes (`constant` and `add_constant` take the type of their
+        // sample; the four of a function value take the function's type) stay in the C++ resolver
+        // and are recorded in the declaration file as `// dynamic func` (handover H141).
+        source: 'graph.cml',
+        declaration: true,
+    },
 ]
 
 function sourceOf(module) {
@@ -452,6 +462,17 @@ function readDeclarations(file, module) {
         const tagged = trimmed.match(/^#\[?op<['"]([^'"]+)['"]>/)
         if (!tagged) throw new Error(`${path.basename(file)}:${i + 1}: unknown tag on a declaration`)
         pendingUri = tagged[1]
+        continue
+    }
+    // A declaration of `operator ==` names a reserved operator group (`__eq__`), which has no
+    // Camel name to list: `inspect --ops` hides those names, `--verify-ops` filters them out, and
+    // the page introduces the operators of a type in the module's text. Reading the declaration as
+    // an entry called `operator ==` would ask --verify-ops for an operator of that name, which
+    // does not exist (handover H141).
+    if (/^export\s+func\s+operator\b/.test(trimmed)) {
+        doc = []
+        withText = ''
+        pendingUri = null
         continue
     }
     if (trimmed.startsWith(keyword + ' ')) {

@@ -65,18 +65,6 @@ Anchor anchorOf(const Handle *handle, const char *site, bool node) {
     return Anchor{handle->program(), graph, node ? handle->index() : kInvalidNodeRef};
 }
 
-StructType *effectsType() {
-    static StructType *type = [] {
-        StructTypeFactory factory;
-        factory.add("external", Type::Bool());
-        factory.add("writes_variables", Type::Bool());
-        factory.add("may_fault", Type::Bool());
-        factory.add("may_not_terminate", Type::Bool());
-        return factory.build();
-    }();
-    return type;
-}
-
 /// What running the graph once does besides computing its value: an effect outside the
 /// program's variables, a write to a variable, a possible fault, a possible non-termination.
 slot_t effectsKernel(ArgsView &, ArgsView &norm, Context &ctx) {
@@ -117,36 +105,29 @@ slot_t permissionsKernel(ArgsView &, ArgsView &norm, Context &ctx) {
 struct FactOp {
     const char *name;
     operator_t kernel;
-    HandleKind param;
-    Type *result;
 };
 
 const std::vector<FactOp> &factOps() {
     static const std::vector<FactOp> ops = {
-        {"effects", effectsKernel, HandleKind::Graph, effectsType()},
-        {"shape", shapeKernel, HandleKind::Node, TupleType::nullable(Type::String())},
-        {"permissions", permissionsKernel, HandleKind::Node, Type::Int64()},
+        {"effects", effectsKernel},
+        {"shape", shapeKernel},
+        {"permissions", permissionsKernel},
     };
     return ops;
 }
 
 } // namespace
 
-const std::vector<oper_group_ptr_t> &factGroups() {
-    static const std::vector<oper_group_ptr_t> groups = [] {
-        std::vector<oper_group_ptr_t> out;
-        for (const FactOp &op : factOps()) {
-            out.push_back(OperatorGroup::create(
-                op.name,
-                {{std::string("graph:") + op.name,
-                  StaticFuncTypeResolver::create(
-                      {},
-                      {{HandleType::get(op.param), false}},
-                      op.result)}}));
-        }
-        return out;
+StructType *effectsType() {
+    static StructType *type = [] {
+        StructTypeFactory factory;
+        factory.add("external", Type::Bool());
+        factory.add("writes_variables", Type::Bool());
+        factory.add("may_fault", Type::Bool());
+        factory.add("may_not_terminate", Type::Bool());
+        return factory.build();
     }();
-    return groups;
+    return type;
 }
 
 const std::unordered_map<std::string, operator_t> &factKernels() {

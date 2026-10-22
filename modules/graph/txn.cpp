@@ -360,11 +360,11 @@ slot_t addConstantKernel(ArgsView &, ArgsView &norm, Context &) {
         mm::autoSpace()));
 }
 
+// The fixed operators of a transaction: their signature is in stdlib/graph.cml, so the table
+// carries the kernel of each name and nothing else (handover H141).
 struct TxnOp {
     const char *name;
     operator_t kernel;
-    std::vector<Type *> params;
-    Type *result;
 };
 
 /// The type rule of an operator on a function value: `open_function` and the like take one (a function of
@@ -386,18 +386,13 @@ resolver_ptr_t functionRule(size_t operands, std::string text, Type *(*make)(Typ
 }
 
 const std::vector<TxnOp> &txnOps() {
-    static const std::vector<TxnOp> ops = [] {
-        Type *program = HandleType::get(HandleKind::Program);
-        Type *txn     = HandleType::get(HandleKind::Txn);
-        Type *node    = HandleType::get(HandleKind::Node);
-        return std::vector<TxnOp>{
-            {"open", openKernel, {program}, txn},
-            {"replace", replaceKernel, {txn, node, node}, Type::Void()},
-            {"erase", eraseKernel, {txn, node}, Type::Void()},
-            {"commit", commitKernel, {txn}, TupleType::fallible(program)},
-            {"abort", abortKernel, {txn}, Type::Void()},
-        };
-    }();
+    static const std::vector<TxnOp> ops = {
+        {"open", openKernel},
+        {"replace", replaceKernel},
+        {"erase", eraseKernel},
+        {"commit", commitKernel},
+        {"abort", abortKernel},
+    };
     return ops;
 }
 
@@ -406,50 +401,47 @@ const std::vector<TxnOp> &txnOps() {
 const std::vector<oper_group_ptr_t> &txnGroups() {
     static const std::vector<oper_group_ptr_t> groups = [] {
         std::vector<oper_group_ptr_t> out;
-        for (const TxnOp &op : txnOps()) {
-            param_vec_t params;
-            for (Type *type : op.params) {
-                params.emplace_back(type, false);
-            }
-            out.push_back(OperatorGroup::create(
-                op.name,
-                {{std::string("graph:") + op.name,
-                  std::make_unique<StaticFuncTypeResolver>(
-                      FunctionType::create({}, params, op.result))}}));
-        }
-        const auto add = [&](const char *name, resolver_ptr_t rule) {
-            out.push_back(OperatorGroup::create(
-                name,
-                {{std::string("graph:") + name, std::move(rule)}}));
-        };
-        add("open_function",
-            functionRule(1, "(f: F) => Txn", [](Type *) -> Type * {
-                return HandleType::get(HandleKind::Txn);
-            }));
-        add("to_function",
-            functionRule(2, "(t: Txn, sample: F) => F!", [](Type *sample) -> Type * {
-                return TupleType::fallible(sample);
-            }));
-        add("program_of",
-            functionRule(1, "(f: F) => Program", [](Type *) -> Type * {
-                return HandleType::get(HandleKind::Program);
-            }));
-        add("graph_of",
-            functionRule(1, "(f: F) => Graph", [](Type *) -> Type * {
-                return HandleType::get(HandleKind::Graph);
-            }));
-        add("add_constant",
-            DynamicFuncTypeResolver::create(
-                {{0, {}}, {3, {false, false, false}}},
-                "(t: Txn, g: Graph, value: T) => Node, T a number, bool or string",
-                [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                    -> std::optional<Type *> {
-                    if (!HandleType::is(norm[0], HandleKind::Txn) ||
-                        !HandleType::is(norm[1], HandleKind::Graph) || !constantType(norm[2])) {
-                        return std::nullopt;
-                    }
-                    return HandleType::get(HandleKind::Node);
-                }));
+        // The signatures of this file C++ computes (stdlib/graph.cml keeps their reference
+        // entries): the result of the first three is the type the function value has.
+        out.push_back(OperatorGroup::create(
+            "open_function",
+            {{"graph:open_function",
+              functionRule(1, "(f: F) => Txn", [](Type *) -> Type * {
+                  return HandleType::get(HandleKind::Txn);
+              })}}));
+        out.push_back(OperatorGroup::create(
+            "to_function",
+            {{"graph:to_function",
+              functionRule(2, "(t: Txn, sample: F) => F!", [](Type *sample) -> Type * {
+                  return TupleType::fallible(sample);
+              })}}));
+        out.push_back(OperatorGroup::create(
+            "program_of",
+            {{"graph:program_of",
+              functionRule(1, "(f: F) => Program", [](Type *) -> Type * {
+                  return HandleType::get(HandleKind::Program);
+              })}}));
+        out.push_back(OperatorGroup::create(
+            "graph_of",
+            {{"graph:graph_of",
+              functionRule(1, "(f: F) => Graph", [](Type *) -> Type * {
+                  return HandleType::get(HandleKind::Graph);
+              })}}));
+        // The result is a node, and the value may be a number, a bool or a string.
+        out.push_back(OperatorGroup::create(
+            "add_constant",
+            {{"graph:add_constant",
+              DynamicFuncTypeResolver::create(
+                  {{0, {}}, {3, {false, false, false}}},
+                  "(t: Txn, g: Graph, value: T) => Node, T a number, bool or string",
+                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
+                      -> std::optional<Type *> {
+                      if (!HandleType::is(norm[0], HandleKind::Txn) ||
+                          !HandleType::is(norm[1], HandleKind::Graph) || !constantType(norm[2])) {
+                          return std::nullopt;
+                      }
+                      return HandleType::get(HandleKind::Node);
+                  })}}));
         return out;
     }();
     return groups;

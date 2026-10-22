@@ -499,3 +499,40 @@ case = "../../../cases/compile/native/fs_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "fs_type.cml:11:19", "argument types: <> (int)", "<fs:exists>: (path: string) => bool"]
+
+# ---- The declarations of `graph`: a program as a value (handover H141) ----
+#
+# `graph` is the module whose values are handles (`Program`, `Graph`, `Node`, ...) and whose
+# operators take and return them. The declarations carry the fixed signatures — including `==`
+# of two handles, which is the reserved group `__eq__` — and the six whose type C++ computes stay
+# in C++ (recorded as `// dynamic func`). `!=` cannot be declared (design principles 4.3) and
+# stays in C++ too. What these cases prove is that an importer reads the declared handle types
+# and results, that `==` and `!=` reach the operators, and that a wrong call is diagnosed against
+# the declaration.
+
+[[tests]]
+name = "native.graph_declaration_import"
+desc = "`graph`'s declarations are the module's signature: an importer holds `Program`, `Graph` and `Node` in locals of those types, compares two handles with `==` and `!=`, reads `int` from `id`, `string` from `name` and `type_name`, and matches the `TypeRef?` of `type_of`; every call reaches the C++ operator."
+kind = "behavior"
+case = "../../../cases/compile/native/graph_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\nfalse\n__root__\ntrue\ntrue\n() => int\n"
+
+[[tests]]
+name = "native.graph_wrong_arity"
+desc = "`graph:root` is declared with one ordinary argument: a call with none is refused at the call, and the overload the message lists is the declaration's, parameter name included."
+kind = "negative"
+case = "../../../cases/compile/native/graph_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_arity.cml:10:17", "argument types: <> ()", "<graph:root>: (p: Program) => Graph"]
+
+[[tests]]
+name = "native.graph_wrong_type"
+desc = "An `int` where the declaration says `Program`: refused at the declaration's type, and the signature in the message has the declaration's own parameter name (`p`) — `stdlib/graph.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/graph_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "graph_type.cml:11:17", "argument types: <> (int)", "<graph:root>: (p: Program) => Graph"]
