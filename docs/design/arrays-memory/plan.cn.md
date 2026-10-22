@@ -94,7 +94,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 - 导出的类型 `Tensor`（`modules/tensor/module.cpp` 第 60 行 `exportType(Reference("Tensor"), TensorType::Default())`）；
 - 所有算子推断的返回类型（`modules/tensor/ops/*`、`support.cpp` 的 `tensorOf`）；
 - 值类型细化器（常量数组 → dtype+形状）与 `.npy` 入口加载器的类型键；
-- `modules/nn`、`modules/onnx`、`modules/tiles`、`modules/tree`、`modules/autodiff` 识别"这是不是张量"的依据（`asTensorType`，25 个文件、51 处）。
+- `modules/nn`、`modules/onnx`、`modules/tiles`、`modules/ckpt`、`modules/autodiff` 识别"这是不是张量"的依据（`asTensorType`，25 个文件、51 处）。
 
 它也是"元素类型精确"的障碍：`normalizeTensorDType` 把 f64 读成 f32、i32 读成 i64，`Tensor<float>` 与 `Tensor<f32>` 同义。
 
@@ -380,7 +380,7 @@ Tensor<f32>               // f32[..]
 - `modules/nn`：checkpoint 的类型文本（`Tensor<f32>` 打印为 `f32[..]`）、`load_tree::<Tensor<int>>`、参数类型；
 - `modules/onnx`：`emitter.cpp`/`exporter.cpp`/`lowering.cpp` 用 `asTensorType` 与 `normalizeTensorDType` 判断 dtype/形状的地方；
 - `modules/tiles`：张量识别与 `Tensor` 拼写；
-- `modules/tree`、`modules/autodiff`：签名与算子里的 `Tensor` 类型；
+- `modules/ckpt`、`modules/autodiff`：签名与算子里的 `Tensor` 类型；
 - `src/execute/entry_args.cpp`：加载器键与"能拒接"的谓词；
 - `src/builtin/modules/globals.cpp`：`std::mem::blocks` 之外的张量相关声明不受影响。
 

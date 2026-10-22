@@ -20,8 +20,8 @@
 // Atomic, typed snapshots of ordinary Camel training-state trees.
 #pragma once
 #include "camel/core/operator.h"
-namespace camel::treelib {
+namespace camel::ckptlib {
 std::vector<oper_group_ptr_t> checkpointOperatorGroups();
 std::unordered_map<std::string, operator_t> checkpointKernels();
 void declareCheckpointResources();
-} // namespace camel::treelib
+} // namespace camel::ckptlib

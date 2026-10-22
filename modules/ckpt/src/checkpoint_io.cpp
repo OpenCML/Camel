@@ -52,7 +52,7 @@
 // moved; if the OS still reports a cross-volume rename (EXDEV / ERROR_NOT_SAME_DEVICE), the
 // save fails with that reason and the old checkpoint stays. A crash can leave an unused
 // `.pending-*` directory; it is never read and can be deleted.
-#include "include/tree/checkpoint_io.h"
+#include "include/ckpt/checkpoint_io.h"
 #include "camel/utils/path.h"
 #include <algorithm>
 #include <atomic>
@@ -76,7 +76,7 @@
 #include <sys/stdio.h>
 #endif
 #endif
-namespace camel::treelib {
+namespace camel::ckptlib {
 namespace fs = std::filesystem;
 namespace {
 // The previous checkpoint is a hidden sibling of the destination: a fixed prefix, the
@@ -504,4 +504,4 @@ std::string readCheckpointFile(const fs::path &directory, const std::string &nam
         throw std::invalid_argument(name + ": checkpoint file changed or read failed");
     return bytes;
 }
-} // namespace camel::treelib
+} // namespace camel::ckptlib

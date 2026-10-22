@@ -8,18 +8,18 @@
  * Supported by: National Key Research and Development Program of China
  */
 
-// The native module `ckpt`: the checkpoint operators (and, until the tree library is written in
-// Camel, the type-directed tree intrinsics the compiler expands). The module is not called
-// `tree` because a
-// `stdlib/tree.cml` beside a `tree.cmo` would be taken for its declaration module instead of the
-// Camel tree library (H19 step 1, H51 step 13).
+// The native module `ckpt`: the checkpoint operators (save_tree, load_tree) and, until the
+// type-directed tree intrinsics are rewritten in Camel (H51 step 13), the four they expand to.
+// The module is not called `tree`: `stdlib/tree.cml` is the Camel tree library, and a `.cml`
+// beside a same-named `.cmo` would be that native module's declaration file instead of the
+// library (H19 plan section 1.6).
 #include "../tensor/ops/registry.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/builtin.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
-#include "include/tree/checkpoint.h"
+#include "include/ckpt/checkpoint.h"
 
 namespace {
 using namespace camel::core::type;
@@ -49,10 +49,10 @@ class CkptModule final : public BuiltinModule {
     explicit CkptModule(context_ptr_t ctx) : BuiltinModule("ckpt", std::move(ctx)) {
         // Tensors are leaves of a checkpoint: their types must be registered.
         camel::tensor::ops::registerTensorOps();
-        for (const auto &group : camel::treelib::checkpointOperatorGroups())
+        for (const auto &group : camel::ckptlib::checkpointOperatorGroups())
             exportEntity(group->name(), group);
         for (const std::string name :
-             {"tree_map", "tree_reduce", "tree_unzip", "tree_leaves", "tree_paths"}) {
+             {"tree_map", "tree_reduce", "tree_unzip", "tree_leaves"}) {
             exportEntity(
                 name,
                 OperatorGroup::create(
@@ -61,16 +61,15 @@ class CkptModule final : public BuiltinModule {
     }
     bool load() override {
         context_->registerExecutorFactory("ckpt", [ctx = context_]() {
-            return std::make_shared<CkptExecutor>(ctx, camel::treelib::checkpointKernels());
+            return std::make_shared<CkptExecutor>(ctx, camel::ckptlib::checkpointKernels());
         });
-        camel::treelib::declareCheckpointResources();
+        camel::ckptlib::declareCheckpointResources();
         camel::core::OperatorTable::instance().declare(
             "ckpt",
             {{"tree_map", false},
              {"tree_reduce", false},
              {"tree_unzip", true},
-             {"tree_leaves", true},
-             {"tree_paths", true}});
+             {"tree_leaves", true}});
         loaded_ = true;
         return true;
     }

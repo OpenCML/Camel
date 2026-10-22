@@ -18,7 +18,7 @@
  */
 
 // Type-directed state persistence: own bytes before IO, validate all files before rebuilding.
-#include "include/tree/checkpoint.h"
+#include "include/ckpt/checkpoint.h"
 #include "../../tensor/binary.h"
 #include "../../tensor/npy.h"
 #include "../../tensor/type.h"
@@ -36,7 +36,7 @@
 #include "camel/core/type/typevar.h"
 #include "camel/utils/path.h"
 #include "camel/utils/sha256.h"
-#include "include/tree/checkpoint_io.h"
+#include "include/ckpt/checkpoint_io.h"
 #include <algorithm>
 #include <bit>
 #include <charconv>
@@ -46,7 +46,7 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 
-namespace camel::treelib {
+namespace camel::ckptlib {
 namespace {
 using namespace core::type;
 using namespace core::rtdata;
@@ -446,4 +446,4 @@ void declareCheckpointResources() {
         "ckpt:save_tree",
         core::sem::externalAmbient("fs", core::sem::AccessMode::ReadModifyWrite));
 }
-} // namespace camel::treelib
+} // namespace camel::ckptlib

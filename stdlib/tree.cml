@@ -1,0 +1,33 @@
+/**
+ * The parameter-tree library written in Camel (design principles 13.5): a tree is a value made
+ * of nested structs and tuples, and everything else is a leaf.
+ *
+ * `tree_paths` is here. `tree_map`, `tree_reduce`, `tree_unzip` and `tree_leaves` still live in
+ * the native module `ckpt`: they need the compiler's per-leaf expansion of a callback or of a
+ * value tuple, which arrives with H51 step 13; keeping them in `ckpt` until then is the split
+ * this library exists for, not a wrapper around them.
+ *
+ * The path of a leaf is its field names (tuple indices) from the root, joined by dots; the
+ * root's own path is the empty string. The path values are ordinary strings, so the result is
+ * the same tree with a `string` at every leaf.
+ */
+module tree
+
+/// The path of every leaf, as a tree of the same shape.
+/// @pure
+/// @example tree_paths({ a: 1, b: (2, 3) })    // { a: 'a', b: ('b.0', 'b.1') }
+export func tree_paths(t: typeas T) {
+    return paths_at(t, '')
+}
+
+func paths_at(t: typeas T, here: string) {
+    return match type T {
+        case struct => { static for (n, F) in fields T => paths_at(t.[n], join(here, n)) }
+        case tuple => ( static for (n, F) in fields T => paths_at(t.[n], join(here, n)) )
+        case _ => here
+    }
+}
+
+func join(a: string, b: string): string {
+    return if a == '' then b else a + '.' + b
+}

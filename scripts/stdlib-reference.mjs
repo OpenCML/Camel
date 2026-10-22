@@ -91,6 +91,14 @@ const MODULES = [
     },
     { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp' },
     {
+        name: 'tree',
+        title: '`tree`: parameter trees written in Camel',
+        kind: 'camel',
+        // Its one public function has no written result type: the result is the argument's
+        // shape with a string at every leaf, which a type the reference can spell does not
+        // name yet. It is rendered as `?` (an inferred result), not as `void`.
+    },
+    {
         name: 'tensor',
         title: '`tensor`: multi-dimensional numeric arrays',
         kind: 'cpp',
@@ -666,6 +674,7 @@ function readDeclarations(file, module) {
                 with: splitParams(withText),
                 norm: splitParams(args.inner),
                 result,
+                inferred: result === '' && module.kind === 'camel',
                 doc: [],
                 purity: null,
                 effect: '',
@@ -756,7 +765,7 @@ function parseHeader(module) {
 function signatureText(entry) {
     if (entry.value) return `${entry.name}: ${entry.result}`
     const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
-    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || 'void'}`
+    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}`
 }
 
 function renderDoc() {
