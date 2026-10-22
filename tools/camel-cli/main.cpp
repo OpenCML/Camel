@@ -26,6 +26,7 @@
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/tags.h"
 #include "camel/core/type.h"
+#include "camel/execute/devices.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/params.h"
@@ -572,6 +573,28 @@ int runCommand(int argc, char *argv[]) {
                     // on the command line leaves no effect and no artefact.
                     requireKnownPasses(Run::resolvedPassList, ctx);
                     requireKnownPasses(Run::fallbackPasses, ctx);
+                    // `--devices` names devices the run must have. The check is made once,
+                    // here: the program's modules are loaded (a module registers its validator
+                    // when it loads) and nothing has run yet. A program that never reaches a
+                    // device operation reports a device that is not there all the same.
+                    if (auto failure = camel::execute::validateSelectedDevices()) {
+                        auto diagnostic =
+                            DiagnosticBuilder::of(RuntimeDiag::DeviceUnavailable)
+                                .commit(failure->ordinal, failure->reason);
+                        // The run's configuration, not a line of the program: the runtime sink
+                        // is created without a module, so name the entry file here and leave the
+                        // position unknown (the short format writes `?`).
+                        diagnostic.moduleName = "main";
+                        diagnostic.modulePath = targetFile;
+                        try {
+                            ctx->runtimeDiagSink()->add(std::move(diagnostic));
+                        } catch (const DiagnosticsLimitExceededBaseException &) {
+                            // The sink stops at its first error; the diagnostic is stored and
+                            // dumped below.
+                        }
+                        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
+                        return 1;
+                    }
                     const auto *program = ctx->runtimeProgram();
                     if (phase::enabled()) {
                         // The size of the program as the passes receive it.

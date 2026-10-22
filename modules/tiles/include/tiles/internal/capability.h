@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace camel::tiles {
 class BackendUnavailable : public std::runtime_error {
@@ -40,6 +41,18 @@ class DeviceUnavailable : public std::runtime_error {
 /// (`--devices cpu`). Without `--devices` it is device 0, which is preferred when there is one
 /// and ignored (the host runs the program) when there is not.
 std::optional<int> configuredCudaOrdinal();
+
+/// What CUDA devices this process can see, asked before any graph runs. `count` is the number of
+/// visible devices; `missing` is the subset of `named` that `cuDeviceGet` does not answer;
+/// `reason` explains a count of zero (no device, no driver, or a build without CUDA support).
+/// This is a device-count question, not the one probe that builds the back end: it opens no
+/// context and compiles nothing.
+struct CudaDeviceAvailability {
+    int count = 0;
+    std::vector<int> missing;
+    std::string reason;
+};
+CudaDeviceAvailability cudaDeviceAvailability(const std::vector<int> &named);
 /// Told when the process takes its one probe of the CUDA back end, before the driver is asked.
 /// The device sources are also built into the module's own check executables, which link neither
 /// libcamel nor its headers, so the probe cannot write a line through the core's logger itself;

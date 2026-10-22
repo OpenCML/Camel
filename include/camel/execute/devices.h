@@ -30,11 +30,14 @@
  * when there is none, which is the behaviour programs had before `--devices`. With it a named
  * device is a requirement: a missing one is RuntimeDiag::DeviceUnavailable naming it, never a
  * fallback to the host or to another device. That is the difference between "may use a GPU" and
- * "must use device 2".
+ * "must use device 2". The requirement is checked once at startup, after the program's modules
+ * are loaded and before any graph runs; a program that never reaches a device operation still
+ * reports a device that is not there.
  */
 
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -64,5 +67,28 @@ void selectDevices(DeviceSelection selection);
 
 /// The selection in effect; the default (no `--devices`) is not given and names no device.
 const DeviceSelection &selectedDevices();
+
+/// A device the run named that its owner cannot provide. `ordinal` is the first such ordinal in
+/// the order written on the command line; `reason` says what the machine has instead (how many
+/// devices, or why none can be asked for) and names the other missing ordinals when there is
+/// more than one.
+struct DeviceValidationFailure {
+    int ordinal = 0;
+    std::string reason;
+};
+
+/// A module's answer to "are the devices `--devices` names there?". A validator is registered
+/// when the module is loaded, so it can ask its own back end; nullopt means every named device
+/// is available.
+using DeviceValidator = std::function<std::optional<DeviceValidationFailure>()>;
+
+/// Registers the validator of `module` (for example "tiles"). Registering the same module again
+/// replaces its validator, as registerModulePass does for a pass.
+void registerDeviceValidator(const std::string &module, DeviceValidator validator);
+
+/// Checks every ordinal `--devices` named, once, before any graph runs: calls the validators of
+/// the modules that have been loaded and returns the first failure. A selection that was not
+/// given, and `--devices cpu`, need no device and always pass, without asking a validator.
+std::optional<DeviceValidationFailure> validateSelectedDevices();
 
 } // namespace camel::execute
