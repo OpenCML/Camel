@@ -1,0 +1,203 @@
+# H132：`saturate.deterministic` —— 把计数快照改成饱和的性质
+
+**任务**：`feat/mm` 快层的 `saturate.deterministic` 在 `develop` 上红：它期望
+`SATURATE-INFO integer_chain rounds=3 matches=26 writings=6 unions=6 saturated=1`，
+实际得不到。H120 已确认它与 sweep 改名无关，并猜是 H121 的事实层。判断到底是**计数移动**
+（规则集/匹配器变了）还是**确定性坏了**（两次同样的运行不一致），然后按原则把用例改成性质，
+而不是把数字改大。
+
+- 工作树：`D:\Projects\Camel-wt\h132-saturate`，分支 `handover/H132-saturate-deterministic`。
+- 基线：`origin/develop` `16a784009`（H120 合并）。工作期间 `origin/develop` 继续前进
+  （`474521b57` 及之后的合并，含 H121）；本分支仍按任务书从 `16a784009` 出发，没有
+  merge/rebase。
+- 构建与测试只在 Linux 主机 `88zjwei` 上做（工作站会蓝屏）：
+
+  ```
+  pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h132-saturate -Plan <计划文件或目录> -Jobs 8
+  ```
+
+  Release / clang；改动后用 `-NoBuild` 复用增量构建。`-Jobs 12` 会诱发
+  `gpu_preference.no_device.*` 的假超时，按任务书用 8。
+
+## 0. 结论
+
+| 问题 | 结论 |
+|---|---|
+| 实际行 | `SATURATE-INFO integer_chain rounds=3 matches=33 writings=6 unions=6 saturated=1 erased=10` |
+| 期望行 | `... matches=26 ...` |
+| 移动的是 | **计数**：只有 `matches` 从 26 变成 33（+7）；`rounds/writings/unions/saturated` 与期望相同 |
+| 确定性 | **没有坏**：同一命令连跑三次，`SATURATE-INFO` 与 `SATURATE` 行逐字节相同；nvm/fvm 也相同 |
+| 原因 | H118 的交换律匹配回退（`f037fbbf7`）在快照之后落地；`feat/mm` 不在它跑过的五个验收计划里 |
+| 处理 | 不保留数字；新增 `test::saturate_props`，断言**终止**、**不动点**、**两次运行/两个后端一致**，并断言抽取后剩下的算子 |
+| 计划结果 | `feat/mm` 快层 175/175；`feat/opt` 710/710；`feat/modules/rules` 67/67；`smoke` 10/10；`feat/mm/writings` 22/22；`rename_identity` 3/3 |
+
+顺带修了本基线上的另一个红（不是本任务引入，见 §4）：H120 的 sweep 副本命名把
+`rename identity` 的 `verify_script` 打红（`no identity case`），并且它的摘要包含每次构建
+重编号的 `origin`，在本树上已经漂移。不修它 `feat/mm` 快层到不了 175/175。
+
+## 1. 复现
+
+在主机上跑（`CAMEL_HOME` 指到构建的 `out/latest`）：
+
+```
+camel test/cases/opt/generic/algebra.cml --arg x=2 std::opt::fold test::saturate std::nvm
+```
+
+用例断言的四条，实际是：
+
+| 函数 | 期望 | 实际 |
+|---|---|---|
+| `strict` | `rounds=3 matches=17 writings=4 unions=3 saturated=1` | 同左 |
+| `strict_coefficients` | `rounds=3 matches=23 writings=6 unions=5 saturated=1` | 同左 |
+| `integer_chain` | `rounds=3 matches=**26** writings=6 unions=6 saturated=1` | `rounds=3 matches=**33** writings=6 unions=6 saturated=1 erased=10` |
+| `mixed_permissions` | `rounds=2 matches=9 writings=3 unions=3 saturated=1` | 同左 |
+
+四条里只有 `integer_chain` 的 `matches` 变了。计数的含义（`include/camel/runtime/writings.h`，
+`docs/design/graph-store/README.cn.md` §3.5–3.6）：
+
+- `rounds`：整个规则表被完整扫过的轮数（`Budget::rounds` 默认 8）；
+- `matches`：每轮先把所有匹配找齐、再统一应用，所有轮累计的匹配数；
+- `writings`：`draft_.nodeSlotCount()` 的增长，即新写法的数量；
+- `unions`：新断言的等价数；
+- `saturated`：某一轮没有带来任何新东西，饱和在不动点结束；
+- `erased`：抽取时丢掉的写法数。
+
+## 2. 为什么是计数移动，不是确定性破坏
+
+1. **重复运行逐字节一致**：同一命令连跑三次，`SATURATE-INFO` 与 `SATURATE <name> ...` 行
+   完全相同；nvm 与 fvm 的计数器也相同。没有"两次运行不一致"。
+2. **引擎本来就按确定的顺序走**：`DraftWritings::saturate` 每轮按节点升序遍历候选，规则按
+   声明顺序尝试；`byOper`（`unordered_map<operator, vector<node>>`）只用来查找候选，候选
+   向量本身是升序的；并查集的根取类里最小的节点，抽取平局按节点 id。没有任何地方依赖哈希表
+   的迭代顺序。头文件 `writings.h` 的注释也写明顺序是结果的一部分。规范见
+   `docs/design/rewrite/README.cn.md` §3："同样的输入、规则和预算，得到同样的结果；匹配顺序、
+   合并顺序、抽取平局都按节点 id 与规则顺序"。
+3. **只有 `matches` 变、其它计数不变**，说明是"规则/匹配器看到的匹配变多了"，不是"这次运行
+   和上次不一样"：多出来的匹配落在已经存在的写法上，所以 `writings` 与 `unions` 不动，
+   `rounds` 也没变。
+4. **时间线**：快照写于 `70e1e7d3b`（2026-10-21）。之后的 `f037fbbf7`（H118）让匹配器在
+   按写下顺序没有可接受的匹配时，**对调二元算子的两个输入再试一次**，并且只对语义声明了
+   交换律的算子这样做。`integer_chain(x) = ((x + 0) * 3) * 2` 饱和后会出现
+   `mul(2, mul(3, x))` 这样的写法；`fold_coefficients` 这类定律只有在把内层操作数交换后才
+   匹配，于是同一轮多出匹配。定律右边的结果与已经存在的写法相同，所以只涨 `matches`。
+5. H118 的报告列了它跑过的五个计划，**不含 `feat/mm`**，快照因此没有被刷新。
+6. H121（事实失效）不相关：这些测试规则的 `when` 条件不读事实；而且 H121 在本分支基线上
+   没有报告（板上"未开始"），基线的 `develop` 日志里也没有它（它是在这之后才合到
+   `origin/develop` 的）。另一个候选 `af8756fc1`（控制输入不参与候选枚举）也解释不了：
+   `integer_chain` 没有控制输入，候选集不变。
+
+## 3. 现在断言什么
+
+新增测试专用 pass `test::saturate_props`（`include/camel/passes/test/saturate.h`、
+`src/passes/test/saturate.cpp`，注册在 `src/execute/pass.cpp`）。它输出：
+
+```
+SATURATE-INFO <name> rounds=.. matches=.. writings=.. unions=.. saturated=.. erased=..
+SATURATE-AGAIN <name> writings=0 unions=0 saturated=1 rounds=.. matches=..
+SATURATE-STABLE <name> same=1
+SATURATE <name> add=.. mul=.. waits=..
+SATURATE-PROPS targets=10 saturated=10 fixpoint=10 stable=10
+```
+
+每个性质怎么来的：
+
+- **终止**：第一次饱和对每个函数都在预算（8 轮）内以 `saturated=1` 结束；十个目标都算进
+  `SATURATE-PROPS` 的 `saturated=`。预算不够/不终止 → 这个数小于 10。
+- **不动点**：`SATURATE-AGAIN` 是对**同一份 writings** 再做一次 `saturate()`；如果还能加写法
+  或断言等价，`writings`/`unions` 就会非 0。`integer_chain` 的这条被单独断言。
+- **两次运行一致**：pass 在同一个输入程序上开**两个会话**，各饱和一次，比较
+  `rounds/matches/writings/unions/saturated`，打印 `same=1`。第二个会话的结果就是交给管线的
+  程序；第一个会话只读计数与不动点，不提交。
+- **两个后端一致**：计划写 `backends = ["nvm", "fvm"]` 与
+  `backends_agree = ["exit_code", "stdout_normalized"]`（这个字段默认不比较，必须显式列）。
+  pass 不打印任何 `SATURATE-TIME`，所以整个 stdout 可以逐字节比较。
+- **两个进程一致**：新增 `saturate.deterministic.again`，`kind = "differential"`，
+  `compare_to = "saturate.deterministic.nvm"`，`compare_fields = ["exit_code",
+  "stdout_normalized"]`。它证明结果不依赖只在一次进程里成立的东西（地址、哈希顺序）。
+- **不早停**：十条 `SATURATE <name> add=.. mul=.. waits=..` 全部断言。少一条规则时，抽取
+  留下的算子会变（例如 `integer_chain` 会留下一个 `add`）；预算不够时 `saturated`/
+  `fixpoint` 会掉下来。所以用例不会因为"某个数字变了"而红，但会因为这些性质破了而红。
+
+实际计数行（留档，不再断言）：
+
+```
+SATURATE-INFO integer_chain rounds=3 matches=33 writings=6 unions=6 saturated=1 erased=10
+SATURATE-AGAIN integer_chain writings=0 unions=0 saturated=1 rounds=1 matches=14
+SATURATE-STABLE integer_chain same=1
+SATURATE integer_chain add=0 mul=1 waits=0
+SATURATE-PROPS targets=10 saturated=10 fixpoint=10 stable=10
+```
+
+**没有保留 26/33 这类数字**：它们是某一套规则和某一版匹配器的快照，不是原则陈述的性质。
+H118 已经证明这种快照会随匹配器变化而红；原则要求的是"同样的输入/规则/预算 → 同样的结果"
+和"饱和在不动点结束"，正好对应上面的四条性质。
+
+注：本基线的 `docs/design-principles.cn.md` **没有**饱和小节（`develop` 与 `fsh-dev` 都核对
+过）。规范文本在 `docs/design/graph-store/README.cn.md` §3.5–3.6（饱和只增加写法，直到没有
+新东西或预算用完）与 `docs/design/rewrite/README.cn.md` §3（结果确定、按节点 id 与规则顺序）。
+H118 报告引用的是同一处。
+
+## 4. 另一个基线红（不是本任务引入）
+
+`feat/mm` 快层在本基线上还有一条红：
+`poison:modules.rename_identity:rename.env_graph_identity`。两件事叠在一起：
+
+1. **取键**：H120 把 sweep 副本命名为 `<sweep>:<源计划 id>:<测试名>`，
+   `test/cases/modules/rename/identity.mjs` 仍用 `input.test_name.split('.')[1]` 取用例键，
+   副本被当成 `rename`，于是报 `no identity case for test
+   poison:modules.rename_identity:rename.env_graph_identity`。
+2. **摘要漂移**：该用例把 `std::jgir` 文档的整份 sha256 作为期望。`origin` 是每次构建重编号
+   的源位置 id，在 `16a784009` 上已经漂移。`origin/develop` 的 `474521b57` 单独修了这一点
+   （摘要前丢掉 `origin`，并把摘要记在它的树上）；本任务按它给出的规范化方式处理，但三条期望
+   值按**本树**记录（本树在 H127 之前，图内容与 `474521b57` 的树不同）。
+
+处理（`test(rename)` 单独一个提交）：
+
+- 取键改为最后一段：`input.test_name.split('.').pop().split('_')[0]`，本计划与副本都能用；
+- 摘要前丢掉 `origin`（这段取自 `474521b57`）；
+- 三条期望摘要按本树记录：env `1b500e77…b067`、process `383d9bb7…97e`、hash `12413456…69cf`。
+
+**合并到当前 `develop` 时注意**：那棵树在 H127 之后，`474521b57` 记录的
+`e25ec979…`、`01e668a0…`、`29ae6c2e…` 才是它上面的值。合并 `identity.mjs` 时取 develop 的
+三条摘要、保留上面的取键修改（取键是必须留的部分，否则 sweep 副本仍会红）；或者合并后重跑
+`test/plans/feat/modules/rename_identity.plan.toml` 记录新值。直接以本分支的摘要去合会在
+这三行上冲突，这是预期的。
+
+H121：本分支基线的板上是"未开始"，`docs/handover/reports/H121.md` 不存在，基线的
+`develop` 日志里也没有它（这之后才合入 `origin/develop` 的 `d41c34eb4`）。本任务不依赖它，
+也没有动事实层。
+
+## 5. 验证
+
+Release / clang，主机 `88zjwei`，`-Jobs 8`（在提交后的树上重新构建并跑）：
+
+| 计划 | 结果 |
+|---|---|
+| `test/plans/feat/mm`（fast 层） | 175/175 |
+| `test/plans/feat/opt`（fast 层） | 710/710 |
+| `test/plans/feat/modules/rules.plan.toml` | 67/67 |
+| `smoke` | 10/10 |
+| `test/plans/feat/mm/writings.plan.toml` | 22/22 |
+| `test/plans/feat/modules/rename_identity.plan.toml` | 3/3 |
+
+`feat/mm` 快层在本分支基线上是 173 条（H120 报告的 171 是它自己的基线 `28073beda`）；
+`saturate.deterministic` 现在在两个后端各跑一次（+1），再加一条 differential（+1），共 175 条。
+
+## 6. 提交
+
+- `90169c7bd` `test(saturate): assert the properties of saturation, not a counter snapshot`
+  —— 新增 pass、注册、计划（4 个文件）。
+- `f465ff396` `test(rename): key a sweep copy by the last name segment, and drop origins`
+  —— `identity.mjs`（另一个基线红，见 §4）。
+- 本报告与看板行：`docs(handover): record H132`（见 `git log`）。
+
+## 7. 风险与开放
+
+- **计数仍会变**：`matches` 只留在 `SATURATE-INFO` 里，不参与断言；规则集或匹配器再变也不会
+  把这条用例打红。若将来匹配器进入"匹配多、写法不增"的状态，`matches` 仍会记录在报告/日志里，
+  供人看，不再当契约。
+- **不动点的检查方式**：对同一份 `DraftWritings` 再调一次 `saturate()`。`Budget` 是每次调用
+  传入的，当前没有把预算状态藏在 writings 里；如果将来改了这一点，这个检查需要重新审视。
+- **第二个基线红的摘要按树记录**：合并时按 §4 取 develop 的值；取键修改要保留。
+- 本分支基线落后 `origin/develop`（其中包含 `474521b57` 与 H127 的合并）。本任务没有
+  merge/rebase；合并顺序由协调者决定。
