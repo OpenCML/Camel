@@ -7414,7 +7414,7 @@ The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient mu
 **Help**
 
 ```text
-A derivative rule returns a gradient of the parameter's element type. Convert the gradient in the rule (f32(x) or float(x)) instead of relying on the accumulator, which cannot change a value's element type. A discrete input (an index, a shape) takes no gradient at all: its rule stops it with noGradient, and that zero is not a converted gradient.
+A derivative rule returns a gradient of the parameter's element type. Convert the gradient in the rule instead of relying on the accumulator to reinterpret it.
 ```
 
 **Example** (`test/cases/modules/autodiff/refuse_gradient_element_type_rule.cml`, run as `camel test/cases/modules/autodiff/refuse_gradient_element_type_rule.cml std::nvm`)

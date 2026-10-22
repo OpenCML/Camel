@@ -245,6 +245,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::GradientElementTypeMismatch,
+            {
+                "GradientElementTypeMismatch",
+                "The gradient of a value of type '{0}' has element type '{1}': {2}. A gradient must have the element type of the value it is the gradient of (design principles 9.9); accumulated as it is, the value would be read at the wrong width and answer with a number that is not the derivative.",
+                "A derivative rule returns a gradient of the parameter's element type. Convert the gradient in the rule instead of relying on the accumulator to reinterpret it.",
+            },
+        },
+        {
             RuntimeDiag::ConversionOutOfRange,
             {
                 "ConversionOutOfRange",
@@ -354,21 +362,6 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "TranslationLinksRuntime",
                 "std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel.",
                 "Every other operator is translated into C++ that needs only the standard library (docs/cpp_export_build.md). The comment at the top of the C++ file gives the command that builds it with the runtime.",
-            },
-        },
-        {
-            RuntimeDiag::GradientElementTypeMismatch,
-            {
-                "GradientElementTypeMismatch",
-                "The gradient of a value of type '{0}' has element type '{1}': {2}. A "
-                "gradient must have the element type of the value it is the gradient of (design "
-                "principles 9.9); accumulated as it is, the value would be read at the wrong "
-                "width and answer with a number that is not the derivative.",
-                "A derivative rule returns a gradient of the parameter's element type. Convert "
-                "the gradient in the rule (f32(x) or float(x)) instead of relying on the "
-                "accumulator, which cannot change a value's element type. A discrete input (an "
-                "index, a shape) takes no gradient at all: its rule stops it with noGradient, "
-                "and that zero is not a converted gradient.",
             },
         },
     };

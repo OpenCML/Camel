@@ -46,17 +46,10 @@ enum class RuntimeDiag : uint32_t {
     FileSystemError        = 0x000036,
     // 0x37 (JsonDecodeFailed) was the fault of json.decode on text that is not JSON; decode
     // returns an error value instead (design principles 11.2). The code is not reused.
-    JsonEncodeUnsupported  = 0x000038,
-    RegexInvalid           = 0x000039,
-    TimeFormatFailed       = 0x00003A,
-    OperatorNotImplemented = 0x00003B,
-    // Autodiff (design principles 9.9): a rule handed a gradient whose element type differs from
-    // the differentiated value's. The accumulator stores the node at the value's width, so a
-    // float64 gradient in an f32 parameter reads 0.0 -- a number that is not the derivative, with
-    // no sign of it. The fact is known when the rule's gradient is built (at run time, and under
-    // std::macro while the pass runs), not when the grad call is type-checked, so the code is a
-    // run-time one. 0x3C is the next free number after the builtin/module block that starts at
-    // MemoryExhausted (0x30): 0x30-0x3B are taken, 0x50+ belongs to the rulings block.
+    JsonEncodeUnsupported       = 0x000038,
+    RegexInvalid                = 0x000039,
+    TimeFormatFailed            = 0x00003A,
+    OperatorNotImplemented      = 0x00003B,
     GradientElementTypeMismatch = 0x00003C,
     // Faults and reports of the rulings of 2026-10-12 (design principles log 2.10).
     ConversionOutOfRange = 0x000050,
