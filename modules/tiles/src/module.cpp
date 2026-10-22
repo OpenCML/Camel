@@ -405,7 +405,16 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
             return false;
         try {
             (void)deviceInfo();
-            program = std::make_shared<Program>(prepare(with, norm, ctx, true));
+            // The graph-bound template is the reusable form, but it needs the parameter
+            // types to fix the shapes. When the call site is the only place that knows
+            // them, specialize from the actual arguments instead of sending the work to
+            // the host: the host path is a different execution of the same graph, and it
+            // neither raises a Tile's own fault nor uses a granted contraction.
+            try {
+                program = std::make_shared<Program>(prepare(with, norm, ctx, true));
+            } catch (const UnsupportedComputation &) {
+                program = std::make_shared<Program>(prepare(with, norm, ctx));
+            }
             return true;
         } catch (const BackendUnavailable &) {
             return false;
