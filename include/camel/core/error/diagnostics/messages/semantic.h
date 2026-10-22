@@ -235,7 +235,6 @@ enum class SemanticDiag : uint32_t {
     ConstasInNativeDeclaration = 0x00019A,
     /// A call to a `constas` declaration gives no value for the parameter.
     ConstasArgumentMissing = 0x00019B,
-=======
     /// A tag gives a fact one value where the node already has another.
     TagValueConflict = 0x00019D,
 
