@@ -811,6 +811,15 @@ std::vector<OpDef> layoutOps() {
     setVjp(defs, "slice", &sliceVjp);
     setVjp(defs, "take", &takeVjp);
     setVjp(defs, "shape", &camel::core::noGradient);
+    // The subscript forms are differentiated by the same rule as the calls they name: the
+    // indices of `t[idx]` take no gradient, and t's receives the scatter-add (takeVjp).
+    setVjp(defs, "idx_take", &takeVjp);
+    // one_hot's input is discrete (an integer array or a rank-1 integer tensor): its derivative
+    // is zero by definition (design principles 9.9), and the float one-hot rows are locally
+    // constant in it. The rule is therefore empty: no gradient, no error, and no caller has to
+    // write stop_gradient around a label. `classes` is an int parameter and takes no gradient
+    // either. The rows' own gradient is used up here, as for every locally constant result.
+    setVjp(defs, "one_hot", &camel::core::noGradient);
     return defs;
 }
 

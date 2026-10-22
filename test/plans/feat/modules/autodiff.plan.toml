@@ -2387,3 +2387,49 @@ expect_diagnostic_column = 1
 expect_output_contains = ["#vjp<rule>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+# ---- Discrete values have zero derivative (design principles 9.9) ----
+#
+# A label, an argmax result and a comparison mask are discrete: their derivative is zero by
+# definition, so a backward pass that reaches one must materialize an exact zero and must not
+# refuse. These cases put each of them inside the differentiated region, assert the exact
+# zeros beside real gradients, and pin that a value with no gradient channel at all (a Map)
+# is still refused where it is built.
+
+[[tests]]
+name = "discrete_zero"
+desc = "one_hot's labels, argmax's result and a comparison mask take no gradient: no error, no stop_gradient, and exactly 0.0; the differentiable weights still receive their real gradient. The one_hot check reaches the new zero rule through a callee whose label port is differentiated, the shape that used to fail."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/discrete_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "discrete_zero one_hot=(-2.0,0.0,2.0) argmax=(3.0,0.0) mask=(4.0,0.0) where=(11.0,4.0) gather=(1.0,6.0,0.0) zero=1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "discrete_zero.macro.nvm"
+desc = "The same zeros when std::macro builds the gradient ahead of time: one_hot's zero rule is applied while differentiating, and the labels' exact zero is in the compiled gradient graph."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/discrete_zero.cml"
+args = ["${case}", "std::macro", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "discrete_zero one_hot=(-2.0,0.0,2.0) argmax=(3.0,0.0) mask=(4.0,0.0) where=(11.0,4.0) gather=(1.0,6.0,0.0) zero=1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "discrete_zero_refuse_map"
+desc = "A continuous value put into a Map is still refused where the map is built, with the collection named: the zero rule for discrete values does not silence a path that would drop the gradient."
+kind = "negative"
+case = "../../../cases/modules/autodiff/discrete_zero_refuse.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 17
+expect_output_contains = ["is put into a Map or a Set 'Map<int, float>'", "Gradients do not flow through it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

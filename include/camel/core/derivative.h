@@ -113,6 +113,17 @@ class DerivativeRegistry {
     /// The tangent space of `type`'s code, or nullptr when values of that type have no tangent.
     const TangentSpace *findTangentSpace(const type::Type *type) const;
 
+    /// Registers a predicate for the values of type code `code` that says they are discrete (an
+    /// integer or a boolean held by a module type, such as a tensor of integers): their
+    /// derivative is zero by definition (design principles 9.9), even though they have no
+    /// tangent space of their own. The builtin scalar codes are recognised without one.
+    void setDiscretePredicate(type::TypeCode code, bool (*predicate)(const type::Type *));
+    /// True for values whose derivative is zero by definition: integers and booleans, scalar or
+    /// held by a module type that registered a predicate. A module type without one (a Map, an
+    /// enum) is not discrete, and a value of it computed from a parameter must be refused
+    /// rather than silently differentiated to zero.
+    bool isDiscrete(const type::Type *type) const;
+
   private:
     struct StringHash {
         using is_transparent = void;
@@ -122,6 +133,7 @@ class DerivativeRegistry {
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, VjpRule, StringHash, std::equal_to<>> rules_;
     std::unordered_map<type::TypeCode, TangentSpace> tangents_;
+    std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
 
 /// Tangent type of values of type `primal`, or nullptr when they have no tangent.

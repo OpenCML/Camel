@@ -234,6 +234,20 @@ Type *tensorTangentType(Type *primal) {
     return primal;
 }
 
+/// An integer or boolean tensor is discrete: its derivative is zero by definition (design
+/// principles 9.9). It has no tangent space, but a value computed from a parameter and held in
+/// one -- an argmax result, a comparison mask -- neither loses a gradient nor must be refused
+/// when it is converted back to float: the derivative there is zero.
+bool tensorIsDiscrete(const type::Type *type) {
+    const TensorType *tensor = asTensorType(type);
+    if (tensor == nullptr) {
+        return false;
+    }
+    const auto dtype = tensor->dtype();
+    return dtype && (*dtype == TypeCode::Int32 || *dtype == TypeCode::Int64 ||
+                     *dtype == TypeCode::Bool);
+}
+
 // ---------------------------------------------------------------- VJP rules
 // The gradient operators are differentiable too, so a gradient can be differentiated again.
 
@@ -452,6 +466,8 @@ void registerTensorTangentSpace() {
     space.addUri       = "tensor:add";
     space.zerosLikeUri = "tensor:zeros_like";
     camel::core::DerivativeRegistry::instance().setTangentSpace(TensorType::typeCode(), space);
+    camel::core::DerivativeRegistry::instance().setDiscretePredicate(
+        TensorType::typeCode(), &tensorIsDiscrete);
 }
 
 } // namespace camel::tensor::ops
