@@ -763,6 +763,8 @@ class Builder {
     // are chosen at instantiation, and only concrete types reach a graph.
     struct GenericInstance {
         camel::core::type::type_bindings_t bindings;
+        // The compile-time values bound to the `constas` parameter of the declaration.
+        camel::core::type::ExtentValues extents;
         compile_graph_ptr_t graph;
         // An error was found in the body: later calls with the same types fail quietly.
         bool failed = false;
@@ -809,6 +811,8 @@ class Builder {
     template_scope_ptr_t templateScope_;
     // The type variables of the instance being built and their types; empty outside one.
     camel::core::type::type_bindings_t typeBindings_;
+    // The `constas` values of the instance being built; empty outside one.
+    camel::core::type::ExtentValues extentBindings_;
     size_t instantiationDepth_ = 0;
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
@@ -831,19 +835,26 @@ class Builder {
     // them.
     std::vector<template_ptr_t> anonymousTemplates_;
 
-    // A type read from the GCT, with the type variables of the current instance replaced.
+    // A type read from the GCT, with the type variables and the named extents of the current
+    // instance replaced.
     Type *boundType(Type *type) const {
-        return camel::core::type::substituteTypeVars(type, typeBindings_);
+        Type *substituted = camel::core::type::substituteTypeVars(type, typeBindings_);
+        return camel::core::type::substituteExtentValues(substituted, extentBindings_);
     }
     // Whether a declared function type is still generic under the current bindings.
     bool isGenericHere(Type *type) const {
         // A rest function is always a template: its arity is decided at each call, so no
-        // graph is built for the declaration itself (design principles 5.5).
+        // graph is built for the declaration itself (design principles 5.5). A declaration
+        // with a `constas` parameter is one too: its instance is fixed by the value at the
+        // call, which is not a runtime argument (design principles 5.4).
         const bool rest =
             type != nullptr && type->code() == camel::core::type::TypeCode::Function &&
             static_cast<FunctionType *>(type)->hasRest();
-        return rest || (camel::core::type::containsTypeVar(type) &&
-                        camel::core::type::containsTypeVar(boundType(type)));
+        const bool constas =
+            type != nullptr && type->code() == camel::core::type::TypeCode::Function &&
+            static_cast<FunctionType *>(type)->hasConstas();
+        return rest || constas || (camel::core::type::containsTypeVar(type) &&
+                                   camel::core::type::containsTypeVar(boundType(type)));
     }
     // Registers the generic functions declared directly in the block `exec`, before anything
     // in the block is built: a call may precede the declaration.
@@ -932,7 +943,7 @@ class Builder {
     void registerTreeOrigin(node_handle_t node, const GCT::node_ptr_t &origin, const char *kind);
     compile_graph_ptr_t instantiateGeneric(
         const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
-        const GCT::node_ptr_t &call);
+        const camel::core::type::ExtentValues &extents, const GCT::node_ptr_t &call);
     // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
     void enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name);
     // Builds the body of the function `gct` into `graph`, whose scope has been entered.

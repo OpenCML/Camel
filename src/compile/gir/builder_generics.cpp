@@ -169,6 +169,11 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
         why = "a rest function is expanded at each call and has no function value";
         return nullptr;
     }
+    if (signature->hasConstas()) {
+        why = "a declaration with a 'constas' parameter needs the constant at its call, so it "
+              "has no function value";
+        return nullptr;
+    }
     const size_t withCount  = signature->withTypesCount();
     const size_t normCount  = signature->normTypesCount();
     if (withCount != expected->withTypesCount() || normCount != expected->normTypesCount()) {
@@ -234,7 +239,7 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
             return nullptr;
         }
     }
-    compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, origin);
+    compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, {}, origin);
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
             .atOrigin(origin->origin())
@@ -258,6 +263,12 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
     const auto generic = genericDrefs_.find(node);
     ASSERT(generic != genericDrefs_.end(), "Not the name of a generic function.");
     const template_ptr_t tmpl = generic->second;
+    if (tmpl->funcType->hasConstas()) {
+        diags_->of(SemanticDiag::ConstasFunctionNeedsCall)
+            .atOrigin(origin != nullptr ? origin->origin() : 0)
+            .commit(tmpl->name);
+        throw BuildAbortException();
+    }
     if (tmpl->funcType->hasRest()) {
         diags_->of(SemanticDiag::RestFunctionNeedsExpansion)
             .atOrigin(origin != nullptr ? origin->origin() : 0)
@@ -300,7 +311,49 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
     const size_t withCount  = signature->withTypesCount();
-    const size_t normCount  = signature->normTypesCount();
+    size_t normCount        = signature->normTypesCount();
+    // A `constas n: int` parameter is bound by the first ordinary argument, which is a
+    // compile-time constant and not a runtime one: it selects the instance and is then dropped
+    // from the call's inputs (design principles 5.4).
+    ExtentValues extents;
+    if (signature->hasConstas()) {
+        const std::string constasName(signature->argNameAt(signature->constasIndex()));
+        if (normInputs.empty()) {
+            diags_->of(SemanticDiag::ConstasArgumentMissing)
+                .atOrigin(call->origin())
+                .commit(constasName);
+            throw BuildAbortException();
+        }
+        const Argument &value               = normInputs.front();
+        const StaticArg constant            = staticArgOf(value.node);
+        const size_t at                     = value.expr && value.expr->origin() != 0
+                                                  ? value.expr->origin()
+                                                  : call->origin();
+        Type *valueType                     = valueTypeOf(nodeTypeOf(value.node));
+        if (!constant || valueType == nullptr) {
+            diags_->of(SemanticDiag::ConstasValueNotConstant)
+                .atOrigin(at)
+                .commit(constasName);
+            throw BuildAbortException();
+        }
+        if (valueType->code() != TypeCode::Int64) {
+            diags_->of(SemanticDiag::ConstasValueNotInt)
+                .atOrigin(at)
+                .commit(constasName, valueType->toString());
+            throw BuildAbortException();
+        }
+        extents[constasName] = static_cast<int64_t>(*constant);
+        normInputs.erase(normInputs.begin());
+        normTypes.erase(normTypes.begin());
+        --normCount;
+    }
+    // The position of a runtime parameter in the declaration's signature: the `constas`
+    // parameter is not one, so the indices after it shift by one.
+    const size_t constasShift =
+        signature->hasConstas() && signature->constasIndex() >= withCount ? 1 : 0;
+    const auto signatureIndexAt = [&](size_t i) {
+        return i < withCount ? i : i + constasShift;
+    };
     const auto inputAt      = [&](size_t i) -> Argument      &{
         return i < withCount ? withInputs[i] : normInputs[i - withCount];
     };
@@ -344,7 +397,14 @@ compile_graph_ptr_t Builder::resolveGenericCall(
                 }
                 return out;
             };
-            const std::string withs = names(0, withCount), norms = names(withCount, normCount);
+            const std::string withs = names(0, withCount), norms = [&] {
+                std::string out;
+                for (size_t i = 0; i < normCount; ++i) {
+                    out += (i == 0 ? "" : ", ") +
+                           std::string(signature->argNameAt(signatureIndexAt(withCount + i)));
+                }
+                return out;
+            }();
             reject(
                 std::format(
                     "it takes '{}' in angle brackets, not in the parentheses: write {}<{}>({}){}",
@@ -370,14 +430,20 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             waiting[i] = generic->second;
         }
     }
-    // A parameter by its position among all parameters (`with` ones first).
+    // A parameter by its position among all parameters (`with` ones first), with the `constas`
+    // values of the call applied to the extents it writes.
     const auto patternAt = [&](size_t i) {
-        return i < withCount ? signature->withTypeAt(i) : signature->normTypeAt(i - withCount);
+        Type *pattern = i < withCount ? signature->withTypeAt(i)
+                                      : signature->normTypeAt(signatureIndexAt(i) - withCount);
+        return substituteExtentValues(pattern, extents);
     };
     const auto actualAt = [&](size_t i) { return valueTypeOf(typeAt(i)); };
     const auto describe = [&](size_t i) {
+        const size_t signatureIndex = signatureIndexAt(i);
         const std::string paramName =
-            i < signature->argNamesCount() ? std::string(signature->argNameAt(i)) : "?";
+            signatureIndex < signature->argNamesCount()
+                ? std::string(signature->argNameAt(signatureIndex))
+                : "?";
         return std::format(
             "{} {} {}, but its parameter '{}: {}'",
             i < withCount ? "with-argument" : "argument",
@@ -421,7 +487,8 @@ compile_graph_ptr_t Builder::resolveGenericCall(
         }
     }
     if (expectedResult && signature->hasExitType()) {
-        unifyTypeVars(signature->exitType(), expectedResult, bindings);
+        unifyTypeVars(
+            substituteExtentValues(signature->exitType(), extents), expectedResult, bindings);
     }
     // 3. The waiting arguments, as long as one of them can be given its types: the parameter
     // it is passed to, with what is known so far, is the function it has to be; its instance
@@ -511,7 +578,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
                 wanted->toString(),
                 typeBindingsToString(bindings)));
     }
-    return instantiateGeneric(tmpl, bindings, call);
+    return instantiateGeneric(tmpl, bindings, extents, call);
 }
 
 void Builder::settleGenericOperatorArguments(
@@ -804,10 +871,11 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
 }
 
 compile_graph_ptr_t Builder::instantiateGeneric(
-    const template_ptr_t &tmpl, const type_bindings_t &bindings, const GCT::node_ptr_t &call) {
+    const template_ptr_t &tmpl, const type_bindings_t &bindings, const ExtentValues &extents,
+    const GCT::node_ptr_t &call) {
     ExpectedValueScope instanceScope(expectedValueType_, nullptr);
     // All routes (inferred calls, function values and ::<T>) enforce the same type rules.
-    Type *concrete = substituteTypeVars(tmpl->funcType, bindings);
+    Type *concrete = substituteExtentValues(substituteTypeVars(tmpl->funcType, bindings), extents);
     if (TupleType *repeated = findRepeatedMark(concrete)) {
         diags_->of(SemanticDiag::TaggedTypeNesting)
             .atOrigin(call->origin())
@@ -836,7 +904,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     // still being built is found here too: that is a recursive call.
     const bool foreign = tmpl->module != module_;
     for (const GenericInstance &instance : tmpl->instances) {
-        if (sameBindings(instance.bindings)) {
+        if (sameBindings(instance.bindings) && instance.extents == extents) {
             if (instance.failed) {
                 throw BuildAbortException();
             }
@@ -853,12 +921,28 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             return instance.graph;
         }
     }
-    const std::string instanceName = std::format(
-        "{}<{}>",
-        tmpl->name,
+    const std::string typeText =
         strutil::join(bindings, ", ", [](const std::pair<std::string, Type *> &b) {
             return b.second->toString();
-        }));
+        });
+    const std::string bindingsText =
+        strutil::join(bindings, ", ", [](const std::pair<std::string, Type *> &b) {
+            return b.first + " = " + b.second->toString();
+        });
+    const std::string extentsText =
+        strutil::join(extents, ", ", [](const auto &value) {
+            return value.first + " = " + std::to_string(value.second);
+        });
+    const std::string instanceArguments =
+        bindingsText.empty() ? extentsText
+                             : extentsText.empty() ? bindingsText
+                                                   : bindingsText + ", " + extentsText;
+    const std::string extentValues =
+        strutil::join(extents, ", ", [](const auto &value) { return std::to_string(value.second); });
+    const std::string instanceTypes =
+        typeText.empty() ? extentValues
+                         : extentValues.empty() ? typeText : typeText + ", " + extentValues;
+    const std::string instanceName = std::format("{}<{}>", tmpl->name, instanceTypes);
     if (tmpl->openInstances >= kMaxOpenInstancesOfOne ||
         instantiationDepth_ >= kMaxInstantiationDepth) {
         diags_->of(SemanticDiag::GenericInstantiationTooDeep)
@@ -890,7 +974,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                   "the call",
                   instanceName,
                   tmpl->name,
-                  typeBindingsToString(bindings)),
+                  instanceArguments),
         ""};
 
     // The instance is built where the function was declared, not where it is called.
@@ -902,6 +986,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         decorated_scope_ptr_t decoratedScope;
         template_scope_ptr_t templateScope;
         type_bindings_t bindings;
+        ExtentValues extents;
         bool waited, synced, varied, declaresVariable, calleeAllowed;
         node_handle_t lastSynced;
         camel::core::module::module_ptr_t module;
@@ -911,7 +996,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         BuildState(Builder &b, GenericTemplate &t)
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
-              bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_), varied(b.varied_),
+              bindings(b.typeBindings_), extents(b.extentBindings_), waited(b.waited_),
+              synced(b.synced_), varied(b.varied_),
               declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
               lastSynced(b.lastSyncedNode_), module(b.module_), namespacePath(b.namespacePath_),
               usingFrames(b.usingFrames_), opened(t) {
@@ -929,6 +1015,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             self.decoratedScope_       = decoratedScope;
             self.templateScope_        = templateScope;
             self.typeBindings_         = std::move(bindings);
+            self.extentBindings_       = std::move(extents);
             self.waited_               = waited;
             self.synced_               = synced;
             self.varied_               = varied;
@@ -956,6 +1043,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         templateScope_  = tmpl->templateScope;
         typeBindings_   = tmpl->outerBindings;
         typeBindings_.insert(typeBindings_.end(), bindings.begin(), bindings.end());
+        extentBindings_ = extents;
         waited_               = false;
         synced_               = false;
         varied_               = false;
@@ -963,7 +1051,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         genericCalleeAllowed_ = false;
         lastSyncedNode_       = {};
 
-        FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings);
+        FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings, &extents);
         const auto graphId = context_->graphIds().allocate();
         graph              = tmpl->name.empty()
                                  ? createCompileGraph(graphId, funcType, currGraph_)
@@ -979,7 +1067,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             rootSubGraphOwners_[graph.get()] =
                 declaring != units_.end() ? declaring->second.get() : unit_;
         }
-        tmpl->instances.push_back({bindings, graph, false});
+        tmpl->instances.push_back({bindings, extents, graph, false});
         // Scopes are kept by name under the scope they were entered from, here the scope the
         // function was declared in: two functions written in place, which have no name to
         // tell them apart, need two scopes; so do two generic overloads of one operator,

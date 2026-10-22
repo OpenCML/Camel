@@ -1,0 +1,12 @@
+module constas_with_rest
+
+// The element types of a rest parameter are decided at the call; combining the two needs the
+// type-level tuple of the declaration first.
+func bad(constas n: int, ..ts): int {
+    return 0
+}
+
+func main(): int sync {
+    println(bad(3, 1, 2))
+    return 0
+}

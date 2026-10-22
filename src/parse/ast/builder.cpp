@@ -2007,24 +2007,30 @@ Value Builder::visitKeyValuePair(cst::KeyValuePair context) {
 }
 
 /*
-keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)? ;
+keyParamPair : ('var' | 'const' | 'constas')? identDef (':' typeExpr ('=' dataExpr)?)?
+    | '..' identDef (':' typeExpr)? ;
 A type left out is a lambda's parameter (design principles 5.9): it stands as an InferTypeLoad,
-which GCT lowers to a hole and GIR fills from the function type the position expects.
+which GCT lowers to a hole and GIR fills from the function type the position expects. A `constas`
+parameter writes its type; one left out stays a pair with no type child, so GCT can report it
+(design principles 5.4).
 */
 Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
-    const bool isRest = static_cast<bool>(context->tok(TK::DotDot));
+    const bool isRest   = static_cast<bool>(context->tok(TK::DotDot));
+    const bool isConstas = context->has(TK::KwConstas);
     bool isVar        = false;
     if (context->tok(TK::KwVar)) {
         isVar = true;
     }
     const bool isConst = context->has(TK::KwConst);
     Reference ref(context->get<cst::IdentDef>()->text());
-    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest);
+    node_ptr_t namedPairNode =
+        createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest, isConstas);
     setNodeTokenRangeByContext(namedPairNode, context);
-    if (isRest) {
+    if (isRest || isConstas) {
         // `..ts` is untyped: the tuple of the arguments left over is made at the call. A type
-        // written after it is still read, so that GCT can report it.
+        // written after either is still read, so that GCT can report it (the rest parameter
+        // refuses one; a `constas` needs one).
         if (context->type()) {
             *namedPairNode << any2node(visitType(context->type()));
         }
@@ -2035,7 +2041,7 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         setNodeTokenRangeByContext(inferNode, context->get<cst::IdentDef>());
         *namedPairNode << inferNode;
     }
-    if (!isRest) {
+    if (!isRest && !isConstas) {
         node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
         if (context->expr()) {
             setNodeTokenRangeByContext(dataExprOptNode, context->expr());

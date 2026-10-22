@@ -467,6 +467,15 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     if (gct->nativeDeclaration()) {
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (handover H19, step 1).
+        // A `constas` parameter belongs to the declaration's compile-time identity, which the
+        // native declaration mechanism does not carry (design principles 5.4).
+        FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+        if (funcType->hasConstas()) {
+            diags_->of(SemanticDiag::ConstasInNativeDeclaration)
+                .atOrigin(gct->origin())
+                .commit(gct->name());
+            throw BuildAbortException();
+        }
         declareNativeOperator(gct);
         LEAVE("DECL");
         return nullptr;

@@ -317,7 +317,35 @@ func main(): int sync {
 - A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration (writing `..` in a lambda, a function type or a rule is a syntax error). Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
 - A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. For now the call must also be in the same module as the declaration: expanding a function body into another module is left to the `tree_*` task, and is reported as `SemanticDiag::RestFunctionNeedsExpansion`.
 
-**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value.
+**Constant value parameters (`constas`)**: before the ordinary parameters a declaration may write one `constas n: int`. Its value is known at compile time and is part of the declaration's identity, not a runtime argument.
+
+```cml
+import { Tensor, ones, sum } from tensor
+
+func total(constas n: int, x: Tensor<f32, const [n]>): float {
+    return sum(x)
+}
+
+func main(): int sync {
+    println(total(3, ones([3])))
+    println(total(5, ones([5])))
+    return 0
+}
+```
+
+```text
+3.0
+5.0
+```
+
+- **The value enters the instance key.** Every distinct constant instantiates a subgraph (`total<3>`, `total<5>`); the same types and value instantiate once. `n` is used in the declaration's types: parameter types and the return type, with the spelling named dimensions already use (`Tensor<f32, const [n]>`; `[n]` works too).
+- **It is not a runtime parameter.** The call gives the constant, but it does not enter the call node: the instance's parameter list has no `n`, and the call passes only the other arguments (`total(3, xs)` has one argument, `xs`). For the same reason `n` cannot be used as a runtime value in the body.
+- The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`) and an `int` (`SemanticDiag::ConstasValueNotInt`). For now there is at most one `constas` parameter (`SemanticDiag::ConstasParameterOnlyOne`), it comes first among the ordinary parameters (`SemanticDiag::ConstasParameterNotFirst`), only `int` is supported (`SemanticDiag::ConstasTypeNotInt`), and the type cannot be omitted (`SemanticDiag::ConstasTypeRequired`).
+- **The value must really decide a type.** A declaration in which no type reads `n` is refused (`SemanticDiag::ConstasNotUsedInType`): if two instances differ only in the value and have exactly the same types, the value is a decoration.
+- A declaration with a `constas` parameter **has no function value**: the constant must be written at the call, so it cannot be assigned or passed on (`SemanticDiag::ConstasFunctionNeedsCall`). A body-less declaration (the declaration of a C++ operator) cannot take one (`SemanticDiag::ConstasInNativeDeclaration`); combining it with a rest parameter is not supported yet (`SemanticDiag::ConstasWithRest`) and waits for the type-level tuple (`StaticTuple`).
+- For now `n` is bound only in the declaration's parameter and return types; a type position in the body (`let z: Tensor<f32, const [n]>`) has no such scope yet. Array dimensions such as `f32[n]` have not landed either (see the restrictions below); what works today is `Tensor<f32, const [n]>`.
+
+**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; a function with a `constas` parameter cannot be a value, cannot be combined with a body-less declaration or a rest parameter, and `f32[n]` array dimensions are not implemented yet.
 
 ## 7.6 Annotations
 

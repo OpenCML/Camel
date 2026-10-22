@@ -1,0 +1,12 @@
+module constas_type_not_int
+import { Tensor, ones } from tensor
+
+// The value becomes an extent, and extents are integers.
+func bad(constas n: float, x: Tensor<f32, const [3]>): float {
+    return 0.0
+}
+
+func main(): int sync {
+    println(bad(1.0, ones([3])))
+    return 0
+}

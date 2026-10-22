@@ -183,8 +183,17 @@ export func show(t: (typeas A)[]): void
 `..ts` 是 5.5 方案 A（按结构展开）的第一阶段，已在 H207 落地：函数声明的最后一个形参
 写 `..ts`（不带类型），调用点写 `f(t, ..ts)` 或 `..(a, b)` 时在编译期把函数体展开到调用者
 的图里，元数编译期确定、可以为 0；带剩余参数的函数没有实例图，也不能作值。语法树的
-`NamedPair` 增加了 `isRest`（`docs/Camel.asdl:165`）。仍未做的是第二阶段：剩余形参写类型
-（连同 `constas`），以及下表每个名字各自缺的规则。
+`NamedPair` 增加了 `isRest`（`docs/Camel.asdl:165`）。
+
+第一期里与它同批的 `constas` 值参数也已落地：函数声明的普通形参之前写
+`constas n: int`，值在编译期已知，进入实例键（`total<3>`、`total<5>`），代入声明的类型里
+（`Tensor<f32, const [n]>`），不进调用结点、实例没有这个形参。`NamedPair` 增加了
+`isConstas`；函数类型用 `constasIndex` 记住它，实例化时由 `substituteExtentValues` 代入。
+目前只支持一个、`int`、必须在最前、类型不能省，且必须真的被某个类型读到（否则
+`ConstasNotUsedInType`）；带 `constas` 的函数没有函数值，无体声明不能带，和剩余参数
+组合也拒绝（`ConstasWithRest`）。仍未做的是第二阶段：剩余形参写类型、`StaticTuple`，
+以及下表每个名字各自缺的规则；`f32[n]` 这种数组维度也还没实现，今天能用的类型位置是
+`Tensor<f32, const [n]>`。
 
 **影响 4 个名字**：`rewrite:__analysis`、`python:py_call`、`python:py_print`、`python:py_println`。
 
@@ -196,9 +205,9 @@ export func show(t: (typeas A)[]): void
 | `py_print`、`py_println` | 结果是**第一个实参的类型**（`return norm.empty() ? Void : norm[0]`），不是固定的 `PyObject` | `module.cpp:524-530`、`541-547` |
 | `__analysis` | 结果取 `initial` 的返回类型，参数里还有任意函数 | H157 §2 |
 
-**选项。** A（已选）：`..ts` 已落地；这四个名字仍各缺下表列出的其他规则。B 给声明单开一个
-rest 标记（第二套写法，与 5.5 冲突）；C 枚举有限元数（说谎）。这一题不需要新提案，只需要
-把“变参声明”剩下的规则记进账本。
+**选项。** A（已选）：`..ts` 与 `constas` 值参数都已落地；这四个名字仍各缺下表列出的其他
+规则。B 给声明单开一个 rest 标记（第二套写法，与 5.5 冲突）；C 枚举有限元数（说谎）。
+这一题不需要新提案，只需要把“变参声明”剩下的规则记进账本。
 
 ### 3.3 Q-M 模块类型的类型变量实参（2 个名字，独占 2）
 
@@ -305,7 +314,7 @@ resolver（`modules/tree/module.cpp:30-60`），没有执行器；声明要求
 | Q-F 任意函数类型 | 作者问题 | 5（A）/ 6（B） | 新类型形式 | 高 |
 | Q1 类型实参 | 作者问题（已有） | 2 | H148 Q1 的 A | 高 |
 | Q3 类型变量谓词 | 作者问题（已有） | 1 | H148 Q3 的 A | 很高 |
-| Q-V 变参 | 已设计未实现 | 0（4 个名字的前置） | 等 `..ts` | 中 |
+| Q-V 变参 | 第一阶段已实现（`..ts`、`constas`） | 0（4 个名字的前置） | 余下等 `StaticTuple` | 中 |
 | 策略（`sum`/`mean`/`range`） | 策略 | 0 | 改“一处签名” | 不建议 |
 | 计算签名 74 | 设计 | 0 | 无 | — |
 

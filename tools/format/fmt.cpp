@@ -790,14 +790,15 @@ any Formatter::visitKeyValuePair(cst::KeyValuePair context) {
 }
 
 /*
-keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)? ;
+keyParamPair : ('var' | 'const' | 'constas')? identDef (':' typeExpr ('=' dataExpr)?)?
+             | '..' identDef (':' typeExpr)? ;
 */
 any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
-    string result = context->tok(TK::DotDot) ? ".."
-                                            : context->tok(TK::KwVar) ? "var "
-                                                                      : context->tok(TK::KwConst)
-                                                                            ? "const "
-                                                                            : "";
+    string result = context->tok(TK::DotDot)      ? ".."
+                    : context->tok(TK::KwConstas) ? "constas "
+                    : context->tok(TK::KwVar)     ? "var "
+                    : context->tok(TK::KwConst)   ? "const "
+                                                  : "";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
