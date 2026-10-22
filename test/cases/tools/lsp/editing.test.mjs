@@ -99,17 +99,20 @@ await withServer(async (ls) => {
             .replace('    return 0\n}', `    let r = ${expr}::/*c*/\n    return 0\n}`))
         return complete(m, 'c')
     }
-    items = await membersOf('import math', 'math')
-    check(labels(items).includes('sqrt'), 'the exports of a module after `::`', labels(items).slice(0, 20))
-    check((items.find((i) => i.label === 'sqrt') || {}).detail !== undefined,
-        'with their signatures', items.find((i) => i.label === 'sqrt'))
-    // The two shapes side by side: `sqrt` is computed in C++, `abs` is declared in math.cml.
-    checkEq(items.find((i) => i.label === 'sqrt').detail, '(val: float | double) => float | double',
-        'a computed member keeps the signature C++ computes')
-    const abs = items.find((i) => i.label === 'abs')
-    check(abs !== undefined && abs.detail.startsWith('(x: i32) => i32') &&
-        abs.detail.includes('(+5 overloads)'),
-        'a declared member carries its declared overloads', abs)
+    items = await membersOf('import graph', 'graph')
+    check(labels(items).includes('program_of'), 'the exports of a module after `::`', labels(items).slice(0, 20))
+    check((items.find((i) => i.label === 'program_of') || {}).detail !== undefined,
+        'with their signatures', items.find((i) => i.label === 'program_of'))
+    // The two shapes side by side: `program_of` is computed in C++ (the type of a function value,
+    // which a declaration cannot state), and `constant` is declared in graph.cml per sample type.
+    // `sqrt` was the computed half until H202 turned all of `math` into declarations.
+    const programOf = items.find((i) => i.label === 'program_of')
+    check(programOf !== undefined && programOf.detail.startsWith('(f: F)'),
+        'a computed member keeps the signature C++ computes', programOf)
+    const constant = items.find((i) => i.label === 'constant')
+    check(constant !== undefined && constant.detail.startsWith('(n: Node, sample: i32) => i32?') &&
+        constant.detail.includes('(+5 overloads)'),
+        'a declared member carries its declared overloads', constant)
     // A module whose every name is declared: no `exportEntity` answers for it any more.
     items = await membersOf('import re', 're')
     checkEq(labels(items), ['test'], 'the members of a module that is all declarations')
