@@ -132,6 +132,14 @@ Both streams carry the same bytes on every platform: a line ends with a line fee
   - The rule does not depend on whether `main` has parameters. Translation passes and dumps are not affected: they write what they always wrote.
 - `--timeit` binds `--arg` like a plain run; the result of `main` is neither printed nor written there.
 
+### Modules that start a runtime: `python` and `pyplot`
+
+`import` executes no code (design principles 3.1), so importing these two modules creates nothing. They share one embedded CPython per process, and it is created by the **first operator call** that needs it — `plot`, or any `py_exec`/`py_eval`/`py_run`/`py_call`/`py_import`/... — or, if the other module already created it, that call attaches to the same interpreter. A program that imports `pyplot` and never plots never starts Python.
+
+- **A CPython that cannot start is reported at that call, not at the import.** `import python` / `import pyplot` then succeed; the first operator call fails with `RuntimeDiag::RuntimeError`, located at the call, and the run exits 1. CPython's own diagnostic (for example the path configuration it prints when `PYTHONHOME` names no Python) is on standard error, as it was. Before H221 the same failure happened during the import, so a script that checked the exit code of an import-only run saw 1; it now sees 0. The active venv's version is checked at the same moment, for the same reason.
+- **`camel inspect --ops` does not prove an interpreter is available.** It lists `pyplot:plot` and `python`'s operators without creating one; an operator that cannot start Python fails when it runs.
+- The interpreter is created once and never finalised; whichever module's operator is called first decides only that the creation happens, not how: the venv, libpython promotion, Python's output order and the site-packages paths are set the same way.
+
 ### Pass pipelines
 
 The passes given on the command line run in the order written. Each pass transforms the graph, executes it (a scheduling pass) or translates it (a translation pass).
