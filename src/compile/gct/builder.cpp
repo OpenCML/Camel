@@ -2423,9 +2423,11 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
             // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the three parts of the dimension
-            // (an unwritten one a null load) and whether the end was written at all (`t[a:]`
-            // runs to the end). A part that was not written is passed as the value it stands
-            // for, 0 for the start and 1 for the step; the end is read only when written.
+            // (an unwritten one a null load) and which of the start and the end were written.
+            // A part that was not written is passed as the value it stands for, 0 for the
+            // start and 1 for the step; the end is read only when written. The last argument
+            // is a two-bit mask (bit 0 end, bit 1 start): `t[a:]` and `t[:b]` differ, and a
+            // negative step needs to know whether the start was given.
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
@@ -2441,7 +2443,7 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[0]                  = written[0] ? bound[0] : intConstant(0);
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
-            node_ptr_t endWrittenNode = intConstant(written[1] ? 1 : 0);
+            node_ptr_t endWrittenNode = intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
@@ -4419,6 +4421,22 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // from the function type the lambda stands in.
     const std::vector<Tree::UnwrittenParam> unwrittenParams =
         std::exchange(pendingUnwrittenParams_, {});
+    // A parameter destructured as a tuple (`((a, b)) => ...`) is bound by GIR when it starts the
+    // body: the parameter is one value, and the names take its elements.
+    std::vector<Tree::TupleParamBinding> tupleParams;
+    {
+        size_t index = 0;
+        for (size_t group = 0; group < 2; ++group) {
+            for (const auto &paramPair :
+                 *ast->atAs<AST::FuncTypeLoad>(0)->atAs<AST::RepeatedLoad>(group)) {
+                const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+                if (paramLoad->isTupleParam()) {
+                    tupleParams.push_back({index, paramLoad->tupleNames()});
+                }
+                ++index;
+            }
+        }
+    }
     // A parameter of a reserved name would stand in front of the operator of that name.
     for (size_t i = 0; i < funcType->argNamesCount(); ++i) {
         if (!validateIdent(std::string(funcType->argNameAt(i)))) {
@@ -4529,6 +4547,9 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     *funcNode << typeNode << stmtsNode;
     if (!unwrittenParams.empty()) {
         tree_->setUnwrittenParams(funcNode, unwrittenParams);
+    }
+    if (!tupleParams.empty()) {
+        tree_->setTupleParams(funcNode, tupleParams);
     }
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");

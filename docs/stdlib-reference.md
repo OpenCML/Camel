@@ -2026,7 +2026,7 @@ Reseeds the module's random generator, which `random` and `randn` draw from.
 ## `array`: arrays and higher-order functions
 
 Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and three primitives of the algo
+operators (map, filter, reduce, range, zip, slice, len) and three private primitives of this
 module (flatten, unique, argsort). Every function returns a new value; none changes its
 argument.
 
@@ -2035,12 +2035,10 @@ argument.
   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
 - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
   returns an error value, and a wrong argument is a fault of the operator that meets it.
-- Order of evaluation (design principles 3.6). A function passed to one of these is applied
-  with `map`: its calls on different elements have NO order among them and the parallel
-  scheduler may run them at the same time; the result is put together by position and is
-  the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
-  `sort_by` and `zip_with`. None of them stops early: the function is applied to every
-  element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
+- A function passed to any of these must be pure. The implementation may stop early
+  (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
+  several elements at once; the result is the same either way, and no call observes another.
+  A function with side effects belongs in `foreach` or `reduce`, which run in order.
 - These are generic functions: there is one instance per set of element types in the whole
   program, whichever module calls it (one root graph, design principles 10.1). `group_by`
   is not here: it needs the map type.
@@ -2097,7 +2095,7 @@ Each element with its index.
 flatten: (xss: T[][]) => T[]
 ```
 
-The elements of the inner arrays, in order. (Primitive: algo::flatten.)
+The elements of the inner arrays, in order.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
@@ -2109,7 +2107,6 @@ unique: (xs: T[]) => T[]
 ```
 
 The first occurrence of every value, in order; values are compared as `==` compares them.
-(Primitive: algo::unique.)
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
@@ -2176,14 +2173,10 @@ The number of elements for which pred is true.
 #### `sum`
 
 ```camel
-sum: (xs: int[]) => int
-sum: (xs: float[]) => float
-sum: (xs: i32[]) => i32
-sum: (xs: f32[]) => f32
+sum: (xs: T[]) => T
 ```
 
-The sum of the elements, 0 for an empty array. One function per numeric type (the zero of a
-type variable cannot be written). Integers wrap around on overflow, as `+` does.
+The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sum([1, 2, 3])` gives `6`
@@ -2194,9 +2187,8 @@ type variable cannot be written). Integers wrap around on overflow, as `+` does.
 min: (xs: T[]) => T?
 ```
 
-The smallest element by `<` (numbers, or strings by byte), or null for an empty array;
-among equal elements the first. A NaN compares false with everything: it is the result only
-when it is the first element.
+The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
++0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `min([3, 9, 2]) ?? 0` gives `2`
@@ -2207,10 +2199,11 @@ when it is the first element.
 max: (xs: T[]) => T?
 ```
 
-The largest element by `>`, or null for an empty array; among equal elements the first.
+The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
+-0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `max(['pear', 'fig']) ?? ''` gives `'pear'`
+- Example: `max([3, 9, 2]) ?? 0` gives `9`
 
 ### Transforming
 
@@ -2232,9 +2225,9 @@ sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 ```
 
 The elements in ascending order of key(x); elements with equal keys keep their order (the
-sort is stable, so sorting by one key and then by another works). A key is a number, a
-string (ordered by byte) or a bool; NaN keys come last. For a descending order of numbers
-use the negated key. (Primitive: algo::argsort.)
+sort is stable, so sorting by one key and then by another works). A key is a number, a string
+(ordered by byte) or a bool; NaN keys come last. For a descending order of numbers use the
+negated key.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>` gives `['fig', 'pear', 'apple']`
@@ -2249,7 +2242,7 @@ f(xs[i], ys[i]) for every i.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<(a: int, b: int): int => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+- Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
 <a id="math"></a>
 

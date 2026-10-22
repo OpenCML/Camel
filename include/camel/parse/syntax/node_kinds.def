@@ -140,3 +140,4 @@ CAMEL_NODE(TypeOfType, Type)           // 'typeof' dataExpr
 CAMEL_NODE(EnumType, Type)             // 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 CAMEL_NODE(EnumVariant, Other)         // identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 CAMEL_NODE(EnumField, Other)           // identDef ':' typeExpr
+CAMEL_NODE(TupleParam, Other)          // '(a, b)': a lambda parameter destructured as a tuple

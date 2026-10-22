@@ -3,7 +3,7 @@
 
 /**
  * Array functions and higher-order functions, written in Camel on top of the built-in
- * operators (map, filter, reduce, range, zip, slice, len) and three primitives of the algo
+ * operators (map, filter, reduce, range, zip, slice, len) and three private primitives of this
  * module (flatten, unique, argsort). Every function returns a new value; none changes its
  * argument.
  *
@@ -12,12 +12,10 @@
  *   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
  * - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
  *   returns an error value, and a wrong argument is a fault of the operator that meets it.
- * - Order of evaluation (design principles 3.6). A function passed to one of these is applied
- *   with `map`: its calls on different elements have NO order among them and the parallel
- *   scheduler may run them at the same time; the result is put together by position and is
- *   the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
- *   `sort_by` and `zip_with`. None of them stops early: the function is applied to every
- *   element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
+ * - A function passed to any of these must be pure. The implementation may stop early
+ *   (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
+ *   several elements at once; the result is the same either way, and no call observes another.
+ *   A function with side effects belongs in `foreach` or `reduce`, which run in order.
  * - These are generic functions: there is one instance per set of element types in the whole
  *   program, whichever module calls it (one root graph, design principles 10.1). `group_by`
  *   is not here: it needs the map type.
@@ -25,28 +23,40 @@
 module array
 
 import algo
+import math
+
+// The primitives are declared here, for this module only, and answered on the `array` protocol
+// (H19 step 5). They are pure and return a new array.
+
+#op<'array:flatten'>
+func native_flatten::<T>(xss: T[][]): T[]
+
+#op<'array:unique'>
+func native_unique::<T>(xs: T[]): T[]
+
+#op<'array:argsort'>
+func native_argsort::<T>(keys: T[]): int[]
 
 // ---- rearranging ----
 
 /// The elements in reverse order.
 /// @example reverse([1, 2, 3])    // [3, 2, 1]
 export func reverse::<T>(xs: T[]): T[] {
-    let n = len(xs)
-    return range(0, n)->map<(i: int) => xs[n - 1 - i]>
+    return xs[:: -1]
 }
 
 /// The first n elements; all of them when there are fewer, none when n is not positive.
 /// @example [1, 2, 3, 4]->take<2>    // [1, 2]
 with <n: int>
 export func take::<T>(xs: T[]): T[] {
-    return if n <= 0 then slice<0, 0>(xs) else if n >= len(xs) then slice<0, len(xs)>(xs) else slice<0, n>(xs)
+    return xs[: math::clamp(n, 0, len(xs))]
 }
 
 /// The elements after the first n; none when there are fewer, all when n is not positive.
 /// @example [1, 2, 3, 4]->drop<1>    // [2, 3, 4]
 with <n: int>
 export func drop::<T>(xs: T[]): T[] {
-    return if n <= 0 then xs else if n >= len(xs) then slice<0, 0>(xs) else slice<n, len(xs)>(xs)
+    return xs[math::clamp(n, 0, len(xs)):]
 }
 
 /// Each element with its index.
@@ -55,95 +65,79 @@ export func enumerate::<T>(xs: T[]): (int, T)[] {
     return zip(range(0, len(xs)), xs)
 }
 
-/// The elements of the inner arrays, in order. (Primitive: algo::flatten.)
+/// The elements of the inner arrays, in order.
 /// @example flatten([[1, 2], [3]])    // [1, 2, 3]
 export func flatten::<T>(xss: T[][]): T[] {
-    return algo::flatten(xss)
+    return native_flatten(xss)
 }
 
 /// The first occurrence of every value, in order; values are compared as `==` compares them.
-/// (Primitive: algo::unique.)
 /// @example unique([3, 1, 3, 2, 1])    // [3, 1, 2]
 export func unique::<T>(xs: T[]): T[] {
-    return algo::unique(xs)
+    return native_unique(xs)
 }
 
 // ---- searching ----
-
-func first_true(flags: bool[]): int {
-    return range(0, len(flags))->reduce<(found: int, i: int) => if found < 0 && flags[i] then i else found, -1>
-}
 
 /// The index of the first element equal to x, or null.
 /// @example [3, 9, 2]->index_of<9> ?? -1    // 1
 with <x: T>
 export func index_of::<T>(xs: T[]): int? {
-    let i = first_true(xs->map<(y: T) => y == x>)
-    return if i < 0 then null else i
+    let i = loop i = 0 while i < len(xs) && xs[i] != x do i + 1
+    return if i < len(xs) then i else null
 }
 
 /// The first element for which pred is true, or null.
 /// @example [3, 9, 2]->find<(x: int) => x > 4> ?? -1    // 9
 with <pred: (x: T) => bool>
 export func find::<T>(xs: T[]): T? {
-    let i = first_true(xs->map<pred>)
-    return if i < 0 then null else xs[i]
+    let i = loop i = 0 while i < len(xs) && !pred(xs[i]) do i + 1
+    return if i < len(xs) then xs[i] else null
 }
 
 /// True when pred is true for at least one element; false for an empty array.
 /// @example [3, 9, 2]->any<(x: int) => x > 4>    // true
 with <pred: (x: T) => bool>
 export func any::<T>(xs: T[]): bool {
-    return xs->map<pred>->reduce<(acc: bool, b: bool) => acc || b, false>
+    return loop hit = false for x in xs while !hit do pred(x)
 }
 
 /// True when pred is true for every element; true for an empty array.
 /// @example [3, 9, 2]->all<(x: int) => x > 4>    // false
 with <pred: (x: T) => bool>
 export func all::<T>(xs: T[]): bool {
-    return xs->map<pred>->reduce<(acc: bool, b: bool) => acc && b, true>
+    return loop ok = true for x in xs while ok do pred(x)
 }
 
 /// The number of elements for which pred is true.
 /// @example [3, 9, 2]->count<(x: int) => x > 2>    // 2
 with <pred: (x: T) => bool>
 export func count::<T>(xs: T[]): int {
-    return xs->map<pred>->reduce<(acc: int, b: bool) => if b then acc + 1 else acc, 0>
+    return loop n = 0 for x in xs do if pred(x) then n + 1 else n
 }
 
 // ---- aggregating ----
 
-/// The sum of the elements, 0 for an empty array. One function per numeric type (the zero of a
-/// type variable cannot be written). Integers wrap around on overflow, as `+` does.
+/// The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
 /// @example sum([1, 2, 3])    // 6
-export func sum(xs: int[]): int {
-    return xs->reduce<(acc: int, x: int) => acc + x, 0>
+export func sum::<T>(xs: T[]): T {
+    let zero: T = 0
+    let add: (a: T, b: T) => T = (a, b) => a + b
+    return xs->reduce<add, zero>
 }
 
-export func sum(xs: float[]): float {
-    return xs->reduce<(acc: float, x: float) => acc + x, 0.0>
-}
-
-export func sum(xs: i32[]): i32 {
-    return xs->reduce<(acc: i32, x: i32) => acc + x, i32(0)>
-}
-
-export func sum(xs: f32[]): f32 {
-    return xs->reduce<(acc: f32, x: f32) => acc + x, f32(0.0)>
-}
-
-/// The smallest element by `<` (numbers, or strings by byte), or null for an empty array;
-/// among equal elements the first. A NaN compares false with everything: it is the result only
-/// when it is the first element.
+/// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
+/// +0), or null for an empty array.
 /// @example min([3, 9, 2]) ?? 0    // 2
 export func min::<T>(xs: T[]): T? {
-    return if len(xs) == 0 then null else xs->reduce<(acc: T, x: T) => if x < acc then x else acc, xs[0]>
+    return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
 }
 
-/// The largest element by `>`, or null for an empty array; among equal elements the first.
-/// @example max(['pear', 'fig']) ?? ''    // 'pear'
+/// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
+/// -0), or null for an empty array.
+/// @example max([3, 9, 2]) ?? 0    // 9
 export func max::<T>(xs: T[]): T? {
-    return if len(xs) == 0 then null else xs->reduce<(acc: T, x: T) => if x > acc then x else acc, xs[0]>
+    return if len(xs) == 0 then null else xs->reduce<math::max, xs[0]>
 }
 
 // ---- transforming ----
@@ -152,23 +146,24 @@ export func max::<T>(xs: T[]): T? {
 /// @example [1, 2]->flat_map<(x: int) => [x, x * 10]>    // [1, 10, 2, 20]
 with <f: (x: T) => U[]>
 export func flat_map::<T, U>(xs: T[]): U[] {
-    return algo::flatten(xs->map<f>)
+    return native_flatten(xs->map<f>)
 }
 
 /// The elements in ascending order of key(x); elements with equal keys keep their order (the
-/// sort is stable, so sorting by one key and then by another works). A key is a number, a
-/// string (ordered by byte) or a bool; NaN keys come last. For a descending order of numbers
-/// use the negated key. (Primitive: algo::argsort.)
+/// sort is stable, so sorting by one key and then by another works). A key is a number, a string
+/// (ordered by byte) or a bool; NaN keys come last. For a descending order of numbers use the
+/// negated key.
 /// @example ['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>    // ['fig', 'pear', 'apple']
 with <key: (x: T) => K>
 export func sort_by::<T, K>(xs: T[]): T[] {
-    return algo::argsort(xs->map<key>)->map<(i: int) => xs[i]>
+    return xs[native_argsort(xs->map<key>)]
 }
 
 /// f(xs[i], ys[i]) for every i.
 /// @fails fault `InvalidArgument` (of zip) when the two arrays differ in length
-/// @example zip_with<(a: int, b: int): int => a + b>([1, 2], [10, 20])    // [11, 22]
+/// @example zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])    // [11, 22]
 with <f: (a: T, b: U) => V>
 export func zip_with::<T, U, V>(xs: T[], ys: U[]): V[] {
-    return zip(xs, ys)->map<(p: (T, U)) => f(p.0, p.1)>
+    let pair: (p: (T, U)) => V = ((a, b)) => f(a, b)
+    return zip(xs, ys)->map<pair>
 }

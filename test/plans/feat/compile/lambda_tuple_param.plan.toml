@@ -1,0 +1,27 @@
+id = "compile.lambda_tuple_param"
+order = 343
+tier = "fast"
+tags = ["feat", "compile", "lambda", "tuple"]
+desc = "A lambda parameter may be destructured as a tuple (`((a, b)) => ...`): the names take the elements of the tuple the position passes, by the rule of `let (a, b) = p` (design principles 5.9)."
+
+[[tests]]
+name = "map_tuple_param"
+desc = "A tuple parameter binds the elements of the tuple: `map<((a, b)) => a + b>` over pairs, and over the pairs `zip` makes."
+kind = "behavior"
+case = "../../../cases/compile/lambda_tuple_param.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+expect_exit = 0
+expect_stdout_exact = "[3, 7, 11]\n[10, 40]\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "tuple_param_arity"
+desc = "A tuple parameter with more names than the tuple has elements is refused, not read past the end."
+kind = "negative"
+case = "../../../cases/compile/err_lambda_tuple_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TupleUnpackingCountMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000

@@ -2125,6 +2125,31 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
 }
 
 /*
+tupleParam : '(' identDef (',' identDef)* ','? ')' ;
+A lambda parameter destructured as a tuple: the parameter has a name the program does not write,
+and the names take the elements of the tuple it is passed (the rule of `let (a, b) = p`).
+*/
+Value Builder::visitTupleParam(cst::TupleParam context) {
+    ENTER("TupleParam");
+    std::vector<std::string> names;
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        names.push_back(identDef->text());
+    }
+    // The name is internal: no program writes it, and the position makes it unique.
+    Reference ref("_tuple_" + std::to_string(context->begin()));
+    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref);
+    namedPairNode->loadAs<NamedPairLoad>()->setTupleNames(std::move(names));
+    setNodeTokenRangeByContext(namedPairNode, context);
+    node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
+    setNodeTokenRangeByContext(inferNode, context);
+    *namedPairNode << inferNode;
+    node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
+    *namedPairNode << dataExprOptNode;
+    LEAVE("TupleParam");
+    return namedPairNode;
+}
+
+/*
 dataList     : dataExpr (',' dataExpr)* ;
 */
 Value Builder::visitDataList(cst::DataList context) {
@@ -2186,8 +2211,12 @@ Value Builder::visitPairedParams(cst::PairedParams context) {
     ENTER("PairedParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
-    for (const auto &keyParamPair : context->all<cst::KeyParamPair>()) {
-        *rep << any2node(visitKeyParamPair(keyParamPair));
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyParamPair)) {
+            *rep << any2node(visitKeyParamPair(cst::KeyParamPair(child)));
+        } else if (child.is(NK::TupleParam)) {
+            *rep << any2node(visitTupleParam(cst::TupleParam(child)));
+        }
     }
     LEAVE("PairedParams");
     return rep;
@@ -2236,6 +2265,9 @@ Value Builder::visitIndices(cst::Indices context) {
                 if (child.isToken()) {
                     if (child.token().kind() == TK::Colon) {
                         ++colons;
+                    } else if (child.token().kind() == TK::ColonColon) {
+                        // `xs[:: -1]`: the two colons of an omitted start and end are one token.
+                        colons += 2;
                     }
                     continue;
                 }

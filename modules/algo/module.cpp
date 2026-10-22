@@ -33,6 +33,18 @@ bool AlgoModule::load() {
     context_->registerExecutorFactory("algo", [ctx = context_]() {
         return createAlgoExecutor(ctx);
     });
+    // The array primitives answer on the `array` protocol as well (H19 step 5): `array.cml`
+    // declares them for itself, and the kernels stay here until the C++ module moves.
+    context_->registerExecutorFactory("array", [ctx = context_]() {
+        return createAlgoSequenceExecutor(ctx);
+    });
+    camel::core::OperatorTable::instance().declare(
+        "array",
+        {
+            {"flatten", true},
+            {"unique", true},
+            {"argsort", true},
+        });
     // The purity of every operator (design principles 3.3).
     camel::core::OperatorTable::instance().declare(
         "algo",

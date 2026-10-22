@@ -1,0 +1,14 @@
+/**
+ * A step of 0 does not move: it is a fault of the subscript, not an empty range.
+ */
+module subscript_step_zero
+
+func every(xs: int[], a: int, b: int, s: int): int[] {
+    return xs[a:b:s]
+}
+
+func main(): int sync {
+    println(every([1, 2, 3], 0, 3, 0))
+    println('not reached')
+    return 0
+}

@@ -762,6 +762,38 @@ void Builder::buildFuncBody(
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;
+        // A parameter destructured as a tuple: the port is the tuple, and the names take its
+        // elements (`((a, b)) => ...` binds as `let (a, b) = p` does). The parameter is one
+        // value, so nothing about the call changes; only the names of the body do.
+        if (const auto *tuples = GCT::Tree::of(gct)->tupleParamsOf(gct)) {
+            for (const auto &tupleParam : *tuples) {
+                const std::string paramName(funcType->argNameAt(tupleParam.index));
+                const bool isWith = tupleParam.index < funcType->withTypesCount();
+                Type *paramType   = isWith
+                                        ? funcType->withTypeAt(tupleParam.index)
+                                        : funcType->normTypeAt(
+                                              tupleParam.index - funcType->withTypesCount());
+                if (paramType->code() != TypeCode::Tuple ||
+                    tt::as_ptr<TupleType>(paramType)->size() != tupleParam.names.size()) {
+                    diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                        .atOrigin(gct->origin())
+                        .commit();
+                    throw BuildAbortException();
+                }
+                const auto *tuple = tt::as_ptr<TupleType>(paramType);
+                const auto port   = nodeAt(paramName);
+                ASSERT(port.has_value(), "A tuple parameter has its port.");
+                for (size_t i = 0; i < tupleParam.names.size(); ++i) {
+                    node_handle_t access = graph->addAccsNode(tuple->typeAt(i), i);
+                    linkNodes(LinkType::Norm, *port, access);
+                    registerNodeOrigin(context_, access, gct, "gir.tuple.param");
+                    insertNode(tupleParam.names[i], access);
+                    if (recorder_) {
+                        recordDeclaration(tupleParam.names[i], access, gct);
+                    }
+                }
+            }
+        }
         if (!funcType->hasExitType()) {
             inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
         }
