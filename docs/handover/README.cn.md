@@ -308,6 +308,7 @@
 | H150 | **`debugger.dap_protocol` 的 slow 层红（80 条里 4 条）与 `dap_pipeline` 的时序红**：前者不是 `std::opt` 改了图，也不是期望陈旧——调试器把 `std::opt` 代数步**为规则库自己**执行的 `stdlib/rules.cml` 当成被调试程序索引了一次，`calls.cml` 的断点全被判成“不在运行的图里”，真正的 `std::fvm` 开始时 `runIndexed_` 已为真、不再重新解析，于是第 16 行给出“被某一遍删掉”、第 17 行根本不停（`waitStop()` 为 `null`，用例取 `stop.top` 抛出）；`std::jgir` 显示优化后第 16 行 `DATA "10"`（origin 179）与第 17 行 `:io/println`（origin 181）都还在，所以第 16 行 `ConstantOnly`、第 17 行可执行这两条期望是对的。后者是适配器收到 `finished` 就杀 worker，而 `continue`/`nextPass` 的回答可能还在 worker 的服务器线程上没写完，客户端收到“被调试程序已经结束”（24 个忙循环下 100 次红 7 次） | 无 | **已完成**（报告 reports/H150.md；修法：`ExecutionObserver` 新增 `passStarting(schedules, root)`，`applyPassesDetailed` 在每遍 `apply` 前通知，`DebugCore` 只在调度遍索引运行并保留帧（改写/翻译遍的规则库、宏函数执行不产生帧、不触发断点重算）；适配器新增 `workerCallMutex_`，`core()` 全程持有、`finished` 杀 worker 前先取，回答不会被截断；用例加守卫“存活断点从未被撤回”，并让 `dap_pipeline` 失败时打印命令回答。`std::opt` 源码与期望未动。验收：连续五次完整调试器计划 12/12（`dap_protocol` 1.18–1.26 s、`dap_pipeline` 282–326 ms），修复前 `dap_protocol` 61 s 红；负载下 `dap_pipeline` 修复前 100 次红 7、修复后 120 次 0 红；`feat/opt` 710/710；`feat/tools` 19 通过、1 失败（既有基线 `lsp.editing`）、10 跳过） |
 | H153 | **看板整理（只改看板，不改代码）**：逐行核对原有 134 行声明是否仍成立（`git log --oneline origin/develop --grep="H<n>"` 加报告里的门禁数字），按 done/partly/stale/open 定性；把行按编号升序排回；重建 H19 的模块账本；标题下写读法与计数 | 无 | **已完成**（报告 reports/H153.md；排序只动行、不删不并，H143 的孤儿行并回表内；改正 8 行——H6（第 2 项归 H85/H95、剩余红归 H102/H103）、H19（第 2–9 步的真实状态）、H38（第 4 项的剩余部分按 H100 更正：文件未删，只剩五条整数单位元）、H44 与 H44b（第 2、3 项由 H60/H71 落地）、H51（`0x17E` 笔误）、H114（3 条摘要的 red→green 经过）、H147（三条阻断已修），每处带 `（H153 校正，依据 Hxx）`；H6/H19 各有一对重复的"剩下什么"，各合并为一条；H145 的裸 `\|\|` 按 H119 的写法转义；账本 13 个声明模块（其中 5 个留 17 条计算签名）、3 个仍 C++（`env`/`process`/`hash`；`globals` 是内建）、1 个阻塞（`ckpt`），见 `### H19` 下；核对计数 done 117 / partly 9 / stale 6 / open 3） |
 | H155 | **文档片段门禁**：面向读者的页面里的 `cml`/`camel` 片段必须通过解析 + GCT + GIR；声明了命令与文本块的片段要真的运行并比对输出；故意不完整或错误的片段必须带显式标记与理由，反例还要在页面上可见。发现过期就改文档，不改检查器 | 无 | **已完成**（报告 reports/H155.md；新增 `scripts/check-doc-snippets.mjs`，接入 `feat/docs_links` 的 `docs.snippets_compile`，与 `docs.retired_names_absent` 并列；干净树 142 篇、211 个片段编译、123 个运行比对、42 个带标记的不完整片段、102 个设计/技术页节选、3 个生成/日期化参考页允许、2 个记录目录不扫描；成本检查器 2.0 s、计划用例 1.98 s（暖跑 0.98 s），`-Jobs 8`，每片段一个进程因为各自可有模块、入口与多文件目录。改 20 篇：10 个顶层语句片段（中英各 5 个）包进 `func main`，6 个输出块（中英各 3 个）按当前格式化器改成 `5.0`/`10.0`/`1.4142135623730951`/`20.0`，其余是标记与“反例”标签，未删片段、未放宽期望。红证：`len(xs)`→`len(xs, 1)` 时 `docs/language/en/03_data_model.md:90` 报 `SemanticDiag::NoMatchingFunction`，计划 2/3 红；撤销后 3/3 绿，`check-doc-links --all` 385 篇 0 断链。提交 `c584e751b`） |
+| H157 | **H19 账本「计算签名、非迁移目标」九行的核对（只盘点，不迁移）**：对 `rewrite`、`nn`、`onnx`、`autodiff`、`pyplot`、`python` 与（H156 尚未开工的）`tiles` 逐个用主机 `inspect --ops` 枚举算子，按「可声明 / 计算签名 / 阻塞」归类并给出可声明数；`graph` 已由 H141 迁移，`tensor` 归 H151；不改代码、计划、用例 | 无 | **已完成**（报告 reports/H157.md；6 个模块 47 个名字：**18 可声明 / 20 计算签名 / 9 阻塞**，其中 11 条今天就能装载（`rewrite` 8、`nn` 1、`onnx` 1、`autodiff` 1），另 7 条（`pyplot` 1、`python` 6）只差模块补 `OperatorTable::declare` 的纯度；阻塞为任意函数类型 3、变参 4、`PyObject<T>` 不接受类型变量 2；结论是这些行没有一行成立。`tiles` 开工时无 H156 提交、收尾时 H156 已完成迁移，按任务书归 H156、不计入合计（旁证见报告 §7，两边的“计算/阻塞”分桶有 5 个名字口径不同）。账本 `graph` 行改为「已迁移（45 声明 + 6 计算）」，`tensor` 行标注归 H151，`rewrite` 行改判，原六模块合并行按模块拆成五行、`tiles` 行归 H156（未删模块/依据）；主机 `-Plan smoke -Jobs 8` 10/10，未跑 GPU/PyTorch，未迁移任何算子） |
 
 **按队列顺序连续做下去**（队列顺序以 `docs/roadmap.cn.md` 与依赖为准，不是本表的编号顺序）：一项完成、报告写好、合入 `develop` 后，接着做下一项，不必等检查意见；检查意见到了再回头处理。遇到需要设计判断的地方，按第 4 节写进报告的"待决问题"，跳过被挡住的部分继续做后面的。H2、H7 是语言表面的较大改动，规格已写全，但涉及的判断较多，宁可多问。
 
@@ -625,7 +626,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 
 #### H19 模块账本（H153 重建，2026-10-22）
 
-判定口径：**声明** = 全部签名在 `stdlib/<m>.cml`；**声明 + 计算签名（n）** = 固定签名在声明里、n 条由 C++ 按实参算（参考条目在 `signatures/<m>.cml`，模块项写 `computed:`）；**仍 C++** = 签名文件还在、未迁移；**计算签名（不在 H19）** = 按 H19 计划批复 Q2(a) 留在 resolver/`OpDef`；**阻塞** = 机制边界，见报告。
+判定口径：**声明** = 全部签名在 `stdlib/<m>.cml`；**声明 + 计算签名（n）** = 固定签名在声明里、n 条由 C++ 按实参算（参考条目在 `signatures/<m>.cml`，模块项写 `computed:`）；**仍 C++** = 签名文件还在、未迁移；**计算签名（不在 H19）** = 按 H19 计划批复 Q2(a) 留在 resolver/`OpDef`；**阻塞** = 机制边界，见报告；**N 可声明 / M 计算** = 该模块 N 个名字的固定签名能写成无体声明、M 个名字的类型由 C++ 按实参算（H157 起用于不在 H19 的模块；装载条件见 reports/H157.md §0）。
 
 | 模块 | 状态 | 依据（报告 / 问题） |
 |---|---|---|
@@ -647,11 +648,17 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 | `hash` | 仍 C++（`stdlib/signatures/hash.cml`）；改名已由 H114 完成 | reports/H114.md；H19-plan §3 第 10 步 |
 | `globals` | 仍 C++（内建；`signatures/globals.cml` 只供参考，不是声明模块） | H19-plan §3 第 10 步；H137.md §2 |
 | `ckpt` | **阻塞**：5 个 intrinsic 无执行器、`save_tree` 的叶子谓词写不出、`load_tree` 的结果类型取自 `::<T>` | reports/H140.md §0/§3；H103 Q1–Q3（参数化声明）；H51 第二期（`where`/类型函数）；H108 §3（作者裁定） |
-| `tensor` | 计算签名（`OpDef`；参考页只收 `from_bytes`/`to_bytes`） | H19-plan §2；H19 计划批复 Q2(a) |
-| `graph` | 计算签名（resolver） | H19-plan §2；H19 计划批复 Q2(a) |
-| `rewrite` | 计算签名（resolver） | H19-plan §2；H19 计划批复 Q2(a) |
-| `nn`、`onnx`、`tiles`、`autodiff`、`pyplot`、`python` | 计算签名（动态/可选，H19 不动） | H19-plan §1.5、§2 |
+| `tensor` | **未审**：H151 独立任务（本任务开始时该分支无提交）；本行不再断言「计算签名」 | H19-plan §2；H151（H157 校正，依据 H157 §8） |
+| `graph` | **已迁移**：45 条声明 + 6 条计算签名（`// dynamic func`） | reports/H141.md（H157 校正，依据 H141） |
+| `rewrite` | **8 可声明 / 0 计算**（3 阻塞：`__rule`/`__rule_when` 的任意函数类型、`__analysis` 变参） | reports/H157.md §2（H157 校正，依据 H157） |
+| `nn` | **1 可声明 / 18 计算**（`save_params`；15 个张量算子与 3 个优化器由 `OpDef`/resolver 算） | reports/H157.md §3（H157 校正，依据 H157） |
+| `onnx` | **1 可声明 / 0 计算**（`supported_operators`；`export_model` 阻塞：任意函数 + 结构示例类型） | reports/H157.md §4（H157 校正，依据 H157） |
+| `tiles` | **H156 已迁移**：`available`/`device` 进 `stdlib/tiles.cml`，其余 10 条留 C++；H157 开工时 H156 无提交、收尾时已有迁移，未计入 H157 合计 | reports/H156.md（H157 注，依据 H156） |
+| `autodiff` | **1 可声明 / 2 计算**（`stop_gradient`；`grad`/`with_grad` 的梯度函数类型由实参算） | reports/H157.md §5（H157 校正，依据 H157） |
+| `pyplot` | **1 可声明 / 0 计算**（`plot` 是固定签名；需先补 `plot` 的纯度，补后 8 条声明） | reports/H157.md §6.1（H157 校正，依据 H157） |
+| `python` | **6 可声明 / 0 计算**（6 个固定签名，需先补纯度；`py_wrap`/`py_unwrap` 的 `PyObject<T>` 与 3 个变参名字（4 个 URI）阻塞） | reports/H157.md §6.2（H157 校正，依据 H157） |
 
+- H157 计数口径：按**名字**计（不是注册条数；`python:py_call` 与 `python:py_call_kw` 只算一个名字）；「可声明」包含“签名可写、只差模块补 `OperatorTable::declare` 纯度”的 7 条（`pyplot` 1、`python` 6），其中**今天就能装载的 11 条**见 reports/H157.md §0。六个模块合计 47 个名字 = 18 可声明 + 20 计算签名 + 9 阻塞；`graph` 已由 H141 迁移，`tensor` 归 H151，`tiles` 归 H156，三者不在 47 里。原六模块合并行按模块拆成五行（`tiles` 归 H156），未删模块或依据（H157）。
 - 13 个声明模块、17 条计算签名与 `node scripts/stdlib-declarations.mjs --check` 的树内判定一致（H146 §6.1 记录“13 个声明模块、17 条计算签名、0 问题”；H153 在 Windows 上只复现了枚举，没跑 `camel inspect --ops`，本机没有构建）。
 - `para` 的两条不是阻塞：H146 §2.2 判定它们可以声明，但声明写不出“函数类型取自数组元素类型”，按约定留在计算签名（与 H115/H128 同形）；`ckpt` 才是机制边界上的阻塞（H140 §3）。
 - 第 5 步（`algo`→`array`）与第 6 步（`statistics`→`stats`）未做，所以两者仍是独立模块；`array`、`rules`、`tensor_definitions` 是 Camel 源码/定义库，没有 C++ 签名文件可迁。
