@@ -1,0 +1,184 @@
+# H121：`std::opt` 使 facts 失效的范围
+
+日期：2026-10-22
+分支：`handover/H121-fact-invalidation`（worktree `D:\Projects\Camel-wt\h121-fact-scope`）
+起点：`5ae2f58a7`。先 `git fetch origin`，再 `git merge --ff-only origin/develop`，前进到 `605ffb36e`（H127、H120、H125、H122、H126、H119 等 57 个提交），无冲突。
+本任务的代码提交：`a661a5143`；本报告与看板行在同一条后续提交里。
+
+## 0. 结论
+
+- `FACTS graph layer valid` 从 6 变成 3 发生在 **H100**（merge `6f02b8c65`）。H100 让 `std::opt` 的代数化简改走规则库：`RulesAlgebraPass` 调 `applyRegisteredPass(..., "rules::simplify", ...)`（`src/execute/pass.cpp:538-557`、`1432-1441`），这个调用在**遍运行到代数阶段时**才第一次解析 `rules::simplify`；`resolvePassWithModule` 于是 `importModule("rules")`（`src/execute/pass.cpp:1322-1345`）。`stdlib/rules.cml` 导入 `graph`、`math`、`rewrite`、`tensor`，加载 `math` 时 `declareMathOperatorSemantics()` 声明 99 条算子语义，`OperatorTable::declareSemantics` 每条把 `declarationEpoch()` 加一（`src/core/operator_table.cpp:449-502`）。
+- 这是**正确的保守失效**（侧 (a)），不是重算路径坏了。layer/total/count 的图修订号在 `std::opt` 前后完全相同，但这些 fact 的印记里还有声明纪元；纪元变了，按规范它们就该过期。过期 fact 读出为"没有"（§10.4），`test::facts_check` 重算 245 条，`verify equal=43 differ=0`。
+- 因此不修改任何语义或生产代码。修在用例层：把 `rewrite_opt`、`rewrite_macro_simplify` 从"历史总数"改成断言性质——**哪些 fact 过期、为什么过期**（图修订号变了，还是声明纪元变了），以及**重算后没有可读的过期 fact**。`rewrite_inline` 仍断言"不加载模块的遍不应让未改图上的任何 fact 过期"，这个对照保留。
+- 六个会被缓存的 core kind 中（`core.permissions` 是 (i)，不入库），`core.shape`（`Dependency::Node`、`readsDeclarations=false`，`src/runtime/core_facts.cpp:296-307`）与 `core.loopDomain`（`readsDeclarations=false`，`:333-341`）不受纪元变化影响；`core.instance`（`:308-313`）、`core.reorder`（`:314-321`）、`core.effects`（`:322-332`）、`core.resources`（`:355-373`）用默认值 `readsDeclarations=true`（`include/camel/runtime/facts.h:162-163`、`188-195`），所以会过期。
+
+## 1. 二分
+
+方法：从 `1c995a0a7`（H92 之前的基线）到 `5ae2f58a7`（H118）逐个 merge 点，每点**一次构建 + 一次计划**：`camel-remote.ps1 -Path <worktree> -Plan test/plans/feat/modules/graph_facts.plan.toml -Jobs 8`（主机上即 `node scripts/test.js`），只记录 `FACTS graph layer/total/count/twice` 与计划的退出码；完整原始输出在 `D:\Temp\h121-bisect.log`。两点之间没有别的提交，所以每个点就是一个 merge。
+
+| merge 点 | 归属 | layer / total / count / twice | 计划退出 |
+|---|---|---|---|
+| `1c995a0a7` | 基线（H92 之前） | 6 / 4 / 2 / 7 | 0 |
+| `45520f228` | H92 | 6 / 4 / 2 / 7 | 0 |
+| `67ba34a15` | H94 | 6 / 4 / 2 / 7 | 0 |
+| `22389a04e` | H96 | 6 / 4 / 2 / 7 | 0 |
+| `72bf10c05` | H99 | 6 / 4 / 2 / 7 | 0 |
+| `34d7d7689` | H97 | 6 / 4 / 2 / 7 | 0 |
+| `9f5620a4c` | H103 | 6 / 4 / 2 / 7 | 0 |
+| **`6f02b8c65`** | **H100** | **3 / 1 / 1 / 5** | **1** |
+| `20c6c5812` | H104 | 3 / 1 / 1 / 5 | 1 |
+| `3438124bc` | H107 | 3 / 1 / 1 / 5 | 1 |
+| `6487151bd` | H106 | 3 / 1 / 1 / 5 | 1 |
+| `5d2c4c2df` | H109 | 3 / 1 / 1 / 5 | 1 |
+| `f492a4d07` | H102 | 3 / 1 / 1 / 5 | 1 |
+| `5d71b1fe5` | H105 | 3 / 1 / 1 / 5 | 1 |
+| `372e41331` | H108 | 3 / 1 / 1 / 5 | 1 |
+| `4f8f53311` | H110 | 3 / 1 / 1 / 5 | 1 |
+| `027302cef` | H101 | 3 / 1 / 1 / 5 | 1 |
+| `5ae2f58a7` | H118 | 3 / 1 / 1 / 5 | 1 |
+
+每一点 `FACTS graph main` 都是 `valid=0 stale=11`，`__root__` 都是 `valid=0 stale=2`，`FACTS gone 0`；只有四个被断言的图在变。H100 之后一直到最后一点数字完全相同，说明 H104/H102/H106/H107/H108/H109/H110/H118 只是**沿用** H100 引入的失效原因，不是各自新增了原因。
+
+H113 在 `f492a4d07` 上复现并写"与 math 声明化无关"，这个结论也对：`f492a4d07` 已经落在 H100 之后；`math` 的 99 条语义在 H113 之前就是从 C++ 声明的，H113 没有新增声明。它只是没有继续往前二分到 H100。
+
+## 2. 规范怎么说
+
+`docs/design-principles.cn.md` 是规范的总纲，但它不展开 fact store 的细节；事实层的规范正文在 `docs/design/op-semantics/README.cn.md` 第 10 节（`docs/technical/40_graph_facts.md` 开头即写明"the graph facts of `docs/design/op-semantics` section 10"）。总纲里与此直接相关的是 9.7 的"重新算出并校验"，以及它引用的 9.5 的"遍自己负责"：
+
+> **副作用追踪在各个遍之下的保持方式**：效应是图上的摘要（图的出口是否依赖效应、写了哪些捕获的变量），每次提交由节点重新算出并校验；**遍不可能提交一张摘要与内容不符的图**。遍删掉或挪动效应是否正确，仍由遍自己负责（9.5）。
+
+事实层把同一原则写成了印记：每次读都校验，过期的读成"没有"，而不是假定它还对。
+
+`docs/design/op-semantics/README.cn.md` §10.1 把事实分成三类，并说明只有 (ii) 需要失效：
+
+> (ii) **派生事实**：能从图推出、但代价高，缓存起来——各节点的张量形状、循环的迭代域、效应摘要、实例化、资源足迹、重排自由度。它们带一个印记：算的时候读了哪张图的哪个修订号；读的时候比对，**过期的读出为"没有"**。
+>
+> 把 (i) 做成图的内容而不是事实，是这一节最重要的选择：图的内容不能与图不一致，所以不需要失效；只有 (ii) 需要失效机制。
+
+§10.3 给出保守规则（**缺省，每种事实都适用**）：
+
+> **保守规则**（缺省，每种事实都适用）：事实读过的每张图都记在印记里——它的锚点所在的图，以及推导时读过的被调图、循环子图、定义图；其中任何一张图的修订号变了，**或算子声明的纪元变了**，或目标配置变了，事实即过期。
+
+同节的表也单列了这一行：
+
+> | 算子的声明 | 纪元变 |
+
+§10.4 规定过期怎么读：
+
+> 读一条事实时比较印记：锚点图的修订号、闭包修订号、声明纪元、目标散列、依赖锥散列。**发布构建里始终检查**，不靠断言。过期的事实读出为"没有"，不报错；调用方重算。
+
+§10.5 规定改写与事实的关系：
+
+> 1. 被 `edit()` 过的图修订号加一。**事实不随拷贝、克隆、改写自动存活**（IC 7："派生的事实不是碰巧在克隆后留下来的陈旧注记"）。
+
+实现说明 `docs/technical/40_graph_facts.md` 把同一个规则写成印记字段：
+
+> Its stamp holds `(GraphId, closure revision)` of each anchored graph, **the declaration epoch when the kind reads declarations**, the target hash, and the cone hash for `Cone` kinds. Every read compares them, in release builds too; a stale fact reads as absent and is dropped.
+
+因此：**图修订号没变并不等于 fact 不该失效**；声明纪元也是印记的一部分。H121 里的 3/1/1 正是规范要求的失效。
+
+## 3. 哪一边是对的：侧 (a)
+
+侧 (a)：失效是对的，不是重算路径坏了。证据：
+
+1. **哪张图变了**：`FACTS seed revision` 与 `FACTS check revision` 显示 layer 2→2、total 3→3、count 5→5、twice 4→4、main 6→298；layer/total/count 的图内容确实没变。
+2. **哪个纪元变了**：`FACTS epoch seed=166`、`FACTS epoch check=265`；差值 99 正是 `math` 的 99 条算子语义。这个 99 不是猜的：同一构建下，不导入任何模块的用例 `test/cases/compile/generic_explicit_named.cml` 种子是 **118**，只导入 `math` 的 `test/cases/compile/native/math_declaration_import.cml` 是 **217**（118 + 99），本用例导入 `tensor` 等是 166（118 + 48），加载 `rules` 后是 265（166 + 99）；`camel inspect --ops test/cases/facts/tensors_and_loops.cml` 里 `math:` 有 **0** 条，说明 `math` 在种子时确实没加载。`std::opt::fold`（不加载规则库）的种子/检查纪元都是 166，layer 仍是 6；`std::opt::algebra` 与 `std::macro std::opt` 都是 166→265、layer 3。直接命名 `rules::simplify` 时，模块在流水线解析阶段就加载了，种子已经是 265，layer 仍是 6——这正好说明问题只出在**"先算 fact、后懒加载模块"**的窗口里。
+3. **重算路径是通的**：检查时库里有 32 条 fact（种子 13+5+2+6+2+4）；过期的那部分被 `computeFacts` 重新算出（`FACTS recomputed 245`），`FACTS after recompute valid=43 stale=0 gone=0`（43 是重算后、含检查阶段在私有 lowering 副本上读到的可读 fact 数），`FACTS verify equal=43 differ=0`。没有一条过期 fact 被当作有效值读出去。
+
+结论：不改语义，不改 `GraphFacts`/`FactStore`，也不为了让旧数字回来去抑制代数阶段的模块加载。
+
+## 4. 哪四个种类从 6 变成 3
+
+种子时每个图的 fact 构成如下（来自 `FACTS graph kind` 行；数字是六张图上的全部 fact）：
+
+| 图 | 种子 fact | 过期的 | 仍有效的 |
+|---|---|---|---|
+| layer | shape×3、instance×1、reorder×1、effects×1 = 6 | instance、reorder、effects | shape×3 |
+| total | shape×1、instance×1、reorder×1、effects×1 = 4 | instance、reorder、effects | shape×1 |
+| count | loopDomain×1、effects×1 = 2 | effects | loopDomain×1 |
+| twice | shape×4、instance×1、loopDomain×1、effects×1 = 7 | instance、effects | shape×4、loopDomain×1 |
+| main | shape×5、instance×2、resources×3、effects×1 = 11 | 全部（图本身变了，且 instance/resources/effects 也读声明） | 无 |
+| `__root__` | effects×1、resources×1 = 2 | 两条（根图的内容也变了） | 无 |
+
+被问到的"四个种类"是 **`core.instance`、`core.reorder`、`core.effects`、`core.resources`**：它们默认 `readsDeclarations = true`，印记里有声明纪元；纪元 166→265，所以过期。layer/total/count/twice 上没有 `core.resources` 的 fact（这些图是纯的，见 `rewrite_inline` 的 `core.resources` 断言），所以那几张图上看见的是前三个。
+
+**`core.shape` 与 `core.loopDomain` 为什么不受影响**：
+
+- `core.shape` 用 `Dependency::Node`，且显式 `readsDeclarations = false`（`src/runtime/core_facts.cpp:296-307`）。它只记"这个节点自己的版本"（节点记录的散列），不看图的修订号，也不看声明；`std::opt` 没有改动 layer/total/count/twice 的节点本身，所以 shape 全部有效。在 main 上 shape 也遵守这个规则：`rewrite_inline` 里留下的两个节点保留 shape（`valid=2`），被改写碰到的三个过期（`stale=3`）；`std::opt` 把 main 的节点都替换了，所以 main 的 5 条 shape 全过期（`valid=0 stale=5`），这不是图修订号造成的，而是节点本身没了。
+- `core.loopDomain` 显式 `readsDeclarations = false`（`:333-341`），它的 compute 读循环的结构、iterable、extent，印记是图修订号；count/twice 的图没变，所以它有效。
+- 其余四个 kind 没有覆盖这两个字段，取 `KindSpec` 默认值 `readsDeclarations = true`（`include/camel/runtime/facts.h:162-163`、`194-195`）。
+
+## 5. 修法：断言性质，而不是历史总数
+
+代码提交 `a661a5143`，分三处：
+
+1. **`test::facts_seed` / `test::facts_check` 说出原因**（`src/passes/test/facts.cpp`、`facts.h`）：
+   - 种子打印 `FACTS epoch seed=<n>` 和每张图的 `FACTS seed revision <graph> <n>`；
+   - 检查打印 `FACTS epoch check=<n>`、`FACTS check revision <graph> <n>`、每张图每个 kind 的 `FACTS graph kind <graph> <kind> valid=.. revalidated=.. stale=..`；
+   - 重算后再读一遍**消费者还能读到的 fact**（它锚定的图和节点都还在），打印 `FACTS after recompute valid=<n> stale=<n> gone=<n>`。这样"没有静默的过期"成为一条可断言的输出，而不是只看 `verify`。
+2. **计划改成性质**（`test/plans/feat/modules/graph_facts.plan.toml`）：
+   - `rewrite_inline`：纪元不变；layer/total/count/twice 的每一条 per-kind 都 `stale=0`；main 的 shape 是 `valid=2 stale=3`（节点规则），其余保守 kind 全部过期；重算后 `stale=0`、`differ=0`。
+   - `rewrite_opt` / `rewrite_macro_simplify`：`checkEpoch > seedEpoch`；layer/total/count/twice 的修订号不变；在这四张图上，**读声明的 kind 必须 stale>0 且 valid=0，不读声明的 kind 必须 stale=0**；main 的图变了，所有 fact 过期；重算后 `stale=0`、`differ=0`，且至少重算了一条。
+   - 这样断言的是"哪些 fact 因为什么而失效"，不再依赖 6/4/2 这类会随模块加载顺序变化的历史数字；如果将来某个遍在种子前就加载了 `rules`，`checkEpoch > seedEpoch` 会失败，作者会看到原因，而不是悄悄地改数字。
+3. **实现说明**（`docs/technical/40_graph_facts.md` §4、§6）：把"加载模块会声明算子、纪元因此变化"写进失效原因的旁边，并记录新的诊断行。H121 的观察项（下一节）不在这里修。
+
+没有修改任何 `FactStore`、`KindSpec`、`OperatorTable` 或 pass 的语义。
+
+## 6. 没有静默的过期：已有的用例
+
+有，就在本计划的 `rewrite_opt` 与 `rewrite_macro_simplify`（以及 `rewrite_inline`）：它们用 `test::facts_seed <pass> test::facts_check` 夹住遍，`facts_check` 在重算前逐条读、重算后再逐条读，输出
+
+```
+FACTS after recompute valid=43 stale=0 gone=0
+FACTS verify equal=43 differ=0
+```
+
+`after recompute stale=0` 是新的、直接的断言：重算之后，任何消费者还能读到的 fact 都不是过期的；`verify equal/differ` 逐条与新鲜计算对比。`rewrite_inline` 是 42/42。此前只有 `verify`，它能发现"重算结果不一致"，但不能单独说明"重算后还有没有可读的过期项"；新行补上了这一条。
+
+## 7. 观察项（给作者，不在本任务修）：`declarationEpoch` 是全局单调的
+
+父任务要求把这一点记录成观察项，不改代码。
+
+现状：`OperatorTable::epoch_` 是一个全局 `atomic<uint64_t>`，每声明/替换一条算子语义（`declareResources`/`declareDefinition` 也落到 `declareSemantics`）就 +1（`src/core/operator_table.cpp:449-502`、`:526`、`:547`）；`KindSpec::readsDeclarations` 是"每个 kind 一个 bool"，印记里只有一个数。于是一次与这些图无关的模块加载（H100 的 `rules` → `math`）会让**所有**读声明的 fact 过期，包括 layer 的 matmul、total 的 sum。
+
+### 7.1 这是规范允许的"最保守读法"吗？
+
+是。§10.3 的保守规则把"算子声明的纪元变了"与"图修订号变了"并列，且明确说这是**缺省、每种事实都适用**；§10.4 只要求"过期读出为没有"。规范没有要求纪元按模块、按声明或按 fact 的依赖集来分，也没有要求"只有我读过的声明变了才失效"。所以全局单调纪元是**允许的、安全的**（绝不会把依据旧声明算出的 fact 当有效值返回），但它比"我读过的那条声明变了"更粗：它把"任何声明变了"当成"我依赖的声明变了"。这是保守规则的代价（多算），不是正确性问题。
+
+### 7.2 更细的粒度与代价
+
+1. **按 owner / 模块的纪元**：`OperatorTable` 维护 `epochOf(owner)`（owner 即 `KindSpec::owner` 那一层的模块名，或声明的 `uri` 前缀），fact 的印记记它读过的 `(owner, epoch)` 列表（通常 1–3 项）。内存：每条 fact 多 16–48 字节；失效正确性：owner 内仍保守（该 owner 任何声明变都失效），但加载 `math` 不再影响只读 `tensor` 声明的 fact；跨模块改名：fact 记的是 owner 的键，若声明从一个模块搬到另一个，旧键不再存在——必须把"键消失"当作变化（否则会静默复用），所以键要进印记，不能只记数字。这是"小步"方案。
+2. **按 fact 实际读到的声明集（声明锥）**：compute 钩子报告它读了哪些 `OperatorKey`（或 `OperId` + 版本），印记记这些键的声明记录散列（与 §10.3 的"依赖锥散列"同构）。内存：每条 fact 一个键向量（effects/resources 的遍历可能几十个键）或一个 64 位散列加一份重算用的键表；失效正确性：只有"compute 真的记录了每一次读"才精确，漏记就是静默复用，所以要么审计所有 compute，要么保留保守兜底；跨模块改名：键含模块/URI 和名字（以及语义版本），改名或搬家就是不同的键，旧键无法解析 → 失效（安全）；同键但语义内容变，散列变 → 失效。这是"精确"方案，代价是 compute 契约和内存都变大。
+3. **只在测试里避开窗口**（不推荐当作修复）：让 `rules` 在种子之前加载（例如先跑一次 `rules::simplify`，或在种子前解析整条流水线）。它能让本用例的数字回到 6/4/2，但真实消费者仍可能在算完 fact 后遇到懒加载的遍；而且这会把"纪元是全局的"这个观察藏起来，不是修。
+4. **建议**：如果重算成本成为问题，先做 (1)（owner 纪元 + owner 键进印记，改动小、仍保守）；需要精确失效时再做 (2)（与 `Dependency::Cone` 的精确规则对齐）。两者都需要先定义"声明身份"（模块 + 名字 + 版本）在改名/搬家下的语义；这属于规范层的决定，建议由作者定，而不是 H121 顺手改。
+
+## 8. 验证
+
+在 Linux 主机上，从本分支的 `a661a5143` 全新构建（`camel-remote.ps1`，`-Jobs 8`）：
+
+| 计划 | 结果 |
+|---|---|
+| `test/plans/feat/modules/graph_facts.plan.toml` | 8/8 通过（含 `rewrite_opt`、`rewrite_macro_simplify`、`rewrite_inline`） |
+| `test/plans/feat/opt`（全部子计划） | 710/710 |
+| `test/plans/feat/trans`（全部子计划） | 44/44 |
+| `test/plans/smoke` | 10/10 |
+| 四者同一次运行 | **772/772，0 失败**，`RUN_EXIT=0` |
+
+手工对照（同一构建）：
+
+```
+std::opt::inline        epoch 166 -> 166   layer valid=6   after recompute valid=42 stale=0   verify equal=42
+std::opt::fold          epoch 166 -> 166   layer valid=6   after recompute valid=30 stale=0
+std::opt::algebra       epoch 166 -> 265   layer valid=3   after recompute valid=32 stale=0
+std::macro std::opt     epoch 166 -> 265   layer valid=3   after recompute valid=43 stale=0   verify equal=43
+rules::simplify         epoch 265 -> 265   layer valid=6   （模块在种子前已加载）
+```
+
+## 9. 改动与提交
+
+- `src/passes/test/facts.cpp`、`src/passes/test/facts.h`：种子/检查的新诊断行（纪元、修订号、per-kind、重算后可读性）。
+- `test/plans/feat/modules/graph_facts.plan.toml`：三个用例改为性质断言；`rewrite_inline` 保留"纪元不变 + 未改图零过期"的对照。
+- `docs/technical/40_graph_facts.md` §4/§6：记录"加载模块会改声明纪元"这一失效原因，以及新的诊断行。
+- `docs/handover/reports/H121.md`、`docs/handover/README.cn.md`：本报告与看板行。
+
+代码提交 `a661a5143`（`test(facts): a rewrite case says which facts it invalidated, and why`）；报告与看板在随后一条提交里。没有改语义，没有推送 develop/main。
