@@ -1,0 +1,282 @@
+# H73 — 紧凑元素视图被当作 GC 对象存进帧槽：`std::nvm` 的 `gc.collfuzz` 失败
+
+分支 `handover/H73-gccollfuzz`，起点 `origin/develop` `60c39d4e`。H71 的慢层扫描证明
+`feat/mm` 的 `gc.collfuzz` 可稳定复现失败（72 次里 18 次，全部是 `std::nvm`，两种压力模式
+都有），而 CI 只跑快层，所以它挡住了下一个发布标签。
+
+结论：**真实缺陷，已修**。根因不在帧复用，也不在验证器：高阶算子在读"紧凑数组"的元素时
+拿到的是一个**视图**（`rtdata/view.h`）——一个位于线程局部视图存储、指向数组数据块的
+Struct/Tuple 头，**不是 GC 堆里的对象**；回调的参数绑定路径把它原样写进了帧的动态槽，而帧是
+每个安全点都要跟踪的 GC 根，于是收集器/验证器把视图当成托管对象去追。修复放在"存储即边界"
+这条既有约定上（`Tuple::set` / `Struct::set` / `Array::set` / H29 的 `materializeCallResult`
+都已经这样做）：`Frame::set` 在槽的静态类型是 Struct/Tuple 且值带视图标志时先物化。验证器、
+收集器、视图设计都没有改。
+
+## 1. 复现
+
+### 1.1 H71 的记录
+
+`test/plans/feat/mm/gc_collections.plan.toml` 的 `gc.collfuzz` 在快层跑
+`check --seeds 0:4 --ops 40 --size 16 --matrix gc`：4 个程序 × 18 种配置（nvm/fvm/prl ×
+tree/flat/tiny2x4 × 非移动/移动）= 72 次，18 次失败，全部是 `std::nvm`，都在
+`CAMEL_GC_STRESS_MODE=both` 下，三种表形状都有。失败信息（H71 原文与本次复现一致）：
+
+```
+error[RuntimeDiag::PassInternalError]: Pass 'std::nvm' failed with an internal error:
+GC heap verification failed before nodevm graph boundary with 1 issue(s):
+{"ok":true,"kind":"gc.verify"}
+- GC-traced slot points outside managed object regions
+  | path=FramePool.activeFrames -> __g_22__@0x...[1]:(int, int)
+  | slotType=(int, int) | target=0x7ffff72c67f0.
+```
+
+### 1.2 最小复现
+
+```bash
+python3 test/tools/collfuzz/collfuzz.py check --seeds 1:2 --ops 40 --size 16 --matrix gc --keep /tmp/cf1
+```
+
+修复前：18 次里 6 次失败（`nvm` × tree/flat/tiny2x4 × stress-stable/stress-moving），另外 12 次
+通过。生成的程序 `/tmp/cf1.cml` 打印完 `println(t28, t29, t30)`（输出 `true true true`）之后，
+在第 119 行
+
+```camel
+let t33 = items(v9)->map<(kv: (int, int)): int => kv.0 * 2 + kv.1>->reduce<(acc: int, x: int): int => acc + x, 0>
+```
+
+失败。手工跑法（`CAMEL_HOME` 指到 `out/latest`）：
+
+```bash
+CAMEL_GC_VERIFY=both CAMEL_GC_STRESS_ALLOC=3 CAMEL_GC_STRESS_SAFEPOINT=1 \
+CAMEL_GC_STRESS_MODE=both camel /tmp/cf1.cml std::gc::verify std::nvm     # 退出码 1
+```
+
+同一程序在修复后 72/72（见 §6）。注意：失败发生在 `t33` 的**第一次**回调调用所含的安全点上，
+不是程序末尾——那一行之前的输出（`println(t28, t29, t30)` → `true true true`）都正常打印。
+
+## 2. 触发条件（完整矩阵）
+
+修复前，在最小复现上逐个改环境变量（其余不变）：
+
+| 设置 | 结果 |
+|---|---|
+| 只有 `CAMEL_GC_VERIFY=both`（无压力） | **退出 0**：这个规模的程序一次收集都没有，缺陷静默 |
+| `STRESS_ALLOC=3` + `STRESS_SAFEPOINT=1` + `MODE=minor` / `major` / `both` | 退出 1 |
+| 只有 `STRESS_SAFEPOINT=1`（每次安全点收集） | 退出 1 |
+| 只有 `STRESS_ALLOC=3`（再多分配） | 退出 1 |
+| 非移动收集器（`CAMEL_GC=mark-sweep`） | 退出 1 |
+| 移动收集器（`CAMEL_GC=generational`） | 退出 1 |
+
+也就是说：**必要条件是"回调帧里放着视图时发生一次收集"，充分条件是任何强制收集的压力
+设置**；移动/非移动都触发，因为问题不在"移动后指针过期"，而在"槽里根本不是堆对象"。没有
+收集时缺陷完全静默（不移动的收集器不会去追它，移动的收集器会把这个 TLS 单元当成对象读它
+的"头部"——未定义行为）。
+
+后端维度（最小复现，同一组压力设置）：
+
+| 后端 | 修复前 | 说明 |
+|---|---|---|
+| `std::nvm` | 退出 1 | 每个图边界都轮询安全点，叶回调一进帧就赶上下一次收集 |
+| `std::fvm` | 退出 1 | 只在回调里有调用/分支跳转时才轮询；H71 的程序里回调是纯表达式，所以 H71 只看到 nvm |
+| `std::jit` | 退出 1 | JIT 编译的同一段字节码里同样有调用边界安全点 |
+| `std::prl` | 退出 0 | 并行后端在元素调用期间不轮询安全点，帧里的视图还没被追到就被释放了 |
+
+元素类型维度：`(int, int)` 与 `{x: int, y: int}` 都失败（分别是 Tuple 与 Struct 两个分支），
+不是 `(int, int)` 特有；只要是"纯数据聚合"的紧凑数组元素即可。
+
+## 3. 根因
+
+### 3.1 视图是什么
+
+`include/camel/core/rtdata/view.h:11-21` 写明：紧凑数组（`Array::isCompact()` 且
+`isAggregateElement()`）的元素可以按"视图"读——**不**为每个元素分配 Struct/Tuple，而是把
+"元素字节指针 + layout + 类型 + 步长"放在一个 `ViewData` 里，紧挨着一个只有头部、没有槽
+数组的 Struct/Tuple 壳：
+
+```cpp
+// view.cpp:39-54
+template <typename T, typename Data> struct ViewCell { ... };
+template <typename T, typename Data, size_t N> struct ViewRing { ... };
+constexpr size_t kViewRingSize = 128;
+// view.cpp:88-102
+Struct *reusedStructView(const Struct::ViewData &data) { static thread_local ViewCell<...> cell{}; ... }
+Tuple  *reusedTupleView (const Tuple::ViewData  &data) { static thread_local ViewCell<...> cell{}; ... }
+// view.cpp:103-118  pureViewOf: 槽宽的聚合（每个字段正好一个槽）复用同一个单元，
+//                   其余走 128 格的环
+```
+
+所以 `pureViewOf` 返回的 Struct/Tuple **位于线程局部存储**（`static thread_local` 且带非平凡
+初始化 → 主线程的动态 TLS 块），既不在任何 GC 空间里，也没有 `ObjectHeader`。`view.h:17` 的
+约定就是"A view is not a Camel value ... must not be stored. Store paths (Struct::set,
+Tuple::set) ... materialise it first"。
+
+### 3.2 视图进帧的路径
+
+1. `src/builtin/operators/higher_order.cpp:71` 与 `:93/:122/:144`：`map`/`filter`/`reduce`/
+   `foreach` 对紧凑聚合数组读元素：
+   ```cpp
+   const slot_t element = useViews ? arrayOf(norm)->getElementView(i, viewLayout)
+                                   : arrayOf(norm)->getSlot(i);
+   const slot_t value   = invokeFunction(ctx, functionOf(with), {}, std::span(&element, 1));
+   ```
+2. `invokeFunction` 走到后端的函数调用作用域：
+   - nvm：`NodeVMSchedPass::evalMarkedOperator_map_arr`（`nodevm.cpp:785`）→
+     `bindMarkedFunctionFrame`（`nodevm.cpp:78`）→ `frame->set(port->dataIndex, normArgs[i])`
+     （`nodevm.cpp:99`）；
+   - fvm：`FastVMSchedPass::evalMarkedOperator_map_arr`（`fastvm.cpp:653`）→
+     `populateMarkedCallFrame` → `calleeFrame->set(port->dataIndex, normArgs[i])`；
+   - 用户算子（`rules` 之类）里调用图时走 `native_call.cpp:32` 的同一个
+     `populateMarkedCallFrame`。
+3. `include/camel/core/context/frame.h` 的 `Frame::set` 把 `rtdata::toSlot(value)` **原样**写进
+   `dynamicArea_[idx]`。
+4. 帧是根：`FramePool::traceActiveFrames`（`frame.h:607`）在每次收集时对池顶以下的每个帧调用
+   `Frame::updateRefs`（`frame.h:282`），后者对每个 `isGCTraced(codes[i])` 的槽按 `Object*`
+   调用重定位器。验证器（`src/core/mm/gc_debug.cpp` 的 `validateRef`/`knownObjectPointer`）
+   在收集前后各查一遍，发现"被跟踪的槽指向托管对象区域之外"，于是有了 1.1 的信息。
+
+### 3.3 地址证据
+
+H73 期间临时加的诊断（已全部撤掉）打印出失败目标的内容：
+
+- 目标地址落在 `[0x7ffff72c4000, 0x7ffff72d0000)` 这段 48 KiB 的匿名 `rw-p` 映射里，位于
+  libstdc++ 与 libdl 之间；不属于 birth/haven/cache、elder、large、graph/perm/meta 任何空间。
+  这是主线程动态 TLS 块的位置——两个 `static thread_local` 视图单元就在其中。
+- `target + 8` 处的字是 **`0x80000002`**：`Tuple::size_`，高位置了 `Tuple::kViewFlag`，低位是
+  2 个字段——一个**两元素元组视图**，与槽类型 `(int, int)` 对上；`target + 0` 是 `libcamel.so`
+  里的 `vtable for Tuple`（`dladdr` 给出 `_ZTV5Tuple`）。
+- `target` 之前的 4 个字正是 `Tuple::ViewData`（`{bytes, layout, type, stride}`）：
+  `target - 8` 是 `stride = 0x10`（16 = 两个 8 字节槽的元素步长；若当成 `ObjectHeader` 读会误
+  以为"总长 16、YoungGen、age 0"），`target - 16` 是指向 perm 空间 `DataLayout` 的指针。
+- `(int, int)` 是槽宽聚合，走的是 `reusedTupleView`——**同一个线程局部单元**被每个元素复用，
+  所以"上一次读的元素"和"这一次的视图"是同一个地址。
+
+验证器没有错：帧槽的静态类型是 `(int, int)`，它就必须是一个可跟踪的托管对象；视图不是。
+
+## 4. 修复
+
+```cpp
+// include/camel/core/context/frame.h，Frame::set 的动态槽分支
+slot_t slot = rtdata::toSlot(value);
+// The frame is a GC root traced at every safepoint, so a slot of the dynamic area holds a
+// managed object, never a compact element view ... The store is the boundary, as it is in
+// Tuple::set and Struct::set; a higher-order operator hands an element of a compact array to
+// its callback through this path (H73).
+const type::TypeCode code = dynamicAreaType_->codes()[idx];
+if ((code == type::TypeCode::Struct || code == type::TypeCode::Tuple) &&
+    rtdata::isViewValue(slot, code)) {
+    slot = rtdata::materializeIfView(slot, dynamicAreaType_->typeAt(idx));
+}
+dynamicArea_[idx] = slot;
+```
+
+配套：
+
+- `include/camel/core/rtdata/aggregate.h:55` 新增内联的 `isViewValue(slot, code)`（读头部视图
+  标志，不调用、不分配）；`src/core/rtdata/view.cpp` 的 `isViewSlot` 改为转调它，视图标志的
+  判定只有一处。
+- 未改：验证器（这条检查是对的，保留）、收集器与重定位、视图/环的设计、`gc.collfuzz` 的
+  压力设置。
+
+代价（同一提交、同一主机上 A/B 测，用户 CPU 时间取 9 次最小值；当时负载 30–70，噪声约
+±10%）：200 万次尾递归（每轮约 9 次帧槽写入）`0.25s → 0.27s`，约 **每次标量槽写入多 3 个
+周期**（一次 `codes()[idx]` 载入 + 两次比较）；带聚合参数的循环 `0.40s → 0.46s`（聚合槽多两次
+载入；视图才走物化）。这与 H29 在 `reduce` 累加器上接受的代价同一量级。fvm 解释器热路径用的
+是 `fastFrameSetSlot`（裸写，见 `gotovm.cpp:199`），不经过 `Frame::set`，所以标量热路径不受
+影响。
+
+**另外一个方案被否掉了**：让 `Frame::updateRefs` 认识视图、跳过视图槽，从而不必物化（省掉
+每元素一次分配）。否决理由：(1) 它把"被跟踪的槽里一定是托管对象"这条不变量打破，验证器与
+调试打印、JIT、`equals`/`clone` 都得跟着认识视图；(2) 设计原则与 `view.h` 的约定是"存储即
+边界，存下来的值先物化"，帧槽是存下来的值（回调可能反复读它，生命周期是整次调用而不是那次
+读）。所以修复放在存储边界上，而不是在跟踪器里开例外。
+
+## 5. 排除的假设
+
+- **H71 已排除的"复用帧时动态区类型也要匹配"**：没有再动。帧复用不是原因——同一个布局、同一
+  个帧地址，第一次收集就失败，且失败目标是 TLS 单元而不是帧。
+- **"验证器太严/槽类型是错的"**：不是。槽里确实是视图，类型也确实是 `(int, int)`；换任何
+  检查都应当报。
+- **"移动后留下的陈旧指针"**：非移动收集器（mark-sweep）同样失败；而且目标地址在 TLS 里，
+  不是 from-space 的任何地址。
+- **H29 的 `reduce` 累加器**：那条路径已经物化（`aggregate.h:63 materializeCallResult`，fvm
+  在 `fastvm.cpp:777` 调用，nvm 在 `higher_order.cpp:127` 调用，并带
+  `CAMEL_ASSERT_NOT_VIEW`）。失败的槽是**回调参数**（`__g_22__` 的 1 号槽），不是累加器。
+- **"只有 nvm"**：fvm 与 jit 同样失败，只是 fvm 需要回调里出现调用/分支跳转才会轮询安全点；
+  prl 不失败是因为它在元素调用期间不轮询。这三点在 §2 都实测过。
+
+## 6. 测试
+
+新增用例 `test/cases/feat/mm/gc/gc_view_frame_store.cml`：三种形状——(1) `(int, int)` 元素交给
+叶回调（nvm 每个图边界都轮询）；(2) 同一个元素交给**有调用**的回调（fvm 的调用边界安全点）；
+(3) `{x: int, y: int}` 元素（Struct 分支）。期望输出 `24 24 10`。
+
+`test/plans/feat/mm/gc.plan.toml` 新增三条（nvm/fvm/jit），环境与复现一致
+（`CAMEL_GC_VERIFY=both`、`STRESS_ALLOC=3`、`STRESS_SAFEPOINT=1`、`STRESS_MODE=both`），
+每条约 17–40 ms，所以快层预算无压力。
+
+修复前/后对照（用 `~/camel-work/verify` 那棵树 14:55 的构建做"修复前"预言机，它的
+`frame.h` 与 `origin/develop` 相同）：
+
+| 用例 | 修复前 | 修复后 |
+|---|---|---|
+| `gc_view_frame_store.cml` + nvm | 退出 1，`slotType=(int, int)` | 退出 0，`24 24 10` |
+| 同上 + fvm | 退出 1 | 退出 0 |
+| 同上 + jit | 退出 1 | 退出 0 |
+| 同上 + prl | 退出 0 | 退出 0 |
+| 只有 Struct 元素（`/tmp/h73s.cml`）+ nvm | 退出 1，`slotType={ x: int, y: int }` | 退出 0，`10` |
+
+计划数字（都在 Linux 主机上、`-Jobs 8`、Release 构建）：
+
+| 目标 | 结果 |
+|---|---|
+| `test/plans/feat/mm`（含 `gc.collfuzz`） | 166 / 166 |
+| `gc_collections.plan.toml`（含 `gc.collfuzz`） | 73 / 73（`gc.collfuzz` 72/72 通过，1.7 s） |
+| `gc.plan.toml`（含新增 3 条） | 43 / 43 |
+| `smoke` + `feat/linear/loops` + `feat/compile` | 1052 / 1052 |
+| 整个快层（`test/plans`，`--tier fast`） | 4816 总数：4803 通过、13 跳过、**0 失败** |
+| H71 复现命令 `--seeds 1:2` | 18 / 18，PASS |
+| H71 的 `--seeds 0:4` | 72 / 72，PASS |
+
+## 7. poison 失败（H74 的范围）不是这个原因
+
+H71 同时记下 `poison:rules.*` 15 条失败（退出码 134，
+"a pointer to a Camel object was used after a safepoint moved the object"）。按任务要求只在
+本分支判断是否同因、不改它。结论：**不同因**。
+
+证据：
+
+1. 修复后（本分支已带修复）把 `feat/modules/rules` 整个计划放进 poison 扫描
+   （`CAMEL_GC_POISON=1`，`--tier all`）仍然 **22 / 47 失败**，信息与 H71 一致；修复没有改变
+   它们。
+2. 失败的程序**根本不产生视图**：例如
+   `test/cases/modules/rules/when_target.cml`（28 行）只有 `int`/`float` 的算术与规则重写，
+   没有任何紧凑聚合数组的高阶调用，视图单元一次都不会被用到。
+3. poison 的报告机制不同：它把 from-space 填成指向 2 MiB `PROT_NONE` 保留区的毒字
+   （`src/core/mm/poison.cpp`），代码把**被移动/回收过的旧地址**当对象读时踩进保留区，信号
+   处理器才打印这句话。视图单元的地址从来不在 from-space 里；本分支的缺陷在 poison 下**不**
+   报这句话（修复前用 `CAMEL_GC_POISON=1` 跑同一个视图用例：退出 0，答案正确——移动收集器
+   把 TLS 单元当成"非年轻对象"放过了），它需要的是 `CAMEL_GC_VERIFY`。
+4. 在修复后的构建上抓到的实际故障点（`gdb`，`when_target.cml` + `std::nvm` + poison）：
+
+   ```
+   SIGSEGV in camel::runtime::(anonymous)::visitGraphsInStaticSlot(...)
+   #1 RuntimeGraphDraftSession::draftRefs(GCGraph*) const
+   #2 RuntimeGraphDraftSession::collectCommitClosure() const
+   #3 RuntimeGraphDraftSession::commit(bool)
+   #4 RuntimeGraphDraftSession::commitChecked()
+   #5 rewriteKernel (stdlib/rewrite.cmo)
+   #6 NodeVMSchedPass::evalNativeOperator
+   ```
+
+   `src/runtime/draft_session.cpp:396` 遍历 `draft.staticSlots()[i]`，`:111-123` 直接解引用
+   这些槽里的 Function/Tuple/闭包。草稿会话保存的是从帧里**拷出来**的槽值，它们不在 GC 根集
+   里；这中间只要发生一次收集（poison 让它发生在每个安全点），这些裸指针就是旧的。
+   这是"跨安全点保留裸指针/漏根"的另一个缺陷，属于 H74。
+
+## 8. 遗留与提示
+
+- `std::prl` 在元素调用期间不轮询安全点（§2）。这不是 GC 缺陷，但意味着并行后端的回调帧在
+  那段时间里"不会被打断"——修复后即使将来在那里加安全点也是安全的，这一条留作观察。
+- `Frame::set` 的两参无类型版本（`Tuple::set(index, value)` 同理）不会物化。任何新的
+  "无类型槽存储"路径都要自己按槽类型做同样的判定；本次改动只覆盖帧的动态/静态区
+  （静态区走 `Tuple::set`，本来就会物化）。
