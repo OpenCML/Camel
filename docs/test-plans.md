@@ -297,6 +297,15 @@ with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
   carries an absolute path (for example the `srcfile` attribute of `std::rgir` / `std::argir`),
   otherwise the golden only matches the checkout it was recorded in.
 - `normalize_addresses`
+- `normalize_origins`
+  Replaces an origin id with `<ORIGIN>`, in the DOT form (`origin=63` in `std::gir`, `std::rgir`,
+  `std::agir` and `std::argir`) and in the JSON form (`"origin": "63"` in `std::jgir`). An origin
+  id is a compiler-internal identifier for a source position: parsing or compiling any other file
+  first renumbers it, so it is an identifier, not graph structure, and a golden that pins it fails
+  when an unrelated file changes. The source position the id stands for stays in the golden as
+  `span` and `srcfile` (the span fields in `jgir`), and `origin=<ORIGIN>` still asserts that a node
+  has an origin. Use it on a `text_exact` snapshot that prints origins; a `gir_dot_isomorphic`
+  comparison already ignores them.
 - `normalize_duration_seconds`
 
 Normalizers affect:

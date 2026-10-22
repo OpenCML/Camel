@@ -555,9 +555,17 @@ function applyNormalizers(text, names) {
         } else if (name === 'normalize_addresses') {
             output = output.replace(/0x[0-9a-fA-F]+/g, '<ADDR>')
         } else if (name === 'normalize_origins') {
-            // The source origin ids of a GIR dump depend on what was compiled before the dumped
-            // program (a pass module written in Camel takes some).
-            output = output.replace(/"origin": "[0-9]+"/g, '"origin": "<ORIGIN>"')
+            // An origin id is an opaque per-build identifier for a source position, not graph
+            // structure: it is renumbered whenever any other file is parsed or compiled before the
+            // dumped program (a pass module written in Camel takes some tokens, a declaration
+            // module adds some). The source position itself is printed next to it -- `span` and
+            // `srcfile` in the DOT dumps, the span fields in `std::jgir` -- so normalizing the id
+            // keeps the assertion on where a node comes from and drops the snapshot of the tree.
+            // `origin=<ORIGIN>` still asserts that a node has an origin (a node without one prints
+            // no attribute at all).
+            output = output
+                .replace(/"origin": "[0-9]+"/g, '"origin": "<ORIGIN>"')
+                .replace(/\borigin=[0-9]+/g, 'origin=<ORIGIN>')
         } else if (name === 'normalize_duration_seconds') {
             output = output.replace(/computed in [0-9]+\.[0-9]+ seconds/g, 'computed in <TIME> seconds')
         }
