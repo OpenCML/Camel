@@ -1,0 +1,188 @@
+# H74 报告
+
+分支：`handover/H74-poison-rules`（起点 `origin/develop` `60c39d4e`），最后提交：本文件所在的提交。
+
+任务：H80 的慢层扫描把 12 项 `poison:rules.*` 判为真实缺陷并转交（报告 `reports/H80.md` §2.4、§4）。
+本文是复现、裸指针、修复与投毒覆盖的记录。
+
+## 1 复现
+
+**投毒模式的语义**（`docs/technical/36_gc_handle_rules.md`、`src/core/mm/poison.cpp`、`gen.cpp:960`）：
+`CAMEL_GC_POISON=1` 时每个 safepoint 都触发一次 minor，把所有年轻对象搬走，并把搬空的旧地址整片填成
+毒字（`resetPoisoned`）；之后从旧地址读到的每个字段都是毒字，用毒字当指针就落在守卫页上，进程打印
+`[camel] GC poison: a pointer to a Camel object was used after a safepoint moved the object ...`
+并以 134 退出。
+
+**跑法**（只在本工作树、只在 Linux 主机上）：用只扫 `../modules/rules.plan.toml` 的临时代替计划
+（`envs = ["CAMEL_GC_POISON=1"]`，`timeout_scale = 20`）跑该计划的全部 47 份（`backends` 展开后的副本），
+即 H80 的 `poison:rules.*` 这些条目；H80 自己的跑法是
+`-Plan test/plans/feat/mm/gc*.plan.toml,test/plans/feat/mm/gc_poison_sweep.plan.toml -Tier all`。
+
+**结果**：修复前 **25 pass / 22 fail**，22 项全部 `exit 134`；不带 `CAMEL_GC_POISON` 时同一计划
+**47/47**、输出正确。22 项是：
+
+- H80 已列出的 12 项（12 项全部是修复前的红）：`float_permissions_gate_the_laws`、
+  `float_permissions_on_every_backend.fvm/.prl`、`when_condition_selects_matches`、
+  `when_on_every_backend.nvm/.fvm/.jit/.prl`、`when_in_saturation`、`analysis_reads_a_fact_in_when`、
+  `analysis_takes_the_parts_of_a_compound`、`extract_keeps_no_unreachable_pure_node`；
+- 当前分支上多出的 10 项（H65 `1106bd97`「typed element laws」的用例）：`typed_element_laws_fire`、
+  `typed_element_laws_prefer_their_type`、`typed_element_laws_prefer_their_type_f32`、
+  `typed_laws_keep_the_answer.nvm/.fvm/.prl`、`typed_library_also_covers_int64`、
+  `typed_exact_doubling_guard`、`typed_exact_doubling_boundary`、`typed_guards_hold`。
+
+**12 与 22 的差**：H80 的扫描基线 `819a22ef` 不含 H65（`git merge-base --is-ancestor 1106bd97 819a22ef`
+为假），所以它的 rules 计划里还没有这 10 个 typed 用例；本分支含 H65。根因是同一个，10 项是同一个
+裸指针在不同程序上的另一些触发点。
+
+**最小形状**（修复前都 `exit 134`，都是同一栈）：
+
+```text
+CAMEL_GC_POISON=1 camel test/cases/modules/rules/when_target.cml when_rules::apply std::nvm
+CAMEL_GC_POISON=1 camel test/cases/modules/rules/extract_boundary.cml extract_boundary::check std::nvm
+```
+
+两条分别走 `rewrite` 与 `saturate`；`when_target` 有 7 张图、4 条带条件的规则，`extract_boundary`
+只有 2 张图和 1 条条件规则，后者是最小的复现（约 50 ms）。
+
+## 2 裸指针：在哪、为什么危险、有几个
+
+### 2.1 位置
+
+`GraphDraft::staticSlots_`（`src/runtime/draft.cpp`）里的 `slot_t`，即**草稿的静态区**。崩溃的槽类型是
+`Function`（`visitGraphsInStaticSlot` 的 `TypeCode::Function` 分支，`src/runtime/draft_session.cpp:93`
+起，`visitor(func->graphId(), func->program())`）：对象已被搬走，旧地址整片是毒字，
+`function.program_` 读出毒字，`resolve` 在 `work_->graph(id)` 为空时调
+`adoptProgram(*home)`（`draft_session.cpp:771`）解引用它，SIGSEGV 的地址是毒字 + `0x18`（读
+`Program` 的一个成员）。定位方法：在 `poison.cpp` 的 SIGSEGV 处理里临时打印 pc 与中断栈上
+`dladdr` 出来的名字（只在本工作树，未提交），三个最小用例给出同一条栈：`draftRefs` ←
+`collectCommitClosure` ← `commit`；再从 `draftRefs` 往下的代码读出上面这条链。
+
+### 2.2 为什么危险
+
+- 草稿的静态区是**对象图之外**的裸槽：collector 不会走到它，除非有人把它注册成根。草稿活着期间
+  它必须一直可重定位（这正是 `RuntimeGraphDraftSession::traceStaticSlots` 的注释所写）。
+- `DraftWritings::EngineRootScope`（`src/runtime/writings.cpp:43-64`）只把**当前这一份**草稿的静态槽
+  （`GraphDraft::relocateStaticValues`）和规则常量（`traceRuleConstants`）注册成外部根，
+  `rewrite()` / `saturate()` 一返回就注销。
+- `rewriteKernel` / `saturateKernel`（`modules/rewrite/module.cpp`）用**一个**
+  `RuntimeGraphDraftSession` 依次改程序里的每一张图，每张图一份草稿，最后才 `commitChecked()`。
+- `when` 条件是 Camel 代码：它一跑就是 safepoint。于是改第二张图（第三张、……）时，条件里的 safepoint
+  会把第一张图草稿里的常量搬走，而没有根告诉 collector 那个槽也要更新。
+- commit 时才第一次回头读所有草稿：`collectCommitClosure` → `draftRefs` → `visitDraftGraphs` →
+  `visitGraphsInStaticSlot`，读到旧地址 → 投毒页 fault。
+
+普通构建里这条路径**不会崩**（对象不移动，旧地址仍可读、内容还在），所以只有投毒模式暴露；这也是
+为什么所有非条件规则的用例修复前就是绿的：没有条件就没有 safepoint，在 commit 之前槽一直有效。
+
+### 2.3 有几个
+
+**一类**指针、每份「已经改写、还没 commit」的草稿各一份（数量 = 程序里被改写的图数）。22 个用例是
+同一机制在不同程序上的触发点，不是 22 个不同的指针。没有发现第二类：
+
+- 规则的常量副本（`Rule::Pattern::value`）由 `traceRuleConstants` 覆盖，只在 `rewrite`/`saturate`
+  期间被读，之后不再读；
+- `checkKernel` 只改一张图、一份草稿，`writings.rewrite` 返回后到 commit 之间没有 safepoint，所以它
+  在修复前也能过（`when_passes_the_check` 修复前是绿的）。
+
+## 3 修复
+
+1. `include/camel/runtime/draft_session.h` / `src/runtime/draft_session.cpp`：新增
+   `RuntimeGraphDraftSession::RootScope`（RAII）。构造时用 `registerExternalRootTracer` 注册
+   `"runtime.draftRoots"`，对 session 里**每一个**打开的草稿调
+   `traceStaticSlots(relocate, nullptr, "Draft")`；析构时注销。同时给 `traceStaticSlots` 加
+   `ownerKind` 参数（默认 `"Txn"`，`modules/graph/txn.cpp:109` 的调用不变），让追踪报告能区分
+   Draft/Txn。
+2. `modules/rewrite/module.cpp:243`（`rewriteKernel`）与 `:282`（`saturateKernel`）：session 建好、
+   第一张图之前打开 scope，活到函数结束（commit 之后）。scope 声明在 session 之后，先于 session
+   析构，注册不会悬空。
+3. `docs/technical/36_gc_handle_rules.md` 第 4 节补一句：rewrite 引擎走的是「root 草稿里的东西」
+   这一条路，并点名 `RootScope`。
+4. `test/plans/feat/mm/gc.plan.toml` 新增两条回归（见 §6）。
+
+为什么不做成「session 构造时自动注册」：session 会被移动（`src/execute/macro/macro.cpp:92` 的 move
+assignment；`modules/graph/txn.cpp:81` 按值持有），构造时注册的 tracer 捕获 `this` 在移动后指向旧地址。
+作用域对象要求「开着的期间 session 不移动」，正好满足，且不改类的不变量。
+
+重复追踪无害：`relocate` 对方已 forward 的对象原样返回，所以 `EngineRootScope`（当前 draft）与
+`RootScope`（所有 draft）同时覆盖一份草稿没有问题；`relocateStaticSlot` 不记一次 mutation，rewrite
+期间追踪也不会把 revision 弄脏。
+
+## 4 设计上的选择
+
+- **由持有者开作用域，而不是让 `GraphDraft` 自注册**：草稿的根责任属于持有者（Txn 用 descriptor 的
+  trace，遍用作用域）。`GraphDraft` 还被宏求值器按「求值完、再开草稿」的约定使用（该文件第 214-216
+  行写明），自注册会让每个草稿在每次 collection 都被扫描（包括根本不需要的），也把一次全局注册藏进
+  构造函数里。
+- **放在 rewrite 的两个 kernel，而不是 `DraftWritings`**：`DraftWritings` 只知道当前 draft，不知道
+  session 里还有别的 draft。
+- **没有合并两处静态槽重定位**：`GraphDraft::relocateStaticValues`（一份草稿）与
+  `RuntimeGraphDraftSession::traceStaticSlots`（多份草稿 + 追踪信息）语义一致（都按
+  `staticSlotTypes`、都跳过槽 0），实现是两份。可以后续让前者复用后者，本次不动，避免把改动扩到
+  macro / txn 的路径上。
+- **`ownerKind` 做成参数而不是写死 "Draft"**：txn 的路径仍要报 `Txn`，且默认值让既有调用点零改动。
+
+## 5 用户可见的变化
+
+- 无。普通构建的输出不变（新增测试的期望输出取自现有行为）；只有投毒模式下的崩溃消失。
+- 投毒模式每次 safepoint 多遍历一次 session 的草稿静态槽（每张被改写的图一份、槽数等于图的常量数）。
+  这是扫描专用的模式：`poison:rules.library_saturate_all` 596 ms、`library_passes_the_check` 6.2 s
+  （投毒 + 检查本来就慢），普通构建同两项 263 ms / 143 ms。
+
+## 6 测试
+
+新增两条，都在 `test/plans/feat/mm/gc.plan.toml`，都要求 `exit 0`：
+
+| 测试 | 用例 / 遍 | 断言 | 修复前 |
+|---|---|---|---|
+| `gc.rewrite_condition_keeps_drafts_rooted` | `when_target.cml` + `when_rules::apply` + `std::nvm` | `7 10 5 12`、`10 2.5` | `exit 134` |
+| `gc.saturation_condition_keeps_drafts_rooted` | `extract_boundary.cml` + `extract_boundary::check` + `std::nvm` | `tabled nodes 33 unread constants 0` / `extracted nodes 3 unread constants 0` / `ay by` | `exit 134` |
+
+两条与 H80 的 `poison:rules.when_on_every_backend.nvm`、`poison:rules.extract_keeps_no_unreachable_pure_node`
+是同一条命令；第二条最小（2 张图、1 条条件规则、字符串常量，槽里是字符串对象），约 50 ms。第一条
+的图更多、条件更多，保住「一图一草稿」这个必要条件。
+
+本轮数字（Linux 主机，`-Jobs 8`，同一构建）：
+
+| 跑法 | 结果 |
+|---|---|
+| `CAMEL_GC_POISON=1` 的 rules 计划，全部 47 份 | 修复前 **25/47**，修复后 **47/47** |
+| `feat/modules/rules`（普通） | **54/54** |
+| `feat/opt`（普通，14 个计划） | **685/685** |
+| `smoke`（普通） | **10/10** |
+| 以上三个 + 投毒 rules 一轮合并 | **796/796，0 fail**（wall 17.0 s） |
+| `feat/mm/gc.plan.toml`（含两条新测试） | **42/42** |
+
+后端：新测试用 `std::nvm`（条件是 Camel 代码，与后端无关）；修复后 `poison:rules.when_on_every_backend.*`
+的 nvm/fvm/jit/prl 四份都绿。
+
+不归本任务、没有动：
+
+- `gc.collfuzz` 与 `gc_pacing.churn_prl`：H73（并行）；
+- `poison:shapes.fvm/jit/prl` 三项：`reference back end did not run: poison:shapes.nvm`，H80 §2.4 已
+  判为 sweep 展开的引用登记问题（同一次扫描里 `poison:shapes.nvm` 通过），不是产品缺陷。
+
+## 7 自查（README 第 2 节逐条）
+
+1. **按名字认东西**：没有新增名字判断。根机制用的是既有的 `registerExternalRootTracer`。
+2. **另造一套相似机制**：没有。`traceStaticSlots` 本来就有，只是补一个调用者与一个可选参数。
+3. **同一事实写在多处**：草稿静态槽的重定位确实有两份实现（见 §4），语义一致、都从
+   `staticSlotTypes` 出发；这次留下，写在「没做完的」里。
+4. **写死的上限与封闭的枚举**：没有。
+5. **临时裁定语义**：没有语义改动。
+6. **为了让测试通过而改**：没有改期望输出；新增测试的期望取自现有行为，并通过投毒红→绿验证。
+7. **兼容层与过渡方案**：没有。
+8. **只做一个后端**：条件是 Camel 代码，与后端无关；投毒计划本身在 nvm/fvm/jit/prl 上跑同一批用例，
+   修复后四份都绿。
+
+## 8 待决问题
+
+无。
+
+## 9 没做完的
+
+- **不变量还只是约定**。其它把 session 的草稿长期开着的路径（autodiff 的 pullback、tiles、inline
+  引擎、generic rewrite）今天不在草稿打开期间跑 Camel 代码，所以没有加 `RootScope`；但「草稿开着时
+  不许有未 root 的 safepoint」没有类型或调试检查兜底。后续可以在 debug 的 `safepoint` 里加一条检查
+  （session 注册自己的存在，safepoint 时若有未 root 的草稿就报错），代价是每次 safepoint 一次遍历。
+- 两处静态槽重定位（§4）可以合并，但会碰 macro 与 txn 的路径，留待后续。
+- `poison:shapes.*` 的 runner 伪失败未修（H80 已记录，不在本任务范围）。
