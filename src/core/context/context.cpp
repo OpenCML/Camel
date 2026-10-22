@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <format>
 #include <mutex>
 #include <tuple>
 #include <unordered_map>
@@ -179,6 +180,31 @@ inline bool fileExists(const std::filesystem::path &path) {
 /// stat on every component).
 std::string canonicalPathKey(const std::string &path) {
     return camel::utils::pathToUtf8(camel::utils::pathFromUtf8(path).lexically_normal());
+}
+
+/// True when `name` is a module name a file may be looked up under: a dotted list of non-empty
+/// components, `IDENT ('.' IDENT)*`. The grammar's relative spelling (`..lib`, one to three
+/// leading dots: docs/language/08_top_level_and_grammar.md) is resolved against the importing
+/// module's name before any lookup, so the lookup never receives a leading dot; if one reached it,
+/// reading the name as a path would turn that dot into a separator and search the filesystem root
+/// (`..lib` -> `//lib` -> `/lib`). An import names a module, not a path (design principles 10.2).
+bool isModuleName(const std::string &name) {
+    if (name.empty())
+        return false;
+    size_t start = 0;
+    for (;;) {
+        const size_t dot = name.find('.', start);
+        const size_t end = dot == std::string::npos ? name.size() : dot;
+        if (end == start)
+            return false; // an empty component: a leading dot, or two dots in a row
+        for (size_t i = start; i < end; ++i) {
+            if (name[i] == '/' || name[i] == '\\')
+                return false; // a path separator has no place in a name
+        }
+        if (dot == std::string::npos)
+            return true;
+        start = dot + 1;
+    }
 }
 
 std::optional<module_ptr_t> Context::getBuiltinModule(const std::string &name) {
@@ -398,14 +424,21 @@ Context::importModule(const std::string &rawModuleName, const module::Module *im
         return getBuiltinModule("").value_or(nullptr); // builtin module already loaded
     }
 
+    const std::string importerName = importer != nullptr ? importer->name() : std::string();
     CAMEL_LOG_INFO_S(
         "Context",
         "Importing module '{}' from current module '{}'.",
         rawModuleName,
-        importer != nullptr ? importer->name() : std::string());
+        importerName);
     lastCmoLoadError_.clear();
-    auto candidates =
-        getModuleNameCandidates(importer != nullptr ? importer->name() : "", rawModuleName);
+    std::string nameProblem;
+    auto candidates = getModuleNameCandidates(importerName, rawModuleName, nameProblem);
+    if (!nameProblem.empty()) {
+        // The spelling is a name the grammar accepts, but against this importer it names nothing.
+        // It is reported as not found and never becomes a path to search (H232).
+        throw DiagnosticBuilder::of(SemanticDiag::ModuleNotFound)
+            .commit(rawModuleName, nameProblem + "\n");
+    }
 
     // Design principles 10.2: a module's import looks in its own directory first, then the module
     // roots, then the standard library, and the entry program follows the same rule. The entry
@@ -549,19 +582,21 @@ module_ptr_t Context::acceptModule(
 }
 
 std::vector<std::string> Context::getModuleNameCandidates(
-    const std::string &currentModule, const std::string &rawImportName) {
+    const std::string &currentModule, const std::string &rawImportName, std::string &problem) {
+    problem.clear();
     std::vector<std::string> candidates;
 
     if (rawImportName.empty())
         return std::vector<std::string>({""});
 
     if (rawImportName[0] == '.') {
-        try {
-            std::string resolved = resolveRelativeModuleName(currentModule, rawImportName);
-            candidates.push_back(resolved);
-        } catch (...) {
-            // ignore invalid relative import
-        }
+        // A relative import spelling is resolved against the importing module's own name, not
+        // against its directory (design principles 10.2: an import names a module, not a path).
+        // When the prefix drops more components than the name has, the spelling names nothing:
+        // the import fails here, before any lookup, rather than becoming a path (H232).
+        std::string resolved = resolveRelativeModuleName(currentModule, rawImportName, problem);
+        if (problem.empty())
+            candidates.push_back(std::move(resolved));
     } else {
         candidates.push_back(rawImportName);
 
@@ -578,7 +613,8 @@ std::vector<std::string> Context::getModuleNameCandidates(
 }
 
 std::string Context::resolveRelativeModuleName(
-    const std::string &currentModule, const std::string &importName) {
+    const std::string &currentModule, const std::string &importName, std::string &problem) {
+    problem.clear();
 
     int level = 0;
     size_t i  = 0;
@@ -591,8 +627,19 @@ std::string Context::resolveRelativeModuleName(
     auto base             = split(currentModule, '.');
 
     if (static_cast<size_t>(level) > base.size()) {
-        throw DiagnosticBuilder::of(RuntimeDiag::RuntimeError)
-            .commit("Too many dots in relative import: " + importName);
+        // The dots count components of the importing module's name to drop; with fewer components
+        // than dots there is no name to form. This is not "not found in a directory": no import
+        // and no file lookup exists, so the diagnostic says exactly that.
+        problem = std::format(
+            "The relative module name '{}' drops {} name component(s), and the importing module's "
+            "name '{}' has {}: no module name can be formed, so no directory was searched. An "
+            "import names a module: the dots drop components of the importing module's name, they "
+            "do not walk the directory tree.",
+            importName,
+            level,
+            currentModule,
+            base.size());
+        return {};
     }
 
     base.resize(base.size() - level);
@@ -607,6 +654,11 @@ std::string Context::resolveRelativeModuleName(
 
 std::pair<std::string, bool>
 Context::findModuleUnder(const std::string &baseDir, const std::string &moduleName) {
+    // A lookup key is a resolved module name, never an import spelling or a path (H232): the
+    // relative prefix is resolved against the importing module's name before this, and a leading
+    // dot here would turn into a leading '/' below and search the filesystem root.
+    if (!isModuleName(moduleName))
+        return {"", false};
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
     fs::path relPath = camel::utils::pathFromUtf8(relativePath);
@@ -691,6 +743,10 @@ std::pair<std::string, bool> Context::getModulePathAndKind(const std::string &mo
 
 std::vector<std::string> Context::getModuleSearchDiagnostics(
     const std::string &moduleName, const std::string &importerDir) const {
+    // Only a resolved module name can name the files to report on; a relative spelling names
+    // nothing and is never turned into a path (H232).
+    if (!isModuleName(moduleName))
+        return {};
     std::string relativePath = moduleName;
     std::replace(relativePath.begin(), relativePath.end(), '.', '/');
     fs::path relPath = camel::utils::pathFromUtf8(relativePath);

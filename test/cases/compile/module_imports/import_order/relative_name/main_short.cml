@@ -1,0 +1,9 @@
+/// H232: imports `short`, whose `import ..lib` cannot be formed against its one-component name.
+module main_short
+
+import short
+
+func main(): int sync {
+    println(short::name())
+    return 0
+}

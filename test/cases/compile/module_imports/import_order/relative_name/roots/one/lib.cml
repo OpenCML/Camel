@@ -1,0 +1,5 @@
+module lib
+
+export func name(): string {
+    return "root1-lib"
+}
