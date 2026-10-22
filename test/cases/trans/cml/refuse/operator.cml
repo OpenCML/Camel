@@ -1,0 +1,7 @@
+// `map` is a module operator outside the printer's table: its source spelling is the operator
+// group's, not the node's, so the printer refuses it rather than inventing a call.
+func main(): int {
+    let xs = [1, 2, 3]
+    let ys = xs->map<(x: int) => x * 2>
+    return ys[0]
+}

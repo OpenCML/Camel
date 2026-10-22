@@ -5014,7 +5014,7 @@ std::cml cannot print {0}: {1}.
 **Help**
 
 ```text
-This version prints straight-line code only: arithmetic, comparisons, conversions, direct calls, `let` and `var` (handover H240, step S1). Control flow, regions, tags, named types and generic instances come in later steps.
+This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.
 ```
 
 *No example: no test small enough to show raises it.*
