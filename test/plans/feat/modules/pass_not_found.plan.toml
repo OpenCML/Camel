@@ -129,3 +129,19 @@ expect_output_contains = ["Pass <none_such::run> not found, available passes are
 expect_output_not_contains = ["PassNotProvidedByModule", "PassNotExportedByModule", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
+# `rewrite` gained a declaration module in H183 (`stdlib/rewrite.cml`), so it is now a Camel
+# module of the kind H130 answers with the short diagnostic. It registers no pass, and the
+# `provided` list names only the module's Camel pass functions, so it says "no passes". This is the
+# same intended change H179 recorded for `onnx`; no diagnostic code was added.
+
+[[tests]]
+name = "pass_absent_from_rewrite_declaration_module"
+desc = "rewrite::nosuchpass: `rewrite` is a declaration module and declares no pass function, so the diagnostic is the H130 module-specific one instead of the generic unknown-pass answer; the program does not run and the global pass list is not printed."
+kind = "negative"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["${case}", "rewrite::nosuchpass", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'rewrite' provides no pass 'nosuchpass'", "it provides no passes"]
+expect_output_not_contains = ["not found, available passes are", "2011"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000

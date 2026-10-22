@@ -1,0 +1,24 @@
+/**
+ * `rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array
+ * of the functions that make a rule, the two arities of `rewrite` and `saturate` both resolve, and
+ * `extract` and `check` answer `Program!` and `string` from `stdlib/rewrite.cml` (handover H183).
+ * Checked, not run: the engines need a compiled program, and the rules plans run them.
+ */
+module rewrite_declaration_import
+
+import { rewrite, saturate, extract, check } from rewrite
+import { Program, current } from graph
+
+export rule int_add_zero(x: int) { x + 0 => x }
+
+func main(): int sync {
+    let p: Program = current()
+    let rules = [int_add_zero]
+    let a: Program! = rewrite(p, rules)
+    let b: Program! = rewrite(p, rules, true)
+    let c: Program! = saturate(p, rules, 20)
+    let d: Program! = saturate(p, rules, 20, true)
+    let e: Program! = extract(p, 'size')
+    let report: string = check(rules, 10, 7)
+    return 0
+}

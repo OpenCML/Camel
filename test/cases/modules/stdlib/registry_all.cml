@@ -40,10 +40,11 @@ import pyplot
 // `python` is the same interpreter, now with the declarations of its six fixed operators; the
 // remaining five are computed signatures (handover H166).
 import python
-// `rewrite` is the native half of the rules library: its eight callable operators are fixed
-// enough to record (the three reserved groups the `rule`/`analysis` declarations compile to have
-// no callable name). Its only undeclared purity, `analysis`, is now declared effectful; before
-// that this probe never listed it, so no check saw it (handover H173).
+// `rewrite` is the native half of the rules library: its eight callable operators are declared
+// in `stdlib/rewrite.cml` (the three reserved groups the `rule`/`analysis` declarations compile
+// to have no callable name and stay exported by C++; handover H183). Its only undeclared purity,
+// `analysis`, is declared effectful; before that this probe never listed it, so no check saw it
+// (handover H173).
 import rewrite
 // `onnx` loads without the ONNX runtime: `inspect --ops` lists its two operators, and the
 // stdlib registry tests hold them to the declaration and the computed signature (handover H179).

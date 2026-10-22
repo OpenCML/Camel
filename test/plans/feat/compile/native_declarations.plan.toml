@@ -949,3 +949,58 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]
+# H183: `rewrite`'s eight callable operators are declarations now (`stdlib/rewrite.cml`), two
+# groups: the four engines that take a `Program` and the four rule readers that take a `Rule`.
+
+[[tests]]
+name = "native.rewrite_declaration_import"
+desc = "`rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array of the functions that make a rule, both arities of `rewrite` and `saturate` resolve, and `extract` and `check` answer `Program!` and `string` from `stdlib/rewrite.cml`. Checked, not run: the rules plans run the engines."
+kind = "behavior"
+case = "../../../cases/compile/native/rewrite_declaration_import.cml"
+args = ["check", "${case}"]
+expect_exit = 0
+
+[[tests]]
+name = "native.rewrite_wrong_arity"
+desc = "`rewrite:rewrite` is declared with two ordinary arguments at least: one is refused at the call, and the overloads the message lists are the declaration's own — `stdlib/rewrite.cml`, not the C++ module. Checked, not run."
+kind = "negative"
+case = "../../../cases/compile/native/rewrite_arity.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_arity.cml:15:20", "argument types: <> (Program)", "<rewrite:rewrite>: (p: Program, rules: () => Rule[]) => Program!", "<rewrite:rewrite>: (p: Program, rules: () => Rule[], strict: bool) => Program!"]
+
+[[tests]]
+name = "native.rewrite_wrong_type"
+desc = "The second parameter of `rewrite:extract` is the declaration's `string`: an `int` there is refused at the call, and the overload the message lists is the declaration's `(p: Program, cost: string) => Program!` — `stdlib/rewrite.cml`, not the C++ module. Checked, not run."
+kind = "negative"
+case = "../../../cases/compile/native/rewrite_type.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_type.cml:14:20", "argument types: <> (Program, int)", "<rewrite:extract>: (p: Program, cost: string) => Program!"]
+
+[[tests]]
+name = "native.rule_reader_declaration_import"
+desc = "The four rule readers are declarations in `stdlib/rewrite.cml` and take a `Rule`: the calls reach the C++ kernels and print the name, the direction, the rewrites they need and the constants they add."
+kind = "behavior"
+case = "../../../cases/compile/native/rule_reader_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "add_zero false 0 0\nswap true\n"
+
+[[tests]]
+name = "native.rule_reader_wrong_arity"
+desc = "`rewrite:needs` is declared with exactly one ordinary argument: none is refused at the call, and the overload the message lists is the declaration's `(r: Rule) => int` — `stdlib/rewrite.cml`, not the C++ module. Checked, not run."
+kind = "negative"
+case = "../../../cases/compile/native/rule_reader_arity.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_arity.cml:11:23", "argument types: <> ()", "<rewrite:needs>: (r: Rule) => int"]
+
+[[tests]]
+name = "native.rule_reader_wrong_type"
+desc = "The parameter of `rewrite:consts` is the declaration's `Rule`: an `int` there is refused at the call, and the overload the message lists is the declaration's `(r: Rule) => int` — `stdlib/rewrite.cml`, not the C++ module. Checked, not run."
+kind = "negative"
+case = "../../../cases/compile/native/rule_reader_type.cml"
+args = ["check", "${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rule_reader_type.cml:11:24", "argument types: <> (int)", "<rewrite:consts>: (r: Rule) => int"]

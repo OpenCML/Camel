@@ -216,10 +216,11 @@ const MODULES = [
         name: 'rewrite',
         title: '`rewrite`: rules applied to a program',
         kind: 'cpp',
-        // The signatures are fixed enough to write down; the module has no declaration module
-        // (`stdlib/rewrite.cml`) yet, so they are reference entries like `ckpt`'s (handover
-        // H173). The three reserved groups the `rule` and `analysis` declarations compile to are
-        // not listed: they have no callable Camel name.
+        // The declarations, not a signature file: they are what the module compiles (handover
+        // H183). The three reserved groups the `rule`/`analysis` declarations compile to have no
+        // callable Camel name, so they are neither declared nor listed.
+        source: 'rewrite.cml',
+        declaration: true,
     },
     {
         name: 'tiles',

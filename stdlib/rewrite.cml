@@ -1,19 +1,31 @@
 /**
- * Signatures of the `rewrite` module (C++ operators, modules/rewrite): rules applied to a
- * program.
+ * Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of the
+ * functions that make a rule to a `Program`, `check` tests rules on random programs, and the four
+ * readers report a `Rule`'s name, direction, required rewrites and added constants. The rules
+ * passed in are function values; a rule that stops a rewrite without changing the program is a
+ * fault, and `strict` restricts the float rules to the ones that hold bit for bit.
  *
- * The module also exports the reserved groups the language's own `rule` and `analysis`
- * declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:analysis`). They have
- * no callable Camel name, so they are not listed here and `inspect --ops` hides them from the
- * name comparison.
- *
- * The rules passed in are function values; a rule that stops a rewrite without changing the
- * program is a fault, and `strict` restricts the float rules to the ones that hold bit for bit.
- *
- * For reference only: these declarations are not compiled. They are checked against the
- * operators the module registers, and docs/stdlib-reference.md is generated from them
- * (scripts/stdlib-reference.mjs).
+ * The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
+ * `analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
+ * `rewrite:analysis`). They have no callable Camel name, so they are not declared here and
+ * `inspect --ops` hides them from the name comparison.
  */
+
+// The declarations of the eight callable operators of the C++ module `modules/rewrite` (design
+// principles 6.4; handover H19, step 10; H183). This file is the one source of their signatures;
+// the C++ side keeps the kernels, the executor and the purity.
+//
+// `Program` is the graph module's type, so the declarations import it; `Rule` is this module's own
+// type, exported by the C++ side, so it is written without an import.
+//
+// No signature of this module is computed from an argument: the two arities of `rewrite` and
+// `saturate` are written as two declarations each, and the other six names have one signature.
+// The module therefore needs no `stdlib/signatures/rewrite.cml`. The three reserved groups stay in
+// C++ because a declaration cannot name a group that has no Camel name.
+
+module rewrite
+
+import { Program } from graph
 
 /// Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
 /// @effect runs the rules' functions
