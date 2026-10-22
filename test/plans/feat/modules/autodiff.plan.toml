@@ -2433,3 +2433,51 @@ expect_diagnostic_column = 17
 expect_output_contains = ["is put into a Map or a Set 'Map<int, float>'", "Gradients do not flow through it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad.runtime.nvm"
+desc = "The adjoint of `t[a:b]` is the zero-padded scatter of the upstream gradient back into the parent at the same indices. Checked against adjoints written out by hand from the forward expression: a slice ([0,2,3,5,0,0]), a slice of a slice ([0,0,7,11,0,0]), a slice with step 2 ([2,0,3,0,5,0]), a reshape/transpose round trip whose gradient must equal the unreshaped sum's, and shape queries (dim, numel) that contribute exactly zero. The last number is the total distance to the zero tensor, so a rule that returned zeros for everything would print 0.0 and fail. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "slice_grad slice_d=0.0 nested_d=0.0 stepped_d=0.0 roundtrip_d=0.0 query_d=0.0 with_grad_d=0.0 value=33.0 nonzero=70.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad.macro.fvm"
+desc = "The same slice, nested, stepped and round-trip adjoints when std::macro builds the gradient ahead of time and the FastVM runs it: the rule is applied to the compiled graph, not only at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/slice_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "slice_grad slice_d=0.0 nested_d=0.0 stepped_d=0.0 roundtrip_d=0.0 query_d=0.0 with_grad_d=0.0 value=33.0 nonzero=70.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad_refuse_reshape_array"
+desc = "A float array is continuous (design principles 9.9). Reshaping one into a tensor has a known adjoint, but no operator here carries a tensor's gradient back into an array, so reshape refuses at the operator and names it instead of dropping the array's gradient; the refusal is located at the reshape call (line 22)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_reshape_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 22
+expect_output_contains = ["cannot differentiate operator 'tensor:reshape'", "no operator that carries a tensor's gradient back into an array"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "slice_grad_refuse_concat_array"
+desc = "concat's array part is continuous too: an array part that depends on the differentiated parameter is refused at the concat call (line 23), naming the operator, rather than being left out of the gradient. A constant array part is still skipped, not refused."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_concat_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 23
+expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

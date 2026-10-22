@@ -55,6 +55,13 @@ void accumulateMatmulGradients(VjpBuilder &builder, vjp_node_t lhs, vjp_node_t r
 /// dy masked by a relu output: dy * (y > 0).
 vjp_node_t reluGradient(VjpBuilder &builder, vjp_node_t output, vjp_node_t dy);
 
+/// Refuses the differentiation of `call`, with a diagnostic located at the operator and naming
+/// it. A rule calls it when its mathematics is known but this module has no operator with which
+/// to express the adjoint of this input: dropping the gradient instead would return a zero the
+/// caller never asked for. `reason` says which input and why (design principles 9.9: a
+/// continuous value that depends on a differentiated parameter is refused, never zeroed).
+[[noreturn]] void refuseVjp(const VjpCall &call, std::string_view reason);
+
 struct OpDef;
 /// Attaches `rule` to the definition named `name` in `defs` (throws if absent).
 void setVjp(std::vector<OpDef> &defs, std::string_view name, VjpFn rule);

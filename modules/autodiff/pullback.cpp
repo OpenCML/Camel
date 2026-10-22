@@ -880,6 +880,7 @@ class Backward final : public VjpBuilder {
     }
     std::optional<vjp_node_t> gradientOf(vjp_node_t node) const override;
     void accumulateGradient(vjp_node_t node, vjp_node_t gradient) override;
+    bool isActive(vjp_node_t node) const override;
 
   private:
     std::optional<gc_node_ref_t> primalOf(gc_node_ref_t target) const;
@@ -2374,6 +2375,11 @@ void Backward::accumulateGradient(vjp_node_t node, vjp_node_t gradient) {
     }
 }
 
+bool Backward::isActive(vjp_node_t node) const {
+    const auto primal = primalOf(node);
+    return primal && active_.contains(*primal);
+}
+
 void Backward::accumulate(gc_node_ref_t primal, gc_node_ref_t gradient) {
     if (!active_.contains(primal)) {
         return; // a constant, or a value no parameter flows into
@@ -3219,7 +3225,8 @@ void Backward::visitOper(gc_node_ref_t node) {
             .uri        = uri,
             .inputs     = inputs,
             .withInputs = withInputs,
-            .output     = ref(node)});
+            .output     = ref(node),
+            .origin     = forward_.nodeOrigin(node)});
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {
