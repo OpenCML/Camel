@@ -301,6 +301,15 @@ class Context : public std::enable_shared_from_this<Context> {
     /// object can nest them.
     void dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInArray = true) const;
 
+    /// Dump the diagnostics of those of `modules` that have errors, in the order given, with
+    /// the rendering and the `[imported by ...]` lines of `dumpAllModuleDiagnostics`. A caller
+    /// that already decided which modules its command is about (a program's import closure and
+    /// not a pass library, `tools/camel-cli/module_failures.h`) prints those and does not
+    /// re-implement the rendering; `dumpAllModuleDiagnostics` is this over every user module.
+    void dumpModuleDiagnostics(
+        std::ostream &os, bool json, bool wrapInArray,
+        const std::vector<module_ptr_t> &modules) const;
+
     /// Dump the Warn-level diagnostics of the user modules that compiled without an error (the
     /// modules with errors show theirs through dumpAllModuleDiagnostics). Text: one line per
     /// warning; JSON: one array, the same objects as the error array. Nothing is written when

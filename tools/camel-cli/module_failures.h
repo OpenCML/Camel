@@ -56,6 +56,11 @@ enum class ModuleScope {
 struct ModuleFailures {
     /// At least one user module *in the requested scope* carries an error.
     bool any = false;
+    /// The modules that carry an error *in the requested scope*, in the order
+    /// `Context::allUserModules()` returns them. This is what `reportModuleFailures` prints: a
+    /// module outside the scope is a pass library or another module the command loaded but did
+    /// not ask about, and its diagnostics would otherwise answer a question nobody asked (H210).
+    std::vector<camel::core::module::module_ptr_t> modules;
     /// The declaration modules (`math.cml` beside `math.cmo`) that carry an error, in the order
     /// `Context::allUserModules()` returns them.
     std::vector<const camel::core::module::UserDefinedModule *> declarationModules;
@@ -68,10 +73,11 @@ struct ModuleFailures {
 ModuleFailures findModuleFailures(
     const camel::core::context::context_ptr_t &ctx, ModuleScope scope);
 
-/// Dump the diagnostics of every module with an error (`Context::dumpAllModuleDiagnostics`).
-/// When `declarationFilesOut` is not null it also receives one line per failed declaration
-/// module, naming the module and its file (H172's `--ops` contract: the channel that carries the
-/// listing stays clean).
+/// Dump the diagnostics of the failed modules in `failures` (`Context::dumpModuleDiagnostics`),
+/// never of every module that happens to carry an error: `findModuleFailures` already decided
+/// which ones this command asked about. When `declarationFilesOut` is not null it also receives
+/// one line per failed declaration module, naming the module and its file (H172's `--ops`
+/// contract: the channel that carries the listing stays clean).
 void reportModuleFailures(
     const camel::core::context::context_ptr_t &ctx,
     const ModuleFailures &failures,
