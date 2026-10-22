@@ -2,7 +2,7 @@
  * `para:unordered_reduce` declares its callback with exactly two ordinary parameters,
  * `(acc: T, item: T) => T`: a third one is refused at the call. The old C++ resolver checked
  * only that the callback had at least two, so this is the boundary H202 narrowed by declaration
- * (handover H202, H215).
+ * (handover H202, H223).
  */
 module para_unordered_reduce_callback_arity
 

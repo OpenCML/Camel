@@ -124,7 +124,7 @@ H202 之前仍是 13 / 210 / 160 的中间态），四桶各是：
 - 结果与 H194 的预测相同：全部装载成功、调用落到声明上（`algo:sort` 是 `int[]`、`sqrt(9)` 是
   `float`、`sqrt(i32(9))` 是 `f32`、`shl(1, i32(2))` 是 `int`、`graph:constant` 是 `int?`、
   `graph:add_constant` 是 `Node`、`rand:choice` 是 `int`）。
-- **H215 复核（2026-10-22）**：迁移后没有声明名再被 `StaticFuncTypeResolver` 或
+- **H223 复核（2026-10-22）**：迁移后没有声明名再被 `StaticFuncTypeResolver` 或
   `DynamicFuncTypeResolver` 接住。还可达的 C++ resolver 只有声明写不出的内部名：
   `graph:__neq__`（8 个 handle 类型的静态规则，`!=` 由它回答）和 `rewrite:__rule`、
   `__rule_when`、`__analysis`（`rule`/`analysis` 编译出的调用）。`--check` 只证明声明名没有静态
