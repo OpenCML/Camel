@@ -43,9 +43,9 @@ func main(): int sync {
     save_npy(download(run_preferred_resident<fixed>(x)), folder + '/fixed_gpu.npy')
     save_npy(configured<[2, 0, 1]>(x), folder + '/config_cpu0.npy')
     save_npy(configured<[1, 2, 0]>(x), folder + '/config_cpu1.npy')
-    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>(x)), folder + '/config_gpu0.npy')
-    save_npy(download(run_preferred_resident<configured<[1, 2, 0]>(x)), folder + '/config_gpu1.npy')
-    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>(x)), folder + '/config_gpu2.npy')
+    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu0.npy')
+    save_npy(download(run_preferred_resident<configured<[1, 2, 0]>>(x)), folder + '/config_gpu1.npy')
+    save_npy(download(run_preferred_resident<configured<[2, 0, 1]>>(x)), folder + '/config_gpu2.npy')
     let a = zeros([2, 4, 3])
     // Bind each transform once, outside the wrapper: tiles::run specializes the wrapper's
     // graph, and a graph that still contains an autodiff operator cannot be lowered there.

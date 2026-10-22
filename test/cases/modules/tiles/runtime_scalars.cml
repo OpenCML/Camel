@@ -15,7 +15,7 @@ func main(): int sync {
     println(download(run_preferred_resident<arithmetic>((2.0, 7.0))) - arithmetic(2.0, 7.0))
     println(download(run_preferred_resident<identity>(1.0000000000000002)) - 1.0000000000000002)
     println(download(run_preferred_resident<identity>(1.0000000000000002)) - 1.0000000000000002)
-    println(download(run_preferred_resident<shifted<3.0>(4.0)) - 7.0)
+    println(download(run_preferred_resident<shifted<3.0>>(4.0)) - 7.0)
     println(sum(abs(download(run_preferred_resident<scale>((x, 1.25))) - x * 1.25)))
     println(inspect<scale>((x, 1.25)))
     println(benchmark<arithmetic>((5.0, 3.0)))
