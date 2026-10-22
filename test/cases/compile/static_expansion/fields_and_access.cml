@@ -3,7 +3,7 @@
  * instantiation (H51 step 3): one copy of the body per field, in declaration order, with no
  * graph node of its own. `t.[n]` picks the field whose key is a compile-time constant (H51
  * step 4). `n` is the field name (a tuple's decimal index) and `F` is the field type, visible
- * in `let v: F` and in `typeas F`.
+ * in `let v: F` and in a head declaration of `F`.
  */
 module fields_and_access
 

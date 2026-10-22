@@ -29,7 +29,7 @@ TypeVarType *TypeVarType::create(const std::string &name, bool binder) {
     return new (mem) TypeVarType(name, binder);
 }
 
-std::string TypeVarType::toString() const { return binder_ ? "typeas " + name_ : name_; }
+std::string TypeVarType::toString() const { return name_; }
 
 std::string TypeVarType::mangle() const { return "V" + std::to_string(name_.size()) + name_; }
 

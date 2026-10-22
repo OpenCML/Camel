@@ -2,7 +2,7 @@ module tree_operations
 import { tree_map, tree_unzip, tree_reduce } from tree
 import { tree_leaves } from ckpt
 import { tree_paths } from tree
-func twice(x: typeas T): T { return x + x }
+func twice::<T>(x: T): T { return x + x }
 func bump(x: int): int { return x + 1 }
 func bump(x: float): float { return x + 0.5 }
 func main(): int sync {

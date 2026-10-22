@@ -13,14 +13,15 @@
 namespace camel::parse::syntax {
 
 /// Whether the current token starts a rule declaration: the name `rule` followed by the name of
-/// the rule, then its parameters or its context (`rule mul_one(`, `rule fuse<f, g>(`). `n` is
-/// the offset of the `rule` token (1 after `export`).
+/// the rule, then its type parameters, its parameters or its context (`rule mul_one(`,
+/// `rule sub_self::<T>(`, `rule fuse<f, g>(`). `n` is the offset of the `rule` token (1 after
+/// `export`).
 bool ParserImpl::atRuleDecl(uint32_t n) const {
     if (peek(n) != TK::Identifier || peek(n + 1) != TK::Identifier) {
         return false;
     }
     const TK after = peek(n + 2);
-    if (after != TK::LParen && after != TK::Lt && after != TK::LAngle) {
+    if (after != TK::LParen && after != TK::ColonColon && after != TK::Lt && after != TK::LAngle) {
         return false;
     }
     // The text of the token at offset `n`.
@@ -34,8 +35,8 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
     return tree_.tokens_.text(i) == "rule";
 }
 
-/// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
-///            '}' (IDENTIFIER dataExpr)?
+/// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
+///            '{' ruleBody '}' (IDENTIFIER dataExpr)?
 /// The first IDENTIFIER is the name `rule`, the second the name `when`: the condition, checked
 /// after the pattern matched. The parameters are the pattern variables; `const x: T` only
 /// matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
@@ -50,6 +51,9 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
     eat(TK::KwExport);
     bump(); // `rule`
     parseIdentDef();
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         parseRuleContext();
     }

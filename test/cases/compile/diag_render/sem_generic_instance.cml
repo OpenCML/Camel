@@ -1,6 +1,6 @@
 module sem_generic_instance
 
-func twice(x: typeas T): T {
+func twice::<T>(x: T): T {
     let n = x + undefined_in_body
     return x + x
 }

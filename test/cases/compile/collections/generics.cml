@@ -1,30 +1,31 @@
 module main
 
-// Map and Set with `typeas`: the variables are bound from the arguments of the collection
-// type, and each set of types gets its own instance. `map_values` and `filter_keys` are the
-// compositions the library cannot ship yet (a generic function cannot be exported).
+// Map and Set with head type parameters: the variables are bound from the arguments of the
+// collection type, and each set of types gets its own instance. `map_values` and
+// `filter_keys` are the compositions the library cannot ship yet (a generic function cannot be
+// exported).
 
-func get_or_else(m: Map<typeas K, typeas V>, k: K, d: V): V {
+func get_or_else::<K, V>(m: Map<K, V>, k: K, d: V): V {
     return m[k] ?? d
 }
 
-func map_values(m: Map<typeas K, typeas V>, f: (v: V) => typeas U): Map<K, U> {
+func map_values::<K, V, U>(m: Map<K, V>, f: (v: V) => U): Map<K, U> {
     return items(m)->map<(kv: (K, V)): (K, U) => (kv.0, f(kv.1))> as Map<K, U>
 }
 
-func filter_keys(m: Map<typeas K, typeas V>, f: (k: K) => bool): Map<K, V> {
+func filter_keys::<K, V>(m: Map<K, V>, f: (k: K) => bool): Map<K, V> {
     return items(m)->filter<(kv: (K, V)): bool => f(kv.0)> as Map<K, V>
 }
 
-func to_set(xs: (typeas T)[]): Set<T> {
+func to_set::<T>(xs: T[]): Set<T> {
     return xs as Set<T>
 }
 
-func key_set(m: Map<typeas K, typeas V>): Set<K> {
+func key_set::<K, V>(m: Map<K, V>): Set<K> {
     return keys(m) as Set<K>
 }
 
-func singleton(k: typeas K, v: typeas V): Map<K, V> {
+func singleton::<K, V>(k: K, v: V): Map<K, V> {
     return ([] as Map<K, V>)->put<k, v>
 }
 

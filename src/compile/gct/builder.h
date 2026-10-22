@@ -115,12 +115,11 @@ class Builder {
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
     // Type variables and type functions (design principles 5.6; camel/core/type/typevar.h).
-    // `typeas T` binds a variable only among the parameters of a function declaration: the
-    // builder notes that the function type it is about to visit is such a signature
-    // (declSignature_, set from funcDeclPending_), allows binding while it visits the
-    // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
-    // declaration can be checked. A type function may only appear as the base of
-    // `Name<...>` (typeFunctionBase_).
+    // A generic declaration declares its type parameters at its head (`func first::<T>(...)`);
+    // the builder puts them in scope before it visits a parameter type, so one of them wins over
+    // a type of the same name (design principles 5.5), and records them in declaredTypeVars_ so
+    // the signature can be checked. A type function may only appear as the base of `Name<...>`
+    // (typeFunctionBase_).
     node_ptr_t makeExec(bool synced = false, bool operands = false);
 
     bool funcDeclPending_ = false;
@@ -130,24 +129,21 @@ class Builder {
     // builder can set the result type the body decides when none is written. Every other
     // function type is interned.
     bool openSignature_    = false;
-    bool typeasAllowed_    = false;
-    bool inDeclReturnType_ = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
 
-    // Type variables also bind automatically (design principles 5.5): a plain name that first
-    // appears in a parameter type of the declaration being visited (a `with` parameter's type
-    // included) and that no type name answers binds a type variable, the way `typeas T` does.
-    // `typeVarBindAllowed_` is true only while those parameter types are visited; a function
-    // type nested in one of them is part of that type, so it binds too. `typeVarOnlyInReturn_`
-    // is true while the declaration's return type is visited: a plain name no parameter bound
-    // is an error there. `typeVarUses_` counts the occurrences of every plain name written in
-    // the signature, and `autoBoundVars_` records the ones this rule bound and where, so one
-    // written only once can be warned about (a misspelt type name usually appears once).
-    bool typeVarBindAllowed_ = false;
-    bool typeVarOnlyInReturn_ = false;
-    std::shared_ptr<std::unordered_map<std::string, size_t>> typeVarUses_;
-    std::shared_ptr<std::unordered_map<std::string, camel::source::origin_id_t>> autoBoundVars_;
+    // The head names written somewhere in the signature being visited. A name declared at the
+    // head but written nowhere is 'unused'; one written only where type construction drops it
+    // (the argument of a type function that does not use it) is 'not bindable'.
+    std::unordered_set<std::string> writtenHeadVars_;
+    bool signatureVisit_ = false;
+
+    // The type variables the declaration being visited declares at its head, and the occurrence
+    // in scope for each (inserted into the signature's type scope). A use of one in the signature
+    // is a binding occurrence: any argument position of that type can fill it, and the first one
+    // that does fixes it (camel/core/type/typevar.h, bindTypeVars). The map is per declaration so
+    // that a name of an enclosing declaration stays a plain use.
+    std::shared_ptr<std::unordered_map<std::string, Type *>> headTypeVarTypes_;
 
     // The lambda parameters whose type was left out, collected while the signature of the
     // function being defined is visited and given to its FUNC node (Tree::setUnwrittenParams).

@@ -141,23 +141,6 @@
 #                   ^ meta.brackets.camel punctuation.section.brackets.begin.camel
 #                    ^ meta.brackets.camel punctuation.section.brackets.end.camel
 >
->func or_else(x: (typeas T)?, d: T): T {
-#^^^^ meta.function.definition.camel storage.type.function.camel
-#     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
-#            ^ meta.parens.camel punctuation.section.parens.begin.camel
-#             ^ meta.parens.camel variable.parameter.camel
-#              ^ meta.parens.camel punctuation.separator.colon.camel
-#                ^ meta.parens.camel meta.parens.camel punctuation.section.parens.begin.camel
-#                 ^^^^^^ meta.parens.camel meta.parens.camel keyword.operator.expression.typeas.camel
-#                        ^ meta.parens.camel meta.parens.camel entity.name.type.parameter.camel
-#                         ^ meta.parens.camel meta.parens.camel punctuation.section.parens.end.camel
-#                          ^ meta.parens.camel keyword.operator.type.camel
-#                           ^ meta.parens.camel punctuation.separator.comma.camel
-#                             ^ meta.parens.camel variable.parameter.camel
-#                              ^ meta.parens.camel punctuation.separator.colon.camel
-#                                 ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                  ^ punctuation.separator.colon.camel
-#                                      ^ meta.block.camel punctuation.section.block.begin.camel
 >    return x ?? d
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 #             ^^ meta.block.camel keyword.operator.fallback.camel

@@ -55,7 +55,7 @@ await withServer(async (ls) => {
     checkEq(names.filter((n) => n === 'add').length, 1, 'overloads are one entry')
     const item = (label) => items.find((i) => i.label === label)
     checkEq(item('total').detail, 'int', 'a variable carries its type')
-    checkEq(item('identity').detail, 'func identity(x: typeas T): T', 'a function its header')
+    checkEq(item('identity').detail, 'func identity::<T>(x: T): T', 'a function its header')
     checkEq(item('identity').documentation, 'Returns its argument.', 'and its documentation')
     check(item('norm2').detail.includes('(p: Point) => int'),
         'an imported function its signature', item('norm2'))
@@ -237,7 +237,8 @@ ${body}
         ['13:5-13:8', '17:5-17:8', '34:14-34:17', '35:15-35:18'],
         'overloads share their name: all are renamed, with the calls of each')
     we = await ls.request('textDocument/rename', { ...pos('): T', 1, 3), newName: 'U' })
-    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['8:24-8:25', '8:28-8:29'], 'a type variable')
+    checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['8:16-8:17', '8:22-8:23', '8:26-8:27'],
+        'a type parameter: its head declaration and its uses')
     we = await ls.request('textDocument/rename', { ...pos('type Pair', 1, 5), newName: 'Entry' })
     checkEq(we.changes[uri].map((e) => fmtRange(e.range)), ['5:5-5:9', '36:14-36:18'], 'a type alias')
 
@@ -258,7 +259,7 @@ ${body}
     // A generic function that is never called: the compiler has not seen the uses in it.
     m = edit(`module main
 
-func unused(x: typeas T): T {
+func unused::<T>(x: T): T {
     let /*y*/y = x
     return y
 }

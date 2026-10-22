@@ -38,4 +38,4 @@ module nn
 /// @fails fault `RuntimeError` when the directory cannot be created or a leaf cannot be written
 /// @example-fragment the example builds its tensors with `new` from the `tensor` module, which this page does not import
 /// @example save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')
-export func save_params(params: typeas P, dir: string): void
+export func save_params::<P>(params: P, dir: string): void

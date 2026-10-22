@@ -14,7 +14,7 @@ func positions(t: (int, string)): (int, int) {
     return ( static for (j) in indices t => j )
 }
 
-func count(t: typeas T): int {
+func count::<T>(t: T): int {
     return static loop acc = 0 for (j) in indices t do acc + 1
 }
 

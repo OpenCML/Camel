@@ -1,7 +1,7 @@
 /** `#leaf` selects every type, so the case after it can never be selected. */
 module match_type_unreachable
 
-func after_leaf(t: typeas T): int {
+func after_leaf::<T>(t: T): int {
     return match type T {
         case #leaf => 1
         case struct => 2

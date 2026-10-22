@@ -1,11 +1,11 @@
 module ns
 
 namespace util {
-    func id(x: typeas T): T {
+    func id::<T>(x: T): T {
         return x
     }
     type Pair<T> = (T, T)
-    func dup(x: typeas T): util::Pair<T> {
+    func dup::<T>(x: T): util::Pair<T> {
         return (util::id(x), x)
     }
 }

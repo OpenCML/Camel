@@ -4,35 +4,35 @@
 module stdlike
 
 // head: (xs: T[]) => T
-func my_head(xs: (typeas T)[]): T {
+func my_head::<T>(xs: T[]): T {
     return xs[0]
 }
 
 // tail: (xs: T[]) => T[]
-func my_tail(xs: (typeas T)[]): T[] {
+func my_tail::<T>(xs: T[]): T[] {
     return xs->slice<1, len(xs)>
 }
 
 // zip of two arrays: (xs: T[], ys: U[]) => (T, U)[]
-func zip_from(xs: (typeas T)[], ys: (typeas U)[], i: int): (T, U)[] {
+func zip_from::<T, U>(xs: T[], ys: U[], i: int): (T, U)[] {
     let empty: (T, U)[] = []
     return if i >= len(xs) || i >= len(ys)
         then empty
         else concat([(xs[i], ys[i])], zip_from(xs, ys, i + 1))
 }
 
-func my_zip(xs: (typeas T)[], ys: (typeas U)[]): (T, U)[] {
+func my_zip::<T, U>(xs: T[], ys: U[]): (T, U)[] {
     return zip_from(xs, ys, 0)
 }
 
 // map / filter / reduce
-with <f: (x: typeas T) => typeas U>
-func my_map(xs: T[]): U[] {
+with <f: (x: T) => U>
+func my_map::<T, U>(xs: T[]): U[] {
     return xs->map<f>
 }
 
-with <f: (acc: typeas U, x: typeas T) => U, init: U>
-func my_reduce(xs: T[]): U {
+with <f: (acc: U, x: T) => U, init: U>
+func my_reduce::<U, T>(xs: T[]): U {
     return xs->reduce<f, init>
 }
 
