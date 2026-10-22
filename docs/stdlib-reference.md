@@ -1148,7 +1148,10 @@ of nested structs and tuples, and everything else is a leaf.
 `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
 `static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
 expanded at each call into ordinary access and fill nodes, with no function of its own per
-leaf type.
+leaf type. Each exported function recurses itself. `paths_at` and `unzip_at` stay because
+they carry a value the exported signature does not have (the path built so far, the component
+of the leaf tuple): a default argument would fold the first one into `tree_paths` (the
+language has none yet), and the second is not a hand-off but the walk of one component.
 
 `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
 leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
