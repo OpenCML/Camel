@@ -792,3 +792,4 @@ H15 的待决问题：分支臂里的 `return` 取臂位置的期望类型；数
 - （2026-10-22，负责人同意）规则语言第二版：不加关键字，扩展 `rule`/`when`/`analysis` 能写的东西——类型泛型与值语义、算子变量、多根模式、条件与右边调用 Camel 函数、代价函数、结合交换匹配、控制区域上的模式。详见 design/rewrite/v2.cn.md。
 - （2026-10-22，负责人）`analysis` 改为 `fact`：`fact 名字(v: T): 事实类型 { case … ; join ; meet ; widen ; narrow }`，输入显式，`case` 沿用 `match`，`join`/`meet`/`widen`/`narrow` 用抽象解释的术语（`meet` 合并等价写法、`join` 合并分支）。详见 design/rewrite/v2.cn.md 7.5。
 - （2026-10-22，负责人提议）`fact` 的结构与 `rule … { } when …` 对齐：`fact 名字(v: T): 类型 match v { case … } join f meet g widen h narrow k`，尾随子句接一个二元函数。取代上一条的块内子句写法。
+- （2026-10-22，负责人授权决策者主导）规则语言第二版补三项：规则是 `Rule` 值、规则集是数组、调度是普通函数与组合子（8.5）；没有函数体的 `fact` 是由规则推导的关系表，规则右边可以断言事实（8.6，与"无体 func 是原生算子"同一约定）；`explain` 与 `why_not`（8.7）。
