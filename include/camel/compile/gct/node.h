@@ -33,7 +33,8 @@
  *                       (empty for `indices`); flag A: the generator is `indices`
  *     SLOOP             payload: the names of the state, then the name of the walked entry and
  *                       the name of its type (empty for `indices`); flag A: `indices`
- *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`
+ *     SCOMP             tag: 0 for `{ ... }`, 1 for `( ... )`, 2 for `T { ... }` (then child 1
+ *                       is the type node naming `T`)
  *     VARI, WAIT, ANNO, SACC  nothing
  *
  * Ownership and lifetime. Nodes are made by a Tree (tree.h) in its arena and are never freed
@@ -345,10 +346,22 @@ class Node {
         check(NodeKind::SCOMP);
         return tag_ == 0;
     }
+    /// SCOMP: the declared shape of `T { ... }`: a struct or tuple comprehension written with
+    /// the shape it fills. The rounds then take both the field names and the kind from `T`.
+    bool comprehensionSameShape() const {
+        check(NodeKind::SCOMP);
+        return tag_ == 2;
+    }
     /// SCOMP: the `static for` whose rounds fill the result (child 0).
     node_ptr_t comprehensionGenerator() const {
         check(NodeKind::SCOMP);
         return at(0);
+    }
+    /// SCOMP: the type node naming the shape of `T { ... }` (child 1, same-shape only).
+    node_ptr_t comprehensionShapeType() const {
+        check(NodeKind::SCOMP);
+        ASSERT(comprehensionSameShape(), "Only a same-shape comprehension has a shape type.");
+        return at(1);
     }
 
     /// SLOOP: the number of names of the state (k).

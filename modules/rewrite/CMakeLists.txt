@@ -5,7 +5,6 @@ add_camel_module(
     analysis.cpp
     module.cpp
     rule.cpp
-    run.cpp
   EXTRA_LIBS
     graph_cmo
 )

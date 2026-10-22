@@ -4,14 +4,14 @@
  * so a count that differs from the design (a rule applied twice where a schedule applies it once,
  * a stage reordered) is visible, not only the final program.
  *
- * A combinator answers `(program, rewrites, rounds, visited)!`. A pass opens it with `!!` and a
- * fallback whose cost is impossible (-1): if a schedule ever failed, the printed line would not
- * match the plan's expected line, so the test fails rather than hiding the error.
+ * A combinator answers a `Run`: `rewrites`, `rounds`, `visited` are read as fields, and the
+ * program is `.result`. The pass hands the run to `reported`, which prints the three counts and
+ * answers the program; `?->` carries an error on unchanged.
  */
 module schedulers
 
 import { Program } from graph
-import { Rule, rule_name, rewrite } from rewrite
+import { Rule, Run, rule_name, rewrite } from rewrite
 import {
     int_add_zero, int_mul_zero, seq, first, repeat, until, alternate,
 } from rules
@@ -45,6 +45,12 @@ func choose(which: int): Rule[] {
     return if which == 0 then [chosen] else [chosen, int_add_zero]
 }
 
+/// Prints what the schedule cost, and answers the program it produced.
+func reported(label: string, r: Run<Program>): Program sync {
+    println(label, r.rewrites, r.rounds, r.visited)
+    return r.result
+}
+
 export func values(p: Program): Program! sync {
     let firstSet: Rule[] = choose(0)
     let secondSet: Rule[] = choose(1)
@@ -54,63 +60,53 @@ export func values(p: Program): Program! sync {
 }
 
 export func seq_order(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = seq(p, [[bump_one], [bump_ten]], false) !! (p, -1, -1, -1)
-    println('seq_order', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->seq<[[bump_one], [bump_ten]], false>
+        ?-> sync (r: Run<Program>) => reported('seq_order', r)
 }
 
 export func seq_reverse(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = seq(p, [[bump_ten], [bump_one]], false) !! (p, -1, -1, -1)
-    println('seq_reverse', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->seq<[[bump_ten], [bump_one]], false>
+        ?-> sync (r: Run<Program>) => reported('seq_reverse', r)
 }
 
 export func first_zero(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = first(p, [[int_add_zero], [bump_one]], false) !! (p, -1, -1, -1)
-    println('first_zero', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->first<[[int_add_zero], [bump_one]], false>
+        ?-> sync (r: Run<Program>) => reported('first_zero', r)
 }
 
 export func first_bump(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = first(p, [[bump_one], [int_add_zero]], false) !! (p, -1, -1, -1)
-    println('first_bump', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->first<[[bump_one], [int_add_zero]], false>
+        ?-> sync (r: Run<Program>) => reported('first_bump', r)
 }
 
 export func repeat_five(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = repeat(p, [step], 5, false) !! (p, -1, -1, -1)
-    println('repeat_five', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->repeat<[step], 5, false>
+        ?-> sync (r: Run<Program>) => reported('repeat_five', r)
 }
 
 export func repeat_two(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = repeat(p, [step], 2, false) !! (p, -1, -1, -1)
-    println('repeat_two', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->repeat<[step], 2, false>
+        ?-> sync (r: Run<Program>) => reported('repeat_two', r)
 }
 
 export func alternate_three(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = alternate(p, [step], [step_ten], 3, false) !! (p, -1, -1, -1)
-    println('alternate_three', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->alternate<[step], [step_ten], 3, false>
+        ?-> sync (r: Run<Program>) => reported('alternate_three', r)
 }
 
 export func until_now(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = until(p, [step], always, 10, false) !! (p, -1, -1, -1)
-    println('until_now', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->until<[step], always, 10, false>
+        ?-> sync (r: Run<Program>) => reported('until_now', r)
 }
 
 export func until_budget(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = until(p, [step], never, 2, false) !! (p, -1, -1, -1)
-    println('until_budget', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->until<[step], never, 2, false>
+        ?-> sync (r: Run<Program>) => reported('until_budget', r)
 }
 
 export func nothing(p: Program): Program! sync {
-    let stage: (Program, int, int, int) = seq(p, [[int_mul_zero]], false) !! (p, -1, -1, -1)
-    println('nothing', stage.1, stage.2, stage.3)
-    return stage.0
+    return p->seq<[[int_mul_zero]], false>
+        ?-> sync (r: Run<Program>) => reported('nothing', r)
 }
 
 export func refuse(p: Program): Program! {

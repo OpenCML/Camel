@@ -1346,6 +1346,13 @@ class Builder {
     completeLambdaSignature(const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected);
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
+    /**
+     * The type a type expression denotes once its `typeof` placeholders are resolved: the
+     * expression is built where the type is used, and the placeholder is replaced by its value
+     * type. Any other type is bound by `boundType`. A placeholder nested inside a larger type
+     * is refused: `typeof` stands for a whole type.
+     */
+    Type *resolveTypeNode(Type *type, const GCT::node_ptr_t &at);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
     /// A name: its value node, or the build-time tuple a rest parameter names (no node).
     std::any visitDRefNode(const GCT::node_ptr_t &gct);

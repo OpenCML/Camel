@@ -698,4 +698,69 @@ const adds = body.filter((line) => line.includes('label=":op/add_l"'))
 assert(adds.length === 3, `the expansion lost an addition: ${adds.length}`)
 }
 """
+
+[[tests]]
+name = "same_shape_comprehension"
+desc = "`T { ... }` fills a struct with its field names, a tuple with its positions, and one `case struct | tuple` branch covers both: the values are the names of the fields."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/same_shape_comprehension.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "{ x: x, y: y }\n(0, 1)\n{ a: a, b: b }\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_in_fields_and_match_type"
+desc = "`typeof e` gives the type of the value `e`; `fields typeof(pair_of(t))` walks the two fields and `match type typeof(pair_of(t))` selects the tuple case, inside a generic function whose pair type has no name."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_type.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "2\npair\n2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_void_is_refused"
+desc = "The operand of `typeof` must have a value: a call that returns void has no type to take."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_void.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeOfNotAValue"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_inside_type_is_refused"
+desc = "`typeof` stands for a whole type: `typeof(1)[]` is refused where the array type is expanded."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_inside_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeOfNotWholeType"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_mismatch"
+desc = "The shape being filled and the type the generator walks must be the same type."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/shape_mismatch.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "same_shape_comprehension_needs_a_shape"
+desc = "A leaf has no fields: `N { ... }`, with `N = int`, is refused before the generator is expanded."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/shape_not_composite.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::SameShapeComprehensionNotComposite"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
