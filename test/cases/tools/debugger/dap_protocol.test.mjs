@@ -108,6 +108,13 @@ await runTest(async (t) => {
             'after the diagnostic of the compiler, with its position',
             dap.outputOf('stdout'),
         )
+        // A program that never started did not end: the reason a request is refused says so.
+        const late = await dap.request('stackTrace', { threadId: 1 })
+        check(
+            !late.success && /did not start/.test(late.message) && !/has ended/.test(late.message),
+            'a request after a launch that never started the program says that, not that it ended',
+            late,
+        )
         await dap.stop()
     }
 
@@ -119,6 +126,14 @@ await runTest(async (t) => {
         const exited = await dap.waitEvent('exited')
         checkEq(exited?.body?.exitCode, 1, 'an unknown pass ends the session with exit code 1')
         check(/std::no_such_pass/.test(dap.outputOf('stderr') + dap.outputOf('stdout')), 'and names the pass', dap.outputOf('stdout'))
+        check(await dap.waitEvent('terminated'), 'and terminated')
+        // This program did run, and then failed: that is the end the error names.
+        const late = await dap.request('stackTrace', { threadId: 1 })
+        check(
+            !late.success && /has ended/.test(late.message),
+            'a request after a pipeline that failed says the program ended',
+            late,
+        )
         await dap.stop()
     }
 
