@@ -8,7 +8,7 @@
 
 ## 1. 模块表
 
-"默认可见"：全局内建不需导入；其余都要 `import`。模块查找：入口文件同目录 .cml、`-I` 目录、`CAMEL_PACKAGES`、随安装的 `out/latest/stdlib/`（.cml 与 .cmo 都放在这里）。
+"默认可见"：全局内建不需导入；其余都要 `import`。模块查找：模块自己的目录（入口程序就是入口文件同目录）的 `.cml`、`-I` 目录、`CAMEL_PACKAGES`、随安装的 `out/latest/stdlib/`（`.cml` 与 `.cmo` 都放在这里）；入口文件同目录不是别的模块的搜索根（设计原则 10.2，H220）。
 "使用者"栏的数字是 test/ 与 examples/ 等目录下 import 该模块的 .cml 文件数（测试/示例）。
 
 ### 1.1 内建（src/builtin/modules，C++ 编进核心）

@@ -651,7 +651,7 @@ void_ptr_t Builder::visitImport(const AST::node_ptr_t &ast) {
     // remembered so that its uses are not reported as well.
     module_ptr_t mod;
     try {
-        mod = context_->importModule(path, module_->name());
+        mod = context_->importModule(path, module_.get());
     } catch (Diagnostic &d) {
         if (refs.empty()) {
             wholeImportFailed_ = true;
