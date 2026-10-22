@@ -173,17 +173,15 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
   `handover/h260-tensor-storage`, which deletes the normalisation table), delete it and add an
   f64 column to the table if f64 then works.  Until then bf16 overflow and the fp64 error of the
   step cannot be measured in Camel; its f32 thresholds match PyTorch's f32 thresholds exactly.
-- **The blocks are a tuple, not `Block[]`.**  H17's native array syntax exists
-  (`f32[b, t, d]`, and shaped `Tensor<f32, [8, 16, 64]>`), but a loop over an array of tensors
-  that depends on a differentiated parameter is refused: the reverse pass would have to scatter
-  each round's gradient into the array, and an array element currently has no zero tangent.  The
-  refusal is explicit: `autodiff: a 'loop' iterates over an array that depends on a
-  differentiated parameter ... Capture the array and read its elements by index`.  The model
-  therefore stores `blocks: (Block, Block)` and the forward pass walks it with
-  `static loop ... for (i, B) in fields (Block, Block)`.  There is no `block0`/`block1` field and
-  no copy of the block body; adding a third block is a type and data change, not a new forward
-  branch.  When H17 can differentiate `Block[]`, the tuple becomes an array and the loop
-  becomes the plain `loop h = x for b in m.blocks`.
+- **The two blocks are now one `Block[]`, and the forward pass is the plain
+  `loop h = x for b in m.blocks`.**  An array's tangent is the array of its elements' tangents
+  (design principles 9.9), so a `for` over an array that depends on a differentiated parameter
+  differentiates: the loop's reverse pass scatters each round's gradient into the array at that
+  round's index, and the optimizer and `save_params` walk the array element by element.  An array
+  has no tangent only when its **element type** has none (string, a function, `Map`), and that
+  refusal happens at the `loop`, naming the array type, the element type and where the array is
+  written.  The checkpoint file names are unchanged (`blocks.0.wq.npy`, `blocks.1.wq.npy`):
+  array elements are named by index, so an existing checkpoint still loads.
 - **`f32[b, t, d]` does not reach the tensor operators.**  `exp`, `@`, `sum` and the rest take
   `Tensor`, not the core array type; `let x: f32[2, 3] = randn(...)` is a `DeclaredTypeMismatch`.
   The example writes shaped `Tensor<f32, [8, 16, 64]>` (and named aliases `TokenStates`,
@@ -197,4 +195,4 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
 - **No fused QKV/attention operator and no `rules::accuracy`/`rules::fusion` pipeline**, so the
   expert form is not produced from the naive source.  `softmax`, `log_softmax` and the fused
   cross-entropy exist as operators and are used by the PyTorch expert and the accuracy probes.
-- **`explain` (the rule-rewrite chain) is not available yet**, so this directory cannot show it.
+- **`explain` (the rule-rewrite chain) is available now** (`run`/`explain` in `stdlib/rewrite.cml`), but this directory does not show it yet.

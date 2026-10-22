@@ -306,11 +306,22 @@ wrapping of function-typed parameters described above is not implemented.)
 everything the function's own result waited for, so effects after the last
 value the gradient reads still happen.
 
-Arrays are not differentiable values today (`:op/idx_arr` and `map` have no
-derivative rule), so a lambda passed to `map` is refused for that reason.
+Arrays are differentiable values: an array's tangent is the array of its elements'
+tangents (design principles 9.9). A read by index scatters the element's gradient
+back at that index (`:op/idx_arr`'s rule, `:tangent/scatter_add_arr`); a `loop`
+that iterates an array carries the array's gradient beside the state gradients
+and scatters each round's element gradient at that round's index into it, taking
+the length of the zero array from the value the forward loop walked; and the
+structural zero and sum of tangents fall back to the tangent space the derivative
+registry holds for the element type (a tensor's `tensor:zeros_like` and
+`tensor:add`). An array whose element type has no tangent has none either, and a
+loop that iterates or captures one while it depends on the differentiated
+parameter is refused with a located diagnostic. A lambda passed to `map` is still
+refused: `map` has no derivative rule.
 Tests: `grad_closure.*`, `grad_function_values*.*` (accepted structures,
 against finite differences), `grad_function_value_*.*` (each refusal with its
-position), `grad_effects_kept.*`.
+position), `grad_effects_kept.*`, `loop_grad_iterable*.*`,
+`loop_grad_refuse_no_element_tangent.*`.
 
 ### 4.4a Variables
 

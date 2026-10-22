@@ -1,0 +1,51 @@
+/**
+ * Verifies that a `for` over an array of differentiable records differentiates, and that its
+ * gradient is bit for bit the one of the same model written as a tuple and walked by `static
+ * loop`: an array's tangent is the array of its elements' tangents, and the reverse pass scatters
+ * each round's element gradient back into it (design principles 9.9). The elements own tensors,
+ * so this also exercises a tangent type that belongs to a module (`tensor:add`, `tensor:zeros_like`)
+ * through the zero tangent and the sum of two array tangents.
+ */
+module loop_grad_iterable_tensors
+
+import { Tensor, abs, reshape, sum } from tensor
+import { grad } from autodiff
+
+type Block = { w: Tensor<f32, [4, 4]>, b: Tensor<f32, [4]> }
+
+with <blocks: Block[]>
+func loss_array(x: Tensor<f32, [4, 4]>): float {
+    let h = loop h = x for block in blocks do h @ block.w + block.b
+    return sum(h)
+}
+
+with <blocks: (Block, Block)>
+func loss_tuple(x: Tensor<f32, [4, 4]>): float {
+    let h = static loop h = x
+        for (i, B) in fields (Block, Block) do h @ blocks.[i].w + blocks.[i].b
+    return sum(h)
+}
+
+func main(): int sync {
+    let w0 = reshape(
+        [0.5, 0.1, 0.0, 0.2, 0.0, 0.3, -0.1, 0.0, 0.2, 0.0, 0.4, 0.1, 0.0, 0.1, 0.0, 0.25],
+        [4, 4])
+    let w1 = reshape(
+        [0.1, 0.0, 0.2, 0.0, 0.3, 0.1, 0.0, -0.1, 0.0, 0.2, 0.1, 0.0, 0.1, 0.0, 0.0, 0.3],
+        [4, 4])
+    let b0: Tensor<f32, [4]> = reshape([0.01, -0.02, 0.03, 0.0], [4])
+    let b1: Tensor<f32, [4]> = reshape([0.0, 0.04, -0.01, 0.02], [4])
+    let x: Tensor<f32, [4, 4]> = reshape(
+        [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        [4, 4])
+    let blocks = [{ w: w0, b: b0 }, { w: w1, b: b1 }]
+    let pair = ({ w: w0, b: b0 }, { w: w1, b: b1 })
+    let ga = grad(loss_array)<blocks>(x)
+    let gt = grad(loss_tuple)<pair>(x)
+    let loss_gap = loss_array<blocks>(x) - loss_tuple<pair>(x)
+    let grad_gap = sum(abs(ga[0].w - gt.0.w)) + sum(abs(ga[1].w - gt.1.w)) +
+        sum(abs(ga[0].b - gt.0.b)) + sum(abs(ga[1].b - gt.1.b))
+    'loop_grad_iterable_tensors loss_gap={:.9f} grad_gap={:.9f} d0w={:.9f} d0b={:.9f}'
+        ->format<loss_gap, grad_gap, sum(ga[0].w), sum(ga[0].b)>->println
+    return 0
+}

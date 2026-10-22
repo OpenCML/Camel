@@ -151,14 +151,12 @@ float64 中计算、存回 float32），与 `nn.adam` 一致；优化器不是�
   `handover/h260-tensor-storage`，删掉归一化表）删掉它；若 f64 可用，再给表加一列。在那之前，
   bf16 溢出与训练步的 fp64 误差无法在 Camel 里测量；它的 f32 阈值与 PyTorch 的 f32 阈值逐项
   一致。
-- **块是元组，不是 `Block[]`。** H17 的原生数组语法已经可用（`f32[b, t, d]` 与带形状的
-  `Tensor<f32, [8, 16, 64]>`），但"循环迭代一个依赖可微参数的张量数组"仍被拒绝：反向要把每轮
-  的梯度散射回数组，而数组元素目前没有零切向量。拒绝是显式的：`autodiff: a 'loop' iterates
-  over an array that depends on a differentiated parameter ... Capture the array and read its
-  elements by index`。模型因此存 `blocks: (Block, Block)`，前向用
-  `static loop ... for (i, B) in fields (Block, Block)`。没有 `block0`/`block1` 字段，也没有
-  复制块体；加第三个块是类型与数据改动，不是新的前向分支。H17 能对 `Block[]` 求导后，元组
-  换成数组，静态循环换成普通的 `loop h = x for b in m.blocks`。
+- **两层块现在是一个 `Block[]`，前向是普通的 `loop h = x for b in m.blocks`。** 数组的切向量
+  就是元素切向量组成的数组，所以 `for` 能对依赖可微参数的数组求导：反向把每一轮的梯度按该轮
+  的下标散射回数组，优化器与 `save_params` 逐元素走过它。只有当**元素类型本身没有切向量**
+  （string、函数、`Map`）时数组才没有切向量，拒绝发生在 `loop` 上，并指名数组类型、元素类型
+  与数组的写入位置。检查点文件名不变（`blocks.0.wq.npy`、`blocks.1.wq.npy`），数组元素按
+  下标命名，旧检查点仍可加载。
 - **`f32[b, t, d]` 还进不了张量算子。** `exp`、`@`、`sum` 等接收的是 `Tensor`，不是核心数组
   类型；`let x: f32[2, 3] = randn(...)` 是 `DeclaredTypeMismatch`。示例用带形状的
   `Tensor<f32, [8, 16, 64]>`（以及 `TokenStates`、`HeadStates` 等别名），每个形状都写全；
@@ -170,4 +168,5 @@ float64 中计算、存回 float32），与 `nn.adam` 一致；优化器不是�
 - **没有融合 QKV/注意力算子，也没有 `rules::accuracy`/`rules::fusion` 流水线**，所以专家
   写法不是从朴素源码自动得到的。`softmax`、`log_softmax` 与融合交叉熵作为普通算子已经存在，
   PyTorch 专家实现与精度探针会用到它们。
-- **`explain`（规则改写链）还不可用**，所以本目录还不能展示它。
+- **`explain`（规则改写链）已经可用**（`stdlib/rewrite.cml` 的 `run`/`explain`），但本目录
+  还没有展示它。
