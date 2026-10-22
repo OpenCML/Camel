@@ -1,0 +1,113 @@
+id = "modules.pass_not_found"
+order = 378
+tier = "fast"
+tags = ["feat", "modules", "pass", "diagnostics", "module"]
+desc = "A pass named through a module that is there: a module that provides no such pass names itself and the passes it does provide, and a module that cannot be loaded keeps the loader's reason"
+
+# H130: a pass named through a module that is there.
+#
+# `camel file.cml module::pass` used to answer "Pass <module::pass> not found, available passes
+# are: ..." whenever the module could not be used: it does not export the name, it provides no such
+# pass, or its file was found and the loader refused it. Every reason the module had was thrown
+# away, so a module that is there and a module that is not were indistinguishable.
+#
+# Three answers now, told apart by what the lookup finds:
+#   * the module file is there and cannot be loaded: InvalidPassParameter, with what the loader
+#     said (this used to be "pass not found" too);
+#   * the module compiles but provides no such pass: the short diagnostic that names the module and
+#     the passes it does provide, and nothing else (no list of every pass of the compiler);
+#   * the module is not there at all: the pipeline's unknown-pass answer, with the list, unchanged.
+
+[[tests]]
+name = "pass_not_exported_by_its_module"
+desc = "declares_not_exported::run: the module declares `run` without `export`; the diagnostic says so, names the pass it does provide, and prints no global pass list."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "declares_not_exported::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotExportedByModule", "Module 'declares_not_exported' declares 'run' but does not export it", "it provides the pass 'other'"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The module that declares `run` without exporting it is a working pass module: `other` runs.
+
+[[tests]]
+name = "the_other_pass_of_that_module_runs"
+desc = "declares_not_exported::other runs the program and prints 42: the module is usable, the name `run` is what is wrong."
+kind = "behavior"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "declares_not_exported::other", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+timeout_ms = 10000
+
+# A module that compiles and provides a pass, but not the one named.
+
+[[tests]]
+name = "pass_absent_from_a_module_that_compiles"
+desc = "no_pass::run: the module provides `ok` and no `run`; the diagnostic names the module and the pass it provides, and prints no global pass list."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "no_pass::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'no_pass' provides no pass 'run'", "it provides the pass 'ok'"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "the_pass_that_module_provides_runs"
+desc = "no_pass::ok runs the program and prints 42: the module loads fine, so the message above is about the name."
+kind = "behavior"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "no_pass::ok", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "42\n"
+timeout_ms = 10000
+
+# H124 probe C: `std::opt` asks for `rules::simplify`, and this directory's rules.cml (found before
+# the standard library's) provides no pass at all. The message must say that, and it must name the
+# module the name resolved to.
+
+[[tests]]
+name = "pass_absent_from_a_shadowing_module"
+desc = "std::opt needs rules::simplify; the local rules.cml provides no pass: the diagnostic names `rules`, says it provides none, and does not fall back to the global pass list."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/shadowed_rules/main.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["PassNotProvidedByModule", "Module 'rules' provides no pass 'simplify'", "it provides no passes"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A module whose file is there but that the loader refuses: the pass specification reports the
+# loader's reason. Before H130 this was "Pass <unloadable::run> not found" with the reason lost.
+
+[[tests]]
+name = "pass_module_that_cannot_be_loaded"
+desc = "unloadable::run: the file is found and refused by the loader, so the diagnostic is InvalidPassParameter and keeps the loader's reason."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "unloadable::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["InvalidPassParameter", "its library 'unloadable' cannot be loaded", "Found .cmo but load failed"]
+expect_output_not_contains = ["not found, available passes are", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The third answer is unchanged: a name with no module behind it is the pipeline's unknown pass,
+# followed by the list of passes that exist.
+
+[[tests]]
+name = "a_name_with_no_module_stays_unknown"
+desc = "none_such::run: no module file anywhere, so the pipeline still lists the passes it knows."
+kind = "negative"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["${case}", "none_such::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["Pass <none_such::run> not found, available passes are:", "Available aliases are:"]
+expect_output_not_contains = ["PassNotProvidedByModule", "PassNotExportedByModule", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000

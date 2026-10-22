@@ -70,12 +70,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "unknown_camel_pass"
-desc = "A module that exports no such function leaves the pass unknown."
+desc = "A module that exports no such function names itself and the passes it does provide (H130), instead of leaving the pass unknown."
 kind = "negative"
 case = "../../../cases/modules/graph_pass/tiny.cml"
 args = ["${case}", "identity::nosuch", "std::nvm"]
 expect_exit = 1
-expect_output_contains = ["UnrecognizedGraphPass"]
+expect_output_contains = ["PassNotProvidedByModule", "Module 'identity' provides no pass 'nosuch'", "it provides the passes 'keep', 'refuse', 'report'"]
+expect_output_not_contains = ["not found, available passes are"]
 timeout_ms = 10000
 
 # A pass written in Camel has a top level of its own (task H37): the pass is the entry of a

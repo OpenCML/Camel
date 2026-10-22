@@ -1,0 +1,14 @@
+// A module that compiles and provides one pass, `ok`, but no `run`: naming `no_pass::run` must
+// say so, and what the module does provide, instead of "pass not found" over the whole pipeline
+// (H130).
+module no_pass
+
+import { Program } from graph
+
+export func ok(p: Program): Program! {
+    return p
+}
+
+export func twice(n: int): int {
+    return n * 2
+}
