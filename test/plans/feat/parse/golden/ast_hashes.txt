@@ -313,6 +313,7 @@ db0a1846a370e360 ok exemplars/08_structured_control_flow/program.cml
 bab3430dab252a98 ok showcase/c2-mlp-mnist/train.cml
 99a1aa3bfd6baad7 ok showcase/c6-vae/train.cml
 4fff9407e41ec7ae ok showcase/d5-tree-lstm/train.cml
+e0b5e276c052e5ee ok stdlib/algo.cml
 cd2479e5aabb7c48 ok stdlib/array.cml
 f8a426c8e96936da ok stdlib/bytes.cml
 81d50d711442ef6b ok stdlib/io.cml
@@ -324,7 +325,7 @@ a8be31ddfa495bf4 ok stdlib/re.cml
 dc425a313698f684 ok stdlib/rules.cml
 1c94db09ee5e88dd ok stdlib/str.cml
 c9fa0db70dcb0226 ok stdlib/tensor_definitions.cml
-68408c82f05916d6 ok stdlib/signatures/algo.cml
+6451a1f63fbca717 ok stdlib/signatures/algo.cml
 985ec586154e41fa ok stdlib/signatures/ckpt.cml
 351e27ad8c07e562 ok stdlib/signatures/env.cml
 e46e8d8f1dd87a8f ok stdlib/signatures/fs.cml
@@ -794,6 +795,9 @@ aa6e3c1cddb68984 ok test/cases/compile/namespace_rules/p29_using_block.cml
 43a07054734e599a ok test/cases/compile/namespace_rules/p33_reopen_using.cml
 08e77648cbe27041 ok test/cases/compile/namespace_rules/p34_ambiguous_qualified.cml
 25e1cd83d3e6642d ok test/cases/compile/namespace_rules/p35_ambiguous_type.cml
+7d4b7d2cbe566da2 ok test/cases/compile/native/algo_arity.cml
+c3909d2fbc7c1025 ok test/cases/compile/native/algo_declaration_import.cml
+47020d9a3e7b57ce ok test/cases/compile/native/algo_type.cml
 f2039bef9588c755 ok test/cases/compile/native/bytes_arity.cml
 a431cbcdbd666629 ok test/cases/compile/native/bytes_tag.cml
 a08398ab5e4ba3b7 ok test/cases/compile/native/bytes_type.cml

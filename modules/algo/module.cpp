@@ -13,7 +13,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Jul. 29, 2025
- * Updated: Oct. 13, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -35,6 +35,11 @@ using namespace camel::core::module;
 using namespace camel::core::type;
 
 namespace {
+// The signatures that take their result type from the element type of their array argument stay
+// in the C++ resolver (design principles 6.4; handover H94, ruling 1, H135): `sort` and its
+// three demonstrators, `merge_sorted_arrays`, `flatten` and `unique` (the last two in
+// sequence.cpp). `argsort` has no such computation and is the six declarations of
+// `algo:argsort` in `stdlib/algo.cml`.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups = {
         OperatorGroup::create(
