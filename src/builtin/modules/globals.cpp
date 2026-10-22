@@ -14,6 +14,7 @@
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/typevar.h"
 
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
@@ -33,6 +34,53 @@ namespace {
 /// (a type variable, a union, a reference). This is what a parameter typed `any` used to accept.
 bool isConcreteValueType(Type *type) {
     return type != nullptr && type->code() != TypeCode::Void && !isAuxiliary(type->code());
+}
+
+/// A type parameter of a signature: `binder` at its first occurrence, a use at every later one.
+Type *typeParameter(const char *name, bool binder) {
+    return TypeVarType::create(name, binder);
+}
+
+/// The signature of `map`'s rule as a type: `<f: (item: T) => U> (collect: T[]) => U[]`. The
+/// rule reports that declaration as spelling for reports; this is the same declaration with its
+/// variables as types, so a lambda written in the `with` position takes its parameter type from
+/// it before the call is resolved (design principles 5.9).
+FunctionType *mapRuleSignature() {
+    FunctionTypeFactory callback;
+    callback.addNormArg("item", typeParameter("T", true), false);
+    callback.setExitType(typeParameter("U", true));
+    FunctionTypeFactory signature;
+    signature.addWithArg("f", callback.buildOpen(), false);
+    signature.addNormArg("collect", ArrayType::create(typeParameter("T", false)), false);
+    signature.setExitType(ArrayType::create(typeParameter("U", false)));
+    return signature.buildOpen();
+}
+
+/// The signature of `reduce`'s rule as a type:
+/// `<f: (acc: U, item: T) => U, initial: U> (collect: T[]) => U`.
+FunctionType *reduceRuleSignature() {
+    FunctionTypeFactory callback;
+    callback.addNormArg("acc", typeParameter("U", true), false);
+    callback.addNormArg("item", typeParameter("T", true), false);
+    callback.setExitType(typeParameter("U", false));
+    FunctionTypeFactory signature;
+    signature.addWithArg("f", callback.buildOpen(), false);
+    signature.addWithArg("initial", typeParameter("U", false), false);
+    signature.addNormArg("collect", ArrayType::create(typeParameter("T", false)), false);
+    signature.setExitType(typeParameter("U", false));
+    return signature.buildOpen();
+}
+
+/// The rule with that signature fixed: a rule whose result depends on its arguments can still
+/// declare the parameter types every call is held to, so an argument that needs them (a lambda
+/// with unwritten parameters) can be built before the call is settled.
+resolver_ptr_t withFixedSignature(resolver_ptr_t resolver, FunctionType *signature) {
+    auto *dynamic = dynamic_cast<DynamicFuncTypeResolver *>(resolver.get());
+    ASSERT(dynamic != nullptr, "A fixed signature was given to a rule that is not dynamic.");
+    if (dynamic != nullptr) {
+        dynamic->declareFixedSignature(signature);
+    }
+    return resolver;
 }
 
 } // namespace
@@ -1975,7 +2023,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             {
                 {
                     ":mark/map_arr",
-                    DynamicFuncTypeResolver::create(
+                    withFixedSignature(
+                        DynamicFuncTypeResolver::create(
                         {{1, {false}}, {1, {false}}},
                         "<f: (item: T) => U> (collect: T[]) => U[]",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
@@ -1994,6 +2043,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                             ASSERT(funcType->hasExitType(), "Function must have exit type");
                             return ArrayType::create(funcType->exitType());
                         }),
+                        mapRuleSignature()),
                 },
             }),
         OperatorGroup::create(
@@ -2057,7 +2107,8 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
             {
                 {
                     ":mark/reduce_arr",
-                    DynamicFuncTypeResolver::create(
+                    withFixedSignature(
+                        DynamicFuncTypeResolver::create(
                         {{2, {false, false}}, {1, {false}}},
                         "<f: (acc: U, item: T) => U, initial: U> (collect: T[]) => U",
                         [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
@@ -2085,6 +2136,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                                 return nullopt;
                             return acc;
                         }),
+                        reduceRuleSignature()),
                 },
             }),
         OperatorGroup::create(

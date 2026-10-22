@@ -871,6 +871,12 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    // Set while the callee of a call is visited, when that callee is a `WITH`: the arguments
+    // bound there are arguments of this call, so one whose parameter type is only known after
+    // the ordinary arguments are typed can be built at the call instead (design principles 5.9:
+    // a lambda's parameter types come from the parameter it is passed to, and `reduce<f, 0>`
+    // binds the element type from the array it reduces).
+    bool withArgsOfCall_ = false;
     // The type of the position the expression being built stands at: the value the expression
     // produces must be of this type (design principles 5.1). Every syntax position that knows
     // the type passes it down with an ExpectedValueScope or visitInPosition; checkValue applies
