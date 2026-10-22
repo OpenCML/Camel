@@ -11,6 +11,7 @@
 // Public region compilation pass. Device selection happens at execution time.
 #include "camel/core/tags.h"
 #include "camel/execute/pass/opt.h"
+#include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
 #include <memory>
 #include <utility>
@@ -23,7 +24,11 @@ class RegionPass final : public RuntimeGraphRewritePass {
   public:
     RegionPass(const core::context::context_ptr_t &context, RegionDeviceOps preferred)
         : RuntimeGraphRewritePass(context), preferred_(std::move(preferred)) {}
-    const runtime::Program *apply(const runtime::Program *program, std::ostream &) override {
+    const runtime::Program *apply(const runtime::Program *program, std::ostream &out) override {
+        // The placement decision this step pins: the report is the query's answer for every
+        // graph, printed before any rewrite. It does not choose an executor; it makes the
+        // answer observable, and a later step is where refusal and selection act on it.
+        out << placementReport(*program);
         size_t count = 0;
         return outlineRegions(
             *context_,

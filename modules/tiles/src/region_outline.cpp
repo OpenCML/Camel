@@ -13,7 +13,6 @@
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
-#include "camel/core/tags.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/draft_session.h"
@@ -21,6 +20,7 @@
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
+#include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
 #include <algorithm>
 #include <mutex>
@@ -103,20 +103,15 @@ const runtime::Program *outlineRegions(
         // 13.4, GPU design 6.1). The capability list is the one the region compiler lowers; an
         // operator outside it would otherwise stay on the CPU without a word, which is the
         // silent fallback the design forbids. Report every such node and leave the graphs alone.
-        const auto gpuTag = core::tag::find("gpu");
-        const core::attr::AttrKey key =
-            gpuTag.has_value() ? core::tag::get(*gpuTag)->key : core::attr::kNoKey;
-        // `#cpu` writes the same key with the other value: it asks for the host, so a scope
-        // marked `cpu` is not this promise and is left alone.
-        const core::attr::AttrValueId gpuValue = core::attr::symbol("gpu");
+        // The placement query is the only reader of `tiles.placement`: it answers Host for an
+        // untagged node and for `#cpu`, so only a device answer reaches this promise.
         bool refused = false;
         for (auto *graph : graphs) {
             for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
                 const auto *node = graph->node(id);
                 if (node->kind != rt::GCNodeKind::Oper)
                     continue;
-                if (key == core::attr::kNoKey ||
-                    core::attr::valueOf(core::tag::factsOf(*graph, id).tags, key) != gpuValue)
+                if (!placementOf(*graph, id).onDevice())
                     continue;
                 const auto oper = graph->nodeBodyAs<rt::GCOperBody>(id)->oper;
                 if (deviceCapable(oper))
