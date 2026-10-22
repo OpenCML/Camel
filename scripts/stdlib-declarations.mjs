@@ -116,16 +116,11 @@ const UNDERIVABLE_OPERATORS = new Set(['__neq__'])
 // reference page excludes the tensor stack by design, and writing a signature file for them
 // would be the declaration migration the H19 ledger assigns, not coverage. Their purity is
 // checked by `registry.purity_declared_tensor_stack` over `registry_tensor.cml`.
-const UNCHECKED_MODULES = [
-    {
-        name: 'onnx',
-        covered_by: 'test/cases/modules/stdlib/registry_tensor.cml',
-        reason:
-            'tensor-stack layer outside the reference: export_model takes optional parameters and ' +
-            'a union argument, supported_operators has no declaration yet (H157), and the module ' +
-            'has no declaration or signature file',
-    },
-]
+//
+// Empty since H179 declared `onnx` (`supported_operators` in stdlib/onnx.cml, `export_model` in
+// stdlib/signatures/onnx.cml): every module that registers operators is now in the probe and in
+// MODULES. The list stays, with its checks, so an exclusion has to be justified the same way.
+const UNCHECKED_MODULES = []
 
 function read(file) {
     return fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n')
