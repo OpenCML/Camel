@@ -529,12 +529,25 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         result += " " + any_cast<string>(visitResourceClause(clause));
     }
 
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(whenClause));
+    }
+
     if (!stmtBlock) {
         // A body-less declaration of a C++ operator: the signature is the whole of it (design
         // principles 6.4; handover H19, step 1).
         return result;
     }
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
+}
+
+/*
+whenClause : IDENTIFIER logicalOrExpr
+*/
+any Formatter::visitWhenClause(cst::WhenClause context) {
+    // The applicability condition of a declaration (design principles 5.13): `when` and the
+    // expression, as written, after the signature and before the body.
+    return "when " + any_cast<string>(visitExpr(context->expr()));
 }
 
 /*
@@ -965,16 +978,14 @@ sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left
 */
 any Formatter::visitSliceIndices(cst::SliceIndices context) {
     // The tree keeps the colons it consumed, so the text is the parts and the colons in the
-    // order they were written. A colon is followed by a space only when a part follows it.
+    // order they were written. Nothing separates a colon from the part that follows it: a
+    // slice is written `xs[a:b:s]`, `xs[:n]`, `xs[n:]` and `xs[::-1]`.
     string result;
     for (size_t i = 0; i < context->childCount(); ++i) {
         const auto child = context->child(i);
         if (child.isToken()) {
             result += child.token().kind() == TK::ColonColon ? "::" : ":";
             continue;
-        }
-        if (!result.empty() && result.back() == ':') {
-            result += " ";
         }
         result += any_cast<string>(visitExpr(child.node()));
     }
@@ -1883,6 +1894,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(TagRef)
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
+        CAMEL_FORMAT(WhenClause)
         CAMEL_FORMAT(AnalysisDecl)
         CAMEL_FORMAT(AnalysisClause)
         CAMEL_FORMAT(RuleContext)
