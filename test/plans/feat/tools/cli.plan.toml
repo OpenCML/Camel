@@ -24,7 +24,7 @@ timeout_ms = 120000
 
 [[tests]]
 name = "cli.failed_program_paths"
-desc = "run, check and --timeit all exit 1 on a semantic error, a missing import and a declaration module that fails to load; a failed --timeit run names the iteration and prints the diagnostics but no elapsed time and no summary, and an unknown pass is a failed iteration too."
+desc = "run, check and --timeit all exit 1 on a semantic error, a missing import, an import that does not compile and a declaration module that fails to load; a failed --timeit run names the iteration and prints the diagnostics but no elapsed time and no summary, and an unknown pass is a failed iteration too."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/tools/cli/failed_program_paths.mjs"

@@ -389,9 +389,17 @@ int runCommand(int argc, char *argv[]) {
             // H172's `--ops` silence on a different output path. `--ops` keeps the contract that
             // H172 gave it: the listing is what stdout carries, so the diagnostics and the
             // declaration files that failed go to stderr.
+            //
+            // The scope is the program's dependencies: these dumps are of the program `inspect`
+            // compiled, and the failure that makes a dump untrue is one in its entry module or
+            // in a module it imports. Nothing else has been loaded on this path.
             const bool listing = Inspect::dumpOps;
             if (camel_cli::failIfModuleErrors(
-                    ctx, listing ? std::cerr : os, useJsonFormat, listing ? &std::cerr : nullptr)) {
+                    ctx,
+                    camel_cli::ModuleScope::ProgramDependencies,
+                    listing ? std::cerr : os,
+                    useJsonFormat,
+                    listing ? &std::cerr : nullptr)) {
                 if (!listing) {
                     compileSummary(false);
                 }
@@ -453,8 +461,17 @@ int runCommand(int argc, char *argv[]) {
                 // A module that is not imported is not looked at, and a C++ module whose
                 // signatures are computed (no `.cml` beside its `.cmo`) has no declaration file
                 // to fail.
+                //
+                // The scope is every user module: the listing is the inventory of every module
+                // the context holds, including the imported ones just loaded above (H172). A
+                // module that failed to compile leaves its operators out wherever it sits, so
+                // this is the one command whose question is about all of them.
                 if (camel_cli::failIfModuleErrors(
-                        ctx, std::cerr, useJsonFormat, &std::cerr)) {
+                        ctx,
+                        camel_cli::ModuleScope::AllUserModules,
+                        std::cerr,
+                        useJsonFormat,
+                        &std::cerr)) {
                     return 1;
                 }
                 camel::core::module::dumpOperators(modules, os);
@@ -462,7 +479,19 @@ int runCommand(int argc, char *argv[]) {
             return 0;
         }
 
-        if (camel_cli::failIfModuleErrors(ctx, os, useJsonFormat)) {
+        // The program's dependencies, not every module in the context: a run is about the entry
+        // module and what it imports. Resolving the pass list above imported the pass's library
+        // (and compiling a pass written in Camel imported what that library imports), so a pass
+        // library that does not parse has its diagnostics in the context by now — but it is not
+        // a dependency of the program, and stopping here would replace the pass resolution's
+        // `InvalidPassParameter` (with the parse error as its secondary location) with the raw
+        // parse diagnostic (H198). A pass that is really unusable is reported by the pipeline,
+        // which runs next and has the pass's name to put in the message.
+        if (camel_cli::failIfModuleErrors(
+                ctx,
+                camel_cli::ModuleScope::ProgramDependencies,
+                os,
+                useJsonFormat)) {
             compileSummary(false);
             return 1;
         }

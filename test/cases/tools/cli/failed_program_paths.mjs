@@ -7,13 +7,14 @@
  *
  * A `--timeit` run is the sensitive one: it must never report a time for a program that failed
  * to compile. Today it reports `[timeit] i/N ... failed` with the diagnostics, no `elapsed=`
- * line and no summary, and exits 1. Run, check and timeit are exercised on the same four broken
+ * line and no summary, and exits 1. Run, check and timeit are exercised on the same five broken
  * inputs:
  *
  *   1. a semantic error;
  *   2. an import of a module that does not exist;
- *   3. a declaration module that exists and fails to load (through `CAMEL_STD_LIB`);
- *   4. a pass name that does not exist (timeit only).
+ *   3. an import of a module that exists and does not compile (a dependency of the program);
+ *   4. a declaration module that exists and fails to load (through `CAMEL_STD_LIB`);
+ *   5. a pass name that does not exist (timeit only).
  *
  * plus a healthy program under `--timeit` as the control: exit 0, an `elapsed=` line, a summary.
  *
@@ -51,6 +52,8 @@ const file = (name, text) => {
 
 const semantic = file('semantic.cml', 'func main(): int {\n    let x = undefined_name + 1\n    return x\n}\n')
 const missingImport = file('missing_import.cml', 'import no_such_module\n\nfunc main(): int {\n    return 0\n}\n')
+const brokenModule = file('brokenlib.cml', 'module brokenlib\n\nexport func broken(p: int): int sync {\n    println(\n    return p\n}\n')
+const brokenImport = file('broken_import.cml', 'import brokenlib\n\nfunc main(): int {\n    return 0\n}\n')
 const healthy = file('healthy.cml', 'import math\n\nfunc main(): int {\n    return 0\n}\n')
 
 function camel(args, stdlib) {
@@ -111,7 +114,35 @@ check('missing import: check reports the diagnostic', missingCheck.stdout.includ
 
 checkTimeitFailed('missing import: timeit', camel(['--timeit', 'std::nvm/1', missingImport]), 'ModuleNotFound')
 
-// 3. A declaration module that exists and fails to load.
+// 3. An import of a module that exists and does not compile. The import is a dependency of the
+// program, so every command that compiles it must fail at the compile step; a pass library that
+// does not compile is not this case (it is not a dependency, and pass resolution reports it).
+const brokenRun = camel(['-E', 'short', brokenImport])
+check('broken import: run exits 1', brokenRun.status === 1, String(brokenRun.status))
+check(
+    'broken import: run reports the imported module\'s diagnostic',
+    brokenRun.stdout.includes('ModuleParseFailed') &&
+        brokenRun.stdout.includes('SyntaxDiag::MissingClosingDelimiter'),
+    brokenRun.stdout,
+)
+
+const brokenCheck = camel(['check', '-O', 'short', brokenImport])
+check('broken import: check exits 1', brokenCheck.status === 1, String(brokenCheck.status))
+check(
+    'broken import: check reports the imported module\'s diagnostic',
+    brokenCheck.stdout.includes('ModuleParseFailed'),
+    brokenCheck.stdout,
+)
+
+// The iteration's own diagnostics stop at its first error, so the imported module's parse
+// diagnostic is what it reports (the run and check cases above see the importer's summary too).
+checkTimeitFailed(
+    'broken import: timeit',
+    camel(['--timeit', 'std::nvm/1', brokenImport]),
+    'MissingClosingDelimiter',
+)
+
+// 4. A declaration module that exists and fails to load.
 const badRun = camel(['-E', 'short', healthy], STDLIB)
 check('declaration load failure: run exits 1', badRun.status === 1, String(badRun.status))
 check(
@@ -134,7 +165,7 @@ checkTimeitFailed(
     'NativeDeclarationNotLoaded',
 )
 
-// 4. A pass name that does not exist is an error of the command line, not of the program, and it
+// 5. A pass name that does not exist is an error of the command line, not of the program, and it
 // is a failed iteration like any other.
 checkTimeitFailed(
     'unknown pass: timeit',
