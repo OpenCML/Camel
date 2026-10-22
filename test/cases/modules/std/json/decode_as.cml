@@ -8,7 +8,7 @@ import json
 
 type Point = { x: int, y: int }
 
-func describe(r: (typeas T)!): string {
+func describe::<T>(r: T!): string {
     return match r {
         case error e => e.kind + ': ' + e.message
         case v => 'ok'

@@ -17,11 +17,11 @@ func area(s: Shape): float {
     }
 }
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
-func pair(a: typeas A, b: typeas B): (A, B) {
+func pair::<A, B>(a: A, b: B): (A, B) {
     return (a, b)
 }
 

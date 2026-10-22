@@ -1,6 +1,6 @@
 module err_mismatch
 
-func pick(c: bool, a: typeas T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T): T {
     return if c then a else b
 }
 

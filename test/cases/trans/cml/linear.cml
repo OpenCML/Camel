@@ -1,0 +1,31 @@
+// The S1 corpus of `std::cml`: straight-line code only. Everything here is inside the subset
+// the printer writes: module values and functions, literals, accesses, casts, operators,
+// direct calls, `let` and `var`, assignment, `return`, and a straight-line `sync` body.
+let scale = 3
+
+func shift(value: int, delta: int): int {
+    let base = value * scale
+    return base + delta
+}
+
+func describe(score: int): string sync {
+    var bonus: int = 1
+    bonus = bonus + score
+    println('bonus =', bonus)
+    return string(bonus) + ' points'
+}
+
+func main(): int sync {
+    let base = 7
+    let shifted = shift(base, 2)
+    let labels = ['zero', 'one', 'two']
+    let point = { x: shifted, y: 1.5 }
+    let pair = (shifted, 2.5)
+    let name = labels[2]
+    let px = point.x
+    let first = pair.0
+    let ok = shifted > 5 & shifted < 100
+    let text = describe(shifted)
+    println(name, px, first, ok, text)
+    return shifted
+}

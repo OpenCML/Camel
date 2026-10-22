@@ -1,18 +1,18 @@
-// Generic functions bind a type variable in place with `typeas`; type declarations may take parameters.
+// Generic functions declare a type parameter at the head (`::<T>`); type declarations may take parameters.
 // Run: camel docs/tutorial/examples/08_generics.cml
 module generics
 
 type Pair<T> = (T, T)
 
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func swap(p: Pair<typeas T>): Pair<T> {
+func swap::<T>(p: Pair<T>): Pair<T> {
     return (p.1, p.0)
 }
 
-func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
     return xs->map<f>
 }
 

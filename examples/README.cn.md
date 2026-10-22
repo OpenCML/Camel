@@ -52,7 +52,7 @@ camel examples/text/word_frequency.cml
 | 文件 | 展示的内容 | 运行命令 |
 |------|------|------|
 | [`closures.cml`](functions/closures.cml) | 函数作为值：闭包、函数组合、`with` 参数、带自身状态的计数器 | `camel examples/functions/closures.cml` |
-| [`generic_helpers.cml`](functions/generic_helpers.cml) | 用 `typeas` 写的泛型辅助函数，建立在 `array` 的泛型函数之上 | `camel examples/functions/generic_helpers.cml` |
+| [`generic_helpers.cml`](functions/generic_helpers.cml) | 在头部声明类型参数（`::<T>`）的泛型辅助函数，建立在 `array` 的泛型函数之上 | `camel examples/functions/generic_helpers.cml` |
 
 ### 命令行工具: `cli/`
 

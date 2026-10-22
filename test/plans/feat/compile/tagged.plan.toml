@@ -116,7 +116,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "generic"
-desc = "`(typeas T)?` and `(typeas T)!` bind `T` from the payload; `T?` and `T!` as declared return types of a generic function."
+desc = "`T?` and `T!` in a generic signature bind `T` from the payload; `T?` and `T!` as declared return types of a generic function."
 kind = "behavior"
 case = "../../../cases/compile/tagged/generic.cml"
 args = ["${case}"]

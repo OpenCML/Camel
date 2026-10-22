@@ -264,7 +264,7 @@ Type *CollectionType::cloneWithArguments(
 namespace {
 
 /// One instance per pair of concrete types. A type that still holds a type variable is not
-/// interned: a binding occurrence (`typeas K`) and a use (`K`) mangle alike and must stay
+/// interned: a binding occurrence (`K` in a signature) and a use (`K`) mangle alike and must stay
 /// distinct objects.
 template <typename T, typename Make> T *interned(std::span<Type *const> params, Make make) {
     bool generic = false;

@@ -6,18 +6,18 @@ module effects
 
 var total = 0
 
-func show(x: typeas T): T sync {
+func show::<T>(x: T): T sync {
     println(x)
     return x
 }
 
-sync func tally(x: typeas T, n: int): T sync {
+sync func tally::<T>(x: T, n: int): T sync {
     total = total + n
     return x
 }
 
 func enclosing(k: int): (int, string) {
-    func tag(x: typeas T): (T, int) {
+    func tag::<T>(x: T): (T, int) {
         return (x, k)
     }
     let a = tag(1)
@@ -25,11 +25,11 @@ func enclosing(k: int): (int, string) {
     return (a.0 + a.1, b.0)
 }
 
-func name_of(s: { name: typeas T }): T {
+func name_of::<T>(s: { name: T }): T {
     return s.name
 }
 
-#macro func twice(x: typeas T): (T, T) {
+#macro func twice::<T>(x: T): (T, T) {
     return (x, x)
 }
 

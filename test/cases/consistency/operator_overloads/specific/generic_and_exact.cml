@@ -5,7 +5,7 @@
  */
 module generic_and_exact
 
-func operator +(a: (typeas T)[], b: T): T[] { return a->append<b> }
+func operator +::<T>(a: T[], b: T): T[] { return a->append<b> }
 func operator +(a: string[], b: string): string[] { return [b] }
 
 func main(): int sync {

@@ -51,7 +51,7 @@ await withServer(async (ls) => {
         'the `///` lines above the declaration are the documentation', h)
     check(h.includes('shapes.cml'), 'the file of the definition is named', h)
     h = await hover('identity(n)')
-    check(h.includes('func identity(x: typeas T): T'), 'a generic function: its header', h)
+    check(h.includes('func identity::<T>(x: T): T'), 'a generic function: its header', h)
     check(h.includes('(x: int) => int') && h.includes('This call'),
         'at a call the instance of the generic function is shown', h)
     check(h.includes('Returns its argument.'), 'with its documentation', h)
@@ -110,7 +110,7 @@ await withServer(async (ls) => {
     d = await def('Pair = (1')
     checkEq(fmtRange(d[0].range), '5:5-5:9', 'a type alias')
     d = await def('): T', 1, 3)
-    checkEq(fmtRange(d[0].range), '8:24-8:25', 'a type variable: its typeas')
+    checkEq(fmtRange(d[0].range), '8:16-8:17', 'a type variable: its head declaration')
     d = await def('v * 2')
     checkEq(fmtRange(d[0].range), '38:18-38:19', 'a parameter of a function literal')
     d = await def('println')
@@ -151,7 +151,7 @@ await withServer(async (ls) => {
     const mainSymbol = symbols.find((s) => s.name === 'main')
     check(mainSymbol.children.some((c) => c.name === 'total' && c.kind === 13),
         'locals are children of their function', mainSymbol.children)
-    checkEq(symbols[1].detail, '(x: typeas T): T', 'a function carries its signature')
+    checkEq(symbols[1].detail, '(x: T): T', 'a function carries its signature')
     checkEq(fmtRange(symbols[1].selectionRange), '8:5-8:13', 'selection range is the name')
 
     // ---- incremental synchronisation ----

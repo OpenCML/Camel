@@ -16,7 +16,7 @@ func loss(): float {
 }
 func loss_with_grad(p: Model): (float, Model) { return with_grad(loss)<p>() }
 func update_model(p: Model, g: Model): (Model, Model) { return update(p, g) }
-func update(p: typeas P, g: P): (P, P) {
+func update::<P>(p: P, g: P): (P, P) {
     let r = tree_map<(a: Tensor<f32>, b: Tensor<f32>) => (a - b * 0.01, b * 0.1)>(p, g)
     return tree_unzip(r, p)
 }

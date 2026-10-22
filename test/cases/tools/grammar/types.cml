@@ -17,7 +17,7 @@ type Lookup = Map<string, Set<i64>>
 type Maybe = (int?)[]
 type Words = string[]
 
-func or_else(x: (typeas T)?, d: T): T {
+func or_else::<T>(x: T?, d: T): T {
     return x ?? d
 }
 

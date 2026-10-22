@@ -991,6 +991,33 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
+    record->nodeNames.clear();
+    bool named = false;
+    for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
+        if (draft.alive(ref) && draft.nodeName(ref) != camel::core::kEmptySym) {
+            named = true;
+        }
+    }
+
+    if (named) {
+        // The names are indexed by runtime node id, not by draft place: the commit drops dead
+        // places and may number the rest differently.
+        const DraftPayloadPlan plan = planDraftPayload(draft);
+        record->nodeNames.assign(plan.nodes.size(), camel::core::kEmptySym);
+
+        for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
+            if (!draft.alive(ref) || draft.nodeName(ref) == camel::core::kEmptySym) {
+                continue;
+            }
+            const gc_node_ref_t runtime =
+                ref < plan.runtimeRefsByDraftId.size() ? plan.runtimeRefsByDraftId[ref]
+                                                       : kInvalidNodeRef;
+
+            if (runtime != kInvalidNodeRef && runtime < record->nodeNames.size()) {
+                record->nodeNames[runtime] = draft.nodeName(ref);
+            }
+        }
+    }
 }
 
 GCGraphNativePayload
@@ -1582,6 +1609,24 @@ std::span<const camel::core::SymId> GCGraph::captureNames() const {
     return debug_ ? std::span<const camel::core::SymId>(debug_->captureNames)
                   : std::span<const camel::core::SymId>();
 }
+
+std::string_view GCGraph::nodeName(gc_node_ref_t ref) const {
+    if (!debug_ || ref >= debug_->nodeNames.size()) {
+        return {};
+    }
+    const camel::core::SymId name = debug_->nodeNames[ref];
+    return name == camel::core::kEmptySym ? std::string_view()
+                                          : camel::core::symbolText(name);
+}
+
+camel::core::SymId GCGraph::nodeNameSym(gc_node_ref_t ref) const {
+    if (!debug_ || ref >= debug_->nodeNames.size()) {
+        return camel::core::kEmptySym;
+    }
+    return debug_->nodeNames[ref];
+}
+
+bool GCGraph::hasNodeNames() const { return debug_ && !debug_->nodeNames.empty(); }
 
 uint32_t GCGraph::nodeAttrs(gc_node_ref_t ref) const {
     return containsNodeRef(ref) && chunkOf(ref).attrs ? chunkOf(ref).attrs[ref & (kNodeChunkNodes - 1)] : 0;

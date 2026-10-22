@@ -23,7 +23,7 @@
 | `p1_regions.cml` | `if`、`match`、两个 `loop` | `pick` 有 2 个 arm 区域，`classify` 有 4 个（`case 1 \| 2` 拆成两臂）；循环是**区域形式**：`loop.condition/body` 为 `null`，`conditionRegion/bodyRegion` 指向 `g1r1/g1r2`；区域记录只有 `id/kind/parent/owner/result`，**没有 `index`、`ports`、`params`、`attrs`**；`pick` 的第 1 臂没有节点，`result` 是区域外的端口 `g2n0`。 |
 | `p2_tags.cml` | `#kernel { let a = x + 1 }`、`tag finite = [kernel, heavy]` | 标签只在**节点**上：`+` 节点带 `main::kernel`，`finite` 把两个标签都加到节点；**没有建 Block 区域**；`let` 本身不是节点。 |
 | `decl.cml`（`test/cases/compile/tags`） | `#kernel` 在函数上、`#shape`/`#width<32>` 在类型/字段上 | `std::jgir` 里**完全没有**这些标签：函数标签没有落到节点（`marked` 只有 `DATA 1`），类型/字段标签没有存储位置。`#strict` 是例外，它作为节点标签 `strict` 落在每个节点上（`p21`）。 |
-| `check_rules.cml` / `check_when.cml` | `rule` 声明 | 规则是普通图：`add_zero__lhs`、`add_zero__rhs`，加一个 `() => Rule` 的构造图（7 个节点：名字字符串、单向/双向布尔、权限掩码、两个函数值、`rewrite:rule`）；`when` 形式多一个 `__when` 图和 `rewrite:rule_when`。`#requires<fast>` 变成掩码 `3`，组名丢失但位还在。 |
+| `check_rules.cml` / `check_when.cml` | `rule` 声明 | 规则是普通图：`add_zero__lhs`、`add_zero__rhs`，加一个 `let add_zero = ...` 的构造图（7 个节点：名字字符串、单向/双向布尔、权限掩码、两个函数值、`rewrite:rule`）；`when` 形式多一个 `__when` 图和 `rewrite:rule_when`。`#requires<fast>` 变成掩码 `3`，组名丢失但位还在。 |
 | `bound_closures.cml` | lambda、闭包、间接调用 | lambda 是图 `__g_3__`…；闭包是 `DATA Function` + `FILL`（`tupleSlots=1`）；调用是带函数值输入的 `CALL`；捕获在 `capturePorts`。 |
 | `p6_generic.cml` | 泛型函数/类型 | 实例图 `id<int>`、`id<string>`、`pair<float>`；**没有模板图**，类型参数只在名字里。 |
 | `p8_literals.cml` | 字面量 | `1.0e10` 的标签变成 `10000000000.0`（值对、拼写丢）；字符串原样打印、没有引号/转义（标签里直接出现换行、制表符）；数组是 `[1, 2, 3]`、嵌套数组；`f32` 的 `3.0` 值对。 |
@@ -111,10 +111,12 @@
 2. `test/tools/cml_roundtrip.py` 读两份文档，做颜色细化 + 对未定颜色类做个体化回溯（节点预算，例如每图 2000 个节点/20 秒）；输出第一处差异的路径。超过预算的图只做执行比较，并在报告里写 `structural=skipped`，不静默通过。
 3. 第二遍往返的**文本**相等（`comments=false`）作为确定性检查：`print(compile(print(P))) == print(P)`。它抓的是命名/排序的不稳定，不是等价证明。
 4. 测试入口是一个新的 `test/plans/feat/trans/cml.plan.toml`（`kind="behavior"`, `tool="python"`, 参照 `jgir.plan.toml` 与 `jgir_contract.py`），驱动 `camel` 三次：`P`、`P std::cml`、`S`。
+5. **名字**不参与图等价（2.2 明确抹掉名字），所以 `let` 名字的保留要单独证明：`std::jgir` v1 的每个图节点名（源图）必须出现在重编译图和打印文本中；重编译多出来的名字只能是打印器生成的 `cmlN`/`pN`。这项检查不能替代往返检查，往返检查也不能替代它。
+6. **S1 的验收固定为往返性质**：S1 语料里的每个程序都必须让 `canon(P)` 与 `canon(compile(P std::cml))` 通过 2.3 的检查器；打印文本再打印一次必须逐字节相同（2.3 第 3 条）。只检查“打印结果看起来可读”不算通过。
 
 ### 2.4 诊断
 
-打印出的源码**必须零错误**；警告按代码多重集与原文比较：打印出的源码引入新警告是失败，原程序有而打印后消失的警告允许（图里不保留“源码本来会警告”的事实，例如原始源码里不可达的 `case` 在打印出的图里已经不存在）。`std::cml` 自己不声明 `readsTags=true`（那会在无关的运行里改变 `TagHasNoReader` 的判定）；它拒绝时用 `RuntimeDiag::TranslationRefused` 在节点/图的 origin 上报。
+打印出的源码**必须零错误**；警告按代码多重集与原文比较：打印出的源码引入新警告是失败，原程序有而打印后消失的警告允许（图里不保留“源码本来会警告”的事实，例如原始源码里不可达的 `case` 在打印出的图里已经不存在）。`std::cml` 自己不声明 `readsTags=true`（那会在无关的运行里改变 `TagHasNoReader` 的判定）；它拒绝时用 `SemanticDiag::CmlUnsupportedConstruct` 在节点/图的 origin 上报，大常量用 `SemanticDiag::CmlBigConstant` 并给出字节数与 `max_literal_bytes`。
 
 ### 2.5 执行
 
@@ -170,7 +172,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
   - 有 `Block` 区域时：按区域的 `attrs` 打印 `#[...] { ... }`，块内节点保留自己的标签（见 5.3）。
   - 没有 `Block` 区域、但一个语句的整棵表达式树的节点集合恰好等于某个标签集：在语句外打印块。
   - 否则拒绝（`CmlTagScope`），并把它记为缺口（5.3）。
-- **规则**：识别 `rewrite:rule` / `rewrite:rule_when` 的构造图（7/8 节点、`() => Rule`、名字字符串、单向/双向、掩码、lhs/rhs/when 函数值），打印 `rule name(...) { lhs => rhs }` / `<=>` / `when ...`；`#requires<...>` 从掩码的位反推标准标签名（`3 -> reassociate, contract`；组名丢失）。构造图不是这个形状（例如被折叠成 `Rule` 常量）则拒绝。
+- **规则**：识别 `rewrite:rule` / `rewrite:rule_when` 的构造图（7/8 节点、`let name = ...` 的初值、名字字符串、单向/双向、掩码、lhs/rhs/when 函数值），打印 `rule name(...) { lhs => rhs }` / `<=>` / `when ...`；`#requires<...>` 从掩码的位反推标准标签名（`3 -> reassociate, contract`；组名丢失）。构造图不是这个形状（例如被折叠成 `Rule` 常量）则拒绝。
 - **`#macro`**：图 `flags` 的 `kGraphFlagMacro` 或函数类型的 `macro` 修饰；打印在函数声明前。
 - **`#vjp<rule>`**：图的规则引用（`GCGraphRefRole::Rule`）打印成标准标签 `#vjp<rule>`；规则名从被引图取。
 - **`#requires`** 只在规则上；其他声明标签（`#shape`、`#width`、函数上的 `#kernel`）等 §4.7 的声明标签存储落地后再打印（5.3、问题 2）。
@@ -294,9 +296,9 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 ### S1：直行函数
 
-- 产物：`std::cml` 骨架、`module`/入口/顶层 `let`、函数签名、字面量、数组/struct/tuple、ACCS、CAST、COPY、算子语法表（算术/比较/逻辑/转换）、直接调用、`return`、函数值（无捕获）、`var`、`sync` 直行。
-- 拒绝：区域（分支/循环/内联）、命名类型、泛型、规则、标签（`#strict` 等节点标签留到 S4 与 `Block` 一起处理，先拒绝带标签的图）。
-- 测试：`test/cases/linear` 的直行子集 + 新增 `test/cases/trans/cml/linear.cml`（覆盖每种表达式/字面量/变量/调用）；结构 + 执行。
+- 产物：`std::cml` 骨架、`module`/入口/顶层 `let`、函数签名、字面量、数组/struct/tuple、ACCS、CAST、COPY、算子语法表（算术/比较/逻辑/转换）、直接调用、返回、函数值（无捕获）、`var`、`sync` 直行。`let`/`var` 的声明名打印源码里的名字（图不保存名字列，名字在 `GCGraphDebugRecord` 的冷数据里）；只有图里本来没有名字的值才生成 `cmlN`。
+- 拒绝：区域（分支/循环/内联）、命名类型、泛型、规则、标签（`#strict` 等节点标签留到 S4 与 `Block` 一起处理，先拒绝带标签的图）、`var` 参数、S1 算子表之外的算子、超过 `max_literal_bytes` 的常量。拒绝先于输出：整段打印在内存里完成，失败时流上不留下半个程序。
+- 测试：`test/cases/linear` 的直行子集 + 新增 `test/cases/trans/cml/linear.cml`（覆盖每种表达式/字面量/变量/调用）；验收是往返性质而不是“看起来对”：`source → std::cml → source` 重编译后与原文的 canonical v2 文档必须被 `test/tools/cml_roundtrip.py` 判为等价（2.3）。`let` 名字不属于图等价，另用 v1 节点名与打印文本逐图检查：源图的名字必须全部出现在重编译图和打印文本里，新增名字只允许打印器生成的 `cmlN`/`pN`。
 - 独立理由：即使只有直行，也能打印一大类程序；“先直行后控制”是诚实的进度。
 
 ### S2：分支、同步、闭包
@@ -329,7 +331,7 @@ GIR 是**无损数据转储**：它能打印语言写不出的图（两张写法
 
 ## 7. 作者问题（编号，附我的答案）
 
-1. **`let` 名字列**（§4.7）：现在只在计划里，没有列。`std::cml` 不需要它也能等价（生成名），但调试器/诊断要用。是先加列，还是让打印机生成？**我的答案**：打印机的 v1 用生成名；列等调试器需要源码名时再加，不阻塞往返。若作者希望输出保留源码名，则必须先加列。
+1. **`let` 名字列**（§4.7）：现在只在计划里，没有列。`std::cml` 不需要它也能等价（生成名），但调试器/诊断要用。**我的答案**：v1 打印源码名；图不保存名字列，但 `GCGraphDebugRecord` 的冷数据里已有 `nodeNames`，打印器查它，只有本来没有名字的值才生成 `cmlN`。名字不进图等价，所以“名字保留”按 2.3 第 5 条单独检查；等调试器需要源文件/行号时再加列。
 2. **声明标签存哪里**：函数头可以放图头的一个 `AttrSetId`；类型/字段/参数是驻留的声明对象，需要一个按声明身份索引的**程序级声明事实表**（或者给 `StructDecl`/`EnumDecl` 加不进驻留键的标签集）。没有它，`#shape`/`#width`/函数上的 `#kernel` 冻结后丢失，往返测试也看不见。**我的答案**：加程序级声明事实表，键为声明身份（类型/字段/参数），函数用图头；这是 §4.7 已经要求的信息，不是新语义。
 3. **`Block` 区域**：前端为每个 `#tag { }` 建 `Block` 区域，`region.attrs` 存块标签；打印机按块打印。或者加表达式级标签语法 `#tag expr`？**我的答案**：建 `Block` 区域。`GCRegionKind::Block` 和 `attrs` 都已存在，前端只需建块并填 attrs；表达式级标签会扩大语法和解析器，收益不如前者。
 4. **泛型实例**：打印成具体函数/类型（`id_int`、`Option_int`），不打印泛型声明；类型参数与 `<...>` 名字丢失。**我的答案**：可以，2.5 明确说“泛型实例写成具体类型的函数”；名字本来就不计。

@@ -268,7 +268,7 @@ Tensor<f32>               // f32[..]
 - 一个数组类型里 `..` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[.., 3]` 是错误。
 - 裸 `..` 匿名（打印 `T[3, ..]`）；`..s` 命名，名字只活在类型里。
 - `?` 是未知维度，`T[?]` 就是 `T[]`；`2 * n - 1` 这类线性形式保留名字。
-- 元素类型可以是类型变量：`(typeas T)[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
+- 元素类型可以是类型变量：函数头声明 `T` 后写 `T[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
 - 形状参数里写 `const`（`Tensor<f32, const [3]>`）报 `InvalidTypeArgument`，消息给出"去掉 `const`"的写法；不新增诊断码（批复 Q2 的同类处理）。
 
 ### 4.2 AST、CST 与格式化
@@ -277,7 +277,7 @@ Tensor<f32>               // f32[..]
 - `src/parse/syntax/parser_type.cpp` 的 `parseArrayType`（158–206）改为循环解析 `ArrayDim`；`parseSpecType`（208+）的 `typeOrData` 增加"以 `[` 开头的形状参数"分支（解析成 `ArrayData`，里面的项是 extent 表达式），`const` 分支保留但只对普通类型参数有效。
 - AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp:83`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `..name`。
 - CST→AST：`src/parse/ast/builder.cpp` 3330–3342 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp` 3639–3652）对每组建一个 `ArrayType`：`[]` → `[?]`，`[..s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
-- 格式化器：`tools/format/fmt.cpp:1567 # "any Formatter::visitArrayType(cst::ArrayType context) {"` 的 `visitArrayType` 逐组打印 `[?]/[..s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
+- 格式化器：`tools/format/fmt.cpp:1573 # "any Formatter::visitArrayType(cst::ArrayType context) {"` 的 `visitArrayType` 逐组打印 `[?]/[..s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
 
 ### 4.3 绑定规则
 
