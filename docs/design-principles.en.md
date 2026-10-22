@@ -321,10 +321,12 @@ A `sync` written before a block (including the postfix form on a function body, 
 ### 5.5 Generics
 
 - **A generic function is instantiated by the types of its arguments.** A generic function is a subgraph template; each call with a set of concrete types instantiates a subgraph whose types are all concrete, and the body is checked at that time. Only concrete types are on the graph, and the runtime needs no type information.
-- **A type variable is bound in place with `typeas T`**: write `typeas T` at its first occurrence in the signature to bind the type at that position as `T`, and use `T` directly afterwards.
+- **Type variables follow the same rule as dimension names and bind automatically**: a name that first appears in a parameter type (including the type of a `with` parameter) and is not an existing type name binds a type variable, and later occurrences refer to it; a name that appears only in the return type is an error; one that appears only once draws a warning (a misspelt type name usually appears once). `typeas T` stays as the explicit binding form, for a name that coincides with an existing type and must say "this is a new binding".
 
   ```camel
-  func first(xs: (typeas T)[]): T { return xs[0] }   // sketch
+  func first(xs: T[]): T { return xs[0] }
+  with <key: (x: T) => K>
+  func sort_by(xs: T[]): T[]
   ```
 
 - **A generic function can appear in any position that expects a function**, including being passed to another generic function. The compiler defers its instantiation until the type variables can be determined from the context; if they cannot be determined it is a compile-time error that points out which variable cannot be fixed. The deferral happens only at compile time, and only concrete instances are on the graph.
@@ -343,7 +345,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 
   ```camel
   type Pair<T> = (T, T)                    // sketch
-  func swap(p: Pair<typeas T>): Pair<T>
+  func swap(p: Pair<T>): Pair<T>
   ```
 
 - **New primitives are used only for what the main language cannot express**, and appear as marks, fixed in number: `typeas T`, `constas n` (binding at a position in the signature), `typeof x` (the static type of an expression), `fields T` (the field table of a type). Whatever can be computed from the primitives (such as `keyof`, which takes the field names) is written in a library, as a type function or an ordinary function, not as a keyword.
