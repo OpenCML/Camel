@@ -50,7 +50,7 @@ template <typename Parts>
 Parts partsOf(
     ModifierSet modifiers, const std::vector<param_t> &withTypes,
     const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
-    const std::vector<std::string> &argNames) {
+    const std::vector<std::string> &argNames, bool hasRest) {
     Parts parts;
     parts.modifiers = modifiers;
     parts.params.reserve(withTypes.size() + normTypes.size());
@@ -59,6 +59,7 @@ Parts partsOf(
     parts.withCount = withTypes.size();
     parts.exitType  = exitType;
     parts.hasNames  = hasNames;
+    parts.hasRest   = hasRest;
     if (hasNames) {
         ASSERT(argNames.size() == parts.params.size(), "One name per parameter.");
         parts.names.reserve(argNames.size());
@@ -80,7 +81,8 @@ FunctionType *FunctionTypeFactory::build() {
         normTypes_,
         exitType_,
         hasNames_,
-        argNames_));
+        argNames_,
+        hasRest_));
 }
 
 OpenFunctionType *FunctionTypeFactory::buildOpen() {
@@ -90,7 +92,8 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         normTypes_,
         exitType_,
         hasNames_,
-        argNames_));
+        argNames_,
+        hasRest_));
 }
 
 // ---- Construction ----
@@ -104,7 +107,7 @@ FunctionType::FunctionType(const Parts &parts, bool open)
     : CompositeType(TypeCode::Function), exitType_(parts.exitType),
       modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
-      hasNames_(parts.hasNames), open_(open) {
+      hasNames_(parts.hasNames), hasRest_(parts.hasRest), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
         const auto &[type, isVar] = parts.params[i];
         types()[i]                = type;
@@ -149,6 +152,7 @@ FunctionType *FunctionType::intern(const Parts &parts) {
     key.push_back(static_cast<uintptr_t>(parts.modifiers.mask));
     key.push_back(reinterpret_cast<uintptr_t>(parts.exitType));
     key.push_back(parts.hasNames ? 1 : 0);
+    key.push_back(parts.hasRest ? 1 : 0);
     for (const auto &[type, isVar] : parts.params) {
         key.push_back(reinterpret_cast<uintptr_t>(type));
         key.push_back(isVar ? 1 : 0);
@@ -168,6 +172,7 @@ FunctionType::Parts FunctionType::parts() const {
     parts.withCount = withCount_;
     parts.exitType  = exitType_;
     parts.hasNames  = hasNames_;
+    parts.hasRest   = hasRest_;
     parts.params.reserve(paramCount());
     for (size_t i = 0; i < paramCount(); ++i) {
         parts.params.emplace_back(types()[i], varMarks()[i] != 0);
@@ -285,7 +290,8 @@ bool FunctionType::assignableFrom(Type *other) const {
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
-    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_)
+    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_ ||
+        hasRest_ != otherFunc.hasRest_)
         return false;
 
     // Parameters are contravariant: this type's parameter must be acceptable where the other

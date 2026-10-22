@@ -813,6 +813,11 @@ void Builder::coerceArmExit(
 }
 
 Type *Builder::declaredExitTypeHere() const {
+    if (activeRestBody_ != nullptr && activeStaticBody_ == nullptr) {
+        // The body of a rest function declares its own result type, whichever graph it is
+        // expanded into.
+        return activeRestBody_->exitType;
+    }
     FunctionType *funcType = currGraph_ != nullptr ? currGraph_->funcType() : nullptr;
     // An undeclared return type is set from the first value returned (see
     // checkDeclaredReturn): before that, a type that is present was declared.
@@ -2771,17 +2776,22 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
             linkNodes(LinkType::Ctrl, ctrlInput, outputAnchor);
         }
     }
-    if (ArmBuild *arm = activeArm()) {
+    if (activeStaticBody_ != nullptr) {
+        // The selected body of a `match type` has no region of its own: its `return` gives the
+        // value of the match (visitTypeMatchNode), not of the function around it.
+        activeStaticBody_->value    = outputAnchor;
+        activeStaticBody_->returned = true;
+    } else if (activeRestBody_ != nullptr) {
+        // A rest function is expanded into the caller's graph, so its `return` is not the
+        // caller's: it gives the value of the expanded body (inlineRestCall).
+        activeRestBody_->value    = outputAnchor;
+        activeRestBody_->returned = true;
+    } else if (ArmBuild *arm = activeArm()) {
         // The value of the arm, not of the function (handover H24).
         arm->output   = outputAnchor;
         arm->value    = resNode;
         arm->type     = isVoidGraphExitType(nodeTypeOf(resNode)) ? Type::Void() : nodeTypeOf(resNode);
         arm->returned = true;
-    } else if (activeStaticBody_ != nullptr) {
-        // The selected body of a `match type` has no region of its own: its `return` gives the
-        // value of the match (visitTypeMatchNode), not of the function around it.
-        activeStaticBody_->value    = outputAnchor;
-        activeStaticBody_->returned = true;
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
         if (!droppedGraphs_.contains(currGraph_.get())) {

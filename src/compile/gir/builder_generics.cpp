@@ -165,6 +165,10 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
     const template_ptr_t &tmpl, FunctionType *expected, const GCT::node_ptr_t &origin,
     std::string &why) {
     FunctionType *signature = tmpl->funcType;
+    if (signature->hasRest()) {
+        why = "a rest function is expanded at each call and has no function value";
+        return nullptr;
+    }
     const size_t withCount  = signature->withTypesCount();
     const size_t normCount  = signature->normTypesCount();
     if (withCount != expected->withTypesCount() || normCount != expected->normTypesCount()) {
@@ -254,6 +258,15 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
     const auto generic = genericDrefs_.find(node);
     ASSERT(generic != genericDrefs_.end(), "Not the name of a generic function.");
     const template_ptr_t tmpl = generic->second;
+    if (tmpl->funcType->hasRest()) {
+        diags_->of(SemanticDiag::RestFunctionNeedsExpansion)
+            .atOrigin(origin != nullptr ? origin->origin() : 0)
+            .commit(
+                tmpl->name,
+                "a rest function has no runtime arity, so it cannot be passed as a value; "
+                "call it directly");
+        throw BuildAbortException();
+    }
     if (expected == nullptr) {
         std::vector<std::string> names;
         collectTypeVars(tmpl->funcType, names);

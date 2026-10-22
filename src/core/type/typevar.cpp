@@ -149,10 +149,13 @@ rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &c
             func->withIsVarAt(i));
     }
     for (size_t i = 0; i < func->normTypesCount(); ++i) {
-        factory.addNormArg(
-            paramNameOf(func, func->withTypesCount() + i, "__n", i),
-            replaced(func->normTypeAt(i)),
-            func->normIsVarAt(i));
+        const std::string name =
+            paramNameOf(func, func->withTypesCount() + i, "__n", i);
+        if (func->hasRest() && i + 1 == func->normTypesCount()) {
+            factory.addRestArg(name);
+            continue;
+        }
+        factory.addNormArg(name, replaced(func->normTypeAt(i)), func->normIsVarAt(i));
     }
     factory.setExitType(func->hasExitType() ? replaced(func->exitType()) : nullptr);
     return factory;

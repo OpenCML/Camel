@@ -1,0 +1,9 @@
+module rest_param_not_last
+
+func bad(..ts, x: int): int {
+    return x
+}
+
+func main(): int sync {
+    return bad(1, 2)
+}

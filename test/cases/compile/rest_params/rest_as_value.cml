@@ -1,0 +1,10 @@
+module rest_as_value
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    let f = sum
+    return f(1, 2)
+}

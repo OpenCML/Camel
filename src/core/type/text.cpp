@@ -215,13 +215,16 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             }
         }
         if (normCount > 0) {
-            parts.push_back(literal("N" + std::to_string(normCount)));
+            parts.push_back(literal((fn->hasRest() ? "X" : "") + std::string("N") +
+                                    std::to_string(normCount)));
             for (size_t i = 0; i < normCount; ++i) {
                 if (fn->normIsVarAt(i)) {
                     parts.push_back(literal("V"));
                 }
                 parts.push_back(typeItem(fn->normTypeAt(i)));
             }
+        } else if (fn->hasRest()) {
+            parts.push_back(literal("X"));
         }
         parts.push_back(literal("R"));
         parts.push_back(fn->hasExitType() ? typeItem(fn->exitType()) : literal("v"));
@@ -251,6 +254,13 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
     for (size_t i = 0; i < normCount; ++i) {
         if (i > 0) {
             parts.push_back(literal(", "));
+        }
+        if (fn->hasRest() && i + 1 == normCount) {
+            parts.push_back(literal(".."));
+            if (fn->hasArgNames()) {
+                parts.push_back(literal(std::string(fn->argNameAt(withCount + i))));
+            }
+            continue;
         }
         if (fn->normIsVarAt(i)) {
             parts.push_back(literal("var "));
@@ -478,7 +488,8 @@ bool sameType(const Type *a, const Type *b) {
             const auto *lhs = static_cast<const FunctionType *>(left);
             const auto *rhs = static_cast<const FunctionType *>(right);
             if (lhs->withTypesCount() != rhs->withTypesCount() ||
-                lhs->normTypesCount() != rhs->normTypesCount()) {
+                lhs->normTypesCount() != rhs->normTypesCount() ||
+                lhs->hasRest() != rhs->hasRest()) {
                 return false;
             }
             for (size_t i = 0; i < lhs->withTypesCount(); ++i) {
