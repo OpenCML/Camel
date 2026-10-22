@@ -24,6 +24,7 @@
 #include <regex>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "camel/common/scope.h"
@@ -143,8 +144,18 @@ class Builder {
     bool openSignature_    = false;
     bool typeasAllowed_    = false;
     bool inDeclReturnType_ = false;
+    // A type variable bound by the result of a function type written inside a signature
+    // (`with <key: (x: T) => K>`): its one occurrence is an output the callback supplies, so
+    // it is not the likely misspelling the once-only warning looks for.
+    bool inNestedFuncReturn_ = false;
+    std::set<std::string> outputTypeVars_;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
+    // The type variables bound by their first occurrence in a parameter type (design
+    // principles 5.5), and how many types of the signature write each. A name used only once
+    // is usually a misspelled type (the warning TypeVariableUsedOnce).
+    std::set<std::string> autoTypeVars_;
+    std::unordered_map<std::string, size_t> typeVarUses_;
 
     // The lambda parameters whose type was left out, collected while the signature of the
     // function being defined is visited and given to its FUNC node (Tree::setUnwrittenParams).

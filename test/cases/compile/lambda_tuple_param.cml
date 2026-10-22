@@ -1,0 +1,14 @@
+module lambda_tuple_param
+
+// A lambda parameter destructured as a tuple binds its names as `let (a, b) = p` does.
+with <f: (p: (int, int)) => int>
+func apply_all(ps: (int, int)[]): int[] {
+    return ps->map<f>
+}
+
+func main(): int sync {
+    let pairs = [(1, 2), (3, 4), (5, 6)]
+    println(apply_all<((a, b)) => a + b>(pairs))
+    println(apply_all<((a, b)) => a * b>(zip([1, 2], [10, 20])))
+    return 0
+}

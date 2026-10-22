@@ -225,6 +225,8 @@ enum class SemanticDiag : uint32_t {
     ConstasArgumentMissing = 0x00019B,
     /// A tag gives a fact one value where the node already has another.
     TagValueConflict = 0x00019D,
+    /// A name appears only in a signature's result type, where no argument can bind it.
+    TypeVariableNotBound = 0x00019E,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
@@ -261,6 +263,9 @@ enum class SemanticDiag : uint32_t {
     // Tags (design principles 6.2): the tag is declared for no pass in the pipeline, so nothing
     // reads what was written.
     TagHasNoReader = 0x100160,
+    // A type variable bound by its first occurrence in a parameter type (design principles 5.5)
+    // is written once, which is usually a misspelled type name.
+    TypeVariableUsedOnce = 0x100161,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

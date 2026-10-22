@@ -206,32 +206,52 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a subscript
 // writes (design principles 5.4). The bounds follow the rules of the slice function (3.9): a
 // position from 0 to the length, the end one past the last element taken, a negative bound a
-// fault rather than a count from the end, and an end before the start the empty range. The step
-// and whether the end was written come with the call: a step is a distance forward, so 0 and
-// negative steps are faults, and an unwritten end runs to the end of the array.
+// fault rather than a count from the end, and an end before the start the empty range. A
+// negative step runs backwards: the start defaults to the last element and the end, left out,
+// stands for the position before the first. The step and which of the start and the end were
+// written come with the call as a two-bit mask (bit 0 end, bit 1 start).
+//
+// A step other than 1 is a view with strides, which needs the multidimensional array
+// representation of H17. Until it lands, a stepped slice is a copy: the elements are the same
+// and the program does not have to know, but the result does not share the array's block. H17
+// records the deviation; step 1 still shares the block.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr    = norm.get<Array *>(0);
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    const Int64 start   = norm.get<Int64>(1);
-    const Int64 endRaw  = norm.get<Int64>(2);
-    const Int64 step    = norm.get<Int64>(3);
-    const bool wroteEnd = norm.get<Int64>(4) != 0;
+    const Int64 startRaw = norm.get<Int64>(1);
+    const Int64 endRaw   = norm.get<Int64>(2);
+    const Int64 step     = norm.get<Int64>(3);
+    const Int64 written  = norm.get<Int64>(4);
+    const bool wroteEnd   = (written & 1) != 0;
+    const bool wroteStart = (written & 2) != 0;
 
     const Int64 size = static_cast<Int64>(arr->size());
-    const Int64 end  = wroteEnd ? endRaw : size;
-    if (start < 0 || start > size || end < 0 || end > size) {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
-    }
-    if (step != 1) {
-        // A slice with a step takes every `step`-th element, which is a view with strides: the
-        // multidimensional array representation H17 brings (design principles 5.4). A copy
-        // would have the same elements but would not share the block a slice shares, so the
-        // form is refused rather than quietly copied.
+    if (step == 0) {
         throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "[]",
-            "a slice step must be 1 for now; a step other than 1 is a view with strides, which "
-            "needs the multidimensional array representation of H17");
+            RuntimeDiag::InvalidArgument, "[]", "a slice step must not be 0");
+    }
+    Int64 start = 0;
+    Int64 end   = 0;
+    Int64 count = 0;
+    if (step > 0) {
+        start = wroteStart ? startRaw : 0;
+        end   = wroteEnd ? endRaw : size;
+        if (start < 0 || start > size || end < 0 || end > size) {
+            throwRuntimeFault(
+                RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
+        }
+        count = start < end ? (end - start + step - 1) / step : 0;
+    } else {
+        // A negative step starts at an element and stops after `end`; an omitted start is the
+        // last element, an omitted end the position before the first (-1).
+        start = wroteStart ? startRaw : size - 1;
+        end   = wroteEnd ? endRaw : -1;
+        if ((wroteStart && (start < 0 || start >= size)) ||
+            (wroteEnd && (end < 0 || end > size))) {
+            throwRuntimeFault(
+                RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
+        }
+        count = start > end ? (start - end + (-step) - 1) / (-step) : 0;
     }
     if (arr->rank() != 1) {
         // A slice of a dimension other than the first is a view with strides (H17); the type
@@ -242,20 +262,19 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
             "a slice of an array of rank 1; a slice of another dimension is a view with "
             "strides, which needs the multidimensional array representation of H17");
     }
-
-    // Both bounds inside the array and the end before the start is the empty range, not a
-    // fault (design principles 3.9).
-    const Int64 count = end > start ? end - start : 0;
-    if (arr->isCompact()) {
+    if (step == 1 && arr->isCompact()) {
         // A slice is a view sharing the data block (design principles 5.4).
         return rtdata::toSlot(
             Array::view(arr, std::span<const int64_t>(&count, 1), static_cast<uint64_t>(start)));
     }
-    // A slot array has no block to share and is copied (H17 records that for slot arrays).
+    // A slot array has no block to share and is copied (H17 records that for slot arrays); so
+    // is a stepped slice.
     Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(count));
     for (Int64 i = 0; i < count; ++i) {
-        res->set<slot_t>(
-            static_cast<size_t>(i), arr->get<slot_t>(static_cast<size_t>(start + i)), arrType);
+        res->setSlot(
+            static_cast<uint64_t>(i),
+            arr->getSlot(static_cast<uint64_t>(start + i * step)),
+            arrType);
     }
     return rtdata::toSlot(res);
 }

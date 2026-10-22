@@ -853,13 +853,30 @@ any Formatter::visitPairedValues(cst::PairedValues context) {
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
+any Formatter::visitTupleParam(cst::TupleParam context) {
+    string result = "(";
+    bool first    = true;
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        if (!first) {
+            result += ", ";
+        }
+        first   = false;
+        result += any_cast<string>(visitIdentDef(identDef));
+    }
+    return result + ")";
+}
+
+/*
+pairedParams : keyParamPair (',' keyParamPair)* ;
+*/
 any Formatter::visitPairedParams(cst::PairedParams context) {
-    return formatList(
-        vec(context->all<cst::KeyParamPair>()),
-        context,
-        ", ",
-        ",",
-        PaddingNL | PushScope);
+    std::vector<syn::Node> params;
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyParamPair) || child.is(NK::TupleParam)) {
+            params.push_back(child);
+        }
+    }
+    return formatList(params, context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
@@ -913,7 +930,7 @@ any Formatter::visitSliceIndices(cst::SliceIndices context) {
     for (size_t i = 0; i < context->childCount(); ++i) {
         const auto child = context->child(i);
         if (child.isToken()) {
-            result += ":";
+            result += child.token().kind() == TK::ColonColon ? "::" : ":";
             continue;
         }
         if (!result.empty() && result.back() == ':') {
@@ -1782,6 +1799,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(KeyTypePair)
         CAMEL_FORMAT(KeyValuePair)
         CAMEL_FORMAT(KeyParamPair)
+        CAMEL_FORMAT(TupleParam)
         CAMEL_FORMAT(DataList)
         CAMEL_FORMAT(IdentList)
         CAMEL_FORMAT(IndexValues)

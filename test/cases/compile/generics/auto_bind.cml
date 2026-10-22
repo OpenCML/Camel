@@ -1,0 +1,13 @@
+module auto_bind
+
+// A type variable is bound by the first occurrence of a name that is not a type, in a parameter
+// type (design principles 5.5). One definition serves every element type.
+func first(xs: T[]): T? {
+    return if len(xs) == 0 then null else xs[0]
+}
+
+func main(): int sync {
+    println(first([1, 2, 3]) ?? -1)
+    println(first(['a', 'b']) ?? '')
+    return 0
+}

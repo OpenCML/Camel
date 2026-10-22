@@ -2140,9 +2140,12 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
             // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the three parts of the dimension
-            // (an unwritten one a null load) and whether the end was written at all (`t[a:]`
-            // runs to the end). A part that was not written is passed as the value it stands
-            // for, 0 for the start and 1 for the step; the end is read only when written.
+            // (an unwritten one a null load) and whether the start and the end were written at
+            // all (`t[a:]` runs to the end; a negative step starts at the last element when the
+            // start is left out). A part that was not written is passed as the value it stands
+            // for, 0 for the start and 1 for the step; the end is read only when written. The
+            // last argument is a two-bit mask (bit 0 end, bit 1 start), so a written start with
+            // an unwritten end is told apart from the reverse.
             node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
             bool written[3]     = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
@@ -2158,7 +2161,8 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             bound[0]                  = written[0] ? bound[0] : intConstant(0);
             bound[1]                  = written[1] ? bound[1] : intConstant(0);
             bound[2]                  = written[2] ? bound[2] : intConstant(1);
-            node_ptr_t endWrittenNode = intConstant(written[1] ? 1 : 0);
+            node_ptr_t endWrittenNode =
+                intConstant((written[1] ? 1 : 0) | (written[0] ? 2 : 0));
             for (size_t i = 0; i < 3; ++i) {
                 *res << bound[i];
                 if (written[i]) {
@@ -4103,13 +4107,40 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const bool isDecl = std::exchange(funcDeclPending_, false);
     struct TypeScopeGuard {
         Builder &self;
+        bool own;
         scope_ptr_t<Reference, Type *> outer;
         std::vector<std::string> outerVars;
+        std::set<std::string> outerAuto;
+        std::set<std::string> outerOutput;
+        std::unordered_map<std::string, size_t> outerUses;
         ~TypeScopeGuard() {
+            if (own) {
+                // A nested signature may use the variables of this one: those uses count
+                // here (a lambda body is part of the declaration it stands in).
+                for (const auto &[name, count] : self.typeVarUses_) {
+                    if (!self.autoTypeVars_.contains(name)) {
+                        outerUses[name] += count;
+                    }
+                }
+                self.autoTypeVars_ = std::move(outerAuto);
+                self.typeVarUses_  = std::move(outerUses);
+                self.outputTypeVars_ = std::move(outerOutput);
+            }
             self.typeScope_        = outer;
             self.declaredTypeVars_ = std::move(outerVars);
         }
-    } typeScopeGuard{*this, typeScope_, std::exchange(declaredTypeVars_, {})};
+    } typeScopeGuard{
+        *this,
+        isDecl,
+        typeScope_,
+        std::exchange(declaredTypeVars_, {}),
+        isDecl ? std::move(autoTypeVars_) : std::set<std::string>{},
+        isDecl ? std::move(outputTypeVars_) : std::set<std::string>{},
+        isDecl ? std::move(typeVarUses_) : std::unordered_map<std::string, size_t>{}};
+    if (isDecl) {
+        autoTypeVars_.clear();
+        typeVarUses_.clear();
+    }
     pushScope();
     declSignature_ = isDecl;
     openSignature_ = true;
@@ -4119,6 +4150,22 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // from the function type the lambda stands in.
     const std::vector<Tree::UnwrittenParam> unwrittenParams =
         std::exchange(pendingUnwrittenParams_, {});
+    // A parameter destructured as a tuple (`((a, b)) => ...`) is bound by GIR when it starts the
+    // body: the parameter is one value, and the names take its elements.
+    std::vector<Tree::TupleParamBinding> tupleParams;
+    {
+        size_t index = 0;
+        for (size_t group = 0; group < 2; ++group) {
+            for (const auto &paramPair :
+                 *ast->atAs<AST::FuncTypeLoad>(0)->atAs<AST::RepeatedLoad>(group)) {
+                const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+                if (paramLoad->isTupleParam()) {
+                    tupleParams.push_back({index, paramLoad->tupleNames()});
+                }
+                ++index;
+            }
+        }
+    }
     // A parameter of a reserved name would stand in front of the operator of that name.
     for (size_t i = 0; i < funcType->argNamesCount(); ++i) {
         if (!validateIdent(std::string(funcType->argNameAt(i)))) {
@@ -4147,8 +4194,11 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
                     .commit(
                         name,
                         funcData->ref().toString(),
-                        "its 'typeas' is inside a union, or is the argument of a type function "
-                        "that does not use it");
+                        autoTypeVars_.contains(name)
+                            ? "it is inside a union, or is the argument of a type function "
+                              "that does not use it"
+                            : "its 'typeas' is inside a union, or is the argument of a type "
+                              "function that does not use it");
                 throw BuildAbortException();
             }
         }
@@ -4208,10 +4258,24 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_            = {};
     node_ptr_t stmtsNode = visitStmtBlock(ast->atAs<AST::StmtBlockLoad>(1));
-    node_ptr_t funcNode  = tree_->makeFunc(funcData->ref().toString());
+    if (isDecl) {
+        // A type variable written once is usually a misspelled type name (design principles
+        // 5.5). The count includes the occurrence in a parameter type that bound it.
+        for (const std::string &name : autoTypeVars_) {
+            if (typeVarUses_[name] <= 1 && !outputTypeVars_.contains(name)) {
+                diags_->of(SemanticDiag::TypeVariableUsedOnce)
+                    .at(ast->atAs<AST::FuncTypeLoad>(0)->load()->tokenRange())
+                    .commit(name, funcData->ref().toString());
+            }
+        }
+    }
+    node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
     *funcNode << typeNode << stmtsNode;
     if (!unwrittenParams.empty()) {
         tree_->setUnwrittenParams(funcNode, unwrittenParams);
+    }
+    if (!tupleParams.empty()) {
+        tree_->setTupleParams(funcNode, tupleParams);
     }
     setOriginFromAst(context_, typeNode, ast, camel::source::OriginKind::GctNode, "gct.func.type");
     setOriginFromAst(context_, funcNode, ast, camel::source::OriginKind::GctNode, "gct.func");
@@ -4846,8 +4910,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             typeasAllowed_    = true;
             inDeclReturnType_ = true;
         }
+        const bool outerNestedFuncReturn = inNestedFuncReturn_;
+        if (!signature) {
+            inNestedFuncReturn_ = true;
+        }
         dimBindAllowed_ = false;
         factory.setExitType(visitType(exitTypeNode));
+        inNestedFuncReturn_ = outerNestedFuncReturn;
     }
 
     LEAVE("FuncType");
@@ -5331,6 +5400,12 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
                 return report(imported.value(), importedOrigin(ref));
             }
         }
+        // A type variable bound automatically (design principles 5.5) that is written again:
+        // the occurrence count decides whether it is reported as a likely misspelling.
+        if (dynamic_cast<TypeVarType *>(found.value()) != nullptr &&
+            autoTypeVars_.contains(written)) {
+            ++typeVarUses_[written];
+        }
         return report(found.value(), module_->typeDeclarationOrigin(*foundRef));
     }
     // The types the module itself exports without a type declaration in this file: a `.cml`
@@ -5414,6 +5489,25 @@ Type *Builder::lookupType(const Reference &ref, const AST::node_ptr_t &ast) {
     }
     if (wholeImportFailed_ || poisonedTypes_.contains(written)) {
         throw BuildAbortException();
+    }
+    // A name that is no type in scope binds a type variable where it first appears in a
+    // parameter type (design principles 5.5; the rule of a dimension name in 5.4). The result
+    // type cannot bind one: a caller has no argument that could say what it is.
+    if (typeasAllowed_ && ref.plain()) {
+        if (inDeclReturnType_) {
+            diags_->of(SemanticDiag::TypeVariableNotBound)
+                .at(ast->load()->tokenRange())
+                .commit(written);
+            throw BuildAbortException();
+        }
+        typeScope_->insert(ref, TypeVarType::create(written, false));
+        declaredTypeVars_.push_back(written);
+        autoTypeVars_.insert(written);
+        typeVarUses_[written] = 1;
+        if (inNestedFuncReturn_) {
+            outputTypeVars_.insert(written);
+        }
+        return report(TypeVarType::create(written, true), 0);
     }
     diags_->of(SemanticDiag::UnresolvedTypeReference).at(ast->load()->tokenRange()).commit(written);
     throw BuildAbortException();

@@ -1,0 +1,12 @@
+module err_return_only_type_var
+
+// A type variable that only the result type writes has nothing to bind it: the caller has no
+// argument that could say what it is (design principles 5.5).
+func make(): T {
+    return 1
+}
+
+func main(): int sync {
+    println(make())
+    return 0
+}

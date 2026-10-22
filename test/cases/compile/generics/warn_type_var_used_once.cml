@@ -1,0 +1,12 @@
+module warn_type_var_used_once
+
+// A type variable written only once does not relate two positions: it is most likely a
+// misspelled type name (design principles 5.5).
+func ignore(x: T, n: int): int {
+    return n
+}
+
+func main(): int sync {
+    println(ignore(1, 2))
+    return 0
+}

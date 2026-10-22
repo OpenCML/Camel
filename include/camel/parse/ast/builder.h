@@ -146,6 +146,7 @@ class Builder {
     Value visitKeyTypePair(syntax::cst::KeyTypePair context);
     Value visitKeyValuePair(syntax::cst::KeyValuePair context);
     Value visitKeyParamPair(syntax::cst::KeyParamPair context);
+    Value visitTupleParam(syntax::cst::TupleParam context);
     Value visitDataList(syntax::cst::DataList context);
     Value visitIdentList(syntax::cst::IdentList context);
     Value visitIndexValues(syntax::cst::IndexValues context);

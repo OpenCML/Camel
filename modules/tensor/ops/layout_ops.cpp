@@ -396,7 +396,7 @@ slot_t sliceSubKernel(ArgsView &, ArgsView &norm, context::Context &) {
     const Array *input  = tensorArg(norm, 0);
     const int64_t start = intArg(norm, 1);
     const int64_t step  = intArg(norm, 3);
-    const bool wroteEnd = intArg(norm, 4) != 0;
+    const bool wroteEnd = (intArg(norm, 4) & 1) != 0;
     if (input->rank() != 1) {
         reportShapeError(
             "[]",
@@ -452,7 +452,7 @@ std::optional<Type *> sliceSubInfer(const InferContext &ctx) {
     if (extent == kUnknownDim || !start || !wroteEnd) {
         return tensorOf(in.dtype, StaticShape{kUnknownDim});
     }
-    const int64_t to = *wroteEnd != 0 ? (end ? *end : kUnknownDim) : extent;
+    const int64_t to = (*wroteEnd & 1) != 0 ? (end ? *end : kUnknownDim) : extent;
     if (to == kUnknownDim) {
         return tensorOf(in.dtype, StaticShape{kUnknownDim});
     }

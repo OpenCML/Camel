@@ -1,0 +1,49 @@
+id = "compile.generics_auto_bind"
+order = 342
+tier = "fast"
+tags = ["feat", "compile", "generics", "type-variables"]
+desc = "A type variable is bound by the first occurrence of a name that is not a type in a parameter type, the return type may only use the names the parameters bound, and a name written once is warned about (design principles 5.5)."
+
+[[tests]]
+name = "auto_bind"
+desc = "One definition of `first(xs: T[]): T?` serves int and string arrays: the first occurrence of `T` binds it."
+kind = "behavior"
+case = "../../../cases/compile/generics/auto_bind.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1\na\n"
+timeout_ms = 8000
+
+[[tests]]
+name = "return_only_type_var"
+desc = "A name only the result type writes binds nothing and is TypeVariableNotBound at that name."
+kind = "negative"
+case = "../../../cases/compile/generics/err_return_only_type_var.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableNotBound"
+expect_diagnostic_code = "0x0300019E"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 14
+expect_output_contains = ["The type variable 'T' is not bound by any parameter of this signature."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "type_var_used_once"
+desc = "A type variable written only once is warned about, naming it and the function: it most likely misspells a type."
+kind = "behavior"
+case = "../../../cases/compile/generics/warn_type_var_used_once.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 0
+verify_script = """
+const diags = JSON.parse(input.stderr)
+assert(diags.length === 1, 'one warning, got ' + diags.length + ': ' + input.stderr)
+const d = diags[0]
+assert(d.severity === 'Warn', 'severity Warn: ' + d.severity)
+assert(d.data.name === 'SemanticDiag::TypeVariableUsedOnce', 'name: ' + d.data.name)
+assert(d.message === "The type variable 'T' of 'ignore' is written only once.", 'message: ' + d.message)
+assert(d.range.start.line + 1 === 5, 'line: ' + (d.range.start.line + 1))
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 6000

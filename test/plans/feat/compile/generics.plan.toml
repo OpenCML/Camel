@@ -902,15 +902,15 @@ timeout_ms = 4000
 
 [[tests]]
 name = "use_before_typeas"
-desc = "A variable used before the position that binds it."
+desc = "A name in a parameter type binds a type variable where it is first written (design principles 5.5), so a later `typeas` of the same name cannot bind it again."
 kind = "negative"
 case = "../../../cases/compile/generics/err_unbound_use.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
 expect_diagnostic_line = 3
-expect_diagnostic_column = 12
-expect_output_contains = ["Unresolved type reference: 'T'"]
+expect_diagnostic_column = 25
+expect_output_contains = ["'typeas T' cannot bind 'T'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

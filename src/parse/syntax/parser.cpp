@@ -1187,6 +1187,22 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 /// report it; the parameter lists of a lambda, a function type and a rule take neither.
 void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
     const size_t m = mark();
+    if (lambdaParams_ && cur_ == TK::LParen) {
+        // A lambda parameter destructured as a tuple: `((a, b)) => ...`. The rule is the one of
+        // `let (a, b) = p`: the names take the elements of the tuple the position passes.
+        bump();
+        parseIdentDef();
+        while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {
+            bump();
+            parseIdentDef();
+        }
+        eat(TK::Comma);
+        if (!panic_) {
+            expect(TK::RParen);
+        }
+        close(m, NK::TupleParam);
+        return;
+    }
     if (allowRest && cur_ == TK::DotDot) {
         bump();
         parseIdentDef();
@@ -1243,6 +1259,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
     {
         Scope scope(*this, false);
         if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
+            (lambdaParams_ && cur_ == TK::LParen) ||
             (allowRest && cur_ == TK::DotDot) || (allowConstas && cur_ == TK::KwConstas)) {
             parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {

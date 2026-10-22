@@ -388,6 +388,17 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TypeVariableNotBound,
+            {
+                "TypeVariableNotBound",
+                "The type variable '{0}' is not bound by any parameter of this signature.",
+                "A name in a parameter type is bound where it first appears, as a dimension name "
+                "is. A name that appears only in the return type is an error: the caller has no "
+                "argument that could say what it is. Write the name in a parameter type to bind "
+                "it, or use 'typeas {0}' there when it is also a type in scope.",
+            },
+        },
+        {
             SemanticDiag::GenericArgumentsMismatch,
             {
                 "GenericArgumentsMismatch",
@@ -1547,6 +1558,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline.",
                 "A tag only allows a pass to do something; with no such pass in the pipeline the "
                 "tag has no effect. Add the pass it names ('read_by'), or remove the tag.",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableUsedOnce,
+            {
+                "TypeVariableUsedOnce",
+                "The type variable '{0}' of '{1}' is written only once.",
+                "A type variable written once is usually a misspelled type name. Check the name; "
+                "if it is deliberate, write it in a second parameter or in the result type.",
             },
         },
     };

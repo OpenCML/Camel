@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-218 diagnostics: 201 errors, 17 warnings.
+220 diagnostics: 202 errors, 18 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -182,6 +182,7 @@ prints one entry.
 | `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
+| `0x0300019E` | [SemanticDiag::TypeVariableNotBound](#typevariablenotbound) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -194,6 +195,7 @@ prints one entry.
 | `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
 | `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
+| `0x03100161` | [SemanticDiag::TypeVariableUsedOnce](#typevariableusedonce) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -880,7 +882,22 @@ Tuple unpacking requires the same number of references and data nodes, or exactl
 Ensure the number of variables matches the number of unpacked data elements, or use a single tuple value.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/err_lambda_tuple_arity.cml`, run as `camel test/cases/compile/err_lambda_tuple_arity.cml`)
+
+```camel
+module lambda_tuple_arity
+
+// More names than the tuple has elements is refused, not read past the end.
+with <f: (p: (int, int)) => int>
+func apply_all(ps: (int, int)[]): int[] {
+    return ps->map<f>
+}
+
+func main(): int sync {
+    println(apply_all<((a, b, c)) => a + b + c>([(1, 2)]))
+    return 0
+}
+```
 
 ### InvalidLiteral
 
@@ -1016,17 +1033,17 @@ Unresolved type reference: '{0}'.
 Ensure the type is defined and visible in the current scope.
 ```
 
-**Example** (`test/cases/compile/generics/err_unbound_use.cml`, run as `camel test/cases/compile/generics/err_unbound_use.cml`)
+**Example** (`test/cases/compile/any_typing/written_unknown_name.cml`, run as `camel test/cases/compile/any_typing/written_unknown_name.cml`)
 
 ```camel
-module err_unbound_use
+module written_unknown_name
 
-func id(a: T, b: typeas T): T {
-    return a
-}
-
+// `any` is not a type: there is no such name in the type scope. A declaration's parameter and
+// result types bind a type variable from a name that is not a type (design principles 5.5), so
+// the test writes it where no type variable can be bound: the type of a `let`.
 func main(): int sync {
-    println(id(1, 2))
+    let x: any = 1
+    println(x)
     return 0
 }
 ```
@@ -4839,6 +4856,39 @@ func main(): int {
 }
 ```
 
+### TypeVariableNotBound
+
+`0x0300019E` · Error · `SemanticDiag::TypeVariableNotBound`
+
+**Message**
+
+```text
+The type variable '{0}' is not bound by any parameter of this signature.
+```
+
+**Help**
+
+```text
+A name in a parameter type is bound where it first appears, as a dimension name is. A name that appears only in the return type is an error: the caller has no argument that could say what it is. Write the name in a parameter type to bind it, or use 'typeas {0}' there when it is also a type in scope.
+```
+
+**Example** (`test/cases/compile/generics/err_return_only_type_var.cml`, run as `camel test/cases/compile/generics/err_return_only_type_var.cml`)
+
+```camel
+module err_return_only_type_var
+
+// A type variable that only the result type writes has nothing to bind it: the caller has no
+// argument that could say what it is (design principles 5.5).
+func make(): T {
+    return 1
+}
+
+func main(): int sync {
+    println(make())
+    return 0
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -5246,6 +5296,39 @@ func f(x: int): int {
 
 func main(): int {
     println(f(1))
+    return 0
+}
+```
+
+### TypeVariableUsedOnce
+
+`0x03100161` · Warn · `SemanticDiag::TypeVariableUsedOnce`
+
+**Message**
+
+```text
+The type variable '{0}' of '{1}' is written only once.
+```
+
+**Help**
+
+```text
+A type variable written once is usually a misspelled type name. Check the name; if it is deliberate, write it in a second parameter or in the result type.
+```
+
+**Example** (`test/cases/compile/generics/warn_type_var_used_once.cml`, run as `camel --output-format json test/cases/compile/generics/warn_type_var_used_once.cml`)
+
+```camel
+module warn_type_var_used_once
+
+// A type variable written only once does not relate two positions: it is most likely a
+// misspelled type name (design principles 5.5).
+func ignore(x: T, n: int): int {
+    return n
+}
+
+func main(): int sync {
+    println(ignore(1, 2))
     return 0
 }
 ```
