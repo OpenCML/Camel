@@ -218,6 +218,18 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/tiles.cml',
     },
+    {
+        name: 'nn',
+        title: '`nn`: neural-network primitives',
+        kind: 'cpp',
+        // `save_params` is declared in stdlib/nn.cml; the eighteen operators whose signature C++
+        // computes from the tensors they receive (the convolution, pooling, batch-normalization,
+        // embedding and loss operators, and the three optimizers) keep their reference entries in
+        // the signature file named by `computed:` (handover H165).
+        source: 'nn.cml',
+        declaration: true,
+        computed: 'signatures/nn.cml',
+    },
 ]
 
 function sourceOf(module) {
@@ -663,7 +675,7 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`), the Python')
+    out.push('Not in this reference: the `autodiff` module, the `onnx` exporter and `sim`\'s simulation types, the Python')
     out.push('bridge (`python`, `pyplot`) and the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')

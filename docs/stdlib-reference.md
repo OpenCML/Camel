@@ -31,7 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`), the Python
+Not in this reference: the `autodiff` module, the `onnx` exporter and `sim`'s simulation types, the Python
 bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
@@ -58,6 +58,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
 | [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
+| [nn](#nn) | `import { ... } from nn` | C++ | 19 |
 
 <a id="built-in-functions"></a>
 
@@ -4450,3 +4451,269 @@ memory. Asking is a requirement, not a preference: with no device the call is a 
 - With effects: probes the driver.
 - Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
 - Example: `println(device())`
+
+<a id="nn"></a>
+
+## `nn`: neural-network primitives
+
+Neural-network primitives: 2-D convolution and its gradients, max and average pooling with
+their gradients, batch normalization, embedding, the fused softmax cross-entropy loss, the
+optimizers, and the checkpoint writer for a parameter tree. The operators work on the core
+`Tensor` type; nothing here needs PyTorch or a GPU.
+
+### Convolution
+
+#### `conv2d`
+
+```camel
+conv2d: (input: Tensor, kernel: Tensor, bias: Tensor, stride?: int, padding?: int) => Tensor
+```
+
+2-D convolution: `input` is `[N, C, H, W]` f32, `kernel` is `[O, C, KH, KW]` f32 and `bias` is
+`[O]` f32. `stride` defaults to 1 and `padding` to 0; the result is `[N, O, OH, OW]` f32 with
+`OH = (H + 2*padding - KH) / stride + 1` and `OW` likewise. An input or kernel that is not
+rank 4, or a window that does not fit, is refused when the call is compiled.
+
+- Pure.
+- Example: `conv2d(x, w, b, 1, 0)` gives `[N, O, OH, OW]`
+
+#### `conv2d_input_grad`
+
+```camel
+conv2d_input_grad: (input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `conv2d` with respect to its input, given the upstream gradient `dy` shaped
+like the convolution's result; the result is shaped like `input`.
+
+- Pure.
+- Example: `conv2d_input_grad(x, w, dy, 1, 0)` gives `like x`
+
+#### `conv2d_kernel_grad`
+
+```camel
+conv2d_kernel_grad: (input: Tensor, kernel: Tensor, dy: Tensor, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the convolution's
+result; the result is shaped like `kernel`.
+
+- Pure.
+- Example: `conv2d_kernel_grad(x, w, dy, 1, 0)` gives `like w`
+
+#### `conv2d_bias_grad`
+
+```camel
+conv2d_bias_grad: (bias: Tensor, dy: Tensor) => Tensor
+```
+
+The gradient of `conv2d` with respect to its bias: the sum of `dy` over the batch and the
+spatial axes, shaped like `bias`.
+
+- Pure.
+- Example: `conv2d_bias_grad(b, dy)` gives `like b`
+
+### Pooling
+
+#### `max_pool2d`
+
+```camel
+max_pool2d: (input: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. `stride` defaults
+to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`. A window that lies entirely in
+the padding contributes -inf (the identity of the maximum).
+
+- Pure.
+- Example: `max_pool2d(x, 2)` gives `[N, C, H/2, W/2]`
+
+#### `avg_pool2d`
+
+```camel
+avg_pool2d: (input: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+Average pooling over a square window of `kernel`: the window's elements plus +0 for those in
+the padding are summed in an f64 accumulator and divided by `kernel*kernel`. `stride` defaults
+to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
+
+- Pure.
+- Example: `avg_pool2d(x, 2)` gives `[N, C, H/2, W/2]`
+
+#### `max_pool2d_grad`
+
+```camel
+max_pool2d_grad: (input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `max_pool2d` with respect to its input, given `dy` shaped like the pooling
+result; the result is shaped like `input`.
+
+- Pure.
+- Example: `max_pool2d_grad(x, dy, 2)` gives `like x`
+
+#### `avg_pool2d_grad`
+
+```camel
+avg_pool2d_grad: (input: Tensor, dy: Tensor, kernel: int, stride?: int, padding?: int) => Tensor
+```
+
+The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like the pooling
+result; the result is shaped like `input`.
+
+- Pure.
+- Example: `avg_pool2d_grad(x, dy, 2)` gives `like x`
+
+### Batch normalization
+
+#### `batch_norm`
+
+```camel
+batch_norm: (input: Tensor, mean: Tensor, var: Tensor, gamma: Tensor, beta: Tensor, eps?: number) => Tensor
+```
+
+Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + beta`, with
+`eps` defaulting to 1e-5. Every tensor is f32 and the result is shaped like `input`.
+
+- Pure.
+- Example: `batch_norm(x, running_mean, running_var, gamma, beta)`
+
+#### `batch_norm_train`
+
+```camel
+batch_norm_train: (input: Tensor, gamma: Tensor, beta: Tensor, running_mean: Tensor, running_var: Tensor, momentum?: number, eps?: number) => (Tensor, Tensor, Tensor)
+```
+
+Training-mode batch normalization: normalizes `input` with the batch statistics, and answers
+`(y, new_running_mean, new_running_var)`, where `y` is shaped like `input` and the running
+statistics are shaped like `running_mean`/`running_var`. `momentum` defaults to 0.1 and `eps`
+to 1e-5.
+
+- Pure.
+- Example: `let (y, mean, var) = batch_norm_train(x, gamma, beta, running_mean, running_var)`
+
+#### `batch_norm_train_grad`
+
+```camel
+batch_norm_train_grad: (input: Tensor, gamma: Tensor, dy: Tensor, eps?: number) => (Tensor, Tensor, Tensor)
+```
+
+The gradients of training-mode batch normalization: `(dx, dgamma, dbeta)`, shaped like
+`input`, `gamma` and `beta`. Only `y` carries gradient; the running-statistics blend is not
+differentiated, so the operator takes `dy` (the gradient of `y`) and `eps`.
+
+- Pure.
+- Example: `let (dx, dgamma, dbeta) = batch_norm_train_grad(x, gamma, dy)`
+
+### Embedding
+
+#### `embedding`
+
+```camel
+embedding: (table: Tensor, indices: Tensor) => Tensor
+```
+
+Gathers rows of the rank-2 int-or-float table `[rows, dim]` by the rank-1 integer indices; the
+result is `[indices.length, dim]`. An index outside `[0, rows)` is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when an index is outside the table.
+- Example: `embedding(table, [0, 2])` gives `[2, dim]`
+
+#### `embedding_table_grad`
+
+```camel
+embedding_table_grad: (table: Tensor, indices: Tensor, dy: Tensor) => Tensor
+```
+
+The gradient of `embedding` with respect to its table: unvisited rows stay zero, and the
+result is shaped like `table`.
+
+- Pure.
+- Example: `embedding_table_grad(table, indices, dy)` gives `like table`
+
+### Loss
+
+#### `softmax_cross_entropy`
+
+```camel
+softmax_cross_entropy: (logits: Tensor, target: Tensor) => float
+softmax_cross_entropy: (logits: Tensor, target: Tensor | number[]) => float
+```
+
+The mean softmax cross-entropy of rank-2 `logits` `[batch, classes]` against a same-shaped
+target distribution. When the target is an integer array or a rank-1 integer tensor it is
+read as one class label per row (the URI `nn:softmax_cross_entropy_labels`), and the value is
+the same as the one-hot form's.
+
+- Pure.
+- Failure: fault `RuntimeError` when a label is outside `[0, classes)`.
+- Example: `softmax_cross_entropy(logits, target)` gives `a float`
+
+#### `softmax_cross_entropy_grad`
+
+```camel
+softmax_cross_entropy_grad: (logits: Tensor, target: Tensor, dy: number) => Tensor
+softmax_cross_entropy_grad: (logits: Tensor, target: Tensor | number[], dy: number) => Tensor
+```
+
+The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is
+shaped like `logits`. The label form (the URI `nn:softmax_cross_entropy_labels_grad`) takes
+integer class labels instead of a target distribution and answers the same shape.
+
+- Pure.
+- Failure: fault `RuntimeError` when a label is outside `[0, classes)`.
+- Example: `softmax_cross_entropy_grad(logits, target, 1.0)` gives `like logits`
+
+### Optimizers
+
+#### `sgd`
+
+```camel
+sgd: (params: P, grads: P, lr: float) => P
+```
+
+One step of stochastic gradient descent on a parameter tree: `params - grads * lr`, with the
+result shaped like `params`. `grads` must be the gradient of `params` and `lr` is a number.
+
+- Pure.
+- Example: `let next = sgd(params, grads, 0.1)`
+
+#### `adam_state`
+
+```camel
+adam_state: (params: P) => OptimizerState
+```
+
+The initial `OptimizerState` of a parameter tree: zero first and second moments, and step 0.
+The state's moment trees are shaped like `params`.
+
+- Pure.
+- Example: `let state = adam_state(params)`
+
+#### `adam`
+
+```camel
+adam: (params: P, grads: P, state: OptimizerState, lr: float, beta1?: number, beta2?: number, eps?: number) => (P, OptimizerState)
+```
+
+One step of Adam on a parameter tree: answers `(new_params, new_state)`, both shaped like
+`params`/`state`. `beta1` defaults to 0.9, `beta2` to 0.999 and `eps` to 1e-8.
+
+- Pure.
+- Example: `let (next, state) = adam(params, grads, state, 0.001)`
+
+#### `save_params`
+
+```camel
+save_params: (params: typeas P, dir: string) => void
+```
+
+Saves every tensor leaf of `params` under `dir`, as `<dir>/<path>.npy`, the path joining struct
+field names and tuple indices with dots; other leaves are ignored. The directories are
+created when missing.
+
+- With effects: writes files under `dir`.
+- Failure: fault `RuntimeError` when the directory cannot be created or a leaf cannot be written.
+- Example: `save_params({ w: new([1.0, 2.0]), b: new([0.0]) }, 'checkpoints/step-1')`
