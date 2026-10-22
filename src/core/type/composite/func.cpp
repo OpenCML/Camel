@@ -52,8 +52,8 @@ template <typename Parts>
 Parts partsOf(
     ModifierSet modifiers, const std::vector<param_t> &withTypes,
     const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
-    const std::vector<std::string> &argNames, bool hasRest, uint16_t constasIndex,
-    const sem::ResourceSignature &resources) {
+    const std::vector<std::string> &argNames, bool hasRest,
+    const std::vector<uint16_t> &constasIndices, const sem::ResourceSignature &resources) {
     Parts parts;
     parts.modifiers = modifiers;
     parts.resources = resources;
@@ -64,7 +64,7 @@ Parts partsOf(
     parts.exitType     = exitType;
     parts.hasNames     = hasNames;
     parts.hasRest      = hasRest;
-    parts.constasIndex = constasIndex;
+    parts.constasIndices = constasIndices;
     if (hasNames) {
         ASSERT(argNames.size() == parts.params.size(), "One name per parameter.");
         parts.names.reserve(argNames.size());
@@ -88,7 +88,7 @@ FunctionType *FunctionTypeFactory::build() {
         hasNames_,
         argNames_,
         hasRest_,
-        constasIndex_,
+        constasIndices_,
         resources_));
 }
 
@@ -101,7 +101,7 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         hasNames_,
         argNames_,
         hasRest_,
-        constasIndex_,
+        constasIndices_,
         resources_));
 }
 
@@ -117,7 +117,7 @@ FunctionType::FunctionType(const Parts &parts, bool open)
       modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
       hasNames_(parts.hasNames), hasRest_(parts.hasRest),
-      constasIndex_(parts.constasIndex), resources_(parts.resources), open_(open) {
+      constasIndices_(parts.constasIndices), resources_(parts.resources), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
         const auto &[type, isVar] = parts.params[i];
         types()[i]                = type;
@@ -163,7 +163,8 @@ FunctionType *FunctionType::intern(const Parts &parts) {
     key.push_back(reinterpret_cast<uintptr_t>(parts.exitType));
     key.push_back(parts.hasNames ? 1 : 0);
     key.push_back(parts.hasRest ? 1 : 0);
-    key.push_back(parts.constasIndex);
+    key.push_back(parts.constasIndices.size());
+    key.insert(key.end(), parts.constasIndices.begin(), parts.constasIndices.end());
     // The resources are part of what a signature promises: two types that differ only there are
     // not the same type (design effects plan 2.2).
     key.push_back(static_cast<uintptr_t>(parts.resources.mode));
@@ -215,7 +216,7 @@ FunctionType::Parts FunctionType::parts() const {
     parts.exitType  = exitType_;
     parts.hasNames  = hasNames_;
     parts.hasRest   = hasRest_;
-    parts.constasIndex = constasIndex_;
+    parts.constasIndices = constasIndices_;
     parts.resources = resources_;
     parts.params.reserve(paramCount());
     for (size_t i = 0; i < paramCount(); ++i) {
@@ -349,7 +350,7 @@ bool FunctionType::assignableFrom(Type *other) const {
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
     if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_ ||
-        hasRest_ != otherFunc.hasRest_ || constasIndex_ != otherFunc.constasIndex_)
+        hasRest_ != otherFunc.hasRest_ || constasIndices_ != otherFunc.constasIndices_)
         return false;
 
     // Parameters are contravariant: this type's parameter must be acceptable where the other

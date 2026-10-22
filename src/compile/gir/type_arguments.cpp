@@ -131,7 +131,7 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 .commit(tmpl->name);
             throw BuildAbortException();
         }
-        auto graph = instantiateGeneric(tmpl, bindings, {}, gct);
+        auto graph = instantiateGeneric(tmpl, bindings, {}, {}, gct);
         currGraph_->addDependencyGraph(graph);
         return createFuncDataNode(graph, true, false);
     }

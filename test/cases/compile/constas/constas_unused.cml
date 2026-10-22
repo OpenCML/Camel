@@ -1,11 +1,15 @@
+/**
+ * A `constas` value need not be read by a type: the body may read it as a value (H51 ruling,
+ * 2026-10-22). `n` is a compile-time constant, so nothing differs at run time between the two
+ * instances `tag<3>` and `tag<4>` except the constant the body reads.
+ */
 module constas_unused
 
-// A value no type reads is a decoration: it would make two instances that differ in nothing.
-func bad(constas n: int, x: float): float {
-    return x
+func tag(constas n: int, x: int): int {
+    return x * 10 + n
 }
 
 func main(): int sync {
-    println(bad(3, 1.0))
+    println(tag(3, 1), tag(4, 1))
     return 0
 }

@@ -1,0 +1,22 @@
+/**
+ * `column(constas n: string, ..ts)`: the acceptance case of
+ * docs/design/generic-structure/README.cn.md 3.1.1 in the form today's features allow. The field
+ * name is a compile-time string value; the body reads it as the key of `ts.[j].[n]`, over the
+ * build-time tuple of the rest parameter. Two calls differing only in the string are two
+ * instances, `column<"w">` and `column<"h">`, and each picks the field its value names.
+ */
+module constas_column
+
+func column(constas n: string, ..ts): (int, int) {
+    return ( static for (j) in indices ts => ts.[j].[n] )
+}
+
+func main(): int sync {
+    let a = { w: 1, h: 2 }
+    let b = { w: 3, h: 4 }
+    let (x, y) = column("w", a, b)
+    println(x, y)
+    let (p, q) = column("h", a, b)
+    println(p, q)
+    return 0
+}

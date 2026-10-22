@@ -290,7 +290,10 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             parts.push_back(literal((fn->hasRest() ? "X" : "") + std::string("N") +
                                     std::to_string(normCount)));
             if (fn->hasConstas()) {
-                parts.push_back(literal("C" + std::to_string(fn->constasIndex())));
+                parts.push_back(literal("C" + std::to_string(fn->constasCount())));
+                for (uint16_t index : fn->constasIndices()) {
+                    parts.push_back(literal(std::to_string(index)));
+                }
             }
             for (size_t i = 0; i < normCount; ++i) {
                 if (fn->normIsVarAt(i)) {
@@ -608,8 +611,7 @@ bool sameType(const Type *a, const Type *b) {
             if (lhs->withTypesCount() != rhs->withTypesCount() ||
                 lhs->normTypesCount() != rhs->normTypesCount() ||
                 lhs->hasRest() != rhs->hasRest() ||
-                lhs->hasConstas() != rhs->hasConstas() ||
-                (lhs->hasConstas() && lhs->constasIndex() != rhs->constasIndex())) {
+                lhs->constasIndices() != rhs->constasIndices()) {
                 return false;
             }
             for (size_t i = 0; i < lhs->withTypesCount(); ++i) {

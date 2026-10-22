@@ -101,11 +101,22 @@ node_handle_t Builder::inlineRestCall(
     std::vector<Argument> &normInputs, const GCT::node_ptr_t &call, Type *expectedResult) {
     FunctionType *signature = tmpl->funcType;
     const size_t withCount  = signature->withTypesCount();
-    const size_t normCount  = signature->normTypesCount();
+    const size_t declaredNormCount = signature->normTypesCount();
+    // The runtime parameters: the `constas` ones are compile-time values and are dropped from
+    // the arguments below (design principles 5.4); the rest parameter is always last.
+    const size_t normCount  = declaredNormCount - signature->constasCount();
     ASSERT(signature->hasRest() && normCount > 0 && restBindings_.size() < 64,
            "A rest signature has its rest parameter last.");
     const size_t fixedCount = normCount - 1;
-    const std::string restName(signature->argNameAt(withCount + normCount - 1));
+    const std::string restName(signature->argNameAt(withCount + declaredNormCount - 1));
+    // The declared ordinary parameter of each runtime argument.
+    std::vector<size_t> runtimeIndices;
+    runtimeIndices.reserve(declaredNormCount);
+    for (size_t i = 0; i < declaredNormCount; ++i) {
+        if (!signature->normIsConstasAt(i)) {
+            runtimeIndices.push_back(i);
+        }
+    }
 
     if (withInputs.size() != withCount) {
         diags_->of(SemanticDiag::ArgumentsMismatch)
@@ -113,6 +124,9 @@ node_handle_t Builder::inlineRestCall(
             .commit(signature->toString(), "the with-arguments given at the call");
         throw BuildAbortException();
     }
+    ConstasValues constas;
+    ExtentValues extents;
+    takeConstasValues(signature, normInputs, nullptr, call, constas, extents);
     if (normInputs.size() < fixedCount) {
         diags_->of(SemanticDiag::RestArgumentsMismatch)
             .atOrigin(call->origin())
@@ -162,7 +176,8 @@ node_handle_t Builder::inlineRestCall(
         bindOne(signature->withTypeAt(i), withInputs[i], true, i);
     }
     for (size_t i = 0; i < fixedCount; ++i) {
-        bindOne(signature->normTypeAt(i), normInputs[i], false, i);
+        Type *pattern = substituteExtentValues(signature->normTypeAt(runtimeIndices[i]), extents);
+        bindOne(pattern, normInputs[i], false, i);
     }
     // Every type variable of the fixed parameters must be known: the rest parameter gives no
     // types of its own, and the body cannot be built around an open `T`.
@@ -179,7 +194,8 @@ node_handle_t Builder::inlineRestCall(
         }
     }
     for (size_t i = 0; i < fixedCount; ++i) {
-        Type *wanted = substituteTypeVars(signature->normTypeAt(i), bindings);
+        Type *wanted = substituteExtentValues(
+            substituteTypeVars(signature->normTypeAt(runtimeIndices[i]), bindings), extents);
         if (containsTypeVar(wanted)) {
             diags_->of(SemanticDiag::GenericArgumentsMismatch)
                 .atOrigin(call->origin())
@@ -214,6 +230,25 @@ node_handle_t Builder::inlineRestCall(
         }
         withInputs[i].node = entered;
     }
+    // A `constas` value is held to the type of its parameter like a fixed argument is, with the
+    // other values' extents and the type variables the fixed arguments bound (5.4).
+    for (size_t i = 0; i < declaredNormCount; ++i) {
+        if (!signature->normIsConstasAt(i)) {
+            continue;
+        }
+        const std::string name(signature->argNameAt(withCount + i));
+        ConstasValue &value = constas.at(name);
+        Type *wanted =
+            substituteExtentValues(substituteTypeVars(signature->normTypeAt(i), bindings), extents);
+        if (!wanted->assignableFrom(value.valueType) &&
+            !entersImplicitly(wanted, value.valueType)) {
+            diags_->of(SemanticDiag::ArgumentsMismatch)
+                .atOrigin(call->origin())
+                .commit(signature->toString(), value.valueType->toString());
+            throw BuildAbortException();
+        }
+        value.type = wanted;
+    }
 
     std::vector<node_handle_t> restValues;
     restValues.reserve(normInputs.size() - fixedCount);
@@ -230,8 +265,10 @@ node_handle_t Builder::inlineRestCall(
     rest.tuple.materializable = false;
     rest.tuple.origin         = call;
 
-    Type *exitType =
-        signature->hasExitType() ? substituteTypeVars(signature->exitType(), bindings) : nullptr;
+    Type *exitType = signature->hasExitType()
+                         ? substituteExtentValues(
+                               substituteTypeVars(signature->exitType(), bindings), extents)
+                         : nullptr;
     if (exitType != nullptr && containsTypeVar(exitType)) {
         diags_->of(SemanticDiag::GenericArgumentsMismatch)
             .atOrigin(call->origin())
@@ -268,6 +305,7 @@ node_handle_t Builder::inlineRestCall(
         size_t staticDepth;
         RestBody *restBody;
         size_t restCount;
+        size_t staticValueCount;
         Type *expected;
         camel::core::module::module_ptr_t module;
         std::vector<std::string> namespacePath;
@@ -283,7 +321,8 @@ node_handle_t Builder::inlineRestCall(
               staticBody(std::exchange(b.activeStaticBody_, nullptr)),
               staticDepth(std::exchange(b.staticDepth_, 0)),
               restBody(std::exchange(b.activeRestBody_, nullptr)),
-              restCount(b.restBindings_.size()), expected(b.expectedValueType_),
+              restCount(b.restBindings_.size()), staticValueCount(b.staticValueScopes_.size()),
+              expected(b.expectedValueType_),
               module(b.module_), namespacePath(b.namespacePath_), usingFrames(b.usingFrames_) {
             ++self.instantiationDepth_;
         }
@@ -308,6 +347,7 @@ node_handle_t Builder::inlineRestCall(
             self.staticDepth_          = staticDepth;
             self.activeRestBody_       = restBody;
             self.restBindings_.resize(restCount);
+            self.staticValueScopes_.resize(staticValueCount);
             self.expectedValueType_    = expected;
             self.module_               = module;
             self.namespacePath_        = std::move(namespacePath);
@@ -346,6 +386,13 @@ node_handle_t Builder::inlineRestCall(
     }
 
     enterBlockScope();
+    // The values of the `constas` parameters are static values of the expanded body, like the
+    // `n` of a `static for`: they are not runtime arguments and have no node of their own.
+    staticValueScopes_.emplace_back();
+    for (const auto &[constasName, constasValue] : constas) {
+        staticValueScopes_.back().push_back(
+            {constasName, constasKeyOf(constasValue.data), constasValue.node});
+    }
     try {
         for (size_t i = 0; i < withCount; ++i) {
             if (!insertNode(std::string(signature->argNameAt(i)), withInputs[i].node)) {
@@ -356,7 +403,7 @@ node_handle_t Builder::inlineRestCall(
             }
         }
         for (size_t i = 0; i < fixedCount; ++i) {
-            const std::string name(signature->argNameAt(withCount + i));
+            const std::string name(signature->argNameAt(withCount + runtimeIndices[i]));
             if (!insertNode(name, normInputs[i].node)) {
                 diags_->of(SemanticDiag::DuplicateParameter)
                     .atOrigin(call->origin())

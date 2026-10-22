@@ -1,12 +1,14 @@
+/**
+ * The value may be any compile-time constant, not only an `int` (H51 ruling, 2026-10-22): a
+ * `float` value that no type reads is as legal as an `int` one.
+ */
 module constas_type_not_int
-import { Tensor, ones } from tensor
 
-// The value becomes an extent, and extents are integers.
-func bad(constas n: float, x: Tensor<f32, const [3]>): float {
-    return 0.0
+func scale(constas k: float, x: float): float {
+    return k * x
 }
 
 func main(): int sync {
-    println(bad(1.0, ones([3])))
+    println(scale(2.5, 2.0))
     return 0
 }

@@ -342,8 +342,10 @@ node_handle_t Builder::visitStaticForNode(
         if (!byIndices) {
             typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
         } else {
-            indexNode = currGraph_->addStaticDataNode(tt::as_shared<Data>(
-                std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i))));
+            const data_ptr_t indexValue = tt::as_shared<Data>(
+                std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i)));
+            indexNode = currGraph_->addStaticDataNode(indexValue);
+            rememberConstant(indexNode, indexValue);
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         }
         staticValueScopes_.emplace_back();
@@ -504,8 +506,10 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
         if (!byIndices) {
             typeBindings_.insert(typeBindings_.begin(), {typeName, tree::childType(subject, i)});
         } else {
-            indexNode = currGraph_->addStaticDataNode(tt::as_shared<Data>(
-                std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i))));
+            const data_ptr_t indexValue = tt::as_shared<Data>(
+                std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i)));
+            indexNode = currGraph_->addStaticDataNode(indexValue);
+            rememberConstant(indexNode, indexValue);
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         }
         staticValueScopes_.emplace_back();

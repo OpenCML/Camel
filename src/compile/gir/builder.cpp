@@ -747,6 +747,12 @@ void Builder::buildFuncBody(
         }
         ~FunctionBodyScope() { slot = outer; }
     } bodyScope(functionBody_, gct->at(1));
+    // A nested function is a boundary for the compile-time names of an enclosing expansion
+    // too: the `n` of a `static for` and the value of an enclosing `constas` parameter are not
+    // names of its body. Its own `constas` values (when it is an instance being built) are
+    // bound below.
+    const size_t outerStaticValues = staticValueScopes_.size();
+    staticValueScopes_.clear();
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -774,6 +780,19 @@ void Builder::buildFuncBody(
         bodyStates_[graph.get()] = BodyState::Open;
         if (!funcType->hasExitType()) {
             inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
+        }
+        // The values of the instance's `constas` parameters: the body reads them as static
+        // values, much as a `static for` reads its round's `n` (design principles 5.4). They
+        // are not ports, so they are not names of the graph; the scope is the body's.
+        if (!constasBindings_.empty()) {
+            staticValueScopes_.emplace_back();
+            for (const auto &[constasName, constasValue] : constasBindings_) {
+                node_handle_t constant = graph->addStaticDataNode(constasValue.data);
+                rememberConstant(constant, constasValue.data);
+                registerNodeOrigin(context_, constant, gct, "gir.data.static.constas");
+                staticValueScopes_.back().push_back(
+                    {constasName, constasKeyOf(constasValue.data), constant});
+            }
         }
         // A decorated block whose value nothing takes is a function whose value is dropped:
         // it returns nothing, and a `return` in it gives no value (visitExitNode). Not a sync
@@ -810,6 +829,7 @@ void Builder::buildFuncBody(
         staticDepth_             = outerStaticDepth;
         activeRestBody_          = outerRestBody;
         restBindings_.resize(outerRestBindings);
+        staticValueScopes_.resize(outerStaticValues);
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
@@ -822,6 +842,7 @@ void Builder::buildFuncBody(
         staticDepth_             = outerStaticDepth;
         activeRestBody_          = outerRestBody;
         restBindings_.resize(outerRestBindings);
+        staticValueScopes_.resize(outerStaticValues);
         leaveScope();
         throw;
     }
@@ -829,6 +850,7 @@ void Builder::buildFuncBody(
     staticDepth_      = outerStaticDepth;
     activeRestBody_   = outerRestBody;
     restBindings_.resize(outerRestBindings);
+    staticValueScopes_.resize(outerStaticValues);
 }
 
 
