@@ -172,3 +172,24 @@ expect_diagnostic_line = 8
 expect_output_contains = ["The default of the 'with' parameter 'v' has type 'int', not 'T'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+[[tests]]
+name = "with_defaults.named_deferred"
+desc = "A name is bound before its literal is typed: `pick`'s second parameter `v: T` is written first (`pick<v: 7, tag: 1>(2)`), and `7` still takes `T` from the ordinary argument, so both the reordered index and the deferred literal follow the declaration's order."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/named_deferred.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "1:7:2\n2:a:b\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_defaults.named_and_default"
+desc = "A named argument and a defaulted one mix in either order: the parameter given by name keeps its value, the other takes the declaration's constant (8 and 'x'), and a positional argument may come before the name (`show<1, label: 'p'>`)."
+kind = "behavior"
+case = "../../../cases/compile/with_defaults/named_and_default.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "x:16\na:16\nx:6\np:2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
