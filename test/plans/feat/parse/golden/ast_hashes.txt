@@ -1710,6 +1710,11 @@ e840bb4e688c1b2d ok test/cases/modules/onnx/refusals/request_in_arm.cml
 a1a5055e9a0b870b ok test/cases/modules/onnx/refusals/var_arm.cml
 c45f2f246e3be78e ok test/cases/modules/onnx/refusals/var_outer.cml
 a08d9b1c92c77582 ok test/cases/modules/onnx/refusals/var_param.cml
+5a957915a79c25ee ok test/cases/modules/pass_not_found/declares_not_exported.cml
+0766fb6475c52bc6 ok test/cases/modules/pass_not_found/main.cml
+63e9d6bea6466093 ok test/cases/modules/pass_not_found/no_pass.cml
+f31b0dd6f1ff32f4 ok test/cases/modules/pass_not_found/shadowed_rules/main.cml
+08b22ac34cb6929a ok test/cases/modules/pass_not_found/shadowed_rules/rules.cml
 22a9abfa3e4b9ffb ok test/cases/modules/random/keyed_random.cml
 9ef2758057679ea9 ok test/cases/modules/random/permutation_negative.cml
 a4167c31852a3565 ok test/cases/modules/random/random_independence.cml
@@ -2182,6 +2187,7 @@ f300e470487fa1bc ok test/cases/perf/gc/build_tree.cml
 f7282e239e9b6bc9 ok test/cases/perf/gc/fib.cml
 67d7480ba05afe38 ok test/cases/perf/gc/jit_const.cml
 3bf44e76d6935b32 ok test/cases/perf/gc/map_chain.cml
+4c742f0f1281a205 ok test/cases/perf/startup/imports_nothing.cml
 308cd3c79d6d3c2f ok test/cases/resources/effects.cml
 6464a4bd00592647 ok test/cases/resources/names.cml
 a3872dff9491d245 ok test/cases/smoke/core/fib10_pipeline.cml
