@@ -1251,7 +1251,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     genericCalleeAllowed_ = gct->at(0)->type() == GCT::NodeKind::DREF ||
                             gct->at(0)->type() == GCT::NodeKind::WITH ||
                             gct->at(0)->type() == GCT::NodeKind::TAPP;
+    const bool outerWithArgsOfCall = withArgsOfCall_;
+    withArgsOfCall_ = gct->at(0)->type() == GCT::NodeKind::WITH;
     any targetNodeRes     = visit(gct->at(0));
+    withArgsOfCall_       = outerWithArgsOfCall;
     genericCalleeAllowed_ = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
     // `v ?-> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
@@ -1270,9 +1273,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         withInputs = std::move(bound->second);
         boundWithArgs_.erase(bound);
         boundWithCallee_.erase(targetNode);
-    }
-    for (const Argument &input : withInputs) {
-        withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
 
     // Call results take the callee's current exit type (a recursive callee's
@@ -1375,6 +1375,88 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 assignedType = place;
             }
         }
+    }
+    // A with-argument whose parameter still had type variables when the callee was visited was
+    // left for this point (visitWithNode): the ordinary arguments are typed now, so the
+    // signature's variables have their types. `reduce<(a, b) => a + b, 0>`: the element type
+    // comes from the array and the accumulator type from the position the call stands at. A
+    // variable that nothing binds stays open, and the argument is built without an expected
+    // type, as it was before.
+    bool hasDeferredWith = false;
+    for (const Argument &input : withInputs) {
+        hasDeferredWith = hasDeferredWith || input.node == nullptr;
+    }
+    if (hasDeferredWith) {
+        type_bindings_t bindings;
+        if (argumentSignature != nullptr) {
+            for (size_t i = 0;
+                 i < normInputTypes.size() && i < argumentSignature->normTypesCount(); ++i) {
+                unifyTypeVars(argumentSignature->normTypeAt(i), normInputTypes[i], bindings);
+            }
+            if (expectedResult != nullptr && argumentSignature->hasExitType()) {
+                unifyTypeVars(argumentSignature->exitType(), expectedResult, bindings);
+            }
+        }
+        const auto parameterOf = [&](size_t i) -> Type * {
+            return argumentSignature != nullptr && i < argumentSignature->withTypesCount()
+                       ? argumentSignature->withTypeAt(i)
+                       : nullptr;
+        };
+        // A function type is a usable expected type for a lambda when its parameters are
+        // concrete; a type variable in its result says nothing and the body decides
+        // (completeLambdaSignature). Any other type must be concrete.
+        const auto usableExpected = [](Type *wanted) {
+            if (wanted == nullptr) {
+                return false;
+            }
+            if (wanted->code() != TypeCode::Function) {
+                return !containsTypeVar(wanted);
+            }
+            const auto *funcType = tt::as_ptr<FunctionType>(wanted);
+            for (size_t p = 0; p < funcType->withTypesCount(); ++p) {
+                if (containsTypeVar(funcType->withTypeAt(p))) {
+                    return false;
+                }
+            }
+            for (size_t p = 0; p < funcType->normTypesCount(); ++p) {
+                if (containsTypeVar(funcType->normTypeAt(p))) {
+                    return false;
+                }
+            }
+            return true;
+        };
+        // A value that is not a function (the initial value of a reduction, a shape literal)
+        // can be built before the function is: its own type binds the variables the signature
+        // still leaves open (`reduce<(a, b) => a + b, 0>` with nothing else fixing the
+        // accumulator type takes it from the `0`). Then the functions follow, with their
+        // parameter types known.
+        for (const bool functionsPass : {false, true}) {
+            for (size_t i = 0; i < withInputs.size(); ++i) {
+                if (withInputs[i].node != nullptr) {
+                    continue;
+                }
+                Type *pattern = parameterOf(i);
+                Type *wanted = pattern != nullptr ? substituteTypeVars(pattern, bindings) : nullptr;
+                const bool isFunction = wanted != nullptr && wanted->code() == TypeCode::Function;
+                if (isFunction != functionsPass) {
+                    continue;
+                }
+                const bool usable = usableExpected(wanted);
+                withInputs[i].node =
+                    visitInPosition(withInputs[i].expr, usable ? wanted : nullptr);
+                if (!usable && pattern != nullptr) {
+                    // The value's own type is what this position gives the variables: an `int`
+                    // literal makes the accumulator an `int`, and the lambda takes that type.
+                    unifyTypeVars(
+                        pattern,
+                        valueTypeOf(nodeTypeOf(withInputs[i].node)),
+                        bindings);
+                }
+            }
+        }
+    }
+    for (const Argument &input : withInputs) {
+        withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
     }
     if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
         // An operator that declares it takes the position of its call at this many arguments

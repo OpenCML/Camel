@@ -1,8 +1,9 @@
 /**
- * The undecided case (H92 report, 待决): a generic higher-order operator whose parameter type
- * holds a type variable (`map`) gives the lambda no expected type, because the instance that
- * would fix it does not exist yet when the lambda is lowered. Today that is the same error: the
- * parameter type has to be written. A test records it so the decision has something to change.
+ * A generic higher-order operator (`map`) now gives the lambda its expected type: the ordinary
+ * arguments are typed first, so the operator's type variable is the element type when the
+ * lambda is lowered, and its parameter type follows (design principles 5.9; the positions of the
+ * H92 report, settled). `map` is declared by the builtin module, whose rule is a family of
+ * types, so this case also covers the rule that a call fills its with-arguments' types.
  */
 module lambda_inference_generic
 
