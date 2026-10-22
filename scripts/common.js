@@ -386,8 +386,12 @@ function removeStaleModuleArtifacts(config, moduleFiles) {
 }
 
 /**
- * 将构建产物复制到项目根目录与 stdlib：camel 可执行文件、libcamel、以及本次构建的 `.cmo` 到
- * stdlib/；不在本次构建里的 `.cmo` 从 stdlib/ 与 build/ 删除（H138）。
+ * 把可执行文件放到 libcamel 旁边（调试用），清掉源码树里旧构建留下的 `.cmo`，并从 `build/`
+ * 删除本次 configure 不构建的模块产物（H138）。
+ *
+ * `.cmo` 不再复制进 `stdlib/`（H191）：源码树不是安装。模块查找本来就会看可执行文件旁与
+ * `CAMEL_HOME` 下（`include/camel/utils/install_layout.h`），安装由 `collect-out` 按清单写进
+ * `out/<tag>/stdlib`；在源码树里再放一份没有消费者，只会把构建产物留在源码树。
  * @param {'Release'|'Debug'|'RelWithDebInfo'} config
  */
 export function copyBuildArtifacts(config) {
@@ -411,25 +415,30 @@ export function copyBuildArtifacts(config) {
         logWarn(`Built ${libName} not found under build/ for ${config}`)
     }
 
-    if (!fs.existsSync(stdlibDir)) {
-        fs.mkdirSync(stdlibDir, { recursive: true })
+    // 源码树不是安装（H191）：`.cmo` 不再复制进 `stdlib/`。模块查找会看可执行文件旁与
+    // `CAMEL_HOME` 下的 `stdlib`，`collect-out` 把清单里的 `.cmo` 写进 `out/<tag>/stdlib`，
+    // 所以在源码树里再放一份没有消费者。旧构建留下的在这里删掉：一个 `.cmo` 也不能比它的
+    // 模块活得久（H114 曾手工删掉这些文件，H138 把删除放进构建）。
+    if (fs.existsSync(stdlibDir)) {
+        for (const f of fs.readdirSync(stdlibDir)) {
+            if (!f.endsWith('.cmo')) continue
+            fs.rmSync(path.join(stdlibDir, f))
+            logWarn(`Removed stdlib/${f}: a .cmo belongs in the install, not in the source tree`)
+        }
     }
-    const moduleFiles = moduleCmoFiles(config)
-    const installed = new Set()
-    for (const src of moduleFiles) {
-        const name = path.basename(src)
-        copyFile(src, path.join(stdlibDir, name))
-        installed.add(name)
+    removeStaleModuleArtifacts(config, moduleCmoFiles(config))
+
+    // H191: a step that starts writing build output next to the sources again fails the build,
+    // with the file named, instead of leaving it for the next person to find.
+    const guard = spawnSync(
+        process.execPath,
+        [path.join(BASEDIR, 'scripts', 'check-source-artifacts.mjs')],
+        { cwd: BASEDIR, stdio: 'inherit' }
+    )
+    if (guard.status !== 0) {
+        logFail('Build output was found in the source tree; a build must not write it there (H191)')
+        process.exit(guard.status || 1)
     }
-    // 一个 `.cmo` 不能比它的模块活得久：collect-out 会把 stdlib/ 原样复制到 out/<tag>/stdlib，
-    // 而模块查找会在这个目录里命中它；旧名因此会“碰巧还能导入”（H114 曾手工删掉这些文件，
-    // H138 把删除放进构建）。
-    for (const f of fs.readdirSync(stdlibDir)) {
-        if (!f.endsWith('.cmo') || installed.has(f)) continue
-        fs.rmSync(path.join(stdlibDir, f))
-        logWarn(`Removed stale stdlib/${f}: no module of that name is built`)
-    }
-    removeStaleModuleArtifacts(config, moduleFiles)
     logDone(`Copied all build artifacts`)
 }
 
@@ -457,9 +466,9 @@ export function copyBuildArtifacts(config) {
 // the tools, `third_party` (globbed into libcamel), `stdlib` (copied verbatim into
 // `out/<tag>/stdlib`, so a comment there *can* move a test -- H139), the CMake glue and the Conan
 // recipe. Generated files (`*.cmo`, objects, libraries, DLLs) are excluded: they are products, not
-// inputs, and `stdlib/*.cmo` is written by every build. `docs/`, `test/`, `scripts/`, `agents/`,
-// `editors/`, `pypi/`, `assets/`, `examples/`, `benchmarks/` and the markdown files are not read by
-// the build and are not fingerprinted.
+// inputs, and no build writes them into `stdlib/` any more (H191). `docs/`, `test/`, `scripts/`,
+// `agents/`, `editors/`, `pypi/`, `assets/`, `examples/`, `benchmarks/` and the markdown files are
+// not read by the build and are not fingerprinted.
 export const BUILD_INFO_FILE = 'build-info.json'
 
 /** Bumped when the recorded shape changes so an old stamp is refused instead of misread. */

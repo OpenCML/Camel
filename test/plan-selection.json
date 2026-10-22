@@ -251,8 +251,8 @@
             "plans": ["feat/parse/frontend.plan.toml"]
         },
         {
-            "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools.",
-            "paths": ["scripts/check-std-includes.mjs"],
+            "comment": "The standard-include check: portability.std_includes runs it over src, include, modules and tools. The source-tree artifact check is the same kind of property of the sources, and portability.source_artifacts runs it.",
+            "paths": ["scripts/check-std-includes.mjs", "scripts/check-source-artifacts.mjs"],
             "plans": ["feat/tools/portability.plan.toml"]
         },
         {
