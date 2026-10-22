@@ -33,7 +33,6 @@
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/tagged.h"
 #include "camel/core/type/composite/tuple.h"
-#include "camel/core/type/resolver.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/effects.h"
 #include "camel/runtime/program.h"
