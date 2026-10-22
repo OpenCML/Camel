@@ -21,8 +21,9 @@
 //
 // Two numbers per repetition: the wall clock, and on Linux the child's own CPU time (user+system),
 // read from the `cutime`/`cstime` fields of /proc/self/stat around the child. Wall clock is what a
-// user waits; CPU time is what the work costs, and it does not grow when the host is busy (H142
-// measured 24.96 ms vs 25.31 ms at load 148 and 215). A case whose child CPU is at least 250 ms is
+// user waits; CPU time is what the work costs. H142 made the same choice for the same reason: at
+// load 200 the wall clock is mostly waiting for a core, while the CPU column's two independent runs
+// differed by under 3%. A case whose child CPU is at least 250 ms is
 // judged on CPU, where the 10 ms tick of /proc is a few percent at most; a shorter one is judged on
 // the wall clock, where the spread is the protection.
 //
@@ -31,8 +32,9 @@
 //   * a wall-clock case whose run left the load band the baseline was recorded in
 //                                         -> "inconclusive", never a pass: the line says "measured
 //     at load N" and the next step is to rerun within the band. A CPU case is compared at any load,
-//     because child CPU time does not grow with the host's load (H142: 24.96 ms vs 25.31 ms at
-//     load 148 and 215, 1.4%), and 15% is three times that;
+//     because child CPU time is what the work costs rather than how long the host made it wait:
+//     H142 judged by CPU for that reason, and its two independent CPU runs differed by under 3%,
+//     while the wall clock at load 150..215 is 2-5x the quiet one;
 //   * the current and baseline spreads (p10..p90) overlap -> "ok (spread overlaps)": a regression
 //     is never claimed from numbers that a busy host can produce;
 //   * otherwise slower by at least --threshold percent -> "REGRESSION" (exit 1);
