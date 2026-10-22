@@ -120,6 +120,23 @@
 //
 // The output is one line per problem, each naming the file, the module and the operator, and a
 // final line starting `migrated modules stay migrated:`. Exit 1 when there is a problem.
+//
+// `--check-ledger` splits its numbers by where they come from, because a tree without a build is
+// a normal tree and a stale build is not (H213). The declaration modules, their declared names and
+// declarations, their computed names, the signature files, and everything on
+// `49_computed_signatures.md` except its `inspect --ops` line count are read from the tree. They
+// are checked with no build at all, so a hand-edited page still fails on a fresh worktree. The
+// registered numbers are the binary's: `camel inspect --ops` supplies the OPERATOR lines, the
+// public names and the registered overloads, and the page's §6 quotes of `--check`,
+// `--verify-ops` and `inspect --ops` are compared with them. Those are read only from a build
+// that says it is this tree's: `out/latest/build-info.json` must exist, name HEAD, not say
+// "clean" over a dirty tree, and record this tree's source fingerprint. When it does not, the
+// build-dependent claims are skipped with a notice and the tree-decidable ones still run (exit 0
+// when only they pass). A stamp that names another commit, or a clean build over a dirty tree,
+// is refused instead: exit 4, one line naming the build, its commit, HEAD, and the
+// `camel-remote.ps1` run that builds this tree, unless `--allow-stale-build` is given (it prints
+// the same facts as a warning and reads the stale build). `--require-build` turns "no build" into
+// exit 5, so a plan that wants the binary claims cannot pass over their absence.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -127,6 +144,13 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 import { BUCKETS, classificationProblems, entryRecords, signatureEntries } from './computed-gaps.mjs'
+import {
+    BUILD_INFO_FILE,
+    BUILD_INFO_SCHEMA,
+    FINGERPRINT_VERSION,
+    gitState,
+    sourceFingerprint,
+} from './common.js'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
@@ -1066,24 +1090,161 @@ function ledgerOperators() {
     }
 }
 
+// ---- where each ledger number comes from ----------------------------------------------------
+//
+// A worktree with no build of this commit is normal; a worktree with a build of another commit is
+// not. The two must not look alike, and neither may hide a page problem the tree can decide
+// (H213). The tree half below reads only `stdlib/`, `modules/`, the signature files and the
+// reference generator's table. The binary half reads `camel inspect --ops`, and it is allowed only
+// while `out/latest/build-info.json` says the install is this tree's.
+
+const EXIT_STALE = 4
+const EXIT_NO_BUILD = 5
+
+function installRoot() {
+    return path.resolve(path.dirname(camelExe()), '..')
+}
+
+function shortRevision(revision) {
+    return revision ? revision.slice(0, 10) : 'unknown'
+}
+
+// The helper lives beside the worktrees (`D:\Projects\Camel-wt\camel-remote.ps1`), not in the
+// repository, so name it with an absolute path when it is there and only by name otherwise.
+function remoteCommand() {
+    const helper = path.resolve(REPO_ROOT, '..', 'camel-remote.ps1')
+    if (fs.existsSync(helper)) {
+        return `pwsh -NoProfile -File "${helper}" -Path "${REPO_ROOT}"`
+    }
+    return `camel-remote.ps1 -Path "${REPO_ROOT}"`
+}
+
+// A stamp that disagrees with the tree is refused, not silently accepted and not silently skipped:
+// the numbers would look derived from this tree while describing another build. The message is one
+// line and names the install, the commit it was built at, HEAD, and the command that rebuilds.
+function staleBuild(where, why, allowStale) {
+    if (!allowStale) {
+        console.log(
+            `--check-ledger: refusing the build-dependent numbers: ${where} ${why}; ` +
+                `run ${remoteCommand()} to build this tree, or pass --allow-stale-build to read the stale build anyway.`,
+        )
+        process.exit(EXIT_STALE)
+    }
+    console.log(
+        `--check-ledger: warning: using a stale build: ${where} ${why}; ` +
+            'the build-dependent numbers below describe that build, not this tree.',
+    )
+}
+
+/**
+ * Whether the binary in the install `camelExe()` names may answer the ledger's binary numbers.
+ *
+ * Returns `{usable: false, why}` for a tree with no install at all (the normal fresh-worktree
+ * case), `{usable: true, stale: true}` when the stamp is absent/unreadable/from another commit,
+ * or when it says "clean" over a dirty tree, or when its source fingerprint differs -- with
+ * `--allow-stale-build` the stale facts are printed and the binary is still read. A stamp that
+ * names the current HEAD, a matching dirty flag and this tree's fingerprint is `stale: false`.
+ */
+function buildProvenance({ allowStale, requireBuild }) {
+    const dir = installRoot()
+    const where = relative(dir)
+    const binary = camelExe()
+    const hasStamp = fs.existsSync(path.join(dir, BUILD_INFO_FILE))
+    const hasBinary = fs.existsSync(binary)
+    if (!hasStamp && !hasBinary) {
+        if (requireBuild) {
+            console.log(
+                `--check-ledger: --require-build: no build of this tree in ${where} ` +
+                    `(no ${BUILD_INFO_FILE} and no camel binary); run ${remoteCommand()} to build this tree.`,
+            )
+            process.exit(EXIT_NO_BUILD)
+        }
+        return {
+            usable: false,
+            why: `no build of this tree in ${where} (no ${BUILD_INFO_FILE} and no camel binary)`,
+        }
+    }
+    if (!hasStamp) {
+        staleBuild(dir, `has no ${BUILD_INFO_FILE}, so it cannot name the commit it was built from`, allowStale)
+        return { usable: true, stale: true }
+    }
+    let stamp
+    try {
+        stamp = JSON.parse(fs.readFileSync(path.join(dir, BUILD_INFO_FILE), 'utf8'))
+    } catch (error) {
+        staleBuild(dir, `has a ${BUILD_INFO_FILE} that is not readable JSON (${error.message})`, allowStale)
+        return { usable: true, stale: true }
+    }
+    if (
+        !stamp ||
+        stamp.schema !== BUILD_INFO_SCHEMA ||
+        !stamp.fingerprint ||
+        stamp.fingerprint.version !== FINGERPRINT_VERSION
+    ) {
+        staleBuild(
+            dir,
+            `has a ${BUILD_INFO_FILE} written by a different form of the build stamp ` +
+                `(schema ${stamp && stamp.schema}, fingerprint ${stamp && stamp.fingerprint && stamp.fingerprint.version})`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    const git = gitState(REPO_ROOT)
+    if (!git.available || !git.revision || !stamp.revision) {
+        staleBuild(
+            dir,
+            'cannot be matched to HEAD because git is unavailable or the stamp names no revision',
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    if (stamp.revision !== git.revision) {
+        staleBuild(
+            dir,
+            `was built at ${shortRevision(stamp.revision)}${stamp.dirty ? ' (dirty)' : ''}, ` +
+                `but HEAD is ${shortRevision(git.revision)}`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    if (git.dirty === true && stamp.dirty === false) {
+        staleBuild(
+            dir,
+            `was built clean at ${shortRevision(stamp.revision)}, but this tree has ` +
+                `${git.dirtyCount} uncommitted file(s)`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    // The commit and the dirty flags agree, but the build inputs can still differ (a build from a
+    // dirty tree, edited further without a new commit). Compare the fingerprint `-NoBuild` already
+    // trusts rather than trust the metadata alone.
+    const fingerprint = sourceFingerprint(REPO_ROOT)
+    if (fingerprint.hash !== stamp.fingerprint.hash) {
+        staleBuild(
+            dir,
+            `was built at ${shortRevision(stamp.revision)} from different build inputs ` +
+                `(fingerprint ${stamp.fingerprint.hash.slice(0, 12)} vs ${fingerprint.hash.slice(0, 12)})`,
+            allowStale,
+        )
+        return { usable: true, stale: true }
+    }
+    return { usable: true, stale: false }
+}
+
 // What the tree says: the declaration modules and their declared names, their computed names (from
-// the signature file the reference generator names, never from the page), and the public
-// operators per module.
-function ledgerTruth() {
+// the signature file the reference generator names, never from the page), and the signature files.
+// It reads no binary, so it works on a fresh worktree.
+function ledgerTreeTruth() {
     const modules = declarationModules()
     const reference = readReferenceModules()
-    const operators = ledgerOperators()
     const signatureFiles = fs.readdirSync(SIGNATURE_DIR).filter((file) => file.endsWith('.cml'))
     const computedFiles = new Set()
     const rows = new Map()
-    let moduleNames = 0
     let declaredNames = 0
     let declarations = 0
     let computedNames = 0
     let computedEntries = 0
-    let overloads = 0
-    let declaredOverloads = 0
-    let computedOverloads = 0
     let withComputed = 0
 
     for (const module of modules) {
@@ -1098,37 +1259,59 @@ function ledgerTruth() {
             computedEntries += computed.length
             for (const each of computed) computedSet.add(each.name)
         }
-        const own = operators.public.filter((op) => op.module === module.name)
         rows.set(module.name, {
-            names: new Set(own.map((op) => op.name)).size,
             declaredNames: declaredSet.size,
             declarations: declared.length,
             computed: computedSet.size,
-            overloads: own.length,
+            // Kept for the binary half: which registered overloads are declared vs computed.
+            declaredSet,
+            computedSet,
         })
-        moduleNames += new Set(own.map((op) => op.name)).size
         declaredNames += declaredSet.size
         declarations += declared.length
         computedNames += computedSet.size
-        overloads += own.length
-        declaredOverloads += own.filter((op) => declaredSet.has(op.name)).length
-        computedOverloads += own.filter((op) => computedSet.has(op.name)).length
     }
 
-    const publicNames = new Set(operators.public.map((op) => `${op.module}::${op.name}`)).size
-    const builtin = operators.public.filter((op) => op.module === '<builtin>')
     const migratedFiles = signatureFiles.filter((file) => computedFiles.has(`signatures/${file}`))
     return {
-        modules: rows,
+        modules,
+        rows,
         declarationModuleNames: modules.map((module) => module.name),
         moduleCount: modules.length,
-        moduleNames,
         declaredNames,
         declarations,
         computedNames,
         computedEntries,
         withComputed,
         withoutComputed: modules.length - withComputed,
+        signatureFiles: signatureFiles.length,
+        migratedSignatureFiles: migratedFiles.length,
+        pendingSignatureFiles: signatureFiles.length - migratedFiles.length,
+    }
+}
+
+// What the binary says: the public operators `camel inspect --ops` lists on the probe
+// `--verify-ops` reads. This half may not run without a usable build (see buildProvenance).
+function ledgerBinaryTruth(tree) {
+    const operators = ledgerOperators()
+    let moduleNames = 0
+    let overloads = 0
+    let declaredOverloads = 0
+    let computedOverloads = 0
+    for (const module of tree.modules) {
+        const row = tree.rows.get(module.name)
+        const own = operators.public.filter((op) => op.module === module.name)
+        row.names = new Set(own.map((op) => op.name)).size
+        row.overloads = own.length
+        moduleNames += row.names
+        overloads += own.length
+        declaredOverloads += own.filter((op) => row.declaredSet.has(op.name)).length
+        computedOverloads += own.filter((op) => row.computedSet.has(op.name)).length
+    }
+    const publicNames = new Set(operators.public.map((op) => `${op.module}::${op.name}`)).size
+    const builtin = operators.public.filter((op) => op.module === '<builtin>')
+    return {
+        moduleNames,
         overloads,
         declaredOverloads,
         computedOverloads,
@@ -1140,9 +1323,6 @@ function ledgerTruth() {
         // `<builtin>` (the page's overload split needs the two parts separately).
         otherModuleOverloads: operators.public.length - overloads - builtin.length,
         operatorLines: operators.lines,
-        signatureFiles: signatureFiles.length,
-        migratedSignatureFiles: migratedFiles.length,
-        pendingSignatureFiles: signatureFiles.length - migratedFiles.length,
     }
 }
 
@@ -1170,10 +1350,11 @@ function lineNumberOf(text, index) {
     return text.slice(0, index).split('\n').length
 }
 
-function compareMigrationLedger(text, truth) {
+function compareMigrationLedger(text, truth, binary, skip) {
     const rows = ledgerRows(text)
     const problems = []
     const page = relative(LEDGER)
+    const build = binary !== null
 
     const missing = (what) =>
         problems.push(`${page}: the page no longer states ${what}, so --check-ledger cannot confirm it`)
@@ -1189,6 +1370,18 @@ function compareMigrationLedger(text, truth) {
         const values = numbersIn(found.cells[cell])
         if (values.length === 0) missing(`${what} (the row states no number)`)
         else if (values[0] !== has) mismatch(found, what, values[0], has)
+    }
+    // A number whose truth comes from the binary. With no usable build, the row must still state a
+    // number (a dropped fact is a tree-decidable hole), but the number itself is not compared; the
+    // claim is recorded so the caller can print what was skipped.
+    const buildNumber = (found, cell, what, has, skipLabel = what) => {
+        if (!found) return
+        if (!build) {
+            if (numbersIn(found.cells[cell]).length === 0) missing(`${what} (the row states no number)`)
+            skip(skipLabel)
+            return
+        }
+        statedNumber(found, cell, what, has)
     }
     const statedPair = (found, cell, what, has) => {
         if (!found) return
@@ -1209,18 +1402,23 @@ function compareMigrationLedger(text, truth) {
     statedNumber(find((cells) => cells[0].startsWith('声明模块'), 'the declaration-module count'), 1, 'declaration modules', truth.moduleCount)
     statedPair(find((cells) => cells[0].startsWith('声明名'), 'the declared-name and declaration counts'), 1, 'declared names / declarations', [truth.declaredNames, truth.declarations])
     statedNumber(find((cells) => cells[0].startsWith('计算名'), 'the computed-name count'), 1, 'computed names', truth.computedNames)
-    statedNumber(find((cells) => cells[0].startsWith('公开名'), 'the public-name count'), 1, 'public names in the declaration modules', truth.moduleNames)
-    statedNumber(
+    buildNumber(
+        find((cells) => cells[0].startsWith('公开名'), 'the public-name count'),
+        1,
+        'public names in the declaration modules',
+        binary && binary.moduleNames,
+    )
+    buildNumber(
         find((cells) => cells[0].startsWith('注册重载') && cells[0].includes('声明模块'), 'the overload count of the declaration modules'),
         1,
         'overloads in the declaration modules',
-        truth.overloads,
+        binary && binary.overloads,
     )
-    statedNumber(
+    buildNumber(
         find((cells) => cells[0].startsWith('注册重载') && cells[0].includes('参考页'), 'the registered-overload total'),
         1,
         'registered overloads',
-        truth.publicOverloads,
+        binary && binary.publicOverloads,
     )
 
     const signatureRow = find((cells) => cells[0].includes('stdlib/signatures/'), 'the signature-file count')
@@ -1258,13 +1456,17 @@ function compareMigrationLedger(text, truth) {
     else {
         const where = { line: lineNumberOf(text, overloadSplit.index) }
         const [total, declared, moduleCount, other, builtin] = overloadSplit.slice(1).map(Number)
-        if (total !== truth.publicOverloads) mismatch(where, 'registered overloads', total, truth.publicOverloads)
-        if (declared !== truth.overloads) mismatch(where, 'overloads in the declaration modules', declared, truth.overloads)
-        if (moduleCount !== truth.moduleCount) mismatch(where, 'declaration modules in the overload split', moduleCount, truth.moduleCount)
-        if (other !== truth.otherModuleOverloads) mismatch(where, 'overloads of the modules that are not declaration modules', other, truth.otherModuleOverloads)
-        if (builtin !== truth.builtinOverloads) mismatch(where, 'overloads of <builtin>', builtin, truth.builtinOverloads)
+        // The arithmetic is between the page's own numbers, so it is checked without a build.
         if (declared + other + builtin !== total) {
             problems.push(`${page}:${where.line}: the overload split does not add up: ${declared} + ${other} + ${builtin} != ${total}`)
+        }
+        if (!build) skip('the overload split of §2.4')
+        else {
+            if (total !== binary.publicOverloads) mismatch(where, 'registered overloads', total, binary.publicOverloads)
+            if (declared !== binary.overloads) mismatch(where, 'overloads in the declaration modules', declared, binary.overloads)
+            if (moduleCount !== truth.moduleCount) mismatch(where, 'declaration modules in the overload split', moduleCount, truth.moduleCount)
+            if (other !== binary.otherModuleOverloads) mismatch(where, 'overloads of the modules that are not declaration modules', other, binary.otherModuleOverloads)
+            if (builtin !== binary.builtinOverloads) mismatch(where, 'overloads of <builtin>', builtin, binary.builtinOverloads)
         }
     }
 
@@ -1289,15 +1491,27 @@ function compareMigrationLedger(text, truth) {
             if (!moduleName) continue
             const name = moduleName[1]
             seen.add(name)
-            const expected = truth.modules.get(name)
+            const expected = truth.rows.get(name)
             if (!expected) {
                 problems.push(`${page}:${row.line}: the per-module table has a row for '${name}', but no declaration module has that name`)
                 continue
             }
-            statedNumber(row, 1, `the name count of '${name}'`, expected.names)
+            buildNumber(
+                row,
+                1,
+                `the name count of '${name}'`,
+                expected.names,
+                'the per-module public-name and overload columns (§2.2)',
+            )
             statedPair(row, 2, `the declared-name / declaration count of '${name}'`, [expected.declaredNames, expected.declarations])
             statedNumber(row, 3, `the computed-name count of '${name}'`, expected.computed)
-            statedNumber(row, 5, `the overload count of '${name}'`, expected.overloads)
+            buildNumber(
+                row,
+                5,
+                `the overload count of '${name}'`,
+                expected.overloads,
+                'the per-module public-name and overload columns (§2.2)',
+            )
             const blockedCell = row.cells[4].match(/\d+/)
             blocked += blockedCell ? Number(blockedCell[0]) : 0
         }
@@ -1308,10 +1522,22 @@ function compareMigrationLedger(text, truth) {
         }
         if (!total) missing('the total row of the per-module table')
         else {
-            statedNumber(total, 1, 'the total of public names', truth.moduleNames)
+            buildNumber(
+                total,
+                1,
+                'the total of public names',
+                binary && binary.moduleNames,
+                'the per-module public-name and overload columns (§2.2)',
+            )
             statedPair(total, 2, 'the total of declared names / declarations', [truth.declaredNames, truth.declarations])
             statedNumber(total, 3, 'the total of computed names', truth.computedNames)
-            statedNumber(total, 5, 'the total of overloads', truth.overloads)
+            buildNumber(
+                total,
+                5,
+                'the total of overloads',
+                binary && binary.overloads,
+                'the per-module public-name and overload columns (§2.2)',
+            )
             const totalBlocked = numbersIn(total.cells[4])
             if (totalBlocked[0] !== blocked) {
                 mismatch(total, 'the total of blocked names', totalBlocked[0], blocked)
@@ -1331,20 +1557,27 @@ function compareMigrationLedger(text, truth) {
     const checkRow = find((cells) => cells[0].includes('stdlib-declarations.mjs --check`'), 'the `--check` line of the re-check table (§6)')
     if (checkRow) {
         const counts = checkRow.text.match(/(\d+) declaration module\(s\), (\d+) computed signature/)
-        const overloads = checkRow.text.match(/(\d+) registered operator overloads/)
-        if (!counts || !overloads) missing('the `--check` output quote (module / computed / overload counts)')
+        if (!counts) missing('the `--check` output quote (module / computed counts)')
         else {
             const where = { line: checkRow.line }
             if (Number(counts[1]) !== truth.moduleCount) mismatch(where, 'the declaration-module count of --check', Number(counts[1]), truth.moduleCount)
             if (Number(counts[2]) !== truth.computedNames) mismatch(where, 'the computed-signature count of --check', Number(counts[2]), truth.computedNames)
-            if (Number(overloads[1]) !== truth.publicOverloads) mismatch(where, 'the overload count of --check', Number(overloads[1]), truth.publicOverloads)
+        }
+        const overloads = checkRow.text.match(/(\d+) registered operator overloads/)
+        if (!overloads) missing('the `--check` output quote (overload count)')
+        else if (!build) skip('the overload count of --check (§6)')
+        else if (Number(overloads[1]) !== binary.publicOverloads) {
+            mismatch({ line: checkRow.line }, 'the overload count of --check', Number(overloads[1]), binary.publicOverloads)
         }
     }
     const verifyRow = find((cells) => cells[0].includes('stdlib-reference.mjs --verify-ops`'), 'the `--verify-ops` line of the re-check table (§6)')
     if (verifyRow) {
         const match = verifyRow.text.match(/the declarations agree with the (\d+) registered operator overloads/)
         if (!match) missing('the `--verify-ops` output quote')
-        else if (Number(match[1]) !== truth.publicOverloads) mismatch(verifyRow, 'the overload count of --verify-ops', Number(match[1]), truth.publicOverloads)
+        else if (!build) skip('the overload count of --verify-ops (§6)')
+        else if (Number(match[1]) !== binary.publicOverloads) {
+            mismatch(verifyRow, 'the overload count of --verify-ops', Number(match[1]), binary.publicOverloads)
+        }
     }
     const inspectRow = find((cells) => cells[0].includes('camel inspect --ops test/cases/modules/stdlib/registry_all.cml'), 'the `inspect --ops` line of the re-check table (§6)')
     if (inspectRow) {
@@ -1352,17 +1585,18 @@ function compareMigrationLedger(text, truth) {
         const publicNames = inspectRow.text.match(/(\d+)\s*个公开名（其中 `<builtin>`\s*(\d+)\s*个）/)
         const publicOverloads = inspectRow.text.match(/(\d+)\s*条公开重载（其中 `<builtin>`\s*(\d+)\s*条）/)
         if (!lines || !publicNames || !publicOverloads) missing('the `inspect --ops` output quote (operator lines, public names, public overloads)')
+        else if (!build) skip('the inspect --ops quote (§6)')
         else {
             const where = { line: inspectRow.line }
-            if (Number(lines[1]) !== truth.operatorLines) mismatch(where, 'the OPERATOR lines of inspect --ops', Number(lines[1]), truth.operatorLines)
-            if (Number(publicNames[1]) !== truth.publicNames) mismatch(where, 'the public names of inspect --ops', Number(publicNames[1]), truth.publicNames)
-            if (Number(publicNames[2]) !== truth.builtinNames) mismatch(where, 'the <builtin> names of inspect --ops', Number(publicNames[2]), truth.builtinNames)
-            if (Number(publicOverloads[1]) !== truth.publicOverloads) mismatch(where, 'the public overloads of inspect --ops', Number(publicOverloads[1]), truth.publicOverloads)
-            if (Number(publicOverloads[2]) !== truth.builtinOverloads) mismatch(where, 'the <builtin> overloads of inspect --ops', Number(publicOverloads[2]), truth.builtinOverloads)
+            if (Number(lines[1]) !== binary.operatorLines) mismatch(where, 'the OPERATOR lines of inspect --ops', Number(lines[1]), binary.operatorLines)
+            if (Number(publicNames[1]) !== binary.publicNames) mismatch(where, 'the public names of inspect --ops', Number(publicNames[1]), binary.publicNames)
+            if (Number(publicNames[2]) !== binary.builtinNames) mismatch(where, 'the <builtin> names of inspect --ops', Number(publicNames[2]), binary.builtinNames)
+            if (Number(publicOverloads[1]) !== binary.publicOverloads) mismatch(where, 'the public overloads of inspect --ops', Number(publicOverloads[1]), binary.publicOverloads)
+            if (Number(publicOverloads[2]) !== binary.builtinOverloads) mismatch(where, 'the <builtin> overloads of inspect --ops', Number(publicOverloads[2]), binary.builtinOverloads)
         }
     }
 
-    return { problems, truth }
+    return { problems }
 }
 
 // ---- the computed-signature page ------------------------------------------------------------
@@ -1443,7 +1677,7 @@ function computedLedgerTruth(operatorLines) {
     }
 }
 
-function compareComputedLedger(text, truth) {
+function compareComputedLedger(text, truth, binary, skip) {
     const rows = ledgerRows(text)
     const problems = []
     const page = relative(COMPUTED_LEDGER)
@@ -1579,12 +1813,13 @@ function compareComputedLedger(text, truth) {
     // §1, the operator-line count the entries were matched against.
     const inspectLines = text.match(/`inspect --ops`（(\d+)\s*行）/)
     if (!inspectLines) missing('the inspect --ops line count (§1)')
-    else if (Number(inspectLines[1]) !== truth.operatorLines) {
+    else if (!binary) skip('the OPERATOR lines of inspect --ops (§1)')
+    else if (Number(inspectLines[1]) !== binary.operatorLines) {
         mismatch(
             { line: lineNumberOf(text, inspectLines.index) },
             'the OPERATOR lines of inspect --ops',
             Number(inspectLines[1]),
-            truth.operatorLines,
+            binary.operatorLines,
         )
     }
 
@@ -1592,40 +1827,80 @@ function compareComputedLedger(text, truth) {
 }
 
 function main() {
-    const mode = process.argv[2] || '--check'
+    const args = process.argv.slice(2)
+    const mode = args[0] || '--check'
+    const allowStale = args.includes('--allow-stale-build')
+    const requireBuild = args.includes('--require-build')
+    const unknown = args.slice(1).filter((arg) => arg !== '--allow-stale-build' && arg !== '--require-build')
+    if (unknown.length > 0) {
+        console.log(`--check-ledger: unknown argument "${unknown[0]}"`)
+        console.log('usage: node scripts/stdlib-declarations.mjs --check | --check-ledger [--allow-stale-build] [--require-build]')
+        process.exit(2)
+    }
     if (mode === '--check-ledger') {
+        const skipped = []
+        const skip = (what) => {
+            if (!skipped.includes(what)) skipped.push(what)
+        }
+        const build = buildProvenance({ allowStale, requireBuild })
+        if (!build.usable) {
+            console.log(
+                `--check-ledger: ${build.why}; the build-dependent claims are skipped, ` +
+                    'the tree-decidable ones are still checked.',
+            )
+        }
         let truth
         let computed
+        let binary = null
         try {
-            truth = ledgerTruth()
-            computed = computedLedgerTruth(truth.operatorLines)
+            truth = ledgerTreeTruth()
+            if (build.usable) binary = ledgerBinaryTruth(truth)
+            computed = computedLedgerTruth(binary ? binary.operatorLines : null)
         } catch (error) {
             console.log(`--check-ledger: ${error.message}`)
             process.exit(1)
         }
-        const migration = compareMigrationLedger(read(LEDGER), truth)
-        const computedPage = compareComputedLedger(read(COMPUTED_LEDGER), computed)
+        const migration = compareMigrationLedger(read(LEDGER), truth, binary, skip)
+        const computedPage = compareComputedLedger(read(COMPUTED_LEDGER), computed, binary, skip)
+        if (!build.usable && skipped.length > 0) {
+            console.log(`--check-ledger: skipped ${skipped.length} build-dependent claim(s): ${skipped.join('; ')}`)
+        }
         const problems = [...computed.treeProblems, ...migration.problems, ...computedPage.problems]
         for (const problem of problems) console.log(problem)
         if (problems.length > 0) {
             console.log(`the ledgers are stale: ${problems.length} problem(s)`)
             process.exit(1)
         }
+        const computedSummary =
+            `${computed.entries} signature entr(y/ies) in ${computed.files} file(s) under ${computed.names} name(s), ` +
+            `buckets ${computed.buckets.map((bucket) => bucket.entries).join('/')}`
+        if (!build.usable) {
+            console.log(
+                `the ledgers' tree-decidable numbers agree with the tree: ${truth.moduleCount} declaration module(s), ` +
+                    `${truth.declaredNames} declared name(s) in ${truth.declarations} declaration(s), ` +
+                    `${truth.computedNames} computed name(s) recorded in ${truth.computedEntries} signature declaration(s), ` +
+                    `${truth.signatureFiles} signature file(s); ${computedSummary}; ` +
+                    'the build-dependent numbers were skipped (no usable build).',
+            )
+            return
+        }
         console.log(
             `the ledgers agree with the tree: ${truth.moduleCount} declaration module(s), ` +
                 `${truth.declaredNames} declared name(s) in ${truth.declarations} declaration(s), ` +
                 `${truth.computedNames} computed name(s) recorded in ${truth.computedEntries} signature declaration(s), ` +
-                `${truth.overloads} overload(s) in the declaration modules ` +
-                `(${truth.declaredOverloads} declared + ${truth.computedOverloads} computed), ` +
-                `${truth.publicOverloads} registered public overload(s) under ${truth.publicNames} name(s), ` +
-                `${truth.signatureFiles} signature file(s); ` +
-                `${computed.entries} signature entr(y/ies) in ${computed.files} file(s) under ${computed.names} name(s), ` +
-                `buckets ${computed.buckets.map((bucket) => bucket.entries).join('/')}`,
+                `${binary.overloads} overload(s) in the declaration modules ` +
+                `(${binary.declaredOverloads} declared + ${binary.computedOverloads} computed), ` +
+                `${binary.publicOverloads} registered public overload(s) under ${binary.publicNames} name(s), ` +
+                `${truth.signatureFiles} signature file(s); ${computedSummary}`,
         )
         return
     }
     if (mode !== '--check') {
-        console.log('usage: node scripts/stdlib-declarations.mjs --check | --check-ledger')
+        console.log('usage: node scripts/stdlib-declarations.mjs --check | --check-ledger [--allow-stale-build] [--require-build]')
+        process.exit(2)
+    }
+    if (allowStale || requireBuild) {
+        console.log('--allow-stale-build and --require-build apply to --check-ledger only')
         process.exit(2)
     }
 
