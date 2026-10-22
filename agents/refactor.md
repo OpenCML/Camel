@@ -15,7 +15,7 @@
 - Keep headers in `include/` and implementations in `src/`.
 - Avoid implementation logic in headers unless strictly necessary.
 - If a single file grows beyond 800 lines, evaluate decomposition.
-- New `.h/.cpp` files must include the standard file header and a short responsibility comment block.
+- Every hand-written source file starts with the two-line header (`// Copyright (c) the OpenCML Organization` / `// SPDX-License-Identifier: MIT`), then a blank line and a short responsibility comment; `node scripts/headers.mjs --fix` writes it and `--check` verifies it. No author, dates or funding lines.
 
 ## The Bar a Change Must Meet
 Code is read far more often than it is written, and this repository will be public. A change is
