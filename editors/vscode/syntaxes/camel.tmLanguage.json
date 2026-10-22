@@ -128,11 +128,11 @@
       ]
     },
     "string-escape": {
-      "comment": "What decodeEscapes (include/camel/utils/escape.h) decodes. Any other backslash pair is kept as written, but still hides a quote from the lexer.",
+      "comment": "What decodeEscapes (include/camel/utils/escape.h) decodes: the named escapes, `\\0`, `\\xHH` and `\\u{H...}`. Any other backslash pair is kept as written (an unknown escape, e.g. the cancelled octal `\\101`), but still hides a quote from the lexer.",
       "patterns": [
         {
           "name": "constant.character.escape.camel",
-          "match": "\\\\(?:[ntrabfv\\\\\"'`$]|0[0-7]{0,2}|x[0-9a-fA-F]{1,2}|u\\{[0-9a-fA-F]{1,6}\\})"
+          "match": "\\\\(?:[ntrabfv\\\\\"'`$]|0|x[0-9a-fA-F]{1,2}|u\\{[0-9a-fA-F]{1,6}\\})"
         }
       ]
     },
@@ -141,7 +141,7 @@
       "patterns": [
         {
           "name": "constant.character.escape.camel",
-          "match": "\\\\(?!'''|\"\"\")(?:[ntrabfv\\\\\"'`$]|0[0-7]{0,2}|x[0-9a-fA-F]{1,2}|u\\{[0-9a-fA-F]{1,6}\\})"
+          "match": "\\\\(?!'''|\"\"\")(?:[ntrabfv\\\\\"'`$]|0|x[0-9a-fA-F]{1,2}|u\\{[0-9a-fA-F]{1,6}\\})"
         }
       ]
     },

@@ -59,7 +59,7 @@
 #                             ^^^^ support.type.primitive.camel
 #                                  ^^^^ storage.modifier.sync.camel
 #                                       ^ meta.block.camel punctuation.section.block.begin.camel
->    print('\033[2J\033[H')  // Clear screen
+>    print('\x1B[2J\x1B[H')  // Clear screen
 #    ^^^^^ meta.block.camel entity.name.function.call.camel
 #         ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
 #          ^ meta.block.camel meta.parens.camel string.quoted.single.camel punctuation.definition.string.begin.camel

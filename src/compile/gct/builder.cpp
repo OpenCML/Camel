@@ -3127,7 +3127,17 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         // Decode escaped characters in the string and create a StringData object. A formatted
         // string's pattern is decoded with `doubleBraces`: a brace that an escape produces is a
         // literal brace of that pattern, and `format` must see it doubled (H89).
-        std::string decoded = decodeEscapes(str, literal->fromFormattedString());
+        //
+        // Every escape form is decoded here, so an unknown escape is reported here too, once per
+        // spelling, in the lexical catalogue: an octal escape is simply unknown (H89), and so is
+        // `\q`. The text keeps the pair as written; a warning does not stop the program.
+        std::vector<std::string> unknownEscapes;
+        std::string decoded = decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
+        for (const std::string &escape : unknownEscapes) {
+            diags_->of(LexicalDiag::InvalidEscapeSequence)
+                .at(ast->load()->tokenRange())
+                .commit(escape);
+        }
         // A string is always valid UTF-8 (design principles 11.1); `'\xE4'` alone is not.
         // Write the character itself or `\u{4E2D}`; a byte sequence is a `Bytes` value.
         if (!camel::utf8::isValid(decoded)) {

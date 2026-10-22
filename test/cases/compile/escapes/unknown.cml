@@ -1,0 +1,14 @@
+/**
+ * H217: `\q` and the octal-looking forms are the same unknown escape, reported by the same code
+ * with the same message shape; each keeps the text as written.
+ */
+module escapes_unknown
+
+func main(): int sync {
+    println('q', len('\q'), '\q')
+    println('101', len('\101'), '\101')
+    println('8', len('\8'), '\8')
+    println('01', len('\01'), '\01')
+    println('0', len('\0'))
+    return 0
+}

@@ -150,7 +150,7 @@
 #             ^ string.quoted.double.camel punctuation.definition.string.begin.camel
 #              ^ string.quoted.double.camel
 #               ^ string.quoted.double.camel punctuation.definition.string.end.camel
->let escapes = "tab\t newline\n quote\" backslash\\ hex\x1B oct\033 nul\0"
+>let escapes = "tab\t newline\n quote\" backslash\\ hex\x1B esc\x1B nul\0"
 #^^^ meta.declaration.let.camel storage.type.let.camel
 #    ^^^^^^^ meta.declaration.let.camel variable.other.constant.camel
 #            ^ keyword.operator.assignment.camel

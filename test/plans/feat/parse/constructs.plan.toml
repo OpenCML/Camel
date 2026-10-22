@@ -87,7 +87,7 @@ expect_stdout_contains = ["5.0"]
 
 [[tests]]
 name = "constructs.literals"
-desc = "The string tokens: `'...'` and `\"...\"` with escapes (`\\t`, `\\x`, `\\033`, `\\0`, `\\u{...}`), a plain string that spans a line, and the multi-line `'''...'''` and `\"\"\"...\"\"\"` forms."
+desc = "The string tokens: `'...'` and `\"...\"` with escapes (`\\t`, `\\x`, `\\x1B`, `\\0`, `\\u{...}`), a plain string that spans a line, and the multi-line `'''...'''` and `\"\"\"...\"\"\"` forms."
 kind = "behavior"
 case = "../../../cases/parse/constructs/literals.cml"
 args = ["${case}"]

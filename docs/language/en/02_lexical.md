@@ -115,7 +115,7 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 - Single or double quotes: `'Hello'`, `"Hello"`; the two are equivalent, and one kind of quote can be written directly inside the other.
 - Triple-quoted multi-line strings: `'''...'''` or `"""..."""`, which may contain newlines.
 - A backquoted **formatted string** `` `...` `` interpolates with `${expression}`; the format specification of `${expression:spec}` is the one of `format` ([2.5.4.1](#2541-formatted-strings)).
-- **Every string shares one escape table**: single-quoted, double-quoted, triple-quoted and the backquoted formatted string. The same backslash pair gives the same character in whichever kind of quotes it is written, so a reader never has to know which string kind they are in.
+- **Every string shares one escape table**: single-quoted, double-quoted, triple-quoted and the backquoted formatted string. The same backslash pair gives the same character in whichever kind of quotes it is written, so a reader never has to know which string kind they are in. All three string tokens take escapes: the ordinary `'...'`/`"..."`, the triple-quoted `'''...'''` and the formatted `` `...` ``; a triple-quoted string only differs in that a backslash does not hide the closing triple quote, and a backslash is not a literal there.
 
 | Escape | Meaning |
 |---|---|
@@ -131,11 +131,12 @@ Names of the form `__x__` (two underscores on each side) are the compiler's own:
 | `\"` | double quote |
 | `` \` `` | backtick |
 | `\$` | dollar sign `$` |
-| `\0`, `\0oo` | a `0` after the backslash followed by 0 to 2 more octal digits, one byte (0 to 0o77); `\0` is the null byte, `\012` is a line feed |
+| `\0` | the null byte U+0000 |
 | `\xHH` | one byte written with 1 or 2 hexadecimal digits; with no hexadecimal digit after it, `\x` is kept as written |
 | `\u{H…}` | one Unicode code point written with 1 to 6 hexadecimal digits, e.g. `\u{4E2D}` is “中”; when it is not a scalar value, `\u` is kept as written |
-| anything else | the backslash and the character are kept as written: `\q` is `\q` |
+| anything else | an **unknown escape**: the backslash and the character are kept as written, and `LexicalDiag::InvalidEscapeSequence` warns, naming the escape that was written. `\q` is `\q`; an octal spelling is no escape: `\101` is `\101` |
 
+- **The octal escape is cancelled** (H89): only a bare `\0` is the null byte. A `0` followed by another octal digit is an unknown escape, not a byte: `\01` is `\01`, `\012` is `\012`, and `\101` and `\8` are the same; each is kept as written and warns with `LexicalDiag::InvalidEscapeSequence` (one code and one message shape, with no diagnostic of its own for octal). `\x` with no hexadecimal digit and a `\u{...}` that is not a scalar value are still kept as written by the table above; they are not unknown escapes here.
 - `\$` is a `$` in a formatted string too. The one addition is `\${` (a dollar sign immediately followed by a left brace): in a formatted string it is the **structural escape** that writes a literal `${` and starts no interpolation, see [2.5.4.1](#2541-formatted-strings); an ordinary or a triple-quoted string has no `${` meaning, so `\${` there is the character escape `\$` followed by `{`, which is also `${`.
 - A string is a sequence of bytes. `len` gives the number of bytes: `len('héllo')` is 6, `len('中文')` is 6.
 

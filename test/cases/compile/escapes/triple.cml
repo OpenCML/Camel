@@ -1,0 +1,21 @@
+/**
+ * H217 probes: the escape table of a triple-quoted string ('''...''').
+ *
+ * The triple-quoted form is the one that takes no escaped quote, but it still shares the one
+ * escape table: every probe of plain.cml is written here again.
+ */
+module escapes_triple
+
+func main(): int sync {
+    println('101', len('''\101'''))
+    println('0', len('''\0'''))
+    println('x41', len('''\x41'''), '''\x41''')
+    println('u', len('''\u{1F600}'''))
+    println('n', len('''\n'''))
+    println('8', len('''\8'''), '''\8''')
+    println('0x', len('''\0x'''))
+    println('01', len('''\01'''))
+    println('012', len('''\012'''))
+    println('033', len('''\033'''))
+    return 0
+}
