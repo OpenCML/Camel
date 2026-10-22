@@ -140,6 +140,9 @@ class Tree {
     /// A comprehension (child: the `static for` that generates it): `isStruct` for
     /// `{ static for ... }`, false for `( static for ... )` (H51 step 4).
     node_ptr_t makeComprehension(bool isStruct);
+    /// `T { static for ... }` (children: the generator, then the type node naming `T`): the
+    /// rounds give the fields' values, `T` gives their names and the kind.
+    node_ptr_t makeShapeComprehension();
     /// A CASE of an enum variant: `label` the variant as written (`Shape::Rect`), `fields` and
     /// `bindings` the entries of the pattern in the order written (see Node::EnumCase).
     node_ptr_t makeEnumCase(

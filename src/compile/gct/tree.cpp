@@ -404,6 +404,12 @@ node_ptr_t Tree::makeComprehension(bool isStruct) {
     return node;
 }
 
+node_ptr_t Tree::makeShapeComprehension() {
+    Node *node = makeNode(NodeKind::SCOMP);
+    node->tag_ = 2;
+    return node;
+}
+
 node_ptr_t Tree::makeEnumCase(
     const std::string &label, const std::vector<std::string> &fields,
     const std::vector<std::string> &bindings, bool structShape) {
@@ -667,8 +673,12 @@ std::string Node::toString() const {
         return "SACC";
     case NodeKind::SPRD:
         return "SPRD";
-    case NodeKind::SCOMP:
-        return std::string("SCOMP: ") + (comprehensionIsStruct() ? "struct" : "tuple");
+    case NodeKind::SCOMP: {
+        const char *kind = comprehensionSameShape() ? "same shape"
+                           : comprehensionIsStruct() ? "struct"
+                                                     : "tuple";
+        return std::string("SCOMP: ") + kind;
+    }
     case NodeKind::SLOOP: {
         std::string text = "SLOOP: ";
         for (size_t j = 0; j < staticLoopStateCount(); ++j) {

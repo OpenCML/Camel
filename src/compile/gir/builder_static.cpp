@@ -169,9 +169,8 @@ bool Builder::typeCaseMatches(Type *subject, uint16_t patterns) const {
 node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
     ENTER("TMTCH");
     ASSERT(gct->size() >= 2, "A match type has a subject type and cases.");
-    Type *subject = boundType(gct->at(0)->dataType());
-    if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
-        containsTypeVar(subject)) {
+    Type *subject = resolveTypeNode(gct->at(0)->dataType(), gct->at(0));
+    if (subject == nullptr || subject->code() == TypeCode::TypeVar || containsTypeVar(subject)) {
         diags_->of(SemanticDiag::StaticTypeNotConcrete)
             .atOrigin(gct->origin())
             .commit(subject == nullptr ? std::string("unknown") : subject->toString());
@@ -303,7 +302,7 @@ node_handle_t Builder::visitStaticForNode(
             throw BuildAbortException();
         }
     } else {
-        subject = boundType(gct->staticForOperand()->dataType());
+        subject = resolveTypeNode(gct->staticForOperand()->dataType(), gct->staticForOperand());
         if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
             containsTypeVar(subject)) {
             diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -436,7 +435,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
     } else {
-        subject = boundType(gct->staticLoopOperand()->dataType());
+        subject = resolveTypeNode(gct->staticLoopOperand()->dataType(), gct->staticLoopOperand());
         if (subject == nullptr || subject->code() == TypeCode::TypeVar ||
             containsTypeVar(subject)) {
             diags_->of(SemanticDiag::StaticTypeNotConcrete)
@@ -620,10 +619,33 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
     // The comprehension is its generator plus the pack: the rounds' values are the fields of a
     // struct (or the elements of a tuple) of the same shape. Nothing of it is left in the graph
     // but the straight-line code of the rounds and one FILL.
+    //
+    // `T { ... }` names the shape: the field names and the kind come from `T`, which must be the
+    // type the generator walks.
+    const bool sameShape = gct->comprehensionSameShape();
+    Type *declaredShape  = nullptr;
+    if (sameShape) {
+        const GCT::node_ptr_t shapeNode = gct->comprehensionShapeType();
+        declaredShape                   = resolveTypeNode(shapeNode->dataType(), shapeNode);
+        if (declaredShape == nullptr || declaredShape->code() == TypeCode::TypeVar ||
+            containsTypeVar(declaredShape)) {
+            diags_->of(SemanticDiag::StaticTypeNotConcrete)
+                .atOrigin(shapeNode->origin())
+                .commit(
+                    declaredShape == nullptr ? std::string("unknown") : declaredShape->toString());
+            throw BuildAbortException();
+        }
+        if (!tree::isInternal(declaredShape)) {
+            diags_->of(SemanticDiag::SameShapeComprehensionNotComposite)
+                .atOrigin(shapeNode->origin())
+                .commit(declaredShape->toString());
+            throw BuildAbortException();
+        }
+    }
     std::vector<node_handle_t> values;
     Type *shape = nullptr;
     const GCT::node_ptr_t generator = gct->comprehensionGenerator();
-    if (gct->comprehensionIsStruct() && generator->staticForIndices()) {
+    if (!sameShape && gct->comprehensionIsStruct() && generator->staticForIndices()) {
         // A struct comprehension names its fields from the walked type; positions have no
         // names, so there is nothing to name the fields.
         diags_->of(SemanticDiag::ConstructNotSupported)
@@ -635,7 +657,17 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
         throw BuildAbortException();
     }
     (void)visitStaticForNode(generator, &values, &shape);
-    if (!gct->comprehensionIsStruct()) {
+    if (sameShape) {
+        if (shape == nullptr || shape != declaredShape) {
+            diags_->of(SemanticDiag::SameShapeComprehensionMismatch)
+                .atOrigin(generator->origin())
+                .commit(
+                    declaredShape->toString(),
+                    shape == nullptr ? std::string("an unknown type") : shape->toString());
+            throw BuildAbortException();
+        }
+    }
+    if (!sameShape && !gct->comprehensionIsStruct()) {
         // A tuple comprehension is a build-time tuple: its rounds are separate element nodes,
         // and the FILL is built only if the value is used at runtime (valueNodeOf).
         type_vec_t types;
@@ -651,8 +683,30 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
         LEAVE("SCOMP");
         return tuple;
     }
-    node_handle_t packed = packStaticValues(
-        true, shape, values, gct, "gir.static.comprehension.fill");
+    if (sameShape && declaredShape->code() != TypeCode::Struct) {
+        // A tuple shape fills the elements by position; the field names it does not have are
+        // the positions the rounds already give.
+        type_vec_t types;
+        types.reserve(values.size());
+        for (const node_handle_t &value : values) {
+            types.push_back(valueTypeOf(nodeTypeOf(value)));
+        }
+        StaticTuple tuple;
+        tuple.type           = TupleType::create(std::move(types));
+        tuple.elements       = std::move(values);
+        tuple.materializable = true;
+        tuple.origin         = gct;
+        LEAVE("SCOMP");
+        return tuple;
+    }
+    if (sameShape) {
+        node_handle_t packed =
+            packStaticValues(true, declaredShape, values, gct, "gir.static.shape.fill");
+        LEAVE("SCOMP");
+        return packed;
+    }
+    node_handle_t packed =
+        packStaticValues(true, shape, values, gct, "gir.static.comprehension.fill");
     LEAVE("SCOMP");
     return packed;
 }
@@ -718,19 +772,37 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
     ENTER("SACC");
     const GCT::node_ptr_t keyNode = gct->staticAccessKey();
 
-    // The key is a compile-time constant: a literal, or the `n` of an enclosing `static for`.
+    // The key is a compile-time constant: a literal, the `n` of an enclosing `static for`, or an
+    // expression whose value is known at build time (`field_names::<S>()[0]` in the library is
+    // such an expression: a comprehension over the field names, indexed at 0).
+    const auto keyOfData = [](const data_ptr_t &data) -> std::optional<std::string> {
+        if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
+            return text->data();
+        }
+        if (data->type() != nullptr && data->type()->code() == TypeCode::Int64) {
+            return std::to_string(std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)->data());
+        }
+        if (data->type() != nullptr && data->type()->code() == TypeCode::Int32) {
+            return std::to_string(std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)->data());
+        }
+        return std::nullopt;
+    };
     std::optional<std::string> key;
     if (keyNode->type() == GCT::NodeKind::DATA) {
-        const data_ptr_t data = keyNode->data();
-        if (auto text = std::dynamic_pointer_cast<StringData>(data)) {
-            key = text->data();
-        } else if (data->type() != nullptr && data->type()->code() == TypeCode::Int64) {
-            key = std::to_string(std::dynamic_pointer_cast<PrimaryData<int64_t>>(data)->data());
-        } else if (data->type() != nullptr && data->type()->code() == TypeCode::Int32) {
-            key = std::to_string(std::dynamic_pointer_cast<PrimaryData<int32_t>>(data)->data());
-        }
+        key = keyOfData(keyNode->data());
     } else if (keyNode->type() == GCT::NodeKind::DREF && !nodeAt(keyNode->name()).has_value()) {
         key = staticValueNamed(keyNode->name());
+    }
+    if (!key.has_value() && keyNode->type() != GCT::NodeKind::DATA &&
+        keyNode->type() != GCT::NodeKind::DREF) {
+        // A key written as an expression: build it where the access is and take its constant.
+        // A value that is not constant is still refused below.
+        const std::any keyRes = visit(keyNode);
+        if (node_handle_t keyValue = valueNodeOf(keyRes)) {
+            if (data_ptr_t data = constantOfNode(keyValue)) {
+                key = keyOfData(data);
+            }
+        }
     }
     if (!key.has_value()) {
         diags_->of(SemanticDiag::StaticAccessNotConstant)

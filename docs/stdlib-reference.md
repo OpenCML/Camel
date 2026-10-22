@@ -1146,8 +1146,9 @@ The parameter-tree library written in Camel (design principles 13.5): a tree is 
 of nested structs and tuples, and everything else is a leaf.
 
 `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
-`static for`/`static loop`, `fields`, `indices` and rest parameters: the walk is expanded at
-each call into ordinary access and fill nodes, with no function of its own per leaf type.
+`static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
+expanded at each call into ordinary access and fill nodes, with no function of its own per
+leaf type.
 
 `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
 leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being

@@ -1,0 +1,24 @@
+/**
+ * `T { static for (n, F) in fields T => e }`: a comprehension written with the shape it fills.
+ * The rounds give the field values; `T` gives their names and whether the result is a struct or
+ * a tuple. One branch therefore covers both kinds, which `{ ... }` and `( ... )` could not.
+ */
+module same_shape_comprehension
+
+type Pair = {a: int, b: (int, int)}
+
+/// The field names of `T`, under the shape of `T`.
+func names_of::<T>(t: T) {
+    return match type T {
+        case struct | tuple => T { static for (n, F) in fields T => n }
+        case _ => 'leaf'
+    }
+}
+
+func main(): int sync {
+    println(names_of({x: 1, y: (2, 3)}))
+    println(names_of((4, 5)))
+    let p: Pair = {a: 1, b: (2, 3)}
+    println(names_of(p))
+    return 0
+}

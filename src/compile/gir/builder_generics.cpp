@@ -1376,9 +1376,44 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     return graph;
 }
 
+Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    if (type->code() == TypeCode::TypeOf) {
+        // `typeof e`: build e where the type is used and take the type of the value it makes.
+        // A build-time tuple is taken without a FILL, as `indices` and `...` take one.
+        const auto *placeholder = tt::as_ptr<TypeOfType>(type);
+        const auto *held       = static_cast<const GCT::Node *>(placeholder->expression());
+        ASSERT(held != nullptr, "typeof holds the expression it was made with.");
+        GCT::Node *expression = const_cast<GCT::Node *>(held);
+        Type *valueType       = nullptr;
+        const std::any result = visit(expression);
+        if (result.type() == typeid(StaticTuple)) {
+            valueType = any_cast<const StaticTuple &>(result).type;
+        } else if (node_handle_t value = valueNodeOf(result)) {
+            valueType = valueTypeOf(nodeTypeOf(value));
+        }
+        if (valueType == nullptr || valueType->code() == TypeCode::Void) {
+            diags_->of(SemanticDiag::TypeOfNotAValue)
+                .atOrigin(expression->origin())
+                .commit(sourceTextOf(expression), valueType == nullptr ? "no value" : "void");
+            throw BuildAbortException();
+        }
+        return boundType(valueType);
+    }
+    if (containsTypeOf(type)) {
+        diags_->of(SemanticDiag::TypeOfNotWholeType)
+            .atOrigin(at != nullptr ? at->origin() : 0)
+            .commit(type->toString());
+        throw BuildAbortException();
+    }
+    return boundType(type);
+}
+
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     ENTER("TYPE");
-    Type *type = boundType(gct->dataType());
+    Type *type = resolveTypeNode(gct->dataType(), gct);
     LEAVE("TYPE");
     return type;
 }

@@ -46,6 +46,8 @@ std::string to_string(DataType type) {
         return "StructComp";
     case DataType::TupleComp:
         return "TupleComp";
+    case DataType::ShapeComp:
+        return "ShapeComp";
     case DataType::Func:
         return "Func";
     case DataType::Ref:
@@ -228,6 +230,8 @@ const std::string TupleDataLoad::geneCode() const { return "()"; }
 const std::string StructCompLoad::geneCode() const { return "{ static for }"; }
 
 const std::string TupleCompLoad::geneCode() const { return "( static for )"; }
+
+const std::string ShapeCompLoad::geneCode() const { return "T { static for }"; }
 
 const std::string FuncDataLoad::geneCode() const {
     if (ref_.empty()) {

@@ -1,0 +1,13 @@
+/** `N` is `int`: a leaf has no fields to fill, so `N { ... }` is refused. */
+module shape_not_composite
+
+type N = int
+
+func build(t: int) {
+    return N { static for (n, F) in fields N => t }
+}
+
+func main(): int sync {
+    println(build(1))
+    return 0
+}

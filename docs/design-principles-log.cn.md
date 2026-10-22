@@ -800,3 +800,4 @@ H15 的待决问题：分支臂里的 `return` 取臂位置的期望类型；数
 - （2026-10-22，负责人同意）规则语言第二版加两项：按目标支持抽取（导出与设备编译先饱和、再选目标支持的写法）；以精度为目标的规则库与新许可 `refine_accuracy`（名字可推翻）。v2.cn.md 8.9、8.10。
 - （2026-10-22，负责人）遍的输入与输出都是图，打印/导出/执行类遍在副作用之后输出空图，不另设"消费遍"（改第 9 节）。`explain`/`why_not` 的用户界面放在调试器 camel-db，核心命令行不加源码位置参数。转译即降低（目标算子 + 规则 + 按目标抽取），执行即改写到范式（`semantics` 规则库，作可执行语义与差分测试参照）。
 - （2026-10-22，负责人）"camel 本身就是主打 pass as func，funcs are graphs，多阶段图重写，直到产生空图就是执行结束"——写入第 1 节。
+- （2026-10-23，评审裁定，合并时记录）`typeof` 在泛型里的用法已经裁定并实现：`typeof e` 是编译期占位，在 `fields` 的操作数、`match type` 的主语、`static for`/`static loop` 的操作数与类型实参的位置解析成 `e` 的静态类型；`e` 没有值报 `TypeOfNotAValue`，`typeof` 写在更大的类型里报 `TypeOfNotWholeType`。配套的同形推导式 `T { static for (n, F) in fields T => e }` 从 `T` 取字段名与种类（结构体或元组）：生成器走别的类型报 `SameShapeComprehensionMismatch`，`T` 不是结构体或元组报 `SameShapeComprehensionNotComposite`。设计原则第 15 节仍把“`typeof` 在泛型里的用法”列为未定，那一行需要作者改写；本条只记录裁定已经生效，不改规范正文。
