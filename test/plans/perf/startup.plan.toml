@@ -33,6 +33,13 @@
 # declaration work), so the ceiling is a coarse alarm, not a declaration budget: a re-added H142
 # 4.6 ms would read about 24% today, under the 30% ceiling. H177 left the ceiling unchanged and
 # recorded the numbers and the per-module table in handover note ⟨83d6558⟩ (H177).
+#
+# The pinned `declarations=` count is how many declarations the run compiles, so it moves whenever
+# a module is migrated: 309 with `env`/`process`/`hash` (H163), 345 after `algo`/`math`/`graph`/
+# `para`/`random` became declarations (H202). The number is the measurement's own, not the ledger's
+# 337 declarations — the compiler counts the functions it instantiates, including the enumerated
+# `graph:constant`/`add_constant` spellings. Update the pin with the measured value when a
+# migration changes it; never loosen the per-declaration ceiling instead.
 id = "perf.startup"
 order = 401
 tier = "slow"
@@ -46,7 +53,7 @@ tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=309"]
+expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=345"]
 # Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
 # well under half a minute under load. 120 s catches a hang, not a slow run.
 timeout_ms = 120000
