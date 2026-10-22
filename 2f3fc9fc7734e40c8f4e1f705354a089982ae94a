@@ -1,0 +1,243 @@
+# H112：运行期 `onnx.export_model` 的 checked commit，以及规则库按需编译带出的两处缺陷
+
+- 分支：`handover/H112-export-rewrite`，自 `origin/develop` 的 `f492a4d07`。
+- 任务板：H111（保持编号，本报告即其完成报告）。
+- 结论：H111 修在**会话的冲突检查**上：只有可能替换上下文程序的会话才比较版本。`feat/modules/onnx`
+  130/130 全绿。另外两处是 H100 让 `std::opt` 按需编译 `stdlib/rules.cml` 之后暴露出来的缺陷（构建库
+  时覆盖了程序的 entry origin；标准库自己的 `import graph` 被入口目录的同名文件遮蔽），一并修复：
+  `feat/opt`、`feat/modules/rules`、`feat/modules/tensor`、`feat/linear`、`feat/trans`、`smoke`
+  1598/1598。全快层 4965 条中仍有 7 条红，逐条说明见 §6：2 条是已在 develop 立项的 H121，1 条是
+  `permissions.strict_algebra` 的形状断言与 H100 新增的精确规则冲突（§6.1），其余是基线已有的
+  工具/快照红。
+
+## 1. 现象与最小复现
+
+任务给出的复现原样成立：
+
+```
+$ camel test/cases/modules/onnx/export_fold.cml
+error[RuntimeDiag::GraphPassFailed]: Pass 'rules::simplify' failed: error RewriteInvalid:
+The commit conflicts with a newer program: 4 graph(s) ... ('unroll$tspec3$spec6', 'unroll$spec2', '__g_5__', 'forward')
+```
+
+最小的运行期导出（本分支新增 `test/cases/modules/onnx/export_minimal.cml`，`f(x: Tensor) = x * 2.0`）
+同样失败，只有一张图：
+
+```
+error[RuntimeDiag::GraphPassFailed]: Pass 'rules::simplify' failed: error RewriteInvalid:
+The commit conflicts with a newer program: 1 graph(s) ... ('f')
+```
+
+这个最小程序没有任何循环，也没有前几轮改写；失败发生在第一轮化简，所以不是“某一轮改过版本”的
+累积问题。
+
+## 2. 两个程序在哪里分岔（证据）
+
+导出器把绑定后的函数做在**私有副本**上：`exportBound`（`modules/onnx/exporter.cpp:4126`）用
+`fn->program()` 和 `fn->graph()` 打开会话，绑定权重、特化/展开，得到 `prepared`；`translatePrepared`
+再调 `simplifyGraph`/`simplifyFully`（`modules/onnx/exporter.cpp:4018`），后者按名字调用
+`std::opt::algebra`，也就是 `rules::simplify`。规则库的 `rewriteKernel`（`modules/rewrite/module.cpp:240`）
+在传进来的 `base` 上开会话，逐图 `edit`，最后 `commitChecked()`（`modules/rewrite/module.cpp:262`）。
+
+分岔点就是这里：`base` 是 `prepared`，而 `context_->currentRuntimeProgram()` 是**仍在运行的**
+那份程序（入口模块物化出来的那份）。两份程序是不同对象，图 id 各自从 1 开始，同名 id 并不指向
+同一版本。
+
+在 `conflicts()` 里加的临时打印（已删除）给出了直接证据。最小程序：
+
+```
+[H112] session program=... current=... mayPublish=0 same=0 root='f' conflicts=1
+[H112] graph 'f' id=2 mineRev=4 current present rev=2 samePtr=0
+```
+
+`mayPublish=0` 是构造时记下的（`src/runtime/draft_session.cpp:973`：只有上下文当时的程序就是
+`program_` 才为真）；`same=0` 表示现在也不是同一对象。副本里的 `f` 已是第 4 版，运行中的 `f`
+是第 2 版，两者是不同的图。`export_fold` 的四张图同样：
+
+```
+[H112] unroll$tspec3$spec6: current absent
+[H112] unroll$spec2:        current absent
+[H112] __g_5__:             mineRev=22 currentRev=5
+[H112] forward:             mineRev=21 currentRev=3
+```
+
+两张特化图在运行程序里根本不存在（`current absent`），另外两张的修订号只是两份程序各自的编号。
+`conflictsWithProgram(current)` 拿这些 id 去运行程序里查，当然全部“冲突”。
+
+**H100 的 `0b45b04d7` 不是原因。** 它只把 `programContentChanged` 的读取移到
+`settleRuntimeGraphs` 之前，影响的是“会话提交**成功安装**到上下文”的那条路。导出这条路上
+`mayPublish_` 为假，`commit()` 不会安装（`publishes=false`），`settleRuntimeGraphs` 根本不会跑；
+位置调换与这里无关。实测也一致：把打印放在 `installRuntimeProgramIfCurrent` 里从未触发。
+
+## 3. 修在哪一层
+
+修在会话，而不在导出器或遍调度器：
+
+```cpp
+// src/runtime/draft_session.cpp
+std::vector<GraphId> RuntimeGraphDraftSession::conflicts() const {
+    const Program *current = context_->currentRuntimeProgram();
+    // A conflict is a lost race between sessions that can replace the same program. A private
+    // program (the exporter's bound copy, a function value, a subgraph root) is not a version
+    // of the context's program: its graph ids name other graphs.
+    const bool contextProgram = mayPublish_ || current == program_;
+    if (!contextProgram || runtimeRoot_ != program_->root()) {
+        return {};
+    }
+    return conflictsWithProgram(current);
+}
+```
+
+这与 `commit()` 判断 `installing` 的条件完全相同（`mayPublish_ || current == program_`，且会话
+根图就是程序的根图），也就是设计 4.3.1 的发布规则：**只有能替换上下文程序的会话才可能输掉竞争**。
+私有程序的会话没有可比较的版本，`commitChecked()` 与 `commit()` 相同。`commitChecked()` 本身不
+改：能发布的会话仍然检查，真正的过期提交仍然抛 `GraphCommitConflict`。
+
+为什么不是另外三种：
+
+- **(a) 导出器的副本应当是会话自己打开的程序**：不成立。副本是设计的一部分：导出要把权重绑成
+  常量、按样例形状特化、展开递归，这些图只属于模型，不能装回运行中的程序（否则用户程序被换成
+  模型专用的图，正在执行的图也会被替换）。函数值（`with_grad` 等）、子图根、tiles 区域都走同一个
+  “私有会话，结果交给 owner”的模式，快层里每次运行有上千次这样的提交。
+- **(b) `applyRegisteredPass` 只应在传入的程序上开会话**：它已经是这样做的（`rewriteKernel` 在
+  `base` 上开会话）；回退 `0b45b04d7` 不改变这条路径（见 §2 的 `publishes=false`）。
+- **(c) 在真实程序上跑 checked pass 再恢复**：会把模型专用的绑定/展开/化简发布进运行程序，并和
+  并发执行竞争；而且“恢复”本身也要发布一个旧程序，等于把导出变成一个会改 live program 的操作。
+- **unchecked commit** 是最后手段，不需要：检查只在有版本可比的会话上有意义，而真正的冲突用例
+  （`test/plans/feat/opt/edges.plan.toml` 的 `commit_conflict_is_detected` 与
+  `stale_commit_merges_into_the_newest_snapshot`）在全快层里仍然绿。
+
+`include/camel/runtime/draft_session.h` 的 `conflicts()` 文档和
+`docs/technical/17_graph_rewrite_api_contracts.md` §4.3 同步写明了这条规则。
+
+## 4. 连带缺陷二：构建库时覆盖了程序的 entry origin
+
+修好 H111 后，四个 `pass_export_refusal_located.*` 用例（`two_calls`、`no_request`、
+`main_not_inlined`、`dynamic_axis`）仍然红：诊断指向
+
+```
+out/latest/stdlib/rules.cml:552:1  export func simplify
+```
+
+而不是用例的 `main`。原因在 `Builder::buildEntryCall`（`src/compile/gir/builder.cpp`）：它对**每次**
+构建都调用 `registerEntryOrigin`。H100 之后 `std::opt` 会按需把 `stdlib/rules.cml` 编译成一个
+程序（`buildLibraryEntry`），于是共享的 `SourceContext` 调试图里“main 在哪”被改成了规则库的入口
+函数。
+
+证据：不带 `std::opt` 或只带 `std::opt::fold`（不编译规则库）时，诊断是用例的 `9:1`；带
+`std::opt::algebra`（编译 `rules.cml`）时变成 `rules.cml:552:1`。修复：只有程序自己的构建
+（`libraryEntryFunction_` 为空）才记录 entry origin；库仍然记录它根图的 origin。
+
+## 5. 连带缺陷三：标准库自己的 import 被入口目录的同名文件遮蔽
+
+`feat/compile` 的 consistency 组（`partial_application`、`generic_values`、`logical_branch`、
+`narrowing` 共 14 条）和 `tags` 的 `read_by.present` 在修好 H111 后仍然静默 exit 1。它们所在的
+用例目录里都有一个 `graph.cml`（`test/cases/compile/tags/graph.cml` 等）。
+
+原因是模块搜索顺序：`buildModuleSearchPaths`（`include/camel/utils/install_layout.h`）把**入口目录**
+放在最前。H100 的 `std::opt` 按需编译 `stdlib/rules.cml`，`rules` 里 `import { Program } from graph`；
+全局搜索先看到入口目录的 `graph.cml`（模块名 `tags_nodes`），把它当成 `graph` 模块，`rules` 编译
+失败，整个 pass 静默退出。把同一个 `decl.cml` 单独复制到 `/tmp` 再跑就正常（exit 7），旁边放一个
+`graph.cml` 就 exit 1，确认了遮蔽。
+
+修复：`Context::importModule`（`src/core/context/context.cpp:389`）先在被导入模块自己的目录里找
+（`findModuleUnder(importerDir, name)`），找不到再走原来的全局搜索；全局搜索和回退顺序不变，入口
+程序自己的 import 仍按入口目录优先。`findModuleUnder`/`loadModuleFrom` 从原来的
+`getModulePathAndKind`/`tryLoadModule` 中拆出，两处共用。
+
+这一条是对模块解析语义的细化（设计原则没有覆盖“模块自己的相对 import 与入口目录谁优先”），
+**请语言作者复核**：它只把“模块自己旁边的同名模块”放在“入口目录的同名文件”之前，入口程序的
+行为不变，14+2 条原本红的用例在测试不动的情况下转绿。
+
+## 6. 仍红的用例（逐条）
+
+全快层（`smoke` + `test/plans/feat`）：
+
+```
+[SUMMARY] total: 4965, pass: 4946, fail: 7, skip: 12
+```
+
+1. `rewrite_opt`、`rewrite_macro_simplify`：**H121**，已在 develop 立项（H113 发现，H113 在
+   `f492a4d07` 上复现过）。`test/cases/facts/tensors_and_loops.cml` 期望
+   `FACTS graph layer valid=6`、`total valid=4`、`count valid=2`，实际 `3`/`1`/`1`，facts 的失效
+   范围变小。与本分支无关，本分支不修。
+2. `permissions.strict_algebra`：**不是 H111**，见 §6.1。
+3. `lsp.editing`：**flaky**（时序）。同一份代码在第一次全快层和单独重跑时 9/9 通过，在全快层
+   并行负载下两次失败；失败点是“正在输入的文本里 `math::` 的补全为空”，而临时打印显示通过路径
+   根本不进 `importModule` 的回退分支（`main.parsed` 为真），说明不是 §5 的解析改动引起的。建议
+   另立一条“LSP 补全与 didChange 的时序”缺陷，不在本分支处理。
+4. `frontend.ast_snapshot`：基线已有，三份与本分支无关的文件读出的哈希不同：
+   `test/cases/compile/numeric/fuse.cml`、`test/cases/compile/numeric/library_gemm.cml`、
+   `test/cases/modules/autodiff/fused_grad_check.cml`。本分支没有改这三个文件。
+5. `compile_bench.smoke`：`chain-3` 期望 4 个 user module，实际 6 个。H100 的按需 `rules` 库和它
+   的 `graph` 声明模块被计入 user module；这是 benchmark 的计数期望没跟上 H100，早于本分支的
+   模块解析改动就已失败，归工具维护者。
+6. `docs.links.reader_facing`：`docs/language/en/04_execution_model.md:198` 链接
+   `../design-principles.en.md`（解析到 `docs/language/design-principles.en.md`），英文设计原则
+   实际在 `docs/design-principles.en.md`；基线已有的坏链。
+
+### 6.1 `permissions.strict_algebra`：形状断言与 H100 的精确规则冲突
+
+修好 §5 之后这个用例已经能跑到断言，失败信息是：
+
+```
+tight keeps the product CSE left, got ["mul_d","mul_d"]
+```
+
+用 `std::gir` 看得很清楚：`std::opt` 的顺序是 fold → **cse** → algebra → dce。CSE 先把
+`x*0.1 + x*0.1` 合并成 `p + p`（`p = x*0.1`），随后规则库的 `float_add_self`
+（`stdlib/rules.cml:108-111`，`x + x => x * 2.0`）把它改写成 `p * 2.0`。这条规则在库里的注释
+明确说“doubling is exact … so the law needs no permission”，7.4 的 `#strict` 是“不使用任何许可、
+按规范算法逐位计算”，而 `p+p` 与 `p*2` 逐位相等，所以这条改写**在 `#strict` 下是合法的**。
+用例的期望（“strict 保留那个和”）是 H100 之前的规则集（没有 `add_self`）留下来的形状断言，
+不是现在的语义。
+
+两条路都要作者定夺，本分支不擅自改：
+
+- 改断言：strict 函数接受“一个乘一个加”或“两个乘（精确翻倍）”，只要不是 `x*0.2` 那种改变
+  舍入路径的写法；
+- 或者把 algebra 移到 CSE 之前：`float_double`（需要 `reassociate`）先看到两个乘积，strict 拦下，
+  再由 CSE 合并成一个乘一个加——形状正好是原断言，但这会改 `std::opt` 的顺序和 H65 语料的计数，
+  影响面远大于 H112。
+
+## 7. 验证与计划数字
+
+全部在 Linux 主机上用 `camel-remote.ps1` 构建/运行（Release，`-Jobs 8`）：
+
+| 计划 | total | pass | fail | 说明 |
+|---|---:|---:|---:|---|
+| `test/plans/feat/modules/onnx.plan.toml` | 130 | 130 | 0 | 含新增 `export_model_minimal` |
+| `feat/opt` + `feat/modules/rules` + `feat/modules/tensor` + `feat/linear` + `feat/trans` + `smoke` | 1598 | 1598 | 0 | 任务列出的爆炸半径 |
+| `test/plans/feat/compile` | 997 | 996 | 1 | 唯一红是 §6.1 的 `permissions.strict_algebra` |
+| `smoke` + 全部 `feat`（全快层） | 4965 | 4946 | 7 | 12 skip；7 条见 §6 |
+
+H111 的验收项：`feat/modules/onnx` 全绿；`read_by.present`、`permissions.strict_algebra`
+（后者只差 §6.1 的形状断言）、`rewrite_opt`、`rewrite_macro_simplify` 之外的 99 条原本红的用例
+都已转绿；`rewrite_opt`/`rewrite_macro_simplify` 仍红但归 H121。新增的最小导出用例锁住“运行期
+导出不再比较私有副本”。
+
+## 8. 改动与提交
+
+```
+398df1d5a runtime: only a session that may publish checks its versions
+5499a8e0d compile: only the program's own build records where main is
+2dafce471 core: a module resolves its imports next to itself first
+```
+
+- `src/runtime/draft_session.cpp`、`include/camel/runtime/draft_session.h`：`conflicts()` 的适用
+  范围；`docs/technical/17_graph_rewrite_api_contracts.md` §4.3 同步。
+- `modules/onnx/exporter.cpp`：`refuseLoops` 的注释不再声称化简会因冲突失败（行为不变）。
+- `test/cases/modules/onnx/export_minimal.cml`、`test/plans/feat/modules/onnx.plan.toml`：最小
+  导出回归用例（`Mul` 一个、图 io `input`→`output`）。
+- `src/compile/gir/builder.cpp`：程序的 entry origin 只由程序自己的构建记录。
+- `src/core/context/context.cpp`、`include/camel/core/context/context.h`：模块自己的 import 先在
+  自己目录解析；`findModuleUnder`/`loadModuleFrom` 拆分。
+
+## 9. 结论与遗留
+
+- H111 已完成：导出器在私有副本上做 checked commit 不再被误报冲突；能发布的会话仍检查版本，
+  真正的冲突仍有诊断。
+- 遗留（都不属于 H111）：H121（facts 失效范围）；`permissions.strict_algebra` 的断言/顺序决定
+  （§6.1）；`lsp.editing` 的时序 flake；`ast_snapshot`、`compile_bench.smoke`、
+  `docs.links.reader_facing` 三条基线红。
+- §5 的模块解析细化请作者复核（语义边界见 §5 末）。
