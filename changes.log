@@ -1,3 +1,5 @@
+[0.2.25]
+
 [0.2.24]
 Changes:
 - 标准库改名：`sys` 是 `env`、`os` 是 `process`、`crypto` 是 `hash`、`tree` 是 `ckpt`；旧名不再是模块，导入它只得到普通的 `ModuleNotFound`，没有别名，也没有指向新名的提示。
