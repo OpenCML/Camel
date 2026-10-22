@@ -179,15 +179,21 @@ export function changedFiles() {
     return [...new Set(files)]
 }
 
-/** A plan entry of a file rule: `"feat/opt"`, or `{ "plan": "...", "layer": true }`. */
+/**
+ * A plan entry of a file rule: `"feat/opt"`, `{ "plan": "...", "layer": true }`, or
+ * `{ "plan": "...", "ownCases": true }`. `ownCases` adds the plan only when the changed file is
+ * one of the cases the plan names: a case edit cannot invalidate a plan that does not run it, so
+ * a slow plan must not ride a directory into a case it never reads (H205).
+ */
 function selectionPlan(entry, ruleLayer) {
     if (entry !== null && typeof entry === 'object') {
         return {
             name: String(entry.plan || ''),
             layer: entry.layer === undefined ? ruleLayer : entry.layer === true,
+            ownCases: entry.ownCases === true,
         }
     }
-    return { name: String(entry), layer: ruleLayer }
+    return { name: String(entry), layer: ruleLayer, ownCases: false }
 }
 
 // The selection is read once per process: `--changed` looks at every changed file, and the
@@ -285,6 +291,52 @@ function nearestPlanDirectory(file) {
     return null
 }
 
+/**
+ * The plans an `ownCases` entry may stand for: the plan file itself, or every plan file under a
+ * plan directory (the selection file names both forms).
+ */
+function walkPlanPaths(entry, out = []) {
+    if (fs.statSync(entry).isDirectory()) {
+        for (const name of fs.readdirSync(entry)) {
+            const full = path.join(entry, name)
+            if (fs.statSync(full).isDirectory()) walkPlanPaths(full, out)
+            else if (name.endsWith('.plan.toml')) out.push(full)
+        }
+    } else {
+        out.push(entry)
+    }
+    return out
+}
+
+const CASE_ENTRY = /^[ \t]*case[ \t]*=[ \t]*"([^"]*)"/gm
+const planCaseCache = new Map()
+
+/** The case files a plan names, resolved the way the test runner resolves them. */
+function planCaseFiles(planPath) {
+    if (!planCaseCache.has(planPath)) {
+        const files = new Set()
+        for (const match of fs.readFileSync(planPath, 'utf8').matchAll(CASE_ENTRY)) {
+            // `${case}` and the other variables are the runner's, not a path in this tree.
+            if (match[1].includes('${')) continue
+            files.add(path.resolve(path.dirname(planPath), match[1].replace(/\\/g, '/')))
+        }
+        planCaseCache.set(planPath, files)
+    }
+    return planCaseCache.get(planPath)
+}
+
+/** Whether a named plan (file or directory) runs the changed file as one of its cases. */
+function selectionPlanRunsFile(name, file) {
+    let target
+    try {
+        target = resolveSelectionTarget(name)
+    } catch {
+        return false
+    }
+    const absolute = path.resolve(REPO_ROOT, file)
+    return walkPlanPaths(target).some((planPath) => planCaseFiles(planPath).has(absolute))
+}
+
 export function plansForChanges(files) {
     const rules = loadSelectionRules()
     const names = new Set()
@@ -309,6 +361,10 @@ export function plansForChanges(files) {
         let excluded = false
         if (rule) {
             for (const plan of rule.plans) {
+                // An `ownCases` plan is added only for a case it actually names. A slow plan
+                // reached through a directory that also holds fast cases would otherwise run in
+                // full on an edit that never touches it (H205).
+                if (plan.ownCases && !selectionPlanRunsFile(plan.name, file)) continue
                 // A layered plan is still a plan to run: it stays in `names` (so it becomes a
                 // target) and is listed in `layered` so the runner does not treat it as a named
                 // plan that runs in full. Dropping it from `names` would select nothing.
