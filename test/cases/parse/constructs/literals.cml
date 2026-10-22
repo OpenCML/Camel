@@ -1,0 +1,27 @@
+/**
+ * String literals: `'...'` and `"..."` are the same token; both take the escapes (including
+ * `\u{...}` and an unknown escape kept as written) and both may span a line. `'''...'''` and
+ * `"""..."""` are the multi-line form, the only one that may contain an unescaped quote of its
+ * own kind.
+ */
+module parse_constructs_literals
+
+func main(): int sync {
+    let single = 'it\'s a string'
+    let double = "a \"quoted\" word"
+    let escapes = "tab\tnl\nhex\x41oct\033nul\0"
+    let unicode = "mid \u{4E2D} end"
+    let spanning = "first
+second"
+    let multi_single = '''one 'quoted' word
+two {} lines\n'''
+    let multi_double = """one "quoted" word
+two \$ lines"""
+    println(single)
+    println(double)
+    println(len(escapes), len(unicode))
+    println(spanning)
+    println(multi_single)
+    println(multi_double)
+    return 0
+}

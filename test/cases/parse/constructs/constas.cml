@@ -1,0 +1,19 @@
+/**
+ * `constas` (tensor named dimensions): inside a type argument, `constas n` binds the value of a
+ * dimension to the name `n`, and the other arguments of the same type are linear forms over it,
+ * so every occurrence of `n` is held to one value. `t.[n]` reads the field named by `n`.
+ */
+module parse_constructs_constas
+import { Tensor, ones, sum } from tensor
+
+func affine(
+    a: Tensor<f32, const [constas n]>,
+    b: Tensor<f32, const [n + 1]>
+): float {
+    return sum(a) + sum(b)
+}
+
+func main(): int sync {
+    println(affine(ones([2]), ones([3])))
+    return 0
+}

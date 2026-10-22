@@ -1,0 +1,28 @@
+/**
+ * An operator is declared and overloaded with `func operator <token>` (design principles 4.3):
+ * `operatorName` is the name `operator` followed by an operator token or by `[ ]`. The
+ * declaration is a function of the module, and a call is written with the operator.
+ */
+module parse_constructs_operator_name
+
+export type Point = { x: int, y: int }
+
+export func operator +(a: Point, b: Point): Point {
+    return { x: a.x + b.x, y: a.y + b.y }
+}
+
+export type Table = { rows: int[] }
+
+export func operator [](t: Table, i: int): int {
+    return t.rows[i]
+}
+
+func main(): int sync {
+    let a: Point = { x: 1, y: 2 }
+    let b: Point = { x: 3, y: 4 }
+    let p = a + b
+    println(p.x, p.y)
+    let t: Table = { rows: [10, 20, 30] }
+    println(t[1])
+    return 0
+}

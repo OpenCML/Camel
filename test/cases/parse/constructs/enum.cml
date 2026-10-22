@@ -1,0 +1,38 @@
+/**
+ * Enums (design principles 5.3): a type declared `enum`, its variants without a payload, with a
+ * tuple and with named fields, and every pattern form in a match: a bare variant, a variant with
+ * a tuple pattern and a variant with a struct pattern.
+ */
+module parse_constructs_enum
+
+type Color = enum { Red, Green, Blue }
+
+type Shape = enum {
+    Circle(float),
+    Rect { w: float, h: float },
+    Empty,
+}
+
+func area(s: Shape): float {
+    return match s {
+        case Shape::Circle(r) => 3.14159 * r * r
+        case Shape::Rect { w, h } => w * h
+        case Shape::Empty => 0.0
+    }
+}
+
+func initial(c: Color): string {
+    return match c {
+        case Color::Red => 'r'
+        case Color::Green => 'g'
+        case Color::Blue => 'b'
+    }
+}
+
+func main(): int sync {
+    println(initial(Color::Green))
+    println(area(Shape::Circle(1.0)))
+    println(area(Shape::Rect { w: 2.0, h: 3.0 }))
+    println(area(Shape::Empty))
+    return 0
+}

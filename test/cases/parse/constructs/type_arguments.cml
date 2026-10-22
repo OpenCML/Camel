@@ -1,0 +1,19 @@
+/**
+ * Type arguments at a call (design principles 5.9): `f::<T>` gives them by position, `f::<A = T>`
+ * by name in any order, and `f::<T = int>` alone is a function value. The `::` separates them
+ * from the value arguments in angle brackets, which are a different form.
+ */
+module parse_constructs_type_arguments
+
+func pair(b: typeas B, a: typeas A): (A, B) { return (a, b) }
+func second(x: typeas T): T { return x }
+
+func main(): int sync {
+    println(pair::<string, int>('s', 1))
+    println(pair::<A = int, B = string>('s', 1))
+    println(pair::<B = string, A = int>('s', 1))
+    let f = second::<T = float>
+    println(f(2.5))
+    println(second::<int>(1))
+    return 0
+}

@@ -1,0 +1,104 @@
+id = "parse.constructs"
+order = 310
+tier = "fast"
+tags = ["feat", "parse", "constructs"]
+desc = "The parser's construct corpus: one small case for each construct the grammar supports that the older parse cases did not exercise on their own. The AST snapshot (frontend.ast_snapshot) hashes exactly the cases under test/cases/parse, so a construct that no case here writes is a construct the snapshot no longer covers (H188)."
+
+# Every case is also a program that compiles and runs, so the construct it is about is exercised
+# from the parse tree through GCT to the value, not only hashed by the AST snapshot. `analysis`
+# declares alone: an analysis is a fact for rules and a pass module, not a function that ordinary
+# code calls.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 12000
+
+[[tests]]
+name = "constructs.enum"
+desc = "`type C = enum { ... }` with a bare variant, a tuple variant and a struct variant, and a match on each pattern form (`Shape::Empty`, `Shape::Circle(r)`, `Shape::Rect { w, h }`)."
+kind = "behavior"
+case = "../../../cases/parse/constructs/enum.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["g", "3.14159", "6.0", "0.0"]
+
+[[tests]]
+name = "constructs.tags"
+desc = "`tag` declarations with positions (`on nodes`, `on func`), a `read_by` pass, a grouped tag (`= [a, b]`), a tagged type, a tagged field, and `#name`, `#[a, b]` and `#name<value>` uses."
+kind = "behavior"
+case = "../../../cases/parse/constructs/tags.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+
+[[tests]]
+name = "constructs.static_loop"
+desc = "`static loop` over the fields of a generic `T`, of a struct type, of a tuple type and of the empty struct, with one state and with two states."
+kind = "behavior"
+case = "../../../cases/parse/constructs/static_loop.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6", "16 9", "9", "7"]
+
+[[tests]]
+name = "constructs.comprehensions"
+desc = "A `static for` written where a value is needed: the struct comprehension `{ ... }`, the tuple comprehension `( ... )`, a round whose body is a block, and the empty struct."
+kind = "behavior"
+case = "../../../cases/parse/constructs/comprehensions.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["2 4", "4 5", "11 21"]
+
+[[tests]]
+name = "constructs.analysis"
+desc = "`analysis name: type { ... }` with the `initial`, `join` and `on` clauses, including a pattern clause (`on (x + y) => ...`) and two clauses of one kind."
+kind = "behavior"
+case = "../../../cases/parse/constructs/analysis.cml"
+args = ["${case}"]
+expect_exit = 0
+
+[[tests]]
+name = "constructs.operator_name"
+desc = "`func operator +(...)` and `func operator [](...)`: an operator overload declared with the `operator` name, and the same operator written at the call."
+kind = "behavior"
+case = "../../../cases/parse/constructs/operator_name.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["4 6", "20"]
+
+[[tests]]
+name = "constructs.type_arguments"
+desc = "Type arguments at a call: by position (`f::<int>`), by name in either order (`f::<A = int, B = string>`), and alone as a function value (`f::<T = float>`)."
+kind = "behavior"
+case = "../../../cases/parse/constructs/type_arguments.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["(1, s)", "2.5", "1"]
+
+[[tests]]
+name = "constructs.constas"
+desc = "`constas n` in a type argument (`Tensor<f32, const [constas n]>`) with a linear form over the same name (`[n + 1]`), and the named field index `t.[n]` it enables."
+kind = "behavior"
+case = "../../../cases/parse/constructs/constas.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["5.0"]
+
+[[tests]]
+name = "constructs.literals"
+desc = "The string tokens: `'...'` and `\"...\"` with escapes (`\\t`, `\\x`, `\\033`, `\\0`, `\\u{...}`), a plain string that spans a line, and the multi-line `'''...'''` and `\"\"\"...\"\"\"` forms."
+kind = "behavior"
+case = "../../../cases/parse/constructs/literals.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["it's a string", "a \"quoted\" word", "19 9"]
+
+[[tests]]
+name = "constructs.fstring"
+desc = "The `FSTRING` token: interpolation, a format specification, an expression, a nested format string, literal braces, the `\\${`, `\\`` and `\\u{...}` escapes, and a format string that spans lines."
+kind = "behavior"
+case = "../../../cases/parse/constructs/fstring.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["hello, Camel!", "pi = 3.50", "nested: <inner 42>", "braces { } are literal; ${not} interpolated"]
