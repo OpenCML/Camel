@@ -1,0 +1,154 @@
+# H77：数值许可改为标签；`#vjp<rule>` 成为声明标签
+
+**分支**：`handover/H77-numeric-vjp-tags`，基于 `origin/develop`（`60c39d4e`）。
+**提交**：第 4 项 `7b4147c1`；第 5 项见本分支最后一个提交。
+**范围**：H2 剩下的第 4、5 两项（第 6 项 `#macro` 不在本任务内）。第 1–3、7、8 项在 `856af859` 已完成。
+
+---
+
+## 1 数值许可成为标签集合（第 4 项）
+
+### 1.1 标签
+
+数值许可现在是一组标签，写在 `on nodes`（`#strict` 另外可写在 `on func`）：
+
+| 标签 | 含义 | 位置 |
+|---|---|---|
+| `reassociate` | 允许重结合 | `nodes` |
+| `contract` | 允许乘加收缩（FMA） | `nodes` |
+| `approx_math` | 允许近似数学（如 `a * b + c` 走 fma、快速倒数） | `nodes` |
+| `change_precision` | 允许降低中间精度 | `nodes` |
+| `no_nans` | 不产生 NaN | `nodes` |
+| `no_infs` | 不产生无穷 | `nodes` |
+| `no_signed_zeros` | 不区分 ±0 | `nodes` |
+| `flush_subnormals` | 次正规数按 0 处理 | `nodes` |
+| `nondeterministic` | 允许结果随调度变化（如浮点原子加） | `nodes` |
+| `finite_math` | 别名组 = `[no_nans, no_infs, no_signed_zeros, flush_subnormals]` | — |
+| `strict` | 不使用任何许可，**含默认许可** | `func`, `nodes` |
+
+这些标签由核心声明（`src/core/tags.cpp` 的 `declarePermissionTags`），不导入即可用；`finite_math` 是 `tag finite_math = [...]` 形式的组，展开成其中四条事实。
+
+### 1.2 默认值与"安全模式"
+
+设计原则 7.3 的默认授予是 `reassociate | contract`。核心的 `sem::NumericPolicy` 现在以 `relaxed()` 为默认策略（`{defaultGrants = kReassociate|kContract, nodeGrants = false}`）；"安全模式"参数就是 `strict()`（`{0, false}`，连默认授予也不给）。`DraftWritings` 的默认策略同样是 `relaxed()`，`std::opt(safe_fp=true)` 仍然等价于对整段代码写 `#strict`（评审 H24–H25–H26 的裁定）。
+
+### 1.3 `#strict` 的实现
+
+`#strict` 不新增许可位、不新增图字段、不移动任何类型码：
+
+- 它和其他标签一样走 `attr::` 属性集：`#strict` 落在节点的 `attrs="strict"` 里；许可列（`uint16_t reserved` 之后保存的 `PermissionMask`）**只保存显式许可标签**，`reassociate` / `contract` 的默认值不写进列里。
+- 许可与含义的对应只有一处：`tag::effectivePermissions(facts/policy, mask)` —— 属性集里出现 `#strict` 时返回 `kNoPermissions`，否则返回 `policy.effective(mask)`（即"列里的显式授予 ∪ 策略的默认授予"的过滤结果）。`tag::permissionsOf` 只做"节点属性里的许可标签 → 位"的翻译，不做策略合并。
+- 读者一律通过这两个函数取许可，不自己碰列：算式优化（`src/passes/opt/generic/algebra.cpp`、`generic.cpp`、`screen.cpp`）、`tensor::fuse`、规则引擎（`stdlib/rules.cml` 的 `#requires<...>` 守卫）、`inspect`、`std::jgir`、Tiles。`std::jgir` 的 `numeric=` 仍然只打印显式许可；`attrs=` 打印 `strict`。
+
+这与评审意见的"`#strict` 清空有效许可（含默认）"在语义上一致；差别只在存储位置（见"待决问题"第 1 条）。
+
+### 1.4 前端删掉的东西与旧写法
+
+- 删除前端 `numeric` 标注分支、许可名名单、`@name(...)` 写法与 GCT 层的许可字段。
+- 旧的 `@numeric(...)`、任何 `@名字(参数)` 现在在标注处报 `SemanticDiag::InvalidAnnotation`，消息指出应写 `#[reassociate]`（可带多条、可用 `finite_math`）。
+- 程序不得声明与核心许可（以及 `finite_math`、`strict`）同名的标签：`SemanticDiag::TagShadowsPermission` 在声明处拒绝，消息说明那样的名字永远指核心标签。
+- `#strict` / 许可标签出现在 `attrs=` / `numeric=` 的规则见 1.3；`inspect --tags` 与 `tag::factsOf` 能看到声明上的许可与 `strict`。
+
+### 1.5 测试
+
+- `test/plans/feat/compile/tag_permissions.plan.toml`：默认授予（`reassociate`/`contract` 生效，其余不生效）、`#strict` 在 `attrs=` 里且 `std::opt` 不做重结合、旧写法诊断。
+- `test/plans/feat/compile/numeric_permissions.plan.toml`：标签落进同一许可列；lambda 继承写下位置的标签（`NumericPermissionScope` 的继承）；块与函数体的合并；`numeric=` / `attrs=` 的输出。
+- `test/plans/feat/compile/tags.plan.toml`：旧标注的诊断文本、同名标签的拒绝、`func` 形参的诊断。
+- 原有用例（`test/cases/compile/numeric/*`、`test/cases/modules/opt/facts/*` 等）改为新写法；`test/cases/modules/rules/requires_group_target.cml` 的 `scaled` 加 `#strict`，使"要求许可的规则在 `#strict` 下不触发"有回归。
+- AST 快照按新 `.cml` 重新生成（`test/plans/feat/parse/golden/ast_hashes.txt`）。
+
+---
+
+## 2 `#vjp<rule>`：声明标签 + 图引用（第 5 项）
+
+### 2.1 形态
+
+```cml
+import { grad, vjp } from autodiff
+
+func cube_rule(x: float, dy: float): float { return 10.0 * dy }
+
+#vjp<cube_rule>
+func cube(x: float): float { return x * x * x }
+```
+
+`autodiff` 模块声明并导出标签：
+
+```c
+export tag vjp<rule: func> on func
+```
+
+- 标签的形参类型是 `func`：实参是程序里的一个函数名，标签的事实是那个函数的**图引用**（`attr::graphRef(GraphId)`），不是函数值。
+- 这是设计原则 6.2 已经写下的规范形态；第 5 项把"函数值作为标签事实"这一层补上了。
+
+### 2.2 编译期：事实 → 图引用表
+
+- `src/compile/gir/builder_tags.cpp`：`ArgKind` 增加 `Func`；`kindOfDeclaredType` 认 `func`/`function`；`tagValueOf` 对 `func` 实参要求参数是 `DREF` 名字，经 `functionGraphNamed`（本地图、唯一重载、导入的图集/装饰图）取到编译期图，存 `attr::graphRef(graph->graphId())`，并在 `tagFunctionGraphs_` 里记下 GraphId → 图。
+- `attachRuleGraphs`（`builder.cpp` 的 `visitFuncNode` 调用）遍历声明的属性集，把 Graph 值（以及 tuple 里的）逐个 `DraftGraphBuilder::addRuleGraphRef`。函数图和它的装饰图都挂。
+- `DraftGraphBuilder::addRuleGraphRef` 既把编译期图放进 `ruleGraphRefs_`（供 `graph_encode` 编码成 `kGraphRefRule`），也写进 `GraphDraft::ruleGraphs_`（供遍运行期间从草稿构出的图，例如 `std::macro` 求值梯度时构的图）。
+- 引用角色：`GCGraphRefRole` 增加 `kGraphRefRule = 1 << 3`；`GCGraph` 的引用表按角色合并，`GCGraph::ruleGraphs()` 与 `Program::ruleGraphs(graph)` 读取。编码/克隆/可达性都跟着改：`graph_encode.cpp`、`draft_session.cpp`、`draft.cpp`、`draft_clone.cpp`、`reachable.cpp`。图引用是 context 内的 `GraphId`，规则图因此随程序一起编码、可被 `Program::graph(id)` 取回。
+
+### 2.3 运行期：自动微分直接读
+
+- `modules/autodiff/rules.h/.cpp` 只剩两个查询：`hasRule(const GCGraph*)`（引用表里有 `kGraphRefRule`）与 `ruleOf(const Program*, const GCGraph*)` / `ruleOf(const ::Function*)`（用规则图的 `GraphId`、空闭包 `TupleType` 造一个 `::Function`）。
+- 前向改写有两条路径会碰到"有规则"的函数：
+  - 静态调用（`ForwardRewrite::rewriteCall`）：`hasRule(callee)` 成立时不再内联函数体，而是记一个 `CallSite{inputs, plan, rule}`，由反向的 `visitRuleSite` 把 `rule(inputs..., dy)` 换成梯度；
+  - 函数值调用（`rewriteIndirectCall`）：同样记 `CallSite`。
+  两条路径都用同一个 `ruleOf`，没有第二套"规则从哪来"的知识。
+- 删掉的东西：`attachRule` / `carriesRule` / 旧的 `ruleOf(const ::Function*)`（读 `autodiff.vjp/` 前缀与 `kGraphFlagCarriesRule`）、`kGraphFlagCarriesRule` 本身、`autodiff:vjp` 算子（`operators.cpp` 的 resolver、kernel、group、metadata）、`pullback.cpp` 的 `kVjp` 宏分支，以及 `@vjp` 装饰器路径。`modules/autodiff/operators.h` 的注释改为"自定义导数是声明标签，不是本模块的算子"。
+- 旧的 `@vjp<rule>` 在标注处报 `SemanticDiag::InvalidAnnotation`，消息指出应写 `#vjp<rule>`（`Builder::rejectVjpAnnotation`）。这条诊断不依赖 `vjp` 是否被导入。
+
+### 2.4 跨模块与模块缓存
+
+Camel 模块没有 `.cmo` 缓存（`.cmo` 是 C++ 动态模块），"模块缓存"指 `Context::modules_` 里同一个模块只编译一次，后导入直接复用已冻结的图。声明标签的事实写在图的引用表里，所以缓存复用不会丢规则——测试专门锁住这一点：
+
+- `test/cases/modules/autodiff/vjp_lib.cml`：库模块，`scale` 带 `#vjp<scale_rule>`，`scale_rule` **不导出**（规则只能通过图引用到达）；
+- `test/cases/modules/autodiff/vjp_user_a.cml`、`vjp_user_b.cml`：两个模块都 `import { scale } from vjp_lib`，第二个导入命中模块缓存；
+- `test/cases/modules/autodiff/vjp_cross_module.cml`：主模块从两个模块各取一个调用了 `scale` 的函数求梯度。规则给 20 / 10，函数体导数会给 16 / 4，输出 `vjp_cross_module da=20.0 db=10.0`。
+- 计划：`modules.autodiff` 的 `vjp.cross_module.macro.nvm`（`std::macro` + nvm）与 `vjp.cross_module.simplified.fvm`（`std::macro` + `std::opt` 系列 + fvm）；另有 `vjp_old_annotation_removed` 锁旧标注的定位。
+- 原有的 `custom_rule.cml`、`macro_round_lifetime_gc.cml`、ONNX 的 `export_train_step_vjp.cml` 改为 `#vjp<...>` 写法并通过（见第 4 节计划）。
+
+### 2.5 限制
+
+规则必须是程序里的静态函数：标签事实是图的引用，载不了闭包。规则函数如果需要外围值，目前只能写在顶层（或用显式参数传进去）。这一点与 `func` 形参的语义一致，记入"待决问题"。
+
+---
+
+## 3 改动文件（第 5 项）
+
+- 标签与图引用：`include/camel/runtime/graph.h`、`include/camel/runtime/draft.h`、`src/runtime/draft.cpp`、`src/runtime/draft_session.cpp`、`src/runtime/draft_clone.cpp`、`src/runtime/graph_build.h`、`src/runtime/graph.cpp`、`include/camel/runtime/program.h`、`src/compile/gir/draft_graph_builder.{h,cpp}`、`src/compile/gir/graph_encode.cpp`、`src/compile/gir/reachable.cpp`。
+- 标签事实：`src/compile/gir/builder_tags.cpp`、`src/compile/gir/builder.{h,cpp}`、`include/camel/parse/ast/builder.h`、`src/parse/ast/builder.cpp`（`rejectVjpAnnotation`）、`include/camel/core/module/module.h`、`src/core/module/module.cpp`（`Module::exportTag`）。
+- 模块：`modules/autodiff/module.cpp`（声明并导出标签）、`modules/autodiff/rules.{h,cpp}`、`modules/autodiff/{operators.cpp,operators.h,pullback.cpp}`。
+- 诊断文本：`src/core/error/diagnostics/messages/semantic.cpp`（`TagParameterType` / `TagArgumentType` 提到 `func`），`docs/diagnostics.md` 重新生成（187 条）。
+- 文档：`docs/language/07_statements.md`、`docs/language/en/07_statements.md`、`docs/technical/26_autodiff_as_graph_rewrite.md`。
+- 测试：`test/cases/modules/autodiff/{custom_rule,macro_round_lifetime_gc,vjp_lib,vjp_user_a,vjp_user_b,vjp_cross_module,err_vjp_annotation}.cml`、`test/cases/modules/onnx/export_train_step_vjp.cml`、`test/cases/modules/tiles/core_views.cml`、`test/plans/feat/modules/autodiff.plan.toml`；第 4 项的测试与计划见 1.5。
+
+---
+
+## 4 验证
+
+只在与 Linux 主机 `88zjwei` 上构建、跑计划（`camel-remote.ps1 -Jobs 8`，不跑 stress / progen / GC-stress / PyTorch 对照）。
+
+第 4 项（`7b4147c1`）：
+
+- `feat/compile` 1069/1069 通过；
+- `feat/opt` + `feat/modules` + `smoke` 通过（其中 2 条仅 Windows 的用例跳过）；
+- 改 `.cml` 后 `feat/parse` 与 AST 快照重跑通过。
+
+第 5 项：
+
+- `feat/compile/tags.plan.toml` 24/24；
+- 新增的 `vjp.cross_module.macro.nvm`、`vjp.cross_module.simplified.fvm`、`vjp_old_annotation_removed` 3/3；
+- `custom_rule`（macro/simplify × nvm/fvm/jit）6/6、`macro_round_lifetime_gc` 4/4、ONNX `export_train_step_vjp` 2/2、`tiles/core_views.cml` 编译通过；
+- 首轮 `feat/parse` + `feat/compile` + `feat/opt` + `feat/modules` + `smoke` 只有 `frontend.ast_snapshot` 失败：4 个改用 `#vjp<...>` 的文件与 5 个新用例让 AST 哈希变了。在主机上用 `check.py snapshot --update` 重新生成（2331 个文件）后 `feat/parse` 56/56；最后在提交后的代码上重跑同一整轮：构建通过，2687 条，2686 通过、1 跳过（仅 Windows 的 `unicode.paths`）、0 失败；`feat/parse` 56/56 也在其中。
+
+第 4 项与第 5 项都不触碰 stress / progen / GC-stress / PyTorch 对照计划；`modules.autodiff` 里的 PyTorch 对照用例没有在本分支执行（它们的 `tier` 是 slow，目录级的 fast 层会跳过）。
+
+---
+
+## 5 待决问题
+
+1. **`#strict` 的存储位置与评审措辞**。评审 H24–H25–H26 写的是"`#strict` 清空有效许可（含默认许可），不新增位/标志"。实现满足"清空有效许可"和"不新增位/标志"，但 `#strict` 存在**节点的属性集**里（`attrs="strict"`），不是让许可列本身变成空集：许可列只保存显式许可标签，默认授予由策略在读取时合并。这样 `std::jgir` 仍能把"显式许可"和"`#strict`"分开显示，也不需要让列去表达"没有默认授予"。若作者要求"列本身为空集"，在不动类型码的前提下可以改成读取时先按 `attrs` 判定，但那样 `attrs` 与列会出现两种真值来源；请裁定。
+2. **`func` 实参只能是静态函数**。图引用载不了闭包，所以 `#vjp<rule>` 的规则不能捕获外围值。若需要"闭包规则"，得再加一层"函数值作为标签事实"的表示（与 H2b 报告里记的下一阶段是同一件事），并决定这种事实在模块缓存与跨进程缓存里如何重新解析。
+3. **`vjp` 是模块标签而非核心标签**。它随 `import ... from autodiff` 的默认导入带入（与算子组一样），所以写 `#vjp<rule>` 的模块必须导入 `autodiff`。设计原则 6.2 的示例是 `export tag vjp<...>`（模块标签），本实现照做；若作者希望它像 `#strict` 一样是核心标签、不必导入，需要把声明移到 `src/core/tags.cpp`（含义仍由 autodiff 读）。
+4. **跨进程/持久化缓存**。`GraphId` 是 context 内的编号；模块缓存（`Context::modules_`）是同进程的，所以现在成立。若将来把声明标签（或图）持久化到 `.cmo` 一类的跨进程缓存，图引用需要在加载时重新绑定（按名字重解析或做 id 重映射），否则缓存里的规则会指向错误的图。
