@@ -21,6 +21,7 @@
 #include "camel/runtime/node_roles.h"
 #include "camel/utils/path.h"
 #include "dtype.h"
+#include "kernels/parallel.h"
 #include "npy.h"
 #include "ops/binary_ops.h"
 #include "ops/registry.h"
@@ -92,6 +93,11 @@ module_ptr_t TensorModule::create(context_ptr_t ctx) { return std::make_shared<T
 bool TensorModule::load() {
     if (loaded_)
         return true;
+    // The run's thread limit, installed once into the kernel pool before any kernel can size it:
+    // `-t` sets every pool of the run, the schedulers and the modules alike, and nothing else
+    // does (design principles 9.3: a setting is not an environment variable). Without `-t` this
+    // is the hardware concurrency.
+    camel::tensor::kernels::setNumThreads(static_cast<int>(context_->threadLimit()));
     context_->registerExecutorFactory("tensor", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<TensorExecutor>(ctx, OpRegistry::instance().kernelMap("tensor"));
     });

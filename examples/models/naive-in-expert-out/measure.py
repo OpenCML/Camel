@@ -64,7 +64,6 @@ def camel_env(camel: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["CAMEL_HOME"] = str(install)
     env["PATH"] = str(install / "bin") + os.pathsep + env.get("PATH", "")
-    env["CAMEL_NUM_THREADS"] = str(THREADS)
     for name in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[name] = str(THREADS)
     return env
@@ -213,9 +212,9 @@ def main() -> int:
     environment = camel_env(Path(args.camel))
 
     # 1. Camel writes the shared starting point and its final model, then trains.
-    print(f"camel: {args.camel} train_step.cml std::{args.backend}")
+    print(f"camel: {args.camel} -t {THREADS} train_step.cml std::{args.backend}")
     camel_run = run(
-        [args.camel, str(HERE / "train_step.cml"), f"std::{args.backend}"],
+        [args.camel, "-t", str(THREADS), str(HERE / "train_step.cml"), f"std::{args.backend}"],
         {**environment, "NAIVE_BENCH": "1",
          "NAIVE_INIT_DIR": str(init), "NAIVE_FINAL_DIR": str(finals / "camel")},
         stats=work / "camel.time",

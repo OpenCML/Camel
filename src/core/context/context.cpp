@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <format>
 #include <mutex>
+#include <thread>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -75,8 +76,17 @@ int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool de
 
 } // namespace
 
+size_t hardwareThreadCount() {
+    const unsigned hardware = std::thread::hardware_concurrency();
+    return hardware == 0 ? 1 : static_cast<size_t>(hardware);
+}
+
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf) {}
+
+size_t Context::threadLimit() const {
+    return entryConfig_.maxThreads != 0 ? entryConfig_.maxThreads : hardwareThreadCount();
+}
 
 Context::~Context() {
     // Runtime function objects stored inside modules may consult GCGraph-backed

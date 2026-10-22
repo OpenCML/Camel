@@ -1,0 +1,114 @@
+id = "modules.threads"
+order = 363
+tier = "fast"
+tags = ["feat", "modules", "tensor", "threads"]
+desc = "`-t` sets the tensor pool as it sets the scheduler, `CAMEL_NUM_THREADS` is gone, and the thread count changes no value: the pool reports the number the run was given, the default is the hardware concurrency, and a reduction and a GEMM produce the same bits at one thread and at four"
+
+# The value of record is the run's `-t` (EntryConfig::maxThreads); the tensor module installs it
+# into its kernel pool when it loads, and without `-t` every pool uses the machine's core count.
+# The programs check the number the pool reports (`num_threads`) themselves and exit 1 on a
+# mismatch, so the exit code is an assertion about the pool, not a wall-clock guess. The
+# `CAMEL_NUM_THREADS` cases pin the retirement of the environment variable: setting it changes
+# neither the reported count nor the output.
+#
+# What makes these cases red: a pool that does not take the run's number, as the tensor pool did
+# while it read CAMEL_NUM_THREADS and otherwise the hardware count. `count.cli_one` then reports
+# the hardware count and exits 1; `count.default_hardware` and `count.env_ignored` go red as soon
+# as that default is not the hardware count; `values.cli_four` goes red if the GEMM or the
+# reduction reassociates with the thread count, because the whole stdout must equal the one of
+# `values.cli_one`.
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "count.cli_one"
+desc = "`-t 1` reaches the tensor pool: `num_threads()` reports 1."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_count.cml"
+args = ["-t", "1", "--arg", "expected=1", "${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "threads=1 expected=1\n"
+
+[[tests]]
+name = "count.cli_four"
+desc = "`-t 4` reaches the tensor pool: `num_threads()` reports 4, not the hardware count."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_count.cml"
+args = ["-t", "4", "--arg", "expected=4", "${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "threads=4 expected=4\n"
+
+[[tests]]
+name = "count.default_hardware"
+desc = "Without `-t` the pool reports the hardware concurrency: the program compares `num_threads()` with `process.cpu_count()`, the same machine, and fails if they differ."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_count.cml"
+args = ["--arg", "expected=0", "${case}", "std::fvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const m = /^threads=([0-9]+) expected=([0-9]+)$/.exec(input.normalized.stdout.trim())
+assert(m !== null, 'no thread-count line: ' + input.normalized.stdout)
+assert(Number(m[1]) === Number(m[2]), 'the pool reports ' + m[1] + ', the machine has ' + m[2])
+assert(Number(m[1]) >= 1, 'the pool reports ' + m[1])
+}
+"""
+
+[[tests]]
+name = "count.env_ignored"
+desc = "`CAMEL_NUM_THREADS=1` without `-t` changes nothing: the pool still reports the hardware concurrency, so the retired variable cannot override the CLI or the default."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_count.cml"
+args = ["--arg", "expected=0", "${case}", "std::fvm"]
+envs = ["CAMEL_NUM_THREADS=1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const m = /^threads=([0-9]+) expected=([0-9]+)$/.exec(input.normalized.stdout.trim())
+assert(m !== null, 'no thread-count line: ' + input.normalized.stdout)
+assert(Number(m[1]) === Number(m[2]), 'the pool reports ' + m[1] + ', the machine has ' + m[2])
+assert(Number(m[1]) >= 1, 'the pool reports ' + m[1])
+}
+"""
+
+[[tests]]
+name = "count.cli_wins_over_env"
+desc = "With both set the command line is the one that counts: `-t 4` and `CAMEL_NUM_THREADS=1` report 4. The environment variable is no longer read."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_count.cml"
+args = ["-t", "4", "--arg", "expected=4", "${case}", "std::fvm"]
+envs = ["CAMEL_NUM_THREADS=1"]
+expect_exit = 0
+expect_stdout_exact = "threads=4 expected=4\n"
+
+[[tests]]
+name = "values.cli_one"
+desc = "Reference run: at `-t 1` a column-sum reduction and a GEMM print the SHA-256 of their payloads. The program also checks that the pool reports 1."
+kind = "behavior"
+case = "../../../cases/modules/tensor/thread_values.cml"
+args = ["-t", "1", "--arg", "expected=1", "${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["reduction=", "product="]
+
+[[tests]]
+name = "values.cli_four"
+desc = "The same reduction and GEMM at `-t 4` are bit-identical to the run at `-t 1`: the whole normalised stdout agrees byte for byte. Both kernels split their output between workers and keep each accumulator's order, so the relation is exact; no tolerance is involved."
+kind = "differential"
+case = "../../../cases/modules/tensor/thread_values.cml"
+args = ["-t", "4", "--arg", "expected=4", "${case}", "std::fvm"]
+expect_exit = 0
+compare_to = "values.cli_one"
+compare_fields = ["exit_code", "stdout_normalized"]
+
+[[tests]]
+name = "values.cli_four_env"
+desc = "The same four-thread run with `CAMEL_NUM_THREADS=1` in the environment: still four threads (the program fails otherwise) and bit-identical to the one-thread run, so the retired variable changes neither the pool's size nor a value."
+kind = "differential"
+case = "../../../cases/modules/tensor/thread_values.cml"
+args = ["-t", "4", "--arg", "expected=4", "${case}", "std::fvm"]
+envs = ["CAMEL_NUM_THREADS=1"]
+expect_exit = 0
+compare_to = "values.cli_one"
+compare_fields = ["exit_code", "stdout_normalized"]

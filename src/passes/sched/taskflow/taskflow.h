@@ -307,13 +307,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     };
 
     static size_t workerCount(const ctx::context_ptr_t &ctx, size_t requested) {
-        if (requested == 0 && ctx) {
-            requested = ctx->maxThreads();
+        if (requested != 0) {
+            return std::max<size_t>(1, requested);
         }
-        if (requested == 0) {
-            requested = std::thread::hardware_concurrency();
-        }
-        return std::max<size_t>(1, requested);
+        return ctx ? ctx->threadLimit() : ctx::hardwareThreadCount();
     }
     /// Runs `flow` to completion on the pass's executor, from any thread.
     void runOnExecutor(tf::Taskflow &flow);

@@ -51,7 +51,7 @@ def prepare_data(data: Path, profile: dict) -> None:
 
 def camel_command(camel: Path, data: Path, profile: dict, passes: list[str]) -> list[str]:
     return [
-        str(camel), str(HERE / "train.cml"),
+        str(camel), "-t", "1", str(HERE / "train.cml"),
         "--arg", f"data={data}",
         "--arg", f"steps={profile['steps']}",
         "--arg", f"batch={profile['batch']}",
@@ -116,7 +116,7 @@ def main() -> int:
     camel = camel_executable(args.camel)
 
     prepare_data(data, profile)
-    c = run_command(camel_command(camel, data, profile, ["std::macro", "std::nvm"]), camel_env(REPO, 1))
+    c = run_command(camel_command(camel, data, profile, ["std::macro", "std::nvm"]), camel_env(REPO))
     t = run_command(torch_command(data, profile), python_env(1))
     for name, run in (("Camel", c), ("PyTorch", t)):
         if run["exit"] != 0:
@@ -128,7 +128,7 @@ def main() -> int:
     for _ in range(3):
         compile_times.append(run_command(
             camel_command(camel, data, profile, ["std::macro", "std::stats", "std::null"]),
-            camel_env(REPO, 1))["seconds"])
+            camel_env(REPO))["seconds"])
     compile_time = statistics.median(compile_times)
 
     rows = []
@@ -148,7 +148,7 @@ def main() -> int:
                  relative(cr["final_recon"], tr["final_recon"]) <= TOL_RECON))
     failures = sum(1 for row in rows if not row[-1])
 
-    version = run_command([str(camel), "--version"], camel_env(REPO, 1))
+    version = run_command([str(camel), "--version"], camel_env(REPO))
     lines = []
     lines.append("# C6 — variational autoencoder on 2-D data: measured results")
     lines.append("")

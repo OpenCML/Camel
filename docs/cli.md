@@ -47,7 +47,7 @@ Executes the specified `.cml` file or directory as the entry point. **Input file
 - `-o`, `--output <file>`: Where the value `main` returns is written (default: standard output; same section)  
 - `-P`, `--profile`: Record time spent in each stage and write trace files to `profile_reports/`. Effective in debug builds only; a release build accepts the option and produces no report  
 - `-S`, `--scheduler <type>`: Specify the scheduler type  
-- `-t`, `--threads <num>`: Maximum number of threads  
+- `-t`, `--threads <num>`: The threads a run may use, for every pool of it: the parallel schedulers and the worker pool each module keeps (the tensor kernels' pool among them). Every pool takes its size from this one number; without the option each uses the machine's core count. There is no environment variable for it, and `CAMEL_NUM_THREADS` is no longer read. `Tensor.num_threads()` reports the pool's size; the program itself can change it at run time with `Tensor.set_num_threads`  
 - `--max-recursion-depth <n>`: Limit on the calls that may be open at once without being tail calls (1 to 1000000; see "Resource limits"). Also `CAMEL_MAX_RECURSION_DEPTH=<n>`; the option wins  
 - `--max-macro-depth <n>`: Limit on nested calls while `std::macro` evaluates a call ahead of time (default 64; same range). Also `CAMEL_MAX_MACRO_DEPTH=<n>`  
 - `--max-macro-rounds <n>`: Limit on the rounds one loop may run while `std::macro` evaluates it ahead of time (default 1000000, 1 to 2^40); a loop past it fails the evaluation. Also `CAMEL_MAX_MACRO_ROUNDS=<n>`; the option wins  
