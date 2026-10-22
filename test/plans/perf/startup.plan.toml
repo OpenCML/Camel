@@ -1,10 +1,12 @@
 # The cost of everything `camel` does before a program runs (handover H142).
 #
 # A declaration module (`stdlib/<module>.cml`) is parsed and compiled like a library when it is
-# imported. The standard library now has nine of them, so this plan pins three commands that run
-# before any program code does: the process itself (`--version`), a one-line program with no
-# imports, and `inspect --ops` on a program that imports every standard library module. It also
-# runs that program, so the same import work is timed on the run path.
+# imported. The tool derives their set and their declaration count from the tree (H177), so a new
+# module is measured the day its `.cml` lands; the count below is the one those sources held when
+# this pin was last read. This plan pins three commands that run before any program code does: the
+# process itself (`--version`), a one-line program with no imports, and `inspect --ops` on a
+# program that imports every standard library module. It also runs that program, so the same import
+# work is timed on the run path.
 #
 # The ceilings are about four times the quiet median for `inspect_ops` and `imports_all`, and five
 # to eight times for `--version` and `imports_nothing`, whose 5-8 ms medians are below this host's
@@ -34,7 +36,7 @@ tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=182"]
+expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=291"]
 # Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
 # well under half a minute under load. 120 s catches a hang, not a slow run.
 timeout_ms = 120000
