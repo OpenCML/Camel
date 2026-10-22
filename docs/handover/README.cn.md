@@ -30,37 +30,25 @@
 
 ## 1. 工作流程
 
-### 1.1 分支
+### 1.1 分支与工作树
 
-- 从最新的 `origin/fsh-dev` 开分支，名字是 `handover/<任务编号>`，如 `handover/H1-enum`。
-- **只推送你自己的 `handover/...` 分支**：`git push origin handover/H1-enum`。不推送、不修改 `fsh-dev`、`develop`、`main` 或别人的分支；不强制推送（`--force`）；不改写已推送的历史。
-- 需要同步时，把 `origin/fsh-dev` **合并**进你的分支（`git merge origin/fsh-dev`，合并提交），不要变基已推送的分支。
+- 工作树是 `D:\Projects\Camel-wt\<任务>`；分支从最新的 `origin/develop` 开，名字是 `handover/<任务编号>`，如 `handover/H1-enum`。
+- **只推送你自己的 `handover/...` 分支**：`git push origin handover/H1-enum`。不推送、不修改 `develop`、`main` 或别人的分支；不强制推送（`--force`）；不改写已推送的历史。`fsh-dev` 是决策者的评审分支，它只被合入 `develop`；我们的工作不经过它。
+- 需要同步时，把 `origin/develop` **合并**进你的分支（`git merge origin/develop`，合并提交），不要变基已推送的分支。
 - 一个任务一个分支。任务很大时可以分几次推送，每次都能编译、相关测试通过。
-- 协调者检查通过后，由协调者把你的分支合并进 `fsh-dev`。你不需要也不应该自己合并。
+- 审查通过后，由施工方协调者把你的分支合并进 `develop`（`--no-ff`）。你不需要也不应该自己合并。
 
 ### 1.2 构建与测试
 
-- 构建：`npm run build`（Windows PowerShell，命令之间用 `;`，不用 `&&`）。产物在 `out/latest/bin/`。
-- 测试：`node scripts/test.js <计划文件或目录>`。测试分两层（H10）：
-  - **日常开发跑 `npm run test`**：只跑 `fast` 层（`smoke` 加 `feat/**` 的快速测试），按处理器核数并行（`--jobs N` 可改，`--jobs 1` 为串行）。改动定下来后可用 `node scripts/test.js --changed`，按 `test/plan-selection.json` 只跑相关计划。
-  - **合入 `develop` 前跑一次 `npm run test:all`**：全部计划、全部层，包括与 PyTorch 的对比、GC 压力与投毒扫描、随机程序检查和性能基准。
-  - 只跑某个目标时：**目录**目标默认只跑 `fast` 层，要看慢测试加 `--tier all`；直接点名**计划文件**则整个计划都跑（点名就是意图）。`--changed` 的基线默认 `origin/develop`，可用 `CAMEL_TEST_BASE` 覆盖。分层规则见 `docs/test-plans.md`。
-- **先手动跑，再写测试**（`AGENTS.md`）：新功能先用 `camel x.cml` 在命令行运行，看清输出与诊断，再把确认过的行为写成测试。
-- 工作中只跑相关的测试计划；**任务结束前跑一次 `npm run test:all`**，把失败的测试名与基线比较。
-- **基线**：2026-10-19 的 `fsh-dev`（5bc29823）全套 5646 项中有 19 项失败，名单如下。这些不是你造成的，不需要你修；但你的分支不能新增失败。
-
-  ```
-  grammar.reference_in_step  frontend.ast_snapshot  frontend.format_keeps_ast
-  frontend.fuzz_lossless_tree  catalog.doc_is_generated  graph.default
-  integrated.graph.false  integrated.graph.true  failed_no_rule.error
-  pass_export_refusal_var_param  pass_export_refusal_located.request_in_arm
-  pass_export_refusal_located.request_in_arm_json  poison:rewrite_opt
-  poison:failed_no_rule.error  registry.signatures_match  rewrite_opt
-  04_staticness  05_effect_order  portability.std_includes
-  ```
-
-  其中几项（AST 快照、诊断目录、签名一致性）会被正在进行的地基工作修掉；合并 `origin/fsh-dev` 后基线可能变短，以合并后的为准。
-- 改了语法、`test/cases/parse` 下的用例或 `test/tools/parsecheck/probes.py`：更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。快照只含解析用例与探针（H188），改 `examples/`、`stdlib/`、`benchmarks/` 或别的计划的用例不会再动它。
+- **不在本机构建**：本机跑构建会蓝屏。构建与测试都在 Linux 主机上，经 `D:\Projects\Camel-wt\camel-remote.ps1` 走（它把工作树送过去、排队取一个构建位、把退出码带回来）：
+  `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\<任务> -Plan <计划文件或目录> -Jobs 8`。
+  产物在主机 `out/latest/bin/`。不要在本机跑 `npm run build`、`cmake` 或 `node scripts/test.js`。
+- 测试分两层（H10）：日常与合入前跑 `fast` 层（`smoke` 加 `feat/**`）；慢层（PyTorch 对照、GC 压力、投毒扫描、性能基准）只在发布前，或改动确实触及 GC、内存管理、数值内核时按需跑。
+- 只跑某个目标时：**目录**目标默认只跑 `fast` 层，要看慢测试加 `--tier all`；直接点名**计划文件**则整个计划都跑（点名就是意图）。`--changed` 的基线默认 `origin/develop`，可用 `CAMEL_TEST_BASE` 覆盖。分层规则见 `docs/test-plans.md`。
+- **先手动跑，再写测试**（`AGENTS.md`）：新功能先在主机上用 `camel x.cml` 看清输出与诊断，再把确认过的行为写成测试。
+- 工作中只跑相关的测试计划；**任务结束前在主机上跑一次快速层**（`smoke` + `feat/**`）与相关计划。
+- **验收**：快速层必须全绿；`skip` 不是失败；基线是零——没有“已知失败名单”，任何一条红都要由变红的分支解释。
+- 改了语法、`test/cases/parse` 下的用例或 `test/tools/parsecheck/probes.py`：在主机上更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。快照只含解析用例与探针（H188），改 `examples/`、`stdlib/`、`benchmarks/` 或别的计划的用例不会再动它。
 - 改了诊断：`node scripts/diagnostics-catalog.mjs --write`。
 - 每次提交前：`node scripts/check-doc-links.mjs --all`、`node scripts/check-std-includes.mjs`。
 
@@ -111,7 +99,7 @@
   ## 没做完的
   ```
 
-- **协调者的检查意见**：写在 `fsh-dev` 上的 `docs/handover/reviews/<任务编号>.md`。开始下一步前先 `git fetch` 看有没有新的检查意见；有"退回"条目时先改完再继续。
+- **决策者的检查意见**：写在 `fsh-dev` 上的 `docs/handover/reviews/<任务编号>.md`。开始下一步前先 `git fetch` 看有没有新的检查意见；有"退回"条目时先改完再继续。
 - 任务状态以本文件第 5 节的表为准，由协调者更新。
 
 ---
@@ -177,7 +165,7 @@
 | GPU、资源与副作用、`std::cml` | 各自按已批计划推进 |
 | **最后（其他全部合入之后）** | H231 全仓库格式化 → H216 公开仓库重组（两者都会与一切冲突，所以排在最后，且按此顺序） |
 
-**三、合入与评审的节奏**：每完成一项即合入 develop（不攒批）；决策者每 15 分钟合并一次并事后评审。**代码质量是硬要求**（负责人 2026-10-22："代码本身也要写的漂亮优雅，有明显问题的可以让他们返工"）：合入前对照 [`agents/refactor.md`](../../agents/refactor.md) 的"The Bar a Change Must Meet"自查；决策者评审发现明显的质量问题（重复、命名、过长的函数、死代码、绕路的写法、只锁计数的测试）即**返工**，返工任务优先于新任务，在 `reviews/` 中以"返工"标出。违反设计原则的同样返工。快速层测试与相关计划必须绿；慢层只在全部合入之后跑一次。
+**三、合入与评审的节奏**：每完成一项即合入 develop（不攒批）；施工方协调者合并并跑闸门，决策者事后评审。**代码质量是硬要求**（负责人 2026-10-22："代码本身也要写的漂亮优雅，有明显问题的可以让他们返工"）：合入前对照 [`agents/refactor.md`](../../agents/refactor.md) 的"The Bar a Change Must Meet"自查；决策者评审发现明显的质量问题（重复、命名、过长的函数、死代码、绕路的写法、只锁计数的测试）即**返工**，返工任务优先于新任务，在 `reviews/` 中以"返工"标出。违反设计原则的同样返工。快速层测试与相关计划必须绿；慢层只在全部合入之后跑一次。
 
 **四、看板**：每完成一项在任务表上改状态为"已完成（note ⟨…⟩）"，决策者据此跟进；遇到需要负责人裁定的语言问题，写进报告的"待决"，同时继续做不依赖它的部分。
 
@@ -616,7 +604,7 @@ VJP 与 ONNX lowering 全部删除，ONNX 导出与 Tiles 的区域分析看到�
 
 ### 先交计划的任务（H17、H18 适用）
 
-这类任务的设计已定，但实现上有结构性的选择。**动手之前先写实施计划**，作为 handover note 提交（`git notes --ref=handover add -F plan.md <提交>`；H17 的计划现为 note ⟨f52f4b9⟩，或记作 H18；H17 的正文在 [arrays-memory/plan.cn.md](../design/arrays-memory/plan.cn.md)），内容：改哪些数据结构与接口（列出文件与类型）、数据怎样流动、旧结构怎样过渡与删除、按什么顺序提交（每次提交都能构建、相关测试通过）、怎样测试（含性能基线的对比）、有哪些拿不准的地方。**协调者在 `reviews/` 中批复计划后再实施**；等待批复期间可以做队列中的其他项。
+这类任务的设计已定，但实现上有结构性的选择。**动手之前先写实施计划**，作为 handover note 提交（`git notes --ref=handover add -F plan.md <提交>`；H17 的计划现为 note ⟨f52f4b9⟩，或记作 H18；H17 的正文在 [arrays-memory/plan.cn.md](../design/arrays-memory/plan.cn.md)），内容：改哪些数据结构与接口（列出文件与类型）、数据怎样流动、旧结构怎样过渡与删除、按什么顺序提交（每次提交都能构建、相关测试通过）、怎样测试（含性能基线的对比）、有哪些拿不准的地方。**决策者在 `reviews/` 中批复计划后再实施**；等待批复期间可以做队列中的其他项。
 
 ### H17：原生多维数组与缓冲区（2026-10-20 指派，先交计划）
 
