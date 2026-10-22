@@ -25,7 +25,6 @@
 // declarations' share of the compile work of the whole run: load slows that work and the
 // declarations alike, so the share is the half of the pair that does not move with the host.
 //
-// The declaration modules are read from the tree, not listed here (handover H177): H152 pinned
 // The declaration modules are read from the tree, not listed here (H177): H152 pinned the nine of
 // its day, thirteen more were migrated, and this tool kept pricing 182 declarations while this tree
 // compiled 291 -- and the share's denominator, which includes the modules the numerator no longer
@@ -204,12 +203,16 @@ function declarationCost(reps) {
 // modules cost in H142's day, and handover note ⟨c49da87⟩ (H142) is where that number is recorded.
 //
 // They were re-measured, not re-set, at H177 (same host, load average 21-22): 5.1 / 7.4 / 38.3 /
-// 37.0 ms. The two commands that import every module grew, but not from declarations: `pyplot`
-// now initialises CPython in its `load()` (about 9.5 ms, modules/pyplot/module.cpp) and `python`,
-// `tiles`, `tensor`, `nn` and `autodiff` load too, so `inspect_ops` and `imports_all` are about 2.6
-// and 2.4 times the quiet median here instead of four. That is a real cost of importing those
-// modules, not a reason to move a ceiling; the numbers are recorded in handover note ⟨83d6558⟩ (H177).
-// modules cost today, and handover note ⟨c49da87⟩ (H142) is where that number is recorded.
+// 37.0 ms. The two commands that import every module were about 2.6 and 2.4 times the quiet median
+// there, not four, because `tiles`, `tensor`, `nn` and `autodiff` load too, and because `pyplot`
+// then initialised CPython from its `load()` (about 9.5 ms). H221 removed that last part: `import`
+// executes no code (design principles 3.1), the interpreter is created by the first `plot` or `py_*`
+// call, and the two full-import medians fell from 42.9 / 40.7 to 31.8 / 31.5 ms (load 10.7, 41
+// samples; docs/technical/50_pyplot_cpython_init.md §4.3). The ceilings stay where they are on
+// purpose. They are smoke alarms ("the standard library is loaded before the program runs"), the
+// medians now sit about three times below them, and a first `plot` still pays the ~9 ms, so
+// tightening them would turn this host's noise into a red gate without saying anything true. The
+// numbers of both windows are in handover notes ⟨83d6558⟩ (H177) and the H221 report.
 const CASES = [
     {
         name: 'version',
@@ -261,17 +264,19 @@ function main() {
     // Three times the ~20 us the declaration modules cost per declaration at H152: a smoke alarm
     // for "a declaration now costs hundreds of microseconds", not a percentage budget. A
     // regression of a few milliseconds stays under it; the printed number is what is read.
-    // H177 measured 21.0 us over all 286 declarations (20.3 us over H152's nine): the per
-    // declaration cost did not move as the set grew, so this ceiling is unchanged.
+    // H177 measured 21.0 us over all 286 declarations (20.3 us over H152's nine), so the per
+    // declaration cost did not move as the set grew. H221 measured 22.3 us over the 345 of this
+    // tree, so this ceiling is unchanged too.
     const DECLARATION_CEILING_US = 60
     // The share of the compile work, which does not read as load: 18-19% at load average 14-30
     // in H152's tree, and about 45% if the 4.6 ms of H142 came back. H177 measured 17.8% with all
     // 286 declarations counted (10.9% over H152's nine alone), so the ceiling still passes. Read
     // it as a coarse alarm, not as a declaration budget: the denominator is the whole import +
-    // compile region of the run, which now includes CPython's initialisation in `pyplot` (~9.5 ms)
-    // and the other new module loads, so a re-added 4.6 ms reads about 24% today instead of 45%
-    // (handover note ⟨83d6558⟩ (H177), section on the share). The ceiling was left unchanged: it is
-    // not too tight, and lowering it would only trade one missed regression for host noise.
+    // compile region of the run, and H221 took CPython's ~9.5 ms out of it (the interpreter is
+    // created at the first use now), so the share rose to 24.2% for the same 22.3 us per
+    // declaration (load 10.7; docs/technical/50_pyplot_cpython_init.md §4.3). The ceiling was
+    // left unchanged: it is not too tight, and lowering it to 25% would turn an honest change of
+    // the import path into a red gate.
     const DECLARATION_SHARE_CEILING = 30
     const declarations = declarationCost(reps)
     if (!json && declarations.median > DECLARATION_CEILING_US) {

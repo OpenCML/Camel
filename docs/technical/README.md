@@ -58,7 +58,7 @@
 | [47_declaration_syntax.md](47_declaration_syntax.md) | 声明写不出的签名（H168）：哪些签名没有写法、每处是文档已裁定的重载还是只有作者能答的问题（任意函数类型、变参、`PyObject<T>`、类型实参、类型变量谓词），各自的依据、解锁名字数与代价 |
 | [48_declaration_migration.md](48_declaration_migration.md) | 声明迁移的结果与边界（H186）：26 个声明模块的账本（声明 / 计算 / 阻塞 / 注册重载）、机制与检查器、剩余项与 owner、迁移下一个模块的七步配方；缺口分类见 47 |
 | [49_computed_signatures.md](49_computed_signatures.md) | `stdlib/signatures/` 的逐条账本（H194）：10 个文件 202 条条目按四桶分类（今天可声明 0 / 差一条机制 104 / 永久只读 98 / 不是签名 0）、每条的证据与迁移任务、该先问作者的一件事、目录的下界与检查器第 7 条 |
-| [50_pyplot_cpython_init.md](50_pyplot_cpython_init.md) | `pyplot` 的 CPython 初始化能否推迟到首次 `plot`（H203）：H191 的 `cmo_load` 数字、边际导入测量、为什么导入期错误码与“第一个初始化者”设置使推迟可见，以及需要作者裁定的 P1/P2 |
+| [50_pyplot_cpython_init.md](50_pyplot_cpython_init.md) | `pyplot` 的 CPython 初始化从导入期移到首次使用（H203 的测量，2026-10-22 语言作者的裁定，H221 的实现）：导入期的 9.x ms 落在 `cmo_load` 的哪一步、改动前后的五条测量、共享初始化入口与“第一个初始化者”的处理、把这条规则钉住的测试，以及 `perf/startup` 的 ceiling 为何不动 |
 | [51_unchecked_examples.md](51_unchecked_examples.md) | 设计稿示例的解析现状与扫描（H206 / H211）：203 个 `examples/` 程序加 7 个其它文件在 `e543f8198` 的解析结果（206 干净 / 3 故意拒绝 / 1 已坏；基点 `880ee74b1` 是 205 / 3 / 2）、每个失败文件的依据与损坏起点、它们各自被文档围栏或计划引用的情况；H211 建成的 `check.py examples`（选择取自树上的 glob 加 7 个具名文件）、文件首行的 `// @refused-example <原因>` 标记规则（标记过必须仍不解析、未标记必须解析、两个方向都红）与计划接线 |
 | [52_cmc_cache_cost.md](52_cmc_cache_cost.md) | `.cmc` 模块缓存的成本模型（H224）：`registry_all` 28 个模块的 parse / gct / declare / GIR 与 `.cmo` 装载、冷启动 / 全部命中 / 单模块编辑三种情形在 41 ms 与 8 ms 程序上的比例、失效面里能散列与必须重算的部分，以及为什么在这些数字上完整缓存不值得实现 |
 | [53_import_cost_audit.md](53_import_cost_audit.md) | `import` 不执行任何代码的逐模块审计（H222）：标准库 28 个模块导入时除声明名字外还做什么、a/b/c 分类（a=0 / b=2 / c=26）、每行的探针与源码扫描两份证据、`python` 与 `pyplot` 的 CPython 初始化价格、搜索根与目录扫描和声明模块整份编译的价格，以及为什么模块顶层 `let` 的探针只能断言"不依赖就永不发生" |
