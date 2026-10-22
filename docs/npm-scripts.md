@@ -61,7 +61,38 @@ reusable external verifier. Full field constraints and examples live in
 |------|------|
 | `npm run test` | Main developer set: the **fast** layer of `smoke` and `feat/**`, in parallel |
 | `npm run test:all` | Full suite: every plan under `test/plans/`, fast and slow |
+| `npm run release-gate` | Release evidence: fast layer + the runnable slow plans by file + the static checks |
 | `npm run precommit:staged` | Format/update only files already staged for the current commit |
+
+## The Release Gate
+
+`npm run release-gate` (`scripts/release-gate.mjs`) owns the release evidence a release decision
+needs, because `npm run test` is only the fast layer: a directory target drops every `tier =
+"slow"` test, and `gpu/**` / `perf/**` are in no gate target at all (H154 §6).
+
+It runs, in order:
+
+1. the fast layer -- `smoke`, `feat/**`, and the fast-tier `gpu/profile` plan at `--tier fast`;
+2. the slow layer -- eleven explicit plan files (the runnable set of H154 §3), named one by one:
+   naming a file is what makes its slow tests run. It never takes a directory or `--tier all`;
+3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
+   --check`, `check-doc-links --all`, `check-retired-names`, `check-doc-snippets`,
+   `stdlib-declarations --check`, `check-std-includes`;
+
+then exits non-zero when any phase failed. It does not build: build once first, and it checks the
+install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — H149's rule that a
+run must not measure another tree's binary — refusing (exit 2) when the stamp is missing or does
+not match this tree's sources.
+
+It also never runs the nineteen plan files `agents/test.md` forbids on a shared host (GC stress
+and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
+reason on every run, and refuses with a message naming the policy when asked for one --
+`--tier all`, `--all`, `--suite`, or an `--include` / positional target that is, or contains, one
+of them. A skipped plan is unknown, not green. The debug layer (`--tier debug`) is out of scope
+for the same reason: it is never part of a Release gate.
+
+`--jobs N` (default 8), `--only fast|slow|static` (a PARTIAL run, for re-checking one layer),
+and `--dry-run` (print the commands and the skip list) are the only options.
 
 The staged pre-commit script delegates file selection to `scripts/format.js` and
 `scripts/update.js`; it only constrains auto-staging to the original staged path

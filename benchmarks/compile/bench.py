@@ -94,14 +94,14 @@ SCALE_FUNCTIONS = 4000
 SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated only this often
 
 # The library modules a `passes` run compiles on demand, in the order they are loaded. `std::opt`'s
-# algebra step compiles stdlib/rules.cml, and `rules` imports `math`; loading the C++ `math` module
-# also loads its declaration module stdlib/math.cml, which is written in Camel and therefore
-# compiled (H100, H112). The lazy import is the real cost, not a defect: `rules` and `math` are
-# library modules, so the program's own module count stays what the input set says. This pin is
-# allowed to change when a library is restructured (a new/moved import in stdlib/rules.cml or a
-# declaration module that appears or goes away): that is exactly the regression the pin makes
-# visible, and the message says which modules were counted.
-PASS_LIBRARY_MODULES = ("rules", "math")
+# algebra step compiles stdlib/rules.cml, and `rules` imports `graph` and `math`; a module whose
+# declaration is written in Camel (stdlib/graph.cml since H141, stdlib/math.cml since H112) is
+# compiled when it is loaded, so it is counted here. The lazy import is the real cost, not a
+# defect: they are library modules, so the program's own module count stays what the input set
+# says. This pin is allowed to change when a library is restructured (a new/moved import in
+# stdlib/rules.cml or a declaration module that appears or goes away): that is exactly the
+# regression the pin makes visible, and the message says which modules were counted.
+PASS_LIBRARY_MODULES = ("rules", "graph", "math")
 
 # The order of the rows of the phase tables; phases not listed follow alphabetically.
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
@@ -681,7 +681,7 @@ def cmd_check(_args) -> int:
                     problems.append(
                         f"{name}: loaded library modules {library}; expected "
                         f"{list(PASS_LIBRARY_MODULES)} (see PASS_LIBRARY_MODULES: the on-demand "
-                        f"rules/math import of std::opt). The program's own modules were {user}")
+                        f"rules/graph/math import of std::opt). The program's own modules were {user}")
             elif library:
                 problems.append(
                     f"{name}: the {r['pipeline']} pipeline loaded library modules {library}; "
