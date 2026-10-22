@@ -76,7 +76,7 @@ const ALLOWED = [
     {
         file: 'docs/technical/51_unchecked_examples.md',
         rules: ['cml-files', 'snapshot-files'],
-        why: 'the H206 dated snapshot at 880ee74b1; its 210 files are the subset it measured, not the repository totals',
+        why: 'the H206 dated snapshot at e543f8198; its 210 files are the subset it measured, not the repository totals',
     },
 ]
 
