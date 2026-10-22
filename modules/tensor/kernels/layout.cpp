@@ -328,6 +328,13 @@ Array *takeGrad(
     if (dy->rank() != input->rank() || dy->dim(0) != static_cast<int64_t>(indices.size())) {
         throw ShapeError("take_grad expects a gradient shaped like the take result");
     }
+    // The scatter walks the gradient at the width of the tensor it writes into. A gradient of
+    // another element type is refused by name instead: read at this width it would be a number that
+    // is not the derivative (an f32 1.0 read as f64 is 0.0078125), and the whole point of this
+    // kernel is that the adjoint has the tensor's own element type.
+    if (dy->dtype() != input->dtype()) {
+        refuseTensorElementType("take_grad", dy, {input->dtype()});
+    }
     Array *out = createTensor(input->dtype(), input->shapeSpan(), allocator, true);
     if (indices.empty()) {
         return out;

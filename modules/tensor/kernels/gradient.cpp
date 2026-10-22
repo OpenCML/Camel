@@ -150,8 +150,8 @@ broadcastTo(const Array *t, std::span<const int64_t> shape, mm::IAllocator &allo
     return out;
 }
 
-Array *fill(double value, std::span<const int64_t> shape, mm::IAllocator &allocator) {
-    return full(TypeCode::Float32, shape, value, allocator);
+Array *fill(double value, TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator) {
+    return full(dtype, shape, value, allocator);
 }
 
 Array *expandAxis(

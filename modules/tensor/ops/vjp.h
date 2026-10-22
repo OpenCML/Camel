@@ -50,6 +50,14 @@ vjp_node_t staticBool(VjpBuilder &builder, bool value);
 /// Operands of other kinds (numeric arrays, integers) take no gradient.
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient);
 
+/// `gradient` converted to the float width of `value`: the rules here reduce at float64
+/// (`tensor:sum`), while an `f32` value's tangent is an `f32`. Handing the accumulator another
+/// width would store a float64 number in an f32 slot, and an integral gradient read back at f32's
+/// width is 0.0 -- a derivative that is not the derivative (design principles 9.9). The conversion
+/// belongs here, in the rule that produced the gradient, and not in the accumulator, which refuses
+/// a gradient of another element type instead of converting it.
+vjp_node_t floatGradientAtWidth(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradient);
+
 /// Gradients of lhs @ rhs given the output gradient dy (batch dims and vectors included).
 void accumulateMatmulGradients(VjpBuilder &builder, vjp_node_t lhs, vjp_node_t rhs, vjp_node_t dy);
 /// dy masked by a relu output: dy * (y > 0).

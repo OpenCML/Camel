@@ -437,6 +437,21 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "possible yet.",
             },
         },
+        {
+            RuntimeDiag::GradientElementTypeMismatch,
+            {
+                "GradientElementTypeMismatch",
+                "The gradient of a value of type '{0}' has element type '{1}': {2}. A "
+                "gradient must have the element type of the value it is the gradient of (design "
+                "principles 9.9); accumulated as it is, the value would be read at the wrong "
+                "width and answer with a number that is not the derivative.",
+                "A derivative rule returns a gradient of the parameter's element type. Convert "
+                "the gradient in the rule (f32(x) or float(x)) instead of relying on the "
+                "accumulator, which cannot change a value's element type. A discrete input (an "
+                "index, a shape) takes no gradient at all: its rule stops it with noGradient, "
+                "and that zero is not a converted gradient.",
+            },
+        },
     };
 
     return infoMap;

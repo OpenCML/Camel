@@ -411,10 +411,26 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// cast(t, dtype): the gradient returns to t's dtype.
+// cast(t, dtype): the gradient returns to t's dtype. `cast` also accepts a numeric array, and a
+// float array is a continuous value with a tangent (design principles 9.9): its adjoint would be
+// the elements of dy in t's dtype, which no operator of this module builds from a tensor's
+// gradient, so an array that depends on a differentiated input is refused by name instead of being
+// dropped -- the refusal `new`, `reshape` and `concat` make for the same reason.
 void castVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
-    if (auto dy = b.gradientOf(call.output); dy && isTensorNode(b, call.inputs[0])) {
+    if (!isTensorNode(b, call.inputs[0])) {
+        if (b.isActive(call.inputs[0])) {
+            refuseVjp(
+                call,
+                "its input is a numeric array of type '" + b.nodeType(call.inputs[0])->toString() +
+                    "', not a tensor, and this module has no operator that carries a tensor's "
+                    "gradient back into an array; the array's gradient would be dropped silently. "
+                    "Cast a differentiable tensor (a parameter, a slice of one) instead of an "
+                    "array");
+        }
+        return;
+    }
+    if (auto dy = b.gradientOf(call.output); dy) {
         b.accumulateGradient(
             call.inputs[0],
             addTensorOper(b, "tensor:cast_like", {*dy, call.inputs[0]}));
