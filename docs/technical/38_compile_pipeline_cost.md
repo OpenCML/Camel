@@ -30,7 +30,7 @@
  "counters":{"modules":…, "ast.nodes":…, "gct.nodes":…, "graph.graphs":…, "graph.nodes":…, "graph.edges":…}}
 ```
 
-`counters.modules` 数的是本次运行从 Camel 源码编译过的**每一个**模块，包括遍按需编译的库模块：H100 之后 `std::opt` 的代数阶段会编译 `stdlib/rules.cml`，它 `import graph` 与 `math` 时又把这两个声明模块 `stdlib/graph.cml`（H141）、`stdlib/math.cml`（H112、H121）一起编译。所以 chain-3（`main` 加三个模块，共四个**程序自己的**模块）在带遍的流水线上是 7 个。计数器本身分不出这四与三，`gct` 阶段的 `detail` 里有模块名，`bench.py` 从它得到完整名单，并把「程序自己的模块」与「库模块」分开报告：前者是输入集的横轴，后者是流水线带出来的真实额外开销，两个数都不能消失（见第 5 节）。
+`counters.modules` 数的是本次运行从 Camel 源码编译过的**每一个**模块，包括遍按需编译的库模块：H100 之后 `std::opt` 的代数阶段会编译 `stdlib/rules.cml`，它 `import graph`、`math` 与 `tensor` 时又把这三个声明模块 `stdlib/graph.cml`（H141）、`stdlib/math.cml`（H112、H121）、`stdlib/tensor.cml`（H151）一起编译。所以 chain-3（`main` 加三个模块，共四个**程序自己的**模块）在带遍的流水线上是 8 个。计数器本身分不出这四与三，`gct` 阶段的 `detail` 里有模块名，`bench.py` 从它得到完整名单，并把「程序自己的模块」与「库模块」分开报告：前者是输入集的横轴，后者是流水线带出来的真实额外开销，两个数都不能消失（见第 5 节）。
 
 各阶段的名字：
 

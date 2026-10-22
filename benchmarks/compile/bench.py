@@ -94,14 +94,16 @@ SCALE_FUNCTIONS = 4000
 SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated only this often
 
 # The library modules a `passes` run compiles on demand, in the order they are loaded. `std::opt`'s
-# algebra step compiles stdlib/rules.cml, and `rules` imports `graph` and `math`; a module whose
-# declaration is written in Camel (stdlib/graph.cml since H141, stdlib/math.cml since H112) is
-# compiled when it is loaded, so it is counted here. The lazy import is the real cost, not a
-# defect: they are library modules, so the program's own module count stays what the input set
-# says. This pin is allowed to change when a library is restructured (a new/moved import in
-# stdlib/rules.cml or a declaration module that appears or goes away): that is exactly the
-# regression the pin makes visible, and the message says which modules were counted.
-PASS_LIBRARY_MODULES = ("rules", "graph", "math")
+# algebra step compiles stdlib/rules.cml, and `rules` imports `graph`, `math` and `tensor`; a
+# module whose declaration is written in Camel (stdlib/graph.cml since H141, stdlib/math.cml since
+# H112, stdlib/tensor.cml since H151) is compiled when it is loaded, so it is counted here. The
+# lazy import is the real cost, not a defect: they are library modules, so the program's own
+# module count stays what the input set says. This pin is allowed to change when a library is
+# restructured (a new/moved import in stdlib/rules.cml or a declaration module that appears or
+# goes away): that is exactly the regression the pin makes visible, and the message says which
+# modules were counted. Being a list it goes stale by construction -- H169 owns replacing it with
+# a derivation over the imports of the module it names.
+PASS_LIBRARY_MODULES = ("rules", "graph", "math", "tensor")
 
 # The order of the rows of the phase tables; phases not listed follow alphabetically.
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
