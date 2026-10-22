@@ -6,7 +6,7 @@
  */
 module param_sorted
 
-import { sort } from algo
+import { sort } from array
 
 func f(xs: int[]): int[] sync {
     wait sort(xs)

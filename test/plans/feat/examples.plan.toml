@@ -37,7 +37,7 @@ golden = "golden/examples/algorithms_binary_search.txt"
 
 [[tests]]
 name = "examples.algorithms.merge_sort"
-desc = "Merge sort by recursion, compared with algo.sort and array.sort_by."
+desc = "Merge sort by recursion, compared with array.sort and array.sort_by."
 case = "../../../examples/algorithms/merge_sort.cml"
 golden = "golden/examples/algorithms_merge_sort.txt"
 

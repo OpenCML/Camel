@@ -17,9 +17,11 @@
 | 类别 | 位置 | 协议名 | 加载方式 |
 |------|------|--------|----------|
 | 全局内置模块（`GlobalsBuiltinModule`） | `src/builtin/`，编入 libcamel | 空字符串 `""` | `Context::create` 时加载，其导出对每个用户模块默认可见 |
-| 标准库与第三方模块 | `modules/<name>/`，各自编译为 `<name>.cmo` 动态库 | 模块名，如 `algo`、`math`、`tensor`、`python` | 被 `import` 时，或其协议下的算子首次被查找时加载 |
+| 标准库与第三方模块 | `modules/<name>/`，各自编译为 `<name>.cmo` 动态库 | 模块名，如 `math`、`tensor`、`python` | 被 `import` 时，或其协议下的算子首次被查找时加载 |
 
-libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`algo`、`math`、`tensor`、`nn`、`process`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
+libcamel 内部的模块工厂表 `builtinModuleFactories`（`src/core/module/builtin.cpp`）只包含全局内置模块，以及调试构建下的 `profiler`。`math`、`tensor`、`nn`、`process`、`io`、`json`、`python` 等都是 `modules/` 下的 `.cmo` 模块。
+
+一个例外是 `array`：它是写在 Camel 里的库（`stdlib/array.cml`），不能同时有同名的 `.cmo` 模块——那样 `stdlib/array.cml` 会变成声明模块，函数体被拒绝。它的原生算子（排序族、`argsort`、`flatten`、`unique`）的内核因此编在 libcamel 里（`src/builtin/operators/array.cpp`），由全局内置模块在 `load()` 里以协议名 `array` 注册执行器工厂并声明纯性与就地形式；`array.cml` 里没有函数体的 `export func` 就是这些算子的声明，不需要第二个模块来加载它们。
 
 ## 2. OperatorGroup 与类型解析
 
@@ -37,7 +39,7 @@ OperatorGroup::create(
     "sort",
     {
         {
-            "algo:sort",
+            "array:sort",
             DynamicFuncTypeResolver::create(
                 {{0, {}}, {1, {false}}},
                 "<> (array: T[]) => T[]",
@@ -92,13 +94,13 @@ OperatorGroup::create(
 
 算子 URI 格式：`protocol:suffix`。
 
-- **protocol**：执行协议名。空字符串表示全局内置模块；其余为模块名，如 `algo`、`tensor`、`python`。
+- **protocol**：执行协议名。空字符串表示全局内置模块；其余为模块名，如 `array`、`tensor`、`python`。
 - **suffix**：协议内的算子标识。
 
 示例：
 
 - `:op/add_i` → protocol 为空，suffix=`op/add_i`
-- `algo:sort` → protocol=`algo`，suffix=`sort`
+- `array:sort` → protocol=`array`，suffix=`sort`
 - `python:py_call` → protocol=`python`，suffix=`py_call`
 
 ### 3.2 Executor 与 opsMap
@@ -127,17 +129,19 @@ using operator_t = slot_t (*)(ArgsView &with, ArgsView &norm, context::Context &
 - protocol 为空，由 `BasicBuiltinExecutor` 处理；`GlobalsBuiltinModule::load()` 以空协议名注册其工厂。
 - 实现表是 `src/builtin/executors/builtin.cpp` 中的 `getOpsImplMap()`，key 形如 `op/itoi`、`op/add_i`、`str/format`、`struct/len_arr`、`coll/len`。
 - 算子组在 `src/builtin/modules/globals.cpp` 中声明，URI 形如 `:op/add_i`、`:str/format`，suffix 与实现表的 key 一致。
-- 各算子的实现按主题分布在 `src/builtin/operators/` 下（`ops`、`cast`、`str`、`struct`、`collection`、`tagged`、`io`、`macro` 等）。
+- 各算子的实现按主题分布在 `src/builtin/operators/` 下（`ops`、`cast`、`str`、`struct`、`collection`、`array`、`tagged`、`io`、`macro` 等）。
 
 ### 3.4 `.cmo` 模块算子
 
-以 `algo` 为例（`modules/algo/`）：
+以 `str` 为例（`modules/str/`）：
 
-- `module.cpp`：`getOperatorGroups()` 声明算子组，URI 为 `algo:sort`、`algo:merge_sort` 等；模块构造函数逐个 `exportEntity(group->name(), group)`；`load()` 调用 `context_->registerExecutorFactory("algo", factory)`。
-- `operators.cpp`：`getAlgoOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `sort`、`sort_in_place` 等（`*_in_place` 是 `xs = xs->sort` 用的就地形式，见 `OperatorTable::setInPlaceForm`）。
-- `executor.cpp`：`createAlgoExecutor()` 用上述映射构造 `Executor` 的子类。
+- `module.cpp`：构造 `BuiltinModule("str")`；`load()` 调用 `context_->registerExecutorFactory("str", factory)`，并用 `OperatorTable::declare("str", ...)` 声明每个算子的纯性。签名不在这里：它们在声明模块 `stdlib/str.cml`（H19），模块不再导出 `OperatorGroup`。
+- `operators.cpp`：`getStrOpsMap()` 返回 suffix → `operator_t` 的映射，key 为 `split`、`trim` 等。
+- `executor.cpp`：`createStrExecutor()` 用上述映射构造 `Executor`。
 
 `.cmo` 模块的类继承 `camel::core::module::BuiltinModule`，以模块名作为名字。
+
+`array` 的算子由内置模块以协议 `array` 注册（第 1 节），形状相同：`src/builtin/operators/array.cpp` 的 `getArrayOpsMap()` 给出 suffix → `operator_t`，`GlobalsBuiltinModule::load()` 注册工厂并调用 `declareArrayOperatorFacts()`；`sort`、`insert_sort`、`quick_sort`、`merge_sort` 的 `*_in_place` 形式同样用 `OperatorTable::setInPlaceForm` 登记（`xs = xs->sort` 用）。
 
 ### 3.5 模块导出的值
 
@@ -305,7 +309,7 @@ URI 仍是调度器向执行器管理器查实现时的键，也是诊断里显�
 - `include/camel/core/module/builtin.h`、`include/camel/core/module/dynamic.h`：`BuiltinModule`、`.cmo` 的 ABI 与加载入口。
 - `src/builtin/modules/globals.cpp`、`src/builtin/executors/builtin.cpp`：全局内置模块的算子组、实现表与性质登记。
 - `modules/camel_module.cmake`：`.cmo` 模块的 CMake 封装。
-- `modules/algo/`：结构最简单的 `.cmo` 模块示例。
+- `src/builtin/operators/array.cpp`：作为 Camel 模块 `array` 的原生算子内核与就地形式声明。
 - `modules/python/`：带外部运行时初始化的 `.cmo` 模块示例（`python.cmo`）。
 - `modules/tensor/ops/`：以 `OpDef` 为单一来源的算子注册。
 - `include/camel/core/module/introspect.h`：列出模块的算子（`camel inspect --ops`）。

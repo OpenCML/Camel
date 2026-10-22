@@ -5,7 +5,7 @@ module bootstrap_medians
 
 import { now } from time
 import { seed, shuffle, sample } from random
-import { sort } from algo
+import { sort } from array
 import { mean, stdev } from statistics
 
 func main(): int sync {

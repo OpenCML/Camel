@@ -1,11 +1,11 @@
 /**
- * The declarations of `algo:argsort` take one array argument: a second one is refused at the
+ * The declarations of `array:argsort` take one array argument: a second one is refused at the
  * call, and the overloads the message lists are the declarations' (handover H19, step 10;
  * H135).
  */
-module algo_arity
+module array_arity
 
-import { argsort } from algo
+import { argsort } from array
 
 func main(): int sync {
     println(argsort([1, 2], 3))

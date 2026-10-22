@@ -349,7 +349,7 @@ H95 把该用例改成用调用构造数组（`make_array()`）：调用是同�
 实参节点，复制的都只是指针，所以各调度器、各遍之后观察到的是同一个对象，不需要回写，也不要求被调帧存活。
 函数类型仍记录源码签名（参数类型 `T` 与 `var` 标记）；重载决议按值类型进行（`valueTypeOf`）。
 
-- 赋值之外不再有带 `var` 形参的内建或标准库算子：`append`、`extend`、`apply`、`algo::sort` 等返回新值，
+- 赋值之外不再有带 `var` 形参的内建或标准库算子：`append`、`extend`、`apply`、`array::sort` 等返回新值，
   不修改实参（设计原则 11.3）。写成语句的 `acc = acc->append<v>` 由图构建器按算子声明的原地形式
   （`OperatorTable::setInPlaceForm`）写成 `:op/assn_owned(acc, :struct/append_arr_in_place(v, :var/take(acc)))`：
   `acc` 的单元作为 `var` 实参，记为对它的一次写入；`:var/take` 在单元只持有该数组时把原数组交给原地形式，

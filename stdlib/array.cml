@@ -3,9 +3,9 @@
 
 /**
  * Array functions and higher-order functions, written in Camel on top of the built-in
- * operators (map, filter, reduce, range, zip, slice, len) and three primitives of this module
- * (flatten, unique, argsort), whose kernels are the C++ module's. Every function returns a new
- * value; none changes its argument.
+ * operators (map, filter, reduce, range, zip, slice, len) and a few native primitives of this
+ * module (the sorts, argsort, flatten, unique). Every function returns a new value; none changes
+ * its argument.
  *
  * - The array a function works on is its ordinary argument; a function or a value that
  *   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
@@ -16,31 +16,67 @@
  *   (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
  *   several elements at once; the result is the same either way, and no call observes another.
  *   A function with side effects belongs in `foreach` or `reduce`, which run in order.
- * - These are generic functions: there is one instance per set of element types in the whole
- *   program, whichever module calls it (one root graph, design principles 10.1). `group_by`
- *   is not here: it needs the map type.
+ * - The functions written here are generic: there is one instance per set of element types in
+ *   the whole program, whichever module calls it (one root graph, design principles 10.1).
+ *   `group_by` is not here: it needs the map type.
  */
 module array
 
-// `algo` is imported for its operator table, not for a name: the C++ module registers the
-// implementations of `array:flatten`, `array:unique` and `array:argsort` (H19 step 5), and a
-// body-less declaration is only a function once the module that implements it is loaded.
-import algo
 import math
 import { is_numeric, is_ordered } from types
 
-// The primitives are declared here, as body-less declarations of this module: each stands for
-// the operator of its own name, implemented by the C++ module `algo`. They are pure and return a
-// new array.
+// The native primitives are declared here, as body-less declarations of this module: each stands
+// for the operator of its own name (`array:argsort`, `array:sort`, ...), implemented in C++ and
+// answered on this module's protocol. They are pure and return a new array.
 
-/// The indices that sort the keys ascending; equal keys keep their order (stable).
-/// @example argsort([3, 1, 2])    // [1, 2, 0]
+// ---- sorting ----
+
+/// The positions of the keys in ascending order of key; equal keys keep their order (a stable
+/// sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
+/// primitive behind `sort_by`.
+/// @pure
+/// @example argsort([30, 10, 20])    // [1, 2, 0]
 export func argsort(keys: i32[]): int[]
 export func argsort(keys: int[]): int[]
 export func argsort(keys: f32[]): int[]
 export func argsort(keys: float[]): int[]
 export func argsort(keys: bool[]): int[]
 export func argsort(keys: string[]): int[]
+
+// The sorts are generic declarations over the element type, as the kernel is generic over it:
+// it reads the element type code and answers a fault of `OperandTypeUnsupported` for anything
+// that is not a number. Narrowing them to the four numeric types would refuse at compile time
+// what used to compile and fault at run time, which is a behaviour change.
+
+/// A sorted copy of xs (quicksort).
+/// @pure
+/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @example sort([3, 1, 2])    // [1, 2, 3]
+export func sort::<T>(xs: T[]): T[]
+
+/// A sorted copy of xs, by insertion sort.
+/// @pure
+/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @example insert_sort([3, 1, 2])    // [1, 2, 3]
+export func insert_sort::<T>(xs: T[]): T[]
+
+/// A sorted copy of xs, by quicksort.
+/// @pure
+/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @example quick_sort([3, 1, 2])    // [1, 2, 3]
+export func quick_sort::<T>(xs: T[]): T[]
+
+/// A sorted copy of xs, by merge sort.
+/// @pure
+/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @example merge_sort([3, 1, 2])    // [1, 2, 3]
+export func merge_sort::<T>(xs: T[]): T[]
+
+/// The sorted array made of the elements of two sorted arrays of numbers.
+/// @pure
+/// @fails fault `OperandTypeUnsupported` when the elements are not numbers
+/// @example merge_sorted_arrays([1, 4], [2, 3])    // [1, 2, 3, 4]
+export func merge_sorted_arrays::<T>(left: T[], right: T[]): T[]
 
 // ---- rearranging ----
 
@@ -70,11 +106,14 @@ export func enumerate::<T>(xs: T[]): (int, T)[] {
     return zip(range(0, len(xs)), xs)
 }
 
-/// The elements of the inner arrays, in order.
+/// The elements of the inner arrays, in order. The primitive behind `flat_map`.
+/// @pure
 /// @example flatten([[1, 2], [3]])    // [1, 2, 3]
 export func flatten::<T>(xss: T[][]): T[]
 
-/// The first occurrence of every value, in order; values are compared as `==` compares them.
+/// The first occurrence of every value, in order; values are compared as `==` compares them
+/// (a NaN equals nothing, so every NaN is kept).
+/// @pure
 /// @example unique([3, 1, 3, 2, 1])    // [3, 1, 2]
 export func unique::<T>(xs: T[]): T[]
 
@@ -125,20 +164,16 @@ export func sum::<T>(xs: T[]): T when is_numeric::<T>() {
     return xs->reduce<(a, b) => a + b, 0>
 }
 
-/// The smallest value, or null for an empty array. Numbers compare by the IEEE 754 minimum (a
-/// NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
-/// prefix first), and false is below true.
+/// The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
+/// +0), or null for an empty array.
 /// @example min([3, 9, 2]) ?? 0    // 2
-/// @example min(['b', 'a']) ?? ''    // 'a'
 export func min::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::min, xs[0]>
 }
 
-/// The largest value, or null for an empty array. Numbers compare by the IEEE 754 maximum (a
-/// NaN anywhere makes the result NaN, and -0 is below +0), strings by their bytes (a proper
-/// prefix first), and false is below true.
+/// The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
+/// -0), or null for an empty array.
 /// @example max([3, 9, 2]) ?? 0    // 9
-/// @example max(['a', 'b']) ?? ''    // 'b'
 export func max::<T>(xs: T[]): T? when is_ordered::<T>() {
     return if len(xs) == 0 then null else xs->reduce<math::max, xs[0]>
 }

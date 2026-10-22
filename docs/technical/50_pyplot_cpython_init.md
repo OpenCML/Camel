@@ -98,7 +98,7 @@ Release 构建，主机 `88zjwei`。墙钟用 `process.hrtime.bigint()` 包住�
 | `registry_all` | 36.13 / 17.36 | 26.81 / 9.11 | 8.61 → 0.91 | 0.44 → 0.34 |
 | `inspect --ops` | 39.60 / 17.48 | 28.00 / 8.52 | 8.85 → 0.93 | 0.47 → 0.33 |
 
-`registry_all` 的 `cmo_load` 里其余 27 个模块合计 8.31 → 7.86 ms（没动），差别全部落在两个 Python 模块上。
+`registry_all` 的 `cmo_load` 里其余 26 个模块合计 8.31 → 7.86 ms（没动），差别全部落在两个 Python 模块上。
 改动后 `pyplot` 的 1.17 ms 只剩 `.cmo` 与 bridge 的 dlopen 和注册——比其它模块的中位 0.3 ms 贵，是因为
 它仍然 `DT_NEEDED` libpython。只 `plot` 一次的墙钟两边相同（17.6 对 17.0），正是"钱换了个时间点"的直接读数。
 

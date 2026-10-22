@@ -4,8 +4,7 @@
 // Run: camel examples/algorithms/binary_search.cml
 module binary_search
 
-import { sort } from algo
-import { index_of } from array
+import { sort, index_of } from array
 
 // Searches xs[lo, hi) for `target` and returns its index.
 func search(xs: int[], target: int, lo: int, hi: int): int? {

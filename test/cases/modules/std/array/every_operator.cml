@@ -1,0 +1,21 @@
+/**
+ * Every native operator of `array`, called through the module-qualified name, answers the value
+ * it did when it was registered as `algo`'s: the algorithms moved, their results did not.
+ */
+module array_every_operator
+
+import array
+
+func main(): int sync {
+    println(array::sort([3, 1, 2]))
+    println(array::insert_sort([3, 1, 2]))
+    println(array::quick_sort([3, 1, 2]))
+    println(array::merge_sort([3, 1, 2]))
+    println(array::merge_sorted_arrays([1, 3], [2, 4]))
+    println(array::argsort([30, 10, 20]))
+    println(array::flatten([[1, 2], [3]]))
+    println(array::unique([3, 1, 3, 2, 1]))
+    let xs = [3, 1, 2]
+    println(array::sort(xs), xs)
+    return 0
+}

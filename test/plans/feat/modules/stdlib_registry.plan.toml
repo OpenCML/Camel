@@ -20,9 +20,11 @@ verify_script = """
 const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
 assert(ops.length > 300, `only ${ops.length} operators listed`)
 const modules = new Set(ops.map((o) => o.module))
-for (const m of ['<builtin>', 'algo', 'hash', 'fs', 'io', 'json', 'math', 'process', 'para', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
+for (const m of ['<builtin>', 'array', 'hash', 'fs', 'io', 'json', 'math', 'process', 'para', 'random', 're', 'sim', 'statistics', 'str', 'env', 'this', 'time']) {
   assert(modules.has(m), `module ${m} is not listed`)
 }
+const stale = ops.filter((o) => o.uri.startsWith('algo:')).map((o) => o.uri)
+assert(stale.length === 0, `operators of the deleted algo module: ${stale.join(', ')}`)
 const undeclared = ops.filter((o) => o.purity === 'undeclared').map((o) => o.uri)
 assert(undeclared.length === 0, `operators without a purity declaration: ${undeclared.join(', ')}`)
 const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
@@ -34,10 +36,12 @@ const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'ran
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
 }
-const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median', 'algo:sort', 'algo:argsort',
+const pure = ['str:split', 'str:codepoints', 'math:sin_d', 'math:shl', 'statistics:median',
   're:test', 'json:encode', 'json:decode', 'hash:sha256_str', 'hash:sha256_bytes', 'this:zen', ':op/add_l', ':op/idx_str', ':struct/slice_arr', ':str/format',
   // They return a new array and leave their argument unchanged (design principles 11.3).
-  ':struct/append_arr', ':struct/extend_arr', 'algo:sort', 'algo:quick_sort', 'algo:insert_sort', 'algo:merge_sort']
+  ':struct/append_arr', ':struct/extend_arr', 'array:sort', 'array:quick_sort', 'array:insert_sort', 'array:merge_sort',
+  // The native primitives of `array`: pure too, and every one of them returns a new array.
+  'array:merge_sorted_arrays', 'array:argsort', 'array:flatten', 'array:unique']
 for (const uri of pure) {
   assert(purity[uri] === 'pure', `${uri} is declared ${purity[uri]}, expected pure`)
 }
@@ -132,5 +136,20 @@ case = "../../../../scripts/stdlib-reference.mjs"
 args = ["${case}", "--verify-doc"]
 expect_exit = 0
 expect_stdout_contains = ["docs/stdlib-reference.md is up to date"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# `import algo` is gone and the operators are `array:`'s. The inspection above catches an
+# `algo:` URI that a program imports; this scan catches one that nothing imports yet, and the
+# return of the files the module was made of. `docs/` is a record and is not scanned.
+[[tests]]
+name = "registry.algo_module_gone"
+desc = "No source, test, example or benchmark names an `algo:` operator or imports `algo`, and neither `stdlib/algo.cml` nor `modules/algo/` exists: the module was folded into `array` and cannot come back alongside its operators."
+kind = "behavior"
+tool = "node"
+case = "../../../tools/check-no-algo.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS no algo module"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
