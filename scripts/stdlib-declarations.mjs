@@ -17,7 +17,7 @@
 // set is read from the tree, not from a list in this script: the next batch (`time`, `algo`,
 // `statistics`, `tree`/`ckpt`) is covered the day its `.cml` lands.
 //
-// The five checks, for every declaration module:
+// The checks, for every declaration module:
 //
 //   1. C++ registers no `StaticFuncTypeResolver` for a name the declaration fixes. A name
 //      whose signature C++ computes (`DynamicFuncTypeResolver`) may stay in C++: this is
@@ -97,6 +97,16 @@
 // have both shapes: `nn` exports its tensor operators from the registry and its optimizers from
 // a literal group list.
 //
+// And one for the gap ledger:
+//
+//   7. Every entry of `stdlib/signatures/*.cml` is classified in `scripts/computed-gaps.mjs`
+//      (handover H194): one record per entry, in the file's order, with a bucket and a mechanism
+//      that are tags defined in that script. An entry the ledger does not name, a ledger record
+//      with no entry, and a bucket or mechanism tag that does not exist — or a mechanism that
+//      names a bucket the mechanism does not belong to — are problems. The directory's size is
+//      then an accounted number: every entry says what would move it, and deleting an entry from
+//      the ledger cannot silently shrink the count.
+//
 // The output is one line per problem, each naming the file, the module and the operator, and a
 // final line starting `migrated modules stay migrated:`. Exit 1 when there is a problem.
 
@@ -104,6 +114,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+
+import { classificationProblems, entryRecords } from './computed-gaps.mjs'
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const STDLIB_DIR = path.join(REPO_ROOT, 'stdlib')
@@ -973,6 +985,10 @@ function staticChecks() {
 
     problems.push(...coverageProblems(reference))
 
+    // (7) every entry of a signature file has one record in the gap ledger, and every record
+    // names a bucket and a mechanism that exist (handover H194).
+    problems.push(...classificationProblems(REPO_ROOT))
+
     return { problems, modules, computedCount, excludedCount: UNCHECKED_MODULES.length }
 }
 
@@ -1014,7 +1030,8 @@ function main() {
     }
     console.log(
         `migrated modules stay migrated: ${modules.length} declaration module(s), ${computedCount} computed signature(s) ` +
-            `left in C++, ${excludedCount} excluded module(s), 0 problem(s)`,
+            `left in C++, ${excludedCount} excluded module(s), ${entryRecords().length} signature entries classified, ` +
+            `0 problem(s)`,
     )
     if (ops.summary) console.log(`every declaration is behind a registered operator (${ops.summary})`)
 }
