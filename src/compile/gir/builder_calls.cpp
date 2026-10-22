@@ -53,6 +53,7 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::data;
 using namespace camel::core::type;
+namespace sem = camel::core::sem;
 
 namespace camel::compile::gir {
 
@@ -482,6 +483,29 @@ node_handle_t Builder::partialApplicationOf(
             calleeType->normTypeAt(i),
             calleeType->normIsVarAt(i));
     }
+    // The bound parameters are the new function's captures, not its parameters: each use moves
+    // one place down. A bound parameter that was used, or any capture, cannot be published as a
+    // Concrete signature here, so the type says Generic instead of promising too little.
+    {
+        const sem::ResourceSignature &sig = calleeType->resources();
+        if (sig.mode == sem::ResourceSignature::Mode::Concrete) {
+            bool expressible = sig.captures.empty();
+            sem::ResourceSignature remapped = sig;
+            remapped.params.clear();
+            for (const auto &use : sig.params) {
+                if (use.index < bound.size()) {
+                    expressible = false;
+                    break;
+                }
+                sem::ResourceSignature::ParamUse moved = use;
+                moved.index = static_cast<uint8_t>(use.index - bound.size());
+                remapped.params.push_back(std::move(moved));
+            }
+            if (expressible) {
+                factory.setResources(remapped);
+            }
+        }
+    }
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph     = enterScope(type);
@@ -565,6 +589,8 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
             targetType->normTypeAt(i),
             targetType->normIsVarAt(i));
     }
+    // The same parameters: the forwarder promises what the target promises.
+    factory.setResources(targetType->resources());
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph = enterScope(type);

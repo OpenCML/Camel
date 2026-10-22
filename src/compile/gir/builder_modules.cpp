@@ -388,6 +388,17 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
             .commit(name, uri);
         throw BuildAbortException();
     }
+    // The declared type publishes what the operator's own module says it touches (design
+    // effects plan 2.2): until a body is inferred, the C++ declaration is the only source of a
+    // Concrete signature. The parameter classes and modes stay those of the declaration, so a
+    // call derived from the type touches what the operator itself would.
+    if (const auto id = camel::core::OperatorTable::instance().lookup(uri); id.has_value()) {
+        if (const auto *declaredFacts = camel::core::OperatorTable::instance().semantics(*id);
+            declaredFacts != nullptr && declaredFacts->resources) {
+            funcType = funcType->withResources(camel::core::sem::signatureOf(
+                *declaredFacts->resources, funcType->withTypesCount()));
+        }
+    }
     auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
     // A declaration stands for an operator of this module (design principles 10.1; handover
     // H94, ruling 5): the prefix of its URI is the name the module declares, or one of the

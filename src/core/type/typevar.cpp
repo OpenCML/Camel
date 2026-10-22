@@ -158,6 +158,7 @@ rebuildFunctionType(FunctionType *func, const type_bindings_t &bindings, bool &c
         factory.addNormArg(name, replaced(func->normTypeAt(i)), func->normIsVarAt(i));
     }
     factory.setExitType(func->hasExitType() ? replaced(func->exitType()) : nullptr);
+    factory.setResources(func->resources());
     return factory;
 }
 

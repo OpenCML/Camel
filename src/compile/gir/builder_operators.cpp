@@ -722,6 +722,9 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     FunctionTypeFactory factory;
     factory.setModifiers(opType->modifiers());
     factory.setExitType(opType->exitType());
+    // The function value promises what the operator's type promises (effects plan 2.3): a call
+    // through this value takes its footprint from the type, not by walking the one-node body.
+    factory.setResources(opType->resources());
     const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
         return argIndex < opType->argNamesCount() && !opType->argNameAt(argIndex).empty()
                    ? std::string(opType->argNameAt(argIndex))

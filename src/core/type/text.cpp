@@ -36,6 +36,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 
+#include <format>
 #include <optional>
 #include <string>
 #include <utility>
@@ -199,6 +200,77 @@ std::vector<TextItem> structParts(const StructType *record, bool mangle) {
     return parts;
 }
 
+/// The resource clause of a function type, as written: "pure" or "uses s, fs". `mangle` writes
+/// the stable encoding that takes part in the mangled name instead.
+std::string resourceClause(const FunctionType *fn, bool mangle) {
+    const sem::ResourceSignature &sig = fn->resources();
+    if (sig.mode == sem::ResourceSignature::Mode::Generic) {
+        return {};
+    }
+    std::string out;
+    if (mangle) {
+        out = "K";
+        out += std::to_string(static_cast<int>(sig.mode));
+        out += "P" + std::to_string(sig.params.size()) + "C" +
+               std::to_string(sig.captures.size()) + "A" + std::to_string(sig.ambient.size()) +
+               "Y" + std::to_string(sig.anyOf.size());
+        for (const auto &use : sig.params) {
+            out += std::format(
+                "p{}{}{}{}{}",
+                use.index,
+                static_cast<int>(use.cls),
+                static_cast<int>(use.mode),
+                use.name.size(),
+                use.name);
+        }
+        for (uint8_t capture : sig.captures) {
+            out += "c" + std::to_string(capture);
+        }
+        for (const auto &use : sig.ambient) {
+            out += "a" + std::to_string(static_cast<int>(use.mode)) +
+                   std::to_string(use.name.size()) + use.name;
+        }
+        for (sem::ResourceClass cls : sig.anyOf) {
+            out += "y" + std::to_string(static_cast<int>(cls));
+        }
+        out += "r" + std::to_string(static_cast<int>(sig.result.kind)) +
+               std::to_string(sig.result.operand);
+        out += sig.allocates
+                   ? "o" + std::to_string(static_cast<int>(sig.allocates->cls)) +
+                         std::to_string(sig.allocates->name.size()) + sig.allocates->name
+                   : "o-";
+        out += sig.external ? "e" : "-";
+        return out;
+    }
+    if (sig.pure()) {
+        return "pure";
+    }
+    out = "uses ";
+    bool first = true;
+    const auto add = [&](const std::string &name) {
+        out += (first ? "" : ", ") + name;
+        first = false;
+    };
+    for (const auto &use : sig.params) {
+        if (fn->hasArgNames() &&
+            use.index < fn->withTypesCount() + fn->normTypesCount()) {
+            add(std::string(fn->argNameAt(use.index)));
+        } else {
+            add(std::format("#{}", use.index));
+        }
+    }
+    for (const auto &use : sig.ambient) {
+        add(use.name);
+    }
+    for (sem::ResourceClass cls : sig.anyOf) {
+        add(std::format("any {}", sem::resourceClassName(cls)));
+    }
+    for (uint8_t capture : sig.captures) {
+        add(std::format("capture {}", capture));
+    }
+    return out;
+}
+
 std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
     std::vector<TextItem> parts;
     const size_t withCount = fn->withTypesCount();
@@ -228,6 +300,10 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
         }
         parts.push_back(literal("R"));
         parts.push_back(fn->hasExitType() ? typeItem(fn->exitType()) : literal("v"));
+        const std::string resources = resourceClause(fn, true);
+        if (!resources.empty()) {
+            parts.push_back(literal(resources));
+        }
         return parts;
     }
     const std::string modifiers = static_cast<std::string>(fn->modifiers());
@@ -272,6 +348,10 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
     }
     parts.push_back(literal(") => "));
     parts.push_back(fn->hasExitType() ? typeItem(fn->exitType()) : literal("<null>"));
+    const std::string resources = resourceClause(fn, false);
+    if (!resources.empty()) {
+        parts.push_back(literal(" " + resources));
+    }
     return parts;
 }
 
@@ -509,6 +589,10 @@ bool sameType(const Type *a, const Type *b) {
             }
             if (lhs->hasExitType()) {
                 pending.emplace_back(lhs->exitType(), rhs->exitType());
+            }
+            // What a function promises about resources is part of its type (effects plan 2.2).
+            if (!(lhs->resources() == rhs->resources())) {
+                return false;
             }
             break;
         }

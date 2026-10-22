@@ -35,6 +35,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/runtime/loop.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/program.h"
@@ -151,6 +152,7 @@ bool merge(GraphFootprint &into, const GraphFootprint &from) {
         addAny(into, cls);
     }
     into.external |= from.external;
+    into.result   = from.result;
     into.declared &= from.declared;
     return !(into == before);
 }
@@ -209,17 +211,33 @@ class Resolver {
     Resolver(const Program &program, FootprintFn footprint)
         : program_(program), footprint_(std::move(footprint)) {}
 
-    NodeResources node(const GCGraph &graph, gc_node_ref_t ref);
+    NodeResources node(const GCGraph &graph, gc_node_ref_t ref) const;
+
+    /// The origin of the value of `ref`, through GATEs and through Same/View results (a call's
+    /// result, an in-place operator's result) to the port or allocation it comes from.
+    ValueOrigin originOf(const GCGraph &graph, gc_node_ref_t ref) const;
+    bool mayAlias(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) const;
+
+    /// Where the graph's return value comes from, as a `ResultAlias` whose operand is a norm
+    /// port (design effects plan 3.3). Fresh when it makes a new resource, Same when it returns
+    /// one of its norm ports. A view of a port is Same at the footprint: the whole port.
+    sem::ResultAlias resultOf(const GCGraph &graph, gc_node_ref_t returnValue) const;
 
   private:
-    NodeResources oper(const GCGraph &graph, gc_node_ref_t ref);
-    NodeResources call(const GCGraph &graph, gc_node_ref_t ref);
-    NodeResources loop(const GCGraph &graph, gc_node_ref_t ref);
+    NodeResources oper(const GCGraph &graph, gc_node_ref_t ref) const;
+    NodeResources call(const GCGraph &graph, gc_node_ref_t ref) const;
+    NodeResources loop(const GCGraph &graph, gc_node_ref_t ref) const;
 
     /// The footprint `fp` of a graph run by node `ref`, with each binding resolved to an input
     /// of the node by `bind` (kInvalidNodeRef: the resource cannot be told).
     template <typename Bind>
-    NodeResources fromFootprint(const GraphFootprint &fp, Bind &&bind) const;
+    NodeResources fromFootprint(const GraphFootprint &fp, size_t normCount, Bind &&bind) const;
+
+    /// The resources of a call whose callee's type publishes a Concrete signature (design
+    /// effects plan 2.3): each use binds to the call's argument by the callee's numbering.
+    NodeResources fromSignature(
+        const sem::ResourceSignature &signature, size_t withCount, const GCGraph &graph,
+        gc_node_ref_t ref) const;
 
     const Program &program_;
     FootprintFn footprint_;
@@ -258,7 +276,7 @@ GraphFootprint FootprintWalk::of(const GCGraph *graph) {
                 addAccess(fp, sem::ambientAccess(access.resource.name, access.mode));
                 continue;
             }
-            const ValueOrigin origin = originOf(*graph, access.value);
+            const ValueOrigin origin = resolver.originOf(*graph, access.value);
             if (origin.kind == ValueOrigin::Kind::Fresh) {
                 continue; // made by this activation: invisible to its caller
             }
@@ -288,6 +306,14 @@ GraphFootprint FootprintWalk::of(const GCGraph *graph) {
                 });
         }
     }
+    // What the graph hands back (design effects plan 3.3). No return value, or no return:
+    // nothing of the caller's escapes, which is fresh.
+    const gc_node_ref_t returned = graph->returnNodeRef();
+    if (graph->returnKind() != GCReturnKind::None && graph->containsNodeRef(returned)) {
+        fp.result = resolver.resultOf(*graph, returned);
+    } else {
+        fp.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Fresh};
+    }
     active_.erase(graph);
     grew_ |= merge(memo_[graph], fp);
     done_.insert(graph);
@@ -295,12 +321,18 @@ GraphFootprint FootprintWalk::of(const GCGraph *graph) {
 }
 
 template <typename Bind>
-NodeResources Resolver::fromFootprint(const GraphFootprint &fp, Bind &&bind) const {
+NodeResources
+Resolver::fromFootprint(const GraphFootprint &fp, size_t normCount, Bind &&bind) const {
     NodeResources r;
     r.external = fp.external;
     r.declared = fp.declared;
-    // What a graph returns may be anything it received: not known here.
-    r.result = ResultAlias{.kind = ResultAlias::Kind::Unknown};
+    // Where the callee's return comes from, in the caller's numbering: its norm ports are the
+    // node's ordinary inputs.
+    r.result = fp.result;
+    if ((r.result.kind == ResultAlias::Kind::Same || r.result.kind == ResultAlias::Kind::View) &&
+        r.result.operand >= normCount) {
+        r.result = ResultAlias{.kind = ResultAlias::Kind::Unknown};
+    }
     for (const sem::ResourceAccess &access : fp.accesses) {
         NodeAccess a{.resource = access.resource, .mode = access.mode};
         if (access.binding.kind != sem::ResourceBinding::Kind::Ambient) {
@@ -315,15 +347,25 @@ NodeResources Resolver::fromFootprint(const GraphFootprint &fp, Bind &&bind) con
     return r;
 }
 
-NodeResources Resolver::node(const GCGraph &graph, gc_node_ref_t ref) {
+NodeResources Resolver::node(const GCGraph &graph, gc_node_ref_t ref) const {
     switch (graph.node(ref)->kind) {
     case GCNodeKind::Oper:
         return oper(graph, ref);
     case GCNodeKind::Func: {
-        const auto norm = graph.normInputsOf(ref);
+        const auto norm           = graph.normInputsOf(ref);
+        const GCGraph *callee     = program_.calleeOf(graph, ref);
+        if (callee != nullptr && callee->funcType() != nullptr &&
+            callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete) {
+            return fromSignature(
+                callee->funcType()->resources(),
+                callee->funcType()->withTypesCount(),
+                graph,
+                ref);
+        }
         const auto with = graph.withInputsOf(ref);
         return fromFootprint(
-            footprint_(program_.calleeOf(graph, ref)),
+            footprint_(callee),
+            norm.size(),
             [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
                 if (b.kind == sem::ResourceBinding::Kind::Norm && b.index < norm.size()) {
                     return norm[b.index];
@@ -346,7 +388,7 @@ NodeResources Resolver::node(const GCGraph &graph, gc_node_ref_t ref) {
     }
 }
 
-NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) {
+NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) const {
     const auto &table           = core::OperatorTable::instance();
     const core::OperId id       = graph.nodeBodyAs<GCOperBody>(ref)->oper;
     const auto traits           = table.find(id);
@@ -390,7 +432,7 @@ NodeResources Resolver::oper(const GCGraph &graph, gc_node_ref_t ref) {
     return r;
 }
 
-NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) {
+NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
     const auto norm = graph.normInputsOf(ref);
     const auto with = graph.withInputsOf(ref);
     // The callee is With input 0: a known function when it is a constant, or a closure this
@@ -426,7 +468,18 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) {
         r.declared = false;
         return r;
     }
-    return fromFootprint(footprint_(callee), [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
+    // A callee whose type publishes its resources: the call takes its footprint from the type
+    // (design effects plan 2.3), not by walking the body. A Generic type (a Camel body, until
+    // its signature is inferred) keeps the body walk.
+    if (callee->funcType() != nullptr &&
+        callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete) {
+        return fromSignature(
+            callee->funcType()->resources(),
+            callee->funcType()->withTypesCount(),
+            graph,
+            ref);
+    }
+    return fromFootprint(footprint_(callee), norm.size(), [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
         switch (b.kind) {
         case sem::ResourceBinding::Kind::Norm:
             return b.index < norm.size() ? norm[b.index] : kInvalidNodeRef;
@@ -441,12 +494,152 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) {
     });
 }
 
-NodeResources Resolver::loop(const GCGraph &, gc_node_ref_t) {
+NodeResources Resolver::fromSignature(
+    const sem::ResourceSignature &signature, size_t withCount, const GCGraph &graph,
+    gc_node_ref_t ref) const {
+    const auto norm   = graph.normInputsOf(ref);
+    const auto with   = graph.withInputsOf(ref);
+    const bool isCall = graph.node(ref)->kind == GCNodeKind::Call;
+    NodeResources r;
+    r.result    = signature.result;
+    r.allocates = signature.allocates;
+    r.external  = signature.external;
+    // The signature's operand numbering is the callee's: with parameters first, ordinary ones
+    // after. It is the same mapping as fromFootprint's bind, with the class the declaration gave
+    // the parameter.
+    const auto argument = [&](uint8_t index) -> gc_node_ref_t {
+        if (index < withCount) {
+            const size_t at = isCall ? size_t(index) + 1 : size_t(index);
+            return at < with.size() ? with[at] : kInvalidNodeRef;
+        }
+        const size_t at = size_t(index) - withCount;
+        return at < norm.size() ? norm[at] : kInvalidNodeRef;
+    };
+    for (const auto &use : signature.params) {
+        NodeAccess a{.resource = {.cls = use.cls, .name = use.name}, .mode = use.mode};
+        a.value    = argument(use.index);
+        a.anyValue = use.cls == ResourceClass::Unknown || a.value == kInvalidNodeRef;
+        if (a.anyValue) {
+            a.value = kInvalidNodeRef;
+        }
+        r.accesses.push_back(std::move(a));
+    }
+    for (const auto &use : signature.ambient) {
+        r.accesses.push_back(
+            NodeAccess{
+                .resource = {.cls = ResourceClass::Ambient, .name = use.name},
+                .mode     = use.mode,
+            });
+    }
+    for (ResourceClass cls : signature.anyOf) {
+        r.accesses.push_back(NodeAccess{.resource = {.cls = cls}, .anyValue = true});
+    }
+    for ([[maybe_unused]] uint8_t capture : signature.captures) {
+        // A directly called graph has no capture slot among the node's inputs: the class is not
+        // known here, so the conservative reading is the only sound one.
+        r.accesses.push_back(NodeAccess{.resource = {}, .anyValue = true});
+        r.declared = false;
+    }
+    if ((r.result.kind == ResultAlias::Kind::Same || r.result.kind == ResultAlias::Kind::View) &&
+        r.result.operand >= norm.size()) {
+        r.result = ResultAlias{.kind = ResultAlias::Kind::Unknown};
+    }
+    return r;
+}
+
+NodeResources Resolver::loop(const GCGraph &, gc_node_ref_t) const {
     // The condition and the body are regions of the same graph: the walk visits their nodes like
     // any other, so the loop node itself only says that its result is anything.
     NodeResources r;
     r.result = ResultAlias{.kind = ResultAlias::Kind::Unknown};
     return r;
+}
+
+ValueOrigin Resolver::originOf(const GCGraph &graph, gc_node_ref_t ref) const {
+    for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(ref); ++hops) {
+        ref                = throughGates(graph, ref);
+        const GCNode *node = graph.node(ref);
+        switch (node->kind) {
+        case GCNodeKind::Port:
+            return ValueOrigin{ValueOrigin::Kind::Port, ref};
+        case GCNodeKind::Copy:
+        case GCNodeKind::Fill:
+            return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
+        case GCNodeKind::Oper:
+        case GCNodeKind::Func:
+        case GCNodeKind::Call:
+        case GCNodeKind::Loop: {
+            const ResultAlias result = this->node(graph, ref).result;
+            if (result.kind == ResultAlias::Kind::Fresh) {
+                return ValueOrigin{ValueOrigin::Kind::Fresh, ref};
+            }
+            const auto norm = graph.normInputsOf(ref);
+            if ((result.kind == ResultAlias::Kind::Same || result.kind == ResultAlias::Kind::View) &&
+                result.operand < norm.size()) {
+                ref = norm[result.operand];
+                continue;
+            }
+            return ValueOrigin{ValueOrigin::Kind::Unknown, ref};
+        }
+        default:
+            return ValueOrigin{ValueOrigin::Kind::Unknown, ref};
+        }
+    }
+    return ValueOrigin{ValueOrigin::Kind::Unknown, ref};
+}
+
+bool Resolver::mayAlias(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) const {
+    const ValueOrigin x = originOf(graph, a);
+    const ValueOrigin y = originOf(graph, b);
+    if (x.kind == ValueOrigin::Kind::Unknown || y.kind == ValueOrigin::Kind::Unknown || x == y) {
+        return true;
+    }
+    // Two different fresh allocations, or a fresh one and a received value: different objects.
+    // Two received values may be one (a caller passes one cell twice).
+    return x.kind == ValueOrigin::Kind::Port && y.kind == ValueOrigin::Kind::Port;
+}
+
+sem::ResultAlias Resolver::resultOf(const GCGraph &graph, gc_node_ref_t value) const {
+    for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(value); ++hops) {
+        value              = throughGates(graph, value);
+        const GCNode *node = graph.node(value);
+        switch (node->kind) {
+        case GCNodeKind::Port: {
+            const auto norm = graph.normPorts();
+            const auto at   = std::find(norm.begin(), norm.end(), value);
+            // A with port or a capture is not a norm port of the footprint; the footprint has no
+            // binding for it yet.
+            return at == norm.end()
+                       ? sem::ResultAlias{.kind = ResultAlias::Kind::Unknown}
+                       : sem::ResultAlias{
+                             .kind    = ResultAlias::Kind::Same,
+                             .operand = static_cast<uint8_t>(at - norm.begin())};
+        }
+        case GCNodeKind::Copy:
+        case GCNodeKind::Fill:
+            return sem::ResultAlias{.kind = ResultAlias::Kind::Fresh};
+        case GCNodeKind::Oper:
+        case GCNodeKind::Func:
+        case GCNodeKind::Call:
+        case GCNodeKind::Loop: {
+            const ResultAlias result = this->node(graph, value).result;
+            if (result.kind == ResultAlias::Kind::Fresh ||
+                result.kind == ResultAlias::Kind::Unknown) {
+                return result;
+            }
+            const auto norm = graph.normInputsOf(value);
+            if ((result.kind == ResultAlias::Kind::Same || result.kind == ResultAlias::Kind::View) &&
+                result.operand < norm.size()) {
+                value = norm[result.operand];
+                continue;
+            }
+            return sem::ResultAlias{.kind = ResultAlias::Kind::Unknown};
+        }
+        default:
+            return sem::ResultAlias{.kind = ResultAlias::Kind::Unknown};
+        }
+    }
+    return sem::ResultAlias{.kind = ResultAlias::Kind::Unknown};
 }
 
 // ---- Regions -----------------------------------------------------------------------------------
@@ -579,50 +772,18 @@ GraphFootprint footprintOf(const Program &program, const GCGraph *graph) {
     return walk.run(graph);
 }
 
-ValueOrigin originOf(const GCGraph &graph, gc_node_ref_t value) {
-    const auto &table = core::OperatorTable::instance();
-    for (gc_cnt_t hops = 0; hops <= graph.nodeCount() && graph.containsNodeRef(value); ++hops) {
-        value              = throughGates(graph, value);
-        const GCNode *node = graph.node(value);
-        switch (node->kind) {
-        case GCNodeKind::Port:
-            return ValueOrigin{ValueOrigin::Kind::Port, value};
-        case GCNodeKind::Copy:
-            return ValueOrigin{ValueOrigin::Kind::Fresh, value};
-        case GCNodeKind::Oper: {
-            const sem::OperatorSemantics *s =
-                table.semantics(graph.nodeBodyAs<GCOperBody>(value)->oper);
-            if (s == nullptr || !s->resources) {
-                return ValueOrigin{ValueOrigin::Kind::Unknown, value};
-            }
-            const ResultAlias &result = s->resources->result;
-            const auto norm           = graph.normInputsOf(value);
-            if (result.kind == ResultAlias::Kind::Fresh) {
-                return ValueOrigin{ValueOrigin::Kind::Fresh, value};
-            }
-            if ((result.kind == ResultAlias::Kind::Same || result.kind == ResultAlias::Kind::View) &&
-                result.operand < norm.size()) {
-                value = norm[result.operand];
-                continue; // the operand's origin
-            }
-            return ValueOrigin{ValueOrigin::Kind::Unknown, value};
-        }
-        default:
-            return ValueOrigin{ValueOrigin::Kind::Unknown, value};
-        }
-    }
-    return ValueOrigin{ValueOrigin::Kind::Unknown, value};
+ValueOrigin originOf(const Program &program, const GCGraph &graph, gc_node_ref_t value) {
+    Resolver resolver(program, [&program](const GCGraph *callee) {
+        return footprintOf(program, callee);
+    });
+    return resolver.originOf(graph, value);
 }
 
-bool mayAlias(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
-    const ValueOrigin x = originOf(graph, a);
-    const ValueOrigin y = originOf(graph, b);
-    if (x.kind == ValueOrigin::Kind::Unknown || y.kind == ValueOrigin::Kind::Unknown || x == y) {
-        return true;
-    }
-    // Two different fresh allocations, or a fresh one and a received value: different objects.
-    // Two received values may be one (a caller passes one cell twice).
-    return x.kind == ValueOrigin::Kind::Port && y.kind == ValueOrigin::Kind::Port;
+bool mayAlias(const Program &program, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
+    Resolver resolver(program, [&program](const GCGraph *callee) {
+        return footprintOf(program, callee);
+    });
+    return resolver.mayAlias(graph, a, b);
 }
 
 std::string_view conflictKindName(ConflictKind kind) {
@@ -637,14 +798,17 @@ std::string_view conflictKindName(ConflictKind kind) {
     return "none";
 }
 
-ResourceConflict
-resourceConflict(const Program &program, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
+namespace {
+
+/// The conflict of two nodes, resolved with one resolver (the public query makes one).
+ResourceConflict conflictWith(
+    const Resolver &resolver, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
     ResourceConflict conflict;
     if (a == b) {
         return conflict;
     }
-    const NodeResources ra = resourcesOf(program, graph, a);
-    const NodeResources rb = resourcesOf(program, graph, b);
+    const NodeResources ra = resolver.node(graph, a);
+    const NodeResources rb = resolver.node(graph, b);
     if (ra.external && rb.external) {
         conflict.kind = ConflictKind::External;
         conflict.why  = "both have effects outside the program";
@@ -665,7 +829,7 @@ resourceConflict(const Program &program, const GCGraph &graph, gc_node_ref_t a, 
             const bool ambientX = x.resource.cls == ResourceClass::Ambient;
             const bool ambientY = y.resource.cls == ResourceClass::Ambient;
             if (!ambientX && !ambientY && !x.anyValue && !y.anyValue &&
-                !mayAlias(graph, x.value, y.value)) {
+                !resolver.mayAlias(graph, x.value, y.value)) {
                 continue;
             }
             if (!regionsOverlap(graph, a, x, b, y)) {
@@ -679,6 +843,16 @@ resourceConflict(const Program &program, const GCGraph &graph, gc_node_ref_t a, 
         }
     }
     return conflict;
+}
+
+} // namespace
+
+ResourceConflict
+resourceConflict(const Program &program, const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
+    Resolver resolver(program, [&program](const GCGraph *callee) {
+        return footprintOf(program, callee);
+    });
+    return conflictWith(resolver, graph, a, b);
 }
 
 bool dependsOn(const GCGraph &graph, gc_node_ref_t later, gc_node_ref_t earlier) {
@@ -720,9 +894,12 @@ bool exclusive(const GCGraph &graph, gc_node_ref_t a, gc_node_ref_t b) {
 } // namespace
 
 std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GCGraph &graph) {
+    // One walk for the whole query (each callee's footprint is a finished fixpoint).
+    FootprintWalk walk(program, core::OperatorTable::instance().declarationEpoch());
+    Resolver resolver(program, [&walk](const GCGraph *callee) { return walk.run(callee); });
     std::vector<gc_node_ref_t> touching;
     for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
-        if (!resourcesOf(program, graph, ref).none()) {
+        if (!resolver.node(graph, ref).none()) {
             touching.push_back(ref);
         }
     }
@@ -732,7 +909,7 @@ std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GC
             if (exclusive(graph, touching[i], touching[j])) {
                 continue; // different arms of one branch: they never both run
             }
-            const ResourceConflict c = resourceConflict(program, graph, touching[i], touching[j]);
+            const ResourceConflict c = conflictWith(resolver, graph, touching[i], touching[j]);
             if (!c) {
                 continue;
             }
@@ -822,6 +999,13 @@ std::string toString(const GraphFootprint &fp) {
     }
     for (ResourceClass cls : fp.anyOf) {
         part(std::format("rmw {} (any)", sem::resourceClassName(cls)));
+    }
+    if (fp.result.kind != ResultAlias::Kind::Unknown) {
+        std::string result = std::format("result {}", sem::resultAliasName(fp.result.kind));
+        if (fp.result.operand != 0xFF) {
+            result += std::format(" {}", fp.result.operand);
+        }
+        part(result);
     }
     if (fp.external) {
         part("external");

@@ -1313,7 +1313,7 @@ for (const rt::RequiredOrdering &o : rt::requiredOrderings(*graph)) {
     o.first; o.second; o.why; o.ordered; o.byData;   // 冲突的一对，图是否已经排序、是否经由数据
 }
 rt::GraphFootprint fp = rt::footprintOf(calleeGraph);   // 一张图对收到的资源（端口、捕获）做了什么
-bool alias = rt::mayAlias(*graph, x, y);                  // 两个值可能是同一个资源吗
+bool alias = rt::mayAlias(program, *graph, x, y);         // 两个值可能是同一个资源吗
 ```
 
 事实种类 `core.resources`（`fact::coreKinds().resources`，值是 `NodeResources`）在碰了资源的节点上，`camel inspect --facts` 打印。异步完成不在核心：Tiles 的流与事件仍是它自己的，交出 Camel 值之前完成（8.2）；`sync`、`wait` 不是 GPU 原语。

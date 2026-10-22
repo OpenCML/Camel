@@ -78,6 +78,10 @@ enum class ResourceClass : uint8_t {
     /// State no value names; the resource's name says which (`fs`, `stdout`, `rng`). Two ambient
     /// resources are the same exactly when their names are.
     Ambient,
+    /// A value with identity a handle type declares (`#resource type Stream<T>`); the resource's
+    /// name is the declaring type's qualified name, and the value node tells one handle from
+    /// another (design effects plan 3.2). Two handles of one declaration are two resources.
+    Handle,
 };
 
 std::string_view resourceClassName(ResourceClass cls);
@@ -174,6 +178,70 @@ struct ResourceSpec {
     bool none() const { return accesses.empty() && !allocates && !externalEffect; }
     bool operator==(const ResourceSpec &) const = default;
 };
+
+/**
+ * The resources a function type publishes (design effects plan 2.2): what a call to a function
+ * of this type touches, named in the callee's parameter numbering (with parameters first, then
+ * ordinary ones, as `varMarks` numbers them).
+ *
+ * `Generic` is a type without a resource clause: it promises nothing, and a call through it is
+ * read conservatively. `Concrete` is what a declaration or an inferred body says; `pure` is the
+ * Concrete signature with nothing at all.
+ *
+ * A parameter use keeps the class and the mode of the declared access (`uses s` will be a
+ * Handle; a `var` parameter a Variable), because the runtime maps each use to the call's value
+ * and the class decides which values may be the same resource.
+ */
+struct ResourceSignature {
+    enum class Mode : uint8_t { Generic, Concrete };
+
+    struct ParamUse {
+        /// The parameter, with parameters first and ordinary ones after them (0..withCount-1,
+        /// then withCount..).
+        uint8_t index = 0;
+        ResourceClass cls = ResourceClass::Unknown;
+        /// The name a Handle or Foreign resource carries (the declaration's qualified name).
+        std::string name;
+        AccessMode mode = AccessMode::ReadModifyWrite;
+
+        bool operator==(const ParamUse &) const = default;
+    };
+
+    struct AmbientUse {
+        std::string name;
+        AccessMode mode = AccessMode::ReadModifyWrite;
+
+        bool operator==(const AmbientUse &) const = default;
+    };
+
+    Mode mode = Mode::Generic; // the default: a type that says nothing
+    /// Sorted by parameter index; at most one use per parameter.
+    std::vector<ParamUse> params;
+    /// The captures used, by capture position (only an inferred closure type has them).
+    std::vector<uint8_t> captures;
+    /// Sorted by name; at most one use per ambient resource.
+    std::vector<AmbientUse> ambient;
+    /// Classes the call may touch without naming a value (`anyValue`).
+    std::vector<ResourceClass> anyOf;
+    ResultAlias result;
+    /// The call's result is a new resource of this class.
+    std::optional<Resource> allocates;
+    bool external = false;
+
+    /// Concrete and touching nothing: `pure`.
+    bool pure() const {
+        return mode == Mode::Concrete && params.empty() && captures.empty() && ambient.empty() &&
+               anyOf.empty() && !allocates && !external;
+    }
+    bool operator==(const ResourceSignature &) const = default;
+};
+
+/// The signature a declared spec publishes, in the parameter numbering of a function with
+/// `withCount` with parameters (with parameters first, ordinary ones after them).
+ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount);
+
+/// The text form of a signature: "" for Generic, "pure", "uses s, fs".
+std::string toString(const ResourceSignature &signature);
 
 // ---- Builders for declarations --------------------------------------------------------------
 
