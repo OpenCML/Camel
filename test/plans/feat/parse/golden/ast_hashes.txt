@@ -330,6 +330,7 @@ e16b29b55ac8a7b2 ok stdlib/pyplot.cml
 b4c0afe128dff2fb ok stdlib/python.cml
 e02c37ac47d43974 ok stdlib/random.cml
 a8be31ddfa495bf4 ok stdlib/re.cml
+7c123c52694c4b0b ok stdlib/rewrite.cml
 dc425a313698f684 ok stdlib/rules.cml
 3c5b84f39dfa2591 ok stdlib/sim.cml
 94e8811447b8d758 ok stdlib/statistics.cml
@@ -352,7 +353,6 @@ a6332d59a0e18fb4 ok stdlib/signatures/para.cml
 c80b5667335e55a8 ok stdlib/signatures/process.cml
 71655c7c19844d68 no stdlib/signatures/python.cml
 82c91a732389ed7e ok stdlib/signatures/random.cml
-5003e0aae8768d14 ok stdlib/signatures/rewrite.cml
 5f79aa6028c4e548 no stdlib/signatures/tensor.cml
 c4e42b3e18cc655d ok stdlib/signatures/tiles.cml
 c2aadab066717442 ok test/cases/compile/format_string_bad_spec.cml
@@ -869,6 +869,12 @@ f6fd74743a748615 ok test/cases/compile/native/re_declaration_import.cml
 25dc1f76b4a5c95e ok test/cases/compile/native/re_type.cml
 cbd832547e7cdf8d ok test/cases/compile/native/retired_str_bytes.cml
 bcac67bf72834a87 ok test/cases/compile/native/retired_str_from_bytes.cml
+a625ba8fade9db66 ok test/cases/compile/native/rewrite_arity.cml
+c3d8edbb72ba6fc6 ok test/cases/compile/native/rewrite_declaration_import.cml
+0a254abf3616a7bc ok test/cases/compile/native/rewrite_type.cml
+051a7bf1ead4723f ok test/cases/compile/native/rule_reader_arity.cml
+fa12b7ddee49be12 ok test/cases/compile/native/rule_reader_declaration_import.cml
+bf8d4cb4781ba5f1 ok test/cases/compile/native/rule_reader_type.cml
 54aa08abcf99901d ok test/cases/compile/native/sim_arity.cml
 1cd7e9ad4fb98e83 ok test/cases/compile/native/sim_declaration_import.cml
 fd495edb5c35f561 ok test/cases/compile/native/sim_type.cml
@@ -1879,7 +1885,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-00909e0329aa897d ok test/cases/modules/stdlib/registry_all.cml
+fd2030cafe78e473 ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml

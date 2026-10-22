@@ -55,12 +55,14 @@
 //      imported at all). A module imported but absent from MODULES is the same hole and is
 //      reported too.
 //
-// The reserved group `__neq__` is the one exception to (1) and (4): `!=` cannot be declared
+// The reserved groups are the exception to (1) and (4): `__neq__` because `!=` cannot be declared
 // (design principles 4.3 — an overload of `==` gives it, and `operator !=` is
 // OperatorNotOverloadable), and the compiler negates a *Camel* overload of `==`, not a native
-// one, so a module whose types have their own `==` keeps the `__neq__` group in C++. It has no
-// Camel name: neither the declaration file nor the reference page carries it, and
-// `--verify-ops` filters reserved names out. Every other reserved group stays checked.
+// one, so a module whose types have their own `==` keeps the `__neq__` group in C++. Rewrite's
+// `__rule`, `__rule_when` and `__analysis` are the compiled form of the language's `rule` and
+// `analysis` declarations, so they are exported by C++ as well (handover H183). None of them has a
+// Camel name: neither the declaration file nor the reference page carries it, and `--verify-ops`
+// filters reserved names out. Every other reserved group stays checked.
 // Two shapes that the tensor module writes are resolved rather than reported:
 //
 //   - A module that exports the groups of its operator registry
@@ -101,8 +103,8 @@ const REFERENCE = path.join(REPO_ROOT, 'scripts', 'stdlib-reference.mjs')
 
 const relative = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
 
-// The one group a migrated module may keep outside its declarations: see the note above.
-const UNDERIVABLE_OPERATORS = new Set(['__neq__'])
+// The reserved groups a migrated module may keep outside its declarations: see the note above.
+const UNDERIVABLE_OPERATORS = new Set(['__neq__', '__rule', '__rule_when', '__analysis'])
 
 // Modules that register operators but are deliberately not verified, each with the fact that
 // makes the exclusion true. `registry_all.cml` is the program `--verify-ops` reads, so a module

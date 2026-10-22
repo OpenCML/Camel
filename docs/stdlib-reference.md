@@ -4302,15 +4302,16 @@ Commits a transaction of `open_function` to a Program of its own (the running pr
 
 ## `rewrite`: rules applied to a program
 
-program.
+Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of the
+functions that make a rule to a `Program`, `check` tests rules on random programs, and the four
+readers report a `Rule`'s name, direction, required rewrites and added constants. The rules
+passed in are function values; a rule that stops a rewrite without changing the program is a
+fault, and `strict` restricts the float rules to the ones that hold bit for bit.
 
-The module also exports the reserved groups the language's own `rule` and `analysis`
-declarations compile to (`rewrite:rule`, `rewrite:rule_when`, `rewrite:analysis`). They have
-no callable Camel name, so they are not listed here and `inspect --ops` hides them from the
-name comparison.
-
-The rules passed in are function values; a rule that stops a rewrite without changing the
-program is a fault, and `strict` restricts the float rules to the ones that hold bit for bit.
+The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
+`analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
+`rewrite:analysis`). They have no callable Camel name, so they are not declared here and
+`inspect --ops` hides them from the name comparison.
 
 #### `rewrite`
 

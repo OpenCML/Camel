@@ -24,6 +24,11 @@
  * `let name = __rule('name', ...)` (graph store 5.2: a rule is the shorthand of a pair of
  * functions); the front end writes the import of this module itself. The engines, `rewrite`,
  * `saturate` and `extract`, take the rules as an array.
+ *
+ * The eight callable operators are declared in `stdlib/rewrite.cml` (handover H183); this file
+ * keeps their kernels, the executor and their purity. The three reserved groups the language's
+ * `rule` and `analysis` declarations compile to (`__rule`, `__rule_when`, `__analysis`) have no
+ * callable Camel name, so they stay exported from here.
  */
 
 #include "rule.h"
@@ -981,13 +986,6 @@ class RewriteExecutor final : public Executor {
     }
 };
 
-oper_group_ptr_t ruleReader(const char *name, Type *result) {
-    return OperatorGroup::create(
-        name,
-        {{std::string("rewrite:") + name,
-          StaticFuncTypeResolver::create({}, {{RuleType::get(), false}}, result)}});
-}
-
 class RewriteModule final : public BuiltinModule {
   public:
     explicit RewriteModule(context_ptr_t ctx) : BuiltinModule("rewrite", std::move(ctx)) {
@@ -1082,98 +1080,9 @@ class RewriteModule final : public BuiltinModule {
                           }
                           return initial->exitType();
                       })}}));
-        const auto rulesOf = [](Type *array) {
-            if (array->code() != TypeCode::Array) {
-                return false;
-            }
-            const Type *element = static_cast<ArrayType *>(array)->elemType();
-            if (element == nullptr || element->code() != TypeCode::Function) {
-                return false;
-            }
-            const auto *maker = static_cast<const FunctionType *>(element);
-            return maker->normTypesCount() == 0 && maker->withTypesCount() == 0 &&
-                   RuleType::is(maker->exitType());
-        };
-        exportEntity(
-            "rewrite",
-            OperatorGroup::create(
-                "rewrite",
-                {{"rewrite:rewrite",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {-1, {}}},
-                      "(p: Program, rules: (() => Rule)[], strict: bool) => Program!",
-                      [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          // The Program type belongs to the module graph; it is told by its name.
-                          // The policy parameter is optional: 2 arguments grant the default
-                          // permissions, 3 choose the policy of the pass.
-                          if (norm.size() != 2 && norm.size() != 3) {
-                              return std::nullopt;
-                          }
-                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1])) {
-                              return std::nullopt;
-                          }
-                          if (norm.size() == 3 && norm[2]->code() != TypeCode::Bool) {
-                              return std::nullopt;
-                          }
-                          return TupleType::fallible(norm[0]);
-                      })}}));
-        exportEntity(
-            "saturate",
-            OperatorGroup::create(
-                "saturate",
-                {{"rewrite:saturate",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {-1, {}}},
-                      "(p: Program, rules: (() => Rule)[], rounds: int, strict: bool) => Program!",
-                      [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (norm.size() != 3 && norm.size() != 4) {
-                              return std::nullopt;
-                          }
-                          if (norm[0]->toString() != "Program" || !rulesOf(norm[1]) ||
-                              norm[2]->code() != TypeCode::Int64) {
-                              return std::nullopt;
-                          }
-                          if (norm.size() == 4 && norm[3]->code() != TypeCode::Bool) {
-                              return std::nullopt;
-                          }
-                          return TupleType::fallible(norm[0]);
-                      })}}));
-        exportEntity(
-            "extract",
-            OperatorGroup::create(
-                "extract",
-                {{"rewrite:extract",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {2, {false, false}}},
-                      "(p: Program, cost: string) => Program!",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (norm[0]->toString() != "Program" ||
-                              norm[1]->code() != TypeCode::String)
-                              return std::nullopt;
-                          return TupleType::fallible(norm[0]);
-                      })}}));
-        exportEntity(
-            "check",
-            OperatorGroup::create(
-                "check",
-                {{"rewrite:check",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {3, {false, false, false}}},
-                      "(rules: (() => Rule)[], samples: int, seed: int) => string",
-                      [rulesOf](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (!rulesOf(norm[0]) || norm[1]->code() != TypeCode::Int64 ||
-                              norm[2]->code() != TypeCode::Int64)
-                              return std::nullopt;
-                          return Type::String();
-                      })}}));
-        exportEntity("rule_name", ruleReader("name", Type::String()));
-        exportEntity("rule_two_way", ruleReader("two_way", Type::Bool()));
-        exportEntity("rule_needs", ruleReader("needs", Type::Int64()));
-        exportEntity("rule_consts", ruleReader("consts", Type::Int64()));
+        // The eight callable operators (`rewrite`, `saturate`, `extract`, `check` and the four
+        // rule readers) are declared in `stdlib/rewrite.cml`; the declarations are the one source
+        // of their signatures, so the module exports none of them itself (handover H183).
     }
 
     bool load() override {
