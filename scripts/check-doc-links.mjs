@@ -8,7 +8,10 @@
 //   node scripts/check-doc-links.mjs --technical-index  every page under docs/technical is listed
 //                                               in docs/technical/README.md (the list is the tree)
 //   node scripts/check-doc-links.mjs --citations  every *.md path cited anywhere in the tree — in a
-//                                               document, a code or .cml comment, a plan — exists
+//                                               document, a code or .cml comment, a plan — exists, and
+//                                               every line citation's quoted anchor is on its line
+//   node scripts/check-doc-links.mjs --citations --root DIR
+//                                               check a fixture tree instead of the repository
 //   node scripts/check-doc-links.mjs FILE DIR  the given files and directories
 //
 // Exit status 1 when a link is broken, 2 when the scope is empty or names a missing entry: a
@@ -18,7 +21,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const args = process.argv.slice(2)
+const rootFlag = args.indexOf('--root')
+const scriptRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const root = rootFlag < 0 ? scriptRoot : path.resolve(args[rootFlag + 1] ?? '')
+if (rootFlag >= 0 && (args[rootFlag + 1] === undefined || !fs.existsSync(root))) {
+    console.log(`--root ${args[rootFlag + 1] ?? ''}: no such directory`)
+    process.exit(2)
+}
 
 const SCOPE = [
     'README.md',
@@ -173,6 +183,21 @@ function checkTechnicalIndex() {
 // page, every plan and every code comment in the tree and resolves every `*.md` path it finds there.
 // A reference to a file that does not exist is a defect, not a style issue.
 //
+// A citation that names a line promises more than the file's existence: it promises that the line
+// still holds what the sentence says. The line is written `path:LINE` or `path:START-END`, and the
+// evidence is a quoted anchor inside the same code span:
+//
+//     `src/runtime/graph.cpp:591 # "one for each input and one for each user of every node"`
+//
+// The anchor is text the cited range must contain (whitespace is compared as single spaces); it is
+// also what tells an ambiguous short name (`graph.h` names two files) which file was meant. A line
+// citation without an anchor cannot be verified and fails, and so does one whose anchor is not in
+// the cited range. The failure names the citing line, the target, what the line holds and what was
+// claimed, plus the line the anchor moved to, so a sweep that only shifts lines can be repaired by
+// re-deriving the line from the tree instead of adding an offset. A bare file name that exists
+// nowhere is an example in prose (a diagnostic's `a.cml:3`), not a citation of the tree; a missing
+// path with a directory or a missing `.md` path is still a failure.
+//
 // Not every `*.md` string is a citation: a script that writes its report names a run output. Only
 // the files listed above are read, and in code only a comment line is (a string literal that names
 // an output is not a citation). The records (docs/handover, docs/reviews, changes.log) are history
@@ -233,8 +258,9 @@ function isComment(file, text, index) {
 }
 
 // A fenced block shows an example, often of a file that a plan *will* create; it is not a citation.
+// A fence may be indented, as it is inside a list item.
 function inFence(text, index) {
-    const fences = (text.slice(0, index).match(/^(?:```|~~~)/gm) || []).length
+    const fences = (text.slice(0, index).match(/^\s*(?:```|~~~)/gm) || []).length
     return fences % 2 === 1
 }
 
@@ -246,21 +272,58 @@ function checkCitations() {
         if (!byName.has(name)) byName.set(name, [])
         byName.get(name).push(file)
     }
-    const citation = /(?<![\w./*-])((?:\.{1,2}\/|[\w@-]+\/)*[\w-][\w.-]*\.md)\b/g
+    const pathCitation = /(?<![\w./*-])((?:\.{1,2}\/|[\w@-]+\/)*[\w-][\w.-]*\.md)\b/g
+    // `path:LINE`, `path:START-END`, and the anchor that proves the line: ` # "text on it"`.
+    // `(?![\d:])` keeps a diagnostic's `file.cml:12:7` (a column, not a citation) out.
+    const lineCitation =
+        /(?<![\w./*-])((?:\.{1,2}\/|[\w@-]+\/)*[\w-][\w.-]*\.(?:c|cc|cpp|cxx|h|hpp|inl|cml|mjs|js|ts|py|sh|ps1|cmake|md|toml|json|yml|yaml))\b:(\d+)(?:[-–](\d+))?(?: # "([^"\n]*)")?(?![\d:])(?!\s*:\d)/g
     const problems = []
-    let examined = 0
+    let pathCitations = 0
+    let lineCitations = 0
+    let verified = 0
+    const relative = (file) => path.relative(root, file).replace(/\\/g, '/')
+    const outside = (text) => text.replace(/\s+/g, ' ').trim()
+    const lineProblem = (file, line, cite, message) =>
+        problems.push(`${relative(file)}:${line}: '${cite}': ${message}`)
+    const excerpt = (text) => (text.length > 160 ? `${text.slice(0, 157)}...` : text)
+
+    // The cited text may be written with the file's short name (`graph.h`), which two files share.
+    // The anchor is the tie-break: exactly one candidate must hold it in the cited range.
+    const targetOf = (file, decoded, anchor, start, end) => {
+        const local = path.resolve(path.dirname(file), decoded)
+        const fromRoot = path.resolve(root, decoded)
+        if (fs.existsSync(local) && fs.statSync(local).isFile()) return { target: local }
+        if (fs.existsSync(fromRoot) && fs.statSync(fromRoot).isFile()) return { target: fromRoot }
+        const candidates = byName.get(path.basename(decoded)) ?? []
+        if (candidates.length === 1) return { target: candidates[0] }
+        if (candidates.length === 0) return { target: null }
+        if (anchor !== null && start >= 1 && end >= start) {
+            const holding = candidates.filter((candidate) => {
+                const lines = fs.readFileSync(candidate, 'utf8').split(/\r?\n/)
+                if (end > lines.length) return false
+                return outside(lines.slice(start - 1, end).join('\n')).includes(anchor)
+            })
+            if (holding.length === 1) return { target: holding[0] }
+        }
+        return { target: null, ambiguous: candidates }
+    }
+
     for (const file of files) {
         const text = fs.readFileSync(file, 'utf8')
         const markdown = path.extname(file).toLowerCase() === '.md'
-        for (const m of text.matchAll(citation)) {
-            const target = m[1]
-            if (EXTERNAL_CITATIONS.some((prefix) => target.startsWith(prefix))) continue
-            let start = m.index
+        const isProseExample = (index) => {
+            let start = index
             // A path inside a URL is not a citation of a file of this repository.
             while (start > 0 && /[\w:/?=&%#+.-]/.test(text[start - 1])) start--
-            if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text.slice(start, m.index))) continue
+            return /^[a-z][a-z0-9+.-]*:\/\//i.test(text.slice(start, index)) ||
+                (markdown && inFence(text, index))
+        }
+
+        for (const m of text.matchAll(pathCitation)) {
+            const target = m[1]
+            if (EXTERNAL_CITATIONS.some((prefix) => target.startsWith(prefix))) continue
+            if (isProseExample(m.index)) continue
             if (!isComment(file, text, m.index)) continue
-            if (markdown && inFence(text, m.index)) continue
             let decoded = target
             try {
                 decoded = decodeURIComponent(target)
@@ -276,25 +339,103 @@ function checkCitations() {
             // another directory: the exact path is the link check's business, existence is this
             // check's.
             if (!fs.existsSync(local) && !fs.existsSync(fromRoot) && !(byTailName && byTailName.length > 0)) {
-                problems.push(`${path.relative(root, file).replace(/\\/g, '/')}:${line}: '${target}': no such file`)
+                lineProblem(file, line, target, 'no such file')
             }
-            examined++
+            pathCitations++
+        }
+
+        for (const m of text.matchAll(lineCitation)) {
+            const target = m[1]
+            if (EXTERNAL_CITATIONS.some((prefix) => target.startsWith(prefix))) continue
+            if (isProseExample(m.index)) continue
+            if (!isComment(file, text, m.index)) continue
+            let decoded = target
+            try {
+                decoded = decodeURIComponent(target)
+            } catch {
+                // A malformed escape is still resolved as written.
+            }
+            if (decoded.startsWith('tmp/') || RUN_OUTPUTS.has(path.basename(decoded))) continue
+            const start = Number(m[2])
+            const end = m[3] === undefined ? start : Number(m[3])
+            const anchor = m[4] === undefined ? null : outside(decodeURIComponent(m[4]))
+            const cite = `${target}:${m[2]}${m[3] === undefined ? '' : `-${m[3]}`}`
+            const { target: resolved, ambiguous } = targetOf(file, decoded, anchor, start, end)
+            const line = text.slice(0, m.index).split('\n').length
+            if (!resolved) {
+                if (ambiguous) {
+                    if (anchor === null) {
+                        lineProblem(file, line, cite, `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' and there is no quoted anchor to say which; the line holds nothing that was named`)
+                    } else {
+                        lineProblem(file, line, cite, `cannot be verified: ${ambiguous.length} files are named '${path.basename(decoded)}' and none holds the claimed "${excerpt(anchor)}" in its cited range`)
+                    }
+                } else if (/[\\/]/.test(decoded) || decoded.endsWith('.md')) {
+                    // A missing .md path is already reported by the path check above.
+                    if (!decoded.endsWith('.md')) {
+                        lineProblem(file, line, cite, `no such file${anchor === null ? '' : `; the citation claims "${excerpt(anchor)}"`}`)
+                    }
+                }
+                // A bare name that exists nowhere is an example in prose (`a.cml:3`), not a citation.
+                continue
+            }
+            lineCitations++
+            const lines = fs.readFileSync(resolved, 'utf8').split(/\r?\n/)
+            const actual = lines[start - 1] === undefined ? '' : outside(lines[start - 1])
+            if (start < 1 || end < start || end > lines.length) {
+                lineProblem(
+                    file,
+                    line,
+                    cite,
+                    `line ${start} does not exist (the file has ${lines.length} lines)` +
+                        (anchor === null ? '' : `; the citation claims "${excerpt(anchor)}"`),
+                )
+                continue
+            }
+            if (anchor === null || anchor === '') {
+                lineProblem(
+                    file,
+                    line,
+                    cite,
+                    `cannot be verified: no quoted anchor; the cited line holds "${excerpt(actual)}"`,
+                )
+                continue
+            }
+            const range = outside(lines.slice(start - 1, end).join('\n'))
+            if (range.includes(anchor)) {
+                verified++
+                continue
+            }
+            const found = lines.findIndex((sourceLine) => outside(sourceLine).includes(anchor)) + 1
+            lineProblem(
+                file,
+                line,
+                cite,
+                `line ${start}${end === start ? '' : `-${end}`} holds "${excerpt(actual)}"; the citation claims "${excerpt(anchor)}"` +
+                    (found > 0 ? ` (that text is at line ${found})` : ' (that text is not in the file)'),
+            )
         }
     }
-    if (examined === 0) {
-        console.log(`no .md citation in ${files.length} file(s): nothing was checked`)
-        return 2
-    }
+
     for (const problem of problems) console.log(problem)
     if (problems.length > 0) {
-        console.log(`${problems.length} missing citation target(s) in ${examined} citation(s)`)
+        console.log(
+            `${problems.length} unverified citation(s) in ${lineCitations} line citation(s) and ${pathCitations} path citation(s)`,
+        )
         return 1
     }
-    console.log(`no missing citation target in ${examined} citation(s) across ${files.length} file(s)`)
+    if (lineCitations === 0) {
+        console.log(`no line citation in ${files.length} file(s): nothing was checked`)
+        return 2
+    }
+    if (verified === 0) {
+        console.log(`no line citation carried a matching anchor: nothing was verified`)
+        return 2
+    }
+    console.log(
+        `no unverified line citation in ${verified} line citation(s) and ${pathCitations} path citation(s) across ${files.length} file(s)`,
+    )
     return 0
 }
-
-const args = process.argv.slice(2)
 if (args.includes('--citations')) {
     process.exit(checkCitations())
 }
