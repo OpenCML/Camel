@@ -193,7 +193,7 @@ GIR Builder 在 `visitCastNode` 中递归访问子节点 0、创建 `CastNode`�
 - **不变量**：一个节点至多是一个节点的子节点（`<<` 断言）；同一子树要用两处时用 `Tree::clone` 复制；子节点只追加。
 - **生命周期**：模块（`UserDefinedModule`）持有树直到上下文结束；泛型函数在每次实例化时、也在导入它的模块里，从树重新降低，所以树必须与模块同寿。GIR Builder 自己合成的少量节点（复合赋值展开、`??` 的标签算子、装饰器调用）由当前模块的树创建。
 
-替换前每个节点是两个堆对象（`Node` 与多态的 `Load`），以 `shared_ptr` 相连，名字解析成 `Reference`；替换前后全仓库每个程序的 `camel inspect --gct` 输出逐字相同（`test/tools/gctcheck`）。数字见 [38_compile_pipeline_cost.md](38_compile_pipeline_cost.md)。
+替换前每个节点是两个堆对象（`Node` 与多态的 `Load`），以 `shared_ptr` 相连，名字解析成 `Reference`；替换前后全仓库每个程序的 `camel inspect --gct` 输出逐字相同（`test/tools/gctcheck`）。
 
 ---
 

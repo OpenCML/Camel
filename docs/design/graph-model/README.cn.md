@@ -3,7 +3,7 @@
 > **2026-10-19：** 本稿中尚未实施的部分（第 4、5、9、11 步，5.2 节 Camel 一侧的草案，第 3 步第 4 片的具体做法）已由 [图存储与图 API（第二版）](../graph-store/README.cn.md) 取代；R4"容量不放宽"撤回。第 1 节描述的"现状"已过时，以第二版第 1 节为准。
 
 状态：**设计稿，待语言作者过目。** 第 7 节的第 1 步与第 2 步已经在分支 `lane/graph-storage`、`lane/graph-storage2` 上实施，进度与实测数字见第 7 节的"实施状态"；其余各节描述的仍是设计。
-依据：`docs/design-principles.cn.md`（2.1 对应表、第 2–4 节、第 14 节、第 15 节）；[模块导出值与公共 root](../module-root/README.cn.md)；[循环](../loops/README.cn.md)。
+依据：`docs/design-principles.cn.md`（2.1 对应表、第 2–4 节、10.1、3.10、第 14 节、第 15 节）。
 基线提交：`e4652d81`（Camel v0.2.9）。文中的图与数字都可以用附录 A 的命令复现。
 
 文中每条事实标注来源：
@@ -14,7 +14,7 @@
 
 图用 `std::rgir` 的记法，去掉了 `origin`/`span`/`srcfile` 属性并把每行缩短（`tools/rgir.sh` 做这件事）：`N02 [OPER :op/mul_l]` 是一个节点，`N00 -> N02 [NORM 0|1]` 是一条边，方括号里是边的种类与"在源节点出边中的序号 | 在目标节点同种入边中的序号"。标"拟议"的图是手写的，现有编译器不产生；其余是实际输出。
 
-示例在本文档旁边的 [`examples/`](examples/)，脚本在 [`tools/`](tools/)；文中写作 `examples/x`、`tools/x` 的路径都相对于 `docs/design/graph-model/`。
+文中写作 `examples/x`、`tools/x` 的路径都相对于 `docs/design/graph-model/`（评审语料与脚本已删除；节点卡片与不变量仍是现行实现的依据）。
 
 ---
 
@@ -181,7 +181,7 @@
 
 ### 1.9 模块、命名空间与缓存
 
-- 每个模块各建一张 `__root__`，程序只运行入口模块的那张；导出值、导出的函数使用本模块顶层值、互相导入都是带位置的诊断（模块 root 设计稿附录 B 的 D1–D5 已改为诊断）。【实测 `docs/design/module-root/examples/` 下的 `export_let/main.cml`、`lib_let/main.cml`、`mutual/main.cml`：依次是 `ConstructNotSupported`、`ImportedFunctionUsesModuleValue`、`ImportCycle`；读码 `builder.cpp:709-862`】
+- 每个模块各建一张 `__root__`，程序只运行入口模块的那张；导出值、导出的函数使用本模块顶层值、互相导入都是带位置的诊断。
 - 导入在建 GCT 时处理，遇到 `import` 就把被导入模块**完整编译完**再回来。【读码 `src/compile/gct/builder.cpp:413-470`、`src/core/context/context.cpp:326-400`】
 - 模块之间交换的实体：节点（值）、图集（重载的函数）、算子组、带装饰器的图、泛型模板，装在一个 `variant` 里；前者是裸指针，后几种是 `shared_ptr`。【读码 `include/camel/core/module/module.h:40-72`】
 - 没有任何缓存，每次运行从源码编译全部模块。`.cmo` 是 C++ 模块动态库的扩展名；查找一个模块时在每个目录里**先找 `名字.cmo`，再找 `名字.*`**。【读码 `context.cpp:519-533`、`src/core/module/dynamic.cpp:44-51`】
@@ -1013,7 +1013,7 @@ N0D -> N0F [WITH 0|0]; N0E -> N0F [NORM 0|0]; N0F -> N10 [WITH 0|0]; N10 -> EXIT
 
 **类型。**
 
-- **I17** 图上的类型都已确定：函数类型（端口与返回）与运行时、静态、闭包三个槽位区的类型，在任何深度上都不带 `Auxiliary` 标志（类型变量、类型函数、联合类型）。依据设计原则 5.10（`any` 已删去，见 [`any` 调研稿](../any-typing/README.cn.md)）。每次提交都查（`src/runtime/graph_types.cpp`）。
+- **I17** 图上的类型都已确定：函数类型（端口与返回）与运行时、静态、闭包三个槽位区的类型，在任何深度上都不带 `Auxiliary` 标志（类型变量、类型函数、联合类型）。依据设计原则 5.10（`any` 已删去）。每次提交都查（`src/runtime/graph_types.cpp`）。
 
 I1–I9、I11–I13 的代价与图的大小成线性。今天的同类检查在五个基准程序上占编译用时的 0.25%–1.1%（文档 17 第 4.1 节的测量）。
 

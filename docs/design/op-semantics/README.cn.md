@@ -9,7 +9,7 @@
 > **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变图的转储；程序的结果只有 `log_softmax` 的变了（内核改为照它的定义，Q10）；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
 
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
-依据：`docs/design-principles.cn.md`（3.3 的纯度、5.5 的泛型、第 7 节的"浮点的数值契约"、3.10 的 `do` 式循环头；第 15 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
+依据：`docs/design-principles.cn.md`（3.3 的纯度、5.5 的泛型、第 7 节的"浮点的数值契约"、3.10 的 `do` 式循环头；第 15 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../../technical/39_loops.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
 基线提交：`6bf31d1f`（`fsh-dev`，v0.2.12 合入之后）。
 相关：物理映射、`std::tiles` 遍的入口与块级内核语言见 [Tiles 的路线](../tiles-route/README.cn.md)（`std::tiles` 遍的入口与块级内核语言；下称 tiles-route），本稿不涉及。
 提出者：Tiles（CUDA 编译模块）的开发方，两轮需求；分工已经商定：**核心提供通用的协议与图结构；CUDA 映射、布局、Tensor Core、调度、流与事件、内存池、编译缓存、自动调优由 Tiles 实现。**

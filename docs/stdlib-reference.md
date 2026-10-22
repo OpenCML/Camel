@@ -33,37 +33,66 @@ How to read an entry:
 
 Not in this reference: the profiler (`perf`).
 
-| Module | Import | Written in | Functions |
-|---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 51 |
-| [str](#str) | `import { ... } from str` | C++ | 14 |
-| [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
-| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
-| [tensor](#tensor) | `import { ... } from tensor` | C++ | 64 |
-| [array](#array) | `import { ... } from array` | Camel | 17 |
-| [math](#math) | `import { ... } from math` | C++ | 48 |
-| [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
-| [algo](#algo) | `import { ... } from algo` | C++ | 8 |
-| [random](#random) | `import { ... } from random` | C++ | 10 |
-| [time](#time) | `import { ... } from time` | C++ | 3 |
-| [fs](#fs) | `import { ... } from fs` | C++ | 15 |
-| [io](#io) | `import { ... } from io` | C++ | 5 |
-| [process](#process) | `import { ... } from process` | C++ | 3 |
-| [env](#env) | `import { ... } from env` | C++ | 2 |
-| [json](#json) | `import { ... } from json` | C++ | 12 |
-| [hash](#hash) | `import { ... } from hash` | C++ | 2 |
-| [re](#re) | `import { ... } from re` | C++ | 1 |
-| [para](#para) | `import { ... } from para` | C++ | 3 |
-| [this](#this) | `import { ... } from this` | C++ | 1 |
-| [graph](#graph) | `import { ... } from graph` | C++ | 41 |
-| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ | 8 |
-| [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
-| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
-| [python](#python) | `import { ... } from python` | C++ | 11 |
-| [nn](#nn) | `import { ... } from nn` | C++ | 19 |
-| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ | 3 |
-| [sim](#sim) | `import { ... } from sim` | C++ | 2 |
-| [onnx](#onnx) | `import { ... } from onnx` | C++ | 2 |
+| Module | Import | Written in |
+|---|---|---|
+| [built-in](#built-in-functions) | none | C++ |
+| [str](#str) | `import { ... } from str` | C++ |
+| [bytes](#bytes) | `import { ... } from bytes` | C++ |
+| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
+| [tensor](#tensor) | `import { ... } from tensor` | C++ |
+| [array](#array) | `import { ... } from array` | Camel |
+| [math](#math) | `import { ... } from math` | C++ |
+| [statistics](#statistics) | `import { ... } from statistics` | C++ |
+| [algo](#algo) | `import { ... } from algo` | C++ |
+| [random](#random) | `import { ... } from random` | C++ |
+| [time](#time) | `import { ... } from time` | C++ |
+| [fs](#fs) | `import { ... } from fs` | C++ |
+| [io](#io) | `import { ... } from io` | C++ |
+| [process](#process) | `import { ... } from process` | C++ |
+| [env](#env) | `import { ... } from env` | C++ |
+| [json](#json) | `import { ... } from json` | C++ |
+| [hash](#hash) | `import { ... } from hash` | C++ |
+| [re](#re) | `import { ... } from re` | C++ |
+| [para](#para) | `import { ... } from para` | C++ |
+| [this](#this) | `import { ... } from this` | C++ |
+| [graph](#graph) | `import { ... } from graph` | C++ |
+| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ |
+| [tiles](#tiles) | `import { ... } from tiles` | C++ |
+| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ |
+| [python](#python) | `import { ... } from python` | C++ |
+| [nn](#nn) | `import { ... } from nn` | C++ |
+| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
+| [sim](#sim) | `import { ... } from sim` | C++ |
+| [onnx](#onnx) | `import { ... } from onnx` | C++ |
+| [built-in](#built-in-functions) | none |  |
+| [str](#str) | `import { ... } from str` |  |
+| [bytes](#bytes) | `import { ... } from bytes` |  |
+| [ckpt](#ckpt) | `import { ... } from ckpt` |  |
+| [tensor](#tensor) | `import { ... } from tensor` |  |
+| [array](#array) | `import { ... } from array` |  |
+| [math](#math) | `import { ... } from math` |  |
+| [statistics](#statistics) | `import { ... } from statistics` |  |
+| [algo](#algo) | `import { ... } from algo` |  |
+| [random](#random) | `import { ... } from random` |  |
+| [time](#time) | `import { ... } from time` |  |
+| [fs](#fs) | `import { ... } from fs` |  |
+| [io](#io) | `import { ... } from io` |  |
+| [process](#process) | `import { ... } from process` |  |
+| [env](#env) | `import { ... } from env` |  |
+| [json](#json) | `import { ... } from json` |  |
+| [hash](#hash) | `import { ... } from hash` |  |
+| [re](#re) | `import { ... } from re` |  |
+| [para](#para) | `import { ... } from para` |  |
+| [this](#this) | `import { ... } from this` |  |
+| [graph](#graph) | `import { ... } from graph` |  |
+| [rewrite](#rewrite) | `import { ... } from rewrite` |  |
+| [tiles](#tiles) | `import { ... } from tiles` |  |
+| [pyplot](#pyplot) | `import { ... } from pyplot` |  |
+| [python](#python) | `import { ... } from python` |  |
+| [nn](#nn) | `import { ... } from nn` |  |
+| [autodiff](#autodiff) | `import { ... } from autodiff` |  |
+| [sim](#sim) | `import { ... } from sim` |  |
+| [onnx](#onnx) | `import { ... } from onnx` |  |
 
 <a id="built-in-functions"></a>
 

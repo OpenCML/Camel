@@ -43,7 +43,7 @@
 
 ### 2.3 AST → GCT
 
-- **GCT Builder**（`src/compile/gct/builder.cpp`）将 AST 转为 **图构造树（GCT）**。树由 `gct::Tree`（`include/camel/compile/gct/tree.h`）持有：节点是 arena 里 32 字节的记录，名字在树内驻留，模块存活多久树就存活多久，详见 [03](03_trees_and_structures.md) 4.7 与 [38](38_compile_pipeline_cost.md)。
+- **GCT Builder**（`src/compile/gct/builder.cpp`）将 AST 转为 **图构造树（GCT）**。树由 `gct::Tree`（`include/camel/compile/gct/tree.h`）持有：节点是 arena 里 32 字节的记录，名字在树内驻留，模块存活多久树就存活多久，详见 [03](03_trees_and_structures.md) 4.7。
 - GCT 节点种类（`NodeKind`）：DECL, FUNC, DATA, TYPE, NREF, DREF, VARI, WAIT, LINK, WITH, ACCS, BRCH, CASE, CAST, ANNO, EXIT, EXEC, EXPT 等。
 - GCT 仍是树形结构，但已按「图构造」的语义组织（声明、链接、分支、退出等）。
 

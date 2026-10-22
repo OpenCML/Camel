@@ -19,7 +19,7 @@
 
 /*
  * The type `Json` of the json module and its run-time object (design principles 11.2;
- * docs/design/any-typing/README.cn.md, 4.4).
+ * design principles 11.2).
  *
  * `json.decode` gives a JSON value whose shape is known only when the program runs. Its static
  * type is `Json`, a definite type: what varies is inside the object, which describes itself.

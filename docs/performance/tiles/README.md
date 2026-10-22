@@ -2,7 +2,6 @@
 
 ## RTX 4060 Ti, 2026-10-15
 
-Raw records: [2026-10-15-rtx4060ti.jsonl](2026-10-15-rtx4060ti.jsonl).
 Each record includes the measured Git revision (`5e5c4485`) and a fingerprint of
 the Tiles source after a standard rebuild, device,
 driver, NVRTC version, target, shapes, plan statistics, raw samples and numerical
@@ -49,7 +48,6 @@ required before wider performance conclusions.
 
 ## Stable parallel maximum, revision 8e7be374
 
-Raw records: [RTX 4060 Ti parallel-max run](2026-10-15-rtx4060ti-parallel-max.jsonl).
 The benchmark now includes `max(x, -1)` for a 128x4097 tensor and explicitly
 disables parallel maximum in its reference policy. Its three optimized medians
 were 0.03520, 0.01987 and 0.01955 ms, versus 0.09046, 0.07485 and 0.07450 ms for
@@ -86,7 +84,6 @@ An archive benchmark can record its verified source revision with
 
 ## RTX 3090, revision 8e7be374
 
-Raw records: [RTX 3090 parallel-max run](2026-10-15-rtx3090-parallel-max.jsonl).
 The source fingerprint matches the RTX 4060 Ti run exactly. This is Linux,
 driver 580.95.05 (CUDA driver API 13000), NVRTC 12.3, target compute_86, device 7.
 Reproduce after the standard build with the toolchain environment above:
