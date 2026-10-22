@@ -37,7 +37,8 @@ const SCOPE = [
     'examples',
 ]
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'third_party', 'out', 'build', 'tmp', 'dist'])
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'third_party', 'out', 'build', 'tmp', 'dist', 'sdks'])
+// 'sdks' is upstream CPython: its headers cite CPython's own documentation, not ours.
 
 function markdownFiles(entry) {
     const abs = path.resolve(root, entry)
@@ -178,6 +179,10 @@ function checkTechnicalIndex() {
 // and are not scanned. EXTERNAL_CITATIONS names files of other repositories: TSE2027 is the paper
 // repository, docs/debugger-migration.md is in OpenCML-Ext.
 const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
+// Gitignored output of a local test run: a developer tree can hold hundreds of thousands of files
+// here, which is why it is skipped by path and why the walkers collect one file at a time instead of
+// spreading a directory's whole subtree into one push (that overflowed the stack on such a tree).
+const GENERATED_DIRS = new Set(['test/results'])
 const C_LIKE = new Set(['.c', '.cc', '.cpp', '.h', '.hpp', '.cml', '.js', '.mjs', '.ts'])
 const HASH_COMMENT = new Set(['.py', '.sh', '.ps1'])
 const SCANNED = new Set(['.md', '.toml', ...C_LIKE, ...HASH_COMMENT])
@@ -194,8 +199,8 @@ function allFiles(directory = root) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
         const full = path.join(directory, entry.name)
         if (entry.isDirectory()) {
-            if (SKIP_DIRS.has(entry.name)) continue
-            out.push(...allFiles(full))
+            if (SKIP_DIRS.has(entry.name) || GENERATED_DIRS.has(path.relative(root, full).replace(/\\/g, '/'))) continue
+            for (const file of allFiles(full)) out.push(file)
         } else if (entry.isFile()) {
             out.push(full)
         }
@@ -209,8 +214,8 @@ function scannedFiles(directory = root) {
         const full = path.join(directory, entry.name)
         const rel = path.relative(root, full).replace(/\\/g, '/')
         if (entry.isDirectory()) {
-            if (SKIP_DIRS.has(entry.name) || RECORD_DIRS.has(rel)) continue
-            out.push(...scannedFiles(full))
+            if (SKIP_DIRS.has(entry.name) || RECORD_DIRS.has(rel) || GENERATED_DIRS.has(rel)) continue
+            for (const file of scannedFiles(full)) out.push(file)
         } else if (entry.isFile() && rel !== 'changes.log' && SCANNED.has(path.extname(entry.name).toLowerCase())) {
             out.push(full)
         }
