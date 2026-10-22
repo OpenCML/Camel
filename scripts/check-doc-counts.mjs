@@ -11,7 +11,9 @@
 //
 // The scope is the reader-facing pages: README.md, CONTRIBUTING.md, ROADMAP.md and docs/**/*.md.
 // Task reports and dated reviews (docs/handover, docs/reviews) are records, not pages, and are
-// not scanned. Generated pages (docs/stdlib-reference.md, docs/diagnostics.md) are not scanned
+// not scanned, with one exception: the handover board's single "当前树计数" line, the only line
+// in that file that claims what the tree is now (see `boardCounts`; its per-task rows are dated).
+// Generated pages (docs/stdlib-reference.md, docs/diagnostics.md) are not scanned
 // either: their generators have their own --verify-doc checks, and a hand edit is the defect
 // those checks already name.
 //
@@ -234,6 +236,45 @@ async function declarationModuleCount() {
     }
 }
 
+// The handover board is an index, not a page, and each task row records the tree as it was when
+// that task merged -- dated, like a report. The one line that claims what the tree is now is the
+// "当前树计数" line under the heading, hand-written (the board is not machine-generated). This
+// computes the five numbers it states that the tree decides without a build. The two overload
+// counts on the same line belong to `stdlib-declarations --check` and `stdlib-reference
+// --verify-ops`, which need the built compiler.
+async function boardCounts() {
+    const { declarationModules, readDeclarations, readReferenceModules } = await import(
+        './stdlib-declarations.mjs'
+    )
+    const modules = declarationModules()
+    let names = 0
+    let declarations = 0
+    for (const module of modules) {
+        const declared = readDeclarations(module.source, module.name).declarations
+        names += new Set(declared.map((each) => each.name)).size
+        declarations += declared.length
+    }
+    let computed = 0
+    for (const entry of readReferenceModules()) {
+        if (!entry.computed) continue
+        const entries = readDeclarations(path.join(ROOT, 'stdlib', entry.computed), entry.name).declarations
+        computed += new Set(entries.map((each) => each.name)).size
+    }
+    const signatureFiles = fs
+        .readdirSync(path.join(ROOT, 'stdlib', 'signatures'))
+        .filter((file) => file.endsWith('.cml')).length
+    return {
+        value: {
+            声明模块: modules.length,
+            声明名: names,
+            声明: declarations,
+            签名文件: signatureFiles,
+            计算名: computed,
+        },
+        source: 'stdlib/<module>.cml declarations, stdlib/signatures/*.cml, scripts/stdlib-declarations.mjs',
+    }
+}
+
 function passAliases() {
     const text = read('src/execute/pass.cpp')
     const start = text.indexOf('passAliases')
@@ -257,6 +298,7 @@ const TRUTHS = {
     syntax: syntaxErrorCodes,
     runtimeErrors: runtimeErrorReferences,
     declarationModules: declarationModuleCount,
+    board: boardCounts,
     passAliases,
 }
 
@@ -575,6 +617,66 @@ function isAllowed(file, rule) {
     return ALLOWED.find((entry) => entry.file === file && entry.rules.includes(rule))
 }
 
+// The board's current-tree line. Its five tree-decided numbers are compared; the two overload
+// counts on the same line are owned by the built-compiler checks named in the comment on
+// `boardCounts`. A missing line is a problem, not a pass: the board would otherwise stop saying
+// what the tree is without anything noticing.
+const BOARD = 'docs/handover/README.cn.md'
+
+function handoverBoardProblems() {
+    const text = read(BOARD)
+    const line = text.split(/\r?\n/).find((each) => each.includes('当前树计数'))
+    const truth = TRUTHS.board.value
+    const source = TRUTHS.board.source
+    if (!line) {
+        return [
+            {
+                file: BOARD,
+                line: 1,
+                rule: 'handover-counts',
+                claim: 'the current-tree counts line',
+                says: 'missing',
+                truth: 'present',
+                source,
+                ok: false,
+            },
+        ]
+    }
+    const lineNumber = text.slice(0, text.indexOf(line)).split('\n').length
+    const findings = []
+    const seen = new Set()
+    for (const part of line.split('·')) {
+        const match = part.match(/(声明模块|声明名|声明|签名文件|计算名)\s*([\d,]+)/)
+        if (!match) continue
+        const label = match[1]
+        seen.add(label)
+        findings.push({
+            file: BOARD,
+            line: lineNumber,
+            rule: 'handover-counts',
+            claim: `board current-tree ${label}`,
+            says: int(match[2]),
+            truth: truth[label],
+            source,
+            ok: int(match[2]) === truth[label],
+        })
+    }
+    for (const label of Object.keys(truth)) {
+        if (seen.has(label)) continue
+        findings.push({
+            file: BOARD,
+            line: lineNumber,
+            rule: 'handover-counts',
+            claim: `board current-tree ${label}`,
+            says: 'missing',
+            truth: truth[label],
+            source,
+            ok: false,
+        })
+    }
+    return findings
+}
+
 async function main() {
     const list = process.argv.includes('--list')
 
@@ -612,6 +714,11 @@ async function main() {
                 if (!finding.ok) problems.push({ file, rule: rule.id, ...finding })
             }
         }
+    }
+
+    for (const finding of handoverBoardProblems()) {
+        checked += 1
+        if (!finding.ok) problems.push(finding)
     }
 
     for (const problem of problems) {
