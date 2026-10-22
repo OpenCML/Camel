@@ -1,0 +1,176 @@
+# H129：`-I` / `--include` 加入模块搜索路径
+
+- 分支：`handover/H129-include-path`，自 `origin/develop` 的 `36da98ad2`。
+- 任务板：H129。
+- 结论：`-I` / `--include` 此前只被解析进 `Run::includeDirs`，之后没有任何地方把它加到
+  模块搜索路径，标记为“已接受”但实际上被静默忽略。本批让它按文档规定的顺序生效：**入口
+  文件所在目录 → 按给出顺序的每个 `-I` 目录 → `CAMEL_PACKAGES` → 标准库**。`-I` 对程序
+  自己的 import 和库自己的 import 都生效；库自己的 import 仍先看它自己的目录（H112）。
+  `docs/cli.md` 与 `docs/cli.cn.md` 现在把这条顺序逐项写明。新增 8 条用例（四类要求 +
+  `CAMEL_PACKAGES` 次序 + 库内 import），`feat/compile/module_imports` 33/33。
+
+## 1. 文档规定的顺序与 `-I` 的位置
+
+先核对文档：
+
+- `docs/cli.md` / `docs/cli.cn.md` 原文只说 `-I`“添加模块搜索路径”，没有写它相对其他
+  根的位置。
+- 任务书点名的 `docs/design-principles.cn.md` **没有**“模块查找顺序”这一节。§10 讲模块
+  与图（10.1）、命名空间（10.2）、模块缓存（10.3）、C++ 原生模块的位置（10.4）与库边界
+  （10.5），没有规定搜索根的次序；§15 的未决问题里也没有这一条。因此无法从设计原则
+  得到顺序。
+- 写明顺序的是 `docs/language/05_modules.md` §5.2（英文版
+  `docs/language/en/05_modules.md` 同条）与 `docs/design/stdlib/inventory.cn.md` 第 8 行：
+
+  > 入口文件自己的 import 先看与它同目录的 `.cml` 文件，再依次看 `-I <目录>` 给出的目录、
+  > 环境变量 `CAMEL_PACKAGES` 列出的目录，以及随 Camel 安装的模块。
+
+  同一段还规定：从文件加载的其他模块做 import 时，先在自己所在的目录里找同名模块
+  （`xx.cmo` 优先于 `xx.*`），找不到再按上面这条顺序找。
+
+这三处没有互相矛盾：语言参考与 stdlib 盘点给出完整顺序，`cli.md` 只是没有把它写全。本批
+**跟随 `docs/language/05_modules.md` §5.2**，因为它是唯一逐步写出顺序的规范性描述；然后把
+`cli.md` / `cli.cn.md` 补成同一顺序，使 CLI 的承诺与实现逐项一致。没有引入新的优先级。
+
+位置的理由（也就是文档为什么把它放在这里，而不是新发明的次序）：
+
+| 次序 | 根 | 理由 |
+|---|---|---|
+| 1 | 入口文件所在目录 | 程序自己的文件属于程序自己；H112/H124 已锁住入口目录对入口 import 优先 |
+| 2 | `-I` / `--include`，按命令行顺序 | 命令行上显式给出的根比环境配置更具体；同一名字在多个 `-I` 中时先给出的胜出（`pushUniquePath` 去重，先到先得） |
+| 3 | `CAMEL_PACKAGES`（`;` 分隔于 Windows，`:` 分隔于其他平台） | 环境里配置的包根；比安装自带的标准库更具体 |
+| 4 | `CAMEL_MODULE_PATH`（旧的、未在语言参考中列出的环境变量） | 保持实现原有的次序，不因本批改动它的位置 |
+| 5 | 标准库：`-L` / `CAMEL_STD_LIB`，否则可执行文件旁与 `CAMEL_HOME` 下的 `stdlib` | 安装自带的模块是最后的兜底 |
+
+库自己的 import：H112 的规则是“先在导入方自己的目录里找，再回退到全局搜索路径”。`-I` 是
+全局搜索路径的一部分，所以在库自己的目录之后生效；没有为 `-I` 单开例外。用例
+`imports.include_root_library_import` 锁住这一点。
+
+## 2. 缺陷与修复
+
+### 2.1 解析之后被丢掉
+
+`tools/camel-cli/config.cpp` 的 `-I` / `--include` 把目录收进 `Run::includeDirs`；但
+`tools/camel-cli/main.cpp` 与 `tools/camel-cli/timeit.cpp` 调用
+`buildModuleSearchPaths(entryDir, ModuleSearchPathOptions{.stdlibOverride = ...})` 时只传了
+标准库覆盖，`includeDirs` 从未进入 `EntryConfig::searchPaths`。于是 `-I` 被接受、被静默
+忽略，只有模块恰好在入口目录或别的既有根下时程序才碰巧能编译。H124 §6 第 3 条记录了这条
+缺陷，本批处理它。
+
+### 2.2 clipp 的贪婪消费（修的时候暴露出来的第二个问题）
+
+只把 `includeDirs` 接入还不够。`-I` 在 clipp 里声明为
+`(option("-I", "--include") & values("include dir", includeDirs))`；`values` 是
+**可重复的 blocking 值参数**，会把它后面的非选项参数继续当成同一个参数的值。结果：
+
+```text
+camel -I ../roots/one prog.cml
+```
+
+把 `prog.cml` 也吃成了第二个 include 目录，运行没有输入文件，报
+`Run requires an input file`。两处 `-I` 时同样如此。因此 `main()` 在 `parseArgs` 之前把
+`-I` / `--include` 从 argv 中取出（与既有的 `--time-phases` 同一做法），每个出现只取一个
+目录，按命令行顺序写入 `Run::includeDirs`；同时支持 `--include=<dir>` 与 `-I<dir>`。
+clipp 里的声明保留，仅用于 `--help` 的选项表。缺少目录值时在解析前报
+`Error: -I requires a directory.`。
+
+### 2.3 改动
+
+- `include/camel/utils/install_layout.h`：`ModuleSearchPathOptions` 增加
+  `std::vector<std::string> includeDirs`；`buildModuleSearchPaths` 在入口目录之后、所有环境
+  根之前逐个加入。相对路径与 `CAMEL_PACKAGES` 一样按入口目录解析（整个搜索列表只有一个
+  基准目录）。
+- `tools/camel-cli/config.h`：声明 `Run::includeDirs`（定义原本就在 `config.cpp`）。
+- `tools/camel-cli/main.cpp`：`run` / `check` / `inspect` 的搜索路径传入
+  `Run::includeDirs`；`main()` 在 clipp 之前取出 `-I`。
+- `tools/camel-cli/timeit.cpp`：`--timeit` 的搜索路径同样传入 `Run::includeDirs`。
+- `docs/cli.md`、`docs/cli.cn.md`：把完整顺序、库内 import 的规则、相对路径的基准，以及
+  “不存在的 `-I` 根不会被静默跳过”写进选项说明。
+
+`codegen`、`debugger` 与语言服务不提供 `-I`，调用 `buildModuleSearchPaths` 时使用默认空的
+`includeDirs`，行为不变。
+
+## 3. 用例
+
+全部在 `test/plans/feat/compile/module_imports.plan.toml`，夹具在
+`test/cases/compile/module_imports/include_path/`，每个用例都用自己的小模块，不依赖标准库。
+`-I` 的相对路径按入口目录解析，因此计划里写 `../roots/...`。
+
+| 用例 | 夹具与命令 | 证明什么 | 期望 |
+|---|---|---|---|
+| `imports.include_root_only` | `prog/only_from_include.cml`，`-I ../roots/one` | import 只可能通过 `-I` 解析 | `101` |
+| `imports.include_root_entry_dir_wins` | `prog/local_wins.cml`，`-I ../roots/one` | 同名 `shadow` 在程序目录（值 1）与 `-I` 根（值 2）都有；入口目录先 | `1` |
+| `imports.include_root_used_without_local_file` | `prog_root/root_wins.cml`，`-I ../roots/one` | 上一条的另一面：本目录没有同名文件时，`-I` 根的值确实可达 | `2` |
+| `imports.include_root_twice` | `prog/two_roots.cml`，`-I ../roots/one --include ../roots/two` | `-I` 可重复，短、长两种拼写各一个根 | `120` |
+| `imports.include_root_missing` | `prog/missing_root.cml`，`-I ../roots/missing` | 不存在的 `-I` 根不是静默通过：import 处 `ModuleNotFound`，搜索尝试点出该根并说 `path does not exist` | 退出 1；`missing_root.cml:6:1`、`ModuleNotFound`、根路径、`path does not exist` |
+| `imports.include_root_library_import` | `prog/library_via_include.cml` → `lib_uses_include.cml` → `dep`，`-I ../roots/one` | 非入口模块自己的 import 也能用 `-I`（在它自己的目录之后，H112） | `8` |
+| `imports.include_root_before_camel_packages` | `prog/packages_order.cml`，`-I ../roots/one` + `CAMEL_PACKAGES=../packages` | 两个根都有 `order`；`-I` 先于 `CAMEL_PACKAGES` | `100` |
+| `imports.include_camel_packages_alone` | 同上，只给 `CAMEL_PACKAGES=../packages` | 包根本身可达，上一条的两个根都是真的 | `200` |
+
+不存在的根这一条没有用 `expect_diagnostic_name` / `expect_diagnostic_line`：`ModuleNotFound`
+的 reason 是“Search attempts:”加多行路径，而测试运行器的结构化诊断解析只认
+`(name=..., code=...)` 与位置在同一行。用例改为在输出文本里断言位置与名字
+（`missing_root.cml:6:1`、`name=SemanticDiag::ModuleNotFound`），再加上根路径与
+`path does not exist`。诊断本身是定位在 import 上的。
+
+不存在的根**只有在它是解析所必需的时候**才报：如果 import 在别的根里找到了，运行仍成功，
+坏根不阻止运行（与编译器对不存在的 `-I` 目录的常见行为一致）。本批没有把“启动时对不存在
+的 `-I` 根无条件告警”加进来；那会是一条新的、文档未承诺的行为。若作者希望无条件告警，
+可以另立一行。
+
+## 4. `CAMEL_PACKAGES` 的交互
+
+`-I` 与 `CAMEL_PACKAGES` 共用同一个 `paths` 向量（同一个 `buildModuleSearchPaths`），不
+存在两套解析：
+
+- `-I` 的根先加入，`CAMEL_PACKAGES` 的根后加入；同名模块先到先得。用例
+  `include_root_before_camel_packages`（100 对 200）与 `include_camel_packages_alone`（200）
+  证明两个根都活着且顺序如此。
+- 重复的根由 `pushUniquePath` 去重，保留第一次出现的位置。
+- `CAMEL_PACKAGES` 仍按平台分隔符拆成多个根：Windows 是 `;`，其他平台是 `:`。这是
+  `install_layout.h` 里 `splitPathList` 的既有行为；`-I` 每次出现给一个目录，不使用这个
+  分隔符。
+- 相对路径的基准也相同：`-I` 与 `CAMEL_PACKAGES` 的相对目录都按入口文件所在目录解析。
+
+## 5. 验证
+
+在 Linux 主机上用 `camel-remote.ps1`（Release，`-Jobs 8`）构建并运行：
+
+| 计划 | 结果 |
+|---|---|
+| `feat/compile/module_imports` | **33/33** |
+| `feat/compile` | **1023/1024** |
+| `feat/modules` | **1064/1070**（5 红、1 skip） |
+| `smoke` | **10/10** |
+
+合计 2097/2104 通过，6 红，1 skip。红与 skip 都不是本批引入：
+
+1. `feat.compile.tag_permissions/permissions.strict_algebra`：H112 §6.1 的 CSE 形状断言，
+   归 `handover/H125-strict-algebra`；H124 已记录。
+2. `feat.modules.graph_facts/rewrite_opt`、`rewrite_macro_simplify`：H121 的 facts 失效范围
+   回归（期望 `valid=6 revalidated=0 stale=0`），H112/H114/H116/H117 都已记录。
+3. `feat.modules.rename_identity/rename.{env,process,hash}_graph_identity`：`std::jgir` 的
+   规范化摘要与本基线记录的值不同（H114 当时记为 3/3，之后图/事实一侧的输出有漂移）。这三
+   条命令只跑 `camel <case> std::jgir`，都不传 `-I`；本批没有改 `std::jgir`、图或 facts 的
+   代码，而且在没有 `-I` 时的搜索列表只多一个空循环，CLI 差异不可能触及它们。因此按本基线
+   的红处理，留给图/事实相关的任务。
+4. `modules.unicode_paths` 是 skip：前置条件 `on-windows.mjs` 在 Linux 上不成立。
+
+## 6. 提交
+
+| 提交 | 内容 |
+|---|---|
+| `ebf001f51` | `cli: make -I/--include add module search roots`：代码（`install_layout.h`、`config.h`、`main.cpp`、`timeit.cpp`） |
+| `60684d24e` | `test: cover -I module roots, their order and a missing root`：计划与 16 个夹具文件 |
+| 本报告所在提交 | `docs: state the module search order and record H129`：`docs/cli.md`、`docs/cli.cn.md`、本报告、任务板 |
+
+## 7. 遗留与说明
+
+- 设计原则 §10/§15 没有模块查找顺序；本批没有往设计原则里加语义，只按语言参考的既有顺序
+  实现，并把 CLI 文档补齐。如果作者希望把顺序提升到设计原则，应在协调者一侧写，而不是在
+  本报告里代写。
+- `-I` 的不存在根是无条件告警还是按需诊断，本批选择后者（按需、定位在 import）。理由与
+  取舍见 §3 末尾。
+- `CAMEL_MODULE_PATH` 是旧的、未在语言参考列出的环境变量；本批保留它原有位置（在
+  `CAMEL_PACKAGES` 之后、标准库之前），没有把它写进语言参考，只在 `cli.md` 的完整列表里
+  如实标为 legacy。
