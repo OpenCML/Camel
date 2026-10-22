@@ -1,0 +1,217 @@
+# H15g — an entry parameter is read at its declared width; a text is not a number
+
+Worktree `D:\Projects\Camel-wt\h15g-entry`, branch `handover/H15g-entry-width` (from `develop`).
+Everything is left in the working tree: no commit, no new branch, no push.
+
+This is H15g, the two items of the H15f review (`docs/handover/reviews/H15-H20-H21.md`,
+lines 84–91):
+
+> 1. **`i32`/`f32` 入口参数按 `int64`/`double` 读**：`--arg n=3000000000` 给 `n: i32` 被读成
+>    int64 后接受（或拒绝时说 `int`），`f32` 参数按 double 读。小项。
+> 2. **`let x: int = '42'` 说的不对**：不做文本到数字的隐式转换（5.1）。现在的消息"文本不是数字"不对
+>    ——问题是类型不符：改为"`string` 不能作为 `int`"，并提示用 `int(s)` 或 `parse_int(s)`。小项。
+
+The design frame is design principles **5.1** (a literal takes its type from context; a value is
+never wrapped or cut to fit a type; a text is not a number), **10.6** (a value that cannot be
+read is a located error that says what is wrong) and language reference **2.5** (the number
+texts), with H15f's rule that every refusal uses a catalogue sentence.
+
+---
+
+## 1. Item 1 — the width a parameter is declared with
+
+Before, the entry readers had one integer case (§`Int32`/`Int64` together) and one float case
+(`Float32`/`Float64` together): the text was parsed as `int64_t`/`double` and then narrowed. So
+`--arg n=3000000000` for `n: i32` was accepted (3000000000 → wrapped/cut into an int32), and a
+refusal named `int`; an `f32` parameter was read as a double, so a value just above a float
+midpoint could round twice, and a value outside the f32 range but inside the double range was
+accepted and became `inf`/`0`.
+
+Now the width is the declared one, at every path:
+
+| path | code | change |
+|---|---|---|
+| `--arg` of an `i32`/`f32`/`int`/`float` parameter, interpreter | `src/execute/entry_args.cpp` | the combined cases are two templated helpers, `loadInteger<T>` (`parseWholeInteger<T>`) and `loadFloat<T>` (`parseWholeFloat<T>`), called with `T` = the declared width; the reason is `integerRangeReason<T>(target)` / `floatRangeReason<T>(target)`, and `target` is the declared type's name (`int`, `i32`, `float`, `f32`) |
+| the same for `std::cpp`'s generated program | `include/camel/standalone/entry.h` | `EntryKind::Int32` / `Float32` read `Value::integer32` / `Value::number32` through `readInteger<T>` / `readNumber<T>` at that width; the `Int` / `Float` kinds are still `int64_t` / `double` |
+| the sentences written into the generated program | `src/passes/trans/cpp/program_emitter.cpp` | `entryNumberText(TypeCode)` has one case per declared type, with that type's name and range; `entryFunction` emits `rt::EntryKind::Int32` / `Float32` and `args.integer32(i)` / `args.number32(i)` |
+| each part of a `c64`/`c128` parameter | `src/execute/entry_args.cpp` (`complexFromText<float/double>`) | unchanged: a part was already read at the part's own width (H15f); the tests now lock the c64 boundary |
+
+The messages, as they now read (interpreter; the nested clause is `Cannot bind the argument
+'n' of 'main': …` at `main`, `RuntimeDiag::EntryArgumentInvalid`, `0x04000011`):
+
+```text
+error EntryArgumentInvalid: Cannot bind the argument 'n' of 'main': Cannot convert '3000000000' to i32: the value is outside the range of i32 (-2147483648 to 2147483647).
+error EntryArgumentInvalid: Cannot bind the argument 'rate' of 'main': Cannot convert '3.5e38' to f32: the value is outside the range of f32 (at most about 3.4e38 in magnitude).
+error EntryArgumentInvalid: Cannot bind the argument 'n' of 'main': Cannot convert the string 'three' to i32.
+error EntryArgumentInvalid: Cannot bind the argument 'w' of 'main': Cannot convert '3.5e38+1i' to c64: the real part is outside the range of c64 (each part at most about 3.4e38 in magnitude).
+```
+
+The standalone program writes the same sentences itself (`EntryNumberText` in the generated
+source), so the two agree byte for byte; `feat/trans/cpp.agree_with_fvm` runs the generated
+programs against `std::fvm` (see §3).
+
+A value that fits is converted **once**, at the declared width. `1.00000005960464479` is
+`1 + 2^-24 + 1.4e-17`: a double rounds it to the float midpoint and a second narrowing rounds
+to even, giving `1.0`; read once as a float it is the next float, `1.0000001`.
+`entry_args.f32_once_at_width` locks that.
+
+Boundary values covered (`test/cases/compile/entry_args/widths.cml`): `2147483647` and
+`-2147483648` fit, `3000000000` and `-2147483649` are refused; `3.4028235e38` (the largest
+f32) and `1.4e-45` (the smallest positive f32, a subnormal) fit, `3.5e38` and `1e-50` are
+refused; `3.4028235e38+1i` is a c64 whose real part fits, `3.5e38+1i` and `1+3.5e38i` are
+refused naming the real / imaginary part.
+
+## 2. Item 2 — a text where a number is declared is a type mismatch
+
+No implicit text-to-number conversion (5.1), so there are two situations and two existing
+codes; no new code was invented:
+
+| situation | code | message |
+|---|---|---|
+| a text where a number is **declared** (`let`/`var`, a struct field, an array element, a generic body instantiated with a number type) | `SemanticDiag::DeclaredTypeMismatch` (`0x03000110`, existed and already meant this) | `This value has type 'string', which is not the declared type 'int'.` |
+| an explicit cast `'42' as int` | `SemanticDiag::DynamicCastForbidden` (`0x03000017`, existed and is what the computed `s as int` reports) | `Dynamic cast from 'string' to 'int' is not allowed.` |
+
+Both help texts were extended with the conversion to write instead: `int(s)` / `parse_int(s)` for
+a text, `float(s)` / `parse_float(s)` for a float, `float(n)` for a number of another type,
+`v as T` for a module type.
+
+Decided in:
+
+- GCT, `src/compile/gct/builder.cpp`: `reportLiteralCastFailure` takes a trailing
+  `bool explicitCast`; when the literal's data is a `StringData` it commits
+  `DynamicCastForbidden` from `'string'` (for the `As` branch) or `DeclaredTypeMismatch` (for
+  `declaredValue` / `literalNodeInType`), and no longer says the text is not a number. The `As`
+  branch passes `/*explicitCast=*/true`.
+- GIR, `src/compile/gir/builder_diagnostics.cpp`: `Builder::rejectLiteralData`'s `StringData`
+  branch reports `DeclaredTypeMismatch` too (it is the defensive path for a declared position
+  that reaches GIR with a type variable, e.g. a generic body).
+
+The conversion calls are unchanged on purpose: `int('12abc')` is still
+`SemanticDiag::LiteralNotRepresentable` with the reason `the text is not a number`, and
+`int('999…')` / `float('1e999')` still say out of range — those are conversions, where running
+the numeric rule on the literal is exactly the point (H15f, `literal_context.plan.toml`).
+
+Neighbours checked by hand and locked by tests where they are cheap:
+
+| source | target | diagnostic |
+|---|---|---|
+| `let x: float = '1.5'` | `float` | `DeclaredTypeMismatch` (`'string'`, `'float'`) |
+| `let z: c128 = '1+2i'` | `c128` | `DeclaredTypeMismatch` (`'string'`, `'c128'`) |
+| `let x: bool = 'true'` | `bool` | `DeclaredTypeMismatch` (`'string'`, `'bool'`) |
+| `let x: i32 = '42'` | `i32` | `DeclaredTypeMismatch` (`'string'`, `'i32'`) |
+| `'42' as int` / `as float` / `as f32` / `as c128` / `as bool` | | `DynamicCastForbidden` |
+| `let x: int? = '42'` | `int?` | `DynamicCastForbidden` (unchanged: the tagged path already said it) |
+| `int('12abc')`, `float('1.5x')` | | `LiteralNotRepresentable`, `the text is not a number` (unchanged) |
+| `['1']` where `int[]` is declared | | `ElementTypeMismatch` (existing; already a type mismatch) |
+
+## 3. Verification
+
+The build was re-run from this tree after `origin/develop` moved (`camel-build.ps1`, exit 0, all
+60 steps, artifacts collected to `out/latest`), and every number below is from that build —
+none is from an interrupted run. Tests were run one at a time (`--jobs 8` where the plan runner
+is used):
+
+| target | result |
+|---|---|
+| `test/plans/feat/compile/entry_args.plan.toml` | **69/69** |
+| `test/plans/feat/compile/literal_context.plan.toml` | **51/51** |
+| `test/plans/feat/compile/literals.plan.toml` | **27/27** |
+| `test/plans/feat/compile/casts.plan.toml` | 4/4 |
+| `test/plans/feat/compile/collections.plan.toml` | 136/136 |
+| `test/plans/feat/compile/typing_any.plan.toml` | 11/11 |
+| `test/plans/feat/trans/cpp.plan.toml` | **8/8** (`agree_with_fvm` included) |
+| `smoke` | 10/10 |
+
+`python test/tools/cppexec/run.py --expect test/tools/cppexec/expect.txt --jobs 8`: **99 of 99
+programs agree with `std::fvm`** (the list's 88 entries, one of which is a directory of 12
+programs) — the 90 existing programs plus 9 new ones (the two i32 boundaries, the f32 boundary
+and the subnormal, the i32 overflow and the f32 overflow, text that is not an integer, the
+single-rounding value, and the c64 part boundary, real-part and imaginary-part overflow). The
+three bridged programs that H15f reported as unbuildable on its worktree build here, so the
+whole list is green.
+
+Generated docs and catalog:
+
+```text
+node scripts/diagnostics-catalog.mjs --check       → 166 codes, every one with a name and a message, no value used twice
+node scripts/diagnostics-catalog.mjs --verify-doc → docs/diagnostics.md is up to date
+node scripts/check-doc-links.mjs                  → no broken links in 31 document(s)
+```
+
+New cases: `test/cases/compile/entry_args/widths.cml`,
+`test/cases/compile/literals/context_text_declared_int.cml`,
+`context_text_declared_float.cml`, `context_text_declared_complex.cml`,
+`context_text_as_int.cml`.
+
+## 4. Expectations changed, and why
+
+No existing expectation was changed to make a test pass, and none was weakened:
+
+- The existing `entry_args` tests for `int`/`float` still pass unmodified: their messages never
+  named `i32`/`f32`, and the `int`/`float` readers are the same `int64_t`/`double` readers with
+  the same sentences.
+- The H15f `literal_context` cases (`context.not_a_number`, `context.text_out_of_range`,
+  `context.text_float_out_of_range`) keep `LiteralNotRepresentable` and
+  `the text is not a number`: they are conversion calls, not declarations.
+- `context.text_declared_int` and its neighbours are new expectations, not changed ones.
+
+## 5. Regenerated artifacts
+
+- `docs/diagnostics.md` (`node scripts/diagnostics-catalog.mjs --write`): the help of
+  `DeclaredTypeMismatch` and `DynamicCastForbidden` gained the text clause. The generator also
+  moved the documented example of `DeclaredTypeMismatch` to the new
+  `context_text_declared_int.cml`, because examples are chosen from the tests in plan order and
+  the new case is placed before the previous example
+  (`context_struct_field_variable.cml`), which still exists and passes. Nothing else in the file
+  changed.
+- No golden was invalidated (`smoke` snapshots, `inspect`, `gir`/`rgir`, `number_text` all
+  still match).
+
+Hand-updated prose: `docs/language/03_data_model.md` and `docs/language/en/03_data_model.md`
+(the no-implicit-conversion bullet now says text is not a number and names the two codes),
+`docs/language/07_statements.md` and `docs/language/en/07_statements.md` (a declared text),
+`docs/language/04_execution_model.md` and `docs/language/en/04_execution_model.md` (entry
+parameters at their declared width),
+`docs/technical/27_entry_parameters_and_pure_export.md` (the width rule for entry numbers and
+for `std::cpp`), `docs/cpp_export_build.md` (the generated program reads at the width too),
+`docs/cli.md` and `docs/cli.cn.md` (`--arg` for `i32`/`f32` and the c64 parts),
+`include/camel/execute/entry_args.h` (the reader's comment) and
+`include/camel/standalone/entry.h` (the header comment: numbers are read at the declared width
+and the refusals name that type).
+
+## 6. A build prerequisite, not part of H15g
+
+`cmake/libcamel_exports.def` gains the 15 lines of `wzj-dev` commit `15c5094d`
+(`fix(build): export the symbols the graph module imports`): `Variant::{clone,print,updateRefs}`,
+`GCGraph::{nodeAttrs,nodeRef}`, `attr::text`, `EnumDecl::{create,define,prototype}`,
+`graphSpace`, `segmentOf(GrowableFreeListAllocator)` and `currentRuntimeProgram`. Without them
+`modules/graph/read.cpp` does not link on this `develop`. This is already fixed on `wzj-dev`;
+it is carried here so the worktree builds, and it changes no behaviour.
+
+`develop` has since merged that same commit (`origin/develop` is now at `d4e3ff0a`, which also
+adds exports for newer passes). The hunk in this working tree is therefore redundant once the
+branch is merged into the current `develop`: git sees the same lines added at the same place and
+keeps one copy, and `d4e3ff0a`'s own additions stay. It is left in the tree only because this
+branch is still cut from `9230790f`, which does not have it.
+
+## 7. Open questions
+
+1. **A text inside a struct literal** — `let p: P = { a: '1.5' }` with `a: float` still reports
+   `LiteralNotRepresentable` for the whole composite (`the value cannot become that type`), not
+   `DeclaredTypeMismatch` for the field. It is not the "text is not a number" defect (the message
+   does not claim the text is not a number), but it is the one declared position where the new
+   type-mismatch sentence does not appear. Making it appear means deciding how a composite
+   literal reports *which* field failed, which is a different (and larger) design question.
+2. **A cast to the value's own type** — `'x' as string` and `s as string` are
+   `DynamicCastForbidden` (`Dynamic cast from 'string' to 'string' is not allowed`), although
+   design principles 5.1 says converting a value to its own type is legal and does nothing
+   (`xs as int[]` passes). This is pre-existing; H15g only moved the literal case from
+   `LiteralNotRepresentable` to the same `DynamicCastForbidden` the computed case reports. It
+   should be fixed by making a same-type cast pass, which is a separate item.
+3. **The reverse direction** — `let x: string = 42` is `LiteralNotRepresentable`
+   (`'42' cannot be represented as type 'string'`), not a type mismatch. That is the literal
+   rule (a number literal does not become a text), not item 2's direction, and was left alone.
+4. The entry text grammar is the whole-token rule of H15f (`parseWholeFloat` /
+   `parseWholeInteger`): `.5`, `5.`, `0x1.8p1` are refused for an entry number although they are
+   valid source literals. This is unchanged and intentional (an argument is not source text),
+   but it is the one place where an entry number is narrower than a literal.
