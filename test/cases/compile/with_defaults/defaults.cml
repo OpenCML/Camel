@@ -1,0 +1,52 @@
+/**
+ * The defaults of `with` parameters, and `with` arguments given by name (design principles
+ * 4.4, handover H235). A default is a compile-time constant evaluated where the declaration
+ * is and filled into each call that leaves the parameter out; a call may give the parameters
+ * by position, or by name after the positional ones.
+ */
+module with_defaults
+
+// A defaulted `with` parameter is omitted at the call, or given another value by position or
+// by name. The parameter a call leaves out takes the declaration's value.
+with <rounds: int = 8, strict: bool = false>
+func repeat(x: int): int {
+    return if strict then x * rounds else x + rounds
+}
+
+// The default is a constant expression, computed where the declaration is (2 + 3 = 5), not at
+// each call.
+with <scale: int = 2 + 3>
+func scaled(x: int): int {
+    return x * scale
+}
+
+// A generic declaration's default is the declaration's too: every instance takes it.
+with <n: int = 3>
+func gen::<T>(x: T): int {
+    return n
+}
+
+func main(): int sync {
+    // Both defaults.
+    println(repeat(10))
+    // Both overridden by position: 10 * 2.
+    println(repeat<2, true>(10))
+    // `rounds` left to its default and `strict` given by name: 10 * 8.
+    println(repeat<strict: true>(10))
+    // `rounds` by position, `strict` left to its default: 10 + 16.
+    println(repeat<16>(10))
+    // The default is the declaration's constant: 2 * 5.
+    println(scaled(2))
+    // A partial application binds what it is given; the value it makes needs only `x`.
+    let bound = repeat<4, true>
+    println(bound(3))
+    // A value made from the declaration carries no default: both `with` parameters are its
+    // arguments, and the value bound above keeps what it was given.
+    let plain = repeat
+    println(plain<4, true>(3))
+    println(plain<1, false>(3))
+    // A generic declaration's default, through inference and through explicit types.
+    println(gen(7))
+    println(gen::<int>(7))
+    return 0
+}

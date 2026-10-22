@@ -1,0 +1,15 @@
+/**
+ * A `with` argument written by name is resolved at a call: a binding used as a function value
+ * binds what it is given in order, and cannot take a name (design principles 4.4).
+ */
+module with_argument_in_value
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    let g = f<rounds: 2>
+    return g(1)
+}

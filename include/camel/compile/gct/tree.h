@@ -250,6 +250,28 @@ class Tree {
     void setHeadTypeParams(const Node *func, std::vector<std::string> names);
     const std::vector<std::string> *headTypeParamsOf(const Node *func) const;
 
+    /// The default of a `with` parameter (design principles 4.4, handover H235), as written:
+    /// the lowered default expression and where it is written. A default is not a child of the
+    /// FUNC and is not part of the function's type: it is evaluated once, where the declaration
+    /// is, and the value is filled into each call that leaves the parameter out. Null `expr`
+    /// stands for a parameter without a default; the vector is aligned with the `with`
+    /// parameters.
+    struct WithDefault {
+        node_ptr_t expr                   = nullptr;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+
+    void setWithDefaults(const Node *func, std::vector<WithDefault> defaults);
+    const std::vector<WithDefault> *withDefaultsOf(const Node *func) const;
+
+    /// The name each argument of a `with` binding was given, in the order written; an empty
+    /// optional is an argument given by position. Null when every argument is positional. A
+    /// name is not part of the call's node: the binding checks it against the callee when the
+    /// call is resolved (design principles 4.4).
+    void setWithArgumentNames(const Node *with, std::vector<std::optional<std::string>> names);
+    const std::vector<std::optional<std::string>> *withArgumentNamesOf(const Node *with) const;
+
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -311,6 +333,9 @@ class Tree {
     std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     std::unordered_map<const Node *, WhenClause> whenClauses_;
     std::unordered_map<const Node *, std::vector<std::string>> headTypeParams_;
+    std::unordered_map<const Node *, std::vector<WithDefault>> withDefaults_;
+    std::unordered_map<const Node *, std::vector<std::optional<std::string>>> withArgumentNames_;
+
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>
