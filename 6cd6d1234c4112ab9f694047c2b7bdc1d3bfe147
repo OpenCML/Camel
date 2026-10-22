@@ -1,0 +1,111 @@
+# H93 报告：删除退役环境变量表与"已退役"诊断
+
+分支 `handover/H93-retired-env-table`（自 `origin/develop` `c62861793` 切出）；代码提交 `7687b39e2`，本报告与任务书状态在它之后的第二个提交里。
+
+**任务**：`docs/handover/README.cn.md` 的 H93 行（作者记为 H83，但 H83 已被下标与切片占用并合入）。**依据**：`docs/handover/reviews/H24-H25-H26.md` 末尾「追加：H71、H73、H76、H81」中 H81 的返工条——**旧写法干净删除，不加"已退役，请改用 X"的诊断**（交接说明第 2 节第 7 条、H26）。H81 把九个 `CAMEL_*` 开关搬出了环境变量，同时留下一张表在启动时拒绝旧名字；那正是 H26 已经退役掉的那一类诊断。
+
+## 1 做了什么
+
+| 位置 | 改动 |
+|---|---|
+| `tools/camel-cli/config.cpp` | 删除 `RetiredEnvironmentVariable`、`kRetiredEnvironmentVariables`（9 条）、`rejectRetiredEnvironmentVariables()`，以及 `parseArgs` 开头对它的调用；`parseArgs` 现在直接进入参数解析 |
+| `test/plans/smoke/core.plan.toml` | 删除负向用例 `retired_environment_variable.diagnosed`（设 `CAMEL_GC=generational`，断言退出 1 且标准错误含 `is retired` 与 `--gc <generational\|mark-sweep>`） |
+| `docs/cli.md`、`docs/cli.cn.md` | 删除"旧名字会被拒绝，并给出指出替代物的诊断"那一句；保留 `--gc`、`--block-limit`、`--graph-gc-mb`、`--native-stack-guard`、`--profile-mode` 与 `std::profile(gc_stats/type_stats/effect_trace=…)` 的说明 |
+| `docs/cli.md`「The collector (`--gc`)」一节 | 删去"旧环境变量会被拒绝"半句；`CAMEL_GC_ENABLE_YOUNG_COPYING` 的说明改为"不被读取，什么也不改变" |
+| `docs/technical/23_gc_runtime_lifetime.md` | `CAMEL_GC=generational` 选移动回收器 → `--gc generational`。原文还说"生产默认仍保持地址不变"，与代码默认（`src/core/mm/mm.cpp:222` 返回 `CollectorMode::Generational`）不符，一并改正 |
+| `docs/technical/07_jit_architecture.md` | `CAMEL_NATIVE_STACK_GUARD=0` → `--native-stack-guard off` |
+| `test/tools/scale/scale.py` | 一句注释：`[camel] spaces:` 行的来源改为 `std::profile(gc_stats=1)`（见 `include/camel/core/mm.h:66-69`） |
+
+## 2 为什么删掉，而不是改成静默接受或警告
+
+裁定要的就是"设置它没有任何效果"。表删掉之后，`src`/`include`/`modules`/`tools` 里没有任何一处读这九个名字，旧变量既不改变行为也不被拒绝——它只是环境里一个没人看的字符串。这与 H26 对 `--no-module-passes`、`A | B`、`T ? U` 的处理同一条：旧写法消失之后按普通的未知东西对待，不额外解释。
+
+**考虑过、未采用**：保留表但降为警告（≥1 条 `warn` + 继续运行）。它仍然是"已退役，请改用 X"的诊断，只是换了严重程度，裁定明确不要。
+
+## 3 没有诊断码可删
+
+那条消息是 `std::cerr` 直接打印的字符串，不是 `SemanticDiag`/`RuntimeDiag` 条目，诊断目录里没有它的码。因此在当前树上重新生成目录不产生任何差异：
+
+```
+$ node scripts/diagnostics-catalog.mjs --check
+diagnostics catalog: 197 codes, every one with a name and a message, no value used twice
+(exit 0)
+
+$ node scripts/diagnostics-catalog.mjs --verify-doc
+docs/diagnostics.md is up to date
+(exit 0)
+```
+
+验收里"诊断若有码则从目录删除并重新生成 `docs/diagnostics.md`"这一项，按"本来就没有码"结案：197 条不变、`--write` 无差异。
+
+## 4 源码里不再有这九个名字（验收 grep）
+
+```
+$ git grep -n -E '\bCAMEL_GC\b|\bCAMEL_BLOCK_LIMIT_MB\b|\bCAMEL_GRAPH_GC_MB\b|\bCAMEL_GC_STATS\b|\bCAMEL_TYPE_STATS\b|\bCAMEL_EFFECT_TRACE\b|\bCAMEL_NATIVE_STACK_GUARD\b|\bCAMEL_PROFILE_MODE\b|\bCAMEL_ENABLE_TEST_PASSES\b' -- src include modules tools
+（无输出，exit 1）
+```
+
+`tools/` 里唯一的命中原来是 `config.cpp` 的那张表，随删除消失。`test/` 里同样已经没有一处（唯一的命中是 `scale.py` 的一句注释，已按 `std::profile(gc_stats=1)` 改写）；`test/plans` 里没有一条计划设置这些名字。
+
+## 5 旧变量现在做什么：什么也不做（实测）
+
+临时探针计划（未提交，验完即删）：同一个 `fib10` 程序，九个变量一起设——`CAMEL_GC=generational`、`CAMEL_BLOCK_LIMIT_MB=64`、`CAMEL_GRAPH_GC_MB=8`、`CAMEL_GC_STATS=1`、`CAMEL_TYPE_STATS=1`、`CAMEL_EFFECT_TRACE=/tmp/h93-probe-effects.jsonl`、`CAMEL_NATIVE_STACK_GUARD=0`、`CAMEL_PROFILE_MODE=full`、`CAMEL_ENABLE_TEST_PASSES=1`——断言退出 0、标准输出含 `Fibonacci(10) = 55`、标准错误里没有 `retired`：
+
+```
+[PLAN] h93-probe: h93.probe
+[PASS] h93.stale_variables_have_no_effect                    33.75 ms
+```
+
+删除之前，同一个程序在这种环境下会以退出码 1 结束，并在标准错误上打印九行 `Error: the environment variable … is retired; …`。
+
+## 6 计划（Linux 主机，Release，`camel-remote.ps1 -Jobs 8`）
+
+构建：`out/latest` 全量 620 个目标，`BUILD_EXIT=0`。此后所有计划都复用这个构建（`-NoBuild`）：验收的五个计划 + 探针一次，`effect_trace`/`limits` 一次，末尾在最终提交上用 `smoke` + `feat/docs_links` 复核一次（11 / 11）。
+
+| 计划 | 结果 |
+|---|---|
+| `smoke` | **10 / 10**（用例从 11 减到 10，少的就是被删掉的那条负向用例） |
+| `feat/mm` | **169 / 169**（blocks 3、capacity 16、complex 4、gc_poison_sweep 116、graph_space 5、mem_blocks 5、writings 20） |
+| `feat/compile` | **958 / 958** |
+| `feat/tools` | **19 通过、10 跳过、0 失败**（跳过的 10 条是 `grammar.scopes.*`，缺 VS Code 依赖；H81 报告里红的 `grammar.tables` 现在是 PASS） |
+| `feat/docs_links` | **1 / 1** |
+| 合计 | `total: 1168, pass: 1158, fail: 0, skip: 10`；wall 28.5 s |
+
+另跑 H81 明确迁移过的两个计划（第二次调用，`-NoBuild`）：`feat/trans/effect_trace` **4 / 4**、`feat/consistency/limits` **110 / 110**（合计 `total: 114, pass: 114, fail: 0`）。
+
+## 7 H81 的迁移仍然完整
+
+- **没有计划再用旧名字**：`test/plans` 下对九个名字的引用只有被删掉的那一条（第 4 节）；`feat/mm`、`feat/compile`、`feat/trans/effect_trace`、`feat/consistency/limits` 里设置这些开关的地方写的是 `--gc`、`--block-limit`、`--graph-gc-mb`、`--native-stack-guard`、`std::profile(…)` 这些新表面。
+- **没有计划靠"设了旧变量就失败"成立**：H81 只加了一条这样的负向用例（`smoke` 的那条），删掉后 `smoke` 由 11 条变 10 条，其余全绿；如果还有计划默默依赖那条诊断，它现在会从"预期失败"变成"实际通过"，`feat/**` 不会全绿——第 6 节的数字说明没有这种计划。
+- 删除之后，迁移过的计划照旧通过，说明 H81 把用例改成新选项/遍参数是彻底的。
+
+## 8 `docs/` 里还提到这九个名字的地方（都不是可用的开关）
+
+| 类别 | 位置 | 为什么保留 |
+|---|---|---|
+| 历史报告与评审 | `docs/handover/reports/H8/H9/H17c/H39/H4/H40*/H43*/H45/H47/H6/H73/H80/H81.md`、`docs/handover/reviews/H24-H25-H26.md` | 记录当时怎么做、怎么测；按 H26 的先例不改写历史 |
+| 带日期的实测记录 | `docs/design/cpp-memory/README.cn.md`、`docs/design/graph-model/README.cn.md`、`docs/design/any-typing/README.cn.md`、`docs/technical/37_generational_gc_report.md` | 表里的 `CAMEL_GC=generational` 是那几次运行的分组标号，改成新写法会篡改记录 |
+| 这些设计稿的测量脚本 | `docs/design/cpp-memory/tools/{measure_all,poll_demo}.sh`、`docs/design/graph-model/tools/{compile_cost.sh,graph_census.py}`、`docs/design/any-typing/tools/run.sh` | H81 第 5 节已把它们列为后续；现在跑不会因旧变量改变行为（见第 9 节） |
+
+**当前文档里再没有一处让读者去设这些名字**：`cli.md`、`cli.cn.md` 与两篇 `technical/` 已改（第 1 节）。
+
+## 9 没做完的（与本任务不同因，供协调者裁）
+
+- `benchmarks/pipeline/{run.py,corpus.py}` 仍写 `env["CAMEL_EFFECT_TRACE"] = …`，并把它算进"harness 自己设的变量"。H81 之后这条追踪不再产生，基准流水线会去读一个永远不会出现的文件；而且在当前 `develop` 上，这些运行还会因为退役表在解析前就退出 1（H93 删表后能跑，但追踪仍为空）。属 H81 §4/§5 的后续，不在本项验收范围（benchmarks 的依赖本机跑不了）。
+- 第 8 节第三行的测量脚本仍按旧写法设置 `CAMEL_GC`/`CAMEL_GC_STATS`；要迁移得连同它们的命令行一起改，且没有可验证的运行，留给 H81 的后续。
+- `docs/handover/reports/H81.md` §2 描述了那张表与退出码 1；按"不改写历史报告"保留，H93 行与 H81 行都加了指向本报告的说明。
+
+## 10 自查（交接说明第 2 节）
+
+1. **核心按名字认具体的东西**：无新增；删掉的正是一张按名字认的表。
+2. **另造一套相似的机制**：无。
+3. **同一事实写在多处**：旧→新的对应关系原来写在表、`cli.md`、`cli.cn.md` 三处，现在只在选项文档里有一份。
+4. **写死的上限与封闭的枚举**：删掉了一个封闭名单（9 条）。
+5. **临时裁定语义**：无（裁定原文就是"设置它没有任何效果"）。
+6. **为了让测试通过而改**：无期望输出变化；删的是断言退役消息的用例本身。
+7. **兼容层与过渡方案**：本任务就是拆掉 H81 留下的这一层。
+8. **只做一个后端**：不涉及。
+
+## 11 待决问题
+
+无。
