@@ -307,9 +307,14 @@ int runCommand(int argc, char *argv[]) {
             return;
         }
         size_t errors = 0, warnings = 0;
-        for (const auto &mod : ctx->allUserModules()) {
+        // The same scope the diagnostic report used: a pass library the pass list loaded is not
+        // part of the program, so its errors are not counted in the program's summary either
+        // (H198/H210). `compileSummary` is only called on paths that asked ProgramDependencies.
+        for (const auto &mod :
+             camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies)
+                 .modules) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-            if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+            if (ud && ud->diagnostics()) {
                 errors += ud->diagnostics()->count(Severity::Error);
                 warnings += ud->diagnostics()->count(Severity::Warn);
             }
@@ -341,7 +346,18 @@ int runCommand(int argc, char *argv[]) {
         if (!parsedOk) {
             // Syntax errors: nothing after the parser can run, and compiling the module would
             // only read and parse the file a second time.
-            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+            //
+            // The program's dependencies, not every module in the context: resolving the pass
+            // list above imported the pass's library, and that library is not part of the
+            // program the user asked to run. Its own parse error is reported by pass resolution
+            // (as `InvalidPassParameter`) when the program gets that far; printing it here, as
+            // a bare `SyntaxDiag`, would answer a question the user did not ask (H198/H210).
+            camel_cli::reportModuleFailures(
+                ctx,
+                camel_cli::findModuleFailures(
+                    ctx, camel_cli::ModuleScope::ProgramDependencies),
+                os,
+                useJsonFormat);
             compileSummary(false);
             return 1;
         }
@@ -697,7 +713,13 @@ int runCommand(int argc, char *argv[]) {
             return ctx->processExitCodeOr(0);
         }
     } catch (DiagnosticsLimitExceededBaseException &e) {
-        ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+        // The compile stopped at its error limit. Report the program's own modules, the ones
+        // `module_failures.h` names; a pass library is not one of them (H198/H210).
+        camel_cli::reportModuleFailures(
+            ctx,
+            camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies),
+            os,
+            useJsonFormat);
         compileSummary(true);
         return 1;
     } catch (Diagnostic &d) {

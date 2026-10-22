@@ -483,7 +483,18 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                     samplesMs,
                     "",
                     [ctx = invocation->ctx](std::ostream &out, bool json) {
-                        ctx->dumpAllModuleDiagnostics(out, json, !json);
+                        // One scope, one report: the same `findModuleFailures` answer that
+                        // entered this branch decides what it prints. A bare
+                        // `dumpAllModuleDiagnostics` would print a module the earlier question
+                        // had already put out of scope (H198/H210).
+                        camel_cli::reportModuleFailures(
+                            ctx,
+                            camel_cli::findModuleFailures(
+                                ctx, camel_cli::ModuleScope::ProgramDependencies),
+                            out,
+                            json,
+                            nullptr,
+                            !json);
                         return true;
                     });
                 return 1;
@@ -616,7 +627,10 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             lastRunExitCode = invocation->ctx->processExitCodeOr(0);
         } catch (DiagnosticsLimitExceededBaseException &) {
             // The diagnostic that ended the run is a runtime one when a pass or the binding of
-            // main's arguments reported it; the module diagnostics otherwise.
+            // main's arguments reported it; the program's module diagnostics otherwise. The
+            // latter are the program's dependencies, the scope the compile gate above asked
+            // about: a pass library is not one of them, and its bare parse diagnostic belongs
+            // to pass resolution (H198/H210), not to this fallback.
             const TimeitDiagnosticsEmitter diagnostics =
                 invocation && invocation->ctx
                     ? TimeitDiagnosticsEmitter([ctx = invocation->ctx](
@@ -624,7 +638,14 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
                           if (const auto &diags = ctx->runtimeDiagSink(); diags->hasErrors()) {
                               diags->dump(out, json, !json);
                           } else {
-                              ctx->dumpAllModuleDiagnostics(out, json, !json);
+                              camel_cli::reportModuleFailures(
+                                  ctx,
+                                  camel_cli::findModuleFailures(
+                                      ctx, camel_cli::ModuleScope::ProgramDependencies),
+                                  out,
+                                  json,
+                                  nullptr,
+                                  !json);
                           }
                           return true;
                       })
