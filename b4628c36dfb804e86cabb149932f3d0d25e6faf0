@@ -1,0 +1,244 @@
+# H66 报告
+
+工作树 `D:\Projects\Camel-wt\h66-h16`，分支 `handover/H66-h16-rest`，基于 `origin/develop` `043ac0eb`，2026-10-22。
+本报告只覆盖 H16 剩下两项：第 6 项（`--timeit` 失败时记录失败的迭代号）与第 7 项（AST 快照既有差异核对）。
+第 1–5 项见 `reports/H16.md`、`reports/H16b.md`。
+
+构建与测试全部在 Linux 主机 `88zjwei` 上通过 `D:\Projects\Camel-wt\camel-remote.ps1` 完成（`-Jobs 8`），
+本机不构建。AST 快照用仓库文档规定的方式在主机上重新生成：
+`python3 test/tools/parsecheck/check.py snapshot --update`（`test/tools/parsecheck/check.py` 的用法说明、
+`docs/handover/reports/H15c.md` 等先例；`agents/test.md` 里的 `run-tests.mjs --update-golden` 是普通 golden 的方式）。
+
+---
+
+## 0. 结论
+
+| 项 | 结果 |
+|---|---|
+| 6 `--timeit` 失败时记录迭代号 | 完成。JSON 失败报告带 `"iteration"`（从 1 起），文本模式打印同一号码的 `[timeit] i/N ... failed` 行；新用例 `entry_args.timeit_failure_iteration` 让程序只在第 3 次执行时除零，两种输出都读到 3 |
+| 7 AST 快照 91 处既有差异 | 已核对：在本分支起点 `043ac0eb` 上重新生成后差异为 **0**（2308 个文件全部按记录读出，0 个未记录）。91 处在 H16 指派之后已被后续任务的多次 `snapshot --update` 消化，每一批都有自己的提交与报告说明（见 §2.2）。本轮唯一改动的快照行是第 6 项新增用例的 1 行 |
+| 缺陷 | **没有发现解析器缺陷。** 历史差异全部是快照落后于解析器/文件集合（注释长度、已删除的 `legacy/`、后来任务已按设计改掉的 AST），不是解析器读错 |
+
+---
+
+## 1. 第 6 项：`--timeit` 失败时记录失败的迭代号
+
+### 1.1 原状
+
+`--timeit` 成功时每一轮打印 `[timeit] i/N pass=... elapsed=... ms`（i 从 1 起），JSON 模式给出
+`{"kind":"timeit", ... "samples_ms":[...]}` 的汇总。失败时（编译失败、绑定 `--arg` 失败、计时遍或前后缀遍执行失败、
+诊断上限、异常）只打印诊断本身，**没有任何字段说明是哪一轮出的错**；在 JSON 里连一个可解析的 timeit 对象都没有，
+只有诊断数组。H9 的第 4 项把这件事记进 H16（`docs/handover/reviews/H9-H11.md` 第 12 行）。
+
+### 1.2 改动
+
+#### 1.2.1 失败报告（`tools/camel-cli/timeit.cpp`）
+
+- 新增 `reportTimeitIterationFailure`，所有在某一轮内发生的失败都走它：
+  编译失败、`main` 的实参绑定失败、前缀遍失败/把图消耗掉、计时遍失败、后缀遍失败、回退遍失败、内层
+  `throw Diagnostic`、外层的诊断上限/`Diagnostic`/异常。
+- 文本模式先打印与成功轮同一格式的一行，用 `failed` 代替时间：
+
+  ```
+  [timeit] 3/5 pass=std::nvm failed
+  ```
+
+  然后照旧打印诊断。这样失败轮与已完成的 1/5、2/5 行是同一个编号序列。
+- JSON 模式输出一个完整的 timeit 对象（而不是裸诊断数组）：
+
+  ```json
+  {
+    "kind": "timeit",
+    "failed": true,
+    "iteration": 3,
+    "iterations": 5,
+    "pass": "std::nvm",
+    "samples_ms": [0.375329,0.167511],
+    "diagnostics": [ ... ]
+  }
+  ```
+
+  `iteration` 是从 1 起的失败轮号，与文本行一致；`samples_ms` 保留失败前已完成轮的样本，读者能看出跑到哪里。
+  没有诊断的失败路径（例如计时遍把图消耗掉、异常）改写成 `"failure": "<一句话>"`，诊断数组为空；
+  有诊断时不写空的 `"failure"` 字段。对象始终是合法 JSON。
+- 同时删掉了原来的 `emitRuntimeFailure`（它的“有诊断就 dump、否则打印一句话”现在由报告函数按 JSON/文本分别处理）。
+
+#### 1.2.2 嵌套模块诊断（`include/camel/core/context/context.h`、`src/core/context/context.cpp`）
+
+编译失败时诊断来自各模块，原来的 `Context::dumpAllModuleDiagnostics(os, json)` 总是自己写 `[` `]`，无法嵌进
+timeit 对象。给它加上与 `Diagnostics::dump` 同名的 `wrapInArray = true` 参数：JSON 下传 false 时只写对象本身
+（逗号分隔、不加方括号），文本模式行为不变。默认值保证既有调用点不受影响。
+
+#### 1.2.3 文档
+
+`docs/cli.md` 与 `docs/cli.cn.md` 的 `--timeit` 条目写明失败轮号：文本模式是 `[timeit] i/N ... failed` 行，
+JSON 模式是带 `"iteration"`、诊断（或 `"failure"`）和已完成样本的 timeit 对象。
+
+### 1.3 证明：让失败发生在后面的某一轮
+
+`--timeit` 每一轮都重建模块、图和 Context，进程内的计数不会保留，因此用例把执行次数写进环境变量
+`CAMEL_TIMEIT_COUNTER` 指出的文件（这也是测试用例读写文件的既有做法，见 `consistency/cleanup`
+的 `CAMEL_TEST_DIR`）。`test/cases/compile/entry_args/timeit_failure.cml`：
+
+```camel
+func main(): int sync {
+    let path = get_env('CAMEL_TIMEIT_COUNTER')
+    let count = int(try_read_text(path) !! '0')
+    let next = count + 1
+    write_text(path, string(next))
+    // Only the third execution has a zero here; the compiler cannot fold the division because
+    // `next` comes from a file at run time.
+    return 1 / (next - 3)
+}
+```
+
+第 3 次执行时 `next - 3 == 0`，运行期故障 `RuntimeDiag::DivisionByZero`。`test/cases/compile/entry_args/timeit_failure.mjs`
+分别跑一次 JSON、一次文本（各自从空计数器开始），要求：
+
+- JSON：`status === 1`、`report.kind === "timeit"`、`report.failed === true`、`report.iteration === 3`、
+  `diagnostics` 中含 `data.name === "RuntimeDiag::DivisionByZero"`；
+- 文本：`status === 1`、含 `[timeit] 1/5`、`[timeit] 2/5`、`[timeit] 3/5 pass=std::nvm failed` 与
+  `RuntimeDiag::DivisionByZero`。
+
+主机上的实际输出（`out/latest/bin/camel`）：
+
+```
+$ CAMEL_TIMEIT_COUNTER=/tmp/h66c1 camel --output-format json test/cases/compile/entry_args/timeit_failure.cml --timeit std::nvm/5
+{
+  "kind": "timeit",
+  "failed": true,
+  "iteration": 3,
+  "iterations": 5,
+  "pass": "std::nvm",
+  "samples_ms": [0.375329,0.167511],
+  "diagnostics": [{"range":{"start":{"line":18,"character":13},"end":{"line":18,"character":14}},"severity":"Error","code":"0x04000001","source":"Camel","message":"Attempted division by zero.","data":{"stage":"run","name":"RuntimeDiag::DivisionByZero","moduleName":"timeit_failure","modulePath":"test/cases/compile/entry_args/timeit_failure.cml","suggestion":"Ensure the denominator is not zero before performing division."}}]
+}
+EXIT=1
+
+$ CAMEL_TIMEIT_COUNTER=/tmp/h66c1 camel test/cases/compile/entry_args/timeit_failure.cml --timeit std::nvm/5
+timeit target=std::nvm iterations=5
+[timeit] 1/5 pass=std::nvm elapsed=0.3001 ms
+[timeit] 2/5 pass=std::nvm elapsed=0.1596 ms
+[timeit] 3/5 pass=std::nvm failed
+error[RuntimeDiag::DivisionByZero]: Attempted division by zero.
+   --> test/cases/compile/entry_args/timeit_failure.cml:19:14
+    |
+ 19 |     return 1 / (next - 3)
+    |              ^
+help: Ensure the denominator is not zero before performing division.
+EXIT=1
+```
+
+JSON 的 `iteration: 3` 与文本的 `[timeit] 3/5` 是同一个号码，测试就是比对这两处。
+
+---
+
+## 2. 第 7 项：AST 快照的 91 处既有差异
+
+### 2.1 先重新生成：本分支起点上已经是 0 处差异
+
+按任务要求没有相信“91”这个数字，直接在起点 `043ac0eb` 的主机构建上重新生成：
+
+```
+$ cd ~/camel-work/h66-h16
+$ CAMEL_HOME=$PWD/out/latest python3 test/tools/parsecheck/check.py snapshot
+probes: 232
+ast snapshot: 2308 files read as recorded, 0 not in the snapshot yet
+```
+
+再跑一次 `snapshot --update`，写出的文件与提交里的文件**逐字节相同**（主机上 `git diff` 为空）。也就是说，
+`043ac0eb` 上既没有哈希不同的行，也没有缺条目的文件；`frontend.ast_snapshot`（连同 grammar、formatter、fuzz）
+在主机上 4/4 通过。任务描述里的“91 处”是 H16 刚指派时的历史状态，在本分支起点已经不存在了。
+
+### 2.2 91 处去了哪里：每一批都有记录的再生成
+
+| 批次 | 提交/报告 | 快照变化 | 原因 | 归类 |
+|---|---|---|---|---|
+| 漂移产生 | `c431e1bc`（2026-10-19，设计原则引用按新主题编号重排）、合并 `2aeb8928` | 91 行的哈希改变，当时没有重录 | 注释文本变了：注释本身是 AST 的一部分，引用编号 `2.13` → `7.1` 之类改变注释长度后，其后所有 token 的位置跟着变。**解析器没有改** | 快照过期（文档/输入文本变化），不是缺陷。H4 §5.4 逐项核对：85 行由 `c431e1bc` 改过、6 行由 `2aeb8928` 改过；H9 §4.6、H14 §5.4 复测同为 91 |
+| 继续增长 | H10 实测 | 94 处 | 同上，基线快照继续落后 | 快照过期；H10 报告第 552 行 |
+| 全量重录 | `69b2e58b`（H26，2026-10-20），报告 `reports/H26.md` §6、§8.1 | 2216 → 2073 行；244 增、387 删 | H26 在**干净的 develop `7f241371`** 上复测到 159 处差异（比 91 更多）：193 行是已不在检出的 `legacy/` 文件，56 个文件的正文在快照上次记录后改过，106 个文件正文未变但哈希对不上（快照本身过期）。该提交的信息与报告都写明“不掩盖这次全量重写”，并说明 H26 自己只把 3 个文件从 `ok` 改成 `no`（联合类型退役，设计变更） | 设计变更（联合类型退役）+ 快照过期/文件删除；不是缺陷 |
+| 之后逐项再生成 | `3bf7c13b`（+120/−1，合并分支带来的用例与一处注释）、`aed7329d`（+21/−4，H2 的 tags）、`130f3866`、`af056c97`、`ee87a499`、`cb76ff24`（+12，H51a 的 `match type`）等 | 各自只改动相关行 | 每个提交的消息/报告都写明是哪一类 AST 变化（新用例、注释、节点种类、诊断文本等） | 设计变更或新用例；没有缺陷 |
+| H61 | `cade3823`（2026-10-22），报告 `reports/H61.md` §6 | +8 行，0 行改动 | 8 行里 1 行是 H61 自己的新用例 `rules/analysis_parts.cml`，其余 7 行是**该分支起点上本来就没有条目的既有文件**（见 §2.3）。H61 报告明确说“没有任何既有哈希改变” | 补上缺失条目，不是设计变更也不是缺陷 |
+| 合并后 | `043ac0eb`（H61 合入 develop） | +2 行，合计 2308 | 合并取两边的并集；`git diff 043ac0eb^1` 只新增 `loops/compiled_native.cml` 与 `rules/analysis_parts.cml` 两行 | 合并结果 |
+| 本轮 | 本文（H66） | 2308 → 2309，+1 行 | 第 6 项新增的用例 `test/cases/compile/entry_args/timeit_failure.cml`（见 §2.4） | 新用例 |
+
+所以“91”不是一个需要逐行裁定的列表：其中 91 行是注释引用重排造成的过期记录，之后又累积到 159 行，由 H26
+连同 `legacy/`、已改正文的文件一起全量重录；再往后每个改 AST 的任务都在自己的提交里重录了相关行。到
+`043ac0eb` 已归零，本轮核对的结果就是 §2.1 的“2308 files read as recorded, 0 not in the snapshot yet”。
+
+### 2.3 H61 的“7 行”
+
+任务描述提到的 7 行是这个分支起点缺少、但 develop 上文件已经存在的条目：
+
+```
+gpu/profile/device_region.cml
+gpu/profile/host_loop.cml
+loops/compiled_native.cml
+modules/autodiff/loop_grad_composite_read.cml
+perf/dependency_chain.cml
+perf/mlp_step.cml
+perf/transformer_step.cml
+```
+
+H61 再生成时它们作为“added”出现（`check.py` 把新文件计为 added、不算差异，所以 H61 的测试当时是绿的）。
+合并到 develop 后 6 行 develop 已有、`compiled_native.cml` 随合并进来，加上 H61 自己的 `analysis_parts.cml`，
+正好是 §2.2 里合并提交的 +2 行；此后 2308 个文件全部有记录。
+
+### 2.4 本轮唯一的快照改动（每一行都有理由）
+
+```diff
+@@ -465,6 +465,7 @@
+ dd7246c7579bc44a ok test/cases/compile/entry_args/tensors.cml
++904d91ce672086f2 ok test/cases/compile/entry_args/timeit_failure.cml
+ 13647c408df0eb49 ok test/cases/compile/entry_args/widths.cml
+```
+
+- `timeit_failure.cml`：**新用例**（第 6 项的证明程序）。没有既有行被修改或删除；没有为了让它通过而改解析器。
+
+### 2.5 缺陷：没有
+
+- 没有一处差异是“解析器读错了”。91 处全部是注释长度变化（输入文本变了，位置自然变）；后续的 159 处里，
+  已删除文件与未记录的设计变更是主体；H26 主动把 3 个文件改成 `no` 是联合类型退役这一设计变更的结果，
+  已在提交与报告里写明。
+- 因此本项没有“修掉缺陷、保留快照原样”的条目，也没有为了让快照变绿而改解析行为；快照跟着解析器走。
+- 当前树上 `frontend.ast_snapshot` 通过，且 `--update` 不产生任何变化，这本身就是“快照与解析器一致”的证明。
+
+---
+
+## 3. 验证
+
+全部在 `88zjwei` 上，`camel-remote.ps1 -Jobs 8`。
+
+| 命令 | 结果 |
+|---|---|
+| 构建（`122.7 s`）+ `smoke` + `test/plans/feat/compile/entry_args.plan.toml` + `test/plans/feat/parse/frontend.plan.toml` + `test/plans/feat/opt/pass_params.plan.toml` | 116/116 通过（smoke 10、entry_args 82、parse 4、pass_params 20；含新的 `entry_args.timeit_failure_iteration` 与 `frontend.ast_snapshot`） |
+| `-NoBuild` 复跑同一组（`failure` 字段调整后、最终构建前） | 116/116 通过 |
+| `python3 test/tools/parsecheck/check.py snapshot`（起点 `043ac0eb`） | `2308 files read as recorded, 0 not in the snapshot yet`；`--update` 后 `git diff` 为空 |
+| 同上（加入第 6 项用例后） | `2309 files read as recorded, 0 not in the snapshot yet`；唯一新增行见 §2.4 |
+
+没有跑全套、GC poison/压力、progen、PyTorch 对比与 perf/timeit 基准计划（`agents/test.md` 的约束）。
+
+### 期望变更清单
+
+1. `tools/camel-cli/timeit.cpp`：失败轮的报告（`iteration` 字段、文本失败行、诊断/样本的 JSON 组织）。
+2. `include/camel/core/context/context.h`、`src/core/context/context.cpp`：`dumpAllModuleDiagnostics` 增加
+   `wrapInArray`（与 `Diagnostics::dump` 同名同义，默认 true）。
+3. `test/cases/compile/entry_args/timeit_failure.cml`、`timeit_failure.mjs`：第 6 项的新用例与驱动。
+4. `test/plans/feat/compile/entry_args.plan.toml`：新增 `entry_args.timeit_failure_iteration`。
+5. `test/plans/feat/parse/golden/ast_hashes.txt`：+1 行（新用例的哈希 `904d91ce672086f2`），无其它改动。
+6. `docs/cli.md`、`docs/cli.cn.md`：`--timeit` 条目说明失败轮号。
+7. `docs/handover/reports/H66.md`、`docs/handover/README.cn.md` 的 H16 行与“剩下什么”。
+
+---
+
+## 4. 备注 / 未决
+
+1. **`--timeit` 失败报告的兼容性**：JSON 模式失败时原来是裸诊断数组，现在是带 `"kind":"timeit"` 的对象。
+   仓库里解析 timeit JSON 的工具（`test/tools/perfbaseline/*.py`、`run-tests.mjs` 的 benchmark 解析）只在
+   成功时解析，失败一律按非零退出处理；`test/tools/timeitloop` 只保存输出，不受影响。若外部有工具在失败时
+   把 stdout 当诊断数组读，需要跟着改成读 `"diagnostics"`。
+2. **失败报告的轮号只在“某一轮内”**：解析器/遍的解析参数错误（`--timeit` 的值本身不合法、找不到计时遍）发生在
+   进入循环之前，仍按原来的文本错误处理；它们不属于“第几轮失败”。
+3. **91 处的逐路径清单已不可复现**：那 91 行对应的解析器/快照状态在 `c431e1bc` 之后、H26 之前；本轮在最终树上
+   复测为 0。报告用 H4/H9/H10/H14/H26 当时逐项核对的结果归类（引用重排 85+6 行；H26 的 159 处按
+   `legacy/`、正文已改、正文未改三类），没有假装逐行重看了已经不存在差异的文件。
