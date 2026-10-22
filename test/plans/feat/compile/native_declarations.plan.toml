@@ -697,6 +697,50 @@ case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
+# ---- The declaration of `show` (handover H175) ----
+#
+# `show` is the last zero-syntax name of H168's inventory: its result is fixed `void`, and its
+# umbrella parameter (`TensorLike`: a tensor or any array) is two declarations, one per accepted
+# type. The C++ module keeps the kernel, the traits, the semantics and the resources; it no
+# longer exports the group, so the declaration is the module's signature for the name.
+# `show([])` is the boundary: the empty array binds the type variable, so the call is still
+# accepted and still faults in the kernel, exactly as before the migration.
+
+[[tests]]
+name = "native.tensor_show_declaration_import"
+desc = "`show`'s two declarations are what an importer sees: the tensor rule and the array rule both type-check and both reach the C++ operator, printing in the module's layout; the marker line proves the program ran to the end."
+kind = "behavior"
+case = "../../../cases/compile/native/tensor_show_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "tensor([[      1.,       2.]], dtype=float32)\ntensor([      3.,       4.], dtype=float32)\n7\n"
+
+[[tests]]
+name = "native.tensor_show_wrong_arity"
+desc = "Both declarations of `tensor:show` take one ordinary argument: a second one is refused at the call, and the two overloads the message lists are the declarations' — `stdlib/tensor.cml`, not the C++ module."
+kind = "negative"
+case = "../../../cases/compile/native/tensor_show_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:12:5", "argument types: <> (Tensor<float32, [?, ?]>, int)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: typeas A[]) => void"]
+
+[[tests]]
+name = "native.tensor_show_wrong_type"
+desc = "A `string` where the declarations of `tensor:show` accept a tensor or an array: refused at the call against the declared types, and the listed overloads are the declaration's two rules."
+kind = "negative"
+case = "../../../cases/compile/native/tensor_show_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_type.cml:11:5", "argument types: <> (string)", "<tensor:show>: (t: Tensor) => void", "<tensor:show>: (t: typeas A[]) => void"]
+
+[[tests]]
+name = "native.tensor_show_empty_array"
+desc = "The umbrella boundary: `show([])` binds the second rule's type variable to the empty array's element type, so the call is accepted as it was under the C++ `TensorLike` resolver, and the kernel faults with the same `Unsupported Tensor dtype` — the declaration narrows nothing (H175, docs/technical/47_declaration_syntax.md §2.3)."
+kind = "negative"
+case = "../../../cases/compile/native/tensor_show_empty_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::RuntimeError", "tensor_show_empty_array.cml:12:5", "show: Unsupported Tensor dtype"]
 # ---- The declarations of `pyplot` (handover H166) ----
 #
 # `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never

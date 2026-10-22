@@ -142,6 +142,11 @@ export func show(t: (typeas A)[]): void
 绑不出来。如果编译器在到达 resolver 之前就拒绝 `[]`，两条声明是精确的；否则这一处是收窄，
 需要一条负例把它记下来。这是 P3 唯一的边界，不是新语法。
 
+**现状（H175）。** 两条已迁入 `stdlib/tensor.cml`（`tensor` 的声明 13 → 15 条），C++ 的
+`kDeclaredOperators` 跳过 `show`，计算参考条目从 `signatures/tensor.cml` 删除。实测 `show([])`
+**仍被接受**（`[]` 把 `A` 绑到空数组的元素类型），随后在内核报与迁移前逐字相同的
+`Unsupported Tensor dtype`：两条声明没有收窄接受面，失败仍在运行时。P3 因此关闭。
+
 ## 3. 只有作者能答的问题
 
 ### 3.1 Q-F 任意函数类型（9 个名字，独占 6）
@@ -292,7 +297,7 @@ resolver（`modules/tree/module.cpp:30-60`），没有执行器；声明要求
 |---|---|---|---|---|
 | P1 可选参数 → 元数重载 | 已有裁定 | 0（使 `range`/`plot` 等可写） | 无 | 无 |
 | P2 宽度 → 拼写重载 | 已有裁定 | 0（同上） | 无 | 无 |
-| P3 伞形 → 重载 | 已有裁定 | 1（`show`） | 2 条声明 + 1 个边界用例 | 低 |
+| P3 伞形 → 重载 | 已有裁定 | 1（`show`） | 2 条声明 + 1 个边界用例（H175 已完成） | 低 |
 | Q-M `PyObject<T>` | 作者一句确认 | 2 | `typeArguments()` + 7.5 例外 | 低 |
 | Q-F 任意函数类型 | 作者问题 | 5（A）/ 6（B） | 新类型形式 | 高 |
 | Q1 类型实参 | 作者问题（已有） | 2 | H148 Q1 的 A | 高 |
@@ -321,4 +326,4 @@ resolver（`modules/tree/module.cpp:30-60`），没有执行器；声明要求
 
 排序与建议见 [`docs/handover/reports/H168.md`](../handover/reports/H168.md) 第 7、8 节：
 先做 0 语法成本的声明（基点上 16 条：`python` 6 + `pyplot` 8 + `show` 2；`develop` 上
-`python`/`pyplot` 的 14 条已由 H166 迁完，只剩 `show` 2 条），再看 Q-M。
+`python`/`pyplot` 的 14 条已由 H166 迁完，`show` 2 条已由 H175 迁完），再看 Q-M。

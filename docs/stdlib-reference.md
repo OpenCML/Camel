@@ -1144,7 +1144,8 @@ The declarations written here are the operators whose signature is fixed. The on
 type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
 axis forms of a reduction — cannot be written as a declaration; they are implemented in
 `modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
-under the same sections (design principles 6.4; handover H19, H151).
+under the same sections (design principles 6.4; handover H19, H151). `show`'s umbrella parameter
+— a tensor, or any array — is written as one declaration per accepted type (handover H175).
 
 ### Creation
 
@@ -1837,7 +1838,8 @@ not change.
 #### `show`
 
 ```camel
-show: (t: Tensor | number[]) => void
+show: (t: Tensor) => void
+show: (t: (typeas A)[]) => void
 ```
 
 Prints t to the console, in the module's layout.

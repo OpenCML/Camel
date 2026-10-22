@@ -56,7 +56,7 @@ class TensorExecutor : public Executor {
         : Executor(std::move(ctx), std::move(ops)) {}
 };
 
-/// The operators whose signatures `stdlib/tensor.cml` declares (handover H19, H151). The C++
+/// The operators whose signatures `stdlib/tensor.cml` declares (handover H19, H151, H175). The C++
 /// side keeps their kernels, executors, traits, resources and folds; the declaration is the
 /// module's signature, so their groups are not exported here. Every operator, declared or
 /// computed, is also exported under the type namespace (`Tensor.shape`): a declaration cannot
@@ -72,6 +72,7 @@ constexpr std::string_view kDeclaredOperators[] = {
     "seed",
     "set_num_threads",
     "shape",
+    "show",
     "to_bytes",
 };
 

@@ -1,0 +1,13 @@
+/**
+ * A `string` where the declarations of `tensor:show` accept a tensor or an array: the call is
+ * refused at the declared types, and the one source is `stdlib/tensor.cml`, not the C++ module
+ * (handover H175).
+ */
+module tensor_show_type
+
+import { show } from tensor
+
+func main(): int sync {
+    show('x')
+    return 0
+}
