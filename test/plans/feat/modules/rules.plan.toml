@@ -2,7 +2,7 @@ id = "modules.rules"
 order = 392
 tier = "fast"
 tags = ["feat", "modules", "rules", "rewrite"]
-desc = "Rules (rewrite design 2): a pass written with `rule` declarations and the rewrite of the module rewrite, run on a program as a Camel pass."
+desc = "Rules (rewrite design 2): a pass written with `rule` declarations, the rewrite of the module rewrite, rules as `Rule` values and the scheduling combinators, run on a program as a Camel pass, with the cost of an application measured."
 
 [[tests]]
 name = "rules.rewrite_pass"
@@ -620,3 +620,147 @@ expect_exit = 0
 expect_stdout_contains = ["-0.0 0.0\ninf inf\n"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "rules.rule_values_are_values"
+desc = "A rule is a `Rule` value, not a function: the pass picks a rule at run time (pick), puts it in a `Rule[]` built at run time (choose), concatenates two sets, reads the names back and applies the set. The set is `[bump_one, int_add_zero, int_add_zero]`, so the run-time built order decides the rewrite: order(5) becomes 5+1 and prints 6."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::values", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["values bump_one int_add_zero int_add_zero 3\n", "\n6\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.seq_runs_stages_in_order"
+desc = "seq applies the stages once each, in the written order: bump_one then bump_ten turns x+0 into x+11 (2 rewrites), while the reversed set leaves x+1 (1 rewrite, because bump_ten does not match x+0). The rewrite count, not only the result, tells the order."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::seq_order", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["seq_order 2 4 ", "\n16\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.seq_reverse_order"
+desc = "The same two stages in the other order: bump_ten matches nothing (its own probe round), bump_one applies once, so the count is 1 and the result is 6. seq did not reorder the stages to find a match."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::seq_reverse", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["seq_reverse 1 3 ", "\n6\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.first_takes_the_first_stage_that_rewrites"
+desc = "first tries the stages in the written order and stops at the first that rewrites: with [int_add_zero, bump_one] the zero law wins (order(5) is 5), with the two stages swapped bump_one wins (6). Both are 1 rewrite; the difference is the choice, not the count."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::first_zero", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["first_zero 1 2 ", "\n5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.first_choice_order"
+desc = "The choice with the stages swapped: the bump rule is stage 0, so it rewrites and the zero law is not tried; the result is 6."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::first_bump", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["first_bump 1 2 ", "\n6\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.repeat_counts_rounds"
+desc = "repeat applies one round at a time, so a rule that matches again every round fires exactly once per round: the step rule on x+0 for 5 rounds gives x+5 with rewrites=5 and rounds=5. An engine loop hidden inside repeat (or a round applied twice) would show a different count."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::repeat_five", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["repeat_five 5 5 ", "\n10\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.repeat_honours_the_budget"
+desc = "repeat with a budget of 2 makes 2 rounds and 2 rewrites (x+2, prints 7): the budget is rounds, not calls of a pass that would run to a fixpoint."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::repeat_two", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["repeat_two 2 2 ", "\n7\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.alternate_alternates_rounds"
+desc = "alternate runs one round of each stage per pair, a then b, so three pairs of step (+1) and step_ten (+10) give +33 with rewrites=6 and rounds=6: a pairwise schedule, not one stage to a fixpoint before the other."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::alternate_three", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["alternate_three 6 6 ", "\n38\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.until_reads_the_predicate_before_a_round"
+desc = "until reads its predicate before each round: a predicate that is already true stops the schedule before the first round, so the program is unchanged (5), rewrites=0 and rounds=0. A scheduler that applied one round before checking would print 6 and rewrites=1."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::until_now", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["until_now 0 0 ", "\n5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.until_honours_the_budget"
+desc = "until with a predicate that never holds and a budget of 2 makes two rounds (rewrites=2, x+2, prints 7)."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::until_budget", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["until_budget 2 2 ", "\n7\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.a_rule_set_that_must_not_fire"
+desc = "A rule set whose rules match nothing (the product-by-zero law on a program with no product) applies 0 rewrites, makes the one probe round that proves the fixpoint, and leaves the program as it was (5). The count is pinned so a scheduler cannot claim a rewrite it did not make."
+kind = "behavior"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::nothing", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["nothing 0 1 ", "\n5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.untypeable_pattern_is_refused"
+desc = "A rule whose left side calls a user function cannot be a pattern: the application refuses it with the error value RuleInvalid, naming the rule and the term, and the program does not run. This is the refusal, not a crash and not a silent skip."
+kind = "negative"
+case = "../../../cases/modules/rules/schedule_target.cml"
+args = ["${case}", "schedulers::refuse", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["GraphPassFailed", "RuleInvalid", "Rule 'bad': the left side has a term that is not an operator, a constant or a parameter"]
+expect_output_not_contains = ["\n5\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "rules.run_cost_is_measurable"
+desc = "`run` keeps what one whole application cost (H226): on a graph of 200 functions holding one `x + 0` each, the first application makes the zero law fire 200 times in 2 rounds (the second round proves the fixpoint) and the second application on its result rewrites nothing in 1 round. The wall time and the visited/erased counts are printed but not pinned (they depend on the machine and the node order); the rewrites and rounds are."
+kind = "behavior"
+case = "../../../cases/modules/rules/bench_target.cml"
+args = ["${case}", "bench::measure", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["run_first rewrites 200 rounds 2 ", "run_again rewrites 0 rounds 1 ", "\n200\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

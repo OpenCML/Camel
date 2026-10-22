@@ -6,7 +6,7 @@
  */
 module parse_constructs_static_loop
 
-func sum_of(t: typeas T): int {
+func sum_of::<T>(t: T): int {
     return static loop acc = 0 for (n, F) in fields T do acc + t.[n]
 }
 

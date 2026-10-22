@@ -91,7 +91,7 @@ Nothing that is built changes. Without a recorder a report site is a test of a n
 ### Generic functions
 
 The body of a generic function is built once per instance, so one range gets several facts.
-They are kept: a local of `func id(x: typeas T)` has the types `int | string` when the function
+They are kept: a local of `func id::<T>(x: T)` has the types `int | string` when the function
 is called with both, the declaration lists its instances, and the callee of each call carries
 the type of the instance that call uses.
 

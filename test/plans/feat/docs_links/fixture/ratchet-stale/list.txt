@@ -1,0 +1,2 @@
+# The line names an unanchored citation that no longer exists.
+notes.md|src/thing.c  # the sentence quotes no text; cites 4

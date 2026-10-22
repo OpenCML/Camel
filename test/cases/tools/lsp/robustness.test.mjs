@@ -78,7 +78,7 @@ await withServer(async (ls) => {
     // ---- half-written text ----
     const halves = ['func', 'func main(', 'module main\n\nfunc main() sync {\n    let x = ',
         'import { } from', '}}}}', '((((((((', "let s = 'unterminated", '/* open comment',
-        'let a = 1 +\n', 'type T = {', 'match x {', '@', 'x.', 'a::', 'func f(x: typeas']
+        'let a = 1 +\n', 'type T = {', 'match x {', '@', 'x.', 'a::', 'func f(x: ']
     for (const [i, text] of halves.entries()) {
         uri = ls.open(`half${i}.cml`, text)
         pushed = await ls.diagnosticsFor(uri)

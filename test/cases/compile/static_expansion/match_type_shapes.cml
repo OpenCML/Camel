@@ -6,7 +6,7 @@
  */
 module match_type_shapes
 
-func shape(t: typeas T): string {
+func shape::<T>(t: T): string {
     return match type T {
         case struct => 'struct'
         case tuple => 'tuple'
@@ -14,21 +14,21 @@ func shape(t: typeas T): string {
     }
 }
 
-func composite(t: typeas T) {
+func composite::<T>(t: T) {
     return match type T {
         case struct | tuple => true
         case #leaf => false
     }
 }
 
-func fallback(t: typeas T) {
+func fallback::<T>(t: T) {
     return match type T {
         case struct => 1
         case _ => 0
     }
 }
 
-func selected(t: typeas T): int {
+func selected::<T>(t: T): int {
     return match type T {
         case struct => 1
         case tuple => len(1)

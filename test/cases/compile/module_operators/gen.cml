@@ -5,15 +5,15 @@
  */
 module gen
 
-export func twice(x: typeas T): T {
+export func twice::<T>(x: T): T {
     return x + x
 }
 
-export func same(a: typeas T, b: T): bool {
+export func same::<T>(a: T, b: T): bool {
     return a == b
 }
 
-export func differs(a: typeas T, b: T): bool {
+export func differs::<T>(a: T, b: T): bool {
     return a != b
 }
 
@@ -21,7 +21,7 @@ export func differs(a: typeas T, b: T): bool {
  * `+=` follows its plain operator (`+`, design principles 4.3), which is the declaring
  * module's one here as well (5.7). Sync because the rebinding writes a variable.
  */
-export func bump(x: typeas T, y: T): T sync {
+export func bump::<T>(x: T, y: T): T sync {
     var acc = x
     acc += y
     return acc

@@ -41,7 +41,7 @@ Camel 是一种**以图为核心**的编程语言：程序在编译期被转换�
 - **引用名（identRef）**：用于命名空间限定时可含 `::`，如 `mod::name`；否则同标识符。
 - **关键字**（保留，不可作普通标识符）：  
   `as`, `let`, `var`, `use`, `from`, `func`, `type`, `enum`, `with`, `wait`, `const`, `keyof`,  
-  `return`, `module`, `import`, `export`, `typeas`, `typeof`, `using`, `namespace`,
+  `return`, `module`, `import`, `export`, `typeof`, `using`, `namespace`,
   `if`, `then`, `else`, `match`, `case`, `for`, `in`, `of`, `try`, `catch`, `finally`, `throw`, `raise`,  
   `sync`,  
   `null`, `true`, `false`。  

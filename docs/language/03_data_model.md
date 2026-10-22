@@ -259,7 +259,7 @@ error DivByZero: the divisor is zero
 - **反方向永不自动。** `T?`、`T!` 要当 `T` 用，必须拆开；`int?` 也不会变成 `float?`，数值之间仍不做隐式转换。内建算子（`append`、`println` 等）的实参不在此列：它们的形参类型由 C++ 的类型规则从实参算出，没有可供装入的目标类型，需要时写 `as`。
 - **空数组字面量 `[]` 的元素类型取自它所在的位置**：声明的类型（`let xs: int[] = []`）、形参（`count([])`）、分支的另一条臂、`??`/`!!` 的左侧（`attempt(f) !! []`）、声明的返回类型、`as`（`[] as Map<string, int>`）。把 `[]` 绑定到没有写类型的名字上（`let xs = []`）是编译期错误 `SemanticDiag::EmptyArrayWithoutType`，诊断提示写出类型。
 - 两种标记可以组合：`T?!`、`T!?`。标记从最内层写起：`T?!` 是 fallible(nullable(T))，`T!?` 是 nullable(fallible(T))；`match` 只拆开最外层。同一种不能重复。数组元素等位置需要括号：`(int?)[]`。
-- 与泛型配合：`(typeas T)?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
+- 与泛型配合：函数头声明 `T` 后，形参类型 `T?` 从可空实参里绑定 `T`（[7.5](07_statements.md#75-泛型函数)）。
 - `let x: int! = v` 中 `!` 与 `=` 之间要有空格。
 - 内建的可能出错的函数：`parse_int(s)`、`parse_float(s)`，`fs` 模块的 `try_read_text(path)`、`remove(path)`、`remove_dir(path)`，`json` 模块的 `decode`、`decode_as`。`error(kind, message)` 构造错误值并记下调用处的位置。
 

@@ -13,7 +13,7 @@ func tail_or_empty(xs: int[]): int[] sync {
 }
 func risky(n: int): int[] { return [10 / n] }
 func find(xs: int[], i: int): int[]? { return if i < len(xs) then [xs[i]] else null }
-func size_of(xs: (typeas T)[]): int { return len(xs) }
+func size_of::<T>(xs: T[]): int { return len(xs) }
 
 func main(): int sync {
     let xs: int[] = []

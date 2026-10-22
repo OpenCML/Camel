@@ -1434,6 +1434,7 @@ RewriteStats DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRound
             if (!draft_.alive(node) || !takesPart(node)) {
                 continue;
             }
+            ++stats.visited;
             const camel::core::sem::PermissionMask context = contextOf(node);
             matchPerms_           = draft_.header(node)->permissions;
             for (const Rule &rule : rules) {

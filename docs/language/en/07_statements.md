@@ -200,7 +200,7 @@ func main(): int sync {
 - **Can be overloaded**: the binary `+` `-` `*` `/` `%` `^` `@` `==` `<` `<=` `>` `>=` `&` `|`, indexing `[]` (the indexed value and at least one index), and the unary `-` `!` `~`. `-` with one parameter is negation, with two subtraction.
 - **Overloading `==` gives `!=`** (design principles 4.3): an `a != b` that uses that overload of `==` is `!(a == b)`, so the two cannot disagree. The overload must return a `bool`, otherwise the `!=` that uses it is `SemanticDiag::OperatorOverloadInvalid`. `!=` cannot be overloaded by itself (`SemanticDiag::OperatorNotOverloadable`).
 - **Cannot be overloaded**: `&&`, `||` (branches), `??`, `!!`, `?->` (branches on a null or an error), `->` (passes a value to a function), `..`, `as`, assignment, `!=` (it follows `==`), and `===`, `!==`. Declaring one is `SemanticDiag::OperatorNotOverloadable`, with the reason. A compound assignment has no overload of its own: `a += b` is `a = a + b` and follows the overload of `+`.
-- An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload writes `typeas` in a parameter's type (`func operator +(a: (typeas T)[], b: T[]): T[]`), not in angle brackets: angle brackets are with-parameters.
+- An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload declares its type parameters after the operator's name (`func operator +::<T>(a: T[], b: T[]): T[]`), not in a parameter's type.
 - **The overloads of every layer form one set.** Every other name takes the nearest layer only (local > this module > imported > built-in); operators are the exception (design principles 10.2): the overloads of this module, those exported by imported modules, and the built-in and C++ module ones are one set, and a call takes the one that accepts its operands.
 - **The more specific overload wins** (design principles 4.3). "More specific" means: an overload of the program whose parameter types are exactly the operands' types (without a value entering `T?` or `T!`), while every other one that accepts the operands takes them only as members of a family of types: a built-in or C++ module operator whose type rule accepts several types (comparing arrays, tuples and structs by content, arithmetic over tensors), or a generic overload. The call then takes the program's overload. So a struct can have an equality of its own: `func operator ==(a: V, b: V): bool` makes `p == q` (both `V`) call it instead of comparing by content; other struct types are still compared by content. A built-in operator declared for exactly those types (`int + int`, `float == float`) is as specific: declaring such an overload is `SemanticDiag::OperatorOverloadConflict`.
 - Otherwise two that accept the operands are `SemanticDiag::AmbiguousCall`, which lists them (two generic overloads, or two modules each giving one for the same parameter types); two overloads with the same parameter types in one module are `SemanticDiag::Redeclaration`. An ordinary call, and a partial application (`f<w>` used as a value), report the same diagnostic when several candidates fit in the pass being used.
@@ -210,18 +210,18 @@ func main(): int sync {
 
 ## 7.5 Generic functions
 
-At the position in the parameter types where a type variable first appears, write `typeas T`, which binds the type at that position as `T`; afterwards (the remaining parameters, the return type, the function body) write `T` directly.
+A generic function declares its type parameters at its head, after its name in `::<…>`. A function with `::<…>` is generic, one without is not.
 
 ```cml
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func pick(c: bool, a: typeas T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T): T {
     return if c then a else b
 }
 
-func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
     return xs->map<f>
 }
 
@@ -240,20 +240,20 @@ func main(): int sync {
 ```
 
 - A generic function is a **subgraph template**. Each call with a set of concrete types instantiates a subgraph in which all types are concrete (the same set of types is instantiated only once; in `std::rgir` one can see subgraphs named `first<int>` and `first<string>`). The graph contains only concrete types, and no type information is needed at run time.
-- **A type variable takes its type from the arguments.** First the type of the argument at its `typeas` position; when the argument there says nothing (it is `null`, or a generic function that is itself waiting for its types), the type found at another occurrence. The constraints of all arguments are collected before any is checked: every parameter is then checked against its type with the variables replaced, without implicit conversion (except that a value enters a `T?`/`T!` parameter, see [3.4](03_data_model.md)). `pick(true, 1, 2.5)` is an error (`T` is bound to `int`); a variable that cannot be determined is a compile-time error, and the diagnostic says which.
-- `typeas` can appear in these positions: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot appear as an argument of a module type.
-- `typeas` can appear in the parameters (including `with` parameters) or result type of a function declaration. A variable must be declared before use (`with` parameters first); declaring it twice or using an existing type name is an error.
-- A result-only variable is inferred from an expected type: `let xs: int[] = empty()`, a known parameter type, or a declared return position. Without sufficient context, provide explicit type arguments: `empty::<int>()`. Types follow their first occurrence in the signature (`with` parameters first) or can be given by name, which does not depend on position: `pair::<A = int, B = string>(..)`. One list is all positional or all named, never mixed; by name every type variable must be given, and a wrong or repeated name is a compile-time error; built-in operators take their type arguments by position only. Type arguments are consumed at compile time. Value context arguments remain `f<w>`; combine them as `f::<T><w>(x)`. An explicit instance can also be a function value: `let f = id::<int>`.
+- **A type variable takes its type from the arguments.** Each argument is unified with its parameter's type; when the argument there says nothing (it is `null`, or a generic function that is itself waiting for its types), the type found at another occurrence. The constraints of all arguments are collected before any is checked: every parameter is then checked against its type with the variables replaced, without implicit conversion (except that a value enters a `T?`/`T!` parameter, see [3.4](03_data_model.md)). `pick(true, 1, 2.5)` is an error (`T` is bound to `int`); a variable that cannot be determined is a compile-time error, and the diagnostic says which.
+- A name declared at the head can be written in any type position of the signature: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot be an argument of a module type.
+- Only a name declared at the head is a type variable. A plain name in a parameter type that denotes no type and is not declared at the head is an unknown type (`SemanticDiag::UnresolvedTypeReference`); it is not bound automatically. One name declared twice at the head is `SemanticDiag::TypeVariableRedeclared`; one declared but never written in the signature is the warning `SemanticDiag::TypeVariableUnused`, and the declaration stays usable. When a head name also denotes a type, it is the type parameter inside its declaration: the head declaration wins.
+- A result-only variable is inferred from an expected type: `let xs: int[] = empty()`, a known parameter type, or a declared return position. Without sufficient context, provide explicit type arguments: `empty::<int>()`. Positional type arguments follow the order of the head declaration, and they can be given by name, which does not depend on position: `pair::<A = int, B = string>(..)`. One list is all positional or all named, never mixed; by name every type variable must be given, and a wrong or repeated name is a compile-time error; built-in operators take their type arguments by position only. Type arguments are consumed at compile time. Value context arguments remain `f<w>`; combine them as `f::<T><w>(x)`. An explicit instance can also be a function value: `let f = id::<int>`.
 - **The function body is checked at instantiation.** Type errors in the function body are reported at instantiation; the diagnostic gives the position of the error in the function body and states which instance it is and which call instantiated it. A generic function that is never called is not checked.
 - Recursive generic functions can be used (the return type must be written out). A function that switches to a larger type at every recursion cannot terminate instantiation, and an error is reported when the nesting reaches 8 levels.
 - `T` can be used in the function body: the parameter types of a lambda, `let z: T = 0`, `e as T`.
 - **Export**: a generic function can be `export`ed, and after an `import` another module calls it as usual (the qualified name `lib::f(x)` can also be written). What is exported is the template; there is one instance per set of types in the whole program, whichever module calls it. Names in the function body are resolved in the module that declares it, so it can use functions of that module that are not exported, other generic functions, its own imports and the values of its top level.
 
-Binding is equally possible in `with` parameters:
+The types of `with` parameters use the names declared at the head too:
 
 ```cml
-with <f: (acc: typeas U, x: typeas T) => U, init: U>
-func my_fold(xs: T[]): U {
+with <f: (acc: U, x: T) => U, init: U>
+func my_fold::<T, U>(xs: T[]): U {
     return xs->reduce<f, init>
 }
 
@@ -270,9 +270,9 @@ func main(): int sync {
 **A generic function may stand wherever a function is expected**, also as an argument of another generic function. The compiler delays its instantiation until the type variables can be determined from the context; the delay exists at compile time only, and the graph holds the concrete instances.
 
 ```cml
-func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
-func id(x: typeas A): A { return x }
-func pair(x: typeas A): (A, A) { return (x, x) }
+func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
+func id::<A>(x: A): A { return x }
+func pair::<A>(x: A): (A, A) { return (x, x) }
 
 func main(): int sync {
     println(apply(id, 3), apply(pair, 'a'))   // T comes from 3: id becomes id<int>, so U = int
@@ -530,11 +530,11 @@ type PairList<T> = Pair<T>[]
 
 func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
 
-func swap(p: Pair<typeas T>): Pair<T> {       // combined with typeas
+func swap::<T>(p: Pair<T>): Pair<T> {          // combined with the head type parameters
     return (p.1, p.0)
 }
 
-func key_of(e: Entry<typeas K, typeas V>): K {
+func key_of::<K, V>(e: Entry<K, V>): K {
     return e.key
 }
 

@@ -291,6 +291,11 @@
             "plans": ["smoke"]
         },
         {
+            "comment": "The showcase's training step: the plan runs the naive Transformer example on the three CPU back ends and pins the fixed-seed losses.",
+            "paths": ["examples/models/naive-in-expert-out/"],
+            "plans": ["feat/modules/naive_in_expert_out.plan.toml"]
+        },
+        {
             "comment": "Example programs and their recorded output.",
             "paths": ["examples/"],
             "plans": ["feat/examples"]

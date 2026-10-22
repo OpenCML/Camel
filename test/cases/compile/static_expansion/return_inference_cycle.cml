@@ -4,7 +4,7 @@
  */
 module return_inference_cycle
 
-func bad(t: typeas T) {
+func bad::<T>(t: T) {
     return bad(t)
 }
 

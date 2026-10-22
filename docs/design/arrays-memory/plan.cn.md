@@ -268,20 +268,20 @@ Tensor<f32>               // f32[..]
 - 一个数组类型里 `..` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[.., 3]` 是错误。
 - 裸 `..` 匿名（打印 `T[3, ..]`）；`..s` 命名，名字只活在类型里。
 - `?` 是未知维度，`T[?]` 就是 `T[]`；`2 * n - 1` 这类线性形式保留名字。
-- 元素类型可以是类型变量：`(typeas T)[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
+- 元素类型可以是类型变量：函数头声明 `T` 后写 `T[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
 - 形状参数里写 `const`（`Tensor<f32, const [3]>`）报 `InvalidTypeArgument`，消息给出"去掉 `const`"的写法；不新增诊断码（批复 Q2 的同类处理）。
 
 ### 4.2 AST、CST 与格式化
 
 - `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '..' ident? ']'`。
 - `src/parse/syntax/parser_type.cpp` 的 `parseArrayType`（158–206）改为循环解析 `ArrayDim`；`parseSpecType`（208+）的 `typeOrData` 增加"以 `[` 开头的形状参数"分支（解析成 `ArrayData`，里面的项是 extent 表达式），`const` 分支保留但只对普通类型参数有效。
-- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp:99`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `..name`。
+- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp:83`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `..name`。
 - CST→AST：`src/parse/ast/builder.cpp` 3330–3342 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp` 3639–3652）对每组建一个 `ArrayType`：`[]` → `[?]`，`[..s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
-- 格式化器：`tools/format/fmt.cpp:1250` 的 `visitArrayType` 逐组打印 `[?]/[..s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
+- 格式化器：`tools/format/fmt.cpp:1573 # "any Formatter::visitArrayType(cst::ArrayType context) {"` 的 `visitArrayType` 逐组打印 `[?]/[..s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
 
 ### 4.3 绑定规则
 
-在一个函数签名的**参数类型**里（`dimBindAllowed_` 只在 `visitFuncType` 访问形参时置位，`src/compile/gct/builder.cpp:3804`）：
+在一个函数签名的**参数类型**里（`dimBindAllowed_` 只在 `visitFuncType` 访问形参时置位，`src/compile/gct/builder.cpp:3788`）：
 
 1. 一个普通名字 `n` 第一次出现 ⇒ 绑定为维度，产生 `ExtentForm::linear({{n, 1}})`；
 2. 同一签名里再出现 `n` ⇒ 引用已绑定的维度（`T[m, m]` 表示方阵）；
@@ -339,7 +339,7 @@ Tensor<f32>               // f32[..]
 
 `Tensor` 不再是一个 `OtherType`，而是**一个由张量模块导出的 `ArrayType` 构造器对象**：
 
-- 导出：`modules/tensor/module.cpp:60` 从 `exportType(Reference("Tensor"), TensorType::Default())` 改为 `exportType(Reference("Tensor"), ArrayType::numericUnknown({}))` —— 元素是"数值、类型未定"，任意秩。`elemType()` 是 `Void`，`numericUnknown_` 为真。
+- 导出：`modules/tensor/module.cpp:44` 从 `exportType(Reference("Tensor"), TensorType::Default())` 改为 `exportType(Reference("Tensor"), ArrayType::numericUnknown({}))` —— 元素是"数值、类型未定"，任意秩。`elemType()` 是 `Void`，`numericUnknown_` 为真。
 - 应用：`ArrayType::applyArguments`（P2 加的 `Type` 虚函数）在 `numericUnknown_` 为真时解释参数：
   - 无参数 ⇒ 自身（`Tensor`，任意秩）；
   - 一个类型参数 `E` ⇒ 要求 `E` 是数值标量（`i32/i64/f32/f64/bool/byte/c64/c128`），否则 `InvalidTypeArgument`（`Tensor<string>` 是错误）；带形状参数 ⇒ `E[extents]`，否则 `E[..]`（任意秩）；
@@ -354,7 +354,7 @@ Tensor<f32>               // f32[..]
 
 ### 5.2 元素类型精确
 
-- 删除 `normalizeTensorDType`（`modules/tensor/dtype.cpp:43`）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
+- 删除 `normalizeTensorDType`（`modules/tensor/dtype.cpp:27 # "TypeCode normalizeTensorDType(TypeCode code) {"`）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
 - 审计模块内核的 dtype 支持：elementwise 已支持 f32/f64/i32/i64（`modules/tensor/kernels/elementwise.cpp`）；conv/bn 的若干内核只接受 `const float*`（`kernels/conv.cpp` 283+、404+、572+）。这些算子的推断处要声明只支持 f32（今天没有声明，遇到 f64 会读错），遇到 f64 输入报运行时故障（而不是静默读错）。测试里没有 `Tensor<float>` 的用例（已核对），只有 `Tensor<int>` 出现在 `modules/nn` 的 checkpoint 用例里，`int` 就是 i64，与今天相同。
 - 删除 `TensorType::castSafetyFrom/castSlotFrom` 里的 dtype 归一化；`as` 的检查变成 `ArrayType::castSlotFrom` 的形状检查（P2）。
 
@@ -392,7 +392,7 @@ Tensor<f32>               // f32[..]
 
 ### 5.5 入口参数与 `.npy`
 
-`EntryArgumentLoader` 今天按 `TypeCode` 精确查表（`src/execute/entry_args.cpp:100/366`），且先试聚合类型。数组与张量共用 `TypeCode::Array` 之后：
+`EntryArgumentLoader` 今天按 `TypeCode` 精确查表（`src/execute/entry_args.cpp:84/350`），且先试聚合类型。数组与张量共用 `TypeCode::Array` 之后：
 
 - 张量模块在 `TypeCode::Array` 上注册 `.npy` 加载器，回调先判"这是不是数值数组、秩是否已知"；不是就返回"不接"（批复 Q4 明确要求加载器能拒接）——`Type[string]` 的入口参数仍按原来的"不能从命令行给出"报错。
 - 返回值的静态类型是**声明的数组类型**（例如 `f32[2, 3]`），不是裸 `Tensor`；`.npy` 的真实 dtype/形状必须与声明相符，否则报入口参数错误。`from_bytes` 的声明保持 `Tensor`（任意数值数组）。

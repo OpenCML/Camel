@@ -2,7 +2,7 @@ id = "compile.generics"
 order = 323
 tier = "fast"
 tags = ["feat", "compile", "generics", "types"]
-desc = "Generic functions bound by `typeas` or by a name's first appearance in a parameter type (one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 5.5 and 5.6."
+desc = "Generic functions that declare their type parameters at their head (`func first::<T>(...)`, one subgraph per set of argument types) and type functions (`type Pair<T> = ...`), design principles 5.5 and 5.6."
 
 [[tests]]
 name = "explicit_type_arguments"
@@ -34,7 +34,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "explicit_type_arguments_by_name"
-desc = "Explicit type arguments by position (order of first appearance in the signature) or by name `A = int`, in any order (design principles 5.9)."
+desc = "Explicit type arguments by position (the order the declaration's head gives them) or by name `A = int`, in any order (design principles 5.9)."
 kind = "behavior"
 case = "../../../cases/compile/generic_explicit_named.cml"
 args = ["${case}", "std::fvm"]
@@ -175,7 +175,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "type_function"
-desc = "Type functions: `Pair<int>` is the right-hand side with the parameter replaced, also with several parameters, inside another type function and combined with `typeas`."
+desc = "Type functions: `Pair<int>` is the right-hand side with the parameter replaced, also with several parameters, inside another type function and combined with a function's head type parameters."
 kind = "behavior"
 case = "../../../cases/compile/generics/type_func.cml"
 args = ["${case}"]
@@ -729,7 +729,7 @@ const want = [
 for (const graph of want) {
   assert(graphs.filter((g) => g === graph).length === 1, `expected exactly one graph '${graph}' in: ${graphs.join(' | ')}`)
 }
-assert(!/typeas|: T\b|=> T\b/.test(graphs.join(' ')), `a type variable reached a graph: ${graphs.join(' | ')}`)
+assert(!/: T\b|=> T\b/.test(graphs.join(' ')), `a type variable reached a graph: ${graphs.join(' | ')}`)
 assert(!graphs.some((g) => /^(first|pick|pair_of|swap) ::/.test(g)), 'a template was built as a graph')
 }
 """
@@ -737,7 +737,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "mismatch"
-desc = "One variable, two arguments of different types: the variable is bound at its `typeas` position and the other argument is then held to it; the diagnostic names the argument, the parameter and the binding."
+desc = "One variable, two arguments of different types: the variable is bound at its first position in the signature and the other argument is then held to it; the diagnostic names the argument, the parameter and the binding."
 kind = "negative"
 case = "../../../cases/compile/generics/err_mismatch.cml"
 args = ["${case}"]
@@ -845,69 +845,32 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "return_type_without_context"
-desc = "A return-only type variable is valid but this call has neither an expected result nor explicit type arguments."
+name = "type_in_lambda_not_declared"
+desc = "A type name inside a lambda's parameter type is not declared by the enclosing function's head, and a lambda cannot declare one: an unknown type."
 kind = "negative"
-case = "../../../cases/compile/generics/err_typeas_return.cml"
+case = "../../../cases/compile/generics/err_type_in_lambda.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
-expect_diagnostic_line = 8
+expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
+expect_diagnostic_code = "0x0300000A"
+expect_diagnostic_line = 9
 expect_diagnostic_column = 17
-expect_output_contains = ["cannot be determined", "make::<...>"]
+expect_output_contains = ["T"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
 [[tests]]
-name = "typeas_in_lambda"
-desc = "`typeas` in a lambda: a type variable is bound only among the parameters of a function declaration."
+name = "duplicate_head_parameter"
+desc = "One name declared twice at the head."
 kind = "negative"
-case = "../../../cases/compile/generics/err_typeas_let.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TypeVariableNotAllowed"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 24
-expect_output_contains = ["this is not a parameter of a function declaration"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "typeas_twice"
-desc = "`typeas T` written twice for one variable."
-kind = "negative"
-case = "../../../cases/compile/generics/err_typeas_twice.cml"
+case = "../../../cases/compile/generics/err_head_param_twice.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 34
-expect_output_contains = ["'typeas T' cannot bind 'T'"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "typeas_collision"
-desc = "`typeas T` where `T` is a declared type: the explicit form binds a type variable of that name for the signature, shadowing the type (design principles 5.5). A plain `T` would refer to the declared type, which is why the explicit form exists."
-kind = "behavior"
-case = "../../../cases/compile/generics/typeas_collision.cml"
-args = ["${case}", "std::fvm"]
-expect_exit = 0
-expect_stdout_exact = "1\n"
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "use_before_typeas"
-desc = "A plain name in an earlier parameter type now binds the variable (5.5), so the later `typeas` of the same name is the redeclaration."
-kind = "negative"
-case = "../../../cases/compile/generics/err_unbound_use.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::TypeVariableRedeclared"
-expect_diagnostic_line = 3
-expect_diagnostic_column = 25
-expect_output_contains = ["'typeas T' cannot bind 'T'", "already binds a type variable"]
+expect_diagnostic_code = "0x03000051"
+expect_diagnostic_line = 6
+expect_diagnostic_column = 1
+expect_output_contains = ["The type parameter 'T' is declared twice"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 
@@ -1115,7 +1078,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "type_function_unused_param"
-desc = "`typeas` as the argument of a type function that does not use the parameter: nothing binds the variable."
+desc = "A head type parameter written as the argument of a type function that does not use the parameter: nothing binds the variable."
 kind = "negative"
 case = "../../../cases/compile/generics/err_tf_unused.cml"
 args = ["${case}"]

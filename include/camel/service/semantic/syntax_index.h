@@ -52,7 +52,7 @@ enum class DeclKind : uint8_t {
     Variable,      // var x
     Type,          // type T = ...
     TypeParameter, // type F<T> = ...
-    TypeVariable,  // typeas T
+    TypeVariable,  // T, declared at the head of a function: `func f::<T>`
     Import,        // import { x } from m / import x from m
     Module,        // import m: the namespace m
     Namespace,     // namespace n { ... }
