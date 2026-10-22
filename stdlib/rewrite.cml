@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of the
- * functions that make a rule to a `Program`, `check` tests rules on random programs, and the four
- * readers report a `Rule`'s name, direction, required rewrites and added constants. The rules
- * passed in are function values; a rule that stops a rewrite without changing the program is a
- * fault, and `strict` restricts the float rules to the ones that hold bit for bit.
+ * Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
+ * values to a `Program`, `check` tests rules on random programs, and the four readers report a
+ * `Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
+ * round budget explicit and the cost kept: its readers give the program, the rewrites applied, the
+ * rounds, the nodes visited, the nodes erased and the wall time (H226). A rule that stops a
+ * rewrite without changing the program is a fault, and `strict` restricts the float rules to the
+ * ones that hold bit for bit.
  *
  * The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
  * `analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
@@ -14,17 +16,17 @@
  * `inspect --ops` hides them from the name comparison.
  */
 
-// The declarations of the eight callable operators of the C++ module `modules/rewrite` (design
-// principles 6.4; handover H19, step 10; H183). This file is the one source of their signatures;
-// the C++ side keeps the kernels, the executor and the purity.
+// The declarations of the callable operators of the C++ module `modules/rewrite` (design
+// principles 6.4; handover H19, step 10; H183; H226). This file is the one source of their
+// signatures; the C++ side keeps the kernels, the executor and the purity.
 //
-// `Program` is the graph module's type, so the declarations import it; `Rule` is this module's own
-// type, exported by the C++ side, so it is written without an import.
+// `Program` is the graph module's type, so the declarations import it; `Rule` and `Run` are this
+// module's own types, exported by the C++ side, so they are written without an import.
 //
 // No signature of this module is computed from an argument: the two arities of `rewrite` and
-// `saturate` are written as two declarations each, and the other six names have one signature.
-// The module therefore needs no `stdlib/signatures/rewrite.cml`. The three reserved groups stay in
-// C++ because a declaration cannot name a group that has no Camel name.
+// `saturate` are written as two declarations each, and the other names have one signature. The
+// module therefore needs no `stdlib/signatures/rewrite.cml`. The three reserved groups stay in C++
+// because a declaration cannot name a group that has no Camel name.
 
 module rewrite
 
@@ -34,20 +36,20 @@ import { Program } from graph
 /// @effect runs the rules' functions
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
 /// @example rewrite(p, rules)    // the rewritten program
-export func rewrite(p: Program, rules: (() => Rule)[]): Program!
+export func rewrite(p: Program, rules: Rule[]): Program!
 
 // The same call with the strict-float choice explicit.
-export func rewrite(p: Program, rules: (() => Rule)[], strict: bool): Program!
+export func rewrite(p: Program, rules: Rule[], strict: bool): Program!
 
 /// Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
 /// writing of the value it finds.
 /// @effect runs the rules' functions
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RewriteInvalid` when a rewrite cannot be carried out
 /// @example saturate(p, rules, 20)    // the smallest writing found
-export func saturate(p: Program, rules: (() => Rule)[], rounds: int): Program!
+export func saturate(p: Program, rules: Rule[], rounds: int): Program!
 
 // The same call with the strict-float choice explicit.
-export func saturate(p: Program, rules: (() => Rule)[], rounds: int, strict: bool): Program!
+export func saturate(p: Program, rules: Rule[], rounds: int, strict: bool): Program!
 
 /// Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 /// @effect rewrites the program and runs the cost model
@@ -59,7 +61,60 @@ export func extract(p: Program, cost: string): Program!
 /// that fails, or that all of them hold.
 /// @effect runs the rules' functions and draws random programs
 /// @example check(rules, 1000, 7)    // the report
-export func check(rules: (() => Rule)[], samples: int, seed: int): string
+export func check(rules: Rule[], samples: int, seed: int): string
+
+/// Applies `rules` to `p` one way, for at most `rounds` rounds, and keeps what the application
+/// cost: the readers below give the program it produced, the rewrites, the rounds, the nodes
+/// visited, the nodes erased, whether it reached a fixpoint and the wall time. This is `rewrite`
+/// with the round budget explicit and the cost measurable (H226).
+/// @effect runs the rules' functions, and nothing else
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example run(p, rules, 16, false)    // the run
+#op<'rewrite:run'>
+export func run(p: Program, rules: Rule[], rounds: int, strict: bool): Run!
+
+/// The program the run `r` produced.
+/// @pure
+/// @example run_program(r)    // the rewritten program
+#op<'rewrite:run_program'>
+export func run_program(r: Run): Program
+
+/// How many rewrites the run `r` applied.
+/// @pure
+/// @example run_rewrites(r)    // 3
+#op<'rewrite:run_rewrites'>
+export func run_rewrites(r: Run): int
+
+/// How many rounds the run `r` made; the last one applied nothing when it reached a fixpoint.
+/// @pure
+/// @example run_rounds(r)    // 2
+#op<'rewrite:run_rounds'>
+export func run_rounds(r: Run): int
+
+/// How many nodes the matcher looked at during the run `r`, over all graphs and rounds.
+/// @pure
+/// @example run_visited(r)    // 24
+#op<'rewrite:run_visited'>
+export func run_visited(r: Run): int
+
+/// How many nodes the run `r` erased as no longer read.
+/// @pure
+/// @example run_erased(r)    // 3
+#op<'rewrite:run_erased'>
+export func run_erased(r: Run): int
+
+/// Whether the run `r` reached a fixpoint (a round applied nothing).
+/// @pure
+/// @example run_fixpoint(r)    // true
+#op<'rewrite:run_fixpoint'>
+export func run_fixpoint(r: Run): bool
+
+/// The wall time of the run `r`, in seconds: compiling the rules, matching, rewriting and the
+/// commit.
+/// @pure
+/// @example run_seconds(r)    // 0.0012
+#op<'rewrite:run_seconds'>
+export func run_seconds(r: Run): float
 
 /// The name of the rule `r`.
 /// @pure

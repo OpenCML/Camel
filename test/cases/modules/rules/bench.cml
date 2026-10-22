@@ -1,0 +1,39 @@
+/**
+ * Measures one whole application of a rule set on `bench_target.cml` (H226): the rewrites, the
+ * rounds, the nodes visited, the nodes erased, whether it reached a fixpoint and the wall time,
+ * for the application that rewrites and for a second one that finds the fixpoint at once.
+ *
+ * Each `report` runs in a `sync` block that is the arm itself, so the printing is part of the
+ * pass's execution: a call inside a plain arm block is otherwise not executed
+ * (`SemanticDiag::EffectNotExecuted`).
+ */
+module bench
+
+import { Program } from graph
+import {
+    Run, run, run_program, run_rewrites, run_rounds, run_visited, run_erased, run_fixpoint,
+    run_seconds,
+} from rewrite
+import { int_add_zero, int_mul_one } from rules
+
+func report(label: string, r: Run): void sync {
+    println(label, 'rewrites', run_rewrites(r), 'rounds', run_rounds(r), 'visited',
+        run_visited(r), 'erased', run_erased(r), 'fixpoint', run_fixpoint(r), 'seconds',
+        run_seconds(r))
+}
+
+export func measure(p: Program): Program! sync {
+    return match run(p, [int_add_zero, int_mul_one], 16, false) {
+        case error e => { throw e }
+        case first => sync {
+            report('run_first', first)
+            return match run(run_program(first), [int_add_zero, int_mul_one], 16, false) {
+                case error e => { throw e }
+                case second => sync {
+                    report('run_again', second)
+                    return run_program(second)
+                }
+            }
+        }
+    }
+}

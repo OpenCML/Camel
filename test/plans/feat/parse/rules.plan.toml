@@ -2,16 +2,16 @@ id = "parse.rules"
 order = 303
 tier = "fast"
 tags = ["feat", "parse", "rules"]
-desc = "Rule declarations (rewrite design 2): `rule name(params) { left => right } when condition`, `<=>`, `const` parameters. The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the function that makes the Rule (module rewrite)."
+desc = "Rule declarations (rewrite design 2): `rule name(params) { left => right } when condition`, `<=>`, `const` parameters. The grammar reads them and the formatter writes them; the compiler makes the pair of functions and the value of type Rule (module rewrite)."
 
 [[tests]]
 name = "rules.ast"
-desc = "The AST of a rule is the pair of functions name__lhs and name__rhs, the function name that makes the Rule, and for a rule with a condition the function name__when."
+desc = "The AST of a rule is the pair of functions name__lhs and name__rhs, the declaration `let name = __rule(...)` whose initializer makes the Rule value, and for a rule with a condition the function name__when."
 kind = "behavior"
 case = "../../../cases/parse/rules/values.cml"
 args = ["${inspect_ast}", "${case}"]
 expect_exit = 0
-expect_stdout_contains = ["FuncDecl: mul_one__lhs", "FuncDecl: mul_one__rhs", "FuncDecl: mul_one", "FuncDecl: swap__lhs", "FuncDecl: swap__rhs", "FuncDecl: guarded__lhs", "FuncDecl: guarded__rhs", "FuncDecl: guarded__when"]
+expect_stdout_contains = ["FuncDecl: mul_one__lhs", "FuncDecl: mul_one__rhs", "DataDecl: mul_one", "FuncDecl: swap__lhs", "FuncDecl: swap__rhs", "FuncDecl: guarded__lhs", "FuncDecl: guarded__rhs", "FuncDecl: guarded__when"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 
@@ -30,7 +30,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "rules.values"
-desc = "A rule is a function that makes a value of the type Rule: the module rewrite reads its name, direction and const parameters back, and the two functions can be called."
+desc = "A rule is a value of the type Rule: the module rewrite reads its name, direction and const parameters back, and the two functions can be called."
 kind = "behavior"
 case = "../../../cases/parse/rules/values.cml"
 args = ["${case}", "${backend}"]

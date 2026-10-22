@@ -1040,12 +1040,13 @@ expect_diagnostic_code = "0x03000110"
 expect_diagnostic_line = 12
 expect_diagnostic_column = 5
 expect_output_contains = ["This value has type 'string[]', which is not the declared type 'int'"]
-# H183: `rewrite`'s eight callable operators are declarations now (`stdlib/rewrite.cml`), two
-# groups: the four engines that take a `Program` and the four rule readers that take a `Rule`.
+# H183/H226: the callable operators of `rewrite` are declarations now (`stdlib/rewrite.cml`):
+# the engines that take a `Program` and `Rule[]`, the rule readers that take a `Rule`, and the
+# run readers that take a `Run`.
 
 [[tests]]
 name = "native.rewrite_declaration_import"
-desc = "`rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array of the functions that make a rule, both arities of `rewrite` and `saturate` resolve, and `extract` and `check` answer `Program!` and `string` from `stdlib/rewrite.cml`. Checked, not run: the rules plans run the engines."
+desc = "`rewrite`'s declarations are what an importer sees: the engines take a `Program` and an array of `Rule` values, both arities of `rewrite` and `saturate` resolve, `extract` and `check` answer `Program!` and `string`, and `run` answers `Run!` from `stdlib/rewrite.cml`. Checked, not run: the rules plans run the engines."
 kind = "behavior"
 case = "../../../cases/compile/native/rewrite_declaration_import.cml"
 args = ["check", "${case}"]
@@ -1058,7 +1059,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rewrite_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_arity.cml:15:20", "argument types: <> (Program)", "<rewrite:rewrite>: (p: Program, rules: () => Rule[]) => Program!", "<rewrite:rewrite>: (p: Program, rules: () => Rule[], strict: bool) => Program!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "rewrite_arity.cml:15:20", "argument types: <> (Program)", "<rewrite:rewrite>: (p: Program, rules: Rule[]) => Program!", "<rewrite:rewrite>: (p: Program, rules: Rule[], strict: bool) => Program!"]
 
 [[tests]]
 name = "native.rewrite_wrong_type"

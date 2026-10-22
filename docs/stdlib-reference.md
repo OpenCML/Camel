@@ -4390,11 +4390,13 @@ traced.
 
 ## `rewrite`: rules applied to a program
 
-Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of the
-functions that make a rule to a `Program`, `check` tests rules on random programs, and the four
-readers report a `Rule`'s name, direction, required rewrites and added constants. The rules
-passed in are function values; a rule that stops a rewrite without changing the program is a
-fault, and `strict` restricts the float rules to the ones that hold bit for bit.
+Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
+values to a `Program`, `check` tests rules on random programs, and the four readers report a
+`Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
+round budget explicit and the cost kept: its readers give the program, the rewrites applied, the
+rounds, the nodes visited, the nodes erased and the wall time (H226). A rule that stops a
+rewrite without changing the program is a fault, and `strict` restricts the float rules to the
+ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
 `analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
@@ -4404,8 +4406,8 @@ The module also exports the reserved groups the language's own `rule`, `rule` wi
 #### `rewrite`
 
 ```camel
-rewrite: (p: Program, rules: (() => Rule)[]) => Program!
-rewrite: (p: Program, rules: (() => Rule)[], strict: bool) => Program!
+rewrite: (p: Program, rules: Rule[]) => Program!
+rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
 ```
 
 Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
@@ -4417,8 +4419,8 @@ Applies `rules` to `p` until no rule changes the program, and gives the rewritte
 #### `saturate`
 
 ```camel
-saturate: (p: Program, rules: (() => Rule)[], rounds: int) => Program!
-saturate: (p: Program, rules: (() => Rule)[], rounds: int, strict: bool) => Program!
+saturate: (p: Program, rules: Rule[], rounds: int) => Program!
+saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
@@ -4443,7 +4445,7 @@ Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 #### `check`
 
 ```camel
-check: (rules: (() => Rule)[], samples: int, seed: int) => string
+check: (rules: Rule[], samples: int, seed: int) => string
 ```
 
 Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
@@ -4451,6 +4453,99 @@ that fails, or that all of them hold.
 
 - With effects: runs the rules' functions and draws random programs.
 - Example: `check(rules, 1000, 7)` gives `the report`
+
+#### `run`
+
+```camel
+run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run!
+```
+
+Applies `rules` to `p` one way, for at most `rounds` rounds, and keeps what the application
+cost: the readers below give the program it produced, the rewrites, the rounds, the nodes
+visited, the nodes erased, whether it reached a fixpoint and the wall time. This is `rewrite`
+with the round budget explicit and the cost measurable (H226).
+
+- With effects: runs the rules' functions, and nothing else.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
+- Example: `run(p, rules, 16, false)` gives `the run`
+
+#### `run_program`
+
+```camel
+run_program: (r: Run) => Program
+```
+
+The program the run `r` produced.
+
+- Pure.
+- Example: `run_program(r)` gives `the rewritten program`
+
+#### `run_rewrites`
+
+```camel
+run_rewrites: (r: Run) => int
+```
+
+How many rewrites the run `r` applied.
+
+- Pure.
+- Example: `run_rewrites(r)` gives `3`
+
+#### `run_rounds`
+
+```camel
+run_rounds: (r: Run) => int
+```
+
+How many rounds the run `r` made; the last one applied nothing when it reached a fixpoint.
+
+- Pure.
+- Example: `run_rounds(r)` gives `2`
+
+#### `run_visited`
+
+```camel
+run_visited: (r: Run) => int
+```
+
+How many nodes the matcher looked at during the run `r`, over all graphs and rounds.
+
+- Pure.
+- Example: `run_visited(r)` gives `24`
+
+#### `run_erased`
+
+```camel
+run_erased: (r: Run) => int
+```
+
+How many nodes the run `r` erased as no longer read.
+
+- Pure.
+- Example: `run_erased(r)` gives `3`
+
+#### `run_fixpoint`
+
+```camel
+run_fixpoint: (r: Run) => bool
+```
+
+Whether the run `r` reached a fixpoint (a round applied nothing).
+
+- Pure.
+- Example: `run_fixpoint(r)` gives `true`
+
+#### `run_seconds`
+
+```camel
+run_seconds: (r: Run) => float
+```
+
+The wall time of the run `r`, in seconds: compiling the rules, matching, rewriting and the
+commit.
+
+- Pure.
+- Example: `run_seconds(r)` gives `0.0012`
 
 #### `rule_name`
 
