@@ -2571,3 +2571,16 @@ expect_exit = 0
 expect_stdout_exact = "[0.0, 2.0, 3.0, 0.0, 0.0]\n[0.0, 0.0, 5.0, 3.0, 2.0]\narray_slice_grad subscript_d=0.0 call_d=0.0 nested_d=0.0 roundtrip_d=0.0 reversed_d=0.0 stepped_d=0.0 nonzero=115.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "refuse_new_array"
+desc = "`new` has an adjoint: a tensor argument passes its gradient through. An array argument's adjoint would put the tensor's gradient back in an array of the same shape, and no operator here carries a gradient from a tensor into an array, so an array that depends on the differentiated parameter is refused at the new call (line 17), naming the operator and the array's type, instead of dropping the array's gradient. A constant array is not refused: it starts no gradient flow, so the call is never visited."
+kind = "negative"
+case = "../../../cases/modules/autodiff/refuse_new_array.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::RuntimeError"
+expect_diagnostic_line = 17
+expect_output_contains = ["cannot differentiate operator 'tensor:new'", "no operator that carries a tensor's gradient back into an array"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
