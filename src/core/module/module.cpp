@@ -335,6 +335,11 @@ bool Module::exportEntity(const Reference &ref, const entity &ent) {
         for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
             nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
         }
+        // The same operator under a type-qualified name (`Tensor.shape` beside `shape`) is one
+        // signature: a plain name this module writes takes its aliases with it.
+        if (ref.plain()) {
+            replaceTypeQualifiedAliases(ref.ident(), ent);
+        }
     }
     return inserted;
 }
@@ -346,8 +351,44 @@ bool Module::replaceEntity(const Reference &ref, const entity &ent) {
         for (const auto &[uri, resolver] : ent.operGroup()->resolvers()) {
             nativeOperatorGroups_[table.intern(uri)] = ent.operGroup();
         }
+        if (ref.plain()) {
+            replaceTypeQualifiedAliases(ref.ident(), ent);
+        }
     }
     return written;
+}
+
+size_t Module::replaceTypeQualifiedAliases(const std::string &ident, const entity &ent) {
+    if (!ent.isOperGroup() || ent.operGroup() == nullptr) {
+        return 0;
+    }
+    // A qualified name of an unrelated operator that happens to share the identifier is left
+    // alone: the two are one operator only when they answer for one URI.
+    const auto &resolvers = ent.operGroup()->resolvers();
+    std::vector<Reference> aliases;
+    nativeEntityNS_->forEach([&](const Reference &ref, const entity &other) {
+        if (ref.plain() || ref.ident() != ident || !other.isOperGroup() ||
+            other.operGroup() == nullptr || other.operGroup() == ent.operGroup()) {
+            return;
+        }
+        const auto &aliasResolvers = other.operGroup()->resolvers();
+        const bool same             = std::any_of(
+            resolvers.begin(),
+            resolvers.end(),
+            [&](const auto &resolver) {
+                return std::any_of(
+                    aliasResolvers.begin(),
+                    aliasResolvers.end(),
+                    [&](const auto &alias) { return alias.first == resolver.first; });
+            });
+        if (same) {
+            aliases.push_back(ref);
+        }
+    });
+    for (const Reference &ref : aliases) {
+        nativeEntityNS_->assign(ref, ent);
+    }
+    return aliases.size();
 }
 
 void Module::inheritExportsFrom(const Module &other) {
@@ -361,6 +402,23 @@ void Module::inheritExportsFrom(const Module &other) {
     }
     for (const Reference &ref : other.defaultImportedRefs_) {
         exportDefaultImportRef(ref);
+    }
+    // A declaration this module holds is the signature of its operator: the implementation may
+    // export the same operator under a type-qualified alias too (`Tensor.shape` beside
+    // `shape`), and an alias that just arrived with those exports would otherwise be the last
+    // write, pointing at the C++ group the declaration replaced. Whichever of the two names is
+    // written last, the declaration is the one signature (design principles 6.4; handover
+    // H151).
+    std::vector<std::string> plainGroups;
+    nativeEntityNS_->forEach([&](const Reference &ref, const entity &ent) {
+        if (ref.plain() && ent.isOperGroup() && ent.operGroup() != nullptr) {
+            plainGroups.push_back(ref.ident());
+        }
+    });
+    for (const std::string &ident : plainGroups) {
+        if (auto ent = nativeEntityNS_->get(Reference(ident)); ent.has_value()) {
+            replaceTypeQualifiedAliases(ident, *ent);
+        }
     }
 }
 

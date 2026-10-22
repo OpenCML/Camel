@@ -25,6 +25,9 @@
 
 #include "module.h"
 
+#include <algorithm>
+#include <string_view>
+
 #include "attrs.h"
 #include "camel/core/context/context.h"
 #include "camel/core/module/module.h"
@@ -53,6 +56,30 @@ class TensorExecutor : public Executor {
         : Executor(std::move(ctx), std::move(ops)) {}
 };
 
+/// The operators whose signatures `stdlib/tensor.cml` declares (handover H19, H151). The C++
+/// side keeps their kernels, executors, traits, resources and folds; the declaration is the
+/// module's signature, so their groups are not exported here. Every operator, declared or
+/// computed, is also exported under the type namespace (`Tensor.shape`): a declaration cannot
+/// write that alias, and the compiler points it at the declaration when the declaration
+/// replaces the module's entity for the name (Module::replaceTypeQualifiedAliases).
+constexpr std::string_view kDeclaredOperators[] = {
+    "dim",
+    "gemm_backend",
+    "load_npy",
+    "num_threads",
+    "numel",
+    "save_npy",
+    "seed",
+    "set_num_threads",
+    "shape",
+    "to_bytes",
+};
+
+bool isDeclaredOperator(std::string_view name) {
+    return std::find(std::begin(kDeclaredOperators), std::end(kDeclaredOperators), name) !=
+           std::end(kDeclaredOperators);
+}
+
 } // namespace
 
 TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
@@ -64,7 +91,9 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     exportEntity(Reference("from_bytes"), binary);
     exportEntity(Reference(std::vector<std::string>{"Tensor"}, "from_bytes"), binary);
     for (const auto &group : OpRegistry::instance().operatorGroups("tensor")) {
-        exportEntity(group->name(), group);
+        if (!isDeclaredOperator(group->name())) {
+            exportEntity(group->name(), group);
+        }
         if (group->name().starts_with("__")) {
             exportDefaultImportRef(group->name());
         } else {

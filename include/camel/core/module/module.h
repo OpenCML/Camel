@@ -292,6 +292,14 @@ class Module : public std::enable_shared_from_this<Module> {
     /// ruling 1), so a declaration of an operator the C++ module exported too writes the
     /// module's signature, not a second entity beside it.
     bool replaceEntity(const Reference &ref, const entity &ent);
+    /// The same, for the aliases a module publishes under a type namespace: a module may export
+    /// one operator under its own name and under a type's (`shape` and `Tensor.shape` in
+    /// `modules/tensor`). A declaration can write only the plain function, so when a plain name
+    /// becomes the module's signature for `ident`, every qualified entity whose identifier is
+    /// `ident` and whose group answers for one of the same URIs resolves to that same entity: the
+    /// alias is the declaration under another name, not a second entity beside it (design
+    /// principles 6.4; handover H19, H151). Returns how many aliases were replaced.
+    size_t replaceTypeQualifiedAliases(const std::string &ident, const entity &ent);
     /// Adds every name `other` exports to this module's own tables: its types, its entities
     /// (operator groups, constants, tags) and the names it brings along. The two objects are one
     /// module (design principles 6.4; handover H94, ruling 1): the C++ module implements, the

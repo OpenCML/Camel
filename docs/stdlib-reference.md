@@ -31,7 +31,7 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the tensor stack (`tensor`, `nn`, `autodiff`, `onnx`, `sim`), the Python
+Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`), the Python
 bridge (`python`, `pyplot`) and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
@@ -40,7 +40,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [str](#str) | `import { ... } from str` | C++ | 14 |
 | [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
-| [tensor](#tensor) | `import { ... } from tensor` | C++ | 2 |
+| [tensor](#tensor) | `import { ... } from tensor` | C++ | 64 |
 | [array](#array) | `import { ... } from array` | Camel | 17 |
 | [math](#math) | `import { ... } from math` | C++ | 48 |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
@@ -1130,18 +1130,717 @@ standard error; the next save restores it before replacing it.
 
 <a id="tensor"></a>
 
-## `tensor`: binary conversion
+## `tensor`: multi-dimensional numeric arrays
 
-#### `to_bytes`
+The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
+binary form, a NumPy file, and the module's worker threads and random generator.
+
+The declarations written here are the operators whose signature is fixed. The ones whose element
+type or shape follows their arguments — elementwise arithmetic, the reshaping operators, the
+axis forms of a reduction — cannot be written as a declaration; they are implemented in
+`modules/tensor` and listed in `stdlib/signatures/tensor.cml`, whose entries this page renders
+under the same sections (design principles 6.4; handover H19, H151).
+
+### Creation
+
+#### `new`
 
 ```camel
-to_bytes: (t: Tensor) => Bytes
+new: (values: Tensor | number[]) => Tensor
 ```
 
-The little-endian bytes of the elements of a tensor, in row-major order.
+A tensor made of a nested number array (or of a tensor, copied into contiguous row-major
+storage); the element type follows the values: `f32` for floats, `int64` for integers, `bool`
+for booleans.
 
 - Pure.
-- Example: `to_bytes(new([1.0, 2.0]))`
+- Example: `new([[1.0, 2.0], [3.0, 4.0]])`
+
+#### `empty`
+
+```camel
+empty: (shape: int[]) => Tensor
+```
+
+A tensor of the given extents; the allocation is zeroed, so it reads as `zeros` of the same
+shape.
+
+- Pure.
+- Example: `empty([2, 3])`
+
+#### `zeros`
+
+```camel
+zeros: (shape: int[]) => Tensor
+```
+
+A tensor of `f32` zeros with the given extents.
+
+- Pure.
+- Example: `zeros([2, 3])`
+
+#### `ones`
+
+```camel
+ones: (shape: int[]) => Tensor
+```
+
+A tensor of `f32` ones with the given extents.
+
+- Pure.
+- Example: `ones([2, 3])`
+
+#### `full`
+
+```camel
+full: (shape: int[], value: number) => Tensor
+```
+
+A tensor of the given extents whose elements are all value; the element type is the value's.
+
+- Pure.
+- Example: `full([2, 2], -1.0)`
+
+#### `eye`
+
+```camel
+eye: (n: int) => Tensor
+```
+
+The `f32` n by n identity matrix.
+
+- Pure.
+- Example: `eye(2)`
+
+#### `range`
+
+```camel
+range: (start: int, stop?: int, step?: int) => Tensor<int64>
+```
+
+The integer sequence start, start + step, ... below stop, as a rank-1 `int64` tensor: one
+argument is stop with start 0, step is 1 by default, and a step of 0 is a fault.
+
+- Pure.
+- Failure: fault `RuntimeError` when stop and start leave a step of 0.
+- Example: `range(0, 5)` gives `[0, 1, 2, 3, 4]`
+
+### Random
+
+#### `random`
+
+```camel
+random: (shape: int[], low: number, high: number) => Tensor
+```
+
+A tensor of `f32` values drawn uniformly from [low, high) with the given extents.
+
+- With effects: reads and advances the random generator.
+- Example: `random([2, 2], 0.0, 1.0)`
+
+#### `randn`
+
+```camel
+randn: (shape: int[], mean?: number, std?: number) => Tensor
+```
+
+A tensor of `f32` values drawn from the normal distribution with the given mean (0 by
+default) and standard deviation (1 by default), with the given extents.
+
+- With effects: reads and advances the random generator.
+- Example: `randn([2, 3])`
+
+### Elementwise
+
+#### `add`
+
+```camel
+add: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a + b per element, with NumPy broadcasting: a scalar operand applies to every element, and
+the element type is the wider of the two (a float with an integer gives `f32`).
+
+- Pure.
+- Example: `add(new([1.0, 2.0]), 1.0)` gives `[2.0, 3.0]`
+
+#### `subtract`
+
+```camel
+subtract: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a - b per element, with NumPy broadcasting.
+
+- Pure.
+- Example: `subtract(new([1.0, 2.0]), 0.5)` gives `[0.5, 1.5]`
+
+#### `multiply`
+
+```camel
+multiply: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a * b per element, with NumPy broadcasting.
+
+- Pure.
+- Example: `multiply(new([1.0, 2.0]), new([3.0, 4.0]))` gives `[3.0, 8.0]`
+
+#### `divide`
+
+```camel
+divide: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a / b per element, with NumPy broadcasting; IEEE division: x / 0 is an infinity or NaN, not a
+fault.
+
+- Pure.
+- Example: `divide(new([1.0, 2.0]), 2.0)` gives `[0.5, 1.0]`
+
+#### `pow`
+
+```camel
+pow: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+a raised to b per element, with NumPy broadcasting.
+
+- Pure.
+- Example: `pow(new([2.0, 3.0]), 2.0)` gives `[4.0, 9.0]`
+
+#### `maximum`
+
+```camel
+maximum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side gives the
+canonical quiet NaN, and -0 is below +0.
+
+- Pure.
+- Example: `maximum(new([1.0, -0.0]), 0.0)` gives `[1.0, 0.0]`
+
+#### `minimum`
+
+```camel
+minimum: (lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side gives the
+canonical quiet NaN, and -0 is below +0.
+
+- Pure.
+- Example: `minimum(new([1.0, -0.0]), 0.0)` gives `[0.0, -0.0]`
+
+#### `where`
+
+```camel
+where: (cond: Tensor, lhs: Tensor | number, rhs: Tensor | number) => Tensor
+```
+
+lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
+lhs and rhs.
+
+- Pure.
+- Example: `where(new([true, false]), new([1.0, 2.0]), 0.0)` gives `[1.0, 0.0]`
+
+#### `neg`
+
+```camel
+neg: (t: Tensor) => Tensor
+```
+
+-x per element: the sign flipped.
+
+- Pure.
+- Example: `neg(new([1.0, -2.0]))` gives `[-1.0, 2.0]`
+
+#### `abs`
+
+```camel
+abs: (t: Tensor) => Tensor
+```
+
+|x| per element: the sign cleared.
+
+- Pure.
+- Example: `abs(new([-1.5, 2.0]))` gives `[1.5, 2.0]`
+
+#### `exp`
+
+```camel
+exp: (t: Tensor) => Tensor
+```
+
+e^x per element, within 2 ulp, subnormal results included.
+
+- Pure.
+- Example: `exp(new([0.0, 1.0]))` gives `[1.0, 2.7182817]`
+
+#### `log`
+
+```camel
+log: (t: Tensor) => Tensor
+```
+
+ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negative x gives
+NaN).
+
+- Pure.
+- Example: `log(new([1.0, 2.7182817]))` gives `[0.0, 1.0]`
+
+#### `sqrt`
+
+```camel
+sqrt: (t: Tensor) => Tensor
+```
+
+sqrt(x) per element, rounded once in `f32`.
+
+- Pure.
+- Example: `sqrt(new([4.0, 9.0]))` gives `[2.0, 3.0]`
+
+#### `rsqrt`
+
+```camel
+rsqrt: (t: Tensor) => Tensor
+```
+
+1 / sqrt(x) per element: two steps, each rounded in `f32`.
+
+- Pure.
+- Example: `rsqrt(new([4.0]))` gives `[0.5]`
+
+#### `sigmoid`
+
+```camel
+sigmoid: (t: Tensor) => Tensor
+```
+
+The logistic function 1 / (1 + e^-x) per element.
+
+- Pure.
+- Example: `sigmoid(new([0.0]))` gives `[0.5]`
+
+#### `tanh`
+
+```camel
+tanh: (t: Tensor) => Tensor
+```
+
+The hyperbolic tangent per element.
+
+- Pure.
+- Example: `tanh(new([0.0]))` gives `[0.0]`
+
+#### `relu`
+
+```camel
+relu: (t: Tensor) => Tensor
+```
+
+maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
+
+- Pure.
+- Example: `relu(new([-1.0, 2.0]))` gives `[0.0, 2.0]`
+
+#### `gelu`
+
+```camel
+gelu: (t: Tensor) => Tensor
+```
+
+The Gaussian error linear unit per element, computed as its normative definition in Camel.
+
+- Pure.
+- Example: `gelu(new([0.0]))` gives `[0.0]`
+
+#### `erf`
+
+```camel
+erf: (t: Tensor) => Tensor
+```
+
+The Gauss error function per element.
+
+- Pure.
+- Example: `erf(new([0.0]))` gives `[0.0]`
+
+### Shape and reshaping
+
+#### `reshape`
+
+```camel
+reshape: (t: Tensor | number[], shape: int[]) => Tensor
+```
+
+The elements in row-major order, in a new shape; one extent may be -1, which the element
+count fills.
+
+- Pure.
+- Example: `reshape(new([1.0, 2.0, 3.0, 4.0]), [2, 2])`
+
+#### `flatten`
+
+```camel
+flatten: (t: Tensor, axis?: int) => Tensor
+```
+
+The elements in row-major order in two axes: the extents before axis multiplied into the
+first, the rest into the second (axis 1 by default).
+
+- Pure.
+- Example: `flatten(new([[1.0, 2.0], [3.0, 4.0]]))`
+
+#### `unsqueeze`
+
+```camel
+unsqueeze: (t: Tensor, axis: int) => Tensor
+```
+
+The elements unchanged, with an axis of extent 1 added at axis.
+
+- Pure.
+- Example: `unsqueeze(new([1.0, 2.0]), 0)` gives `shape [1, 2]`
+
+#### `transpose`
+
+```camel
+transpose: (t: Tensor) => Tensor
+```
+
+The last two axes swapped (a vector becomes a column, a matrix its transpose).
+
+- Pure.
+- Example: `transpose(new([[1.0, 2.0], [3.0, 4.0]]))`
+
+#### `permute`
+
+```camel
+permute: (t: Tensor, perm: int[]) => Tensor
+```
+
+The axes reordered as perm lists them.
+
+- Pure.
+- Example: `permute(new([[1.0, 2.0], [3.0, 4.0]]), [1, 0])`
+
+#### `concat`
+
+```camel
+concat: (a: Tensor | number[], b: Tensor | number[], axis: int) => Tensor
+```
+
+a and b joined along axis; every other extent must agree.
+
+- Pure.
+- Example: `concat(new([[1.0]]), new([[2.0]]), 0)` gives `shape [2, 1]`
+
+#### `slice`
+
+```camel
+slice: (t: Tensor, axis: int, start: int, end: int, step?: int) => Tensor
+```
+
+The elements start, start + step, ... of one axis before end; step is 1 by default.
+
+- Pure.
+- Example: `slice(new([1.0, 2.0, 3.0, 4.0]), 0, 1, 3)` gives `[2.0, 3.0]`
+
+#### `take`
+
+```camel
+take: (t: Tensor, indices: Tensor | number[]) => Tensor
+```
+
+The entries of the first axis that indices name, in that order.
+
+- Pure.
+- Failure: fault `RuntimeError` when an index is outside the first axis.
+- Example: `take(new([[1.0], [2.0], [3.0]]), [2, 0])` gives `[[3.0], [1.0]]`
+
+#### `one_hot`
+
+```camel
+one_hot: (labels: Tensor | number[], classes: int) => Tensor
+```
+
+Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
+an `int64` tensor of shape [labels, classes].
+
+- Pure.
+- Failure: fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative.
+- Example: `one_hot(new([0, 2]), 3)` gives `[[1, 0, 0], [0, 0, 1]]`
+
+#### `shape`
+
+```camel
+shape: (t: Tensor) => int[]
+```
+
+The extents of a tensor, in order.
+
+- Pure.
+- Example: `shape(new([[1.0, 2.0], [3.0, 4.0]]))` gives `[2, 2]`
+
+#### `numel`
+
+```camel
+numel: (t: Tensor) => int
+```
+
+The number of elements in a tensor: the product of its extents.
+
+- Pure.
+- Example: `numel(zeros([2, 3]))` gives `6`
+
+#### `dim`
+
+```camel
+dim: (t: Tensor, axis: int) => int
+dim: (t: Tensor, axis: i32) => int
+```
+
+The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `dim(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `2`
+
+### Reduction
+
+#### `sum`
+
+```camel
+sum: (t: Tensor) => float
+```
+
+Every element converted to `f64` and summed in row-major order from +0; `int64` and `bool`
+elements are summed exactly in `int64` and converted once.
+
+- Pure.
+- Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]))` gives `10.0`
+
+#### `sum`
+
+```camel
+sum: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `sum(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[4.0, 6.0]`
+
+#### `mean`
+
+```camel
+mean: (t: Tensor) => float
+```
+
+The sum of `sum` divided by the element count in `f64`; an empty tensor is a fault.
+
+- Pure.
+- Failure: fault `DivisionByZero` when the tensor has no element.
+- Example: `mean(new([[1.0, 2.0], [3.0, 4.0]]))` gives `2.5`
+
+#### `mean`
+
+```camel
+mean: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The same mean over one axis; keepdims keeps the axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
+- Example: `mean(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1.5, 3.5]`
+
+#### `max`
+
+```camel
+max: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
+the same bits); keepdims keeps the axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `max(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[3.0, 4.0]`
+
+#### `min`
+
+```camel
+min: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
+axis with extent 1.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `min(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1.0, 3.0]`
+
+#### `argmax`
+
+```camel
+argmax: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
+NaN if there is one, +0 above -0, the earlier position on a tie.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `argmax(new([[1.0, 2.0], [3.0, 4.0]]), 1)` gives `[1, 1]`
+
+#### `argmin`
+
+```camel
+argmin: (t: Tensor, axis: int, keepdims?: bool) => Tensor
+```
+
+The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
+NaN if there is one, -0 below +0, the earlier position on a tie.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Example: `argmin(new([[1.0, 2.0], [3.0, 4.0]]), 0)` gives `[0, 0]`
+
+#### `softmax`
+
+```camel
+softmax: (t: Tensor, axis?: int) => Tensor
+```
+
+The softmax over the axis (-1, the last axis, by default), computed as its normative
+definition in Camel, in `f32`.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax(new([[1.0, 1.0]]))` gives `[[0.5, 0.5]]`
+
+#### `log_softmax`
+
+```camel
+log_softmax: (t: Tensor, axis?: int) => Tensor
+```
+
+The log of the softmax over the axis (-1 by default), computed as its normative definition in
+Camel, in `f32`.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `log_softmax(new([[1.0, 1.0]]))` gives `[[-0.6931472, -0.6931472]]`
+
+#### `softmax_grad`
+
+```camel
+softmax_grad: (y: Tensor, dy: Tensor, axis?: int) => Tensor
+```
+
+The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank.
+- Example: `softmax_grad(y, dy)`
+
+#### `layer_norm`
+
+```camel
+layer_norm: (x: Tensor, gamma: Tensor, beta: Tensor, eps?: number) => Tensor
+```
+
+Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
+the trailing axes; eps is 1e-5 by default. The result is `f32`.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x.
+- Example: `layer_norm(x, gamma, beta)`
+
+### Linear algebra
+
+#### `matmul`
+
+```camel
+matmul: (lhs: Tensor, rhs: Tensor) => Tensor
+```
+
+The matrix product of lhs and rhs: per output element acc = +0, then acc = fma(a[i][k],
+b[k][j], acc) for k ascending, every fused multiply-add rounded once in `f32`.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when the inner extents do not agree.
+- Example: `matmul(new([[1.0, 2.0]]), new([[3.0], [4.0]]))` gives `[[11.0]]`
+
+#### `linear`
+
+```camel
+linear: (x: Tensor, weight: Tensor, bias?: Tensor) => Tensor
+```
+
+The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
+a rank-1 bias [out] when given.
+
+- Pure.
+- Failure: fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent.
+- Example: `linear(x, weight, bias)`
+
+### Gradient
+
+#### `zeros_like`
+
+```camel
+zeros_like: (t: Tensor) => Tensor
+```
+
+A tensor of zeros shaped and typed like t.
+
+- Pure.
+- Example: `zeros_like(new([[1.0, 2.0]]))`
+
+#### `ones_like`
+
+```camel
+ones_like: (t: Tensor) => Tensor
+```
+
+A tensor of ones shaped and typed like t.
+
+- Pure.
+- Example: `ones_like(new([[1.0, 2.0]]))`
+
+### Conversion and display
+
+#### `cast`
+
+```camel
+cast: (t: Tensor | number[], dtype: string) => Tensor
+```
+
+t converted to the element type the name gives: "float32", "float", "double" or "float64"
+for `f32`; "int64", "int", "long" or "int32" for `int64`; "bool" for `bool`. The extents do
+not change.
+
+- Pure.
+- Failure: fault `RuntimeError` when the name is not one of those.
+- Example: `cast(new([1.0, 2.0]), 'int64')` gives `[1, 2]`
+
+#### `show`
+
+```camel
+show: (t: Tensor | number[]) => void
+```
+
+Prints t to the console, in the module's layout.
+
+- With effects: writes the console.
+- Example: `show(new([[1.0, 2.0]]))`
+
+### Binary form
 
 #### `from_bytes`
 
@@ -1150,12 +1849,97 @@ from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 ```
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
-type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result;
-it is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
+is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
 
 - Pure.
-- Failure: fault `InvalidArgument` when the number of bytes does not fit the shape and the element type.
+- Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
 - Example: `from_bytes::<f32>(to_bytes(new([1.0, 2.0])), [2])`
+
+#### `to_bytes`
+
+```camel
+to_bytes: (t: Tensor) => Bytes
+```
+
+The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
+reads back.
+
+- Pure.
+- Example: `to_bytes(new([1.0, 2.0]))` gives `[0, 0, 128, 63, 0, 0, 0, 64]`
+
+#### `load_npy`
+
+```camel
+load_npy: (path: string) => Tensor
+```
+
+The tensor a NumPy `.npy` file holds: its element type and extents are the file's, known when
+the program runs (check them with `as`, or read them with `shape`).
+
+- With effects: reads a file.
+- Failure: fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read.
+- Example: `load_npy('x.npy') as Tensor<f32, const [2, 2]>`
+
+#### `save_npy`
+
+```camel
+save_npy: (t: Tensor, path: string) => void
+```
+
+Writes a tensor to a NumPy `.npy` file, replacing it.
+
+- With effects: writes a file.
+- Failure: fault `RuntimeError` when the file cannot be written.
+- Example: `save_npy(zeros([2, 2]), 'x.npy')`
+
+### Module state
+
+#### `num_threads`
+
+```camel
+num_threads: () => int
+```
+
+The size of the module's worker pool.
+
+- With effects: reads the size of the worker pool.
+- Example: `num_threads()`
+
+#### `set_num_threads`
+
+```camel
+set_num_threads: (n: int) => void
+set_num_threads: (n: i32) => void
+```
+
+Sets the size of the module's worker pool; a value below 1 is read as 1.
+
+- With effects: changes the size of the worker pool.
+- Example: `set_num_threads(4)`
+
+#### `gemm_backend`
+
+```camel
+gemm_backend: () => string
+```
+
+The name of the matrix-multiplication kernel the module dispatches to.
+
+- Pure.
+- Example: `gemm_backend()`
+
+#### `seed`
+
+```camel
+seed: (seed: int) => void
+seed: (seed: i32) => void
+```
+
+Reseeds the module's random generator, which `random` and `randn` draw from.
+
+- With effects: writes the random generator.
+- Example: `seed(42)`
 
 <a id="array"></a>
 
