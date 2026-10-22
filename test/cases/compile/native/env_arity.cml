@@ -1,0 +1,12 @@
+/**
+ * The declaration of `env:get_env` takes one ordinary argument: a second one is refused at the
+ * call, and the overload the message lists is the declaration's (handover H163).
+ */
+module env_arity
+
+import { get_env } from env
+
+func main(): int sync {
+    println(get_env('a', 'b'))
+    return 0
+}

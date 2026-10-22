@@ -1,0 +1,20 @@
+/**
+ * The declarations of `hash` are what an importer sees: `sha256` accepts a `string` and a `Bytes`
+ * value (two operators, `hash:sha256_str` and `hash:sha256_bytes`), and `sha256_rounds` takes the
+ * declared `string` and `int`. Every call reaches the C++ operator (handover H163).
+ */
+module hash_declaration_import
+
+import { sha256, sha256_rounds } from hash
+import { encode } from bytes
+
+func main(): int sync {
+    let expected = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+    let text: string = sha256('abc')
+    let binary: string = sha256(encode('abc'))
+    println(text == expected)
+    println(binary == expected)
+    println(sha256_rounds('abc', 0) == 'abc')
+    println(sha256_rounds('abc', 1) == expected)
+    return 0
+}

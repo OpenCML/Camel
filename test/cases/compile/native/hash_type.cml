@@ -1,0 +1,13 @@
+/**
+ * An integer where the declarations of `hash:sha256` say `string` or `Bytes`: the call is refused
+ * against both declarations, whose parameter name (`s`) comes from `stdlib/hash.cml`, not the C++
+ * module (handover H163).
+ */
+module hash_type
+
+import { sha256 } from hash
+
+func main(): int {
+    println(sha256(42))
+    return 0
+}

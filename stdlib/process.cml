@@ -1,0 +1,34 @@
+/**
+ * Every function touches the process or the machine and is declared with effects. `sleep` and
+ * `exit` are also built in: they need no import. The terminal is `io`'s (H19 step 4).
+ */
+
+// The declarations of the operators of the C++ module `modules/process` (design principles 6.4;
+// handover H19, step 10; H163). This file is the one source of their signatures; the C++ side
+// keeps the kernels, the executor, the purity and the resources: `sleep` waits on the clock, and
+// `whoami` and `cpu_count` read the environment (design principles 3.3). `exit` is the built-in
+// operator of `src/builtin/modules/globals.cpp`, not a group of this module, so it is not
+// declared here.
+//
+// No signature of this module is computed from an argument: `sleep` answers nothing and the other
+// two answer `string` and `int` whatever the values are. `modules/process` therefore exports no
+// operator group of its own, and the module needs no `stdlib/signatures/process.cml`.
+
+module process
+
+/// Suspends the program for the given number of milliseconds.
+/// @effect waits
+/// @fails fault `InvalidArgument` when the duration is negative
+/// @example sleep(100)
+export func sleep(milliseconds: int): void
+
+/// The name of the user the process runs as.
+/// @effect reads the environment
+/// @fails fault `RuntimeError` when the name cannot be found
+/// @example whoami()    // 'alice'
+export func whoami(): string
+
+/// The number of hardware threads, at least 1.
+/// @effect reads the machine
+/// @example cpu_count()    // 8
+export func cpu_count(): int
