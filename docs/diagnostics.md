@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-254 diagnostics: 235 errors, 19 warnings.
+262 diagnostics: 243 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -215,6 +215,14 @@ prints one entry.
 | `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error |
 | `0x030001C8` | [SemanticDiag::FoldCallResultNotConstant](#foldcallresultnotconstant) | Error |
 | `0x030001C9` | [SemanticDiag::FoldCallNotEvaluable](#foldcallnotevaluable) | Error |
+| `0x030001CD` | [SemanticDiag::ParamArgumentUnknown](#paramargumentunknown) | Error |
+| `0x030001CE` | [SemanticDiag::ParamArgumentDuplicate](#paramargumentduplicate) | Error |
+| `0x030001CF` | [SemanticDiag::ParamArgumentMissing](#paramargumentmissing) | Error |
+| `0x030001D0` | [SemanticDiag::ParamArgumentCallee](#paramargumentcallee) | Error |
+| `0x030001D1` | [SemanticDiag::ParamArgumentPositionalAfterNamed](#paramargumentpositionalafternamed) | Error |
+| `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
+| `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
+| `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -5913,6 +5921,250 @@ func first_of_list(): int {
 func main(): int {
     let t = (10, 20, 30)
     return t.[first_of_list()]
+}
+```
+
+### ParamArgumentUnknown
+
+`0x030001CD` · Error · `SemanticDiag::ParamArgumentUnknown`
+
+**Message**
+
+```text
+'{0}' is not a parameter of '{1}'.
+```
+
+**Help**
+
+```text
+A named argument is written as in a struct literal, 'name: value', and must be one of the callee's ordinary parameters.
+```
+
+**Example** (`test/cases/compile/param_defaults/unknown_name.cml`, run as `camel test/cases/compile/param_defaults/unknown_name.cml`)
+
+```camel
+module param_argument_unknown
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1, z: 2)
+}
+```
+
+### ParamArgumentDuplicate
+
+`0x030001CE` · Error · `SemanticDiag::ParamArgumentDuplicate`
+
+**Message**
+
+```text
+The parameter '{0}' of '{1}' is given twice.
+```
+
+**Help**
+
+```text
+Give each parameter once: positionally, or by name after the positional arguments.
+```
+
+**Example** (`test/cases/compile/param_defaults/duplicate.cml`, run as `camel test/cases/compile/param_defaults/duplicate.cml`)
+
+```camel
+module param_argument_duplicate
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1, a: 2)
+}
+```
+
+### ParamArgumentMissing
+
+`0x030001CF` · Error · `SemanticDiag::ParamArgumentMissing`
+
+**Message**
+
+```text
+The call gives no value for the parameter '{0}' of '{1}', and it has no default.
+```
+
+**Help**
+
+```text
+Give the parameter, or write a default where the parameter is declared ('name: type = value').
+```
+
+**Example** (`test/cases/compile/param_defaults/missing.cml`, run as `camel test/cases/compile/param_defaults/missing.cml`)
+
+```camel
+module param_argument_missing
+
+func f(a: int, b: int, c: int = 3): int {
+    return a + b + c
+}
+
+func main(): int sync {
+    return f(1, c: 5)
+}
+```
+
+### ParamArgumentCallee
+
+`0x030001D0` · Error · `SemanticDiag::ParamArgumentCallee`
+
+**Message**
+
+```text
+The argument '{0}' is given by name, and the signature of '{1}' is not known where the call is written.
+```
+
+**Help**
+
+```text
+Name one function, or give the arguments positionally.
+```
+
+**Example** (`test/cases/compile/param_defaults/callee_unknown.cml`, run as `camel test/cases/compile/param_defaults/callee_unknown.cml`)
+
+```camel
+module param_argument_callee
+
+func f(x: int): int {
+    return x
+}
+
+func f(x: int, y: int): int {
+    return x + y
+}
+
+func main(): int sync {
+    return f(1, y: 2)
+}
+```
+
+### ParamArgumentPositionalAfterNamed
+
+`0x030001D1` · Error · `SemanticDiag::ParamArgumentPositionalAfterNamed`
+
+**Message**
+
+```text
+A positional argument follows a named one in the call of '{0}'.
+```
+
+**Help**
+
+```text
+Write the positional arguments first, then the named ones ('f(1, by: 2)').
+```
+
+**Example** (`test/cases/compile/param_defaults/positional_after_name.cml`, run as `camel test/cases/compile/param_defaults/positional_after_name.cml`)
+
+```camel
+module param_argument_after_name
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(a: 1, 2)
+}
+```
+
+### ParamDefaultNotConstant
+
+`0x030001D2` · Error · `SemanticDiag::ParamDefaultNotConstant`
+
+**Message**
+
+```text
+The default of the parameter '{0}' is not a compile-time constant: {1}.
+```
+
+**Help**
+
+```text
+A default is evaluated where the declaration is, not at each call, so it can only be a constant expression.
+```
+
+**Example** (`test/cases/compile/param_defaults/default_not_constant.cml`, run as `camel test/cases/compile/param_defaults/default_not_constant.cml`)
+
+```camel
+module param_default_not_constant
+
+func f(a: int, b: int = a): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### ParamDefaultWrongType
+
+`0x030001D3` · Error · `SemanticDiag::ParamDefaultWrongType`
+
+**Message**
+
+```text
+The default of the parameter '{0}' has type '{1}', not '{2}'.
+```
+
+**Help**
+
+```text
+The default is a value of the parameter's type, as an argument at the call would be.
+```
+
+**Example** (`test/cases/compile/param_defaults/default_wrong_type.cml`, run as `camel test/cases/compile/param_defaults/default_wrong_type.cml`)
+
+```camel
+module param_default_wrong_type
+
+func f(a: int = "x"): int {
+    return a
+}
+
+func main(): int sync {
+    return f()
+}
+```
+
+### ParamAfterDefault
+
+`0x030001D4` · Error · `SemanticDiag::ParamAfterDefault`
+
+**Message**
+
+```text
+The parameter '{0}' has no default and follows '{1}', which has one.
+```
+
+**Help**
+
+```text
+Write a default here too, so that a call that leaves '{1}' out can still give '{0}' by name.
+```
+
+**Example** (`test/cases/compile/param_defaults/after_default.cml`, run as `camel test/cases/compile/param_defaults/after_default.cml`)
+
+```camel
+module param_after_default
+
+func f(a: int = 1, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(2, 3)
 }
 ```
 

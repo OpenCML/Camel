@@ -1844,6 +1844,78 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ParamArgumentUnknown,
+            {
+                "ParamArgumentUnknown",
+                "'{0}' is not a parameter of '{1}'.",
+                "A named argument is written as in a struct literal, 'name: value', and must "
+                "be one of the callee's ordinary parameters.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentDuplicate,
+            {
+                "ParamArgumentDuplicate",
+                "The parameter '{0}' of '{1}' is given twice.",
+                "Give each parameter once: positionally, or by name after the positional "
+                "arguments.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentMissing,
+            {
+                "ParamArgumentMissing",
+                "The call gives no value for the parameter '{0}' of '{1}', and it has no "
+                "default.",
+                "Give the parameter, or write a default where the parameter is declared "
+                "('name: type = value').",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentCallee,
+            {
+                "ParamArgumentCallee",
+                "The argument '{0}' is given by name, and the signature of '{1}' is not known "
+                "where the call is written.",
+                "Name one function, or give the arguments positionally.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentPositionalAfterNamed,
+            {
+                "ParamArgumentPositionalAfterNamed",
+                "A positional argument follows a named one in the call of '{0}'.",
+                "Write the positional arguments first, then the named ones ('f(1, by: 2)').",
+            },
+        },
+        {
+            SemanticDiag::ParamDefaultNotConstant,
+            {
+                "ParamDefaultNotConstant",
+                "The default of the parameter '{0}' is not a compile-time constant: {1}.",
+                "A default is evaluated where the declaration is, not at each call, so it can "
+                "only be a constant expression.",
+            },
+        },
+        {
+            SemanticDiag::ParamDefaultWrongType,
+            {
+                "ParamDefaultWrongType",
+                "The default of the parameter '{0}' has type '{1}', not '{2}'.",
+                "The default is a value of the parameter's type, as an argument at the call "
+                "would be.",
+            },
+        },
+        {
+            SemanticDiag::ParamAfterDefault,
+            {
+                "ParamAfterDefault",
+                "The parameter '{0}' has no default and follows '{1}', which has one.",
+                "Write a default here too, so that a call that leaves '{1}' out can still give "
+                "'{0}' by name.",
+            },
+        },
+        {
             SemanticDiag::FoldCallArgumentNotConstant,
             {
                 "FoldCallArgumentNotConstant",

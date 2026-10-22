@@ -1321,10 +1321,31 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     const size_t restDeclaredCount     = restTemplate != nullptr
                                             ? restTemplate->funcType->normTypesCount()
                                             : 0;
+    // An ordinary argument may be written by name (`f(1, by: 2)`), and an ordinary parameter
+    // may have a default (design principles 4.4). The name selects the parameter the value is
+    // given to, so the expected type is that parameter's, not the position's: the written
+    // order is only the order the call was written in.
+    const auto *argumentNames = GCT::Tree::of(gct)->argumentNamesOf(gct);
+    const auto normSlotOf     = [&](size_t written) -> size_t {
+        if (argumentNames == nullptr || written >= argumentNames->size() ||
+            !(*argumentNames)[written]) {
+            return written;
+        }
+        if (argumentSignature != nullptr && argumentSignature->hasArgNames()) {
+            const std::string &name = *(*argumentNames)[written];
+            for (size_t i = 0; i < argumentSignature->normTypesCount(); ++i) {
+                if (name == argumentSignature->argNameAt(argumentSignature->withTypesCount() + i)) {
+                    return i;
+                }
+            }
+        }
+        return written;
+    };
     for (size_t i = 1; i < gct->size(); i++) {
-        Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
-                           ? argumentSignature->normTypeAt(i - 1)
-                           : nullptr;
+        const size_t slot = normSlotOf(i - 1);
+        Type *wanted      = argumentSignature && slot < argumentSignature->normTypesCount()
+                                ? argumentSignature->normTypeAt(slot)
+                                : nullptr;
         if (restTemplate != nullptr) {
             // The declaration's own parameter, `constas` values included: a `constas` value is
             // written at its parameter's position like any other argument. The rest parameter
@@ -1361,18 +1382,79 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 gct);
             for (const node_handle_t &element : elements) {
                 normInputs.push_back({element, operand, std::nullopt});
-                normInputTypes.push_back(valueTypeOf(callableValueType(element)));
             }
             continue;
         }
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
-        normInputs.push_back({inputNode, gct->at(i), std::nullopt});
-        normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
+        const std::optional<std::string> name =
+            argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
+                                                                      : std::nullopt;
+        normInputs.push_back({inputNode, gct->at(i), name});
         if (isAssignment && i == 1) {
             Type *place = valueTypeOf(nodeTypeOf(inputNode));
             if (place != nullptr && place->code() == TypeCode::Function) {
                 assignedType = place;
             }
+        }
+    }
+    // An ordinary argument may be written by name, and an ordinary parameter may have a
+    // default (design principles 4.4, handover H276): the same binding as the `with` arguments,
+    // on the other parameter list. From here on an index into `normInputs` is an ordinary
+    // parameter's index — the declaration's order, the one order everything below reads. A rest
+    // call is expanded instead of bound: its parameters are read by position.
+    if (restTemplate == nullptr) {
+        bindArguments(normInputs, targetNode, gct, argumentSignature, false);
+    } else if (argumentNames != nullptr) {
+        const auto first = std::find_if(
+            normInputs.begin(), normInputs.end(), [](const Argument &input) {
+                return input.name.has_value();
+            });
+        if (first != normInputs.end()) {
+            diags_->of(SemanticDiag::ParamArgumentCallee)
+                .atOrigin(first->expr->origin())
+                .commit(*first->name, gct->at(0)->toString());
+            throw BuildAbortException();
+        }
+    }
+    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
+        // An operator that declares it takes the position of its call at this many arguments
+        // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it
+        // was made, design principles 3.9) gets that position as one more, constant argument.
+        const auto &drefTarget   = nodeGraphOf(targetNode)->drefTarget(targetNode);
+        const auto takesCallSite = [&] {
+            if (!std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
+                return false;
+            }
+            for (const auto &[uri, resolver] :
+                 std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
+                const auto *spec = camel::core::OperatorTable::instance().callSpec(uri);
+                if (spec != nullptr && spec->callSiteAtArity >= 0 &&
+                    static_cast<size_t>(spec->callSiteAtArity) + 1 == gct->size()) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        if (takesCallSite()) {
+            // The position the value records is the whole call expression: `error(k, m)`, and
+            // `x->error(m)` written as a pipeline, which is the same call (design principles
+            // 4.4, 3.9). The call node's own span is its argument list, so the callee and the
+            // arguments together are the expression.
+            const camel::source::origin_id_t where = expressionPositionOf(gct);
+            node_handle_t location                 = currGraph_->addStaticDataNode(
+                tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
+            registerNodeOrigin(context_, location, gct, "gir.data");
+            normInputs.push_back({location, gct, std::nullopt});
+        }
+    }
+    // The one place the ordinary argument types are built: from the bound nodes, in the
+    // declaration's order. A binding that fills a default puts the declaration's own static
+    // node there, so the type is the parameter's, and nothing here reads the written order.
+    {
+        normInputTypes.clear();
+        normInputTypes.reserve(normInputs.size());
+        for (const Argument &input : normInputs) {
+            normInputTypes.push_back(valueTypeOf(callableValueType(input.node)));
         }
     }
     // A `with` argument may be written by name, and a `with` parameter may have a default
@@ -1384,7 +1466,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // own place, after the deferred arguments have their nodes (the typing h245 defers to the
     // call). A default is a static node the declaration already computed: it is in place
     // here and is never deferred.
-    bindWithArguments(withInputs, targetNode, gct, argumentSignature);
+    bindArguments(withInputs, targetNode, gct, argumentSignature, true);
 
     // A with-argument whose parameter still had type variables when the callee was visited was
     // left for this point (visitWithNode): the ordinary arguments are typed now, so the
@@ -1472,38 +1554,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // order the binding put them in, after the deferred arguments above have theirs (h245).
     for (const Argument &input : withInputs) {
         withInputTypes.push_back(valueTypeOf(nodeTypeOf(input.node)));
-    }
-    if (nodeIsKind(targetNode, runtime::GCNodeKind::Dref)) {
-        // An operator that declares it takes the position of its call at this many arguments
-        // (CallSpec::callSiteAtArity; `error(kind, message)`: an error value records where it
-        // was made, design principles 3.9) gets that position as one more, constant argument.
-        const auto &drefTarget   = nodeGraphOf(targetNode)->drefTarget(targetNode);
-        const auto takesCallSite = [&] {
-            if (!std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
-                return false;
-            }
-            for (const auto &[uri, resolver] :
-                 std::get<oper_group_ptr_t>(drefTarget)->resolvers()) {
-                const auto *spec = camel::core::OperatorTable::instance().callSpec(uri);
-                if (spec != nullptr && spec->callSiteAtArity >= 0 &&
-                    static_cast<size_t>(spec->callSiteAtArity) + 1 == gct->size()) {
-                    return true;
-                }
-            }
-            return false;
-        };
-        if (takesCallSite()) {
-            // The position the value records is the whole call expression: `error(k, m)`, and
-            // `x->error(m)` written as a pipeline, which is the same call (design principles
-            // 4.4, 3.9). The call node's own span is its argument list, so the callee and the
-            // arguments together are the expression.
-            const camel::source::origin_id_t where = expressionPositionOf(gct);
-            node_handle_t location                 = currGraph_->addStaticDataNode(
-                tt::as_shared<Data>(std::make_shared<StringData>(sourceLocationOf(where))));
-            registerNodeOrigin(context_, location, gct, "gir.data");
-            normInputs.push_back({location, gct, std::nullopt});
-            normInputTypes.push_back(Type::String());
-        }
     }
 
     // An argument that is still a name without a single function value (several overloads, or

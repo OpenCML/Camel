@@ -1177,10 +1177,10 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         }
         return false;
     };
-    const auto *withNames = GCT::Tree::of(gct)->withArgumentNamesOf(gct);
+    const auto *withNames = GCT::Tree::of(gct)->argumentNamesOf(gct);
     // A `with` argument may be written by name (`f<rounds: 8>`, design principles 4.4): the
     // name chooses the parameter the literal takes its type from, and is kept on the argument
-    // for the call to bind (bindWithArguments). A binding used as a value has no names to
+    // for the call to bind (bindArguments). A binding used as a value has no names to
     // resolve them with, and is refused there.
     const auto slotOf = [&](size_t written) -> size_t {
         if (withNames == nullptr || written >= withNames->size() || !(*withNames)[written]) {

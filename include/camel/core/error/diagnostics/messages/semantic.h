@@ -316,6 +316,26 @@ enum class SemanticDiag : uint32_t {
     /// The call's body uses a construct this build-time evaluation does not read.
     FoldCallNotEvaluable = 0x0001C9,
 
+    // Defaults of ordinary parameters and ordinary arguments given by name (design principles
+    // 4.4, handover H276). 0x1CD and up, after the constant-folding codes of h271. The `with`
+    // parameter's forms are 0x1B7-0x1BE.
+    /// A name in a call's argument list names no ordinary parameter of the callee.
+    ParamArgumentUnknown = 0x0001CD,
+    /// An ordinary parameter is given twice, once by position and once by name.
+    ParamArgumentDuplicate = 0x0001CE,
+    /// A call gives no value for an ordinary parameter that has no default.
+    ParamArgumentMissing = 0x0001CF,
+    /// An ordinary argument is given by name where the callee's signature is not known.
+    ParamArgumentCallee = 0x0001D0,
+    /// A positional argument is written after a named one.
+    ParamArgumentPositionalAfterNamed = 0x0001D1,
+    /// The default of an ordinary parameter is not a compile-time constant.
+    ParamDefaultNotConstant = 0x0001D2,
+    /// The default of an ordinary parameter has a type that does not fit the parameter.
+    ParamDefaultWrongType = 0x0001D3,
+    /// An ordinary parameter without a default follows one that has a default.
+    ParamAfterDefault = 0x0001D4,
+
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
     IgnoredSideEffect            = 0x100002,
