@@ -30,7 +30,7 @@
  "counters":{"modules":…, "ast.nodes":…, "gct.nodes":…, "graph.graphs":…, "graph.nodes":…, "graph.edges":…}}
 ```
 
-`counters.modules` 数的是本次运行从 Camel 源码编译过的**每一个**模块，包括遍按需编译的库模块：H100 之后 `std::opt` 的代数阶段会编译 `stdlib/rules.cml`，它 `import math` 时又把 C++ 模块 `math` 的声明模块 `stdlib/math.cml` 一起编译（H112、H121）。所以 chain-3（`main` 加三个模块，共四个**程序自己的**模块）在带遍的流水线上是 6 个。计数器本身分不出这四与二，`gct` 阶段的 `detail` 里有模块名，`bench.py` 从它得到完整名单，并把「程序自己的模块」与「库模块」分开报告：前者是输入集的横轴，后者是流水线带出来的真实额外开销，两个数都不能消失（见第 5 节）。
+`counters.modules` 数的是本次运行从 Camel 源码编译过的**每一个**模块，包括遍按需编译的库模块：H100 之后 `std::opt` 的代数阶段会编译 `stdlib/rules.cml`，它 `import graph` 与 `math` 时又把这两个声明模块 `stdlib/graph.cml`（H141）、`stdlib/math.cml`（H112、H121）一起编译。所以 chain-3（`main` 加三个模块，共四个**程序自己的**模块）在带遍的流水线上是 7 个。计数器本身分不出这四与三，`gct` 阶段的 `detail` 里有模块名，`bench.py` 从它得到完整名单，并把「程序自己的模块」与「库模块」分开报告：前者是输入集的横轴，后者是流水线带出来的真实额外开销，两个数都不能消失（见第 5 节）。
 
 各阶段的名字：
 
@@ -179,7 +179,7 @@ scale-4000 只编译，重构前，10 次运行（12.1 s 用户态、3.4 s 内�
 
 ## 5. 多模块
 
-`bench.py` 的表里，`modules` 是 `gen_modules.py` 要求的模块数 N（不含 `main`），`user` 是程序自己的模块数（N+1，含 `main`），`total` 是这次运行编译过的全部模块数（`user` 加库模块）；阶段表另有一行 `library modules`，写出库模块的名字。这里的横轴是 `user`：它才是「每多一个程序自己的模块要花多少」的量。`total` 与库模块是遍按需加载的真实成本，例如带 `std::opt` 的 chain-128 是 131（129 + `rules`、`math`），不是 129。
+`bench.py` 的表里，`modules` 是 `gen_modules.py` 要求的模块数 N（不含 `main`），`user` 是程序自己的模块数（N+1，含 `main`），`total` 是这次运行编译过的全部模块数（`user` 加库模块）；阶段表另有一行 `library modules`，写出库模块的名字。这里的横轴是 `user`：它才是「每多一个程序自己的模块要花多少」的量。`total` 与库模块是遍按需加载的真实成本，例如带 `std::opt` 的 chain-128 是 132（129 + `rules`、`graph`、`math`），不是 129。
 
 chain 形状，重构前，最小值：
 
