@@ -52,6 +52,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/composite/composite.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -65,9 +66,6 @@ namespace camel::core::type {
 using param_t           = std::pair<Type *, bool>; // bool indicates whether the parameter is `var`.
 using param_init_list_t = std::initializer_list<param_t>;
 using param_vec_t       = std::vector<param_t>;
-
-/// No parameter is a `constas` parameter (design principles 5.4).
-inline constexpr uint16_t kNoConstas = 0xFFFF;
 
 class FunctionType;
 class OpenFunctionType;
@@ -106,15 +104,16 @@ class FunctionTypeFactory {
 
     /// A `constas n: T` parameter: it records a compile-time value that is part of the
     /// declaration's identity, not a runtime argument (design principles 5.4). Its type stays in
-    /// the signature so that the call site is checked against it, and `constasIndex` tells it
-    /// apart from an ordinary parameter of the same type.
+    /// the signature so that the call site is checked against it, and the recorded index tells it
+    /// apart from an ordinary parameter of the same type. A declaration may have any number of
+    /// them, in any position among the ordinary parameters.
     void addConstasArg(const std::string &ident, Type *type) {
-        constasIndex_ = static_cast<uint16_t>(withTypes_.size() + normTypes_.size());
+        constasIndices_.push_back(static_cast<uint16_t>(withTypes_.size() + normTypes_.size()));
         normTypes_.emplace_back(type, false);
         argNames_.push_back(ident);
     }
 
-    bool hasConstas() const { return constasIndex_ != kNoConstas; }
+    bool hasConstas() const { return !constasIndices_.empty(); }
 
     /// Whether the signature records the parameter names given to addWithArg/addNormArg (the
     /// default). Without them it prints the parameter types only.
@@ -133,8 +132,9 @@ class FunctionTypeFactory {
     bool hasNames_  = true;
     bool hasRest_   = false;
     std::vector<std::string> argNames_;
-    uint16_t constasIndex_ = kNoConstas;
     sem::ResourceSignature resources_;
+    /// The parameters written with `constas`, as indices over all parameters (`with` first).
+    std::vector<uint16_t> constasIndices_;
 };
 
 class FunctionType : public CompositeType {
@@ -202,18 +202,18 @@ class FunctionType : public CompositeType {
     /// signature is `void`; the tuple of the arguments it receives is made at the call.
     bool hasRest() const { return hasRest_; }
 
-    /// Whether the signature has a `constas n: T` parameter, and which one it is (an index over
-    /// all parameters, `with` parameters first).
-    bool hasConstas() const { return constasIndex_ != kNoConstas; }
-    size_t constasIndex() const {
-        ASSERT(hasConstas(), "The signature has no constas parameter");
-        return constasIndex_;
+    /// Whether the signature has a `constas n: T` parameter, which ones they are (indices over
+    /// all parameters, `with` parameters first), and whether a given parameter is one.
+    bool hasConstas() const { return !constasIndices_.empty(); }
+    size_t constasCount() const { return constasIndices_.size(); }
+    const std::vector<uint16_t> &constasIndices() const { return constasIndices_; }
+    bool isConstasAt(size_t index) const {
+        return std::find(constasIndices_.begin(), constasIndices_.end(), index) !=
+               constasIndices_.end();
     }
-    /// The ordinary index of the `constas` parameter (`normTypeAt`/`argNameAt`).
-    size_t constasNormIndex() const { return constasIndex_ - withCount_; }
     bool normIsConstasAt(size_t index) const {
         ASSERT(index < normCount_, "Index out of range");
-        return withCount_ + index == constasIndex_;
+        return isConstasAt(withCount_ + index);
     }
 
     std::span<Type *const> withTypesSpan() const { return {types(), withCount_}; }
@@ -254,7 +254,7 @@ class FunctionType : public CompositeType {
         Type *exitType   = nullptr;
         bool hasNames    = false;
         bool hasRest     = false;
-        uint16_t constasIndex = kNoConstas;
+        std::vector<uint16_t> constasIndices;
         std::vector<SymId> names;
         sem::ResourceSignature resources;
     };
@@ -299,8 +299,9 @@ class FunctionType : public CompositeType {
     uint16_t normCount_ = 0;
     bool hasNames_      = false;
     bool hasRest_       = false;
-    /// The index of the `constas` parameter, or kNoConstas.
-    uint16_t constasIndex_ = kNoConstas;
+    /// The parameters written with `constas`, as indices over all parameters (`with` first):
+    /// a compile-time value at the call, not a runtime parameter (design principles 5.4).
+    std::vector<uint16_t> constasIndices_;
     bool open_          = false;
     /// The resources the signature publishes (Generic when it says nothing).
     sem::ResourceSignature resources_;

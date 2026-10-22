@@ -24,6 +24,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <unordered_map>
 
 #include "camel/common/scope.h"
 #include "camel/core/context/context.h"
@@ -48,6 +49,7 @@ namespace camel::compile::gir {
 using void_ptr_t   = void *;
 using Type         = camel::core::type::Type;
 using FunctionType = camel::core::type::FunctionType;
+using data_ptr_t   = camel::core::data::data_ptr_t;
 
 using compile_graph_ptr_t   = std::shared_ptr<DraftGraphBuilder>;
 using node_handle_t         = camel::runtime::DraftNodeRef;
@@ -59,6 +61,13 @@ using graph_scope_t         = Scope<std::string, graph_set_ptr_t>;
 using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
+
+/// The value of a `constas` constant as the key it stands for when it names a field or a
+/// position (`t.[n]`): the text of a string, the digits of an integer, `true` / `false`.
+std::string constasKeyOf(const camel::core::data::data_ptr_t &data);
+/// The value as an instance name shows it, strings quoted: `f(3)` is `f<3>`, `f("w")` is
+/// `f<"w">`.
+std::string constasTextOf(const camel::core::data::data_ptr_t &data);
 
 /// The graph builder of a program (design principles 10.1, "模块"; the graph model,
 /// docs/design/graph-model/README.cn.md 3.9). One builder serves every module of the program:
@@ -662,6 +671,18 @@ class Builder {
         node_handle_t node{};
     };
     std::vector<std::vector<StaticValueBinding>> staticValueScopes_;
+    /// The `Data` behind a static data node, when the builder made the node from one. A
+    /// compile-time value handed on from node to node (a `constas` value passed to another
+    /// `constas`, the `n` of a `static for`) has no `Data` of its own any more: it was encoded
+    /// into a slot when its node was made, and the value is read back from here.
+    std::unordered_map<node_handle_t, data_ptr_t> constantNodes_;
+    void rememberConstant(node_handle_t node, const data_ptr_t &data) {
+        if (node != nullptr && data != nullptr) {
+            constantNodes_[node] = data;
+        }
+    }
+    /// The constant a static data node (or a COPY of one) was made from, or null.
+    data_ptr_t constantOfNode(node_handle_t node) const;
     std::optional<std::string> staticValueNamed(const std::string &name) const {
         for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
              ++scope) {
@@ -764,9 +785,29 @@ class Builder {
     // function's GCT with the variables replaced (typeBindings_) wherever the body names a
     // type, and then called like any other function. So the body is typed and its overloads
     // are chosen at instantiation, and only concrete types reach a graph.
+    //
+    // A `constas` parameter binds a compile-time value the same way (design principles 5.4):
+    // the value is given at the call, is part of the instance key, and is read by the body as
+    // a static value. It is not a runtime argument, so the instance has no port for it.
+    struct ConstasValue {
+        // The declared type of the parameter, with the other extents substituted; the type the
+        // constant must have.
+        Type *type = nullptr;
+        // The type of the constant the call wrote.
+        Type *valueType = nullptr;
+        // The constant itself. It is the instance key's value, and the body reads it as a
+        // static data node.
+        data_ptr_t data;
+        // The node the call gave the value as (a rest expansion binds it directly; an instance
+        // makes a static data node of its own in its graph).
+        node_handle_t node = {};
+    };
+    using ConstasValues = std::map<std::string, ConstasValue>;
     struct GenericInstance {
         camel::core::type::type_bindings_t bindings;
-        // The compile-time values bound to the `constas` parameter of the declaration.
+        // The compile-time values bound to the `constas` parameters of the declaration, and
+        // the integer ones among them as the extent bindings they stand for.
+        ConstasValues constas;
         camel::core::type::ExtentValues extents;
         compile_graph_ptr_t graph;
         // An error was found in the body: later calls with the same types fail quietly.
@@ -816,6 +857,8 @@ class Builder {
     camel::core::type::type_bindings_t typeBindings_;
     // The `constas` values of the instance being built; empty outside one.
     camel::core::type::ExtentValues extentBindings_;
+    // The `constas` values of the instance being built, by parameter name; empty outside one.
+    ConstasValues constasBindings_;
     size_t instantiationDepth_ = 0;
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
@@ -877,6 +920,14 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
+    /// Reads the values of the `constas` parameters of `signature` from the ordinary arguments
+    /// of the call (each written at its parameter's position), removes them from `normInputs`
+    /// (and `normTypes`, when given), and records the integer ones as the extent bindings they
+    /// stand for. `normTypes` may be null (a rest call has only the argument nodes).
+    void takeConstasValues(
+        FunctionType *signature, std::vector<Argument> &normInputs,
+        camel::core::type::type_vec_t *normTypes, const GCT::node_ptr_t &call,
+        ConstasValues &constas, camel::core::type::ExtentValues &extents);
     /// A function written in place whose type still holds a type variable (the element
     /// functions of a list comprehension): a template without a name, registered where it
     /// stands. Its marker node is what the name of a generic function gives.
@@ -962,7 +1013,8 @@ class Builder {
     void registerTreeOrigin(node_handle_t node, const GCT::node_ptr_t &origin, const char *kind);
     compile_graph_ptr_t instantiateGeneric(
         const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
-        const camel::core::type::ExtentValues &extents, const GCT::node_ptr_t &call);
+        const camel::core::type::ExtentValues &extents, const ConstasValues &constas,
+        const GCT::node_ptr_t &call);
     // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
     void enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name);
     // Builds the body of the function `gct` into `graph`, whose scope has been entered.
