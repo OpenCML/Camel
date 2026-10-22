@@ -106,6 +106,9 @@ const runtime::Program *outlineRegions(
         const auto gpuTag = core::tag::find("gpu");
         const core::attr::AttrKey key =
             gpuTag.has_value() ? core::tag::get(*gpuTag)->key : core::attr::kNoKey;
+        // `#cpu` writes the same key with the other value: it asks for the host, so a scope
+        // marked `cpu` is not this promise and is left alone.
+        const core::attr::AttrValueId gpuValue = core::attr::symbol("gpu");
         bool refused = false;
         for (auto *graph : graphs) {
             for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
@@ -113,8 +116,7 @@ const runtime::Program *outlineRegions(
                 if (node->kind != rt::GCNodeKind::Oper)
                     continue;
                 if (key == core::attr::kNoKey ||
-                    core::attr::valueOf(core::tag::factsOf(*graph, id).tags, key) ==
-                        core::attr::kNoValue)
+                    core::attr::valueOf(core::tag::factsOf(*graph, id).tags, key) != gpuValue)
                     continue;
                 const auto oper = graph->nodeBodyAs<rt::GCOperBody>(id)->oper;
                 if (deviceCapable(oper))

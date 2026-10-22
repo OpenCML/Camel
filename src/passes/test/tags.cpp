@@ -19,12 +19,15 @@
 
 /*
  * TEST-ONLY: reads the standard tag `independent` from every graph of the program through the
- * runtime query a scheduler would use (camel/core/tags.h, declaresIndependentElements).
+ * runtime query a scheduler would use (camel/core/tags.h, declaresIndependentElements), and
+ * prints the graph's portable content hash (`TAGS hash <name> <hex>`) so a test can show that
+ * a difference only in a region's facts is a difference in the hashed content.
  */
 
 #include "tags.h"
 
 #include "camel/core/tags.h"
+#include "camel/runtime/fact_persist.h"
 #include "camel/runtime/graph.h"
 
 #include <algorithm>
@@ -42,6 +45,10 @@ TagsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
             "TAGS independent {} {}\n",
             graph->name(),
             camel::core::tag::declaresIndependentElements(*graph) ? "yes" : "no");
+        os << std::format(
+            "TAGS hash {} {:016x}\n",
+            graph->name(),
+            camel::runtime::fact::portableGraphHash(*program, graph));
     }
     return program;
 }

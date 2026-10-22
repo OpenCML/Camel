@@ -71,6 +71,16 @@ json attrValueJson(camel::core::attr::AttrValueId id) {
     return nullptr;
 }
 
+/// An attribute set as an object keyed by the key's name, empty for kNoAttrs.
+json attrSetJson(uint32_t set) {
+    namespace attr = camel::core::attr;
+    json out       = json::object();
+    for (const attr::Attr &entry : attr::entries(set)) {
+        out[std::string(attr::keyName(entry.key))] = attrValueJson(entry.value);
+    }
+    return out;
+}
+
 } // namespace
 using namespace camel::runtime;
 using namespace camel::passes::gir;
@@ -124,11 +134,21 @@ std::string dumpJsonRuntimeGraph(
             graph["contextPorts"].push_back(nodeId(g, n));
         for (auto n : g->closureNodes())
             graph["capturePorts"].push_back(nodeId(g, n));
-        // The regions, when the graph has any besides the body (an inlined function is one).
-        if (g->regionCount() > 1) {
+        // The regions, when the graph has any besides the body (an inlined function is one), and
+        // the body itself when it carries a fact (the tags written on the function). A body
+        // region with no attributes is left out, so a graph without tags keeps its form.
+        const uint32_t bodyAttrs =
+            g->regionCount() > 0 ? g->region(0)->attrs : camel::core::attr::kNoAttrs;
+        if (g->regionCount() > 1 || bodyAttrs != camel::core::attr::kNoAttrs) {
             static const char *const kRegionKinds[] =
                 {"body", "arm", "loop_cond", "loop_body", "inline", "block"};
             json regions = json::array();
+            if (bodyAttrs != camel::core::attr::kNoAttrs) {
+                regions.push_back(json{
+                    {"id", std::format("{}r0", ids.at(g))},
+                    {"kind", "body"},
+                    {"attrs", attrSetJson(bodyAttrs)}});
+            }
             for (uint32_t r = 1; r < g->regionCount(); ++r) {
                 const GCRegion &region = *g->region(r);
                 if (region.kind == GCRegionKind::Dead) {
@@ -145,6 +165,9 @@ std::string dumpJsonRuntimeGraph(
                 if (region.kind == GCRegionKind::Inline) {
                     if (const GCGraph *source = program.graph(region.inlineOf))
                         entry["inlined"] = source->name();
+                }
+                if (region.attrs != camel::core::attr::kNoAttrs) {
+                    entry["attrs"] = attrSetJson(region.attrs);
                 }
                 regions.push_back(std::move(entry));
             }

@@ -378,6 +378,9 @@ class Builder {
     // starts from what was in force where it is written. Stamped with the permissions
     // (stampPermissions).
     camel::core::attr::AttrSetId currentAttrs_ = camel::core::attr::kNoAttrs;
+    /// The EXEC that is the body of the function being built: its tags are the body region's
+    /// (region 0), not a block region of their own.
+    const GCT::Node *functionBody_ = nullptr;
     /// Sets currentAttrs_ for a scope and puts the previous value back at its end.
     struct AttrScope {
         camel::core::attr::AttrSetId &current;

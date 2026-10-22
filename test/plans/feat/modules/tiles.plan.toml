@@ -631,6 +631,19 @@ expect_output_contains = ["`#gpu` scope 'activate'", "operator 'tensor:tanh'", "
 timeout_ms = 30000
 
 [[tests]]
+name = "gpu_scope.cpu_scope_is_not_refused"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_cpu_escape.cml"
+# `#cpu` writes the same placement key with the value `cpu`: the refusal of S1 is about the
+# `gpu` value, so an unsupported-for-device operator in a `#cpu` scope stays on the host and
+# the program runs.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_contains = ["2.72"]
+timeout_ms = 30000
+
+[[tests]]
 name = "preferred_resident_execution"
 kind = "behavior"
 case = "../../../cases/modules/tiles/region_execution.cml"
@@ -669,3 +682,14 @@ args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["Device leaf 'block.1.label'", "unsupported type string"]
 timeout_ms = 10000
+
+[[tests]]
+name = "placement.hash_covers_region_facts"
+desc = "Two programs whose nodes, names and edges are the same, whose block region says `gpu` in one and `cpu` in the other, hash differently: the portable graph hash includes the facts of a region (docs/design/gpu/plan.cn.md 4). test::tags prints the hash of every graph; the script runs both and compares them."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/tiles/placement_hash.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["placement hash differs:"]
+timeout_ms = 30000

@@ -1,0 +1,30 @@
+/// Two labels, one fact (docs/design/gpu/plan.cn.md 2.1-2.2): `#gpu` and `#cpu` both write
+/// `tiles.placement`, a Symbol. The tag on a function is a fact of its body region (region 0);
+/// the tag on a block is a Block region with that fact; a node written in the scope carries it
+/// too, and the inner scope wins where scopes nest. Nothing reads the fact yet: the program
+/// means what it meant without the tags.
+module tags_placement
+
+#gpu
+func on_device(x: int): int {
+    return x + 1
+}
+
+#cpu
+func on_host(x: int): int {
+    return x + 2
+}
+
+func plain(x: int): int {
+    return x + 3
+}
+
+func main(): int {
+    #gpu {
+        let b = on_device(1) + on_host(2)
+        #cpu {
+            let c = b + plain(3) + 20
+            return c
+        }
+    }
+}

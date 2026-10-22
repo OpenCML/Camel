@@ -188,6 +188,18 @@ uint64_t ownContentHash(const Program &program, const GCGraph &graph) {
             break;
         }
     }
+    // The tag set of a region is part of what the graph is: two graphs whose nodes and names are
+    // the same but whose body or block says `gpu` and `cpu` are different graphs (the cache key
+    // of docs/design/gpu/plan.cn.md 4). A region without attributes adds nothing, so a graph
+    // that has none keeps the hash it had.
+    for (uint32_t r = 0; r < graph.regionCount(); ++r) {
+        const GCRegion &region = *graph.region(r);
+        if (region.attrs == 0) {
+            continue;
+        }
+        h.u64(r);
+        h.str("region_attrs:" + camel::core::attr::text(region.attrs));
+    }
     return h.h;
 }
 

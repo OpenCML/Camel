@@ -288,6 +288,128 @@ expect_output_contains = ["The tag 'reassociate' is declared with the name of a 
 
 
 [[tests]]
+name = "placement.graph"
+desc = "`#gpu` and `#cpu` write the same fact, `tiles.placement`, as a Symbol: std::gir shows it as `body_attrs` of the body region of a tagged function, and as `attrs` of the nodes written in a tagged block, with the inner scope winning where blocks nest."
+kind = "behavior"
+case = "../../../cases/compile/tags/placement.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+const at = (name) => {
+  const i = lines.findIndex((l) => l.includes(`label="${name}"`))
+  assert(i >= 0, `no graph ${name}`)
+  return i
+}
+const label = (name) => lines[at(name)]
+const body = (name) => {
+  const i = at(name)
+  const found = lines.slice(i, i + 6).find((l) => l.includes('body_attrs='))
+  return found || ''
+}
+assert(body('on_device').includes('tiles.placement=\\"gpu\\"'), body('on_device'))
+assert(body('on_host').includes('tiles.placement=\\"cpu\\"'), body('on_host'))
+assert(!body('plain').includes('body_attrs'), body('plain'))
+// 0-based lines: 9 on_device, 14 on_host, 23 the gpu block, 25 the cpu block inside it.
+const attrs = (l) => { const m = l.match(/attrs="(.*)"/); return m ? m[1].replace(/\\/g, '') : '' }
+const oper = (line) => lines.filter((l) => l.includes('type="OPER"') && l.includes(`span="${line}:`))
+const value = (line, expected) => {
+  const found = oper(line)
+  assert(found.length > 0, `no OPER at line ${line}`)
+  for (const l of found) assert(attrs(l) === expected, `line ${line}: ${attrs(l)}`)
+}
+value(9, 'tiles.placement="gpu"')
+value(14, 'tiles.placement="cpu"')
+value(23, 'tiles.placement="gpu"')
+value(25, 'tiles.placement="cpu"')
+assert(label('main') && !lines[at('main') + 1].includes('body_attrs'), 'main has no body tag')
+}
+"""
+
+[[tests]]
+name = "placement.regions"
+desc = "std::gir_regions draws a tagged block as a Block region with `region_attrs`, and the nested block inside the outer one; the inner scope says `cpu`, the outer says `gpu`."
+kind = "behavior"
+case = "../../../cases/compile/tags/placement.cml"
+args = ["${case}", "std::gir_regions"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const gpu = out.indexOf('region_attrs="tiles.placement=\\"gpu\\""')
+const cpu = out.indexOf('region_attrs="tiles.placement=\\"cpu\\""')
+assert(gpu >= 0, 'no gpu block region')
+assert(cpu > gpu, 'the cpu block is not inside the gpu block')
+for (const line of [
+  'subgraph cluster_F01_r1 { label="block";',
+  'subgraph cluster_F01_r2 { label="block";',
+]) assert(out.includes(line), `missing ${line}`)
+assert(out.indexOf('subgraph cluster_F01_r1') < out.indexOf('subgraph cluster_F01_r2'),
+  'the outer block cluster is not written before the inner one')
+}
+"""
+
+[[tests]]
+name = "placement.facts"
+desc = "std::jgir shows the fact where each scope puts it: `body` regions of the tagged functions, Block regions of the tagged blocks (nested, with the parent chain), and `attrs` on the nodes written in a block; a function without a tag has no region fact."
+kind = "behavior"
+case = "../../../cases/compile/tags/placement.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const dump = JSON.parse(input.normalized.stdout)
+const graph = (name) => {
+  const g = dump.graphs.find((x) => x.name === name)
+  assert(g, `no graph ${name}`)
+  return g
+}
+const bodyAttrs = (name) => {
+  const regions = graph(name).regions || []
+  const body = regions.find((r) => r.kind === 'body')
+  assert(body, `${name} has no body region fact`)
+  return body.attrs
+}
+assert(bodyAttrs('on_device')['tiles.placement'] === 'gpu', JSON.stringify(bodyAttrs('on_device')))
+assert(bodyAttrs('on_host')['tiles.placement'] === 'cpu', JSON.stringify(bodyAttrs('on_host')))
+assert(!('regions' in graph('plain')) || !graph('plain').regions, 'plain has a region fact')
+const main = graph('main')
+const regions = main.regions || []
+const outer = regions.find((r) => r.attrs && r.attrs['tiles.placement'] === 'gpu')
+const inner = regions.find((r) => r.attrs && r.attrs['tiles.placement'] === 'cpu')
+assert(outer && outer.kind === 'block', JSON.stringify(regions))
+assert(inner && inner.kind === 'block' && inner.parent === outer.id, JSON.stringify(regions))
+const nodeAt = (line) => {
+  const nodes = main.nodes.filter((n) => n.source && n.source.start.line === line && n.attrs)
+  assert(nodes.length > 0, `no attributed node at line ${line}`)
+  return nodes
+}
+for (const n of nodeAt(23)) {
+  assert(n.region === outer.id, `line 23 node ${n.id} in ${n.region}`)
+  assert(n.attrs['tiles.placement'] === 'gpu', JSON.stringify(n.attrs))
+}
+for (const n of nodeAt(25)) {
+  assert(n.region === inner.id, `line 25 node ${n.id} in ${n.region}`)
+  assert(n.attrs['tiles.placement'] === 'cpu', JSON.stringify(n.attrs))
+}
+}
+"""
+
+[[tests]]
+name = "placement.conflict"
+desc = "Two placement labels on the same node are two values for one fact: TagValueConflict at the second label, naming the fact, the value and the value the node already has."
+kind = "negative"
+case = "../../../cases/compile/tags/placement_conflict.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TagValueConflict"
+expect_diagnostic_line = 5
+expect_diagnostic_column = 8
+expect_output_contains = ["The tag 'cpu' gives the fact 'tiles.placement' the value \"cpu\", but the node already says \"gpu\"."]
+
+[[tests]]
 name = "independent.node"
 desc = "`#independent` on a user function declaration reaches the runtime graph: std::jgir shows it as an attribute of the function graph's exit node, and a function declared without the tag has none. The tag is on the declaration, not on every node of the body: the exit node is the one that stands for what the function gives."
 kind = "behavior"

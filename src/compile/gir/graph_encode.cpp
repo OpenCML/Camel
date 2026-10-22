@@ -35,6 +35,7 @@
 #include "camel/compile/gir/reachable.h"
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/mm.h"
+#include "camel/core/node_attrs.h"
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/collection.h"
 #include "camel/core/rtdata/conv.h"
@@ -613,6 +614,11 @@ class EncodeSession {
         const auto mapped       = [&](runtime::gc_node_ref_t ref) {
             return ref == runtime::kInvalidNodeRef ? ref : sourceToPrepared[ref];
         };
+        // The body region (0) is usually not in the table at all. When it carries a fact (a tag
+        // written on the function), it must survive the encoding: setRegionAttrs makes it.
+        if (built.regionCount() > 0 && built.region(0).attrs != camel::core::attr::kNoAttrs) {
+            prepared.draft->setRegionAttrs(0, built.region(0).attrs);
+        }
         for (uint32_t r = 1; r < built.regionCount(); ++r) {
             const runtime::GCRegion &region = built.region(r);
             const bool controls             = region.kind == runtime::GCRegionKind::Arm ||

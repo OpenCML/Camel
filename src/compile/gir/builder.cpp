@@ -738,6 +738,15 @@ void Builder::buildFuncBody(
     // expansion cannot be spread inside another graph.
     RestBody *outerRestBody         = std::exchange(activeRestBody_, nullptr);
     const size_t outerRestBindings  = restBindings_.size();
+    // The body EXEC is where the tags of the function are the body region's, not a block's.
+    struct FunctionBodyScope {
+        const GCT::Node *&slot;
+        const GCT::Node *outer;
+        FunctionBodyScope(const GCT::Node *&s, const GCT::Node *body) : slot(s), outer(s) {
+            slot = body;
+        }
+        ~FunctionBodyScope() { slot = outer; }
+    } bodyScope(functionBody_, gct->at(1));
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -776,6 +785,13 @@ void Builder::buildFuncBody(
         }
         node_handle_t bodyResult = visitBodyNode(gct->at(1));
         setBodyResult(graph, dropped ? nullptr : bodyResult);
+        // The tags written before the function are the placement of its body as a whole: a
+        // consumer that asks the body region (region 0) finds them without walking the nodes
+        // (docs/design/gpu/plan.cn.md 2.2). Only the tags written on this declaration, not
+        // those of the scope it is written in, which the nodes carry themselves.
+        if (bodyTags.nodes != camel::core::attr::kNoAttrs) {
+            graph->draft().setRegionAttrs(0, bodyTags.nodes);
+        }
         // A body declared `: void` drops the value of its last statement.
         if (!inferredExitGraphs_.contains(graph.get()) &&
             isVoidGraphExitType(funcType->exitType())) {
@@ -831,6 +847,26 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(currentAttrs_, blockTags.nodes));
+    // A tagged block is a Block region: the facts it carries are the region's, and the nodes
+    // written in it are put in the region by the draft (addNode follows the insert region).
+    // The region is an annotation only: it changes no order and reaches no scheduler.
+    struct InsertRegionScope {
+        runtime::GraphDraft *draft = nullptr;
+        uint32_t outer             = 0;
+        ~InsertRegionScope() {
+            if (draft != nullptr) {
+                draft->setInsertRegion(outer);
+            }
+        }
+    } regionScope;
+    regionScope.draft = &currGraph_->draft();
+    regionScope.outer = regionScope.draft->insertRegion();
+    if (blockTags.nodes != camel::core::attr::kNoAttrs && gct != functionBody_) {
+        const uint32_t block = regionScope.draft->addRegion(
+            runtime::GCRegionKind::Block, regionScope.outer);
+        regionScope.draft->setRegionAttrs(block, blockTags.nodes);
+        regionScope.draft->setInsertRegion(block);
+    }
     // The `using namespace` written in this block are in force in it (design principles 10.2).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;

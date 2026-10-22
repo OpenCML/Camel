@@ -274,6 +274,15 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
             res += std::format("{}{}tooltip=\"{}\";\n", baseIndent_, indent_, graphTooltip(graph));
         }
     }
+    // The facts of the body region (0): the tags written on the function. A graph whose body
+    // carries none prints no line, so existing output is unchanged.
+    if (graph->regionCount() > 0 && graph->region(0)->attrs != camel::core::attr::kNoAttrs) {
+        res += std::format(
+            "{}{}body_attrs=\"{}\";\n",
+            baseIndent_,
+            indent_,
+            escape(camel::core::attr::text(graph->region(0)->attrs)));
+    }
 
     program_->traceGraphs(*graph, [&](camel::runtime::GCGraph *dep) {
         if (!dep) {
@@ -474,6 +483,13 @@ std::string GraphVizDumpPass::dumpGraph(camel::runtime::GCGraph *graph) {
                     funcId,
                     *at,
                     escape(title));
+                if (region.attrs != camel::core::attr::kNoAttrs) {
+                    res += std::format(
+                        "{}{}region_attrs=\"{}\";\n",
+                        baseIndent_,
+                        indent_,
+                        escape(camel::core::attr::text(region.attrs)));
+                }
             }
             res += line;
             for (size_t i = 0; i < chain.size(); ++i) {
