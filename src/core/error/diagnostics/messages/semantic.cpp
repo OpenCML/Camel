@@ -1319,6 +1319,61 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RestParameterNotLast,
+            {
+                "RestParameterNotLast",
+                "The rest parameter '..{0}' must be the last parameter.",
+                "A rest parameter stands for every argument left over, so no parameter can "
+                "follow it. Move '..{0}' after the other parameters.",
+            },
+        },
+        {
+            SemanticDiag::RestParameterTypeNotSupported,
+            {
+                "RestParameterTypeNotSupported",
+                "The rest parameter '..{0}' cannot write a type.",
+                "A rest parameter is untyped: the tuple of the arguments left over is made at "
+                "the call, so its element types are decided there. Write '..{0}'.",
+            },
+        },
+        {
+            SemanticDiag::RestArgumentNotLast,
+            {
+                "RestArgumentNotLast",
+                "The rest argument '..{0}' must be the last positional argument.",
+                "'..e' expands to every element of 'e', so no positional argument can follow "
+                "it. Named arguments cannot follow it either: write '..e' last.",
+            },
+        },
+        {
+            SemanticDiag::RestArgumentNotTuple,
+            {
+                "RestArgumentNotTuple",
+                "The rest argument '..{0}' is not a compile-time tuple.",
+                "'..e' needs a tuple whose elements are known when the call is instantiated: a "
+                "tuple literal, a tuple comprehension, or the rest parameter of the enclosing "
+                "rest function. A runtime tuple value has no fixed arity here.",
+            },
+        },
+        {
+            SemanticDiag::RestFunctionNeedsExpansion,
+            {
+                "RestFunctionNeedsExpansion",
+                "The rest function '{0}' cannot be used here: {1}.",
+                "A function with a rest parameter has no runtime arity, so it has no function "
+                "value and no instance: call it directly, with the arguments it takes.",
+            },
+        },
+        {
+            SemanticDiag::RestArgumentsMismatch,
+            {
+                "RestArgumentsMismatch",
+                "The call to '{0}' gives {1} argument(s), but its fixed parameters need {2}.",
+                "A rest parameter only stands for the arguments after the fixed ones. Give at "
+                "least as many arguments as the declaration has fixed parameters.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",

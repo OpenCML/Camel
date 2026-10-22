@@ -1885,6 +1885,9 @@ node_ptr_t Builder::visitData(const AST::node_ptr_t &ast) {
     case AST::DataType::Tuple:
         dataNode = visitTupleData(ast);
         break;
+    case AST::DataType::SpreadArg:
+        dataNode = visitSpreadArg(ast);
+        break;
     case AST::DataType::StructComp:
         dataNode = visitStaticComprehension(ast, true);
         break;
@@ -2342,8 +2345,28 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // Handle the "Call" operator
         const auto &argsNode   = ast->atAs<AST::RepeatedLoad>(1);
         const auto &kwargsNode = ast->atAs<AST::RepeatedLoad>(2);
-        res                    = tree_->makeLink(argsNode->size());
-        node_ptr_t calleeNode  = visitData(lhsASTNode);
+        // `..(1, 2)` is the two arguments written out: a tuple literal is expanded here,
+        // where its elements are still AST nodes. Any other `..e` keeps its marker for GIR,
+        // which expands a `..ts` rest binding or a tuple comprehension.
+        const auto spreadLiteral = [](const AST::node_ptr_t &arg) -> AST::node_ptr_t {
+            if (arg->type() != AST::LoadType::Data ||
+                arg->loadAs<AST::DataLoad>()->dataType() != AST::DataType::SpreadArg) {
+                return nullptr;
+            }
+            const auto &operand = arg->atAs<AST::DataLoad>(0);
+            if (operand->type() != AST::LoadType::Data ||
+                operand->loadAs<AST::DataLoad>()->dataType() != AST::DataType::Tuple) {
+                return nullptr;
+            }
+            return operand;
+        };
+        size_t argCount = 0;
+        for (const auto &argNode : *argsNode) {
+            const AST::node_ptr_t literal = spreadLiteral(argNode);
+            argCount += literal != nullptr ? literal->atAs<AST::RepeatedLoad>(0)->size() : 1;
+        }
+        res                   = tree_->makeLink(argCount);
+        node_ptr_t calleeNode = visitData(lhsASTNode);
         *res << calleeNode;
         std::vector<camel::source::SemanticPart> parts = {
             semanticPart(camel::source::SemanticRole::Callee, nodeOrigin(calleeNode), -1, "callee"),
@@ -2355,7 +2378,36 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         // taken out of `x` under a reserved name (design principles 3.8).
         node_ptr_t passedNode        = nullptr;
         AST::node_ptr_t passOperator = nullptr;
-        for (auto &argNode : *argsNode) {
+        const auto appendArgument = [&](node_ptr_t gctArg) {
+            *res << gctArg;
+            mergedInputs.push_back(nodeOrigin(gctArg));
+            parts.push_back(semanticPart(
+                camel::source::SemanticRole::Argument,
+                nodeOrigin(gctArg),
+                argSlot++,
+                "arg"));
+        };
+        for (size_t ai = 0; ai < argsNode->size(); ++ai) {
+            const auto &argNode = argsNode->at(ai);
+            if (const AST::node_ptr_t literal = spreadLiteral(argNode); literal != nullptr) {
+                if (ai + 1 != argsNode->size()) {
+                    // `..e` stands for every argument it leaves: nothing can follow it.
+                    const auto &operand = argNode->atAs<AST::DataLoad>(0);
+                    diags_->of(SemanticDiag::RestArgumentNotLast)
+                        .atOrigin(operand->load()->origin())
+                        .commit(
+                            operand->type() == AST::LoadType::Data &&
+                                    operand->loadAs<AST::DataLoad>()->dataType() ==
+                                        AST::DataType::Ref
+                                ? operand->loadAs<AST::RefDataLoad>()->ref().toString()
+                                : std::string("expression"));
+                    throw BuildAbortException();
+                }
+                for (const auto &element : *literal->atAs<AST::RepeatedLoad>(0)) {
+                    appendArgument(visitData(element));
+                }
+                continue;
+            }
             node_ptr_t gctArg   = nullptr;
             const auto &argData = argNode->loadAs<AST::DataLoad>();
             if (argData->dataType() == AST::DataType::ReservedExpr &&
@@ -4014,6 +4066,22 @@ node_ptr_t Builder::visitTupleData(const AST::node_ptr_t &ast) {
 }
 
 /*
+SpreadArg() : Data data ;
+A rest argument (design principles 5.5): the operand is a compile-time tuple; the arguments it
+stands for are decided when the call is instantiated.
+*/
+node_ptr_t Builder::visitSpreadArg(const AST::node_ptr_t &ast) {
+    ENTER("SpreadArg");
+    ASSERT(ast->type() == AST::LoadType::Data, "Expected DataLoad type for SpreadArg");
+    node_ptr_t operand    = visitData(ast->atAs<AST::DataLoad>(0));
+    node_ptr_t spreadNode = tree_->makeSpreadArg();
+    *spreadNode << operand;
+    setOriginFromAst(context_, spreadNode, ast, camel::source::OriginKind::GctNode, "gct.spread");
+    LEAVE("SpreadArg");
+    return spreadNode;
+}
+
+/*
 FuncData(Ref ref) : FuncType funcType, StmtBlock body ;
 */
 node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
@@ -4547,7 +4615,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
         // name before the parameter that binds it.
         for (size_t group = 0; group < 2; ++group) {
             for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(group)) {
-                collectDimensionNames(paramPair->atAs<AST::TypeLoad>(0), *dimNames_);
+                // An untyped rest parameter has no type child to scan for `constas`.
+                if (paramPair->size() > 0) {
+                    collectDimensionNames(paramPair->atAs<AST::TypeLoad>(0), *dimNames_);
+                }
             }
         }
     }
@@ -4637,13 +4708,10 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
 
     // Process normal parameters
-    for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
+    const auto &normParams = *ast->atAs<AST::RepeatedLoad>(1);
+    for (size_t pi = 0; pi < normParams.size(); ++pi) {
+        const auto &paramPair = normParams[pi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-        bool isVar            = paramLoad->isVar();
-        if (isVar && !typeLoad->modifiers().sync()) {
-            // variable parameters are not allowed in asynchronous functions
-            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
-        }
         const Reference &paramRef = paramLoad->getRef();
         if (!paramRef.plain()) {
             // Parameter references must be unqualified
@@ -4653,7 +4721,44 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
-        Type *type         = nullptr;
+        if (paramLoad->isRest()) {
+            // A rest parameter is untyped and last (design principles 5.5); it stands in the
+            // signature as a `void` parameter that no call passes a value for.
+            if (!signature) {
+                // The parser admits `..` only in a function declaration's parameter list.
+                ASSERT(false, "A rest parameter outside a function declaration.");
+                diags_->of(SemanticDiag::FeatureNotSupported)
+                    .at(paramLoad->tokenRange())
+                    .commit("a rest parameter outside a function declaration");
+                throw BuildAbortException();
+            }
+            if (pi + 1 != normParams.size()) {
+                diags_->of(SemanticDiag::RestParameterNotLast)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (paramPair->size() > 0) {
+                diags_->of(SemanticDiag::RestParameterTypeNotSupported)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (!paramNames.insert(name).second) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            factory.addRestArg(name);
+            continue;
+        }
+        bool isVar = paramLoad->isVar();
+        if (isVar && !typeLoad->modifiers().sync()) {
+            // variable parameters are not allowed in asynchronous functions
+            diags_->of(SemanticDiag::VarParamInAsyncFunction).at(paramLoad->tokenRange()).commit();
+        }
+        Type *type = nullptr;
         {
             dimBindAllowed_ = signature;
             type            = paramTypeOf(paramPair, name);

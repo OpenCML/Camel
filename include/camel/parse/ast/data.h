@@ -50,7 +50,10 @@ enum class DataType {
     Ref,
     ConstAs,
     Slice,
-    EnumPattern
+    EnumPattern,
+    // `..e` in an argument list: the operand is a compile-time tuple whose elements are the
+    // arguments (design principles 5.5).
+    SpreadArg
 };
 
 /// The shapes a `match type` case selects (design principles 5.5, R3):

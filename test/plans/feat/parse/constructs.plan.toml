@@ -42,6 +42,15 @@ expect_exit = 0
 expect_stdout_contains = ["6", "16 9", "9", "7"]
 
 [[tests]]
+name = "constructs.rest_signature"
+desc = "`..ts`, the last parameter of a signature, and `..e`, the last argument of a call: written out, expanded from a tuple literal, and forwarded as `..ts`."
+kind = "behavior"
+case = "../../../cases/parse/constructs/rest_signature.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["6", "9", "13"]
+
+[[tests]]
 name = "constructs.comprehensions"
 desc = "A `static for` written where a value is needed: the struct comprehension `{ ... }`, the tuple comprehension `( ... )`, a round whose body is a block, and the empty struct."
 kind = "behavior"

@@ -837,8 +837,13 @@ class Builder {
     }
     // Whether a declared function type is still generic under the current bindings.
     bool isGenericHere(Type *type) const {
-        return camel::core::type::containsTypeVar(type) &&
-               camel::core::type::containsTypeVar(boundType(type));
+        // A rest function is always a template: its arity is decided at each call, so no
+        // graph is built for the declaration itself (design principles 5.5).
+        const bool rest =
+            type != nullptr && type->code() == camel::core::type::TypeCode::Function &&
+            static_cast<FunctionType *>(type)->hasRest();
+        return rest || (camel::core::type::containsTypeVar(type) &&
+                        camel::core::type::containsTypeVar(boundType(type)));
     }
     // Registers the generic functions declared directly in the block `exec`, before anything
     // in the block is built: a call may precede the declaration.
@@ -885,6 +890,41 @@ class Builder {
         const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    // ---- Rest parameters (design principles 5.5, H51 step 6) ----
+    // A rest function has no runtime arity, so it is never an instance: each direct call
+    // expands its body into the caller's graph, with the fixed parameters bound to the argument
+    // nodes and the rest parameter bound to the nodes the call's arguments leave over. The
+    // expansion is built here, once per call; there is no call node and no tuple fill.
+    struct RestBinding {
+        std::string name;
+        std::vector<node_handle_t> values;
+        Type *type = nullptr; // the tuple of `values`
+    };
+    struct RestBody {
+        Type *exitType            = nullptr;
+        node_handle_t value       = nullptr;
+        bool returned             = false;
+    };
+    /// The rest parameters in force while an expanded body is built (innermost last).
+    std::vector<RestBinding> restBindings_;
+    /// The expanded body whose `return` is being built, if any.
+    RestBody *activeRestBody_ = nullptr;
+    /// The rest binding of `name` that no local of the same name shadows.
+    const RestBinding *restBindingNamed(const std::string &name) const;
+    /// The tuple value of a rest binding, made from its elements (a FILL that no expansion
+    /// needs stays dead and is removed by the ordinary passes).
+    node_handle_t materializeRestBinding(const RestBinding &binding, const GCT::node_ptr_t &at);
+    /// The nodes `..operand` stands for: the elements of a compile-time tuple, or the
+    /// elements of the rest parameter it names.
+    std::vector<node_handle_t> expandRestArgument(
+        const GCT::node_ptr_t &operand, const std::string &written,
+        const GCT::node_ptr_t &call);
+    /// Expands `tmpl`, a rest function, at `call`: binds its type variables and fixed
+    /// parameters, checks the arguments, and builds its body in the caller's graph.
+    node_handle_t inlineRestCall(
+        const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, const GCT::node_ptr_t &call,
+        Type *expectedResult);
     // Type-directed tree intrinsics expand to ordinary accesses, calls and fills.
     node_handle_t expandTreeCall(
         const oper_group_ptr_t &ops, const std::vector<Argument> &with,

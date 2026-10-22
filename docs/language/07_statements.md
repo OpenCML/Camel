@@ -293,6 +293,30 @@ func main(): int sync {
 - 确定不了是编译期错误 `SemanticDiag::GenericFunctionAsValue`（或作为实参时的 `SemanticDiag::GenericArgumentsMismatch`），指出哪个变量定不下来：`let g = id` 没有上下文（写出类型）；`apply(id, id)` 两个实参互相等对方。
 - 导入的泛型函数同样可以作值（`xss->map<reverse>`，`reverse` 来自 `array` 模块）。
 
+**剩余参数（rest parameter）**：函数声明的最后一个形参可以写 `..ts`，它没有类型，代表调用时剩下的全部实参。调用点写出的固定实参依次绑定到固定形参，其余实参按顺序成为 `ts` 的元素；`ts` 是编译期已知的元组，可以用 `indices ts`、`ts.[j]` 和 `..ts`。
+
+```cml
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    println(sum(1, 2, 3))
+    println(sum(..(4, 5)))
+    return 0
+}
+```
+
+```text
+6
+9
+```
+
+- **调用在编译期展开。** 带剩余参数的函数没有运行时的参数个数，因此不为它建实例图，也不生成调用结点；每个直接调用都把函数体展开在调用者的图里，固定形参绑定到实参结点，`ts` 绑定到剩下的结点。`ts` 可以是 0 个元素。
+- **剩余实参**写作 `..e`，且必须是调用实参表的最后一项。`e` 必须是编译期元组：元组字面量、元组推导式，或外层剩余函数的 `..ts`。运行时的元组值没有固定个数，是 `SemanticDiag::RestArgumentNotTuple`；`..e` 后面还有实参是 `SemanticDiag::RestArgumentNotLast`。
+- 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明里（lambda、函数类型和规则里写 `..` 是语法错误）。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
+- 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。目前调用还必须和声明在同一个模块里：跨模块展开要等 `tree_*` 任务把函数体按调用点带过去，现在会报 `SemanticDiag::RestFunctionNeedsExpansion`。
+
 **目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值。
 
 ## 7.6 标注

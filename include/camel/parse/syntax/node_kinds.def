@@ -80,6 +80,7 @@ CAMEL_NODE(IdentDef, Other)            // IDENTIFIER
 CAMEL_NODE(IdentRef, Other)            // (IDENTIFIER '::')* IDENTIFIER, where a name is required
 
 CAMEL_NODE(SpreadValue, Expr)          // '...' dataExpr (an indexValue with the marker)
+CAMEL_NODE(RestValue, Expr)            // '..' dataExpr (a rest argument, expanded at the call)
 CAMEL_NODE(WaitExpr, Expr)             // 'wait' assignExpr
 CAMEL_NODE(IfExpr, Expr)               // 'if' logicalOrExpr 'then' blockExpr ('else' blockExpr)?
 CAMEL_NODE(MatchExpr, Expr)            // 'match' logicalOrExpr '{' matchCase+ '}'

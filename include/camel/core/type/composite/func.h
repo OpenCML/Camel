@@ -88,6 +88,16 @@ class FunctionTypeFactory {
         argNames_.push_back(ident);
     }
 
+    /// The last ordinary parameter is a rest parameter (`..ts`): it stands for the arguments
+    /// left over at a call and is expanded there (design principles 5.5). It is added after
+    /// every other ordinary parameter, as a `void` parameter that no call ever passes a value
+    /// for; `hasRest` tells it apart from an ordinary `void` parameter.
+    void addRestArg(const std::string &ident) {
+        hasRest_ = true;
+        normTypes_.emplace_back(Type::Void(), false);
+        argNames_.push_back(ident);
+    }
+
     /// Whether the signature records the parameter names given to addWithArg/addNormArg (the
     /// default). Without them it prints the parameter types only.
     void setHasCompileInfo(bool has) { hasNames_ = has; }
@@ -103,6 +113,7 @@ class FunctionTypeFactory {
     std::vector<param_t> normTypes_;
     Type *exitType_ = nullptr;
     bool hasNames_  = true;
+    bool hasRest_   = false;
     std::vector<std::string> argNames_;
 };
 
@@ -162,6 +173,10 @@ class FunctionType : public CompositeType {
         return varMarks()[withCount_ + index] != 0;
     }
 
+    /// Whether the last ordinary parameter is a rest parameter (`..ts`). Its type in this
+    /// signature is `void`; the tuple of the arguments it receives is made at the call.
+    bool hasRest() const { return hasRest_; }
+
     std::span<Type *const> withTypesSpan() const { return {types(), withCount_}; }
     std::span<Type *const> normTypesSpan() const { return {types() + withCount_, normCount_}; }
     std::span<const TypeCode> withTypeCodesSpan() const { return {codes(), withCount_}; }
@@ -199,6 +214,7 @@ class FunctionType : public CompositeType {
         size_t withCount = 0;
         Type *exitType   = nullptr;
         bool hasNames    = false;
+        bool hasRest     = false;
         std::vector<SymId> names;
     };
 
@@ -241,6 +257,7 @@ class FunctionType : public CompositeType {
     uint16_t withCount_ = 0;
     uint16_t normCount_ = 0;
     bool hasNames_      = false;
+    bool hasRest_       = false;
     bool open_          = false;
     // Followed in memory by the parameter arrays (see the file comment).
 };

@@ -946,7 +946,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     } else {
         parseIdentRef(NK::IdentRef);
     }
-    parseParentParams();
+    parseParentParams(true);
     if (eat(TK::Colon)) {
         parseType();
     }
@@ -1178,8 +1178,21 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 }
 
 /// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
-void ParserImpl::parseKeyParamPair() {
+///              | '..' identDef (':' typeExpr)?
+/// A rest parameter is written untyped and last in a function declaration's parameter list
+/// (design principles 5.5). A type written after it is parsed so that the semantic stage can
+/// report it; the parameter lists of a lambda, a function type and a rule do not take one.
+void ParserImpl::parseKeyParamPair(bool allowRest) {
     const size_t m = mark();
+    if (allowRest && cur_ == TK::DotDot) {
+        bump();
+        parseIdentDef();
+        if (eat(TK::Colon)) {
+            parseType();
+        }
+        close(m, NK::KeyParamPair);
+        return;
+    }
     if (!eat(TK::KwVar)) {
         eat(TK::KwConst);
     }
@@ -1196,26 +1209,27 @@ void ParserImpl::parseKeyParamPair() {
 }
 
 /// pairedParams : keyParamPair (',' keyParamPair)*
-void ParserImpl::parsePairedParams(TK closer) {
+void ParserImpl::parsePairedParams(TK closer, bool allowRest) {
     const size_t m = mark();
-    parseKeyParamPair();
+    parseKeyParamPair(allowRest);
     while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
         bump();
-        parseKeyParamPair();
+        parseKeyParamPair(allowRest);
     }
     close(m, NK::PairedParams);
 }
 
 /// parentParams : '(' pairedParams? ','? ')'
-void ParserImpl::parseParentParams() {
+void ParserImpl::parseParentParams(bool allowRest) {
     const size_t m = mark();
     if (!expect(TK::LParen)) {
         return;
     }
     {
         Scope scope(*this, false);
-        if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst) {
-            parsePairedParams(TK::RParen);
+        if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
+            (allowRest && cur_ == TK::DotDot)) {
+            parsePairedParams(TK::RParen, allowRest);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
             unexpected({e(TK::Comma), e(TK::RParen), e(TK::KwVar), e(TK::Identifier)});
         }
@@ -1240,7 +1254,7 @@ void ParserImpl::parseAngledParams() {
     {
         Scope scope(*this, false, open);
         if (cur_ != TK::Gt && cur_ != TK::Comma) {
-            parsePairedParams(TK::Gt);
+            parsePairedParams(TK::Gt, false);
         }
         eat(TK::Comma);
         if (!panic_ && cur_ != TK::Gt) {

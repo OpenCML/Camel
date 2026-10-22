@@ -477,6 +477,13 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return drefNode;
     }
     ENTER("DREF");
+    // `..ts` names the rest parameter of the expansion being built: as a value it is the tuple
+    // of the arguments left over (a FILL; a use only as `..ts` reads the elements directly).
+    if (const RestBinding *binding = restBindingNamed(gct->name()); binding != nullptr) {
+        node_handle_t node = materializeRestBinding(*binding, gct);
+        LEAVE("DREF");
+        return node;
+    }
     // `n` of a `static for`: a compile-time string, not a name of the enclosing scope. A use
     // of it as a value (not as the key of `t.[n]`) becomes a constant; the `j` of `indices`
     // binds the round's integer node instead of a string. A binding of the body with the same

@@ -622,13 +622,15 @@ void ParserImpl::parseLiteral() {
     close(m, NK::Literal);
 }
 
-/// indexValue : '...'? dataExpr
+/// indexValue : ('...' | '..')? dataExpr
+/// `...e` is a spread that is not implemented; `..e` is a rest argument (design principles 5.5).
 void ParserImpl::parseIndexValue() {
-    if (cur_ == TK::Ellipsis) {
+    if (cur_ == TK::Ellipsis || cur_ == TK::DotDot) {
         const size_t m = mark();
+        const bool rest = cur_ == TK::DotDot;
         bump();
         parseExpr();
-        return close(m, NK::SpreadValue);
+        return close(m, rest ? NK::RestValue : NK::SpreadValue);
     }
     parseExpr();
 }

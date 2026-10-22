@@ -196,6 +196,20 @@ enum class SemanticDiag : uint32_t {
     // this one takes the next free code after them.
     StaticIndicesNotTuple = 0x000182,
 
+    // Rest parameters (design principles 5.5, H51 step 6): 0x18A and up.
+    /// A rest parameter is not the last of the ordinary parameters.
+    RestParameterNotLast = 0x00018A,
+    /// A type was written after `..`: a rest parameter is untyped.
+    RestParameterTypeNotSupported = 0x00018B,
+    /// A `..e` argument is followed by another argument.
+    RestArgumentNotLast = 0x00018D,
+    /// The operand of `..e` is not a compile-time tuple.
+    RestArgumentNotTuple = 0x00018E,
+    /// A rest function was used where a function value is needed.
+    RestFunctionNeedsExpansion = 0x00018F,
+    /// A call passes fewer arguments than the fixed parameters of a rest function.
+    RestArgumentsMismatch = 0x000190,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,
