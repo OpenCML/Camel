@@ -1,0 +1,225 @@
+# H136 — 退役名字的文档扫尾与门禁
+
+分支 `handover/H136-json-computed`（工作树目录名 `h136-json-leftovers` 是旧的，分支名沿用），起点
+`origin/develop` `b249211e1`。只在这个工作树里改；未推送、未合入 `develop`/`main`、未动其他工作树、
+未用 `git stash`。构建与测试只在 Linux 主机 `88zjwei` 上做（`camel-remote.ps1 -Jobs 8`）。
+
+## 1. 结论
+
+H114（`sys`→`env`、`os`→`process`、`crypto`→`hash`）、H122（删除 `str::bytes`/`str::from_bytes`）、
+H107（删除 `inner`/`outer`/`atomic`/`shared`）、H127（删除把 URI 写在函数体里的签名写法）各自改完了
+自己拥有的文件。本次逐页复查了 `docs/`（中英）、`editors/`、`tools/`、`scripts/`、`examples/`、
+`README*`，以及 `src/`、`modules/`、`include/` 的注释：
+
+- **4 页、5 个退役拼写**仍被当作现行写法，已改（§3）；没有需要补讲“新东西”的教程页，因为这几页
+  都是设计/技术说明。
+- **2 份日期化记录**保留正文，只在顶部加一行注记（§4）。
+- **任务报告、日期化评审、日期化盘点与日志**属于历史记录，保留原拼写并逐条列出（§5）。
+- **新增门禁** `scripts/check-retired-names.mjs`，由 `feat/docs_links` 计划执行；干净树通过，故意加回
+  `sys:get_env` 时退出 1（§6、§7）。
+- **没有发现“退役不彻底”的活代码路径**：旧模块名在 `src`/`include`/`modules`/`stdlib`/`tools` 里既
+  没有别名也没有诊断。只发现一处测试夹具仍导入旧名（§8，是测试缺陷，不是文档修复）。
+
+## 2. 什么时候退役了什么
+
+| 任务 | 日期 | 退役的写法 | 现在的写法 | 关键点 |
+|---|---|---|---|---|
+| H107 | 2026-10-22 | `inner`/`outer`/`atomic`/`shared` 四个修饰符（含 `inner func`） | 四个词是普通标识符；原生实现是声明模块里**无函数体**的 `export func`，模块私有辅助函数是不导出的 `func`，外部实现由模块系统表达；“整体不展开”是 `#kernel` 一类标签 | 没有替代标签（`atomic`/`shared` 也没有）；旧写法就是 `SyntaxDiag::UnexpectedToken`，没有“已退役”诊断 |
+| H114 | 2026-10-22 | `sys`、`os`、`crypto` 模块及 `sys:`/`os:`/`crypto:` URI | `env`、`process`、`hash`；`process:exit`/`process:sleep` 仍是全局内建 | 没有别名、过渡层或指向新名的诊断；导入旧名是普通的 `SemanticDiag::ModuleNotFound` |
+| H122 | 2026-10-22 | `str::bytes`、`str::from_bytes` | `bytes::encode`、`bytes::decode`（字节数组另走 `to_array`/`from_array`） | 是删除不是搬家；非 UTF-8 的差别：旧 `from_bytes` 是故障，新 `decode` 是 `EncodingError` 错误值 |
+| H127 | 2026-10-22 | `func f(...) { return '<模块:算子>' }` 的签名写法 | 声明模块里无函数体的 `export func`（URI 用 `#op` 或默认 `<模块>:<名字>`） | 编译器本来就不特判 URI 函数体；`--verify-ops` 现在拒绝签名文件里带函数体的条目 |
+
+H123 是这次做法的先例：逐处读上下文再改，改 20 处拼写、补 7 处规则说明，历史报告只加顶部更正注记。
+
+## 3. 改掉的页面
+
+| 文件 | 位置 | 旧 | 新 |
+|---|---|---|---|
+| `docs/technical/30_diagnostics_reporting.md` | §7 Q6 | `` `os.exit` `` | `` `process:exit` `` |
+| `docs/design/module-root/README.cn.md` | §5.5 | “从 `inner func pi(): float` 改成值的声明” | “把 `pi` 从函数声明改成值的声明” |
+| `docs/design/stdlib/README.cn.md` | §4 第 2 条 | `sys`、`os` → `env`、`process` | 系统层已拆成 `env`、`process`、`io` |
+| `docs/design/training/README.cn.md` | §8.1 | “用非法字节造字符串（`str::from_bytes([255])`）在调用处就是故障” | “非法字节不能造出字符串：`bytes::decode` 返回的是错误值，不是故障” |
+
+第 4 条不只是换名字：同一页的下一行本来就写着 `decode(b): string!`（非法 UTF-8 为错误值），旧句子与
+它矛盾；改后与 H122 的语义一致。
+
+没有用替换脚本：每一处都先读上下文。`git grep -nE` 的旧拼写结果按下面几节逐条分流，没有“看到就换”。
+
+## 4. 只加注记的两份日期化记录
+
+| 文件 | 注记 |
+|---|---|
+| `docs/design/stdlib/inventory.cn.md` | 2026-10-20 的盘点，保留当时的 `str::bytes`/`str::from_bytes`；顶部注明 H122 已删除，现在只用 `bytes::encode`/`bytes::decode` |
+| `docs/design/training/bytes.cn.md` | 2026-10-18/19 的实现日志；顶部注明第 29 行的 `str::from_bytes` 已由 H122 删除，非法 UTF-8 现在是错误值 |
+
+两份都在门禁的允许清单里（§6.3），正文不重写：盘点的结论依赖它当时看到的旧接口，日志记的是当时的事实。
+
+## 5. 判定不改的（逐条）
+
+### 5.1 只以“已退役”身份提到旧写法
+
+- `docs/technical/09_operator_registration.md` §8：说明旧写法“把 URI 写在函数体的 `return '<URI>'` 里”
+  **已经删除**，带函数体的 `func` 现在是普通函数，声明模块里报 `DeclarationModuleHasBody`。
+- `docs/stdlib-conventions.cn.md` 第 31 行：同上，说明声明不带函数体、旧写法已删除。
+- `scripts/stdlib-reference.mjs` 文件头第 19–21 行：同样的说明，旧写法已删除，`--verify-ops` 拒绝带函数体
+  的条目。
+
+这三处是**提及**，不是**使用**：门禁对带“旧写法/已删除/已改名/旧名/retired/renamed/is gone/no longer”
+等标记的行跳过（§6.2）。
+
+### 5.2 记录，不是页面
+
+- `docs/handover/**`：任务报告、计划与看板（含 `H19-plan.md`、`reports/H97.md`、`H103.md`、`H104.md`、
+  `H107.md`、`H113.md`、`H114.md`、`H116.md`、`H122.md`、`H123.md`、`H127.md`、`H131.md`、
+  `plans/H51.md` 等）。它们记录“当时是什么样”，旧拼写就是证据；门禁不扫描 `docs/handover/`。
+- `docs/reviews/2026-10-19/frontend.cn.md`：日期化评审，含 `crypto::sha256`、`inner func`、
+  `str::from_bytes`；同样不扫描。
+
+（`docs/handover/reports/H136.md` 就是本报告，属于记录，不在扫描范围内。）
+
+### 5.3 有意的测试用例与夹具
+
+- `test/cases/modules/rename/env_old.cml`、`process_old.cml`、`hash_old.cml` 与
+  `test/plans/feat/modules/rename.plan.toml` 的 desc：负例，证明导入旧名是普通的未知模块，没有别名、
+  没有指向新名的提示（H114）。
+- `test/cases/compile/native/retired_str_bytes.cml`、`retired_str_from_bytes.cml` 与
+  `test/plans/feat/compile/native_declarations.plan.toml` 的 desc：负例，证明旧名只是 `str` 不导出的名字
+  （H122）。
+- `test/cases/tools/grammar/keywords.cml` 的 `import os`：词法/语法测试里的任意模块名，只被解析、不被编译
+  （H114 已说明）。
+- `test/plans/feat/modules/bytes.plan.toml`、`test/cases/modules/bytes_invalid_utf8.cml` 的注释：说明旧的
+  `str::from_bytes` 是故障、现在是错误值（H122）。
+- `test/cases/modules/rename/*_new.cml` 的注释：说明这些样本是为哪次改名留的恒等样本。
+
+### 5.4 英文短语，不是关键字
+
+- `docs/technical/06_runtime_and_execution.md` 与 `benchmarks/parallel/` 的 “parallel inner function”：
+  普通英文描述，不是 `inner` 修饰符。门禁只匹配 `<修饰符> func`，不会误报。
+- `docs/language/en/07_statements.md` 的 “the inner type of `T?`”：普通英文短语；门禁不匹配
+  `inner type`，只匹配函数修饰符的 `inner func`。
+
+### 5.5 测试夹具里的陈旧注释（不是页面）
+
+`test/cases/consistency/faults/sleep_global.cml:2`、`exit_imported.cml:2` 与
+`test/plans/feat/consistency/faults.plan.toml:417` 的 desc 还写着 “os module”；实际
+`exit_imported.cml` 导入的是 `process`，这些用例本身通过。它们不是读者页面，改注释又会碰 AST 快照，
+本任务不动，列在这里。
+
+## 6. 门禁
+
+### 6.1 位置与运行
+
+`scripts/check-retired-names.mjs`，由 `test/plans/feat/docs_links.plan.toml` 的
+`docs.retired_names_absent` 执行（与 `check-doc-links.mjs` 同一个计划），`npm run test` 的 feat 快速层
+会跑到：
+
+```text
+node scripts/check-retired-names.mjs
+no retired spelling in 409 reader-facing file(s) (2 dated snapshot(s) allowed; 2 record directories not scanned)
+```
+
+扫描范围：`README.md`、`README.cn.md`（存在时）、`docs/**/*.md`、`docs/*.asdl`、
+`examples/**/*.{md,cml}`、`editors/**/*.md`、`tools/**/*.md`、`scripts/**/*.md`。`.cml` 里的 `import`
+规则只对 Camel 程序生效；Markdown 中带 `python`/`js`/`sh` 等语言标记的代码块整块跳过，避免把 Python 的
+`import os` 当成 Camel 导入。
+
+### 6.2 规则
+
+- `sys:`/`os:`/`crypto:` 的模块 URI，`sys::`/`os::`/`crypto::` 的限定名；
+- `from sys|os|crypto` 与裸 `import sys|os|crypto`；
+- `str::bytes`/`str::from_bytes`（也接受 `str:bytes` 写法）；
+- `inner func`/`outer func`/`atomic func`/`shared func`；
+- 函数体里的签名字符串：`return '<模块:算子>'`（含 `return '<uri>'`/`'<URI>'` 占位符）；
+- 反引号里的旧模块名（`` `sys` `` 等）、`X module`；
+- 少数旧算子名：`sys.get_env`、`sys.get_cwd`、`os.exit`、`os.sleep`、`os.whoami`、`os.cpu_count`、
+  `crypto.sha256*`。
+
+每行命中一条就报一次，输出 `文件:行: 规则: 行内容`，退出 1。**只匹配 `func` 不匹配 `type`**：英文
+“the inner type of `T?`” 不是 `inner` 修饰符。带“旧写法/已删除/已改名/旧名/retired/renamed/is gone/
+no longer”的行视为说明退役，跳过。
+
+### 6.3 允许清单（2 个文件）
+
+| 文件 | 理由（脚本里的注释） |
+|---|---|
+| `docs/design/stdlib/inventory.cn.md` | 2026-10-20 的盘点：旧名是那次盘点的证据 |
+| `docs/design/training/bytes.cn.md` | 日期化实现日志：那一条是当时的事实 |
+
+`docs/handover/` 与 `docs/reviews/` 不是页面，不进入扫描，也不占允许清单。清单只有 2 个文件；如果以后
+要加第三个，先问这是不是又有一页在教旧名字。
+
+## 7. 红/绿证明
+
+绿（干净树）：
+
+```text
+$ node scripts/check-retired-names.mjs
+no retired spelling in 409 reader-facing file(s) (2 dated snapshot(s) allowed; 2 record directories not scanned)
+$ echo $?
+0
+```
+
+红（在 `docs/technical/30_diagnostics_reporting.md` 末尾故意加一行 `<!-- guard proof: sys:get_env -->`）：
+
+```text
+$ node scripts/check-retired-names.mjs
+docs/technical/30_diagnostics_reporting.md:196: retired module URI: <!-- guard proof: sys:get_env -->
+1 retired spelling(s) in 409 reader-facing file(s)
+$ echo $?
+1
+```
+
+撤销那一行后重跑，回到上面的绿。另用临时页验证过：`python` 代码块里的 `import os`/`from sys import path`
+不报，`cml` 代码块里的 `import os` 报（该临时页已删）。
+
+## 8. 发现：H114 漏掉一个活的测试夹具
+
+`test/tools/selftest/sweep_names/reuse_sources/reuse.cml:5` 仍写 `import { get_env } from sys`。它不是
+负例：`test/tools/selftest/sweep_names/reuse.plan.toml` 把它当**能通过**的样本，期望打印 sweep 的环境
+变量；H114 只改了 `test/cases` 与 `test/plans`，漏了这个 `test/tools/selftest` 夹具。按现在的模块表它会
+在导入处报 `ModuleNotFound`，所以 `feat/consistency/runner`
+（`test/plans/feat/consistency/runner.plan.toml`）应当是红的——本轮验收里它确实是红的：
+`[FAIL] runner.backend_matrix`（`expected exit 0, got 1`，stdout 没有 `runner self-test ok`）。
+
+本任务**没有改它**：它不在页面范围内，而且改 `.cml` 会改
+`test/plans/feat/parse/golden/ast_hashes.txt` 里这一行的哈希，需要按
+`python3 test/tools/parsecheck/check.py snapshot --update` 的流程刷新；这是测试基础设施的缺陷，归 H114
+的遗漏，应由负责人单独修。修复只需把 `sys` 改成 `env` 并刷新这一行的哈希。
+
+## 9. 验证
+
+构建（Linux 主机 `88zjwei`，Release，`camel-remote.ps1 -Jobs 8`，首次不加 `-NoBuild`）：transfer
+17 s、build 420 s、plan 148 s，整体 exit 1（因下面 6 条失败）。同一批计划共 2170 条：2162 通过、
+6 失败、2 跳过。
+
+| 计划 | 结果 |
+|---|---|
+| `smoke` | 10/10 |
+| `feat/compile` | 1036/1036 |
+| `feat/parse` | 57/57 |
+| `feat/docs_links` | 2/2（含新门禁；另用 `-NoBuild` 只跑这一个计划，仍 2/2） |
+| `feat/modules` | 1057 通过 / 5 失败 / 2 跳过 |
+| `feat/consistency/runner` | 0/1（§8 的夹具） |
+
+`feat/modules` 的 5 条失败都是起点已记的基线，与本次改动无关：
+
+- `graph_facts.rewrite_opt`、`graph_facts.rewrite_macro_simplify`：验证输出缺少
+  `FACTS graph layer valid=6 revalidated=0 stale=0`；H121 仍未开始，H131 行也把这两条归 H121。
+- `rename_identity` 的 env/process/hash 三条：`test/cases/modules/rename/identity.mjs` 里记录的
+  `std::jgir` 摘要与当前树不符。`474521b57`（2026-10-22 07:54）刚把 origin id 归一后重记过摘要，
+  之后 H131 的 `fs` 声明化又改动了图（`b249211e1` 只刷新了 AST 快照）；H131 行已把这 3 条记为
+  “H114 的过期摘要”。本任务只改文档，不可能移动图。
+
+本地另跑：`node scripts/check-doc-links.mjs --all` → 367 篇 0 断链；
+`node scripts/diagnostics-catalog.mjs --check` → 202 个码；
+`node scripts/check-retired-names.mjs` → 409 篇 0 命中（§7）。
+
+**验收判定**：`smoke`、`feat/compile`、`feat/parse`、`feat/docs_links` 全绿；`feat/modules` 的 5 条红
+全部是起点已有的 H121/H131 基线，没有新增失败；`feat/consistency/runner` 的红是 §8 的 H114 遗漏，
+本任务只报告、不越界改测试。
+
+## 10. 提交
+
+- `docs: catch the last pages up with the retired names, and guard them`（`fee923fd3`）— 6 个文档文件、
+  `scripts/check-retired-names.mjs`、`test/plans/feat/docs_links.plan.toml`。
+- `docs(handover): record H136, the retired-name sweep` — 本报告与看板 H136 行（即本行所在提交）。
