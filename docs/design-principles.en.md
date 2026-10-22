@@ -587,8 +587,8 @@ Design motivation: the dynamism of the Python language itself determines its fle
 
 ### 10.3 The module cache
 
-- **A compiled module can be cached** (`.cmo`, cached module object), so that a module need not be recompiled. The cache of each module is one graph rooted at that module; it is for convenience and speed and need not be identical to the final result of an actual compilation. C++ modules use the same extension, and the two are told apart by the file header.
-- The cache is put in the `__cmo__/` directory beside the source file; off by default at first; a module that hits the cache does not replay compile-time warnings. The importer's cache is invalidated when any of the following changes: the signature of an exported function (including the inferred return type), the module-level values it uses indirectly, its effects, the body of a generic function.
+- **A compiled module can be cached** (`.cmc`, cached module object), so that a module need not be recompiled. The cache of each module is one graph rooted at that module; it is for convenience and speed and need not be identical to the final result of an actual compilation. **The cache is not implemented**: this section fixes its form and invalidation conditions; whether to implement it is still open.
+- The cache is put in the `__cmc__/` directory beside the source file; off by default at first; a module that hits the cache does not replay compile-time warnings. The importer's cache is invalidated when any of the following changes: the signature of an exported function (including the inferred return type), the module-level values it uses indirectly, its effects, the body of a generic function. `--verify-ops` still reads the source, not the cache.
 
 ### 10.4 The place of native C++ modules
 
