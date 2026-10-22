@@ -214,6 +214,17 @@ class Tree {
     void setUnwrittenParams(const Node *func, std::vector<UnwrittenParam> params);
     const std::vector<UnwrittenParam> *unwrittenParamsOf(const Node *func) const;
 
+    /// A parameter of a function that is destructured as a tuple (`((a, b)) => ...`): the names
+    /// the elements are bound to, in order, and the parameter's index over all parameters.
+    struct TupleParamBinding {
+        size_t index = 0;
+        std::vector<std::string> names;
+    };
+
+    /// The parameters of `func` destructured as tuples. Null when there are none.
+    void setTupleParams(const Node *func, std::vector<TupleParamBinding> params);
+    const std::vector<TupleParamBinding> *tupleParamsOf(const Node *func) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -272,6 +283,7 @@ class Tree {
     std::unordered_map<const Node *, std::map<size_t, std::vector<TagUse>>> fieldTagUses_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
+    std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>

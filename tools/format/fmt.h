@@ -484,6 +484,7 @@ class Formatter {
     std::any visitKeyValuePair(cst::KeyValuePair context);
 
     std::any visitKeyParamPair(cst::KeyParamPair context);
+    std::any visitTupleParam(cst::TupleParam context);
 
     std::any visitDataList(cst::DataList context);
 

@@ -889,7 +889,22 @@ Tuple unpacking requires the same number of references and data nodes, or exactl
 Ensure the number of variables matches the number of unpacked data elements, or use a single tuple value.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/err_lambda_tuple_arity.cml`, run as `camel test/cases/compile/err_lambda_tuple_arity.cml`)
+
+```camel
+module lambda_tuple_arity
+
+// More names than the tuple has elements is refused, not read past the end.
+with <f: (p: (int, int)) => int>
+func apply_all(ps: (int, int)[]): int[] {
+    return ps->map<f>
+}
+
+func main(): int sync {
+    println(apply_all<((a, b, c)) => a + b + c>([(1, 2)]))
+    return 0
+}
+```
 
 ### InvalidLiteral
 
