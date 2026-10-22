@@ -1,0 +1,324 @@
+# H165：`nn` 与 `autodiff` 的声明化（H19 第 10 步）
+
+本批做 H157 账本里的两行：`nn`（1 可声明 / 18 计算）与 `autodiff`（1 可声明 / 2 计算）。
+逐条核对注册代码与 resolver 后，账本的分类成立：两个模块各只有一条固定签名，其余 20 条
+（`nn` 18 个名字 20 条 URI，`autodiff` 2 条）的类型由实参算出，声明写不出。于是按 H151/H156
+的形状迁移两个可声明的名字，其余留在 C++，参考条目写进 `stdlib/signatures/`。两个模块都
+不需要 PyTorch、GPU 或 Python 解释器就能装载，所以六条声明用例全部真跑，没有退到只编译。
+
+提交：`nn` 为 `2ff611def`，`autodiff` 为 `23cdcf0ef`（`b66edb7b5` 之上，按模块分开）。
+
+## 0 结论
+
+| 项 | 改动前 | 改动后 |
+|---|---|---|
+| `nn` 的导出名字 / 注册重载 | 19 / 21 | 19 / 21 |
+| 其中可声明 | **1**（`save_params`） | 已写进 `stdlib/nn.cml` |
+| 其中计算签名 | 18 个名字 / 20 条 URI | 参考条目在 `stdlib/signatures/nn.cml`，模块项写 `computed:` |
+| 其中阻塞 | 0 | 0 |
+| `autodiff` 的导出名字 / 注册重载 | 3 / 3 | 3 / 3 |
+| 其中可声明 | **1**（`stop_gradient`） | 已写进 `stdlib/autodiff.cml` |
+| 其中计算签名 | 2 | 参考条目在 `stdlib/signatures/autodiff.cml` |
+| 其中阻塞 | 0 | 0 |
+| 声明模块 / 计算签名（`--check`） | 16 / 87 | **18 / 107**，0 问题 |
+| `--verify-ops` 的注册重载 | 465 | **489** |
+| 参考页条目 | 338 | **361**（`nn` 20 条 + `autodiff` 3 条） |
+| AST 快照 | 2540 个文件 | **2550** 个文件 |
+
+- **H157 的判定成立**：`nn` 1/18、`autodiff` 1/2。只有一条理由要写得更准确：`adam_state`
+  不是「结果取自参数」，它的结果是固定 `OptimizerState`；它不可声明是因为参数域是「有切线的
+  树」，`typeas P` 会把这个域放宽（`adam_state(3)` 现在编译期就被拒绝，见 §3.2）。
+- 没有新增诊断码：目录仍是 204 条，本批一条没加，也没有动 `0x188+`。
+- 执行器、纯度、资源、原地语义一条没改：`std::jgir` 样本在起点树与本分支上规范化 `origin`
+  后逐字节相同（§6.1）；`inspect --ops` 的 24 条基线行里只有 2 条的签名/参数计数变化
+  （§6.2）。
+- 迁移后两个模块第一次进入 `--verify-ops` 的覆盖（`registry_all.cml` 加 `import nn` 与
+  `import autodiff`），24 条注册全部与声明/计算条目对上。
+- 两个模块的 C++ registry 写法不同：`nn` 的张量算子经
+  `camel::tensor::ops::OpRegistry::instance().operatorGroups("nn")` 导出，优化器经
+  `optimizerOperatorGroups()` 的字面组列表导出；`autodiff` 只有字面列表。声明检查器原先
+  只认未限定名的 registry 循环，且只在没有 registry 时才读字面列表，本批让它同时认这两种
+  形状（§4.3）。
+
+## 1 账本的说法与本轮核对
+
+`docs/handover/README.cn.md` 的 H19 账本（H157 校正）有两行：
+
+> | `nn` | **1 可声明 / 18 计算**（`save_params`；15 个张量算子与 3 个优化器由 `OpDef`/resolver 算） |
+> | `autodiff` | **1 可声明 / 2 计算**（`stop_gradient`；`grad`/`with_grad` 的梯度函数类型由实参算） |
+
+核对方式是读三条来源，而不是只看签名文本：`modules/nn/tensor_ops.cpp` 的 `OpDef` 推断规则、
+`modules/nn/optim.cpp` 的 `OptimizerResolver`、`modules/autodiff/operators.cpp` 的
+`GradResolver`；再用主机 `inspect --ops` 枚举两个模块实际注册的每一行（名字、URI、with/norm
+计数、签名、纯度），与 resolver 的分支逐条对照。结果是账本的分类与计数都对，只有
+`adam_state` 的理由需要补一句（§3.2）。
+
+## 2 `nn` 的清单
+
+`inspect --ops`（主机，改动后）列出 **19 个名字 / 21 条 URI**。`save_params` 来自
+`optimizerOperatorGroups()`；15 个张量名字（17 条 URI，`softmax_cross_entropy` 与
+`softmax_cross_entropy_grad` 各有一条 labels 重载）来自 tensor registry；`sgd`、`adam_state`、
+`adam` 来自优化器组。
+
+| 名字 | URI | with / norm | 签名 | 分类 | 理由 |
+|---|---|---|---|---|---|
+| `save_params` | `nn:save_params` | 0 / 2 | `(params: typeas P, dir: string) => void` | **声明** | 任何值 + `string` 目录，结果固定 `void` |
+| `conv2d` | `nn:conv2d` | -2 / -2 | `(input: Tensor, kernel: Tensor, bias: Tensor, stride?: int, padding?: int) => Tensor` | 计算 | 结果的 dtype/shape 由输入与卷积核推断 |
+| `conv2d_input_grad` | 同名 | -2 / -2 | `(input, kernel, dy, stride?, padding?) => Tensor` | 计算 | 结果形如 `input` |
+| `conv2d_kernel_grad` | 同名 | -2 / -2 | 同上 | 计算 | 结果形如 `kernel` |
+| `conv2d_bias_grad` | 同名 | -2 / -2 | `(bias, dy) => Tensor` | 计算 | 结果形如 `bias` |
+| `max_pool2d` | `nn:max_pool2d` | -2 / -2 | `(input, kernel: int, stride?, padding?) => Tensor` | 计算 | 窗口参数进入形状推断 |
+| `avg_pool2d` | `nn:avg_pool2d` | -2 / -2 | 同上 | 计算 | 同上 |
+| `max_pool2d_grad` | 同名 | -2 / -2 | `(input, dy, kernel: int, stride?, padding?) => Tensor` | 计算 | 结果形如 `input`；窗口参数仍在 |
+| `avg_pool2d_grad` | 同名 | -2 / -2 | 同上 | 计算 | 同上 |
+| `batch_norm` | `nn:batch_norm` | -2 / -2 | `(input, mean, var, gamma, beta, eps?: number) => Tensor` | 计算 | 五个张量的 dtype/shape 参与推断 |
+| `batch_norm_train` | 同名 | -2 / -2 | `(input, gamma, beta, running_mean, running_var, momentum?, eps?) => (Tensor, Tensor, Tensor)` | 计算 | 结果是三元组，形状取自实参 |
+| `batch_norm_train_grad` | 同名 | -2 / -2 | `(input, gamma, dy, eps?) => (Tensor, Tensor, Tensor)` | 计算 | 同上 |
+| `embedding` | `nn:embedding` | -2 / -2 | `(table, indices) => Tensor` | 计算 | 结果 `[indices.length, table.dim(1)]` |
+| `embedding_table_grad` | 同名 | -2 / -2 | `(table, indices, dy) => Tensor` | 计算 | 结果形如 `table` |
+| `softmax_cross_entropy` | `nn:softmax_cross_entropy` | -2 / -2 | `(logits, target: Tensor) => float` | 计算 | 重载按 target 的 dtype 选择；labels 形式是另一条 URI |
+| 同上 | `nn:softmax_cross_entropy_labels` | -2 / -2 | `(logits, target: Tensor \| number[]) => float` | 计算 | 同上 |
+| `softmax_cross_entropy_grad` | `nn:softmax_cross_entropy_grad` | -2 / -2 | `(logits, target: Tensor, dy: number) => Tensor` | 计算 | 同上，结果形如 `logits` |
+| 同上 | `nn:softmax_cross_entropy_labels_grad` | -2 / -2 | `(logits, target: Tensor \| number[], dy: number) => Tensor` | 计算 | 同上 |
+| `sgd` | `nn:sgd` | -2 / -2 | `(params: P, grads: grad of P, lr: float) => P` | 计算 | 结果就是 `params` 的类型 |
+| `adam_state` | `nn:adam_state` | -2 / -2 | `(params: P) => OptimizerState` | 计算 | 参数域是「有切线的树」，见 §3.2 |
+| `adam` | `nn:adam` | -2 / -2 | `(params: P, grads: grad of P, state: OptimizerState, lr: float, beta1?, beta2?, eps?) => (P, OptimizerState)` | 计算 | 结果是 `(params 类型, OptimizerState)`，元数 4–7 |
+
+21 条里只有 `save_params` 是 effectful（`rmw ambient fs; external`），其余 pure；这些事实在
+`NnModule::load` 与 `OpDef` 里，本批没动。
+
+## 3 为什么这 18 个名字不能声明
+
+### 3.1 张量算子（15 个名字）
+
+`OpDef` 的 infer 规则读的是**实参的 dtype 与 shape**：
+
+- 卷积/池化（8 个名字）的结果形状是 `input.shape`、`kernel.shape` 与 `stride`/`padding`
+  的表达式；`conv2d` 与池化的 `stride`/`padding` 是可选参数，其中 `padding` 还参与窗口是否
+  放得下的编译期判断。
+- 三个 batch-norm 名字的结果形状取自 4–5 个张量；`batch_norm_train` 及其梯度返回三元组，
+  每条结果的形状各不相同。
+- `embedding` 的结果是 `[indices.length, table.dim(1)]`，`embedding_table_grad` 的结果形如
+  表；索引的 dtype 还必须是整数。
+- `softmax_cross_entropy` 的结果固定 `float`，但它按 target 的 dtype 在两条注册 URI 之间
+  选择（分布或整数标签）；源码类型 `Tensor` 看不到 dtype，`typeas` 也写不出这个选择。
+
+一个名字要写成无体声明，参数必须各自是一个源码可写的类型，结果的类型不能依赖实参。这些
+规则都做不到；`conv2d`/`max_pool2d` 的「窗口放不下在编译期拒绝」也需要 infer 规则，声明
+只能写类型，写不了这个谓词。
+
+### 3.2 优化器（3 个名字）
+
+- `sgd` 的结果就是 `params` 的类型：`(params: typeas P, grads: typeas G, lr: float) => P`
+  能过类型检查，但 `grads` 必须是 `P` 的切线（`grad of P`），`typeas G` 会接受任意类型，
+  丢掉「`grads` 与 `params` 同形」这条编译期检查。签名里写成 `grads: P` 只是「切线等于自身」
+  的那个实例，不是通用规则。
+- `adam` 除了同样的 `grads` 约束，还有 4–7 的元数与 `(P, OptimizerState)` 的结果；一个名字
+  一条声明写不出这个元数范围。
+- `adam_state` 是本批唯一需要改账本措辞的一条。它的结果固定是 `OptimizerState`，看起来
+  只差一个参数类型；但 resolver 要求 `tangentTypeOf(params) != nullptr`，也就是参数必须是
+  「有切线的树」。`typeas P` 会接受 `int`/`string`，而现在这些在编译期就被拒绝（主机实测：
+
+  ```
+  adam_state(3)      -> SemanticDiag::NoMatchingFunction, (int)
+  adam_state("x")    -> SemanticDiag::NoMatchingFunction, (string)
+  adam_state(3.0)    -> 通过（float 有切线）
+  ```
+
+  ）。声明机制还没有「可微类型」这种约束类型，所以它留在 C++。H157 把它记成「参数类型取自
+  `params`」不准确，分类（计算）是对的。
+
+## 4 `nn` 的做法
+
+### 4.1 声明文件
+
+- `stdlib/nn.cml`：一条无体声明
+  `export func save_params(params: typeas P, dir: string): void`，带
+  `@effect writes files under dir`、`@fails fault RuntimeError ...` 与 `@example`。
+  文件头说明其余 18 个名字为什么在 C++。
+- `stdlib/signatures/nn.cml`：20 条参考条目、18 个名字，按 convolution / pooling / batch
+  normalization / embedding / loss / optimizers 六节分组；两条 labels 重载用
+  `#op<'nn:...'>` 指到各自的 URI，并和上一条共用一个小节与文档。
+
+### 4.2 C++ 交出什么
+
+- `modules/nn/optim.cpp`：从 `optimizerOperatorGroups()` 删掉 `save_params` 的
+  `OperatorGroup::create`（原 `DynamicFuncTypeResolver`），保留 `saveParamsKernel` 与
+  `optimizerKernels()` 里的登记。
+- `modules/nn/module.cpp`：加匿名命名空间的
+  `kDeclaredOperators = {"save_params"}` 与 `isDeclaredOperator()`，registry 循环里跳过
+  声明名字。`save_params` 今天不在 registry 里（它在优化器组里），这条跳过是防御：即使
+  它以后移进 registry，这个循环也不会把声明名字再导出一次；声明检查器要求 registry 模块有
+  这张跳过表，且表里的名字正好是声明名字。
+- `NnModule::load` 的纯度/资源、执行器、`operatorKernels`、traits、语义一条没动。
+
+### 4.3 声明检查器为什么要改
+
+`scripts/stdlib-declarations.mjs` 原来只认两种形状：未限定名的
+`OpRegistry::instance().operatorGroups("<m>")` 循环，或没有 registry 时的
+`for (g : factory())`。`nn` 同时有这两种形状，而且 registry 调用是
+`camel::tensor::ops::OpRegistry::...`。三处改动：
+
+1. registry 循环的正则允许任意 `A::B::` 前缀；
+2. 字面组列表循环无论有没有 registry 都解析（`nn` 的优化器组与 registry 都要算进导出集）；
+3. `Type.name` 别名只在模块确实发布别名时要求（`tensor` 是，`nn` 不是）。
+
+改动后 `--check` 的输出是 **18 个声明模块、107 条计算签名、0 问题**，`--verify-ops`
+**489** 条重载一致。
+
+## 5 `autodiff`
+
+### 5.1 清单与判定
+
+`inspect --ops` 列出 3 个名字：
+
+| 名字 | URI | with / norm | 签名 | 分类 | 理由 |
+|---|---|---|---|---|---|
+| `stop_gradient` | `autodiff:stop_gradient` | 0 / 1 | `(x: typeas T) => T` | **声明** | 恒等，结果就是实参类型 |
+| `grad` | `autodiff:grad` | -2 / -2 | `(f: <W...>(N...) => float) => <W...>(N...) => gradient of W0` | 计算 | 结果的参数表与结果类型由 `gradientSignature(f)` 算；且 `f` 必须有 with 参数 |
+| `with_grad` | `autodiff:with_grad` | -2 / -2 | 同上，结果多带原值 | 计算 | 同上 |
+
+`grad`/`with_grad` 在 `OperatorTable` 里是 effectful（对函数图做微分），`stop_gradient` 是
+pure；这些没动。
+
+### 5.2 做法
+
+- `stdlib/autodiff.cml`：`export func stop_gradient(x: typeas T): T`，`@pure` 与 `@example`；
+  没有 `@fails`——`NotDifferentiable` 是编译期 `SemanticDiag`（`grad` 的检查），不是运行时
+  fault，写在 `stop_gradient` 上反而是错的。
+- `stdlib/signatures/autodiff.cml`：`grad`/`with_grad` 两条参考条目；文档写明「对第一个
+  with 参数求导」与「没有 with 参数、或第一个 with 没有切线时在编译期拒绝」。
+- `modules/autodiff/operators.cpp`：删掉 `IdentityResolver` 与 `stop_gradient` 的
+  `OperatorGroup::create`；`stopGradientKernel`、`operatorKernels()`、`operatorGroups()` 里
+  的 `grad`/`with_grad`、`OperatorTable::set` 与 `DerivativeRegistry::setRule` 都没动。
+
+## 6 效果与资源没有动：两条证据
+
+### 6.1 `std::jgir` 样本
+
+同一程序在起点树 `b66edb7b5` 的安装（主机 `h166-pyplot-python` checkout，HEAD 就是
+`b66edb7b5`，只有 `modules/python`、`modules/pyplot` 两处与本批无关的脏改动）与本分支上各跑
+一次。程序混用两条声明算子、四条计算算子、两条 autodiff 计算/声明算子：
+
+```camel
+module jgir_sample
+
+import { save_params, sgd, adam_state, adam } from nn
+import { stop_gradient, grad } from autodiff
+import { new, shape } from tensor
+
+with <x: float>
+func square(): float {
+    return x * x
+}
+
+func main(): int sync {
+    let params = { w: new([1.0, 2.0]) }
+    let grads = { w: new([0.5, -0.5]) }
+    save_params(params, "/tmp/h165-jgir-save")
+    let next = sgd(params, grads, 0.1)
+    let state = adam_state(next)
+    let (updated, newState) = adam(next, grads, state, 0.01)
+    let frozen = stop_gradient(updated)
+    let df = grad(square)
+    let extents = shape(new([3.0]))
+    println(extents[0])
+    return 0
+}
+```
+
+两次输出都是 18910 字节；把 `origin`（源码 id，两棵树的分配顺序不同）与 `file` 规范化后
+**逐字节相同**：
+
+```
+identical after origin normalization: true
+labels: Function(graph=main, tupleSlots=0) | CALL | [1.0, 2.0] | tensor:new | { w: null } |
+        { w: Tensor<float32, [?]> } | [0.5, -0.5] | /tmp/h165-jgir-save | nn:save_params | 0.1 |
+        nn:sgd | nn:adam_state | 0.01 | nn:adam | .0 | autodiff:stop_gradient |
+        Function(graph=square, tupleSlots=0) | autodiff:grad | [3.0] | tensor:shape | 0 |
+        :op/idx_arr | :io/println | GATE | x | :op/mul_d
+```
+
+声明算子（`save_params`、`stop_gradient`）与计算算子（`sgd`、`adam_state`、`adam`、`grad`）
+在图上都是 OPER，节点、边、类型、`roles` 一致；三个图（`main`、`square`、`__root__`）也
+一致。
+
+### 6.2 `inspect --ops` 的 24 条基线行
+
+起点与改动后都是 21 条 `nn` + 3 条 `autodiff`，URI 集合相同。逐字段比较，只有两行变化：
+
+| URI | 字段 | 改动前 | 改动后 |
+|---|---|---|---|
+| `nn:save_params` | `signature` | `(params: P, dir: string) => void` | `(params: typeas P, dir: string) => void` |
+| `autodiff:stop_gradient` | `with` / `norm` / `signature` | `-2` / `-2` / `(x: T) => T` | `0` / `1` / `(x: typeas T) => T` |
+
+其余 22 行的 `purity`、`semantics`（`key`/`numeric`/`compute`/`resources`/`algorithm`/
+`sensitive_to`）、`with`/`norm`、`signature` 逐字节相同。`save_params` 仍是
+`effectful`、`rmw ambient fs; external`；`stop_gradient` 仍是 `pure`。所以「声明只携带类型，
+不携带效果」在这两个模块上是字面成立的。
+
+## 7 参考页与生成物
+
+- `scripts/stdlib-reference.mjs` 的 `MODULES` 加 `nn` 与 `autodiff`，各写
+  `source: '<m>.cml'`、`declaration: true`、`computed: 'signatures/<m>.cml'`；页首
+  「Not in this reference」改为只列 `onnx`、`sim`、Python 桥（`python`/`pyplot`）与
+  `perf`。
+- 重新生成 `docs/stdlib-reference.md`：338 → **361** 条（`nn` 一节 19 个名字/20 条条目，
+  `autodiff` 一节 3 条），模块表多出 `nn`（19）与 `autodiff`（3）两行。两条 labels 重载
+  与主条目共用一个 `####` 小标题，不重复成节。
+- `test/plans/feat/parse/golden/ast_hashes.txt`：2540 → **2550** 个文件（4 个新 stdlib
+  文件 + 6 个新用例；`registry_all.cml` 的一行替换）。`stdlib/signatures/nn.cml` 在快照里
+  记成 `no`（与 `tensor.cml`、`globals.cml` 一样：`#op` 标签不是解析器语法，签名文件只给
+  参考生成器读）。
+
+## 8 用例与验收
+
+六条用例（`test/cases/compile/native/`）：
+
+| 用例 | 断言 |
+|---|---|
+| `nn_declaration_import` | 导入者读到 `save_params` 的声明；调用写到 `w.npy`/`b.npy`；非树值也被接受 |
+| `nn_arity` | `save_params('params')` → `NoMatchingFunction` `0x0300000F`，11:5，列出 `<nn:save_params>: (params: typeas P, dir: string) => void` |
+| `nn_type` | `save_params('params', 1)` → `NoMatchingFunction` `0x0300000F`，11:5，列出同一重载 |
+| `autodiff_declaration_import` | `stop_gradient(7)`、`stop_gradient('text')`、张量都原样返回 |
+| `autodiff_arity` | `stop_gradient(1.0, 2.0)` → `NoMatchingFunction` `0x0300000F`，11:26，列出 `<autodiff:stop_gradient>: (x: typeas T) => T` |
+| `autodiff_result_type` | `let count: int = stop_gradient(1.0)` → `DeclaredTypeMismatch` `0x03000110`，12:5，`This value has type 'float', which is not the declared type 'int'` |
+
+`autodiff` 的参数是 `typeas T`，没有「错类型」用例可写；按任务书用结果类型用例代替，并在
+报告里说明。六条都进了 `test/plans/feat/compile/native_declarations.plan.toml`
+（61 → 67 条）。
+
+验收（主机 `-Jobs 8`）：
+
+- **完整环境**（带 PyTorch/ORT 依赖，合并树）：`feat.modules` 1073（1072 通过 / 1 跳过）、
+  `feat.compile` 1063、`feat.linear` 723、`smoke` 10，合计 **2869 条：2868 通过 / 0 失败 /
+  1 跳过**（跳过是 Windows 专属的 `modules.unicode_paths`）。
+- **最终树、不带 PyTorch/ORT 的环境**：同样 2869 条，**2845 通过 / 0 失败 / 24 跳过**；跳过
+  是 23 条 PyTorch/ORT 对照（`grad_structures`、`capability_vs_torch`、21 条 `ort_*`）加
+  `unicode.paths`。其中 `feat/compile` 1063/1063、`feat/linear` 723/723、`smoke` 10/10
+  （1796/1796），`feat/modules` 1049 通过 / 0 失败 / 24 跳过。任务书要求不跑 PyTorch 计划，
+  这些跳过是环境没有依赖，不是失败。
+- `nn` 阶段单独跑过 `stdlib_registry` + `feat/compile` + `feat/linear` + `smoke`
+  **1798/1798**，证明拆成两个提交时中间树也是绿的。
+
+另有：`scripts/stdlib-declarations.mjs --check` 18 个声明模块 / 107 条计算签名 / 0 问题；
+`scripts/stdlib-reference.mjs --verify-ops` 489 条重载一致；`--verify-doc` 一致；六条新用例
+单独跑与全量跑都是绿的。没有新增诊断码（目录仍 204 条）。
+
+## 9 账本修正
+
+- H157 的两行改为「已迁移」：`nn` 1 条声明 + 18 个名字 / 20 条计算签名，`autodiff` 1 条
+  声明 + 2 条计算签名；两处都标 `（H165 校正，依据 H165）`。
+- 看板加 H165 行，记录两个模块的分类、数字与验收结果。
+- H19 账本尾部的计数补一条 H165 校正：18/107、489、361、AST 2550。
+
+## 10 待决与边界
+
+- `adam_state` 一旦有「可微类型」约束（或 `grad of P` 能写进声明），它就能迁；现在
+  `typeas P` 会放宽参数域，所以留在 C++。
+- `softmax_cross_entropy` 的两条 URI 依赖 target 的 dtype；源码类型不区分 dtype，因此重载
+  选择仍由 resolver 做。若以后 `Tensor` 能带 dtype 参数，这条可以重新考虑。
+- `save_params` 在类型层接受任何值（内核只写张量叶子，其他值忽略）；声明与文档都写的是
+  「任何值」，不是「参数树」。
+- 本批的 24 条跳过里有 23 条是 PyTorch/ORT 对照，本任务不碰这些算子/测试；完整环境的
+  2868/0/1 与本环境的 2845/0/24 都是 0 失败，后者只是没有依赖。
