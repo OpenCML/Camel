@@ -22,6 +22,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/core/type/tree.h"
+#include "camel/execute/devices.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/function_call.h"
 #include "camel/profile/profile.h"
@@ -32,7 +33,6 @@
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/compiled_region.h"
-#include "tiles/internal/dispatch.h"
 #include "tiles/internal/graph_values.h"
 #include "tiles/internal/profile_hooks.h"
 #include "tiles/internal/regions.h"
@@ -41,6 +41,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
 
 namespace camel::tiles {
@@ -65,6 +66,42 @@ template <class F> slot_t checked(F &&body) {
             core::error::RuntimeDiag::RuntimeError,
             std::string("tiles: ") + e.what());
     }
+}
+
+/// The startup check of `--devices` (GPU plan 5.3): every ordinal the run named must be one this
+/// machine has. It runs before any graph executes, whether or not the program reaches a device
+/// operation, so a device that is not there is reported where it was asked for rather than at
+/// the first device call or not at all. The reason names what the machine has (how many devices,
+/// or why none can be asked for) and every other named ordinal that is missing.
+std::optional<execute::DeviceValidationFailure> validateCudaDevices() {
+    const auto &selection = execute::selectedDevices();
+    if (selection.cuda.empty()) {
+        // The core answers `--devices cpu` itself; this is the ordinary guard for a validator
+        // that is asked without a device list.
+        return std::nullopt;
+    }
+    const CudaDeviceAvailability devices = cudaDeviceAvailability(selection.cuda);
+    if (devices.missing.empty()) {
+        return std::nullopt;
+    }
+    std::string reason;
+    if (devices.count == 0) {
+        reason = devices.reason.empty() ? "this machine has no CUDA device" : devices.reason;
+    } else if (devices.count == 1) {
+        reason = "this machine has 1 CUDA device (ordinal 0)";
+    } else {
+        reason = "this machine has " + std::to_string(devices.count) +
+                 " CUDA devices (ordinals 0 to " + std::to_string(devices.count - 1) + ")";
+    }
+    if (devices.missing.size() > 1) {
+        reason += "; missing: ";
+        std::string separator;
+        for (const int ordinal : devices.missing) {
+            reason += separator + std::to_string(ordinal);
+            separator = ", ";
+        }
+    }
+    return execute::DeviceValidationFailure{devices.missing.front(), std::move(reason)};
 }
 
 Program prepare(ArgsView &with, ArgsView &norm, Context &ctx, bool staticRegion = false) {
@@ -151,53 +188,16 @@ slot_t runPrepared(ArgsView &with, std::shared_ptr<const Program> program) {
     };
     return rebuild(rebuild, static_cast<FunctionType *>(with.type(0))->exitType());
 }
-slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    return checked([&] {
-        return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx)));
-    });
-}
 slot_t runCompiledKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     return checked([&] {
         return runPrepared(with, std::make_shared<const Program>(prepare(with, norm, ctx, true)));
     });
-}
-slot_t preferGpuKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    std::shared_ptr<const Program> program;
-    const bool supported = checked([&] {
-        // `--devices cpu`: the host path, exactly as when no device is available.
-        if (!configuredCudaOrdinal())
-            return false;
-        try {
-            (void)deviceInfo();
-            program = std::make_shared<const Program>(prepare(with, norm, ctx));
-            return true;
-        } catch (const UnsupportedComputation &) {
-            return false;
-        } catch (const BackendUnavailable &) {
-            return false;
-        }
-    });
-    if (supported)
-        return checked([&] { return runPrepared(with, std::move(program)); });
-    // No device work has executed. Keep the original function and arguments rooted in
-    // their caller frame; the backend binds them before reaching a safepoint.
-    auto *function = with.get<::Function *>(0);
-    std::vector<slot_t> arguments;
-    if (function->graph()->normPorts().size() == 1) {
-        arguments.push_back(norm.slot(0));
-    } else {
-        auto *tuple = norm.get<::Tuple *>(0);
-        for (size_t i = 0; i < function->graph()->normPorts().size(); ++i)
-            arguments.push_back(tuple->get<slot_t>(i));
-    }
-    return execute::invokeFunction(ctx, function, {}, arguments);
 }
 slot_t availableKernel(ArgsView &, ArgsView &, Context &) {
     // checked, so that a device the run named and that is missing is a diagnostic rather than
     // "no device here": `available()` answers a capability question, not a configuration one.
     return checked([] { return td::toSlot(available()); });
 }
-slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx);
 slot_t wrapDevice(std::shared_ptr<DeviceValue> resident) {
     auto *owner = new std::shared_ptr<DeviceValue>(std::move(resident));
     td::ForeignResourceDescriptor descriptor;
@@ -230,14 +230,6 @@ slot_t runResidentPrepared(ArgsView &with, std::shared_ptr<const Program> progra
         };
         return rebuild(rebuild, resultType);
     });
-}
-slot_t runDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
-    std::shared_ptr<const Program> program;
-    checked([&] {
-        program = std::make_shared<const Program>(prepare(with, norm, ctx));
-        return slot_t{};
-    });
-    return runResidentPrepared(with, std::move(program));
 }
 slot_t runCompiledDeviceKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<const Program> program;
@@ -323,6 +315,40 @@ slot_t retainHostKernel(ArgsView &, ArgsView &norm, Context &) {
         return hostResidentValue(norm.type(0), norm.slot(0), true);
     });
 }
+// One argument of a resident execution call, as the host value the callee takes: a leaf that
+// arrived resident is downloaded, an ordinary host leaf is passed through. `run_host_resident`
+// and `run_preferred_resident` take either form — the region pass hands them resident inputs,
+// while a direct call usually has host arguments — and both declare the host aggregate as their
+// ordinary parameter.
+slot_t hostArgument(Type *hostType, Type *givenType, slot_t value) {
+    if (asDeviceType(givenType))
+        return hostResidentValue(hostType, value, false);
+    if (hostType->code() == TypeCode::Tuple) {
+        auto *host  = static_cast<TupleType *>(hostType);
+        auto *given = static_cast<TupleType *>(givenType);
+        auto *input = td::fromSlot<::Tuple *>(value);
+        auto *out   = ::Tuple::create(host->size(), core::mm::autoSpace());
+        for (size_t i = 0; i < host->size(); ++i)
+            out->set(
+                i,
+                hostArgument(host->typeAt(i), given->typeAt(i), input->get<slot_t>(i)),
+                host);
+        return td::toSlot(out);
+    }
+    if (hostType->code() == TypeCode::Struct) {
+        auto *host  = static_cast<StructType *>(hostType);
+        auto *given = static_cast<StructType *>(givenType);
+        auto *input = td::fromSlot<::Struct *>(value);
+        auto *out   = ::Struct::create(host->size(), core::mm::autoSpace());
+        for (size_t i = 0; i < host->size(); ++i)
+            out->set(
+                i,
+                hostArgument(host->typeAt(i), given->typeAt(i), input->get<slot_t>(i)),
+                host);
+        return td::toSlot(out);
+    }
+    return value;
+}
 slot_t runHostResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     auto *type = static_cast<FunctionType *>(with.type(0));
     core::mm::RootHandle root(core::mm::autoSpace(), "tiles.host.arguments");
@@ -335,12 +361,19 @@ slot_t runHostResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         auto *tupleType = TupleType::create(fields);
         auto *tuple     = ::Tuple::create(fields.size(), core::mm::autoSpace());
         root.reset(tuple, tupleType);
-        for (size_t i = 0; i < fields.size(); ++i) {
-            const auto value =
-                fields.size() == 1 ? norm.slot(0) : norm.get<::Tuple *>(0)->get<slot_t>(i);
-            const auto host = hostResidentValue(fields[i], value, false);
-            tuple->set(i, host, tupleType);
+        if (fields.size() == 1) {
+            const auto host = hostArgument(fields[0], norm.type(0), norm.slot(0));
+            tuple->set(0, host, tupleType);
             arguments.push_back(host);
+        } else {
+            auto *packed = norm.get<::Tuple *>(0);
+            auto *given  = static_cast<TupleType *>(norm.type(0));
+            for (size_t i = 0; i < fields.size(); ++i) {
+                const auto host =
+                    hostArgument(fields[i], given->typeAt(i), packed->get<slot_t>(i));
+                tuple->set(i, host, tupleType);
+                arguments.push_back(host);
+            }
         }
         return slot_t{};
     });
@@ -397,20 +430,6 @@ slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) 
         return slot_t{};
     });
     return runResidentPrepared(with, std::move(program));
-}
-slot_t gpuKernel(ArgsView &, ArgsView &norm, Context &ctx) {
-    return checked([&] {
-        return td::toSlot(gpuFunction(
-            norm.get<::Function *>(0),
-            &preferGpuKernel,
-            ctx,
-            {&retainPreferredKernel,
-             &runPreferredResidentKernel,
-             &downloadKernel,
-             "tiles:retain_preferred",
-             "tiles:run_preferred_resident",
-             "tiles:download"}));
-    });
 }
 slot_t deviceKernel(ArgsView &, ArgsView &, Context &) {
     return checked([] { return td::toSlot(::String::from(deviceInfo(), core::mm::autoSpace())); });
@@ -471,35 +490,14 @@ std::optional<Type *> resolve(const type_vec_t &with, const type_vec_t &norm, bo
 }
 
 // The operator groups whose signature the module computes from an argument; a declaration cannot
-// write any of them (standard library conventions 1-2; handover H156). `gpu` returns the type of
-// its function argument; `upload` and `download` map every leaf of their argument into or out of
-// the `Device<...>` handle; the run/query groups take the function's parameter list as their
-// ordinary parameter (`run` also answers its result type); `regions` accepts any function value.
-// `stdlib/signatures/tiles.cml` records their reference entries, and the two fixed signatures
-// (`available`, `device`) are declared in `stdlib/tiles.cml`, so no group here is a declaration's
-// duplicate.
+// write any of them (standard library conventions 1-2; handover H156). `upload` and `download` map
+// every leaf of their argument into or out of the `Device<...>` handle; the resident/query groups
+// take the function's parameter list as their ordinary parameter; `regions` accepts any function
+// value. `stdlib/signatures/tiles.cml` records their reference entries, and the two fixed
+// signatures (`available`, `device`) are declared in `stdlib/tiles.cml`, so no group here is a
+// declaration's duplicate.
 const std::vector<oper_group_ptr_t> &getOperatorGroups() {
     static const std::vector<oper_group_ptr_t> groups{
-        OperatorGroup::create(
-            "gpu",
-            {{"tiles:gpu",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {1, {false}}},
-                  "(fn: Function) => Function",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (!with.empty() || norm.size() != 1 ||
-                          norm[0]->code() != TypeCode::Function)
-                          return std::nullopt;
-                      auto *fn = static_cast<FunctionType *>(norm[0]);
-                      if (fn->withTypesCount() || !fn->normTypesCount() ||
-                          !supportedLeaves(fn->exitType()))
-                          return std::nullopt;
-                      for (size_t i = 0; i < fn->normTypesCount(); ++i)
-                          if (fn->normIsVarAt(i) || !supportedLeaves(fn->normTypeAt(i)))
-                              return std::nullopt;
-                      return fn;
-                  })}}),
         OperatorGroup::create(
             "upload",
             {{"tiles:upload",
@@ -525,28 +523,6 @@ const std::vector<oper_group_ptr_t> &getOperatorGroups() {
                           return std::nullopt;
                       auto *result = transferTreeType(norm[0], false);
                       return result ? std::optional<Type *>(result) : std::nullopt;
-                  })}}),
-        OperatorGroup::create(
-            "run",
-            {{"tiles:run",
-              DynamicFuncTypeResolver::create(
-                  {{1, {false}}, {1, {false}}},
-                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => NumericAggregate",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> { return resolve(with, norm, false); })}}),
-        OperatorGroup::create(
-            "run_device",
-            {{"tiles:run_device",
-              DynamicFuncTypeResolver::create(
-                  {{1, {false}}, {1, {false}}},
-                  "<fn: (...) => NumericAggregate>(inputs: NumericAggregate) => DeviceAggregate",
-                  [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      auto result = resolve(with, norm, false);
-                      if (!result)
-                          return result;
-                      auto *type = residentType(*result);
-                      return type ? std::optional<Type *>(type) : std::nullopt;
                   })}}),
         OperatorGroup::create(
             "run_preferred_resident",
@@ -634,9 +610,11 @@ class TilesModule final : public BuiltinModule {
              "tiles:run_preferred_resident",
              "tiles:download"});
         exportType(Reference("Device"), DeviceType::get(tensor::TensorType::Default()));
+        // `#gpu` is a standard tag of the core (design principles 13.4); `tiles::compile` reads
+        // it and refuses a scope the device cannot run (GPU design 6.1).
         // `available` and `device` are declared in stdlib/tiles.cml (handover H156): their
         // signatures are fixed, so the declaration is their one source and C++ exports no group
-        // for them. The ten groups behind `getOperatorGroups()` compute their signature from an
+        // for them. The seven groups behind `getOperatorGroups()` compute their signature from an
         // argument and remain the module's own; the reference entries are in
         // stdlib/signatures/tiles.cml.
         for (const auto &group : getOperatorGroups())
@@ -687,14 +665,10 @@ class TilesModule final : public BuiltinModule {
             return std::make_shared<Executor>(
                 ctx,
                 std::unordered_map<std::string, operator_t>{
-                    {"run", &runKernel},
                     {"run_compiled", &runCompiledKernel},
                     {"run_compiled_device", &runCompiledDeviceKernel},
-                    {"prefer_gpu", &preferGpuKernel},
                     {"test_call", &testNativeCall},
                     {"test_compiled_call", &testCompiledCall},
-                    {"gpu", &gpuKernel},
-                    {"run_device", &runDeviceKernel},
                     {"retain_host", &retainHostKernel},
                     {"retain_preferred", &retainPreferredKernel},
                     {"run_preferred_resident", &runPreferredResidentKernel},
@@ -716,13 +690,10 @@ class TilesModule final : public BuiltinModule {
         core::OperatorTable::instance().set(
             "tiles:run_preferred_resident",
             {.pure = false, .callsGraphs = true, .readsGraphs = true});
-        // run may initialize a driver/compile code; never execute it in constant folding.
+        // The operators that initialize a driver or compile code are never constant-folded.
         core::OperatorTable::instance().declare(
             "tiles",
-            {{"run", false},
-             {"gpu", false},
-             {"run_device", false},
-             {"upload", false},
+            {{"upload", false},
              {"download", false},
              {"source", false},
              {"inspect", false},
@@ -734,31 +705,25 @@ class TilesModule final : public BuiltinModule {
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run",
-              "run_device",
-              "run_compiled",
+             {"run_compiled",
               "run_compiled_device",
               "source",
               "inspect",
               "benchmark",
-              "regions",
-              "gpu"}) {
+              "regions"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .readsGraphs = true});
         }
-        core::OperatorTable::instance().set(
-            "tiles:prefer_gpu",
-            {.pure = false, .callsGraphs = true, .readsGraphs = true});
         for (const char *name : {"tiles:run_compiled", "tiles:run_compiled_device"})
             core::OperatorTable::instance().set(
                 name,
                 {.pure = false, .callsGraphs = true, .readsGraphs = true});
         // What each touches (docs/design/op-semantics 8, 14.4): device memory is a foreign
-        // resource `tiles:device` (upload makes one; run and run_device read the device values
-        // among their inputs, run_device returns new ones that may be inputs again); the driver
-        // and the device are ambient state `tiles:driver`. Every operator is an effect outside
-        // the program, as its traits say.
+        // resource `tiles:device` (upload makes one; the compiled-region runners read the device
+        // values among their inputs, the resident ones return new ones that may be inputs
+        // again); the driver and the device are ambient state `tiles:driver`. Every operator is
+        // an effect outside the program, as its traits say.
         {
             using namespace core::sem;
             const Resource device{.cls = ResourceClass::Foreign, .name = "tiles:device"};
@@ -778,19 +743,9 @@ class TilesModule final : public BuiltinModule {
                      ResourceSpec{
                          .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
                          .externalEffect = true}},
-                    {"run",
-                     ResourceSpec{
-                         .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
-                         .externalEffect = true}},
                     {"run_compiled",
                      ResourceSpec{
                          .accesses       = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
-                         .externalEffect = true}},
-                    {"run_device",
-                     ResourceSpec{
-                         .accesses = {readsDevice(), driver(AccessMode::ReadModifyWrite)},
-                         .result   = ResultAlias{.kind = ResultAlias::Kind::MayAlias, .operand = 0},
-                         .allocates      = device,
                          .externalEffect = true}},
                     {"run_compiled_device",
                      ResourceSpec{
@@ -808,6 +763,9 @@ class TilesModule final : public BuiltinModule {
                     {"device", externalAmbient("tiles:driver", AccessMode::ReadModifyWrite)},
                 });
         }
+        // The driver asks this before the first graph runs; the selection is the run's, and this
+        // module is the one that owns the CUDA ordinals it names.
+        execute::registerDeviceValidator("tiles", validateCudaDevices);
         loaded_ = true;
         return true;
     }

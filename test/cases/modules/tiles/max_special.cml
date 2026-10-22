@@ -2,7 +2,7 @@ module tiles_max_special
 import { Tensor, reshape, max, save_npy } from tensor
 import { nan, inf } from math
 import { get_env } from env
-import { run, inspect } from tiles
+import { inspect, run_preferred_resident, download } from tiles
 with <width: int>
 func sample(i: int): float {
     let row = i / width
@@ -22,6 +22,6 @@ func main(): int sync {
     let x = reshape(range(0, 8 * width)->map<sample<width>>, [8, width])
     println(inspect<maximum>(x))
     save_npy(maximum(x), get_env('TILES_TEST_OUT') + '/cpu.npy')
-    save_npy(run<maximum>(x), get_env('TILES_TEST_OUT') + '/gpu.npy')
+    save_npy(download(run_preferred_resident<maximum>(x)), get_env('TILES_TEST_OUT') + '/gpu.npy')
     return 0
 }

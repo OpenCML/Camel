@@ -26,6 +26,7 @@
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/tags.h"
 #include "camel/core/type.h"
+#include "camel/execute/devices.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/params.h"
@@ -307,9 +308,14 @@ int runCommand(int argc, char *argv[]) {
             return;
         }
         size_t errors = 0, warnings = 0;
-        for (const auto &mod : ctx->allUserModules()) {
+        // The same scope the diagnostic report used: a pass library the pass list loaded is not
+        // part of the program, so its errors are not counted in the program's summary either
+        // (H198/H210). `compileSummary` is only called on paths that asked ProgramDependencies.
+        for (const auto &mod :
+             camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies)
+                 .modules) {
             auto ud = std::dynamic_pointer_cast<UserDefinedModule>(mod);
-            if (ud && ud->diagnostics() && ud->diagnostics()->hasErrors()) {
+            if (ud && ud->diagnostics()) {
                 errors += ud->diagnostics()->count(Severity::Error);
                 warnings += ud->diagnostics()->count(Severity::Warn);
             }
@@ -341,7 +347,18 @@ int runCommand(int argc, char *argv[]) {
         if (!parsedOk) {
             // Syntax errors: nothing after the parser can run, and compiling the module would
             // only read and parse the file a second time.
-            ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+            //
+            // The program's dependencies, not every module in the context: resolving the pass
+            // list above imported the pass's library, and that library is not part of the
+            // program the user asked to run. Its own parse error is reported by pass resolution
+            // (as `InvalidPassParameter`) when the program gets that far; printing it here, as
+            // a bare `SyntaxDiag`, would answer a question the user did not ask (H198/H210).
+            camel_cli::reportModuleFailures(
+                ctx,
+                camel_cli::findModuleFailures(
+                    ctx, camel_cli::ModuleScope::ProgramDependencies),
+                os,
+                useJsonFormat);
             compileSummary(false);
             return 1;
         }
@@ -556,6 +573,28 @@ int runCommand(int argc, char *argv[]) {
                     // on the command line leaves no effect and no artefact.
                     requireKnownPasses(Run::resolvedPassList, ctx);
                     requireKnownPasses(Run::fallbackPasses, ctx);
+                    // `--devices` names devices the run must have. The check is made once,
+                    // here: the program's modules are loaded (a module registers its validator
+                    // when it loads) and nothing has run yet. A program that never reaches a
+                    // device operation reports a device that is not there all the same.
+                    if (auto failure = camel::execute::validateSelectedDevices()) {
+                        auto diagnostic =
+                            DiagnosticBuilder::of(RuntimeDiag::DeviceUnavailable)
+                                .commit(failure->ordinal, failure->reason);
+                        // The run's configuration, not a line of the program: the runtime sink
+                        // is created without a module, so name the entry file here and leave the
+                        // position unknown (the short format writes `?`).
+                        diagnostic.moduleName = "main";
+                        diagnostic.modulePath = targetFile;
+                        try {
+                            ctx->runtimeDiagSink()->add(std::move(diagnostic));
+                        } catch (const DiagnosticsLimitExceededBaseException &) {
+                            // The sink stops at its first error; the diagnostic is stored and
+                            // dumped below.
+                        }
+                        ctx->runtimeDiagSink()->dump(os, useJsonFormat);
+                        return 1;
+                    }
                     const auto *program = ctx->runtimeProgram();
                     if (phase::enabled()) {
                         // The size of the program as the passes receive it.
@@ -697,7 +736,13 @@ int runCommand(int argc, char *argv[]) {
             return ctx->processExitCodeOr(0);
         }
     } catch (DiagnosticsLimitExceededBaseException &e) {
-        ctx->dumpAllModuleDiagnostics(os, useJsonFormat);
+        // The compile stopped at its error limit. Report the program's own modules, the ones
+        // `module_failures.h` names; a pass library is not one of them (H198/H210).
+        camel_cli::reportModuleFailures(
+            ctx,
+            camel_cli::findModuleFailures(ctx, camel_cli::ModuleScope::ProgramDependencies),
+            os,
+            useJsonFormat);
         compileSummary(true);
         return 1;
     } catch (Diagnostic &d) {

@@ -1,7 +1,7 @@
 // Multiple state values share one recurrence and update simultaneously.
 module tiles_loop_multi_device
 import { Tensor, load_npy, save_npy } from tensor
-import { run, run_device, download, source, inspect, benchmark } from tiles
+import { download, source, inspect, benchmark, run_preferred_resident } from tiles
 import { get_env } from env
 
 func scalar_swap(a: float, b: float): (float, float) {
@@ -62,29 +62,29 @@ func main(): int sync {
     let b = load_npy(folder + '/b.npy') as Tensor<f32>
     let c = load_npy(folder + '/c.npy') as Tensor<f32>
     println('VALUES')
-    println(scalar_swap(2.0, 7.0), run<scalar_swap>((2.0, 7.0)))
-    println(fibonacci(0.0, 1.0), run<fibonacci>((0.0, 1.0)))
-    println(rotate(2.0, 7.0, 11.0), run<rotate>((2.0, 7.0, 11.0)))
+    println(scalar_swap(2.0, 7.0), download(run_preferred_resident<scalar_swap>((2.0, 7.0))))
+    println(fibonacci(0.0, 1.0), download(run_preferred_resident<fibonacci>((0.0, 1.0))))
+    println(rotate(2.0, 7.0, 11.0), download(run_preferred_resident<rotate>((2.0, 7.0, 11.0))))
     let cpu = recurrence(a, b)
-    let gpu = run<recurrence>((a, b))
+    let gpu = download(run_preferred_resident<recurrence>((a, b)))
     save_npy(cpu.0, folder + '/cpu0.npy')
     save_npy(cpu.1, folder + '/cpu1.npy')
     save_npy(gpu.0, folder + '/gpu0.npy')
     save_npy(gpu.1, folder + '/gpu1.npy')
-    let resident = run_device<recurrence>((a, b))
+    let resident = run_preferred_resident<recurrence>((a, b))
     save_npy(download(resident.0), folder + '/resident0.npy')
     save_npy(download(resident.1), folder + '/resident1.npy')
-    save_npy(run<first>((a, b)), folder + '/first.npy')
-    save_npy(run<second>((a, b)), folder + '/second.npy')
-    let order = run<reordered>((a, b))
+    save_npy(download(run_preferred_resident<first>((a, b))), folder + '/first.npy')
+    save_npy(download(run_preferred_resident<second>((a, b))), folder + '/second.npy')
+    let order = download(run_preferred_resident<reordered>((a, b)))
     save_npy(order.0, folder + '/order0.npy')
     save_npy(order.1, folder + '/order1.npy')
     save_npy(order.2, folder + '/order2.npy')
     let cap0 = captured(a, b, c)
     let cap1 = captured(b, c, a)
-    let d0 = run<captured>((a, b, c))
-    let d1 = run<captured>((b, c, a))
-    let d2 = run<captured>((a, b, c))
+    let d0 = download(run_preferred_resident<captured>((a, b, c)))
+    let d1 = download(run_preferred_resident<captured>((b, c, a)))
+    let d2 = download(run_preferred_resident<captured>((a, b, c)))
     save_npy(cap0.0, folder + '/capcpu0.npy')
     save_npy(cap0.1, folder + '/capcpu1.npy')
     save_npy(cap1.0, folder + '/capcpu2.npy')
@@ -95,13 +95,13 @@ func main(): int sync {
     save_npy(d1.1, folder + '/capgpu3.npy')
     save_npy(d2.0, folder + '/capgpu4.npy')
     save_npy(d2.1, folder + '/capgpu5.npy')
-    let sw = run<swap>((a, b))
-    let em = run<empty>((a, b))
+    let sw = download(run_preferred_resident<swap>((a, b)))
+    let em = download(run_preferred_resident<empty>((a, b)))
     save_npy(sw.0, folder + '/swap0.npy')
     save_npy(sw.1, folder + '/swap1.npy')
     save_npy(em.0, folder + '/empty0.npy')
     save_npy(em.1, folder + '/empty1.npy')
-    let rounded = run<rounding>((a, b))
+    let rounded = download(run_preferred_resident<rounding>((a, b)))
     save_npy(rounded.0, folder + '/rounded.npy')
     println('SCALAR_INSPECT')
     println(inspect<fibonacci>((0.0, 1.0)))

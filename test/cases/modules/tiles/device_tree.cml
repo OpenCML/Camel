@@ -1,7 +1,7 @@
 module tiles_device_tree
 import { Tensor, reshape, sum, abs, zeros } from tensor
 import { with_grad } from autodiff
-import { Device, upload, download, run_device } from tiles
+import { Device, upload, download, run_preferred_resident } from tiles
 
 type Model = { weight: Tensor<f32>, block: (Tensor<f32>, float) }
 type ExplicitDeviceModel = { weight: Device<Tensor<f32>>, block: (Device<Tensor<f32>>, Device<float>) }
@@ -23,9 +23,9 @@ func main(): int sync {
     println(sum(restored.block.0))
     println(restored.block.1 - p.block.1)
     let vg = (q: Model): (float, Model) => with_grad(loss)<q>()
-    let measured: (Device<float>, Device<Model>) = run_device<vg>(resident)
+    let measured: (Device<float>, Device<Model>) = run_preferred_resident<vg>(resident)
     println(download(measured.0) - loss<p>())
-    let updated: Device<Model> = run_device<descend>((resident, measured.1))
+    let updated: Device<Model> = run_preferred_resident<descend>((resident, measured.1))
     let actual: Model = download(updated)
     let expected: Model = descend(p, vg(p).1)
     println(sum(abs(actual.weight - expected.weight)))

@@ -4,9 +4,26 @@ tier = "fast"
 tags = ["feat", "modules", "io", "terminal"]
 
 # `io` is the terminal until `Stream` exists (H19 steps 4 and 10): what stdin has waiting, the keys
-# themselves, and raw mode. The standard streams and `print`/`println`/`input` are the prelude's.
-# The cases below need no interactive terminal: the read side is fed through a pipe, and the
-# effects and resources are read from the graph and from `inspect --ops`.
+# themselves, and raw mode. The standard streams and `print`/`println`/`eprintln`/`input` are the
+# prelude's. The cases below need no interactive terminal: the read side is fed through a pipe, and
+# the effects and resources are read from the graph and from `inspect --ops`.
+#
+# The `eprintln` case is the prelude's own: it names no module, and the runner keeps stdout and
+# stderr apart, so the case shows the text is on stderr and that the call needs no import.
+
+[[tests]]
+name = "eprintln_without_import"
+desc = "`eprintln` is in the prelude (H134 question 2), so a program calls it without an import; it has println's declaration shape — it returns its first argument — and writes standard error, while the value printed by println goes to standard output."
+kind = "behavior"
+case = "../../../cases/modules/io/eprintln.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "stderr_normalized"]
+expect_exit = 0
+expect_stdout_exact = "value: to stderr\n"
+expect_stderr_contains = ["to stderr 1"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
 
 [[tests]]
 name = "terminal_read_write_roundtrip"
@@ -49,7 +66,7 @@ assert(node.roles.includes('effect'), `io:get_chars roles: ${JSON.stringify(node
 
 [[tests]]
 name = "declared_resources"
-desc = "`inspect --ops` reports the resources the module registered: the readers touch `stdin` (read or read-modify-write) and raw mode writes `io:terminal`, all external. Raw mode keeps its own resource: folding it into `stdin` would be a change of the resource set (H134)."
+desc = "`inspect --ops` reports the resources the module registered: all five operators touch the one `stdin` resource (read, read-modify-write or, for raw mode, write), all external. The terminal mode shares `stdin` (the author's ruling on H134 question 1), so raw mode and a read must order each other."
 kind = "behavior"
 case = "../../../cases/modules/io/resources.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -61,10 +78,40 @@ verify_script = """
 const ops = input.normalized.stdout.split('\n').filter((l) => l.startsWith('OPERATOR ')).map((l) => JSON.parse(l.slice(9)))
 const byUri = Object.fromEntries(ops.map((o) => [o.uri, o]))
 const resources = (uri) => byUri[uri] && byUri[uri].semantics && byUri[uri].semantics.resources
-assert(resources('io:set_terminal_raw_mode') === 'write ambient io:terminal; external', resources('io:set_terminal_raw_mode'))
+assert(resources('io:set_terminal_raw_mode') === 'write ambient stdin; external', resources('io:set_terminal_raw_mode'))
 assert(resources('io:has_input') === 'read ambient stdin; external', resources('io:has_input'))
 assert(resources('io:get_char') === 'rmw ambient stdin; external', resources('io:get_char'))
 assert(resources('io:get_chars') === 'rmw ambient stdin; external', resources('io:get_chars'))
 assert(resources('io:clear_input_buffer') === 'rmw ambient stdin; external', resources('io:clear_input_buffer'))
+}
+"""
+
+[[tests]]
+name = "terminal_mode_and_a_read_are_ordered"
+desc = "Raw mode and reading input name the same `stdin` resource (H134 question 1), so a terminal-mode call and a stdin read in one body must keep their order: `test::resources` reports both nodes as touching `stdin` and reports the pair as ordered. The case would be red if raw mode went back to a resource of its own, because its node line would name that resource instead."
+kind = "behavior"
+case = "../../../cases/modules/io/ordering.cml"
+args = ["${case}", "test::resources", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const nodes = out.split('\n').filter((l) => l.startsWith('RESOURCES node '))
+const node = (uri) => nodes.find((l) => l.includes(` ${uri}: `))
+const raw = node('io:set_terminal_raw_mode')
+const read = node('io:get_chars')
+assert(raw, 'no node for io:set_terminal_raw_mode')
+assert(read, 'no node for io:get_chars')
+assert(raw.includes('write ambient stdin; external'), raw)
+assert(read.includes('rmw ambient stdin; external'), read)
+const id = (line) => Number(line.split(' ')[3])
+const pair = out.split('\n').filter((l) => l.startsWith('RESOURCES order ')).find((l) => {
+  const ids = l.split(' ').slice(3, 5).map(Number)
+  return ids.includes(id(raw)) && ids.includes(id(read))
+})
+assert(pair, 'the terminal-mode call and the stdin read are not a pair the resources report')
+assert(/ ordered by (data|control)$/.test(pair), pair)
 }
 """

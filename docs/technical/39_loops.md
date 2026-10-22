@@ -5,8 +5,7 @@ This note describes how a loop goes from source to execution. The normative text
 or `continue`; a `LOOP` node whose condition and body are regions of the graph it is in, run in
 that graph's frame by every back end; `for … while`
 is a third form of the same node; several values of state are a tuple; the `do`
-syntax) and 7.5 (`@numeric` covers loop bodies). The design work behind it is `docs/design/loops`, the
-node card is in `docs/design/graph-model` 3.5, and the consumer API is
+syntax) and 7.5 (`@numeric` covers loop bodies). The node card is in `docs/design/graph-model` 3.5, and the consumer API is
 `docs/design/op-semantics` section 11.
 
 ## 1. Source
@@ -236,7 +235,7 @@ another `if`, are the same: each loop's condition and body are regions of where 
 the commit refuses a graph where they are not (`17_graph_rewrite_api_contracts.md`, 4.1).
 
 **Operators that read graphs see the program's own.** An operator that reads the graph of a
-function value it receives instead of calling it (Tiles' `run`, `run_device`, `source`,
+function value it receives instead of calling it (Tiles' `run_preferred_resident`, `source`,
 `inspect`, `benchmark`; `onnx:export_model`; `autodiff:grad`, `with_grad`) declares
 `OperatorTraits::readsGraphs`. It sees a function's LOOP and its regions (`modules.tiles`
 `loop_structure_*`), and the ONNX export refuses it where it is written (`linear.loops`
@@ -284,8 +283,8 @@ A loop with several values of state builds the tuple of the next state every rou
 FILL), which a hand-written recursion over separate parameters does not.
 
 That was where the time went: on a 32-core EPYC 7343 (shared, load average 20 to 130), whole-process
-CPU time of ten million rounds, `bench_loop.cml` against the same loop written as a tail recursion
-(`bench_tail.cml`), in ns per round:
+CPU time of ten million rounds, the loop against the same loop written as a tail recursion, in ns
+per round:
 
 | round | `std::nvm` | `std::fvm` |
 |---|---|---|

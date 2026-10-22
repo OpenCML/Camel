@@ -1,7 +1,7 @@
 module batch_matmul_checks
 import { Tensor, randn, seed, sum, mean, abs, reshape, shape, set_num_threads } from tensor
 import { with_grad } from autodiff
-import { run, source } from tiles
+import { source, run_preferred_resident, download } from tiles
 
 type Pair = { a: Tensor<f32>, b: Tensor<f32> }
 func pair(a: Tensor<f32>, b: Tensor<f32>): Pair { return { a: a, b: b } }
@@ -19,9 +19,9 @@ func check(name: string, a: Tensor<f32>, b: Tensor<f32>, target: Tensor<f32>, ru
     let code = source<derivative>((w, target))
     if len(code) == 0 then sync { exit(1) }
     if run_gpu then sync {
-        let forward_error = sum(abs(run<product>((a, b)) - a @ b))
+        let forward_error = sum(abs(download(run_preferred_resident<product>((a, b))) - a @ b))
         let cpu = derivative(w, target)
-        let gpu = run<derivative>((w, target))
+        let gpu = download(run_preferred_resident<derivative>((w, target)))
         let gradient_error = sum(abs(cpu.1.a - gpu.1.a)) + sum(abs(cpu.1.b - gpu.1.b))
         let plus = pair(a + 0.001, b - 0.001)
         let minus = pair(a - 0.001, b + 0.001)
@@ -45,11 +45,11 @@ func main(run_gpu: bool): int sync {
     if run_gpu then sync {
         let a = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], [2, 2, 3])
         let expected = reshape([22.0, 28.0, 49.0, 64.0, 220.0, 244.0, 301.0, 334.0], [2, 2, 2])
-        let known_error = sum(abs(run<product>((a, reshape(a, [2, 3, 2]))) - expected))
+        let known_error = sum(abs(download(run_preferred_resident<product>((a, reshape(a, [2, 3, 2])))) - expected))
         if known_error != 0.0 then sync { exit(1) }
-        let empty_k = run<product>((randn([2, 3, 0]), randn([2, 0, 4])))
+        let empty_k = download(run_preferred_resident<product>((randn([2, 3, 0]), randn([2, 0, 4]))))
         if sum(abs(empty_k)) != 0.0 then sync { exit(1) }
-        let empty_batch = run<product>((randn([0, 3, 4]), randn([1, 4, 5])))
+        let empty_batch = download(run_preferred_resident<product>((randn([0, 3, 4]), randn([1, 4, 5]))))
         if shape(empty_batch)[0] != 0 then sync { exit(1) }
     }
     println('BATCH MATMUL CHECKS PASS')

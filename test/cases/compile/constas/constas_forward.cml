@@ -1,0 +1,19 @@
+/**
+ * A `constas` value may be handed on to another `constas` parameter (H51 ruling, 2026-10-22):
+ * `outer`'s compile-time value reaches `inner` as a compile-time value, so `outer<3>` makes
+ * `inner<3>` and `outer<4>` makes `inner<4>` -- two instances each.
+ */
+module constas_forward
+
+func inner(constas k: int, x: int): int {
+    return x * 10 + k
+}
+
+func outer(constas n: int, x: int): int {
+    return inner(n, x)
+}
+
+func main(): int sync {
+    println(outer(3, 1), outer(4, 1))
+    return 0
+}

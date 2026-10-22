@@ -258,22 +258,36 @@ class NamedTypeLoad : public Load {
 
 class NamedPairLoad : public Load {
   public:
-    NamedPairLoad(const Reference &ref, bool isVar = false, bool isConst = false)
-        : Load(LoadType::NamedPair), ref_(ref), isVar_(isVar), isConst_(isConst) {}
+    NamedPairLoad(
+        const Reference &ref, bool isVar = false, bool isConst = false, bool isRest = false,
+        bool isConstas = false)
+        : Load(LoadType::NamedPair), ref_(ref), isVar_(isVar), isConst_(isConst),
+          isRest_(isRest), isConstas_(isConstas) {}
     const std::string toString() const override {
-        return "NamedPair: " + (isVar_ ? std::string("var ") : isConst_ ? "const " : "") +
+        return "NamedPair: " +
+               (isRest_ ? std::string("..")
+                        : isConstas_ ? std::string("constas ")
+                                     : isVar_ ? std::string("var ")
+                                              : isConst_ ? "const " : "") +
                ref_.toString();
     }
     const Reference &getRef() const { return ref_; }
     bool isVar() const { return isVar_; }
     /// `const x: T`, a parameter of a rule that only matches a constant.
     bool isConst() const { return isConst_; }
+    /// `..ts`, the rest parameter of a function declaration (design principles 5.5).
+    bool isRest() const { return isRest_; }
+    /// `constas n: T`, a compile-time value parameter of a function declaration: the value is
+    /// part of the declaration's identity, not a runtime argument (design principles 5.4).
+    bool isConstas() const { return isConstas_; }
     const std::string geneCode() const override;
 
   private:
     Reference ref_;
     bool isVar_;
     bool isConst_;
+    bool isRest_;
+    bool isConstas_;
 };
 
 class NullLoad : public Load {

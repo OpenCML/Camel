@@ -1,6 +1,0 @@
-// import <module> as <name>
-import lib as L
-func main(): int sync {
-    println(L::root())
-    return 0
-}

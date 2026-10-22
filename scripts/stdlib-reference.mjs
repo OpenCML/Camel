@@ -91,6 +91,14 @@ const MODULES = [
     },
     { name: 'ckpt', title: '`ckpt`: parameter trees and checkpoints', kind: 'cpp' },
     {
+        name: 'tree',
+        title: '`tree`: parameter trees written in Camel',
+        kind: 'camel',
+        // Its one public function has no written result type: the result is the argument's
+        // shape with a string at every leaf, which a type the reference can spell does not
+        // name yet. It is rendered as `?` (an inferred result), not as `void`.
+    },
+    {
         name: 'tensor',
         title: '`tensor`: multi-dimensional numeric arrays',
         kind: 'cpp',
@@ -105,13 +113,10 @@ const MODULES = [
         name: 'math',
         title: '`math`: numbers and bits',
         kind: 'cpp',
-        // The declarations, and, in the signature file, the reference entries of the three names
-        // whose result type C++ computes from their argument (sqrt; the mixed-integer shifts).
-        // One convention for every declaration module: the computed half is a signature file
-        // named by `computed:` (handover H180).
+        // The declarations only: the three names whose result type C++ computed from their
+        // argument (sqrt; the mixed-integer shifts) are written out per spelling (handover H202).
         source: 'math.cml',
         declaration: true,
-        computed: 'signatures/math.cml',
     },
     {
         name: 'statistics',
@@ -125,23 +130,20 @@ const MODULES = [
         name: 'algo',
         title: '`algo`: sorting and array primitives',
         kind: 'cpp',
-        // The declaration of `argsort`, and, in the signature file, the reference entries of the
-        // seven names whose result type C++ computes from their array argument (handover H115,
-        // H128, H135).
+        // The declarations only: the seven names whose result type C++ computed from their array
+        // argument are generic declarations (handover H202).
         source: 'algo.cml',
         declaration: true,
-        computed: 'signatures/algo.cml',
     },
     {
         name: 'random',
         title: '`random`',
         kind: 'cpp',
         // The declarations, not a signature file: they are what the module compiles (H19). The
-        // three operators whose result type comes from their array argument stay in the C++
-        // resolver; the signature file keeps only their reference entries (handover H115, H128).
+        // three operators whose result type comes from their array argument are generic
+        // declarations too (handover H202).
         source: 'random.cml',
         declaration: true,
-        computed: 'signatures/random.cml',
     },
     {
         name: 'time',
@@ -219,12 +221,10 @@ const MODULES = [
         name: 'para',
         title: '`para`: unordered iteration',
         kind: 'cpp',
-        // The declaration of `rendezvous`, and, in the signature file, the reference entries of
-        // the two names whose signature C++ computes from their array argument (handover H115,
-        // H128, H146).
+        // The declarations of `rendezvous` and of the two names that take the element type of
+        // their array argument (handover H202).
         source: 'para.cml',
         declaration: true,
-        computed: 'signatures/para.cml',
     },
     {
         name: 'this',
@@ -238,11 +238,10 @@ const MODULES = [
         name: 'graph',
         title: '`graph`: a program as a value',
         kind: 'cpp',
-        // The declarations, and, in the signature file, the reference entries of the operators
-        // whose type C++ computes (`constant` and `add_constant` take the type of their sample;
-        // the four of a function value take the function's type). One convention for every
-        // declaration module: the computed half is a signature file named by `computed:`
-        // (handover H180).
+        // The declarations, and, in the signature file, the reference entries of the four
+        // operators whose type C++ computes (a function value's type). `constant` and
+        // `add_constant` take the type of their sample and are written out per sample type
+        // (handover H180, H202).
         source: 'graph.cml',
         declaration: true,
         computed: 'signatures/graph.cml',
@@ -675,6 +674,7 @@ function readDeclarations(file, module) {
                 with: splitParams(withText),
                 norm: splitParams(args.inner),
                 result,
+                inferred: result === '' && module.kind === 'camel',
                 doc: [],
                 purity: null,
                 effect: '',
@@ -765,7 +765,7 @@ function parseHeader(module) {
 function signatureText(entry) {
     if (entry.value) return `${entry.name}: ${entry.result}`
     const withPart = entry.with.length ? `<${entry.with.join(', ')}> ` : ''
-    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || 'void'}`
+    return `${entry.name}: ${withPart}(${entry.norm.join(', ')}) => ${entry.result || (entry.inferred ? '?' : 'void')}`
 }
 
 function renderDoc() {
@@ -805,16 +805,23 @@ function renderDoc() {
     out.push('')
 out.push('Not in this reference: the profiler (`perf`).')
     out.push('')
-    out.push('| Module | Import | Written in | Functions |')
-    out.push('|---|---|---|---|')
+    out.push('| Module | Import | Written in |')
+    out.push('|---|---|---|')
     const parsed = MODULES.map((module) => ({ module, entries: parseDeclarations(module) }))
     for (const { module, entries } of parsed) {
-        const names = [...new Set(entries.map((e) => e.name))]
         const anchor = module.name === 'globals' ? 'built-in-functions' : module.name
         out.push(
             `| [${module.name === 'globals' ? 'built-in' : module.name}](#${anchor}) | ` +
                 `${module.name === 'globals' ? 'none' : '`import { ... } from ' + module.name + '`'} | ` +
-                `${module.kind === 'camel' ? 'Camel' : 'C++'} | ${names.length} |`,
+                `${module.kind === 'camel' ? 'Camel' : 'C++'} |`,
+        )
+    }
+    for (const { module, entries } of parsed) {
+        const anchor = module.name === 'globals' ? 'built-in-functions' : module.name
+        out.push(
+            `| [${module.name === 'globals' ? 'built-in' : module.name}](#${anchor}) | ` +
+                `${module.name === 'globals' ? 'none' : '`import { ... } from ' + module.name + '`'} | ` +
+                ` |`,
         )
     }
     out.push('')
@@ -1107,7 +1114,7 @@ async function probeImport(name, moduleName) {
 // expression whose compile fails is retried as a statement before the failure is reported (a void
 // call is a valid example of a writer such as save_params).
 async function exampleSource(module, entries, entry, code, asStatement = false) {
-    const names = [...new Set(entries.map((each) => each.name))].filter((name) => /^[A-Za-z_]\w*$/.test(name))
+    const names = [...new Set(entries.map((e) => e.name))]
     const lines = []
     if (module.name !== 'globals') {
         lines.push(`import { ${names.join(', ')} } from ${module.name}`)
@@ -1484,7 +1491,6 @@ if (mode === '--write' || mode === '--verify-doc') {
     let totals = { names: 0, entries: 0, noDoc: 0, noExample: 0, examples: 0, fragments: 0, compileBroken: 0 }
     for (const module of MODULES) {
         const entries = parseDeclarations(module)
-        const names = [...new Set(entries.map((entry) => entry.name))]
         const firsts = names.map((name) => entries.find((entry) => entry.name === name))
         const noDoc = firsts.filter((entry) => entry.doc.filter((line) => line.trim() !== '').length === 0).length
         const noExample = firsts.filter((entry) => entry.examples.length === 0).length

@@ -424,7 +424,7 @@ args = ["--gc", "generational", "${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit_hot_threshold0", "prl"]
 envs = ["CUDA_VISIBLE_DEVICES=-1", "CAMEL_GC_VERIFY=both", "CAMEL_GC_STRESS_SAFEPOINT=1", "CAMEL_GC_STRESS_MODE=minor"]
 expect_exit = 0
-expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 timeout_ms = 30000
 
 [[tests]]
@@ -432,29 +432,113 @@ name = "gpu_preference.missing_device"
 kind = "negative"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
 # A device named by --devices must be there: it is a requirement, not a preference. 63 is
-# outside any machine's list, so this needs no GPU and no driver; the report names the device
-# and the first use that wanted it (the `available()` call here).
+# outside any machine's list, so this needs no GPU. The check is the startup one: the report
+# no longer points at the `available()` call on line 16, because the program never reaches it.
 args = ["--devices", "63", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
-expect_diagnostic_line = 15
-expect_diagnostic_column = 13
+expect_diagnostic_code = "0x04000070"
 expect_output_contains = ["CUDA device 63 was named by --devices but is not available"]
+expect_stdout_not_contains = ["false"]
 timeout_ms = 10000
+
+[[tests]]
+name = "device_startup.missing_zero"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# --devices 0 on a machine with no CUDA device fails at startup even though this program never
+# asks for a device: before the check it printed `ran` and exited 0. CUDA_VISIBLE_DEVICES hides
+# the host's devices, so the case needs no GPU and runs the same on every machine.
+args = ["--devices", "0", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 0 was named by --devices but is not available"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.out_of_range"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# An ordinal past the visible list: startup names 7, and still no program output.
+args = ["--devices", "7", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 7 was named by --devices but is not available"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.all_named"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# Two ordinals, neither present: the check is not the first use's business, so it runs once at
+# startup. It names the first missing ordinal in the order written and lists every missing one.
+args = ["--devices", "0,1", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 0 was named by --devices but is not available", "missing: 0, 1"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.one_device_named_missing"
+kind = "negative"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# The user's case: one GPU on the machine, `--devices 1` asks for a second. The report says how
+# many there are, so the number in the message is the answer to "why not 1?".
+args = ["--devices", "1", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=0"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DeviceUnavailable"
+expect_diagnostic_code = "0x04000070"
+expect_output_contains = ["CUDA device 1 was named by --devices but is not available", "this machine has 1 CUDA device (ordinal 0)"]
+expect_stdout_not_contains = ["ran"]
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.available"
+kind = "behavior"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# The in-range case: device 0 is there, so the startup check passes and the program runs.
+args = ["--devices", "0", "${case}", "std::nvm"]
+skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
+expect_exit = 0
+expect_stdout_exact = "ran\n"
+timeout_ms = 30000
+
+[[tests]]
+name = "device_startup.cpu_always_passes"
+kind = "behavior"
+case = "../../../cases/modules/tiles/device_startup.cml"
+# --devices cpu asks for no device and is answered before any validator: it passes on every
+# machine, including one where CUDA_VISIBLE_DEVICES hides every device.
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_exact = "ran\n"
+timeout_ms = 30000
 
 [[tests]]
 name = "gpu_probe.once_per_process"
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
-# No device: available() probes once, and the four @gpu calls take the host fallback from that
+# No device: available() probes once, and the four preferred calls take the host fallback from that
 # cached miss instead of constructing the back end again. Before H117 this run asked the driver
 # seven times (one per preferred call). The count is asserted on the module's info log, the only
 # line the probe writes; `--devices cpu` never reaches it (see host_only_is_silent).
 args = ["-vv", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
 verify_script = """
 ({ input, assert }) => {
@@ -473,7 +557,7 @@ case = "../../../cases/modules/tiles/gpu_fallback.cml"
 args = ["-vv", "--devices", "cpu", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 normalizers = ["strip_ansi", "normalize_newlines"]
 verify_script = """
 ({ input, assert }) => {
@@ -487,25 +571,25 @@ timeout_ms = 10000
 name = "gpu_preference.host_only"
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
-# --devices cpu: the host runs everything, including the `@gpu` functions, and no device is
+# --devices cpu: the host runs everything, including the preferred calls, and no device is
 # asked for; the output is the one the machine without a device gives.
 args = ["--devices", "cpu", "${case}", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
-expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+expect_stdout_exact = "false\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 timeout_ms = 10000
 
 [[tests]]
 name = "gpu_preference.named_device"
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_fallback.cml"
-# Device 0 is named, and the run takes the device path: available() is true and the `@gpu`
+# Device 0 is named, and the run takes the device path: available() is true and the preferred
 # functions execute on it. The probe uses the surface that existed before --devices, so a
 # broken option makes this test fail rather than skip.
 args = ["--devices", "0", "${case}", "std::nvm"]
 skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]
 expect_exit = 0
-expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n10.0\n10.0\n5.0 6.0\n"
+expect_stdout_exact = "true\n5.0\ncpu effect\n8.0\n10.0\n5.0 6.0\n"
 timeout_ms = 60000
 
 [[tests]]
@@ -518,6 +602,113 @@ args = ["--devices", "invalid", "${case}"]
 expect_exit = 1
 expect_output_contains = ["Error: --devices 'invalid': 'invalid' is not a device; write cpu or a CUDA device ordinal"]
 timeout_ms = 10000
+
+[[tests]]
+name = "gpu_scope.supported_operator_compiles"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_supported.cml"
+# The label is a fact `tiles::compile` reads, not an instruction to the runtime: with every
+# operator in the scope on the device capability list, the pass accepts it and the host fallback
+# (no CUDA here) computes the ordinary result.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trimEnd().split('\n')
+assert(lines.at(-1) === '12.0', JSON.stringify(lines))
+const rows = lines.filter((line) => line.startsWith('TILES_PLACEMENT '))
+  .map((line) => JSON.parse(line.slice('TILES_PLACEMENT '.length)))
+const scale = rows.find((row) => row.graph === 'scale')
+const main = rows.find((row) => row.graph === 'main')
+assert(scale && scale.body === 'gpu-required' && scale.body_fact === 'gpu', JSON.stringify(rows))
+assert(main && main.body === 'host' && main.gpu_required === 0, JSON.stringify(rows))
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.unsupported_operator_is_a_compile_error"
+kind = "negative"
+case = "../../../cases/modules/tiles/gpu_scope_refusal.cml"
+# `tanh` is pure, but the device back end does not lower it. A `#gpu` scope promises the device
+# runs everything written in it, so the pass refuses instead of falling back silently: the
+# report names the scope and the operator, and no CUDA device is needed to produce it.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::GpuScopeUnsupported"
+expect_output_contains = ["`#gpu` scope 'activate'", "operator 'tensor:tanh'", "no device implementation"]
+timeout_ms = 30000
+
+[[tests]]
+name = "gpu_scope.cpu_scope_is_not_refused"
+kind = "behavior"
+case = "../../../cases/modules/tiles/gpu_scope_cpu_escape.cml"
+# `#cpu` writes the same placement key with the value `cpu`: the placement query answers the
+# host, so an unsupported-for-device operator in a `#cpu` scope stays there and the program runs.
+args = ["${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_contains = ["2.72"]
+timeout_ms = 30000
+
+[[tests]]
+name = "placement.query"
+desc = "The placement query resolves a node from its own fact, then the nearest tagged region, then the function body. `tiles::compile` prints the answer as one TILES_PLACEMENT JSON line per graph; the pass still does not choose an executor. A nested `#cpu` block overrides an outer `#gpu` block, an untagged function is the host, and a `#gpu` body is a device unit with a host escape inside it."
+kind = "behavior"
+case = "../../../cases/modules/tiles/placement_query.cml"
+args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const rows = input.normalized.stdout.split('\n')
+  .filter((line) => line.startsWith('TILES_PLACEMENT '))
+  .map((line) => JSON.parse(line.slice('TILES_PLACEMENT '.length)))
+assert(rows.length >= 3, `placement lines: ${rows.length}`)
+const byName = new Map(rows.map((row) => [row.graph, row]))
+const graph = (name) => {
+  const found = byName.get(name)
+  assert(found, `no placement line for ${name}: ${rows.map((r) => r.graph)}`)
+  return found
+}
+// The tagged function is a device unit; its `#cpu` block is the inner scope and wins.
+const onDevice = graph('on_device')
+assert(onDevice.body === 'gpu-required', onDevice.body)
+assert(onDevice.body_fact === 'gpu', onDevice.body_fact)
+assert(onDevice.gpu_required > 0, JSON.stringify(onDevice))
+assert(onDevice.host > 0, JSON.stringify(onDevice))
+const escaped = onDevice.regions.find((region) => region.fact === 'cpu')
+assert(escaped, JSON.stringify(onDevice.regions))
+assert(escaped.host > 0 && escaped.gpu === 0 && escaped.gpu_required === 0,
+  JSON.stringify(escaped))
+// An untagged function is the host.
+const plain = graph('plain')
+assert(plain.body === 'host', plain.body)
+assert(plain.body_fact === '', plain.body_fact)
+assert(plain.gpu === 0 && plain.gpu_required === 0, JSON.stringify(plain))
+assert(plain.host === plain.nodes, JSON.stringify(plain))
+// An untagged graph whose body is a `#gpu` block: the block's nodes are on the device, the
+// graph body is not, and the `#cpu` block inside it is the inner scope.
+const blocks = graph('blocks')
+assert(blocks.body === 'host', blocks.body)
+assert(blocks.gpu > 0, JSON.stringify(blocks))
+assert(blocks.gpu_required === 0, JSON.stringify(blocks))
+const outer = blocks.regions.find((region) => region.fact === 'gpu')
+const inner = blocks.regions.find((region) => region.fact === 'cpu')
+assert(outer && outer.gpu > 0 && outer.host === 0 && outer.gpu_required === 0,
+  JSON.stringify(blocks.regions))
+assert(inner && inner.host > 0 && inner.gpu === 0 && inner.gpu_required === 0,
+  JSON.stringify(blocks.regions))
+assert(inner.parent === outer.id, `inner ${inner.id} parent ${inner.parent}, outer ${outer.id}`)
+// An untagged graph outside any block stays entirely on the host.
+const main = graph('main')
+assert(main.body === 'host' && main.gpu === 0 && main.gpu_required === 0, JSON.stringify(main))
+assert(main.host === main.nodes, JSON.stringify(main))
+}
+"""
+timeout_ms = 30000
 
 [[tests]]
 name = "preferred_resident_execution"
@@ -558,3 +749,14 @@ args = ["--devices", "cpu", "${case}", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["Device leaf 'block.1.label'", "unsupported type string"]
 timeout_ms = 10000
+
+[[tests]]
+name = "placement.hash_covers_region_facts"
+desc = "Two programs whose nodes, names and edges are the same, whose block region says `gpu` in one and `cpu` in the other, hash differently: the portable graph hash includes the facts of a region (docs/design/gpu/plan.cn.md 4). test::tags prints the hash of every graph; the script runs both and compares them."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/modules/tiles/placement_hash.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["placement hash differs:"]
+timeout_ms = 30000

@@ -1,5 +1,5 @@
 {
-    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, { \"plan\": path, \"layer\": true } or { \"plan\": path, \"ownCases\": true }: an ownCases plan is added only when the changed file is one of the `case` paths it names, so a slow plan cannot ride a shared directory into an edit it never reads (H205); a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions, gpu/tiles_decorator) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. The same self-test now checks the other direction too (H201): every plan file under test/plans must be selected by at least one of the case paths it names, so a plan --changed can never reach cannot hide behind cases that select another plan; plans the policy keeps unselectable (perf, GC stress, progen, the debug layer) and a sweep-only plan are the only exemptions. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, { \"plan\": path, \"layer\": true } or { \"plan\": path, \"ownCases\": true }: an ownCases plan is added only when the changed file is one of the `case` paths it names, so a slow plan cannot ride a shared directory into an edit it never reads (H205); a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. The same self-test now checks the other direction too (H201): every plan file under test/plans must be selected by at least one of the case paths it names, so a plan --changed can never reach cannot hide behind cases that select another plan; plans the policy keeps unselectable (perf, GC stress, progen, the debug layer) and a sweep-only plan are the only exemptions. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
     "directoryRules": [
         {
             "comment": "The graph-space gradient case is a fast mm case that lives in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects feat/mm/graph_space instead (H205).",
@@ -38,6 +38,11 @@
         }
     ],
     "rules": [
+        {
+            "comment": "The parse-check harness and the selftest fixtures: a change here runs smoke, the runner plan and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
+            "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/"],
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+        },
         {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
             "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "test/vars.toml", "scripts/test.js", "package.json"],
@@ -99,9 +104,9 @@
             "plans": ["smoke", "feat/parse", "feat/compile", "feat/consistency"]
         },
         {
-            "comment": "Values, types, the collector and the runtime shell.",
+            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too.",
             "paths": ["src/core/", "src/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
         },
         {
             "comment": "Execution, entry arguments and the standalone bridge.",
@@ -129,9 +134,9 @@
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
         },
         {
-            "comment": "The core value/type headers and the runtime headers.",
+            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too.",
             "paths": ["include/camel/core/", "include/camel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",
@@ -187,8 +192,8 @@
         },
         {
             "comment": "Checkpoint trees.",
-            "paths": ["modules/tree/"],
-            "plans": ["feat/modules/checkpoints.plan.toml"]
+            "paths": ["modules/ckpt/"],
+            "plans": ["feat/modules/ckpt.plan.toml", "feat/modules/checkpoints.plan.toml"]
         },
         {
             "comment": "I/O: the module's plan and the std facade that wraps it.",
@@ -251,13 +256,8 @@
             "plans": ["feat/tools", "feat/format"]
         },
         {
-            "comment": "The documentation guards: docs_links runs all four (links, retired names, snippets, counts).",
-            "paths": ["scripts/check-doc-links.mjs", "scripts/check-doc-snippets.mjs", "scripts/check-retired-names.mjs", "scripts/check-doc-counts.mjs"],
-            "plans": ["feat/docs_links.plan.toml"]
-        },
-        {
-            "comment": "The release gate: docs.counts_current reads its --dry-run output (the slow-plan, static-check and skipped counts), so a change to the gate is a documentation-count change before it is anything else.",
-            "paths": ["scripts/release-gate.mjs"],
+            "comment": "The documentation guards: docs_links runs the link and snippet checks.",
+            "paths": ["scripts/check-doc-links.mjs", "scripts/check-doc-snippets.mjs"],
             "plans": ["feat/docs_links.plan.toml"]
         },
         {
@@ -304,6 +304,11 @@
             "comment": "The generated diagnostics catalog: compile.diag_catalog.catalog.doc_is_generated re-runs --verify-doc.",
             "paths": ["docs/diagnostics.md"],
             "plans": ["feat/compile/diag_catalog.plan.toml", "feat/docs_links.plan.toml"]
+        },
+        {
+            "comment": "A design page and its sources are edited together; a design change selects the documentation checks the general docs rule runs.",
+            "paths": ["docs/design/"],
+            "plans": ["smoke", "feat/docs_links.plan.toml", "feat/tools/portability.plan.toml"]
         },
         {
             "comment": "Documentation checks. The root Markdown files are scanned by the same guards (README, CONTRIBUTING, ROADMAP, the code of conduct); agents/ is the development guide. Smoke is included because a documentation change is usually part of a code change and the report's gate runs it; it is ten tests, not a mirror of the tree.",
@@ -384,7 +389,7 @@
             "comment": "A plan file selects itself: editing the tests of one plan runs that plan. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",
             "paths": ["test/plans/"],
             "self": true,
-            "except": ["test/plans/perf/", "test/plans/feat/mm/gc.plan.toml", "test/plans/feat/mm/gc_collections.plan.toml", "test/plans/feat/mm/gc_elder_exhaustion.plan.toml", "test/plans/feat/opt/progen.plan.toml", "test/plans/gpu/tiles_regions.plan.toml", "test/plans/gpu/tiles_decorator.plan.toml"]
+            "except": ["test/plans/perf/", "test/plans/feat/mm/gc.plan.toml", "test/plans/feat/mm/gc_collections.plan.toml", "test/plans/feat/mm/gc_elder_exhaustion.plan.toml", "test/plans/feat/opt/progen.plan.toml", "test/plans/gpu/tiles_regions.plan.toml"]
         }
     ],
     "slowCaseOwners": {

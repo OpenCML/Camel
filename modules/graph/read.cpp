@@ -683,28 +683,6 @@ const std::vector<ReadOp> &readOps() {
 
 } // namespace
 
-const std::vector<oper_group_ptr_t> &readGroups() {
-    static const std::vector<oper_group_ptr_t> groups = [] {
-        std::vector<oper_group_ptr_t> out;
-        // The one signature of this file C++ computes: the result is the type of `sample`.
-        out.push_back(
-            OperatorGroup::create(
-                "constant",
-                {{"graph:constant",
-                  DynamicFuncTypeResolver::create(
-                      {{0, {}}, {2, {false, false}}},
-                      "(n: Node, sample: T) => T?, T a number, bool or string",
-                      [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                          -> std::optional<Type *> {
-                          if (!HandleType::is(norm[0], HandleKind::Node) || !constantType(norm[1]))
-                              return std::nullopt;
-                          return TupleType::nullable(norm[1]);
-                      })}}));
-        return out;
-    }();
-    return groups;
-}
-
 const std::unordered_map<std::string, operator_t> &readKernels() {
     static const std::unordered_map<std::string, operator_t> kernels = [] {
         std::unordered_map<std::string, operator_t> out;

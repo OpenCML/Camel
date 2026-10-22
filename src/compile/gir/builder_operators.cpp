@@ -722,6 +722,9 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     FunctionTypeFactory factory;
     factory.setModifiers(opType->modifiers());
     factory.setExitType(opType->exitType());
+    // The function value promises what the operator's type promises (effects plan 2.3): a call
+    // through this value takes its footprint from the type, not by walking the one-node body.
+    factory.setResources(opType->resources());
     const auto nameAt = [&](size_t argIndex, const char *prefix, size_t i) {
         return argIndex < opType->argNamesCount() && !opType->argNameAt(argIndex).empty()
                    ? std::string(opType->argNameAt(argIndex))
@@ -1321,16 +1324,64 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     const bool isAssignment = gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
                               gct->at(0)->name() == "__assn__";
     Type *assignedType = nullptr;
+    // The declaration of a rest function, when this call names one: its arguments are expanded
+    // into a body in place of the call, and no instance is made (inlineRestCall).
+    template_ptr_t restTemplate;
+    if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end() &&
+                                                       generic->second->funcType->hasRest()) {
+        restTemplate = generic->second;
+    }
+    const size_t restFixedCount        = restTemplate != nullptr
+                                            ? restTemplate->funcType->normTypesCount() - 1 -
+                                                  restTemplate->funcType->constasCount()
+                                            : 0;
+    const size_t restDeclaredCount     = restTemplate != nullptr
+                                            ? restTemplate->funcType->normTypesCount()
+                                            : 0;
     for (size_t i = 1; i < gct->size(); i++) {
         Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
                            ? argumentSignature->normTypeAt(i - 1)
                            : nullptr;
+        if (restTemplate != nullptr) {
+            // The declaration's own parameter, `constas` values included: a `constas` value is
+            // written at its parameter's position like any other argument. The rest parameter
+            // takes every argument after the fixed ones and gives them no expected type.
+            const size_t at = i - 1;
+            wanted          = at < restDeclaredCount &&
+                             (restTemplate->funcType->normIsConstasAt(at) || at < restFixedCount)
+                                  ? restTemplate->funcType->normTypeAt(at)
+                                  : nullptr;
+        }
         if (isAssignment && i == 2 && assignedType != nullptr) {
             wanted = assignedType;
         }
         ExpectedValueScope argumentScope(
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
+        if (gct->at(i)->type() == GCT::NodeKind::SPRD) {
+            // `..e`: the elements are arguments of their own. The marker is last, so nothing
+            // follows that could be mistaken for an element.
+            if (i + 1 != gct->size()) {
+                const GCT::node_ptr_t operand = gct->at(i)->at(0);
+                diags_->of(SemanticDiag::RestArgumentNotLast)
+                    .atOrigin(operand->origin() != 0 ? operand->origin() : gct->origin())
+                    .commit(
+                        operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                               : std::string("expression"));
+                throw BuildAbortException();
+            }
+            const GCT::node_ptr_t operand = gct->at(i)->at(0);
+            std::vector<node_handle_t> elements = expandRestArgument(
+                operand,
+                operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                       : std::string("expression"),
+                gct);
+            for (const node_handle_t &element : elements) {
+                normInputs.push_back({element, operand});
+                normInputTypes.push_back(valueTypeOf(callableValueType(element)));
+            }
+            continue;
+        }
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
         normInputs.push_back({inputNode, gct->at(i)});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
@@ -1547,6 +1598,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // The dimension names a call binds (design principles 5.4), remembered for the checked
     // conversion of the returned value below.
     ExtentValues dimValues;
+    ExtentPacks dimPacks;
     const auto enterParameters = [&](FunctionType *funcType) {
         // The parameter types may write their extents over names the signature binds, e.g.
         // `func f(x: Tensor<f32, const [constas n]>, y: Tensor<f32, const [n]>)`. Bind each name
@@ -1571,37 +1623,35 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (isVar || param == nullptr || types[i] == nullptr) {
                         continue;
                     }
-                    const auto *named = dynamic_cast<const OtherType *>(param);
+                    // Whether the parameter states dimension names (or a pack name) is the
+                    // type's answer, not a module type's: the core array type and a module
+                    // type are both bound the same way here.
                     std::vector<ExtentForm> forms;
-                    if (named == nullptr || !named->extentForms(forms)) {
+                    if (!param->extentForms(forms)) {
                         continue;
                     }
-                    bool hasNames = false;
+                    bool hasNames = !param->packName().empty();
                     for (const ExtentForm &form : forms) {
                         hasNames |= form.hasNames();
                     }
-                    if (!hasNames || types[i]->code() != param->code()) {
-                        continue;
-                    }
-                    const auto *actual = dynamic_cast<const OtherType *>(types[i]);
-                    std::vector<ExtentForm> actualForms;
-                    if (actual == nullptr || !actual->extentForms(actualForms)) {
+                    if (!hasNames) {
                         continue;
                     }
                     const size_t nameIndex  = (with ? 0 : funcType->withTypesCount()) + i;
                     const std::string label = nameIndex < funcType->argNamesCount()
                                                   ? std::string(funcType->argNameAt(nameIndex))
                                                   : std::to_string(i + 1);
-                    for (size_t j = 0; j < forms.size() && j < actualForms.size(); ++j) {
-                        if (!actualForms[j].isConstant()) {
-                            continue;
-                        }
-                        if (!forms[j].bind(actualForms[j].constant(), dimValues)) {
-                            diags_->of(SemanticDiag::DimensionMismatch)
-                                .atOrigin(inputs[i].expr->origin())
-                                .commit(label, actualForms[j].toString());
-                            throw BuildAbortException();
-                        }
+                    std::string mismatch;
+                    const ExtentBinding binding =
+                        bindExtents(param, types[i], dimValues, dimPacks, mismatch);
+                    if (binding == ExtentBinding::NotDimensioned) {
+                        continue;
+                    }
+                    if (binding == ExtentBinding::Mismatch) {
+                        diags_->of(SemanticDiag::DimensionMismatch)
+                            .atOrigin(inputs[i].expr->origin())
+                            .commit(label, mismatch);
+                        throw BuildAbortException();
                     }
                     namedArgs.push_back({&inputs[i], &types, i, param, types[i]});
                 }
@@ -1609,12 +1659,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         bindNamedExtents(withInputs, withInputTypes, true);
         bindNamedExtents(normInputs, normInputTypes, false);
         for (const NamedExtentArg &arg : namedArgs) {
-            const auto *named = dynamic_cast<const OtherType *>(arg.param);
-            if (named == nullptr) {
-                continue;
-            }
-            OtherType *refined = named->withExtentValues(dimValues);
-            if (refined == nullptr || refined->equals(arg.param)) {
+            Type *refined = const_cast<Type *>(arg.param->withExtentValues(dimValues, dimPacks));
+            if (refined == nullptr || refined == arg.param || refined->equals(arg.param)) {
                 continue;
             }
             if (refined->assignableFrom(arg.actual)) {
@@ -1714,6 +1760,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         currGraph_->addDependencyGraph(targetGraph);
         targetNode     = createFuncDataNode(targetGraph, false, true);
         targetFuncType = targetGraph->funcType();
+    } else if (restTemplate != nullptr) {
+        // A rest function is expanded here, into the caller's graph: its fixed parameters take
+        // the arguments and the rest parameter takes the nodes left over. No call node is
+        // made and the function is never an instance.
+        return inlineRestCall(restTemplate, withInputs, normInputs, gct, expectedResult);
     } else if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
         // A call of a generic function: the argument types select (and, the first time,
         // build) the instance, which is then called like any other function.
@@ -2437,22 +2488,26 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         lastSyncedNode_ = targetNode;
         chainedNodes_.insert(targetNode);
     }
-    if (targetOperator == nullptr && !dimValues.empty() && targetFuncType != nullptr &&
-        targetFuncType->hasExitType()) {
+    if (targetOperator == nullptr && (!dimValues.empty() || !dimPacks.empty()) &&
+        targetFuncType != nullptr && targetFuncType->hasExitType()) {
         // The return type may speak about the names the parameters bound (`: Tensor<[n, k]>`).
         // The function still has one graph: what varies with the call is only the static type,
         // and the value is passed through the checked conversion to it (the same check `as`
         // makes), so a body that breaks the relation is caught where the call runs.
-        const auto *namedExit = dynamic_cast<const OtherType *>(targetFuncType->exitType());
+        Type *namedExit = targetFuncType->exitType();
         std::vector<ExtentForm> forms;
         if (namedExit != nullptr && namedExit->extentForms(forms)) {
-            bool hasNames = false;
+            bool hasNames = !namedExit->packName().empty();
             for (const ExtentForm &form : forms) {
                 hasNames |= form.hasNames();
             }
-            Type *actualExit   = valueTypeOf(nodeTypeOf(targetNode));
-            OtherType *refined = hasNames ? namedExit->withExtentValues(dimValues) : nullptr;
-            if (refined != nullptr && actualExit != nullptr && !refined->equals(actualExit) &&
+            Type *actualExit = valueTypeOf(nodeTypeOf(targetNode));
+            Type *refined    = hasNames
+                                   ? const_cast<Type *>(
+                                         namedExit->withExtentValues(dimValues, dimPacks))
+                                   : nullptr;
+            if (refined != nullptr && refined != namedExit && actualExit != nullptr &&
+                !refined->equals(actualExit) &&
                 refined->castSafetyFrom(actualExit) != CastSafety::Forbidden) {
                 targetNode = castNodeTo(targetNode, refined, gct);
             }

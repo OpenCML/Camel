@@ -1,7 +1,0 @@
-// using namespace <module>
-import lib
-using namespace lib
-func main(): int sync {
-    println(root(), Tools::inc(1))
-    return 0
-}

@@ -197,7 +197,7 @@ tools.cmake.cmaketoolchain:generator=Ninja Multi-Config
   - `profiler`：性能分析工具 `camel-pr`
   - `lang-server`：语言服务器 `camel-ls`（见 3.7）
 
-构建产物位于 `build/tools/<tool>/<Config>/`，`camel` 可执行文件会复制到项目根目录。
+中间构建产物位于 `build/tools/<tool>/<Config>/`；`npm run build` 随后把它们安装到 `out/latest/`（Debug 构建安装到 `out/debug/`），可执行文件在 `out/latest/bin/`——Linux 与 macOS 上是 `camel`，Windows 上是 `camel.exe`。
 
 ### 3.6 编译目标构建
 

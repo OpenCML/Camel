@@ -1,7 +1,0 @@
-module t05h_map_key
-func main(): int sync {
-    let n = 1
-    let m = [(n as any, 2)] as Map<any, int>
-    println(m)
-    return 0
-}

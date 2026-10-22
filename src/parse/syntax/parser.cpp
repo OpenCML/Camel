@@ -946,7 +946,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     } else {
         parseIdentRef(NK::IdentRef);
     }
-    parseParentParams();
+    parseParentParams(true, true);
     if (eat(TK::Colon)) {
         parseType();
     }
@@ -1178,8 +1178,36 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 }
 
 /// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
-void ParserImpl::parseKeyParamPair() {
+///              | '..' identDef (':' typeExpr)?
+///              | 'constas' identDef (':' typeExpr)?
+/// A rest parameter is written untyped and last in a function declaration's parameter list
+/// (design principles 5.5). A `constas` parameter is written first in that list and is a
+/// compile-time value, not a runtime parameter (design principles 5.4). A type written after a
+/// rest parameter, or left out of a `constas` one, is parsed so that the semantic stage can
+/// report it; the parameter lists of a lambda, a function type and a rule take neither.
+void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
     const size_t m = mark();
+    if (allowRest && cur_ == TK::DotDot) {
+        bump();
+        parseIdentDef();
+        if (eat(TK::Colon)) {
+            parseType();
+        }
+        close(m, NK::KeyParamPair);
+        return;
+    }
+    if (allowConstas && cur_ == TK::KwConstas) {
+        // `constas n: int` binds a compile-time value in a function declaration (design
+        // principles 5.4). The type is required, but leaving it out is parsed as well, so that
+        // the semantic stage reports it with a diagnostic instead of a bare syntax error.
+        bump();
+        parseIdentDef();
+        if (eat(TK::Colon)) {
+            parseType();
+        }
+        close(m, NK::KeyParamPair);
+        return;
+    }
     if (!eat(TK::KwVar)) {
         eat(TK::KwConst);
     }
@@ -1196,28 +1224,34 @@ void ParserImpl::parseKeyParamPair() {
 }
 
 /// pairedParams : keyParamPair (',' keyParamPair)*
-void ParserImpl::parsePairedParams(TK closer) {
+void ParserImpl::parsePairedParams(TK closer, bool allowRest, bool allowConstas) {
     const size_t m = mark();
-    parseKeyParamPair();
+    parseKeyParamPair(allowRest, allowConstas);
     while (cur_ == TK::Comma && peek(1) != closer && !panic_) {
         bump();
-        parseKeyParamPair();
+        parseKeyParamPair(allowRest, allowConstas);
     }
     close(m, NK::PairedParams);
 }
 
 /// parentParams : '(' pairedParams? ','? ')'
-void ParserImpl::parseParentParams() {
+void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
     const size_t m = mark();
     if (!expect(TK::LParen)) {
         return;
     }
     {
         Scope scope(*this, false);
-        if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst) {
-            parsePairedParams(TK::RParen);
+        if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
+            (allowRest && cur_ == TK::DotDot) || (allowConstas && cur_ == TK::KwConstas)) {
+            parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
-            unexpected({e(TK::Comma), e(TK::RParen), e(TK::KwVar), e(TK::Identifier)});
+            unexpected(
+                {e(TK::Comma),
+                 e(TK::RParen),
+                 e(TK::KwVar),
+                 e(TK::KwConstas),
+                 e(TK::Identifier)});
         }
         eat(TK::Comma);
     }
@@ -1240,7 +1274,7 @@ void ParserImpl::parseAngledParams() {
     {
         Scope scope(*this, false, open);
         if (cur_ != TK::Gt && cur_ != TK::Comma) {
-            parsePairedParams(TK::Gt);
+            parsePairedParams(TK::Gt, false, false);
         }
         eat(TK::Comma);
         if (!panic_ && cur_ != TK::Gt) {

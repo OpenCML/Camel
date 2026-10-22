@@ -370,6 +370,8 @@ node_ptr_t Tree::makeStaticLoop(
 
 node_ptr_t Tree::makeStaticAccess() { return makeNode(NodeKind::SACC); }
 
+node_ptr_t Tree::makeSpreadArg() { return makeNode(NodeKind::SPRD); }
+
 node_ptr_t Tree::makeComprehension(bool isStruct) {
     Node *node = makeNode(NodeKind::SCOMP);
     node->tag_ = static_cast<uint16_t>(isStruct ? 0 : 1);
@@ -626,6 +628,8 @@ std::string Node::toString() const {
         return "SFOR: " + staticForValueName() + ", " + staticForTypeName();
     case NodeKind::SACC:
         return "SACC";
+    case NodeKind::SPRD:
+        return "SPRD";
     case NodeKind::SCOMP:
         return std::string("SCOMP: ") + (comprehensionIsStruct() ? "struct" : "tuple");
     case NodeKind::SLOOP: {

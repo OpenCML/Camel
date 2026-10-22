@@ -1,9 +1,0 @@
-// Inside a namespace, a sibling named with the qualifier.
-namespace N {
-    func a(): int { return 1 }
-    func b(): int { return N::a() + 1 }
-}
-func main(): int sync {
-    println(N::b())
-    return 0
-}

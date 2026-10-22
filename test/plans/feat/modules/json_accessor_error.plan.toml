@@ -9,7 +9,7 @@ tags = ["feat", "modules", "std", "json", "errors"]
 
 [[tests]]
 name = "json.accessor_error"
-desc = "get<key>, get<index>, as_int, as_string, as_bool, as_float, as_array and as_object of a failed Json! give that same error (same kind, message and location, not null and not a crash); the accessors of a plain Json still take parts out; the accessors of a document that has a value chain over Json!?; a document nested past CAMEL_JSON_MAX_DEPTH (default 10000) gives JsonTooDeep with the line and column of the bracket that goes too deep, from decode and decode_as."
+desc = "get<key>, get<index>, as_int, as_string, as_bool, as_float, as_array and as_object of a failed Json! give that same error (same kind, message and location, not null and not a crash); the accessors of a plain Json still take parts out; the accessors of a document that has a value chain over Json!?; a document nested past the fixed limit (10000) gives JsonTooDeep with the line and column of the bracket that goes too deep, from decode and decode_as."
 kind = "snapshot"
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
@@ -32,5 +32,21 @@ case = "../../../cases/modules/std/json/json_accessor_error.cml"
 args = ["${case}", "std::opt::inline", "std::opt", "std::fvm"]
 golden = "golden/json_accessor_error.txt"
 expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "json.depth_limit"
+desc = "The depth limit is a fixed constant, not an environment variable (H16 question 4): the case decodes a document of exactly 10000 levels and gets JsonTooDeep for one of 10001 levels, at line 1, column 10001, naming the limit of 10000. The constant is named once, as kJsonMaxDepth in modules/json/operators.cpp; raising it makes the 10001-level document decode, lowering it makes the 10000-level one fail, so either change turns this case red."
+kind = "behavior"
+case = "../../../cases/modules/std/json/depth_limit.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = """20001
+JsonTooDeep <json::decode>
+the JSON document nests deeper than the limit of 10000 levels (at line 1, column 10001); decoding a deeper document would exhaust the native stack: decode a shallower document
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 30000

@@ -1,0 +1,9 @@
+/// H220 trap 3: the second root's `pkg/` library; the same source, reached when this root comes
+/// first.
+module pkg_helper
+
+import lib
+
+export func n(): int {
+    return lib::n()
+}

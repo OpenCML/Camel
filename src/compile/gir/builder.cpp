@@ -467,6 +467,15 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     if (gct->nativeDeclaration()) {
         // A body-less declaration declares an operator of a C++ module (design principles 6.4):
         // it is checked and kept as an operator rule, not as a graph (handover H19, step 1).
+        // A `constas` parameter belongs to the declaration's compile-time identity, which the
+        // native declaration mechanism does not carry (design principles 5.4).
+        FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
+        if (funcType->hasConstas()) {
+            diags_->of(SemanticDiag::ConstasInNativeDeclaration)
+                .atOrigin(gct->origin())
+                .commit(gct->name());
+            throw BuildAbortException();
+        }
         declareNativeOperator(gct);
         LEAVE("DECL");
         return nullptr;
@@ -725,6 +734,25 @@ void Builder::buildFuncBody(
     // A function (or a lambda) written inside a `match type` arm has returns of its own.
     StaticBodyScope *outerStaticBody = std::exchange(activeStaticBody_, nullptr);
     const size_t outerStaticDepth    = std::exchange(staticDepth_, 0);
+    // A nested function is a boundary for rest parameters too: `..ts` of an enclosing
+    // expansion cannot be spread inside another graph.
+    RestBody *outerRestBody         = std::exchange(activeRestBody_, nullptr);
+    const size_t outerRestBindings  = restBindings_.size();
+    // The body EXEC is where the tags of the function are the body region's, not a block's.
+    struct FunctionBodyScope {
+        const GCT::Node *&slot;
+        const GCT::Node *outer;
+        FunctionBodyScope(const GCT::Node *&s, const GCT::Node *body) : slot(s), outer(s) {
+            slot = body;
+        }
+        ~FunctionBodyScope() { slot = outer; }
+    } bodyScope(functionBody_, gct->at(1));
+    // A nested function is a boundary for the compile-time names of an enclosing expansion
+    // too: the `n` of a `static for` and the value of an enclosing `constas` parameter are not
+    // names of its body. Its own `constas` values (when it is an instance being built) are
+    // bound below.
+    const size_t outerStaticValues = staticValueScopes_.size();
+    staticValueScopes_.clear();
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -753,6 +781,19 @@ void Builder::buildFuncBody(
         if (!funcType->hasExitType()) {
             inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
         }
+        // The values of the instance's `constas` parameters: the body reads them as static
+        // values, much as a `static for` reads its round's `n` (design principles 5.4). They
+        // are not ports, so they are not names of the graph; the scope is the body's.
+        if (!constasBindings_.empty()) {
+            staticValueScopes_.emplace_back();
+            for (const auto &[constasName, constasValue] : constasBindings_) {
+                node_handle_t constant = graph->addStaticDataNode(constasValue.data);
+                rememberConstant(constant, constasValue.data);
+                registerNodeOrigin(context_, constant, gct, "gir.data.static.constas");
+                staticValueScopes_.back().push_back(
+                    {constasName, constasKeyOf(constasValue.data), constant});
+            }
+        }
         // A decorated block whose value nothing takes is a function whose value is dropped:
         // it returns nothing, and a `return` in it gives no value (visitExitNode). Not a sync
         // block: its statements run in order whatever is done with its value, as they do
@@ -763,6 +804,13 @@ void Builder::buildFuncBody(
         }
         node_handle_t bodyResult = visitBodyNode(gct->at(1));
         setBodyResult(graph, dropped ? nullptr : bodyResult);
+        // The tags written before the function are the placement of its body as a whole: a
+        // consumer that asks the body region (region 0) finds them without walking the nodes
+        // (docs/design/gpu/plan.cn.md 2.2). Only the tags written on this declaration, not
+        // those of the scope it is written in, which the nodes carry themselves.
+        if (bodyTags.nodes != camel::core::attr::kNoAttrs) {
+            graph->draft().setRegionAttrs(0, bodyTags.nodes);
+        }
         // A body declared `: void` drops the value of its last statement.
         if (!inferredExitGraphs_.contains(graph.get()) &&
             isVoidGraphExitType(funcType->exitType())) {
@@ -779,6 +827,9 @@ void Builder::buildFuncBody(
         bodyStates_[graph.get()] = BodyState::Built;
         activeStaticBody_        = outerStaticBody;
         staticDepth_             = outerStaticDepth;
+        activeRestBody_          = outerRestBody;
+        restBindings_.resize(outerRestBindings);
+        staticValueScopes_.resize(outerStaticValues);
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
@@ -789,11 +840,17 @@ void Builder::buildFuncBody(
         failedBodies_.insert(graph.get());
         activeStaticBody_        = outerStaticBody;
         staticDepth_             = outerStaticDepth;
+        activeRestBody_          = outerRestBody;
+        restBindings_.resize(outerRestBindings);
+        staticValueScopes_.resize(outerStaticValues);
         leaveScope();
         throw;
     }
     activeStaticBody_ = outerStaticBody;
     staticDepth_      = outerStaticDepth;
+    activeRestBody_   = outerRestBody;
+    restBindings_.resize(outerRestBindings);
+    staticValueScopes_.resize(outerStaticValues);
 }
 
 
@@ -812,6 +869,26 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(currentAttrs_, blockTags.nodes));
+    // A tagged block is a Block region: the facts it carries are the region's, and the nodes
+    // written in it are put in the region by the draft (addNode follows the insert region).
+    // The region is an annotation only: it changes no order and reaches no scheduler.
+    struct InsertRegionScope {
+        runtime::GraphDraft *draft = nullptr;
+        uint32_t outer             = 0;
+        ~InsertRegionScope() {
+            if (draft != nullptr) {
+                draft->setInsertRegion(outer);
+            }
+        }
+    } regionScope;
+    regionScope.draft = &currGraph_->draft();
+    regionScope.outer = regionScope.draft->insertRegion();
+    if (blockTags.nodes != camel::core::attr::kNoAttrs && gct != functionBody_) {
+        const uint32_t block = regionScope.draft->addRegion(
+            runtime::GCRegionKind::Block, regionScope.outer);
+        regionScope.draft->setRegionAttrs(block, blockTags.nodes);
+        regionScope.draft->setInsertRegion(block);
+    }
     // The `using namespace` written in this block are in force in it (design principles 10.2).
     UsingScope usings(*this, GCT::Tree::of(gct)->usingsOf(gct));
     bool old                  = synced_;
@@ -907,6 +984,12 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
                 result = visit(child);
             }
             unusedStatement_ = nullptr;
+            if (result.has_value() && result.type() == typeid(StaticTuple)) {
+                // A build-time tuple is the block's value only as a runtime tuple: a tail
+                // comprehension materializes here, and an unused one is held to the same
+                // unused-pure-value rule as before.
+                result = valueNodeOf(result);
+            }
             if (unused && result.has_value() && result.type() == typeid(node_handle_t)) {
                 rejectUnusedPureResult(child, any_cast<node_handle_t>(result));
             }

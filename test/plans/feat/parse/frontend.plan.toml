@@ -40,6 +40,7 @@ expect_stdout_contains = ["changed=0", "unstable=0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
+
 [[tests]]
 name = "frontend.fuzz_lossless_tree"
 # Slow layer: measured 9.7 s in the full serial run (handover note ⟨617198c⟩ (H10)).

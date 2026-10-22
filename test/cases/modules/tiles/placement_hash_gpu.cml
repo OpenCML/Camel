@@ -1,0 +1,16 @@
+/// The hash proof: this program and placement_hash_cpu.cml have the same nodes, graph names and
+/// edges; they differ only in the tags of the block region, `gpu` here and `cpu` there. The
+/// portable graph hash must differ (docs/design/gpu/plan.cn.md 4); it did not while the hash
+/// ignored region facts.
+module tiles_placement_hash
+
+func other(): int {
+    return 5
+}
+
+func main(): int {
+    #gpu {
+        7
+    }
+    return other()
+}

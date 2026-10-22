@@ -1,6 +1,0 @@
-import { pi } from lib
-
-func main(): int sync {
-    println(pi)
-    return 0
-}

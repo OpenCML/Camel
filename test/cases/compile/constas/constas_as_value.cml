@@ -1,0 +1,16 @@
+module constas_as_value
+import { Tensor, ones, sum } from tensor
+
+func total(constas n: int, x: Tensor<f32, const [n]>): float {
+    return sum(x)
+}
+
+func apply(f: (x: Tensor<f32>) => float, x: Tensor<f32>): float {
+    return f(x)
+}
+
+func main(): int sync {
+    // The value must be known where the call is written, so `total` has no function value.
+    println(apply(total, ones([3])))
+    return 0
+}

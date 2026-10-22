@@ -5,9 +5,8 @@ tags = ["feat", "compile", "cli", "check"]
 desc = "`camel check`: the exit code says whether an error was found, `-s` stops after the syntax tree, `-i` after the tokens"
 
 # `camel check` returned 0 whatever it found, and its options `-i` / `--lexical-only` and
-# `-s` / `--syntax-only` were read and ignored
-# (docs/issues/2026-10-12-language-surface-findings.md, 20). A file that does not parse is
-# named in its diagnostics by the module it declares, as it is in semantic ones (22).
+# `-s` / `--syntax-only` were read and ignored. A file that does not parse is named in its
+# diagnostics by the module it declares, as it is in semantic ones.
 
 [defaults]
 kind = "behavior"

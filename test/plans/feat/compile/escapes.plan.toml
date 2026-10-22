@@ -1,0 +1,116 @@
+id = "compile.escapes"
+order = 923
+tier = "fast"
+tags = ["feat", "compile", "literals", "escapes"]
+desc = "The one escape table of the three string forms after H89: `\\0`, `\\xHH`, `\\u{...}` and the named escapes decode; an octal-looking form (`\\101`, `\\01`, `\\012`, `\\033`) and any other unknown pair (`\\q`, `\\8`) are unknown escapes -- kept as written, warned as LexicalDiag::InvalidEscapeSequence, one code and one message shape for all of them."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "escapes.plain"
+desc = "A plain string: the seven probes of the ruling and the three octal-looking forms. `\\101`, `\\8`, `\\01`, `\\012` and `\\033` are unknown (six warnings, the text kept); `\\0` is the null byte, `\\x41` is `A`, `\\u{1F600}` is one code point, `\\n` is the line feed, and `\\0x` is the null byte and an `x`."
+kind = "behavior"
+case = "../../../cases/compile/escapes/plain.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]:", "name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8", "Invalid escape sequence in string: \\01", "Invalid escape sequence in string: \\012", "Invalid escape sequence in string: \\033"]
+verify_script = """
+({ input, assert }) => {
+const bs = String.fromCharCode(92)
+const want = [
+    '101 4', '0 1', 'x41 1 A', 'u 1', 'n 1', '8 2 ' + bs + '8', '0x 2',
+    '01 3', '012 4', '033 4',
+].join('\n')
+assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
+const warnings = (input.normalized.stderr.match(/Invalid escape sequence in string:/g) || []).length
+assert(warnings === 6, 'six warnings, got ' + warnings + ': ' + input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "escapes.formatted"
+desc = "A formatted string: the same probes and the same six unknown escapes; the pattern text reaches the same table."
+kind = "behavior"
+case = "../../../cases/compile/escapes/formatted.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]:", "name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8"]
+verify_script = """
+({ input, assert }) => {
+const bs = String.fromCharCode(92)
+const want = [
+    '101 4', '0 1', 'x41 1 A', 'u 1', 'n 1', '8 2 ' + bs + '8', '0x 2',
+    '01 3', '012 4', '033 4',
+].join('\n')
+assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
+const warnings = (input.normalized.stderr.match(/Invalid escape sequence in string:/g) || []).length
+assert(warnings === 6, 'six warnings, got ' + warnings + ': ' + input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "escapes.triple"
+desc = "A triple-quoted string: the same probes and the same six unknown escapes; the form that takes no escaped quote still shares the one table."
+kind = "behavior"
+case = "../../../cases/compile/escapes/triple.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stderr_contains = ["[Warn]:", "name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8"]
+verify_script = """
+({ input, assert }) => {
+const bs = String.fromCharCode(92)
+const want = [
+    '101 4', '0 1', 'x41 1 A', 'u 1', 'n 1', '8 2 ' + bs + '8', '0x 2',
+    '01 3', '012 4', '033 4',
+].join('\n')
+assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
+const warnings = (input.normalized.stderr.match(/Invalid escape sequence in string:/g) || []).length
+assert(warnings === 6, 'six warnings, got ' + warnings + ': ' + input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "escapes.valid_only"
+desc = "The escapes that remain valid warn about nothing: `\\0` (but not `\\01`), `\\x41`, `\\u{...}`, `\\n` and `\\0x` in all three forms give the same lengths and no diagnostic."
+kind = "behavior"
+case = "../../../cases/compile/escapes/valid.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const want = [
+    'plain 1 1 1 1 2',
+    'formatted 1 1 1 1 2',
+    'triple 1 1 1 1 2',
+    'A ' + String.fromCharCode(0x4E2D),
+].join('\n')
+assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
+assert(input.normalized.stderr.trim() === '', 'no warning: ' + input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "escapes.unknown_forms"
+desc = "`\\q` and `\\101` sit in the same catalogue entry, with the same message shape: eight warnings and the text kept as written (`\\q`, `\\101`, `\\8`, `\\01`). `\\0` alone stays the null byte."
+kind = "behavior"
+case = "../../../cases/compile/escapes/unknown.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stderr_contains = ["name=LexicalDiag::InvalidEscapeSequence, code=0x01100000", "Invalid escape sequence in string: \\q", "Invalid escape sequence in string: \\101", "Invalid escape sequence in string: \\8", "Invalid escape sequence in string: \\01"]
+verify_script = """
+({ input, assert }) => {
+const bs = String.fromCharCode(92)
+const want = [
+    'q 2 ' + bs + 'q',
+    '101 4 ' + bs + '101',
+    '8 2 ' + bs + '8',
+    '01 3 ' + bs + '01',
+    '0 1',
+].join('\n')
+assert(input.normalized.stdout.trim() === want, 'stdout: ' + input.normalized.stdout)
+const warnings = (input.normalized.stderr.match(/LexicalDiag::InvalidEscapeSequence/g) || []).length
+assert(warnings === 8, 'eight warnings, got ' + warnings + ': ' + input.normalized.stderr)
+}
+"""

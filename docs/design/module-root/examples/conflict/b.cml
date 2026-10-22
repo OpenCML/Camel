@@ -1,4 +1,0 @@
-module b
-export func f(x: int): int {
-    return x + 1
-}

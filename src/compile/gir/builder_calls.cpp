@@ -53,6 +53,7 @@ using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::data;
 using namespace camel::core::type;
+namespace sem = camel::core::sem;
 
 namespace camel::compile::gir {
 
@@ -73,6 +74,19 @@ node_handle_t Builder::valueNodeOf(const std::any &res) {
     if (res.type() == typeid(graph_ptr_t)) {
         return createFuncDataNode(any_cast<graph_ptr_t>(res), true, false);
     }
+    if (res.type() == typeid(StaticTuple)) {
+        // A build-time tuple used where a runtime value is needed. A comprehension becomes one
+        // FILL here, at its first such use; a rest parameter's `ts` is not a value at all.
+        const StaticTuple &tuple = any_cast<const StaticTuple &>(res);
+        if (!tuple.materializable) {
+            const GCT::node_ptr_t at = tuple.origin;
+            diags_->of(SemanticDiag::StaticTupleEscapes)
+                .atOrigin(at != nullptr ? at->origin() : 0)
+                .commit(tuple.name.empty() ? std::string("a build-time tuple") : tuple.name);
+            throw BuildAbortException();
+        }
+        return materializeStaticTuple(tuple, tuple.origin);
+    }
     ASSERT(res.type() == typeid(node_handle_t), "Expression did not produce a value node.");
     return any_cast<node_handle_t>(res);
 }
@@ -87,7 +101,7 @@ node_handle_t Builder::elementNodeOf(const std::string &name, const GCT::node_pt
         // the name is anywhere else. An unknown name is reported at the literal.
         const GCT::node_ptr_t dref = tree_->makeDRef(name);
         dref->setOrigin(literal->origin());
-        node = visitDRefNode(dref);
+        node = valueNodeOf(visitDRefNode(dref));
     }
     return namedValueOf(node, name, literal);
 }
@@ -482,6 +496,29 @@ node_handle_t Builder::partialApplicationOf(
             calleeType->normTypeAt(i),
             calleeType->normIsVarAt(i));
     }
+    // The bound parameters are the new function's captures, not its parameters: each use moves
+    // one place down. A bound parameter that was used, or any capture, cannot be published as a
+    // Concrete signature here, so the type says Generic instead of promising too little.
+    {
+        const sem::ResourceSignature &sig = calleeType->resources();
+        if (sig.mode == sem::ResourceSignature::Mode::Concrete) {
+            bool expressible = sig.captures.empty();
+            sem::ResourceSignature remapped = sig;
+            remapped.params.clear();
+            for (const auto &use : sig.params) {
+                if (use.index < bound.size()) {
+                    expressible = false;
+                    break;
+                }
+                sem::ResourceSignature::ParamUse moved = use;
+                moved.index = static_cast<uint8_t>(use.index - bound.size());
+                remapped.params.push_back(std::move(moved));
+            }
+            if (expressible) {
+                factory.setResources(remapped);
+            }
+        }
+    }
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph     = enterScope(type);
@@ -565,6 +602,8 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
             targetType->normTypeAt(i),
             targetType->normIsVarAt(i));
     }
+    // The same parameters: the forwarder promises what the target promises.
+    factory.setResources(targetType->resources());
     FunctionType *type = factory.build();
 
     compile_graph_ptr_t graph = enterScope(type);
@@ -616,8 +655,7 @@ node_handle_t Builder::argumentNodeOf(const std::any &res, const GCT::node_ptr_t
     if (res.type() == typeid(graph_ptr_t)) {
         return createFuncDataNode(any_cast<graph_ptr_t>(res), true, false);
     }
-    ASSERT(res.type() == typeid(node_handle_t), "Argument did not produce a value node.");
-    return functionValueOf(any_cast<node_handle_t>(res), origin);
+    return functionValueOf(valueNodeOf(res), origin);
 }
 
 StaticArg Builder::staticArgOf(node_handle_t node) const {

@@ -228,6 +228,13 @@ class Module : public std::enable_shared_from_this<Module> {
 
     virtual bool load() = 0;
     virtual bool loaded() const { return loaded_; }
+    /// The URI protocols the operators of this module answer on, that is the part before the
+    /// colon of their URIs: its own name, unless the module registers its operators under another
+    /// name (`random` answers on `rand:`; design principles 6.4; handover H94 ruling 6). A
+    /// declaration may name an operator of this module with a `#op` tag whose prefix is one of
+    /// these, or empty for an operator the compiler itself names (`:op/...`); naming another
+    /// module's operator is refused (NativeDeclarationForeignOperator; H202).
+    virtual std::vector<std::string> operatorProtocols() const { return {name_}; }
     /// Makes the types the module exports readable (getExportedType). A module written in
     /// Camel declares them while its construction tree is built, so that modules importing
     /// each other can use each other's types (design principles 10.1); a module of another

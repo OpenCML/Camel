@@ -33,9 +33,8 @@ namespace camel::graphmod {
 /// to an object), so a transaction can make one without a type of its own.
 bool constantType(const camel::core::type::Type *type);
 
-/// The operators that read a Program: their kernels, and the one group whose signature C++
-/// computes (`constant`; every other declaration is in stdlib/graph.cml). Every one is pure.
-const std::vector<oper_group_ptr_t> &readGroups();
+/// The kernels of the operators that read a Program. Every one is pure and every signature is a
+/// declaration of `stdlib/graph.cml` (`constant` per sample type; handover H202).
 const std::unordered_map<std::string, operator_t> &readKernels();
 
 } // namespace camel::graphmod

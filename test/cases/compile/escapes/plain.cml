@@ -1,0 +1,23 @@
+/**
+ * H217 probes: the escape table of a plain string ('...' / "...").
+ *
+ * Each line prints the length and, where the result is printable, the text the
+ * escape produced. The seven probes of the ruling (`\101`, `\0`, `\x41`, `\u{1F600}`, `\n`,
+ * `\8`, `\0x`) and the three octal-looking forms that must stop meaning a byte (`\01`,
+ * `\012`, `\033`).
+ */
+module escapes_plain
+
+func main(): int sync {
+    println('101', len('\101'))
+    println('0', len('\0'))
+    println('x41', len('\x41'), '\x41')
+    println('u', len('\u{1F600}'))
+    println('n', len('\n'))
+    println('8', len('\8'), '\8')
+    println('0x', len('\0x'))
+    println('01', len('\01'))
+    println('012', len('\012'))
+    println('033', len('\033'))
+    return 0
+}

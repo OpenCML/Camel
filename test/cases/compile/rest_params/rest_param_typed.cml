@@ -1,0 +1,9 @@
+module rest_param_typed
+
+func bad(..ts: int): int {
+    return 0
+}
+
+func main(): int sync {
+    return bad(1)
+}

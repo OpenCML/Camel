@@ -33,37 +33,68 @@ How to read an entry:
 
 Not in this reference: the profiler (`perf`).
 
-| Module | Import | Written in | Functions |
-|---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 51 |
-| [str](#str) | `import { ... } from str` | C++ | 14 |
-| [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
-| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
-| [tensor](#tensor) | `import { ... } from tensor` | C++ | 64 |
-| [array](#array) | `import { ... } from array` | Camel | 17 |
-| [math](#math) | `import { ... } from math` | C++ | 48 |
-| [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
-| [algo](#algo) | `import { ... } from algo` | C++ | 8 |
-| [random](#random) | `import { ... } from random` | C++ | 10 |
-| [time](#time) | `import { ... } from time` | C++ | 3 |
-| [fs](#fs) | `import { ... } from fs` | C++ | 15 |
-| [io](#io) | `import { ... } from io` | C++ | 5 |
-| [process](#process) | `import { ... } from process` | C++ | 3 |
-| [env](#env) | `import { ... } from env` | C++ | 2 |
-| [json](#json) | `import { ... } from json` | C++ | 12 |
-| [hash](#hash) | `import { ... } from hash` | C++ | 2 |
-| [re](#re) | `import { ... } from re` | C++ | 1 |
-| [para](#para) | `import { ... } from para` | C++ | 3 |
-| [this](#this) | `import { ... } from this` | C++ | 1 |
-| [graph](#graph) | `import { ... } from graph` | C++ | 41 |
-| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ | 8 |
-| [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
-| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
-| [python](#python) | `import { ... } from python` | C++ | 11 |
-| [nn](#nn) | `import { ... } from nn` | C++ | 19 |
-| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ | 3 |
-| [sim](#sim) | `import { ... } from sim` | C++ | 2 |
-| [onnx](#onnx) | `import { ... } from onnx` | C++ | 2 |
+| Module | Import | Written in |
+|---|---|---|
+| [built-in](#built-in-functions) | none | C++ |
+| [str](#str) | `import { ... } from str` | C++ |
+| [bytes](#bytes) | `import { ... } from bytes` | C++ |
+| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
+| [tree](#tree) | `import { ... } from tree` | Camel |
+| [tensor](#tensor) | `import { ... } from tensor` | C++ |
+| [array](#array) | `import { ... } from array` | Camel |
+| [math](#math) | `import { ... } from math` | C++ |
+| [statistics](#statistics) | `import { ... } from statistics` | C++ |
+| [algo](#algo) | `import { ... } from algo` | C++ |
+| [random](#random) | `import { ... } from random` | C++ |
+| [time](#time) | `import { ... } from time` | C++ |
+| [fs](#fs) | `import { ... } from fs` | C++ |
+| [io](#io) | `import { ... } from io` | C++ |
+| [process](#process) | `import { ... } from process` | C++ |
+| [env](#env) | `import { ... } from env` | C++ |
+| [json](#json) | `import { ... } from json` | C++ |
+| [hash](#hash) | `import { ... } from hash` | C++ |
+| [re](#re) | `import { ... } from re` | C++ |
+| [para](#para) | `import { ... } from para` | C++ |
+| [this](#this) | `import { ... } from this` | C++ |
+| [graph](#graph) | `import { ... } from graph` | C++ |
+| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ |
+| [tiles](#tiles) | `import { ... } from tiles` | C++ |
+| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ |
+| [python](#python) | `import { ... } from python` | C++ |
+| [nn](#nn) | `import { ... } from nn` | C++ |
+| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
+| [sim](#sim) | `import { ... } from sim` | C++ |
+| [onnx](#onnx) | `import { ... } from onnx` | C++ |
+| [built-in](#built-in-functions) | none |  |
+| [str](#str) | `import { ... } from str` |  |
+| [bytes](#bytes) | `import { ... } from bytes` |  |
+| [ckpt](#ckpt) | `import { ... } from ckpt` |  |
+| [tree](#tree) | `import { ... } from tree` |  |
+| [tensor](#tensor) | `import { ... } from tensor` |  |
+| [array](#array) | `import { ... } from array` |  |
+| [math](#math) | `import { ... } from math` |  |
+| [statistics](#statistics) | `import { ... } from statistics` |  |
+| [algo](#algo) | `import { ... } from algo` |  |
+| [random](#random) | `import { ... } from random` |  |
+| [time](#time) | `import { ... } from time` |  |
+| [fs](#fs) | `import { ... } from fs` |  |
+| [io](#io) | `import { ... } from io` |  |
+| [process](#process) | `import { ... } from process` |  |
+| [env](#env) | `import { ... } from env` |  |
+| [json](#json) | `import { ... } from json` |  |
+| [hash](#hash) | `import { ... } from hash` |  |
+| [re](#re) | `import { ... } from re` |  |
+| [para](#para) | `import { ... } from para` |  |
+| [this](#this) | `import { ... } from this` |  |
+| [graph](#graph) | `import { ... } from graph` |  |
+| [rewrite](#rewrite) | `import { ... } from rewrite` |  |
+| [tiles](#tiles) | `import { ... } from tiles` |  |
+| [pyplot](#pyplot) | `import { ... } from pyplot` |  |
+| [python](#python) | `import { ... } from python` |  |
+| [nn](#nn) | `import { ... } from nn` |  |
+| [autodiff](#autodiff) | `import { ... } from autodiff` |  |
+| [sim](#sim) | `import { ... } from sim` |  |
+| [onnx](#onnx) | `import { ... } from onnx` |  |
 
 <a id="built-in-functions"></a>
 
@@ -300,6 +331,20 @@ one line end.
 
 - With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`
+
+#### `eprintln`
+
+```camel
+eprintln: (x: T, ...rest: U...) => T
+```
+
+Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
+the first one (so that the write can be part of the data flow). The other arguments may each
+have a type of their own. With a format, eprintln<fmt>(...), writes the format with the
+arguments put in and one line end.
+
+- With effects: writes to standard error.
+- Example: `eprintln('a', 1)` gives `a 1`
 
 #### `input`
 
@@ -1081,17 +1126,6 @@ The leaves of a tree, as a tuple.
 - Pure.
 - Example: `tree_leaves({ a: 1, b: (2, 3) })` gives `(1, 2, 3)`
 
-#### `tree_paths`
-
-```camel
-tree_paths: (tree: T) => P
-```
-
-The paths of the leaves, as a tree of the same shape.
-
-- Pure.
-- Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
-
 #### `save_tree`
 
 ```camel
@@ -1138,6 +1172,33 @@ standard error; the next save restores it before replacing it.
 - With effects: reads the directory.
 - Failure: error value `CheckpointError` when the directory does not hold a tree of the type T, or a file is missing or does not match its recorded sum.
 - Example: `load_tree::<{ w: float, step: int }>('out/ckpt') !! { w: 0.0, step: 0 }`
+
+<a id="tree"></a>
+
+## `tree`: parameter trees written in Camel
+
+The parameter-tree library written in Camel (design principles 13.5): a tree is a value made
+of nested structs and tuples, and everything else is a leaf.
+
+`tree_paths` is here. `tree_map`, `tree_reduce`, `tree_unzip` and `tree_leaves` still live in
+the native module `ckpt`: they need the compiler's per-leaf expansion of a callback or of a
+value tuple, which arrives with H51 step 13; keeping them in `ckpt` until then is the split
+this library exists for, not a wrapper around them.
+
+The path of a leaf is its field names (tuple indices) from the root, joined by dots; the
+root's own path is the empty string. The path values are ordinary strings, so the result is
+the same tree with a `string` at every leaf.
+
+#### `tree_paths`
+
+```camel
+tree_paths: (t: typeas T) => ?
+```
+
+The path of every leaf, as a tree of the same shape.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
 
 <a id="tensor"></a>
 
@@ -2737,6 +2798,8 @@ bits, `i32` has 32.
 
 ```camel
 shl: (x: i32, count: i32) => i32
+shl: (x: i32, count: int) => i32
+shl: (x: int, count: i32) => int
 shl: (x: int, count: int) => int
 ```
 
@@ -2751,6 +2814,8 @@ change. The count may be of either integer type.
 
 ```camel
 shr: (x: i32, count: i32) => i32
+shr: (x: i32, count: int) => i32
+shr: (x: int, count: i32) => int
 shr: (x: int, count: int) => int
 ```
 
@@ -2899,91 +2964,6 @@ variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the varia
 array in place when nothing else refers to it, an optimisation that does not change what the
 program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
 
-#### `sort`
-
-```camel
-sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs (quicksort).
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: T[]) => T[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: T[], right: T[]) => T[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
-
-#### `flatten`
-
-```camel
-flatten: (xss: T[][]) => T[]
-```
-
-The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
-of the `array` module.
-
-- Pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
-
-#### `unique`
-
-```camel
-unique: (xs: T[]) => T[]
-```
-
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
-module.
-
-- Pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
-
 #### `argsort`
 
 ```camel
@@ -3002,6 +2982,91 @@ primitive behind `sort_by` of the `array` module.
 - Pure.
 - Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
 
+#### `sort`
+
+```camel
+sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs (quicksort).
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `insert_sort`
+
+```camel
+insert_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by insertion sort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `quick_sort`
+
+```camel
+quick_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by quicksort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sort`
+
+```camel
+merge_sort: (xs: (typeas T)[]) => T[]
+```
+
+A sorted copy of xs, by merge sort.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sorted_arrays`
+
+```camel
+merge_sorted_arrays: (left: (typeas T)[], right: T[]) => T[]
+```
+
+The sorted array made of the elements of two sorted arrays of numbers.
+
+- Pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
+
+#### `flatten`
+
+```camel
+flatten: (xss: (typeas T)[][]) => T[]
+```
+
+The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
+of the `array` module.
+
+- Pure.
+- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
+
+#### `unique`
+
+```camel
+unique: (xs: (typeas T)[]) => T[]
+```
+
+The first occurrence of every value, in order; values are compared as `==` compares them
+(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
+module.
+
+- Pure.
+- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
+
 <a id="random"></a>
 
 ## `random`
@@ -3017,41 +3082,6 @@ distributions, which differ between libraries: a float in [0, 1) is the generato
 times 2^-64; an integer in a range uses Lemire's method; a normal value uses Marsaglia's polar
 method (the second value of each pair is dropped); `shuffle` and `sample` take the generator's
 output modulo the number of places left.
-
-#### `choice`
-
-```camel
-choice: (xs: T[]) => T
-```
-
-One element of xs, drawn uniformly.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when xs is empty.
-- Example: `choice(['a', 'b', 'c'])` gives `'b'`
-
-#### `sample`
-
-```camel
-sample: (xs: T[], n: int) => T[]
-```
-
-n elements of xs drawn without replacement, as a new array.
-
-- With effects: advances the generator.
-- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
-- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
-
-#### `shuffle`
-
-```camel
-shuffle: (xs: T[]) => T[]
-```
-
-The elements of xs in a random order, as a new array; xs is not changed.
-
-- With effects: advances the generator.
-- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `seed`
 
@@ -3097,6 +3127,41 @@ above high.
 
 - With effects: advances the generator.
 - Example: `randint(1, 6)` gives `4`
+
+#### `choice`
+
+```camel
+choice: (xs: (typeas T)[]) => T
+```
+
+One element of xs, drawn uniformly.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when xs is empty.
+- Example: `choice(['a', 'b', 'c'])` gives `'b'`
+
+#### `sample`
+
+```camel
+sample: (xs: (typeas T)[], n: int) => T[]
+```
+
+n elements of xs drawn without replacement, as a new array.
+
+- With effects: advances the generator.
+- Failure: fault `InvalidArgument` when n is negative or above the number of elements.
+- Example: `sample([1, 2, 3, 4], 2)` gives `[3, 1]`
+
+#### `shuffle`
+
+```camel
+shuffle: (xs: (typeas T)[]) => T[]
+```
+
+The elements of xs in a random order, as a new array; xs is not changed.
+
+- With effects: advances the generator.
+- Example: `shuffle([1, 2, 3])` gives `[2, 3, 1]`
 
 #### `key`
 
@@ -3567,7 +3632,7 @@ its error is passed on unchanged); read a part whose shape is known with decode_
 its JSON text. In the examples below, `j` is a Json decoded so.
 
 - Pure.
-- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 by default, set by `CAMEL_JSON_MAX_DEPTH`; the message gives the line and column of the bracket that goes too deep).
+- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep).
 - Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
 
 #### `kind`
@@ -3777,29 +3842,6 @@ Whether the regular expression (ECMAScript syntax) matches somewhere in text.
 The unordered counterparts of the built-in `foreach` and `reduce`: the scheduler may run the
 calls of the function in any order and at the same time.
 
-#### `unordered_foreach`
-
-```camel
-unordered_foreach: <f: (item: T) => void> (xs: T[]) => void
-```
-
-Calls f for every element; the calls have no order among them.
-
-- With effects: what f does.
-- Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
-
-#### `unordered_reduce`
-
-```camel
-unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
-```
-
-Combines the elements with f starting from initial; the order in which elements are
-combined is not fixed, so f should be associative and commutative.
-
-- With effects: what f does.
-- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
-
 #### `rendezvous`
 
 ```camel
@@ -3813,6 +3855,29 @@ were waiting). A tool for showing that calls really run at the same time.
 - With effects: waits for other calls.
 - Failure: fault `RuntimeError` when parties is below 1 or timeout_ms is negative.
 - Example: `rendezvous(2, 1000)` gives `2 when another call arrived in time`
+
+#### `unordered_foreach`
+
+```camel
+unordered_foreach: <f: (item: typeas T) => typeas R> (xs: T[]) => void
+```
+
+Calls f for every element; the calls have no order among them.
+
+- With effects: what f does.
+- Example: `[1, 2]->unordered_foreach<(x: int) => println(x)>`
+
+#### `unordered_reduce`
+
+```camel
+unordered_reduce: <f: (acc: typeas T, item: T) => T, initial: T> (xs: T[]) => T
+```
+
+Combines the elements with f starting from initial; the order in which elements are
+combined is not fixed, so f should be associative and commutative.
+
+- With effects: what f does.
+- Example: `[1, 2, 3]->unordered_reduce<(acc: int, x: int): int => acc + x, 0>`
 
 <a id="this"></a>
 
@@ -3891,17 +3956,6 @@ The nodes of the graph in NodeId order; the places of removed nodes are skipped.
 - Example: `nodes(root(current()))`
 
 ### Reading nodes
-
-#### `constant`
-
-```camel
-constant: (n: Node, sample: T) => T?
-```
-
-The value of a constant node of the type of the sample (a number, a bool or a string; the value of the sample is not read), null for any other node.
-
-- Pure.
-- Example: `constant(n, 0)` gives `int?`
 
 #### `inputs`
 
@@ -4090,6 +4144,23 @@ The source origin id of the node, 0 when unknown.
 - Pure.
 - Example: `origin(n)`
 
+#### `constant`
+
+```camel
+constant: (n: Node, sample: i32) => i32?
+constant: (n: Node, sample: int) => int?
+constant: (n: Node, sample: f32) => f32?
+constant: (n: Node, sample: float) => float?
+constant: (n: Node, sample: bool) => bool?
+constant: (n: Node, sample: string) => string?
+```
+
+The value of a constant node of the type of the sample (a number, a bool or a string; the value
+of the sample is not read), null for any other node.
+
+- Pure.
+- Example: `constant(n, 0)` gives `int?`
+
 ### Regions
 
 #### `region_of`
@@ -4212,20 +4283,6 @@ The graph of a function value.
 
 ### Transactions
 
-#### `add_constant`
-
-```camel
-add_constant: (t: Txn, g: Graph, value: T) => Node
-```
-
-Adds a value the transaction creates to the graph's static values and gives the node that
-holds it. The value may be a number, a bool or a string; a string is copied into the permanent
-space because a value a transaction creates may be live at a safepoint where its draft is not
-traced.
-
-- With effects: changes the transaction.
-- Example: `add_constant(t, g, 7)`
-
 #### `open_function`
 
 ```camel
@@ -4303,6 +4360,25 @@ Drops the transaction.
 
 - With effects: changes the transaction.
 - Example: `abort(t)`
+
+#### `add_constant`
+
+```camel
+add_constant: (t: Txn, g: Graph, value: i32) => Node
+add_constant: (t: Txn, g: Graph, value: int) => Node
+add_constant: (t: Txn, g: Graph, value: f32) => Node
+add_constant: (t: Txn, g: Graph, value: float) => Node
+add_constant: (t: Txn, g: Graph, value: bool) => Node
+add_constant: (t: Txn, g: Graph, value: string) => Node
+```
+
+Adds a value the transaction creates to the graph's static values and gives the node that
+holds it. The value may be a number, a bool or a string; a string is copied into the permanent
+space because a value a transaction creates may be live at a safepoint where its draft is not
+traced.
+
+- With effects: changes the transaction.
+- Example: `add_constant(t, g, 7)`
 
 <a id="rewrite"></a>
 
@@ -4419,26 +4495,12 @@ How many constants the rule `r` adds to the program.
 ## `tiles`: programs on a CUDA device
 
 Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
-the device computes, and the results come back to the host. `gpu` marks a function to prefer the
-device, `run`/`run_device` run one explicitly, `source`/`inspect`/`benchmark` show what would
-run, and `upload`/`download` move a value by hand. The device holds a foreign resource
-(`tiles:device`) and the driver is ambient state (`tiles:driver`), so every operator of this
-module has effects and none is folded or dropped.
-
-#### `gpu`
-
-```camel
-gpu: (fn: (x: float) => float) => (x: float) => float
-```
-
-Compiles the function to device code and returns a function of the same type that prefers the
-device: it runs there when the device can take it, and on the host otherwise. The function
-takes no with-parameter, has at least one ordinary parameter, and every leaf of its parameters
-and result is a float or an f32 tensor. The result is the argument's own type, which a
-declaration cannot say without also dropping that restriction.
-
-- With effects: marks a function to prefer the device.
-- Example: `let fast = gpu((x: float): float => x + 1.0)`
+the device computes, and the results come back to the host. `tiles::compile` outlines the regions
+the device can run, `source`/`inspect`/`benchmark` show what would run, and `upload`/`download`
+move a value by hand. Placement is asked for in the source with the `#gpu` label (design
+principles 13.4), which `tiles::compile` reads; the card is chosen at run time with `--devices`.
+The device holds a foreign resource (`tiles:device`) and the driver is ambient state
+(`tiles:driver`), so every operator of this module has effects and none is folded or dropped.
 
 #### `upload`
 
@@ -4465,39 +4527,16 @@ leaf that is not a device value is refused when the call is compiled.
 - With effects: transfers from the device.
 - Example: `download(resident)` gives `the tensor resident holds`
 
-#### `run`
-
-```camel
-run: <fn: (a: float, b: float) => float> (inputs: (float, float)) => float
-```
-
-Runs the function on the CUDA device: its parameter (or the tuple of its parameters) is
-uploaded, the device computes, and the result is downloaded again. The result type is the
-function's result type.
-
-- With effects: transfers both ways and runs device code.
-- Example: `run<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `5.0`
-
-#### `run_device`
-
-```camel
-run_device: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
-```
-
-Runs the function as `run` does but leaves the result on the device: each leaf of it comes back
-wrapped in `Device<...>`.
-
-- With effects: transfers to the device and runs device code.
-- Example: `run_device<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
-
 #### `run_preferred_resident`
 
 ```camel
 run_preferred_resident: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
 ```
 
-Runs the function the way `@gpu` does — a prepared device program when one can be made, the
-host otherwise — and answers the resident form of its result.
+Runs the function through the device path the pipeline prepared for it — the device when a
+program can be made for it, the host otherwise — and answers the resident form of its result.
+This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` scope asks for
+the device explicitly, and an operator the device cannot run is a compile error there.
 
 - With effects: transfers to the device and runs device code.
 - Example: `run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`

@@ -84,6 +84,7 @@ ModuleFailures findModuleFailures(
             continue;
         }
         failures.any = true;
+        failures.modules.push_back(module);
         if (userModule->declarationModule()) {
             failures.declarationModules.push_back(userModule.get());
         }
@@ -105,7 +106,11 @@ void reportModuleFailures(
                                  << std::endl;
         }
     }
-    ctx->dumpAllModuleDiagnostics(diagnosticsOut, json, wrapInArray);
+    // Report what the question was about. The context may hold more failed modules than the
+    // scope names (a pass library the pass list loaded, H198/H210); printing them would report a
+    // failure the command never asked about and, for a pass library, replace the pass
+    // resolution's `InvalidPassParameter` with the raw parse diagnostic.
+    ctx->dumpModuleDiagnostics(diagnosticsOut, json, wrapInArray, failures.modules);
 }
 
 bool failIfModuleErrors(

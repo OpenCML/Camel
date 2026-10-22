@@ -1,0 +1,9 @@
+module rest_too_many
+
+func pair(a: int, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return pair(..(1, 2, 3))
+}

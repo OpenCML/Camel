@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: May. 04, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -21,6 +21,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/utils/path.h"
 #include "camel/utils/type.h"
+#include "module.h"
 
 #include <pybind11/embed.h>
 
@@ -104,6 +105,10 @@ static std::vector<double> __array_to_vector_with_type__(
 }
 
 slot_t __plot__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
+    // The interpreter is created here, at the operator's first use, not by `import pyplot`
+    // (design principles 3.1; the language author's ruling of 2026-10-22; handover H221). CPython
+    // that cannot be initialised is this call's fault, not the import's.
+    ensurePyplotInterpreter();
     py::gil_scoped_acquire gil;
     Array *arr               = norm.get<Array *>(0);
     const ArrayType *arrType = tt::as_ptr<ArrayType>(norm.type(0));

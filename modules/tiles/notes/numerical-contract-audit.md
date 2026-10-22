@@ -18,14 +18,14 @@ schedulers: `std::nvm`, `std::fvm`, and `std::jit`.
 ```camel
 module tiles_exp_contract_audit
 import { Tensor, reshape, exp, sum } from tensor
-import { run } from tiles
+import { run_preferred_resident, download } from tiles
 
 func exponent(x: Tensor<f32>): Tensor<f32> { return exp(x) }
 
 func main(): int sync {
     let x = reshape([-90.0], [1])
     let cpu = exponent(x)
-    let gpu = run<exponent>(x)
+    let gpu = download(run_preferred_resident<exponent>(x))
     println(sum(cpu))
     println(sum(gpu))
     println(sum(gpu - cpu))

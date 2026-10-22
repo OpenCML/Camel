@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-204 diagnostics: 187 errors, 17 warnings.
+218 diagnostics: 201 errors, 17 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -169,6 +169,19 @@ prints one entry.
 | `0x03000180` | [SemanticDiag::NativeDeclarationOverlap](#nativedeclarationoverlap) | Error |
 | `0x03000181` | [SemanticDiag::NativeDeclarationForeignOperator](#nativedeclarationforeignoperator) | Error |
 | `0x03000182` | [SemanticDiag::StaticIndicesNotTuple](#staticindicesnottuple) | Error |
+| `0x0300018A` | [SemanticDiag::RestParameterNotLast](#restparameternotlast) | Error |
+| `0x0300018B` | [SemanticDiag::RestParameterTypeNotSupported](#restparametertypenotsupported) | Error |
+| `0x0300018D` | [SemanticDiag::RestArgumentNotLast](#restargumentnotlast) | Error |
+| `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error |
+| `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error |
+| `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error |
+| `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error |
+| `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error |
+| `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error |
+| `0x0300019A` | [SemanticDiag::ConstasInNativeDeclaration](#constasinnativedeclaration) | Error |
+| `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
+| `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
+| `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -217,6 +230,7 @@ prints one entry.
 | `0x04000061` | [RuntimeDiag::GraphPassFailed](#graphpassfailed) | Error |
 | `0x04000062` | [RuntimeDiag::PassNeedsExtraction](#passneedsextraction) | Error |
 | `0x04000070` | [RuntimeDiag::DeviceUnavailable](#deviceunavailable) | Error |
+| `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
@@ -355,7 +369,25 @@ Invalid escape sequence in string: {0}.
 Check and correct the escape sequence.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/escapes/plain.cml`, run as `camel test/cases/compile/escapes/plain.cml`)
+
+```camel
+module escapes_plain
+
+func main(): int sync {
+    println('101', len('\101'))
+    println('0', len('\0'))
+    println('x41', len('\x41'), '\x41')
+    println('u', len('\u{1F600}'))
+    println('n', len('\n'))
+    println('8', len('\8'), '\8')
+    println('0x', len('\0x'))
+    println('01', len('\01'))
+    println('012', len('\012'))
+    println('033', len('\033'))
+    return 0
+}
+```
 
 ## Syntax (`SyntaxDiag`)
 
@@ -1864,13 +1896,19 @@ The generic function '{0}' cannot be called with argument types {1}: {2}.
 A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
 ```
 
-**Example** (`test/cases/compile/generic_explicit_named_unknown.cml`, run as `camel test/cases/compile/generic_explicit_named_unknown.cml`)
+**Example** (`test/cases/compile/constas/constas_argument_shape.cml`, run as `camel test/cases/compile/constas/constas_argument_shape.cml`)
 
 ```camel
-module generic_explicit_named_unknown
-func second(x: typeas T): T { return x }
+module constas_argument_shape
+import { Tensor, ones, sum } from tensor
+
+func total(constas n: int, x: Tensor<f32, const [n]>): float {
+    return sum(x)
+}
+
 func main(): int sync {
-    println(second::<U = int>(1))
+    // The instance for n = 3 takes a Tensor<f32, [3]>; this argument has extent 4.
+    println(total(3, ones([4])))
     return 0
 }
 ```
@@ -2279,14 +2317,16 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-**Example** (`test/cases/compile/module_load/value_cycle_modules.cml`, run as `camel -E short test/cases/compile/module_load/value_cycle_modules.cml`)
+**Example** (`test/cases/compile/module_imports/import_order/relative_name/main_short.cml`, run as `camel -E short test/cases/compile/module_imports/import_order/relative_name/main_short.cml`)
 
 ```camel
-// Values of two modules that depend on each other: ModuleValueCycle across the modules.
-import cycle_x
+/// H232: imports `short`, whose `import ..lib` cannot be formed against its one-component name.
+module main_short
+
+import short
 
 func main(): int sync {
-    println(cycle_x::x)
+    println(short::name())
     return 0
 }
 ```
@@ -2663,7 +2703,7 @@ module if_condition
 import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
-// bool (docs/design/any-typing, defect D5). It is a `Json` now, and a condition is a bool.
+// bool. It is a `Json` now, and a condition is a bool.
 func check(a: Json): int sync {
     println(if a then 1 else 2)
     return 0
@@ -2698,7 +2738,7 @@ module match_subject
 import { Json, decode } from json
 
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
-// bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
+// bit, a string by address, so `'ab'` fell to `case _`. It
 // is a `Json` now, and a case has the type of the value matched.
 func check(v: Json): int sync {
     let r = match v {
@@ -4386,6 +4426,419 @@ func main(): int {
 }
 ```
 
+### RestParameterNotLast
+
+`0x0300018A` · Error · `SemanticDiag::RestParameterNotLast`
+
+**Message**
+
+```text
+The rest parameter '..{0}' must be the last parameter.
+```
+
+**Help**
+
+```text
+A rest parameter stands for every argument left over, so no parameter can follow it. Move '..{0}' after the other parameters.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_param_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_param_not_last.cml`)
+
+```camel
+module rest_param_not_last
+
+func bad(..ts, x: int): int {
+    return x
+}
+
+func main(): int sync {
+    return bad(1, 2)
+}
+```
+
+### RestParameterTypeNotSupported
+
+`0x0300018B` · Error · `SemanticDiag::RestParameterTypeNotSupported`
+
+**Message**
+
+```text
+The rest parameter '..{0}' cannot write a type.
+```
+
+**Help**
+
+```text
+A rest parameter is untyped: the tuple of the arguments left over is made at the call, so its element types are decided there. Write '..{0}'.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_param_typed.cml`, run as `camel test/cases/compile/rest_params/rest_param_typed.cml`)
+
+```camel
+module rest_param_typed
+
+func bad(..ts: int): int {
+    return 0
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### RestArgumentNotLast
+
+`0x0300018D` · Error · `SemanticDiag::RestArgumentNotLast`
+
+**Message**
+
+```text
+The rest argument '..{0}' must be the last positional argument.
+```
+
+**Help**
+
+```text
+'..e' expands to every element of 'e', so no positional argument can follow it. Named arguments cannot follow it either: write '..e' last.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_arg_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_last.cml`)
+
+```camel
+module rest_arg_not_last
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    return sum(..(1, 2), 3)
+}
+```
+
+### RestArgumentNotTuple
+
+`0x0300018E` · Error · `SemanticDiag::RestArgumentNotTuple`
+
+**Message**
+
+```text
+The rest argument '..{0}' is not a compile-time tuple.
+```
+
+**Help**
+
+```text
+'..e' needs a tuple whose elements are known when the call is instantiated: a tuple literal, a tuple comprehension, or the rest parameter of the enclosing rest function. A runtime tuple value has no fixed arity here.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_arg_not_tuple.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_tuple.cml`)
+
+```camel
+module rest_arg_not_tuple
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    return sum(..5)
+}
+```
+
+### RestFunctionNeedsExpansion
+
+`0x0300018F` · Error · `SemanticDiag::RestFunctionNeedsExpansion`
+
+**Message**
+
+```text
+The rest function '{0}' cannot be used here: {1}.
+```
+
+**Help**
+
+```text
+A function with a rest parameter has no runtime arity, so it has no function value and no instance: call it directly, with the arguments it takes.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_as_value.cml`, run as `camel test/cases/compile/rest_params/rest_as_value.cml`)
+
+```camel
+module rest_as_value
+
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    let f = sum
+    return f(1, 2)
+}
+```
+
+### RestArgumentsMismatch
+
+`0x03000190` · Error · `SemanticDiag::RestArgumentsMismatch`
+
+**Message**
+
+```text
+The call to '{0}' gives {1} argument(s), but its fixed parameters need {2}.
+```
+
+**Help**
+
+```text
+A rest parameter only stands for the arguments after the fixed ones. Give at least as many arguments as the declaration has fixed parameters.
+```
+
+**Example** (`test/cases/compile/rest_params/rest_too_few.cml`, run as `camel test/cases/compile/rest_params/rest_too_few.cml`)
+
+```camel
+module rest_too_few
+
+func first(a: int, ..ts): int {
+    return a
+}
+
+func main(): int sync {
+    return first()
+}
+```
+
+### ConstasTypeRequired
+
+`0x03000193` · Error · `SemanticDiag::ConstasTypeRequired`
+
+**Message**
+
+```text
+The 'constas' parameter '{0}' writes no type.
+```
+
+**Help**
+
+```text
+A 'constas' parameter is a compile-time value and its type is part of the declaration's identity: write 'constas {0}: string', 'constas {0}: int', 'constas {0}: bool', or the type of whatever constant the call binds.
+```
+
+**Example** (`test/cases/compile/constas/constas_no_type.cml`, run as `camel test/cases/compile/constas/constas_no_type.cml`)
+
+```camel
+module constas_no_type
+
+// A `constas` parameter writes its type; only `int` is supported.
+func bad(constas n): int {
+    return n
+}
+
+func main(): int sync {
+    println(bad(1))
+    return 0
+}
+```
+
+### ConstasValueNotConstant
+
+`0x03000195` · Error · `SemanticDiag::ConstasValueNotConstant`
+
+**Message**
+
+```text
+The value given for the 'constas' parameter '{0}' is not a compile-time constant of its parameter's type ('{1}').
+```
+
+**Help**
+
+```text
+The value selects the instance of the declaration, so it must be known before the program runs: a literal or a constant of a type that has compile-time constants. A runtime value would need one instance per possible value.
+```
+
+**Example** (`test/cases/compile/constas/constas_value_not_constant.cml`, run as `camel test/cases/compile/constas/constas_value_not_constant.cml`)
+
+```camel
+module constas_value_not_constant
+import { Tensor, ones, sum } from tensor
+
+func total(constas n: int, x: Tensor<f32, const [n]>): float {
+    return sum(x)
+}
+
+func use(m: int): float {
+    return total(m, ones([3]))
+}
+
+func main(): int sync {
+    println(use(3))
+    return 0
+}
+```
+
+### ConstasFunctionNeedsCall
+
+`0x03000199` · Error · `SemanticDiag::ConstasFunctionNeedsCall`
+
+**Message**
+
+```text
+The declaration '{0}' takes a 'constas' parameter, so it has no function value.
+```
+
+**Help**
+
+```text
+The value must be known where the call is written. Call the declaration directly with its constant ('{0}(4, ...)'), or wrap it in a function that does.
+```
+
+**Example** (`test/cases/compile/constas/constas_as_value.cml`, run as `camel test/cases/compile/constas/constas_as_value.cml`)
+
+```camel
+module constas_as_value
+import { Tensor, ones, sum } from tensor
+
+func total(constas n: int, x: Tensor<f32, const [n]>): float {
+    return sum(x)
+}
+
+func apply(f: (x: Tensor<f32>) => float, x: Tensor<f32>): float {
+    return f(x)
+}
+
+func main(): int sync {
+    // The value must be known where the call is written, so `total` has no function value.
+    println(apply(total, ones([3])))
+    return 0
+}
+```
+
+### ConstasInNativeDeclaration
+
+`0x0300019A` · Error · `SemanticDiag::ConstasInNativeDeclaration`
+
+**Message**
+
+```text
+The body-less declaration '{0}' cannot take a 'constas' parameter.
+```
+
+**Help**
+
+```text
+A body-less declaration names a C++ operator whose signature is fixed; a 'constas' value would have to be part of the operator's compile-time identity, which the native declaration mechanism does not carry yet. Write the function with a body.
+```
+
+**Example** (`test/cases/compile/constas/constas_native.cml`, run as `camel test/cases/compile/constas/constas_native.cml`)
+
+```camel
+module constas_native
+import { Tensor } from tensor
+
+// A body-less declaration names a C++ operator whose signature does not carry a compile-time
+// value parameter, even when the value writes the result's extent.
+func zeros(constas n: int): Tensor<f32, const [n]>
+
+func main(): int sync {
+    println(zeros(3))
+    return 0
+}
+```
+
+### ConstasArgumentMissing
+
+`0x0300019B` · Error · `SemanticDiag::ConstasArgumentMissing`
+
+**Message**
+
+```text
+The call gives no value for the 'constas' parameter '{0}'.
+```
+
+**Help**
+
+```text
+A 'constas' value is bound at the call, like any other argument, but it is not a runtime argument: give the constant at the parameter's position, as in 'f(4, x)'.
+```
+
+**Example** (`test/cases/compile/constas/constas_missing_argument.cml`, run as `camel test/cases/compile/constas/constas_missing_argument.cml`)
+
+```camel
+module constas_missing_argument
+import { Tensor, ones, sum } from tensor
+
+func total(constas n: int, x: Tensor<f32, const [n]>): float {
+    return sum(x)
+}
+
+func main(): int sync {
+    println(total())
+    return 0
+}
+```
+
+### StaticTupleEscapes
+
+`0x0300019C` · Error · `SemanticDiag::StaticTupleEscapes`
+
+**Message**
+
+```text
+The build-time tuple '{0}' is not a value.
+```
+
+**Help**
+
+```text
+A rest parameter's tuple stands for the arguments a call left over: read it with 'indices {0}', '{0}.[j]' or '..{0}', or write a tuple literal '(a, b)' when a runtime tuple value is wanted.
+```
+
+**Example** (`test/cases/compile/static_expansion/static_tuple_escape.cml`, run as `camel test/cases/compile/static_expansion/static_tuple_escape.cml`)
+
+```camel
+module static_tuple_escape
+
+func first(..ts): int {
+    return ts
+}
+
+func main(): int sync {
+    return first(1, 2)
+}
+```
+
+### TagValueConflict
+
+`0x0300019D` · Error · `SemanticDiag::TagValueConflict`
+
+**Message**
+
+```text
+The tag '{0}' gives the fact '{1}' the value {2}, but the node already says {3}.
+```
+
+**Help**
+
+```text
+One node has one value for a fact. Write one of the tags here, or put the other tag on a block of its own: an inner block's value wins.
+```
+
+**Example** (`test/cases/compile/tags/placement_conflict.cml`, run as `camel test/cases/compile/tags/placement_conflict.cml`)
+
+```camel
+/// Two placement labels on one node give one attribute key two values: a conflict, not a
+/// choice left to declaration order (docs/design/gpu/plan.cn.md 2.1).
+module tags_placement_conflict
+
+#[gpu, cpu]
+func both(x: int): int {
+    return x
+}
+
+func main(): int {
+    return both(1)
+}
+```
+
 ### VarParamInAsyncFunction
 
 `0x03100001` · Warn · `SemanticDiag::VarParamInAsyncFunction`
@@ -5744,28 +6197,60 @@ Name a device this machine has (--devices <ordinal>), or run on the host with --
 
 ```camel
 module tiles_gpu_fallback
-import { gpu, available } from tiles
-@gpu
+import { available, run_preferred_resident, download } from tiles
+
 func add(a: float, b: float): float { return a + b }
-@gpu
+
 func effect(x: float): float sync {
     println("cpu effect")
     return x + x
 }
-@gpu
+
 func nested(a: float, b: float): float { return add(a, b) * 2.0 }
-@gpu
+
 func pair(a: float, b: float): (float, float) { return (a + b, a * b) }
+
 func main(): int sync {
     println(available())
-    println(add(2.0, 3.0))
-    println(effect(4.0))
-    let offset = 7.0
-    let captured = gpu((x: float): float => x + offset)
-    println(captured(3.0))
-    println(nested(2.0, 3.0))
-    let p = pair(2.0, 3.0)
+    println(download(run_preferred_resident<add>((2.0, 3.0))))
+    println(download(run_preferred_resident<effect>(4.0)))
+    println(download(run_preferred_resident<nested>((2.0, 3.0))))
+    let p = download(run_preferred_resident<pair>((2.0, 3.0)))
     println(p.0, p.1)
+    return 0
+}
+```
+
+### GpuScopeUnsupported
+
+`0x04000071` · Error · `RuntimeDiag::GpuScopeUnsupported`
+
+**Message**
+
+```text
+`#gpu` scope '{0}': {1} cannot run on the device ({2}).
+```
+
+**Help**
+
+```text
+The `#gpu` tag promises that the device runs everything written in the function or block. Remove the tag, or rewrite the scope so that every operator in it has a device implementation; `--devices cpu` runs the whole program on the host.
+```
+
+**Example** (`test/cases/modules/tiles/gpu_scope_refusal.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/modules/tiles/gpu_scope_refusal.cml tiles::compile std::nvm`)
+
+```camel
+module tiles_gpu_scope_refusal
+import { Tensor, reshape, tanh, sum } from tensor
+
+// `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
+// scope that is a compile error, not a silent fallback to the host.
+#gpu
+func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
+
+func main(): int sync {
+    let x = reshape([1.0, 2.0, 3.0], [3])
+    println(sum(activate(x)))
     return 0
 }
 ```

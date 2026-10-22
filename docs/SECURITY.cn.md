@@ -6,8 +6,8 @@
 
 | 版本 | 支持状态     |
 |------|--------------|
-| 最新发布版 | 支持         |
-| 开发版 (main) | 支持       |
+| 最新发布版（`main`） | 支持         |
+| 开发版（`develop`） | 支持       |
 | 更早版本 | 不再积极支持 |
 
 ## 报告安全漏洞
@@ -21,6 +21,10 @@
 
 2. **或联系维护者**
    通过 [OpenCML 组织](https://github.com/OpenCML) 联系项目维护者。
+
+私有安全通告是目前唯一的私下报告渠道：项目尚未公布安全邮箱，因此不要为漏洞开公开 Issue。
+
+<!-- TODO(author): add a security contact address here if the project wants one; otherwise confirm that the GitHub private advisory stays the only channel and remove this comment. -->
 
 我们会在确认漏洞后的合理时间内做出响应，并会：
 - 确认收到报告

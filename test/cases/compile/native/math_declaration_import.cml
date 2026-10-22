@@ -1,12 +1,13 @@
 /**
  * The declarations of `math` are what an importer sees: the per-type overloads (`abs`, `min`,
- * `clamp`) and a computed-signature operator that stayed in C++ (`sqrt`) are read from
- * `stdlib/math.cml`, and the calls reach the operators the C++ module runs. The constant `pi`
- * is still the C++ module's value, visible through the same declaration module (handover H113).
+ * `clamp`), `sqrt` with its four spellings and the two shifts with both integer types for the
+ * count are read from `stdlib/math.cml`, and the calls reach the operators the C++ module runs.
+ * The constant `pi` is still the C++ module's value, visible through the same declaration module
+ * (handover H113; H202).
  */
 module math_declaration_import
 
-import { abs, clamp, min, sqrt, shl, pi } from math
+import { abs, clamp, min, sqrt, shl, shr, pi } from math
 
 func main(): int sync {
     println(abs(-3))
@@ -15,6 +16,7 @@ func main(): int sync {
     println(clamp(15, 0, 10))
     println(sqrt(9.0))
     println(shl(1, i32(4)))
+    println(shr(256, 4))
     println(pi)
     return 0
 }

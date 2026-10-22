@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: May. 24, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -23,267 +23,17 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/resolver.h"
-#include "camel/utils/env.h"
-#include "camel/utils/path.h"
+#include "modules/python/embed.h"
 #include "executor.h"
 #include "operators.h"
 
-#include <algorithm>
-#include <cctype>
-#include <filesystem>
-#include <fstream>
-#include <optional>
-#include <sstream>
-#include <vector>
+#include <exception>
+#include <string>
 
 using namespace camel::core::error;
 using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
-#include <pybind11/embed.h>
-#include <pybind11/pybind11.h>
-#include <string>
-
-#ifdef _WIN32
-#include <stdlib.h>
-#endif
-
-namespace py = pybind11;
-namespace fs = std::filesystem;
-
-namespace {
-
-bool envFlagEnabled(const std::string &key) {
-    std::string value = getEnv(key);
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
-        return static_cast<char>(std::tolower(c));
-    });
-    return value == "1" || value == "true" || value == "yes" || value == "on";
-}
-
-std::vector<std::string> splitPathList(const std::string &value) {
-    std::vector<std::string> out;
-    if (value.empty())
-        return out;
-#ifdef _WIN32
-    constexpr char delim = ';';
-#else
-    constexpr char delim = ':';
-#endif
-    std::stringstream ss(value);
-    std::string item;
-    while (std::getline(ss, item, delim)) {
-        if (!item.empty())
-            out.push_back(item);
-    }
-    return out;
-}
-
-struct PyMajorMinor {
-    int major = -1;
-    int minor = -1;
-    bool valid() const { return major >= 0 && minor >= 0; }
-};
-
-PyMajorMinor compiledPythonVersion() { return PyMajorMinor{PY_MAJOR_VERSION, PY_MINOR_VERSION}; }
-
-std::optional<std::string> activeVenvPath() {
-    std::string venv = getEnv("VIRTUAL_ENV");
-    if (!venv.empty())
-        return venv;
-    std::string conda = getEnv("CONDA_PREFIX");
-    if (!conda.empty())
-        return conda;
-    return std::nullopt;
-}
-
-std::optional<std::string> readPyVenvCfgValue(const std::string &venvPath, const std::string &key) {
-    if (venvPath.empty())
-        return std::nullopt;
-#ifdef _WIN32
-    std::string cfgPath = venvPath + "\\pyvenv.cfg";
-#else
-    std::string cfgPath = venvPath + "/pyvenv.cfg";
-#endif
-    std::ifstream f(cfgPath);
-    if (!f)
-        return std::nullopt;
-    std::string line;
-    while (std::getline(f, line)) {
-        if (line.rfind(key, 0) != 0)
-            continue;
-        size_t eq = line.find('=');
-        if (eq == std::string::npos)
-            continue;
-        std::string value = line.substr(eq + 1);
-        size_t start      = value.find_first_not_of(" \t");
-        if (start != std::string::npos)
-            value = value.substr(start);
-        size_t end = value.find_last_not_of(" \t");
-        if (end != std::string::npos)
-            value = value.substr(0, end + 1);
-        if (!value.empty())
-            return value;
-    }
-    return std::nullopt;
-}
-
-PyMajorMinor parseVersion(const std::string &text) {
-    PyMajorMinor out;
-    if (text.empty())
-        return out;
-    char dot = 0;
-    std::stringstream ss(text);
-    if ((ss >> out.major) && (ss >> dot) && dot == '.' && (ss >> out.minor))
-        return out;
-    out.major = -1;
-    out.minor = -1;
-    return out;
-}
-
-bool isVenvVersionCompatible(const std::string &venvPath) {
-    auto expected = compiledPythonVersion();
-    auto rawVer   = readPyVenvCfgValue(venvPath, "version");
-    if (!rawVer.has_value())
-        return true;
-    auto parsed = parseVersion(rawVer.value());
-    if (!parsed.valid())
-        return true;
-    return parsed.major == expected.major && parsed.minor == expected.minor;
-}
-
-void prepend_path_if_missing(py::list &path, py::object &normalize, const std::string &dir) {
-    if (dir.empty())
-        return;
-    std::error_code ec;
-    fs::path absPath = fs::absolute(camel::utils::pathFromUtf8(dir), ec);
-    if (ec || !fs::exists(absPath))
-        return;
-    std::string dirStr  = camel::utils::pathToUtf8(absPath.lexically_normal());
-    std::string normDir = normalize(dirStr).cast<std::string>();
-    for (size_t i = 0; i < path.size(); ++i) {
-        std::string existing = py::str(path[i]).cast<std::string>();
-        if (normalize(existing).cast<std::string>() == normDir)
-            return;
-    }
-    path.attr("insert")(0, dirStr);
-}
-
-void ensure_site_packages_in_path() {
-    if (!Py_IsInitialized())
-        return;
-    auto envRoot = activeVenvPath();
-    if (!envRoot.has_value())
-        return;
-    if (!isVenvVersionCompatible(envRoot.value()))
-        return;
-    std::string sitePackages;
-#ifdef _WIN32
-    sitePackages = envRoot.value() + "\\Lib\\site-packages";
-#else
-    sitePackages = envRoot.value() + "/lib/python";
-    try {
-        py::module_ sys = py::module_::import("sys");
-        std::string ver = py::str(sys.attr("version_info").attr("major")).cast<std::string>() +
-                          "." + py::str(sys.attr("version_info").attr("minor")).cast<std::string>();
-        sitePackages += ver + "/site-packages";
-    } catch (...) {
-        sitePackages += "3.11/site-packages";
-    }
-#endif
-    try {
-        py::module_ sys      = py::module_::import("sys");
-        py::module_ os       = py::module_::import("os");
-        py::object normalize = py::cpp_function([&os](const std::string &value) {
-            py::object pathMod = os.attr("path");
-            return pathMod.attr("normcase")(pathMod.attr("normpath")(value));
-        });
-        py::list path        = sys.attr("path");
-        prepend_path_if_missing(path, normalize, sitePackages);
-    } catch (...) {
-        // 失败时继续，不阻塞加载
-    }
-}
-
-void ensure_extra_python_paths_in_path() {
-    if (!Py_IsInitialized())
-        return;
-    try {
-        py::module_ sys      = py::module_::import("sys");
-        py::module_ os       = py::module_::import("os");
-        py::object normalize = py::cpp_function([&os](const std::string &value) {
-            py::object pathMod = os.attr("path");
-            return pathMod.attr("normcase")(pathMod.attr("normpath")(value));
-        });
-        py::list path        = sys.attr("path");
-        for (const auto &dir : splitPathList(getEnv("CAMEL_PYTHONPATH"))) {
-            prepend_path_if_missing(path, normalize, dir);
-        }
-        if (envFlagEnabled("CAMEL_PYTHON_INHERIT_HOST_PYTHONPATH")) {
-            for (const auto &dir : splitPathList(getEnv("PYTHONPATH"))) {
-                prepend_path_if_missing(path, normalize, dir);
-            }
-        }
-    } catch (...) {
-        // 失败时继续，不阻塞加载
-    }
-}
-
-struct PythonInitEnvGuard {
-    std::optional<ScopedEnvVar> pythonHome;
-    std::optional<ScopedEnvVar> pythonPath;
-
-    PythonInitEnvGuard() {
-        if (envFlagEnabled("CAMEL_PYTHON_INHERIT_HOST_ENV"))
-            return;
-        pythonHome.emplace("PYTHONHOME", std::nullopt);
-        if (!envFlagEnabled("CAMEL_PYTHON_INHERIT_HOST_PYTHONPATH"))
-            pythonPath.emplace("PYTHONPATH", std::nullopt);
-    }
-};
-
-static void set_python_home_from_venv() {
-    auto venv = activeVenvPath();
-    if (!venv.has_value())
-        return;
-    if (!isVenvVersionCompatible(venv.value()))
-        return;
-    auto home = readPyVenvCfgValue(venv.value(), "home");
-    if (!home.has_value())
-        return;
-    wchar_t *whome = Py_DecodeLocale(home.value().c_str(), nullptr);
-    if (!whome)
-        return;
-    static std::wstring python_home_storage;
-    python_home_storage = whome;
-    PyMem_RawFree(whome);
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#endif
-    Py_SetPythonHome(python_home_storage.c_str());
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
-}
-
-} // namespace
-
-namespace {
-// The interpreter is initialised on the thread that loads the module, which then holds the
-// GIL. Operators run on whichever thread the scheduler gives them (a worker of the parallel
-// scheduler, several at once), so each takes the GIL for its duration, and the loading thread
-// gives it up once the module is loaded. A thread that never held the GIL has no Python thread
-// state at all: calling into the interpreter from it crashes.
-struct ReleaseGilAfterLoad {
-    bool armed = false;
-    ~ReleaseGilAfterLoad() {
-        if (armed) {
-            (void)PyEval_SaveThread();
-        }
-    }
-};
-} // namespace
 
 // The module exports no operator group of its own: `plot` is declared in `stdlib/pyplot.cml`,
 // which is the one source of its signature (design principles 6.4; handover H19, step 10; H166).
@@ -292,24 +42,26 @@ PyplotModule::PyplotModule(context_ptr_t ctx) : BuiltinModule("pyplot", ctx) {}
 
 module_ptr_t PyplotModule::create(context_ptr_t ctx) { return std::make_shared<PyplotModule>(ctx); }
 
-bool PyplotModule::load() {
-    if (loaded_)
-        return true;
-    ReleaseGilAfterLoad releaseGil;
+void ensurePyplotInterpreter() {
     try {
-        if (!Py_IsInitialized()) {
-            PythonInitEnvGuard envGuard;
-            set_python_home_from_venv();
-            py::initialize_interpreter();
-            releaseGil.armed = true;
-            ensure_site_packages_in_path();
-            ensure_extra_python_paths_in_path();
-        }
+        camel::pyembed::ensureInitialized();
     } catch (const std::exception &e) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
-            std::string("Failed to load pyplot module: ") + e.what());
+            std::string("Failed to initialise pyplot's embedded Python interpreter at its first "
+                        "use: ") +
+                e.what());
     }
+}
+
+bool PyplotModule::load() {
+    if (loaded_)
+        return true;
+    // `import` executes no code (design principles 3.1; the language author's ruling of
+    // 2026-10-22; handover H221): loading registers the executor and the purity of the operator,
+    // which the declaration loader needs, and nothing that touches CPython. The interpreter is
+    // created by the first `plot` (`ensurePyplotInterpreter`), or attached to when `python`
+    // created it first.
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("pyplot", [ctx]() { return createPyplotExecutor(ctx); });
     // The purity of the module's operator (design principles 3.3). `plot` writes an image file

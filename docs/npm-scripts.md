@@ -115,16 +115,16 @@ It runs, in order:
 1. the fast layer -- `smoke`, `feat/**`, and the fast-tier `gpu/profile` plan at `--tier fast`;
 2. the slow layer -- eleven explicit plan files (the runnable set), named one by one:
    naming a file is what makes its slow tests run. It never takes a directory or `--tier all`;
-3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
-   --check`, `check-doc-links --all`, `check-retired-names`, `check-doc-snippets`,
-   `stdlib-declarations --check`, `check-std-includes`;
+3. the seven static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
+   --check`, `check-doc-links --all`, `check-doc-snippets`, `stdlib-declarations --check`,
+   `check-std-includes`;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
 install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — the rule that a
 run must not measure another tree's binary — refusing (exit 2) when the stamp is missing or does
 not match this tree's sources.
 
-It also never runs the nineteen plan files `agents/test.md` forbids on a shared host (GC stress
+It also never runs the eighteen plan files `agents/test.md` forbids on a shared host (GC stress
 and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
 reason on every run, and refuses with a message naming the policy when asked for one --
 `--tier all`, `--all`, `--suite`, or an `--include` / positional target that is, or contains, one

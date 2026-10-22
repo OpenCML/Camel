@@ -6,12 +6,12 @@
  */
 
 // The declarations of the operators of the C++ module `math` (`modules/math`). This file is the
-// one source of their fixed signatures (design principles 6.4; handover H19, step 10): the C++
-// side keeps the kernels, the executor, the operator traits, the numeric semantics and the
-// constants. Two entries are not declarations:
-//   - the computed signatures (`sqrt`, `shl`, `shr`) have a result type C++ computes from the
-//     argument; their reference entries are in `stdlib/signatures/math.cml`, named by the
-//     module's `computed:` field (handover H180).
+// one source of their signatures (design principles 6.4; handover H19, step 10): the C++ side
+// keeps the kernels, the executor, the operator traits, the numeric semantics and the constants.
+// Every operator is declared here and no computed signature is left (handover H202): `sqrt` and
+// the two shifts, whose result type C++ computes from the argument, are written out per spelling
+// (`i32`/`int` for `sqrt`, both integer types for a shift count), which is the whole accept set
+// of the old resolvers. One entry is not a declaration:
 //   - `// value` records a constant the C++ module exports; a value has no declaration to write,
 //     and the C++ module remains the one source of the value itself.
 
@@ -37,6 +37,14 @@ module math
 // value nan: float
 
 // ---- elementary functions ----
+
+/// The square root. An integer argument is converted: i32 gives f32, int gives float.
+/// @pure
+/// @example sqrt(9.0)    // 3
+export func sqrt(x: i32): f32
+export func sqrt(x: int): float
+export func sqrt(x: f32): f32
+export func sqrt(x: float): float
 
 /// The absolute value. The smallest integer has no positive counterpart: its absolute value is
 /// not defined.
@@ -379,6 +387,25 @@ export func hex(x: int): string
 //
 // Bit operations are functions, not operators. Integers are two's complement: `int` has 64
 // bits, `i32` has 32.
+
+/// x shifted left by count bits: bits shifted out are lost and zeros come in, so the sign may
+/// change. The count may be of either integer type.
+/// @pure
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x (64 for int, 32 for i32)
+/// @example shl(1, 4)    // 16
+export func shl(x: i32, count: i32): i32
+export func shl(x: i32, count: int): i32
+export func shl(x: int, count: i32): int
+export func shl(x: int, count: int): int
+
+/// x shifted right by count bits, keeping the sign (an arithmetic shift): shr(-8, 1) is -4.
+/// @pure
+/// @fails fault `InvalidArgument` when count is negative or not below the width of x
+/// @example shr(256, 4)    // 16
+export func shr(x: i32, count: i32): i32
+export func shr(x: i32, count: int): i32
+export func shr(x: int, count: i32): int
+export func shr(x: int, count: int): int
 
 /// The bits set in both a and b.
 /// @pure

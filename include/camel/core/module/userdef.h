@@ -175,6 +175,9 @@ class UserDefinedModule : public Module {
     void declareEntities() override;
     // A module written in Camel brings no names along with an import of it.
     void declareDefaultRefs() override {}
+    /// A declaration module answers for the operators of the C++ module it declares: its `rand:`
+    /// is the protocol of `random`'s operators, not a name of its own (handover H202).
+    std::vector<std::string> operatorProtocols() const override;
 
     static module_ptr_t fromFile(
         const std::string &name, const std::string &path, camel::core::context::context_ptr_t ctx);

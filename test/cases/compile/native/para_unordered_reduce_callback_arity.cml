@@ -1,0 +1,15 @@
+/**
+ * `para:unordered_reduce` declares its callback with exactly two ordinary parameters,
+ * `(acc: T, item: T) => T`: a third one is refused at the call. The old C++ resolver checked
+ * only that the callback had at least two, so this is the boundary H202 narrowed by declaration
+ * (handover H202, H223).
+ */
+module para_unordered_reduce_callback_arity
+
+import { unordered_reduce } from para
+
+func main(): int sync {
+    let xs: int[] = range(1, 5)
+    let total: int = unordered_reduce<(acc: int, item: int, extra: int): int => acc + item + extra, 0>(xs)
+    return total
+}

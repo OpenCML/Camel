@@ -1,9 +1,0 @@
-// A generic function is a template; every instance is a graph with concrete types.
-func first(xs: (typeas T)[]): T {
-    return xs[0]
-}
-
-func main(): int sync {
-    println(first([1, 2, 3]), first(['a', 'b']))
-    return 0
-}

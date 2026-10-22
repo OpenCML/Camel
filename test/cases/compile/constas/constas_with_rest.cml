@@ -1,0 +1,14 @@
+/**
+ * A `constas` parameter may be combined with a rest parameter (H51 ruling, 2026-10-22): the
+ * value is bound before the expansion, and the rest parameter takes the arguments left over.
+ */
+module constas_with_rest
+
+func first(constas offset: int, ..ts): int {
+    return offset + ts.[0]
+}
+
+func main(): int sync {
+    println(first(3, 1, 2))
+    return 0
+}

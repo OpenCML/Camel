@@ -45,6 +45,7 @@ FunctionType *closedSignature(FunctionType *declared) {
             declared->normTypeAt(i), declared->normIsVarAt(i));
     }
     factory.setExitType(declared->exitType());
+    factory.setResources(declared->resources());
     return factory.build();
 }
 

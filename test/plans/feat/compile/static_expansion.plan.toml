@@ -564,3 +564,138 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_indices"
+desc = "A rest parameter's build-time tuple is walked by `indices` and `static for`: the trip count is the number of arguments left over (zero included), `ts.[j]` reads the element, and an `indices` operand that is a tuple comprehension keeps its elements separate."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_indices.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ["6", "0", "17", "0 1", "9 10", "2"].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `build-time tuples changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_builds_no_value_node"
+desc = "`indices ts` and `ts.[j]` over a rest parameter build the argument nodes only: the graph of `main` has no FILL for `ts` and no ACCS for its elements, and the expansion is the hand-written sum."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_graph.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const at = lines.findIndex((line) => line.includes('label="main"'))
+assert(at > 0, "the graph of main is missing")
+const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+assert(end > at, "the graph of main has no end")
+const body = lines.slice(at, end)
+const fills = body.filter((line) => line.includes('type="FILL"'))
+assert(fills.length === 0, `a FILL was built for the build-time tuple: ${fills[0]}`)
+const accesses = body.filter((line) => line.includes('type="ACCS"'))
+assert(accesses.length === 0, `an ACCS was built for a build-time tuple element: ${accesses[0]}`)
+const calls = body.filter((line) => line.includes('type="CALL"') && line.includes('sum'))
+assert(calls.length === 0, `the rest call was not expanded: ${calls[0]}`)
+const adds = body.filter((line) => line.includes('label=":op/add_l"'))
+assert(adds.length === 3, `the expansion lost an addition: ${adds.length}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_escape_refused"
+desc = "A rest parameter's build-time tuple is not a value: returning it is refused with StaticTupleEscapes, not materialized."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_tuple_escape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::StaticTupleEscapes"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_function_materializes"
+desc = "A tuple comprehension returned by a function is a value: one FILL materializes it at the `return`, and the caller sees an ordinary tuple through the function value (FUNC then ACCS), not a build-time tuple."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_function.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const graphBody = (name) => {
+  const at = lines.findIndex((line) => line.includes(`label="${name}"`))
+  assert(at > 0, `the graph of ${name} is missing`)
+  const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+  const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+  assert(end > at, `the graph of ${name} has no end`)
+  return lines.slice(at, end)
+}
+const positions = graphBody("positions")
+const fills = positions.filter((line) => line.includes('type="FILL"'))
+assert(fills.length === 1, `the returned tuple was not materialized by one FILL: ${fills.length}`)
+const caller = graphBody("firstPosition")
+const functions = caller.filter((line) => line.includes('type="FUNC"') && line.includes('positions'))
+assert(functions.length === 1, `the caller does not read the function value: ${functions.length}`)
+const accesses = caller.filter((line) => line.includes('type="ACCS"'))
+assert(accesses.length === 1, `the caller does not project the returned tuple: ${accesses.length}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_is_not_a_runtime_tuple"
+desc = "A runtime tuple value is not a build-time tuple: `..t` over a parameter is still RestArgumentNotTuple, because its arity is not known when the call is compiled."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/static_tuple_runtime_tuple.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RestArgumentNotTuple"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_forward"
+desc = "`..ts` forwards a rest parameter's build-time tuple as its remaining argument nodes: the elements pass on with no FILL, and both rest calls are expanded into `main`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_forward.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "static_tuple_forward_builds_no_value_node"
+desc = "Forwarding `..ts` builds no value node for the build-time tuple: `main` has no FILL, no ACCS and no call to either rest function, only the three argument nodes and the three additions."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/static_tuple_forward.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const at = lines.findIndex((line) => line.includes('label="main"'))
+assert(at > 0, "the graph of main is missing")
+const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+assert(end > at, "the graph of main has no end")
+const body = lines.slice(at, end)
+assert(!body.some((line) => line.includes('type="FILL"')), "a FILL was built for the forwarded tuple")
+assert(!body.some((line) => line.includes('type="ACCS"')), "an ACCS was built for a forwarded element")
+assert(!body.some((line) => line.includes('label="forward"') || line.includes('label="sum"')), "a rest function was not expanded")
+const adds = body.filter((line) => line.includes('label=":op/add_l"'))
+assert(adds.length === 3, `the expansion lost an addition: ${adds.length}`)
+}
+"""
+timeout_ms = 8000

@@ -9,7 +9,7 @@
 > **第四阶段已实现（`lane/opsem-p4`）**：资源的声明与查询（`camel/core/resource_semantics.h`、`camel/runtime/resources.h`；事实种类 `core.resources`），见第 8 节开头；定义图的登记、构建与检查、展开（`OperatorTable::declareDefinition`、`camel/runtime/definitions.h`；`stdlib/tensor_definitions.cml`），见第 9 节开头。给 Tiles 的说明见 14.4 节。没有改变图的转储；程序的结果只有 `log_softmax` 的变了（内核改为照它的定义，Q10）；没有遍或后端默认展开定义图。`Indirect` 访问的 gather/scatter 算子仍不存在（数据结构自第二阶段就有），本阶段没有声明。
 
 状态：**设计稿，待语言作者过目。本稿不含任何源码改动。**
-依据：`docs/design-principles.cn.md`（3.3 的纯度、5.5 的泛型、第 7 节的"浮点的数值契约"、3.10 的 `do` 式循环头；第 15 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../loops/README.cn.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
+依据：`docs/design-principles.cn.md`（3.3 的纯度、5.5 的泛型、第 7 节的"浮点的数值契约"、3.10 的 `do` 式循环头；第 15 节）；[图的数据模型](../graph-model/README.cn.md)（3.5 节点卡片、3.8 算子表、3.10 不变量、第 4 节存储、5.1 C++ 接口、第 7 节迁移计划）；[循环](../../technical/39_loops.md)；[Indexed Computation, Schedules, and Resource Graphs](../indexed-computation/README.md)（下称 **IC 稿**）；[`modules/tiles`](../../../modules/tiles/README.md)。
 基线提交：`6bf31d1f`（`fsh-dev`，v0.2.12 合入之后）。
 相关：物理映射、`std::tiles` 遍的入口与块级内核语言见 [Tiles 的路线](../tiles-route/README.cn.md)（`std::tiles` 遍的入口与块级内核语言；下称 tiles-route），本稿不涉及。
 提出者：Tiles（CUDA 编译模块）的开发方，两轮需求；分工已经商定：**核心提供通用的协议与图结构；CUDA 映射、布局、Tensor Core、调度、流与事件、内存池、编译缓存、自动调优由 Tiles 实现。**
@@ -1057,7 +1057,7 @@ for (rt::gc_node_ref_t ref = 0; ref < g->nodeCount(); ++ref) {
 ```
 
 - 语义：每一轮先求条件（`While`、`ForWhile`；条件看得到状态，看不到元素），再取下一个元素（`For`、`ForWhile`），再求循环体；条件为假或元素取完即结束；循环的值是最后的状态。`camel/core/loop_kind.h` 写明了这一点。
-- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它，每个后端都在程序自己的图上执行，所以 `tiles.run<f>` 等在所有后端上收到的都是程序原来的 `f` 的图。声明了读图的算子（`OperatorTraits::readsGraphs`：Tiles 的 `run`、`run_device`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）直接拿到程序里的函数值，不需要把副本换回原图。新的模块算子若读函数值的图，同样在登记时声明 `readsGraphs`。
+- Tiles 在流水线的任何位置拿到的程序里 `LOOP` 都是结构化的：任何遍都不降级它，每个后端都在程序自己的图上执行，所以 `tiles.run_preferred_resident<f>` 等在所有后端上收到的都是程序原来的 `f` 的图。声明了读图的算子（`OperatorTraits::readsGraphs`：Tiles 的 `run_preferred_resident`、`source`、`inspect`、`benchmark`，`onnx:export_model`，`autodiff:grad`、`with_grad`）直接拿到程序里的函数值，不需要把副本换回原图。新的模块算子若读函数值的图，同样在登记时声明 `readsGraphs`。
 - 没有"在入口降级"这条路径：Tiles 直接读 `LoopView` 的两个区域。
 - 校验已保证：初值能赋给状态类型、循环体返回状态类型、条件返回 `bool`、元素端口类型是数组的元素类型、两张子图的捕获端口个数、次序、类型相同并与 `captures()` 一一对应（I18、I19）。
 
@@ -1287,7 +1287,7 @@ auto cached = facts.get<MyLayout>(kLayout, fact::Anchor{graph, ref}, target); //
 
 **图的转储不变；CPU 的结果只有 `log_softmax` 变了**（它的内核改为照定义，第 9 节开头：对数在 f32 里取，最后几位可能不同；Tiles 以定义为准对照）；没有遍或后端默认展开定义图。因为加了定义，`tensor:relu`、`tensor:mean` 的键升为 `@1.2`，`tensor:softmax`、`tensor:log_softmax`、`tensor:sigmoid` 第一次有语义记录（`@1.0`，只有定义）；编译缓存若记了这些键，次版本变化按 4.1 处理。
 
-**Tiles 自己的算子已声明资源**（`modules/tiles/src/module.cpp` 的 `load()`，核心为此对 Tiles 做的第二处改动；若 Tiles 想自己维护，直接改那一段即可）：设备内存是外部对象 `tiles:device`，驱动与设备是环境状态 `tiles:driver`；`upload` 新建 `tiles:device`；`download`、`run`、`benchmark` 读第 0 个操作数里的设备值；`run_device` 同样读，并新建 `tiles:device`，结果可能与输入别名（"returned inputs share native ownership"）；`source`、`inspect` 读 `tiles:driver`；全部有外部效应（与 traits 一致）。
+**Tiles 自己的算子已声明资源**（`modules/tiles/src/module.cpp` 的 `load()`，核心为此对 Tiles 做的第二处改动；若 Tiles 想自己维护，直接改那一段即可）：设备内存是外部对象 `tiles:device`，驱动与设备是环境状态 `tiles:driver`；`upload` 新建 `tiles:device`；`download`、`run_preferred_resident`、`benchmark` 读第 0 个操作数里的设备值；`run_preferred_resident` 新建 `tiles:device`，结果可能与输入别名（"returned inputs share native ownership"）；`source`、`inspect` 读 `tiles:driver`；全部有外部效应（与 traits 一致）。
 
 **查询一个节点碰了什么、两个节点要不要保持先后：**
 
@@ -1313,7 +1313,7 @@ for (const rt::RequiredOrdering &o : rt::requiredOrderings(*graph)) {
     o.first; o.second; o.why; o.ordered; o.byData;   // 冲突的一对，图是否已经排序、是否经由数据
 }
 rt::GraphFootprint fp = rt::footprintOf(calleeGraph);   // 一张图对收到的资源（端口、捕获）做了什么
-bool alias = rt::mayAlias(*graph, x, y);                  // 两个值可能是同一个资源吗
+bool alias = rt::mayAlias(program, *graph, x, y);         // 两个值可能是同一个资源吗
 ```
 
 事实种类 `core.resources`（`fact::coreKinds().resources`，值是 `NodeResources`）在碰了资源的节点上，`camel inspect --facts` 打印。异步完成不在核心：Tiles 的流与事件仍是它自己的，交出 Camel 值之前完成（8.2）；`sync`、`wait` 不是 GPU 原语。
@@ -1396,7 +1396,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 
 ### Q11 后端入口能否接受许可
 
-例如 `tiles.run<fn>(x)` 带一个"允许重排"的参数。候选：(A) 不能，许可只能写在 `fn` 的代码上；(B) 能，视为调用处写下的授予，作用于 `fn` 的整张图。
+例如 `tiles.run_preferred_resident<fn>(x)` 带一个"允许重排"的参数。候选：(A) 不能，许可只能写在 `fn` 的代码上；(B) 能，视为调用处写下的授予，作用于 `fn` 的整张图。
 **建议 A**：B 等于让调用者把许可传给被调用的函数，正是"被调用的函数不继承"所排除的；需要放宽就在 `fn` 上写标注。在前端支持标注之前，Tiles 只运行规范算法。
 
 ---

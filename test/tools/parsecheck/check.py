@@ -147,6 +147,8 @@ def write_probes(folder):
     return actual, [f"probes/{Path(path).name}" for path in actual]
 
 
+
+
 def read_golden():
     """The recorded lines, keyed by the path after the hash and the verdict."""
     if not GOLDEN.exists():

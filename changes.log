@@ -7,7 +7,8 @@ Changes:
 - `str::bytes`/`str::from_bytes` 删除：字符串与 UTF-8 字节之间只经 `bytes::encode`/`bytes::decode`；非法 UTF-8 现在是 `decode` 返回的 `EncodingError` 错误值，不再是 `from_bytes` 的故障。
 - 标准库的签名改由声明给出：`stdlib/<模块>.cml` 里无函数体的 `export func` 就是签名，26 个模块已迁（185 个声明名、301 条声明）；`stdlib/signatures/` 还剩 14 个文件，12 个是已迁模块里按类型计算的名字，2 个属于尚未迁移的模块（`ckpt` 和内建的 `globals`）。`inspect --ops` 与 `docs/stdlib-reference.md` 由声明生成，错元数、错类型在调用处拒绝并列出声明里的签名（含参数名）。
 - 结果类型随实参变的少数签名仍由 C++ 计算，声明文件里以 `// dynamic func` 或 `stdlib/signatures/<模块>.cml` 记下；`Tensor.shape` 这类限定名写不进声明，仍由 C++ 发布、指向声明的同一个算子，照常可用。
-- 资源名按设计原则 3.3 写平：`stdout`、`stdin`、`stderr`、`clock`、`env`、`rng`（原 `io:stdout`、`io:stdin`、`io:stderr`、`time:clock`、`process:environment`、`rand:generator`）；`process`、`fs`、`tensor:*`、`tiles:*`、`para:rendezvous`、`io:terminal` 不变。
+- 资源名按设计原则 3.3 写平：`stdout`、`stdin`、`stderr`、`clock`、`env`、`rng`（原 `io:stdout`、`io:stdin`、`io:stderr`、`time:clock`、`process:environment`、`rand:generator`）；`process`、`fs`、`tensor:*`、`tiles:*`、`para:rendezvous` 不变；终端模式并入 `stdin`，与读输入互相有序。
+- `eprintln` 进前奏，不用 import；它写标准错误，声明与 `println` 同形。`CAMEL_JSON_MAX_DEPTH` 删除：JSON 的深度上限是固定常量 10000，超过是错误值 `JsonTooDeep`。
 - ONNX 导出：只改名的聚合类型转换按目标类型标注、不生成算子——结构体字面量进入它命名的类型不再被拒，也不再写出 ONNX 没有的 `Cast`；循环体尾部的转换先脱掉，臂的叶子接受命名类型与字段顺序相同的匿名类型。
 - 数值许可成为标签：`@numeric(...)` 删除（写了是 `InvalidAnnotation`）；`#strict` 只拿走许可，不禁止逐位等价的改写（需要 `reassociate` 的重结合仍被拒，`x + x` 换成 `x * 2.0` 照常命中）；`rule` 可以带 `when` 条件，用 `#requires<...>` 声明许可。
 - 位置的期望类型只套在值上，不落进操作数：`let o: bool? = true || false` 能编译，`&&`/`||` 两侧仍是 `bool`，`??` 的两臂按 payload 取类型。

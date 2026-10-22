@@ -306,7 +306,17 @@ std::optional<DefinitionStore::LibraryFunction> DefinitionStore::libraryFunction
     // ports are bound from values that were computed (design principles 10.1). The graph the
     // caller runs is that program's root; its signature is the function's.
     std::shared_ptr<camel::compile::gir::DraftGraphBuilder> rootGraph;
-    const auto status = module->compileAsProgram(functionName, problem, rootGraph);
+    UserDefinedModule::ProgramStatus status = UserDefinedModule::ProgramStatus::Failed;
+    try {
+        status = module->compileAsProgram(functionName, problem, rootGraph);
+    } catch (const core::error::DiagnosticsLimitExceededBaseException &) {
+        // The compile stopped at the diagnostics limit of the context. In a `--timeit` context
+        // that limit is the first error, which is a property of the iteration, not of the
+        // library: the library still did not compile, and it is reported as such below, with
+        // its first error as the secondary location. Letting the limit escape here is what made
+        // `--timeit` print a bare `SyntaxDiag` instead of `InvalidPassParameter` (H210).
+        status = UserDefinedModule::ProgramStatus::Failed;
+    }
     LibraryLookup what;
     what.moduleFound = true;
     what.module      = module;

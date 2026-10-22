@@ -24,8 +24,8 @@
  * Off by default. It is switched on by `camel --time-phases` (standard error),
  * `camel --time-phases=<file>` or by the environment variable CAMEL_TIME_PHASES=<file>
  * (`-` is standard error), and the report is one JSON
- * object (see docs/technical/38_compile_pipeline_cost.md for the schema and for how
- * benchmarks/compile/ uses it).
+ * object: one entry per phase with its wall-clock time, and with the counting allocator
+ * also its allocations; benchmarks/compile/ renders the tables.
  *
  * Cost when off: a Scope is one load of a global flag and one branch at each end, and scopes
  * are only placed around whole phases (a module, a pass), never inside a loop over nodes.

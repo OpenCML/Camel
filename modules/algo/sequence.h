@@ -25,7 +25,6 @@
 #include <unordered_map>
 #include <vector>
 
-/// The operator groups and implementations of sequence.cpp, merged into the module by module.cpp
-/// and operators.cpp.
-const std::vector<oper_group_ptr_t> &getAlgoSequenceGroups();
+/// The implementations of sequence.cpp, merged into the module by operators.cpp. The operators
+/// are declared in `stdlib/algo.cml` (`argsort`, `flatten`, `unique`; handover H202).
 std::unordered_map<std::string, operator_t> getAlgoSequenceOpsMap();

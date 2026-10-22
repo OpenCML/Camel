@@ -1,6 +1,6 @@
 module tiles_math_ulp
 import { Tensor, load_npy, save_npy, exp, log } from tensor
-import { run, inspect } from tiles
+import { inspect, run_preferred_resident, download } from tiles
 import { get_env } from env
 func exponential(x: Tensor<f32>): Tensor<f32> { return exp(x) }
 func logarithm(x: Tensor<f32>): Tensor<f32> { return log(x) }
@@ -8,8 +8,8 @@ func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
     let x = load_npy(folder + '/exp.npy') as Tensor<f32>
     let y = load_npy(folder + '/log.npy') as Tensor<f32>
-    save_npy(run<exponential>(x), folder + '/exp_result.npy')
-    save_npy(run<logarithm>(y), folder + '/log_result.npy')
+    save_npy(download(run_preferred_resident<exponential>(x)), folder + '/exp_result.npy')
+    save_npy(download(run_preferred_resident<logarithm>(y)), folder + '/log_result.npy')
     println(inspect<exponential>(x))
     println(inspect<logarithm>(y))
     return 0

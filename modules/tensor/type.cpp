@@ -407,7 +407,8 @@ bool TensorType::extentForms(std::vector<ExtentForm> &out) const {
     return true;
 }
 
-OtherType *TensorType::withExtentValues(const ExtentValues &values) const {
+const Type *TensorType::withExtentValues(const ExtentValues &values, const ExtentPacks &packs) const {
+    (void)packs; // a tensor shape has no trailing pack; only the array type binds one
     if (!shape_ || forms_.empty()) {
         return const_cast<TensorType *>(this);
     }

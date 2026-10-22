@@ -25,6 +25,7 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/log.h"
 
+#include <algorithm>
 #include <limits>
 #include <new>
 #include <type_traits>
@@ -33,6 +34,7 @@ using namespace std;
 using namespace camel::core::type;
 using camel::core::internSymbol;
 using camel::core::symbolText;
+namespace sem = camel::core::sem;
 
 static_assert(
     sizeof(FunctionType) % alignof(Type *) == 0,
@@ -50,15 +52,19 @@ template <typename Parts>
 Parts partsOf(
     ModifierSet modifiers, const std::vector<param_t> &withTypes,
     const std::vector<param_t> &normTypes, Type *exitType, bool hasNames,
-    const std::vector<std::string> &argNames) {
+    const std::vector<std::string> &argNames, bool hasRest,
+    const std::vector<uint16_t> &constasIndices, const sem::ResourceSignature &resources) {
     Parts parts;
     parts.modifiers = modifiers;
+    parts.resources = resources;
     parts.params.reserve(withTypes.size() + normTypes.size());
     parts.params.insert(parts.params.end(), withTypes.begin(), withTypes.end());
     parts.params.insert(parts.params.end(), normTypes.begin(), normTypes.end());
-    parts.withCount = withTypes.size();
-    parts.exitType  = exitType;
-    parts.hasNames  = hasNames;
+    parts.withCount    = withTypes.size();
+    parts.exitType     = exitType;
+    parts.hasNames     = hasNames;
+    parts.hasRest      = hasRest;
+    parts.constasIndices = constasIndices;
     if (hasNames) {
         ASSERT(argNames.size() == parts.params.size(), "One name per parameter.");
         parts.names.reserve(argNames.size());
@@ -80,7 +86,10 @@ FunctionType *FunctionTypeFactory::build() {
         normTypes_,
         exitType_,
         hasNames_,
-        argNames_));
+        argNames_,
+        hasRest_,
+        constasIndices_,
+        resources_));
 }
 
 OpenFunctionType *FunctionTypeFactory::buildOpen() {
@@ -90,7 +99,10 @@ OpenFunctionType *FunctionTypeFactory::buildOpen() {
         normTypes_,
         exitType_,
         hasNames_,
-        argNames_));
+        argNames_,
+        hasRest_,
+        constasIndices_,
+        resources_));
 }
 
 // ---- Construction ----
@@ -104,7 +116,8 @@ FunctionType::FunctionType(const Parts &parts, bool open)
     : CompositeType(TypeCode::Function), exitType_(parts.exitType),
       modifiers_(parts.modifiers), withCount_(static_cast<uint16_t>(parts.withCount)),
       normCount_(static_cast<uint16_t>(parts.params.size() - parts.withCount)),
-      hasNames_(parts.hasNames), open_(open) {
+      hasNames_(parts.hasNames), hasRest_(parts.hasRest),
+      constasIndices_(parts.constasIndices), resources_(parts.resources), open_(open) {
     for (size_t i = 0; i < parts.params.size(); ++i) {
         const auto &[type, isVar] = parts.params[i];
         types()[i]                = type;
@@ -149,6 +162,40 @@ FunctionType *FunctionType::intern(const Parts &parts) {
     key.push_back(static_cast<uintptr_t>(parts.modifiers.mask));
     key.push_back(reinterpret_cast<uintptr_t>(parts.exitType));
     key.push_back(parts.hasNames ? 1 : 0);
+    key.push_back(parts.hasRest ? 1 : 0);
+    key.push_back(parts.constasIndices.size());
+    key.insert(key.end(), parts.constasIndices.begin(), parts.constasIndices.end());
+    // The resources are part of what a signature promises: two types that differ only there are
+    // not the same type (design effects plan 2.2).
+    key.push_back(static_cast<uintptr_t>(parts.resources.mode));
+    key.push_back(parts.resources.params.size());
+    for (const auto &use : parts.resources.params) {
+        key.push_back(use.index);
+        key.push_back(static_cast<uintptr_t>(use.cls));
+        key.push_back(static_cast<uintptr_t>(use.mode));
+        key.push_back(internSymbol(use.name));
+    }
+    key.push_back(parts.resources.captures.size());
+    for (uint8_t capture : parts.resources.captures) {
+        key.push_back(capture);
+    }
+    key.push_back(parts.resources.ambient.size());
+    for (const auto &use : parts.resources.ambient) {
+        key.push_back(internSymbol(use.name));
+        key.push_back(static_cast<uintptr_t>(use.mode));
+    }
+    key.push_back(parts.resources.anyOf.size());
+    for (sem::ResourceClass cls : parts.resources.anyOf) {
+        key.push_back(static_cast<uintptr_t>(cls));
+    }
+    key.push_back(static_cast<uintptr_t>(parts.resources.result.kind));
+    key.push_back(parts.resources.result.operand);
+    key.push_back(parts.resources.allocates ? 1 : 0);
+    if (parts.resources.allocates) {
+        key.push_back(static_cast<uintptr_t>(parts.resources.allocates->cls));
+        key.push_back(internSymbol(parts.resources.allocates->name));
+    }
+    key.push_back(parts.resources.external ? 1 : 0);
     for (const auto &[type, isVar] : parts.params) {
         key.push_back(reinterpret_cast<uintptr_t>(type));
         key.push_back(isVar ? 1 : 0);
@@ -168,6 +215,9 @@ FunctionType::Parts FunctionType::parts() const {
     parts.withCount = withCount_;
     parts.exitType  = exitType_;
     parts.hasNames  = hasNames_;
+    parts.hasRest   = hasRest_;
+    parts.constasIndices = constasIndices_;
+    parts.resources = resources_;
     parts.params.reserve(paramCount());
     for (size_t i = 0; i < paramCount(); ++i) {
         parts.params.emplace_back(types()[i], varMarks()[i] != 0);
@@ -206,6 +256,20 @@ FunctionType *FunctionType::create(
 FunctionType *FunctionType::withExitType(Type *exitType) const {
     Parts changed    = parts();
     changed.exitType = exitType;
+    return intern(changed);
+}
+
+FunctionType *FunctionType::withResources(const sem::ResourceSignature &resources) const {
+    if (resources_ == resources) {
+        return const_cast<FunctionType *>(this);
+    }
+    if (asOpen() != nullptr) {
+        OpenFunctionType *copy = OpenFunctionType::copyOf(this);
+        copy->setResources(resources);
+        return copy;
+    }
+    Parts changed     = parts();
+    changed.resources = resources;
     return intern(changed);
 }
 
@@ -285,7 +349,8 @@ bool FunctionType::assignableFrom(Type *other) const {
 
     const FunctionType &otherFunc = static_cast<const FunctionType &>(*other);
 
-    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_)
+    if (withCount_ != otherFunc.withCount_ || normCount_ != otherFunc.normCount_ ||
+        hasRest_ != otherFunc.hasRest_ || constasIndices_ != otherFunc.constasIndices_)
         return false;
 
     // Parameters are contravariant: this type's parameter must be acceptable where the other
@@ -302,5 +367,64 @@ bool FunctionType::assignableFrom(Type *other) const {
     } else if (exitType_ || otherFunc.exitType_) {
         return false;
     }
+
+    // Resources (design effects plan 2.2): a target that promises nothing accepts anything; a
+    // Concrete target accepts a Concrete source that uses no more (a `pure` function fits
+    // anywhere, an arbitrary one does not fit a pure position). A Generic source cannot be
+    // proved to fit a Concrete target.
+    const sem::ResourceSignature &target = resources_;
+    const sem::ResourceSignature &source = otherFunc.resources_;
+    if (target.mode == sem::ResourceSignature::Mode::Concrete) {
+        if (source.mode == sem::ResourceSignature::Mode::Generic) {
+            return false;
+        }
+        const auto coversMode = [](sem::AccessMode targetMode, sem::AccessMode sourceMode) {
+            return targetMode == sem::AccessMode::ReadModifyWrite ||
+                   targetMode == sourceMode;
+        };
+        for (const auto &use : source.params) {
+            const bool covered = std::any_of(
+                target.params.begin(), target.params.end(), [&](const auto &t) {
+                    return t.index == use.index && t.cls == use.cls && t.name == use.name &&
+                           coversMode(t.mode, use.mode);
+                });
+            const bool any = std::any_of(target.anyOf.begin(), target.anyOf.end(), [&](auto cls) {
+                return cls == use.cls || cls == sem::ResourceClass::Unknown;
+            });
+            if (!covered && !any) {
+                return false;
+            }
+        }
+        for (const auto &use : source.ambient) {
+            const bool covered = std::any_of(
+                target.ambient.begin(), target.ambient.end(), [&](const auto &t) {
+                    return t.name == use.name && coversMode(t.mode, use.mode);
+                });
+            if (!covered) {
+                return false;
+            }
+        }
+        for (uint8_t capture : source.captures) {
+            if (std::find(target.captures.begin(), target.captures.end(), capture) ==
+                target.captures.end()) {
+                return false;
+            }
+        }
+        for (sem::ResourceClass cls : source.anyOf) {
+            if (std::find(target.anyOf.begin(), target.anyOf.end(), cls) == target.anyOf.end()) {
+                return false;
+            }
+        }
+        if (source.allocates && !target.allocates) {
+            return false;
+        }
+        if (source.allocates && target.allocates && !(*source.allocates == *target.allocates)) {
+            return false;
+        }
+        if (source.external && !target.external) {
+            return false;
+        }
+    }
     return true;
 }
+

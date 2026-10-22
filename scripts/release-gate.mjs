@@ -19,7 +19,7 @@
 //                      one. Naming a file makes the runner run the whole plan, slow tests
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
-//   3. static checks-- the eight tree/compiler checks a release has to pass;
+//   3. static checks-- the seven tree/compiler checks a release has to pass;
 //   4. the policy  -- the 19 plans in FORBIDDEN are never run. The gate prints them by name,
 //                      with the reason and the policy, and refuses (exit 2) when a caller asks
 //                      for one (a positional target, `--include`, `--plan`, `--tier all`,
@@ -112,7 +112,6 @@ const FORBIDDEN = [
     { file: 'test/plans/feat/mm/gc_elder_exhaustion.plan.toml', reason: 'elder-generation exhaustion (`gc_elder_*`; agents/test.md)' },
     { file: 'test/plans/feat/opt/progen.plan.toml', reason: 'progen random-program check (agents/test.md)' },
     { file: 'test/plans/gpu/tiles_regions.plan.toml', reason: 'region run under GC stress (`CAMEL_GC_STRESS_SAFEPOINT=1` + `CAMEL_GC_VERIFY`)' },
-    { file: 'test/plans/gpu/tiles_decorator.plan.toml', reason: '`@gpu` decorator: ten GC-stress subprocesses per case' },
     // Files whose slow entries are forbidden; the whole file is skipped (the runner cannot select
     // a test by name, so naming the file would start the forbidden tests).
     { file: 'test/plans/feat/modules/autodiff.plan.toml', reason: 'its 5 slow tests compare against PyTorch (`*_vs_torch64`)' },
@@ -135,7 +134,6 @@ const STATIC_CHECKS = [
     { name: 'stdlib reference: docs/stdlib-reference.md is up to date', args: ['scripts/stdlib-reference.mjs', '--verify-doc'] },
     { name: 'diagnostics catalog: the code tables are consistent', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
-    { name: 'retired names: no reader-facing page teaches one', args: ['scripts/check-retired-names.mjs'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'] },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'] },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },

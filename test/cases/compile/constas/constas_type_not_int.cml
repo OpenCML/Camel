@@ -1,0 +1,14 @@
+/**
+ * The value may be any compile-time constant, not only an `int` (H51 ruling, 2026-10-22): a
+ * `float` value that no type reads is as legal as an `int` one.
+ */
+module constas_type_not_int
+
+func scale(constas k: float, x: float): float {
+    return k * x
+}
+
+func main(): int sync {
+    println(scale(2.5, 2.0))
+    return 0
+}

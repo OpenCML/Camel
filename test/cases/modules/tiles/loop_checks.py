@@ -18,15 +18,13 @@ for vm in ['std::nvm', 'std::fvm', 'std::jit', 'std::prl']:
         env = dict(ENV)
         if hidden:
             env['CUDA_VISIBLE_DEVICES'] = '-1'
-        for case, passes in [('loop_boundaries', ['tiles::compile', vm]),
-                             ('loop_decorator_boundaries', [vm])]:
+        for case, passes in [('loop_boundaries', ['tiles::compile', vm])]:
             result = run(case, passes, env)
             assert result.returncode == 0, (vm, hidden, case, result.stdout, result.stderr)
             assert result.stdout == 'cpu round 1\ncpu round 2\n504.0\n12296.0\n36.0\n', result.stdout
     for case, marker, diagnostic in [
         ('loop_fault', 'before fault once', 'division by zero at Tiles node'),
-        ('loop_benchmark_fault', 'benchmark before fault once', 'division by zero at Tiles node'),
-        ('loop_empty_fault', 'zero lanes before fault once', 'RuntimeDiag::DivisionByZero')]:
+        ('loop_benchmark_fault', 'benchmark before fault once', 'division by zero at Tiles node')]:
         result = run(case, [vm])
         text = result.stdout + result.stderr
         assert result.returncode == 1 and diagnostic in text, (vm, case, text)

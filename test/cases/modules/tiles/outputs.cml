@@ -1,6 +1,6 @@
 module tiles_outputs
 import { Tensor, reshape, sum, abs, transpose, slice } from tensor
-import { run, inspect, benchmark } from tiles
+import { inspect, benchmark, run_preferred_resident, download } from tiles
 
 type Results = { first: Tensor<f32>, rest: (Tensor<f32>, Tensor<f32>) }
 func compute(x: Tensor<f32>): Results {
@@ -13,16 +13,16 @@ func identity(x: Tensor<f32>): (Tensor<f32>, Tensor<f32>) { return (x, x) }
 func with_empty(x: Tensor<f32>): (Tensor<f32>, Tensor<f32>) { return (slice(x, 0, 0, 0), x + 2.0) }
 func main(): int sync {
     let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
-    let gpu = run<compute>(x)
+    let gpu = download(run_preferred_resident<compute>(x))
     let cpu = compute(x)
     println(sum(abs(gpu.first - cpu.first)))
     println(sum(abs(gpu.rest.0 - cpu.rest.0)))
     println(sum(abs(gpu.rest.1 - cpu.rest.1)))
-    println(sum(abs(run<consume>(gpu) - consume(cpu))))
-    println(sum(abs(run<through>(x) - through(x))))
-    let same = run<identity>(x)
+    println(sum(abs(download(run_preferred_resident<consume>(gpu)) - consume(cpu))))
+    println(sum(abs(download(run_preferred_resident<through>(x)) - through(x))))
+    let same = download(run_preferred_resident<identity>(x))
     println(sum(abs(same.0 - same.1)))
-    let mixed = run<with_empty>(x)
+    let mixed = download(run_preferred_resident<with_empty>(x))
     println(sum(mixed.0))
     println(sum(abs(mixed.1 - (x + 2.0))))
     println(inspect<compute>(x))

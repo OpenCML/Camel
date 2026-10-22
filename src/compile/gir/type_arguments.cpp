@@ -125,7 +125,13 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
         for (size_t i = 0; i < types.size(); ++i) {
             bindings.emplace_back(names[i], types[i]);
         }
-        auto graph = instantiateGeneric(tmpl, bindings, gct);
+        if (tmpl->funcType->hasConstas()) {
+            diags_->of(SemanticDiag::ConstasFunctionNeedsCall)
+                .atOrigin(gct->origin())
+                .commit(tmpl->name);
+            throw BuildAbortException();
+        }
+        auto graph = instantiateGeneric(tmpl, bindings, {}, {}, gct);
         currGraph_->addDependencyGraph(graph);
         return createFuncDataNode(graph, true, false);
     }

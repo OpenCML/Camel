@@ -1,0 +1,6 @@
+/// H220 trap 3: the `pkg/lib.cml` of the first root (value 1).
+module lib
+
+export func n(): int {
+    return 1
+}

@@ -170,3 +170,98 @@ expect_output_contains = ["PassNotProvidedByModule", "Module 'rewrite' provides 
 expect_output_not_contains = ["not found, available passes are", "2011"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 20000
+
+# H209: `data` says where a diagnostic is, not what it is about. A pass name is a command-line
+# matter and has no file, so `data.moduleName` and `data.modulePath` are empty -- the same
+# diagnostic prints `():?:?:` in the short text form. What it is about is not lost: `data.stage`
+# carries `pass:<module>::<pass>` and the message carries the rest. A JSON consumer reads
+# `stage`; it must not synthesize a module out of the two location fields. The contract is
+# stated in docs/technical/30_diagnostics_reporting.md, "The JSON `data` object".
+
+[[tests]]
+name = "json_data_of_a_pass_the_module_does_not_provide"
+desc = "no_pass::run with --output-format json: one diagnostic whose data.stage names the module and the pass while both location fields stay empty (a command line has no file), and whose message names both. This is the H209 instance (hash::nosuchpass) in the form its own module provides."
+kind = "behavior"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["--output-format", "json", "${case}", "no_pass::run", "std::nvm"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 1, 'one diagnostic: ' + input.stdout)
+const d = diags[0]
+assert(d.code === '0x04000186', 'code: ' + d.code)
+assert(d.data.name === 'RuntimeDiag::PassNotProvidedByModule', 'name: ' + d.data.name)
+assert(d.data.stage === 'pass:no_pass::run', 'stage names the module and the pass: ' + d.data.stage)
+assert(d.data.moduleName === '' && d.data.modulePath === '',
+    'a command-line diagnostic has no file: ' + JSON.stringify(d.data))
+assert(d.range.start.line === 0 && d.range.start.character === 0 && d.range.end.line === 0 && d.range.end.character === 0,
+    'no source range: ' + JSON.stringify(d.range))
+assert(d.message.includes("Module 'no_pass' provides no pass 'run'"), 'message names both: ' + d.message)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "json_data_of_a_pass_the_module_does_not_export"
+desc = "declares_not_exported::run with --output-format json: the same envelope for the other H130 code; stage names the module and the pass, both location fields are empty."
+kind = "behavior"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["--output-format", "json", "${case}", "declares_not_exported::run", "std::nvm"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 1, 'one diagnostic: ' + input.stdout)
+const d = diags[0]
+assert(d.code === '0x04000187', 'code: ' + d.code)
+assert(d.data.name === 'RuntimeDiag::PassNotExportedByModule', 'name: ' + d.data.name)
+assert(d.data.stage === 'pass:declares_not_exported::run', 'stage names the module and the pass: ' + d.data.stage)
+assert(d.data.moduleName === '' && d.data.modulePath === '',
+    'a command-line diagnostic has no file: ' + JSON.stringify(d.data))
+assert(d.message.includes("Module 'declares_not_exported' declares 'run'"), 'message names both: ' + d.message)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "json_data_of_a_pass_module_that_cannot_be_loaded"
+desc = "unloadable::run with --output-format json: the pass specification is refused with InvalidPassParameter, and the same envelope holds -- stage names the specification, both location fields are empty because the refusal is about the command line (the loader's words are in the message and are not pinned here)."
+kind = "behavior"
+case = "../../../cases/modules/pass_not_found/main.cml"
+args = ["--output-format", "json", "${case}", "unloadable::run", "std::nvm"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 1, 'one diagnostic: ' + input.stdout)
+const d = diags[0]
+assert(d.code === '0x04000060', 'code: ' + d.code)
+assert(d.data.name === 'RuntimeDiag::InvalidPassParameter', 'name: ' + d.data.name)
+assert(d.data.stage === 'pass:unloadable::run', 'stage names the specification: ' + d.data.stage)
+assert(d.data.moduleName === '' && d.data.modulePath === '',
+    'a command-line diagnostic has no file: ' + JSON.stringify(d.data))
+assert(d.message.includes("its library 'unloadable' cannot be loaded"), 'message: ' + d.message)
+assert(!input.stdout.includes('42'), 'the program must not run')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "json_data_of_the_reported_instance"
+desc = "hash::nosuchpass with --output-format json, the run H209 was reported from: hash is a declaration module that provides no passes; the message is the whole answer and data.stage carries hash::nosuchpass, while both location fields are empty because a command line has no file."
+kind = "behavior"
+case = "../../../cases/linear/byref/wait_direct_user.cml"
+args = ["--output-format", "json", "${case}", "hash::nosuchpass"]
+expect_exit = 1
+verify_script = """
+const diags = JSON.parse(input.stdout)
+assert(diags.length === 1, 'one diagnostic: ' + input.stdout)
+const d = diags[0]
+assert(d.code === '0x04000186', 'code: ' + d.code)
+assert(d.data.stage === 'pass:hash::nosuchpass', 'stage: ' + d.data.stage)
+assert(d.data.moduleName === '' && d.data.modulePath === '',
+    'a command-line diagnostic has no file: ' + JSON.stringify(d.data))
+assert(d.message === "Module 'hash' provides no pass 'nosuchpass'; it provides no passes.",
+    'message: ' + d.message)
+assert(!input.stdout.includes('2011'), 'the program must not run')
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000

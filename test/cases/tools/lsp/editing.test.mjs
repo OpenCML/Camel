@@ -99,17 +99,20 @@ await withServer(async (ls) => {
             .replace('    return 0\n}', `    let r = ${expr}::/*c*/\n    return 0\n}`))
         return complete(m, 'c')
     }
-    items = await membersOf('import math', 'math')
-    check(labels(items).includes('sqrt'), 'the exports of a module after `::`', labels(items).slice(0, 20))
-    check((items.find((i) => i.label === 'sqrt') || {}).detail !== undefined,
-        'with their signatures', items.find((i) => i.label === 'sqrt'))
-    // The two shapes side by side: `sqrt` is computed in C++, `abs` is declared in math.cml.
-    checkEq(items.find((i) => i.label === 'sqrt').detail, '(val: float | double) => float | double',
-        'a computed member keeps the signature C++ computes')
-    const abs = items.find((i) => i.label === 'abs')
-    check(abs !== undefined && abs.detail.startsWith('(x: i32) => i32') &&
-        abs.detail.includes('(+5 overloads)'),
-        'a declared member carries its declared overloads', abs)
+    items = await membersOf('import graph', 'graph')
+    check(labels(items).includes('program_of'), 'the exports of a module after `::`', labels(items).slice(0, 20))
+    check((items.find((i) => i.label === 'program_of') || {}).detail !== undefined,
+        'with their signatures', items.find((i) => i.label === 'program_of'))
+    // The two shapes side by side: `program_of` is computed in C++ (the type of a function value,
+    // which a declaration cannot state), and `constant` is declared in graph.cml per sample type.
+    // `sqrt` was the computed half until H202 turned all of `math` into declarations.
+    const programOf = items.find((i) => i.label === 'program_of')
+    check(programOf !== undefined && programOf.detail.startsWith('(f: F)'),
+        'a computed member keeps the signature C++ computes', programOf)
+    const constant = items.find((i) => i.label === 'constant')
+    check(constant !== undefined && constant.detail.startsWith('(n: Node, sample: i32) => i32?') &&
+        constant.detail.includes('(+5 overloads)'),
+        'a declared member carries its declared overloads', constant)
     // A module whose every name is declared: no `exportEntity` answers for it any more.
     items = await membersOf('import re', 're')
     checkEq(labels(items), ['test'], 'the members of a module that is all declarations')
@@ -124,10 +127,10 @@ await withServer(async (ls) => {
         })
         return r ? r.contents.value : null
     }
-    let h = await hoverMember('import math', 'math::sqrt(4.0)', 'math::sqrt', 7)
-    check(h !== null && h.includes('sqrt: (val: float | double) => float | double'),
+    let h = await hoverMember('import graph', 'graph::program_of((x: float): float => x + 1.0)', 'graph::program_of', 7)
+    check(h !== null && h.includes('program_of: (f: F) => Program'),
         'hover on a computed member of a migrated module', h)
-    check(h.includes('Function of module `math`'), 'naming the module it comes from', h)
+    check(h.includes('Function of module `graph`'), 'naming the module it comes from', h)
     h = await hoverMember('import re', 're::test("a", "b")', 're::test', 5)
     check(h !== null && h.includes('test: (pattern: string, text: string) => bool'),
         'hover on a declared member of a migrated module', h)
@@ -203,10 +206,10 @@ ${body}
     m = edit(MAIN.replace('    return 0\n}', '    let z = (1, /*t*/2)\n    return 0\n}'))
     checkEq(await help(m, 't'), null, 'no signature help inside a tuple')
     // A member of a migrated module: a computed signature and a declared one.
-    m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')
-        .replace('    return 0\n}', '    let r = math::sqrt(/*m*/4.0)\n    return 0\n}'))
+    m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport graph')
+        .replace('    return 0\n}', '    let r = graph::program_of(/*m*/(x: float): float => x + 1.0)\n    return 0\n}'))
     sh = await help(m, 'm')
-    check(sh !== null && sh.signatures[0].label.includes('sqrt: (val: float | double)'),
+    check(sh !== null && sh.signatures[0].label.includes('program_of: (f: F)'),
         'signature help on a computed member of a migrated module', sh)
     checkEq(sh.activeParameter, 0, 'its first argument is active')
     m = edit(MAIN.replace('import { now } from time', 'import { now } from time\nimport math')

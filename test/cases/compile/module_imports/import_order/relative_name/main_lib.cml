@@ -1,0 +1,11 @@
+/// H232: the ordinary relative case that must keep working. A plain name is looked for in the
+/// importing module's own directory first (design principles 10.2), so this takes lib.cml beside
+/// it (local-lib), not a file of any module root.
+module main_lib
+
+import lib
+
+func main(): int sync {
+    println(lib::name())
+    return 0
+}

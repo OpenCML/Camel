@@ -24,6 +24,7 @@
 
 #include "camel/core/resource_semantics.h"
 
+#include <algorithm>
 #include <format>
 
 namespace camel::core::sem {
@@ -40,6 +41,8 @@ std::string_view resourceClassName(ResourceClass cls) {
         return "foreign";
     case ResourceClass::Ambient:
         return "ambient";
+    case ResourceClass::Handle:
+        return "handle";
     }
     return "unknown";
 }
@@ -182,7 +185,8 @@ std::optional<std::string> checkVarParameters(
 
 std::optional<std::string> checkResources(const ResourceSpec &spec) {
     const auto named = [](ResourceClass cls) {
-        return cls == ResourceClass::Foreign || cls == ResourceClass::Ambient;
+        return cls == ResourceClass::Foreign || cls == ResourceClass::Ambient ||
+               cls == ResourceClass::Handle;
     };
     for (const ResourceAccess &access : spec.accesses) {
         const Resource &r = access.resource;
@@ -213,10 +217,12 @@ std::optional<std::string> checkResources(const ResourceSpec &spec) {
     if (spec.allocates) {
         if (spec.allocates->cls == ResourceClass::Unknown ||
             spec.allocates->cls == ResourceClass::Ambient) {
-            return std::string("an operator allocates a variable, an object or a foreign resource");
+            return std::string(
+                "an operator allocates a variable, an object, a handle or a foreign resource");
         }
         if (named(spec.allocates->cls) == spec.allocates->name.empty()) {
-            return std::string("the resource it allocates is named exactly when it is foreign");
+            return std::string(
+                "the resource it allocates is named exactly when it is a handle or foreign");
         }
     }
     const ResultAlias::Kind k = spec.result.kind;
@@ -297,6 +303,106 @@ std::string toString(const ResourceSpec &spec) {
     }
     if (spec.externalEffect) {
         part("external");
+    }
+    return out;
+}
+
+ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
+    ResourceSignature sig;
+    sig.mode    = ResourceSignature::Mode::Concrete;
+    sig.result  = spec.result;
+    sig.allocates = spec.allocates;
+    sig.external  = spec.externalEffect;
+    const auto uniteMode = [](AccessMode a, AccessMode b) {
+        return writes(a) || writes(b) ? AccessMode::ReadModifyWrite : AccessMode::Read;
+    };
+    for (const ResourceAccess &access : spec.accesses) {
+        switch (access.binding.kind) {
+        case ResourceBinding::Kind::Norm:
+        case ResourceBinding::Kind::With: {
+            // The signature numbers with parameters first, ordinary ones after them; a spec
+            // numbers the two kinds separately.
+            const size_t index =
+                size_t(access.binding.index) +
+                (access.binding.kind == ResourceBinding::Kind::With ? 0 : withCount);
+            if (index > 0xFF) {
+                break;
+            }
+            auto found = std::find_if(sig.params.begin(), sig.params.end(), [&](const auto &use) {
+                return use.index == index;
+            });
+            if (found == sig.params.end()) {
+                sig.params.push_back(
+                    ResourceSignature::ParamUse{
+                        .index = static_cast<uint8_t>(index),
+                        .cls   = access.resource.cls,
+                        .name  = access.resource.name,
+                        .mode  = access.mode});
+            } else {
+                // One parameter, one resource: two declarations of it are one use.
+                if (found->cls != access.resource.cls) {
+                    found->cls = ResourceClass::Unknown;
+                }
+                if (found->name.empty()) {
+                    found->name = access.resource.name;
+                }
+                found->mode = uniteMode(found->mode, access.mode);
+            }
+            break;
+        }
+        case ResourceBinding::Kind::Ambient: {
+            auto found = std::find_if(sig.ambient.begin(), sig.ambient.end(), [&](const auto &use) {
+                return use.name == access.resource.name;
+            });
+            if (found == sig.ambient.end()) {
+                sig.ambient.push_back(
+                    ResourceSignature::AmbientUse{
+                        .name = access.resource.name, .mode = access.mode});
+            } else {
+                found->mode = uniteMode(found->mode, access.mode);
+            }
+            break;
+        }
+        case ResourceBinding::Kind::Capture:
+            sig.captures.push_back(access.binding.index);
+            break;
+        }
+    }
+    std::sort(sig.params.begin(), sig.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    std::sort(sig.ambient.begin(), sig.ambient.end(), [](const auto &a, const auto &b) {
+        return a.name < b.name;
+    });
+    std::sort(sig.captures.begin(), sig.captures.end());
+    sig.captures.erase(std::unique(sig.captures.begin(), sig.captures.end()), sig.captures.end());
+    return sig;
+}
+
+std::string toString(const ResourceSignature &signature) {
+    if (signature.mode == ResourceSignature::Mode::Generic) {
+        return {};
+    }
+    if (signature.pure()) {
+        return "pure";
+    }
+    std::string out = "uses ";
+    bool first      = true;
+    const auto add  = [&](const std::string &name) {
+        out += (first ? "" : ", ") + name;
+        first = false;
+    };
+    for (const auto &use : signature.params) {
+        add(std::format("#{}", use.index));
+    }
+    for (const auto &use : signature.ambient) {
+        add(use.name);
+    }
+    for (ResourceClass cls : signature.anyOf) {
+        add(std::format("any {}", resourceClassName(cls)));
+    }
+    for (uint8_t capture : signature.captures) {
+        add(std::format("capture {}", capture));
     }
     return out;
 }

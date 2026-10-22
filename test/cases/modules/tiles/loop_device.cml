@@ -1,6 +1,6 @@
 module tiles_loop_device
 import { Tensor, load_npy, save_npy } from tensor
-import { run, source } from tiles
+import { source, run_preferred_resident, download } from tiles
 import { get_env } from env
 
 func scalar(a: float, bias: float): float {
@@ -20,17 +20,17 @@ func main(): int sync {
     let folder = get_env('TILES_TEST_OUT')
     let a = load_npy(folder + '/a.npy') as Tensor<f32>
     let b = load_npy(folder + '/b.npy') as Tensor<f32>
-    println(scalar(1.0, 0.25), run<scalar>((1.0, 0.25)))
-    println(scalar(3.0, -2.0), run<scalar>((3.0, -2.0)))
-    println(scalar(1.0, 0.25), run<scalar>((1.0, 0.25)))
+    println(scalar(1.0, 0.25), download(run_preferred_resident<scalar>((1.0, 0.25))))
+    println(scalar(3.0, -2.0), download(run_preferred_resident<scalar>((3.0, -2.0))))
+    println(scalar(1.0, 0.25), download(run_preferred_resident<scalar>((1.0, 0.25))))
     save_npy(recurrence(a, b), folder + '/cpu0.npy')
-    save_npy(run<recurrence>((a, b)), folder + '/gpu0.npy')
+    save_npy(download(run_preferred_resident<recurrence>((a, b))), folder + '/gpu0.npy')
     save_npy(recurrence(b, a), folder + '/cpu1.npy')
-    save_npy(run<recurrence>((b, a)), folder + '/gpu1.npy')
-    save_npy(run<recurrence>((a, b)), folder + '/gpu2.npy')
+    save_npy(download(run_preferred_resident<recurrence>((b, a))), folder + '/gpu1.npy')
+    save_npy(download(run_preferred_resident<recurrence>((a, b))), folder + '/gpu2.npy')
     save_npy(no_round(a, b), folder + '/cpu3.npy')
-    save_npy(run<no_round>((a, b)), folder + '/gpu3.npy')
-    save_npy(run<rounding>((a, b)), folder + '/gpu4.npy')
+    save_npy(download(run_preferred_resident<no_round>((a, b))), folder + '/gpu3.npy')
+    save_npy(download(run_preferred_resident<rounding>((a, b))), folder + '/gpu4.npy')
     println('LOOP_SOURCE')
     println(source<recurrence>((a, b)))
     return 0

@@ -10,7 +10,7 @@
  *
  * Author: Zhenjie Wei
  * Created: Feb. 22, 2026
- * Updated: Mar. 07, 2026
+ * Updated: Oct. 22, 2026
  * Supported by: National Key Research and Development Program of China
  */
 
@@ -27,3 +27,10 @@ class PyplotModule : public camel::core::module::BuiltinModule {
 
     static camel::core::module::module_ptr_t create(camel::core::context::context_ptr_t ctx);
 };
+
+/// Called at the top of `plot`, before it takes the GIL. The first call creates the process's
+/// embedded interpreter (or attaches to the one `python` created) and every later call is a
+/// no-op; a fault is thrown here when CPython cannot be initialised. `import pyplot` no longer
+/// runs any of this (design principles 3.1; the language author's ruling of 2026-10-22; handover
+/// H221).
+void ensurePyplotInterpreter();

@@ -220,7 +220,7 @@ What a rule deliberately does **not** select, because the project forbids it on 
 
 - `test/plans/perf/**` (benchmarks and the PyTorch showcase comparisons);
 - the GC-stress plans `feat/mm/gc`, `feat/mm/gc_collections`, `feat/mm/gc_elder_exhaustion`,
-  `gpu/tiles_regions`, `gpu/tiles_decorator`;
+  `gpu/tiles_regions`;
 - the random-program check `feat/opt/progen.plan.toml`.
 
 No file rule names them, and the `test/plans/` self rule excludes them: editing one of those plan
@@ -269,7 +269,7 @@ that area, specific rules first (`src/passes/sched/` before `src/passes/`, `modu
 `modules/`). A rule that selects one plan too many is better than a rule that selects none, but say
 the cost: `stdlib/rules.cml` selects the whole `feat/opt` directory (the rewrite engine can change
 any optimized result), which is 710 tests plus smoke; `modules/tiles/**` selects six plan files and
-the 88 GPU tests among them. Add a rule when a new subsystem gets a plan of its own; do not add a
+the 87 GPU tests among them. Add a rule when a new subsystem gets a plan of its own; do not add a
 rule that maps every change to every plan.
 
 ## Top-Level Plan Fields

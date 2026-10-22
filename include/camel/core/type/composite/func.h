@@ -48,9 +48,11 @@
 #pragma once
 
 #include "camel/core/func.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/symbol.h"
 #include "camel/core/type/composite/composite.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -77,6 +79,8 @@ class FunctionTypeFactory {
 
     void setModifiers(ModifierSet mod) { modifiers_ = mod; }
     void setExitType(Type *type) { exitType_ = type; }
+    /// The resources the signature publishes (design effects plan 2.2); Generic when not set.
+    void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
 
     void addWithArg(const std::string &ident, Type *type, bool isVar) {
         withTypes_.emplace_back(type, isVar);
@@ -87,6 +91,29 @@ class FunctionTypeFactory {
         normTypes_.emplace_back(type, isVar);
         argNames_.push_back(ident);
     }
+
+    /// The last ordinary parameter is a rest parameter (`..ts`): it stands for the arguments
+    /// left over at a call and is expanded there (design principles 5.5). It is added after
+    /// every other ordinary parameter, as a `void` parameter that no call ever passes a value
+    /// for; `hasRest` tells it apart from an ordinary `void` parameter.
+    void addRestArg(const std::string &ident) {
+        hasRest_ = true;
+        normTypes_.emplace_back(Type::Void(), false);
+        argNames_.push_back(ident);
+    }
+
+    /// A `constas n: T` parameter: it records a compile-time value that is part of the
+    /// declaration's identity, not a runtime argument (design principles 5.4). Its type stays in
+    /// the signature so that the call site is checked against it, and the recorded index tells it
+    /// apart from an ordinary parameter of the same type. A declaration may have any number of
+    /// them, in any position among the ordinary parameters.
+    void addConstasArg(const std::string &ident, Type *type) {
+        constasIndices_.push_back(static_cast<uint16_t>(withTypes_.size() + normTypes_.size()));
+        normTypes_.emplace_back(type, false);
+        argNames_.push_back(ident);
+    }
+
+    bool hasConstas() const { return !constasIndices_.empty(); }
 
     /// Whether the signature records the parameter names given to addWithArg/addNormArg (the
     /// default). Without them it prints the parameter types only.
@@ -103,7 +130,11 @@ class FunctionTypeFactory {
     std::vector<param_t> normTypes_;
     Type *exitType_ = nullptr;
     bool hasNames_  = true;
+    bool hasRest_   = false;
     std::vector<std::string> argNames_;
+    sem::ResourceSignature resources_;
+    /// The parameters written with `constas`, as indices over all parameters (`with` first).
+    std::vector<uint16_t> constasIndices_;
 };
 
 class FunctionType : public CompositeType {
@@ -126,6 +157,11 @@ class FunctionType : public CompositeType {
 
     /// The interned signature equal to this one in everything but the result type.
     FunctionType *withExitType(Type *exitType) const;
+
+    /// The resources this function type publishes (design effects plan 2.2).
+    const sem::ResourceSignature &resources() const { return resources_; }
+    /// The interned signature equal to this one in everything but its resources.
+    FunctionType *withResources(const sem::ResourceSignature &resources) const;
 
     /// This signature as an OpenFunctionType, or nullptr when it is not open.
     OpenFunctionType *asOpen() const;
@@ -160,6 +196,24 @@ class FunctionType : public CompositeType {
     bool normIsVarAt(size_t index) const {
         ASSERT(index < normCount_, "Index out of range");
         return varMarks()[withCount_ + index] != 0;
+    }
+
+    /// Whether the last ordinary parameter is a rest parameter (`..ts`). Its type in this
+    /// signature is `void`; the tuple of the arguments it receives is made at the call.
+    bool hasRest() const { return hasRest_; }
+
+    /// Whether the signature has a `constas n: T` parameter, which ones they are (indices over
+    /// all parameters, `with` parameters first), and whether a given parameter is one.
+    bool hasConstas() const { return !constasIndices_.empty(); }
+    size_t constasCount() const { return constasIndices_.size(); }
+    const std::vector<uint16_t> &constasIndices() const { return constasIndices_; }
+    bool isConstasAt(size_t index) const {
+        return std::find(constasIndices_.begin(), constasIndices_.end(), index) !=
+               constasIndices_.end();
+    }
+    bool normIsConstasAt(size_t index) const {
+        ASSERT(index < normCount_, "Index out of range");
+        return isConstasAt(withCount_ + index);
     }
 
     std::span<Type *const> withTypesSpan() const { return {types(), withCount_}; }
@@ -199,7 +253,10 @@ class FunctionType : public CompositeType {
         size_t withCount = 0;
         Type *exitType   = nullptr;
         bool hasNames    = false;
+        bool hasRest     = false;
+        std::vector<uint16_t> constasIndices;
         std::vector<SymId> names;
+        sem::ResourceSignature resources;
     };
 
     FunctionType(const Parts &parts, bool open);
@@ -241,7 +298,13 @@ class FunctionType : public CompositeType {
     uint16_t withCount_ = 0;
     uint16_t normCount_ = 0;
     bool hasNames_      = false;
+    bool hasRest_       = false;
+    /// The parameters written with `constas`, as indices over all parameters (`with` first):
+    /// a compile-time value at the call, not a runtime parameter (design principles 5.4).
+    std::vector<uint16_t> constasIndices_;
     bool open_          = false;
+    /// The resources the signature publishes (Generic when it says nothing).
+    sem::ResourceSignature resources_;
     // Followed in memory by the parameter arrays (see the file comment).
 };
 
@@ -255,6 +318,8 @@ class OpenFunctionType final : public FunctionType {
   public:
     /// Sets the result type, once the body that decides it is built.
     void setExitType(Type *type) { exitType_ = type; }
+    /// Sets the resources once the body (or the declaration) decides them.
+    void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
 
     /// A new open signature with the same parts as `type`, its parameter names included.
     static OpenFunctionType *copyOf(const FunctionType *type);

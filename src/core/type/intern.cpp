@@ -87,4 +87,36 @@ size_t TypeTable::hits() const {
     return hits_;
 }
 
+const std::vector<ExtentForm> *TypeTable::internExtents(std::span<const ExtentForm> extents) {
+    if (extents.empty()) {
+        // No dimensions is not a shape of one unknown dimension; the caller maps both to the
+        // one word keeping them apart.
+        return nullptr;
+    }
+    // The text of a normalized form is canonical (terms sorted by name, zero terms dropped),
+    // so two spellings of one shape produce one entry.
+    std::string key;
+    for (size_t i = 0; i < extents.size(); ++i) {
+        if (i != 0) {
+            key += ',';
+        }
+        key += extents[i].toString();
+    }
+    std::lock_guard lock(mutex_);
+    auto [it, inserted] = extents_.try_emplace(std::move(key));
+    if (inserted) {
+        it->second.assign(extents.begin(), extents.end());
+    }
+    return &it->second;
+}
+
+const std::string *TypeTable::internText(std::string_view text) {
+    if (text.empty()) {
+        return nullptr;
+    }
+    std::lock_guard lock(mutex_);
+    auto [it, inserted] = texts_.try_emplace(std::string(text));
+    return &it->first;
+}
+
 } // namespace camel::core::type

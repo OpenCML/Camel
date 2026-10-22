@@ -29,7 +29,7 @@ const purity = Object.fromEntries(ops.map((o) => [o.uri, o.purity]))
 const notPure = ['time:now', 'time:strftime', 'time:strptime', 'rand:rand', 'rand:seed', 'rand:shuffle', 'rand:choice', 'env:get_env', 'env:get_cwd',
   'fs:read_text', 'fs:try_read_text', 'fs:exists', 'fs:file_size', 'fs:write_text', 'process:whoami', 'process:cpu_count', 'process:sleep', 'process:exit',
   'io:set_terminal_raw_mode', 'io:has_input', 'io:get_char', 'io:get_chars', 'io:clear_input_buffer',
-  ':io/print', ':io/println', ':io/input', ':op/assn', ':op/assn_owned', 'para:rendezvous',
+  ':io/print', ':io/println', ':io/eprintln', ':io/input', ':op/assn', ':op/assn_owned', 'para:rendezvous',
   ':mark/map_arr', ':mark/foreach_arr']
 for (const uri of notPure) {
   assert(purity[uri] === 'effectful', `${uri} is declared ${purity[uri]}, expected effectful`)
@@ -100,34 +100,6 @@ case = "../../../../scripts/stdlib-declarations.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
 expect_stdout_contains = ["migrated modules stay migrated"]
-normalizers = ["normalize_newlines"]
-timeout_ms = 60000
-
-# ---- The account pages' numbers are the tree's (H200) ----
-#
-# docs/technical/48_declaration_migration.md is the ledger of the migration: the declaration
-# modules, their declared names and declarations, their computed names, the registered overloads
-# and public names, the signature files, and one row per module. docs/technical/49_computed_signatures.md
-# is the ledger of the signature directory: the files, entries and names, the four buckets, the
-# per-file table, the size predictions, and the operator-line count. Every one of those is a claim
-# about the tree, and a hand edit is how it goes stale: H200 found 48 still listing `rewrite` as
-# pending although H183 had migrated it, and 49 drifted twice — its counts were patched by hand
-# while the table kept the old numbers. `--check-ledger` reads each number from both pages and
-# compares it with the tree, naming the file, so this test is red when a number is edited (it
-# prints "<file>:<line>: <what>: page says X, tree has Y"), when a row or a fact is dropped, and
-# when the rows and the totals disagree. The registered counts come from `camel inspect --ops` on
-# the same probe `--verify-ops` reads, and the bucket and per-file counts from the classification
-# `--check` rule 7 already trusts, so a change in either is red too.
-
-[[tests]]
-name = "registry.ledger_matches_tree"
-desc = "Every number docs/technical/48_declaration_migration.md and docs/technical/49_computed_signatures.md state is the tree's number: 48's declaration modules, declared names and declarations, computed names, overloads, public names, signature files, per-module rows and re-check quotes; 49's files, entries, names, four buckets, per-file rows, size predictions and operator-line count. A hand edit fails with '<file>:<line>: <what>: page says X, tree has Y', and a dropped row or fact fails instead of passing over a hole."
-kind = "behavior"
-tool = "node"
-case = "../../../../scripts/stdlib-declarations.mjs"
-args = ["${case}", "--check-ledger"]
-expect_exit = 0
-expect_stdout_contains = ["the ledgers agree with the tree"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 

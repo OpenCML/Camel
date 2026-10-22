@@ -20,7 +20,7 @@ value: the file system, the console, a module's random generator. An operator's
 
 | Part | Values |
 |---|---|
-| resource | `Variable`, `Object`, `Foreign` (with a name: `tiles:device`), `Ambient` (with a name: `fs`, `stdout`, `rng`, `tensor:generator`, `io:terminal`); `Unknown` only in the conservative reading |
+| resource | `Variable`, `Object`, `Foreign` (with a name: `tiles:device`), `Ambient` (with a name: `fs`, `stdout`, `stderr`, `stdin`, `rng`, `tensor:generator`); `Unknown` only in the conservative reading |
 | binding | the ordinary or with operand that names it; none for an ambient resource (`Capture` appears in graph footprints only) |
 | region | `Whole`; `Mapped` (the elements an access or the write map of the node's index instance reaches); `Unknown` (read as whole) |
 | mode | `Read`, `Write`, `ReadModifyWrite` |
@@ -57,9 +57,10 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:struct/append_arr_in_place`, `:op/set_index_in_place` | read-modify-write of operand 0; the result is that object |
 | `algo:*_in_place` | read-modify-write of an object (operand 0); the result is that object |
 | `:io/print`, `:io/println`, `tensor:show` | write `stdout`, external |
+| `:io/eprintln` | write `stderr`, external |
 | `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `stdin`, external |
 | `io:has_input` | read `stdin`, external |
-| `io:set_terminal_raw_mode` | write `io:terminal`, external; its own resource, not folded into `stdin` (a set change, H134) |
+| `io:set_terminal_raw_mode` | write `stdin`, external; the one resource of the terminal, so raw mode and a read order each other (H134 question 1) |
 | `fs:*`, `nn:save_params`, `tensor:load_npy`, `tensor:save_npy`, `ckpt:save_tree` | read or read-modify-write `fs`, external |
 | `ckpt:load_tree` | read `fs` and write `stderr`, external |
 | `rand:*` | write or read-modify-write `rng`, external |
@@ -69,8 +70,8 @@ result may be any of them, and it has an external effect when its traits say so.
 | `process:exit` | read-modify-write `process`, external |
 | `:profiler/*`, `para:rendezvous`, `tensor:(set_)num_threads` | their ambient state, external |
 | `tiles:upload` | allocates `tiles:device`; read-modify-write `tiles:driver`, external |
-| `tiles:download`, `tiles:run`, `tiles:benchmark` | read the device values among operand 0; `tiles:driver`, external |
-| `tiles:run_device` | as `run`, allocates `tiles:device`, the result may alias operand 0 |
+| `tiles:download`, `tiles:run_preferred_resident`, `tiles:benchmark` | read the device values among operand 0; `tiles:driver`, external |
+| `tiles:run_preferred_resident` (resident form) | allocates `tiles:device`, the result may alias operand 0 |
 | `tiles:source`, `inspect`, `available`, `device` | `tiles:driver`, external |
 
 The higher-order `:mark/` operators (they run the functions they are given), `python`, `pyplot`,
@@ -78,7 +79,7 @@ The higher-order `:mark/` operators (they run the functions they are given), `py
 
 ### 1.3 Queries (`camel/runtime/resources.h`)
 
-- `resourcesOf(graph, node)`: the accesses of one node, each with the node of the same graph whose
+- `resourcesOf(program, graph, node)`: the accesses of one node, each with the node of the same graph whose
   value names the resource (`NodeAccess::value`), or `anyValue` when it cannot be told. An OPER
   reads its declaration; a FUNC, a LOOP, and a CALL whose callee is a constant function or a
   closure the graph builds from one read the footprints of the graphs they run, mapped onto
@@ -87,12 +88,15 @@ The higher-order `:mark/` operators (they run the functions they are given), `py
   unknown value is conservative.
 - `footprintOf(graph)`: what running a graph once does to resources it receives (its norm ports,
   with ports and closure ports), to ambient state and outside the program; resources it makes
-  itself are not part of it. Footprints of recursive graphs are a least fixpoint; a finished one
+  itself are not part of it, and its `result` says whether the value it returns is fresh, one of
+  its norm ports, or unknown. Footprints of recursive graphs are a least fixpoint; a finished one
   is cached by the graph's serial and the declaration epoch.
-- `originOf(graph, value)` and `mayAlias(graph, a, b)`: within one activation, a value is a fresh
-  allocation of a node (an operator whose result is fresh, a COPY), a received value (a port), or
-  unknown; two fresh allocations of different nodes, or a fresh one and a received one, are never
-  one resource; two ports may be.
+- `originOf(program, graph, value)` and `mayAlias(program, graph, a, b)`: within one activation, a
+  value is a fresh allocation of a node (an operator whose result is fresh, a COPY), a received
+  value (a port), or unknown; a FUNC or CALL whose callee returns the value it was given (a
+  `Same`/`View` result, from the callee's footprint or its function type) is its argument's
+  origin. Two fresh allocations of different nodes, or a fresh one and a received one, are never
+  one resource; two ports may be. The program is needed to resolve a callee.
 - `regionBounds(instance, region)` and `regionsMayOverlap`: the bounding box of a mapped region
   over the instance's domain, and whether two may overlap.
 - `resourceConflict(graph, a, b)`: `External` when both have external effects (the outside world

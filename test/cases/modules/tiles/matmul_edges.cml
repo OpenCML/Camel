@@ -1,12 +1,12 @@
 module tiles_matmul_edges
 import { Tensor, reshape, sum, abs } from tensor
-import { run } from tiles
+import { run_preferred_resident, download } from tiles
 func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> { return a @ b }
 func value(i: int): float { return ((i % 17) - 8) as float / 8.0 }
 func check(m: int, k: int, n: int): float {
     let a = reshape(range(0, m * k)->map<value>, [m,k])
     let b = reshape(range(0, k * n)->map<value>, [k,n])
-    return sum(abs(run<product>((a,b)) - product(a,b)))
+    return sum(abs(download(run_preferred_resident<product>((a,b))) - product(a,b)))
 }
 func main(): int sync {
     println(check(17,0,19))

@@ -1,0 +1,11 @@
+// A pass module that does not parse and that no program in this directory imports. It is the
+// other half of `unparsable_pass.cml`'s case (H198/H210): a program's diagnostics report the
+// modules the program is made of, so a pass library that fails on the command line appears only
+// as the `InvalidPassParameter` of pass resolution, never as this file's bare `SyntaxDiag`.
+module unparsable_pass_lib
+import { Program } from graph
+
+export func run(p: Program): Program! sync {
+    println(
+    return p
+}

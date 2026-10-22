@@ -2,13 +2,13 @@ module tree_training
 import { Tensor, reshape, zeros, sum, abs } from tensor
 import { with_grad } from autodiff
 import { tree_map, tree_reduce, tree_unzip } from ckpt
-import { Device, upload, download, run_device } from tiles
+import { Device, upload, download, run_preferred_resident } from tiles
 type Model = { weight: Tensor<f32>, nested: (Tensor<f32>, Tensor<f32>) }
 func initialize(): Model {
     return { weight: reshape([1.0, 2.0], [2]), nested: (reshape([3.0], [1]), zeros([0, 2])) }
 }
 // The parameter tree is the first `with` parameter; the value-gradient function is wrapped in
-// an ordinary function so that run_device can hand it the device-resident tree.
+// an ordinary function so that run_preferred_resident can hand it the device-resident tree.
 with <p: Model>
 func loss(): float {
     let squared = tree_map<(x: Tensor<f32>): float => sum(x * x)>(p)
@@ -27,8 +27,8 @@ func main(): int sync {
     println(cpu.0 - 14.0)
     println(sum(abs(cpu.1.weight - p.weight * 2.0)))
     let dp: Device<Model> = upload(p)
-    let measured = run_device<vg>(dp)
-    let changed: Device<(Model, Model)> = run_device<update_model>((dp, measured.1))
+    let measured = run_preferred_resident<vg>(dp)
+    let changed: Device<(Model, Model)> = run_preferred_resident<update_model>((dp, measured.1))
     let actual = download(changed)
     let expected = update(p, cpu.1)
     println(download(measured.0) - cpu.0)

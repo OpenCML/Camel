@@ -8,7 +8,7 @@
 
 ## 使用
 
-`python` 为标准库模块，随 Camel 发布，直接 `import python` 即可。若自编译或需单独部署，可将 `python.cmo` 放置在 Camel 能访问的模块搜索路径下。首次使用时会初始化 Python 解释器。
+`python` 为标准库模块，随 Camel 发布，直接 `import python` 即可。若自编译或需单独部署，可将 `python.cmo` 放置在 Camel 能访问的模块搜索路径下。`import` 不执行代码（设计原则 3.1）：导入只注册执行器与算子，Python 解释器在第一次调用任一 `py_*` 算子时创建；若 `pyplot` 已经创建了它，这里只附着，不会新建第二个（handover H221）。
 
 ### 运行时环境兼容
 
@@ -16,7 +16,7 @@
 - `CAMEL_PYTHONPATH`：为 Camel 的嵌入式 Python 追加额外搜索路径；Windows 使用 `;` 分隔。
 - `CAMEL_PYTHON_INHERIT_HOST_PYTHONPATH=1`：保留并继承宿主 `PYTHONPATH`。
 - `CAMEL_PYTHON_INHERIT_HOST_ENV=1`：完全回退到旧行为，初始化时不屏蔽宿主 `PYTHONHOME` / `PYTHONPATH`。
-- 若激活了版本不匹配的 venv，Camel 会拒绝加载 Python 模块并给出明确版本错误，而不是继续在污染状态下运行。
+- 若激活了版本不匹配的 venv，Camel 拒绝初始化解释器并给出明确版本错误，而不是继续在污染状态下运行；这条检查在**首次使用**时进行，不在 `import` 时。没有对应 bridge 的版本连 `.cmo` 都加载不了（`SemanticDiag::ModuleNotFound`，说明缺少哪个 `py_bridge`），那一步仍发生在导入期，因为它决定加载哪个二进制。
 
 ## 接口
 
@@ -99,6 +99,6 @@ camel run test/modules/python/main.cml
 ## 与内置模块的区别
 
 - **内置模块**：在 `builtinModuleFactories` 中注册，算子表在 `getOpsImplMap()` 中，随 libcamel 一起编译。
-- **本模块**：不进入内置表，通过 `camel_module_create` 导出模块，在 `load()` 中注册 `python` 协议的 executor，算子实现全部在本 .cmo 中。
+- **本模块**：不进入内置表，通过 `camel_module_create` 导出模块，在 `load()` 中注册 `python` 协议的 executor 与算子的纯度，算子实现全部在本 .cmo 中；解释器的创建在第一次调用算子时（`modules/python/embed.h`，与 `pyplot` 共用）。
 
 第三方可按此方式实现自己的 `.cmo` 模块。

@@ -114,7 +114,11 @@ const string NamedTypeLoad::geneCode() const {
 }
 
 const string NamedPairLoad::geneCode() const {
-    return (isVar_ ? string("var ") : isConst_ ? string("const ") : "") + ref_.toString();
+    return (isRest_ ? string("..")
+                     : isConstas_ ? string("constas ")
+                                  : isVar_ ? string("var ")
+                                           : isConst_ ? string("const ") : "") +
+           ref_.toString();
 }
 
 } // namespace camel::parse::ast

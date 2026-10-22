@@ -145,7 +145,7 @@ assert(JSON.stringify(byUri.get('tensor:matmul').semantics.laws) === '["fma_f32"
 
 [[tests]]
 name = "declared_math_numeric_semantics"
-desc = "Every operator the math module exports declares its numeric semantics, as `camel inspect --ops` shows them (design principles 7.1; docs/design/op-semantics 6.2; reviews/2026-10-19/modules.cn.md item 15): exact for the integer arithmetic, the bit operations, the sign and rounding operators, min, max, clamp, the tests and the complex accessors and conjugate; correctly rounded for sqrt; bounded for the transcendentals, exp and log within the standard library target of 2 ulp and the others within 4 ulp, complex abs and exp within the platform bound of 4 ulp. pow and hypot declare that they do not always propagate a NaN, as do complex abs and exp. A declaration missing for any math operator fails the completeness check."
+desc = "Every operator the math module exports declares its numeric semantics, as `camel inspect --ops` shows them (design principles 7.1; docs/design/op-semantics 6.2): exact for the integer arithmetic, the bit operations, the sign and rounding operators, min, max, clamp, the tests and the complex accessors and conjugate; correctly rounded for sqrt; bounded for the transcendentals, exp and log within the standard library target of 2 ulp and the others within 4 ulp, complex abs and exp within the platform bound of 4 ulp. pow and hypot declare that they do not always propagate a NaN, as do complex abs and exp. A declaration missing for any math operator fails the completeness check."
 kind = "behavior"
 case = "../../../cases/modules/stdlib/math_functions.cml"
 args = ["inspect", "--ops", "${case}"]
@@ -216,7 +216,11 @@ for (const op of mathOps) {
   assert(JSON.stringify(s.not_ieee) === JSON.stringify(e.notIeee), `${uri}: not_ieee ${JSON.stringify(s.not_ieee)}`)
   assert(typeof s.algorithm === 'string' && s.algorithm.length > 0, `${uri}: no algorithm`)
 }
-assert(mathOps.length === expected.size, `${mathOps.length} math operators listed, ${expected.size} expected`)
+// A declaration writes one row per spelling, so one URI may be listed several times (math:sqrt
+// and the two shifts have four each; handover H202): count distinct URIs, and every row of a URI
+// is held to the same declaration by the loop above.
+const listed = new Set(mathOps.map((o) => o.uri))
+assert(listed.size === expected.size, `${listed.size} math operators listed (${mathOps.length} rows), ${expected.size} expected`)
 assert(!mathOps.some((o) => o.semantics.indexing), 'no math operator declares index semantics')
 }
 """

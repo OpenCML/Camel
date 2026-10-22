@@ -1,13 +1,13 @@
 module tiles_upload_large
 import { Tensor, random, seed, sum, abs } from tensor
-import { run } from tiles
+import { run_preferred_resident, download } from tiles
 func twice(x: Tensor<f32>): Tensor<f32> { return x + x }
 func main(): int sync {
     seed(73)
     let x = random([8388736], -1.0, 1.0)
     let expected = twice(x)
-    println(sum(abs(run<twice>(x) - expected)))
-    println(sum(abs(run<twice>(x) - expected)))
-    println(sum(abs(run<twice>(x) - expected)))
+    println(sum(abs(download(run_preferred_resident<twice>(x)) - expected)))
+    println(sum(abs(download(run_preferred_resident<twice>(x)) - expected)))
+    println(sum(abs(download(run_preferred_resident<twice>(x)) - expected)))
     return 0
 }

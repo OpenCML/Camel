@@ -24,6 +24,7 @@
 #include <iostream>
 #include <map>
 #include <set>
+#include <unordered_map>
 
 #include "camel/common/scope.h"
 #include "camel/core/context/context.h"
@@ -48,6 +49,7 @@ namespace camel::compile::gir {
 using void_ptr_t   = void *;
 using Type         = camel::core::type::Type;
 using FunctionType = camel::core::type::FunctionType;
+using data_ptr_t   = camel::core::data::data_ptr_t;
 
 using compile_graph_ptr_t   = std::shared_ptr<DraftGraphBuilder>;
 using node_handle_t         = camel::runtime::DraftNodeRef;
@@ -59,6 +61,13 @@ using graph_scope_t         = Scope<std::string, graph_set_ptr_t>;
 using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
+
+/// The value of a `constas` constant as the key it stands for when it names a field or a
+/// position (`t.[n]`): the text of a string, the digits of an integer, `true` / `false`.
+std::string constasKeyOf(const camel::core::data::data_ptr_t &data);
+/// The value as an instance name shows it, strings quoted: `f(3)` is `f<3>`, `f("w")` is
+/// `f<"w">`.
+std::string constasTextOf(const camel::core::data::data_ptr_t &data);
 
 /// The graph builder of a program (design principles 10.1, "模块"; the graph model,
 /// docs/design/graph-model/README.cn.md 3.9). One builder serves every module of the program:
@@ -378,6 +387,9 @@ class Builder {
     // starts from what was in force where it is written. Stamped with the permissions
     // (stampPermissions).
     camel::core::attr::AttrSetId currentAttrs_ = camel::core::attr::kNoAttrs;
+    /// The EXEC that is the body of the function being built: its tags are the body region's
+    /// (region 0), not a block region of their own.
+    const GCT::Node *functionBody_ = nullptr;
     /// Sets currentAttrs_ for a scope and puts the previous value back at its end.
     struct AttrScope {
         camel::core::attr::AttrSetId &current;
@@ -659,6 +671,18 @@ class Builder {
         node_handle_t node{};
     };
     std::vector<std::vector<StaticValueBinding>> staticValueScopes_;
+    /// The `Data` behind a static data node, when the builder made the node from one. A
+    /// compile-time value handed on from node to node (a `constas` value passed to another
+    /// `constas`, the `n` of a `static for`) has no `Data` of its own any more: it was encoded
+    /// into a slot when its node was made, and the value is read back from here.
+    std::unordered_map<node_handle_t, data_ptr_t> constantNodes_;
+    void rememberConstant(node_handle_t node, const data_ptr_t &data) {
+        if (node != nullptr && data != nullptr) {
+            constantNodes_[node] = data;
+        }
+    }
+    /// The constant a static data node (or a COPY of one) was made from, or null.
+    data_ptr_t constantOfNode(node_handle_t node) const;
     std::optional<std::string> staticValueNamed(const std::string &name) const {
         for (auto scope = staticValueScopes_.rbegin(); scope != staticValueScopes_.rend();
              ++scope) {
@@ -761,8 +785,30 @@ class Builder {
     // function's GCT with the variables replaced (typeBindings_) wherever the body names a
     // type, and then called like any other function. So the body is typed and its overloads
     // are chosen at instantiation, and only concrete types reach a graph.
+    //
+    // A `constas` parameter binds a compile-time value the same way (design principles 5.4):
+    // the value is given at the call, is part of the instance key, and is read by the body as
+    // a static value. It is not a runtime argument, so the instance has no port for it.
+    struct ConstasValue {
+        // The declared type of the parameter, with the other extents substituted; the type the
+        // constant must have.
+        Type *type = nullptr;
+        // The type of the constant the call wrote.
+        Type *valueType = nullptr;
+        // The constant itself. It is the instance key's value, and the body reads it as a
+        // static data node.
+        data_ptr_t data;
+        // The node the call gave the value as (a rest expansion binds it directly; an instance
+        // makes a static data node of its own in its graph).
+        node_handle_t node = {};
+    };
+    using ConstasValues = std::map<std::string, ConstasValue>;
     struct GenericInstance {
         camel::core::type::type_bindings_t bindings;
+        // The compile-time values bound to the `constas` parameters of the declaration, and
+        // the integer ones among them as the extent bindings they stand for.
+        ConstasValues constas;
+        camel::core::type::ExtentValues extents;
         compile_graph_ptr_t graph;
         // An error was found in the body: later calls with the same types fail quietly.
         bool failed = false;
@@ -809,6 +855,10 @@ class Builder {
     template_scope_ptr_t templateScope_;
     // The type variables of the instance being built and their types; empty outside one.
     camel::core::type::type_bindings_t typeBindings_;
+    // The `constas` values of the instance being built; empty outside one.
+    camel::core::type::ExtentValues extentBindings_;
+    // The `constas` values of the instance being built, by parameter name; empty outside one.
+    ConstasValues constasBindings_;
     size_t instantiationDepth_ = 0;
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
@@ -831,14 +881,26 @@ class Builder {
     // them.
     std::vector<template_ptr_t> anonymousTemplates_;
 
-    // A type read from the GCT, with the type variables of the current instance replaced.
+    // A type read from the GCT, with the type variables and the named extents of the current
+    // instance replaced.
     Type *boundType(Type *type) const {
-        return camel::core::type::substituteTypeVars(type, typeBindings_);
+        Type *substituted = camel::core::type::substituteTypeVars(type, typeBindings_);
+        return camel::core::type::substituteExtentValues(substituted, extentBindings_);
     }
     // Whether a declared function type is still generic under the current bindings.
     bool isGenericHere(Type *type) const {
-        return camel::core::type::containsTypeVar(type) &&
-               camel::core::type::containsTypeVar(boundType(type));
+        // A rest function is always a template: its arity is decided at each call, so no
+        // graph is built for the declaration itself (design principles 5.5). A declaration
+        // with a `constas` parameter is one too: its instance is fixed by the value at the
+        // call, which is not a runtime argument (design principles 5.4).
+        const bool rest =
+            type != nullptr && type->code() == camel::core::type::TypeCode::Function &&
+            static_cast<FunctionType *>(type)->hasRest();
+        const bool constas =
+            type != nullptr && type->code() == camel::core::type::TypeCode::Function &&
+            static_cast<FunctionType *>(type)->hasConstas();
+        return rest || constas || (camel::core::type::containsTypeVar(type) &&
+                                   camel::core::type::containsTypeVar(boundType(type)));
     }
     // Registers the generic functions declared directly in the block `exec`, before anything
     // in the block is built: a call may precede the declaration.
@@ -858,6 +920,14 @@ class Builder {
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call,
         Type *expectedResult = nullptr);
+    /// Reads the values of the `constas` parameters of `signature` from the ordinary arguments
+    /// of the call (each written at its parameter's position), removes them from `normInputs`
+    /// (and `normTypes`, when given), and records the integer ones as the extent bindings they
+    /// stand for. `normTypes` may be null (a rest call has only the argument nodes).
+    void takeConstasValues(
+        FunctionType *signature, std::vector<Argument> &normInputs,
+        camel::core::type::type_vec_t *normTypes, const GCT::node_ptr_t &call,
+        ConstasValues &constas, camel::core::type::ExtentValues &extents);
     /// A function written in place whose type still holds a type variable (the element
     /// functions of a list comprehension): a template without a name, registered where it
     /// stands. Its marker node is what the name of a generic function gives.
@@ -885,6 +955,57 @@ class Builder {
         const oper_group_ptr_t &ops, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, camel::core::type::type_vec_t &withTypes,
         camel::core::type::type_vec_t &normTypes, const GCT::node_ptr_t &call);
+    // ---- Build-time tuples (H51 step 6) ----
+    // A tuple that is known while the graph is built: its type and its element nodes, without a
+    // FILL node. A rest parameter's `ts` and a tuple comprehension are the two producers.
+    // `indices` reads only the type, `ts.[j]` selects an element, and `..ts` splices the
+    // elements; none of those builds a node for the tuple. A runtime use either materializes one
+    // FILL (a comprehension is a value expression) or is refused (`ts` is not a value).
+    struct StaticTuple {
+        Type *type = nullptr; // TupleType of `elements`
+        std::vector<node_handle_t> elements;
+        /// A comprehension is a value and materializes when one is needed; a rest parameter's
+        /// tuple is not a value and its escape is StaticTupleEscapes.
+        bool materializable = true;
+        /// The name the tuple was written with (`ts`), for the escape diagnostic.
+        std::string name;
+        /// Where the tuple was written, for the escape diagnostic and the materialized FILL.
+        GCT::node_ptr_t origin;
+    };
+    // ---- Rest parameters (design principles 5.5, H51 step 6) ----
+    // A rest function has no runtime arity, so it is never an instance: each direct call
+    // expands its body into the caller's graph, with the fixed parameters bound to the argument
+    // nodes and the rest parameter bound to the nodes the call's arguments leave over. The
+    // expansion is built here, once per call; there is no call node and no tuple fill.
+    struct RestBinding {
+        std::string name;
+        StaticTuple tuple; // the build-time tuple `ts`; not a value
+    };
+    struct RestBody {
+        Type *exitType            = nullptr;
+        node_handle_t value       = nullptr;
+        bool returned             = false;
+    };
+    /// The rest parameters in force while an expanded body is built (innermost last).
+    std::vector<RestBinding> restBindings_;
+    /// The expanded body whose `return` is being built, if any.
+    RestBody *activeRestBody_ = nullptr;
+    /// The rest binding of `name` that no local of the same name shadows.
+    const RestBinding *restBindingNamed(const std::string &name) const;
+    /// The FILL of a build-time tuple, built only when the tuple is used as a runtime value.
+    node_handle_t materializeStaticTuple(
+        const StaticTuple &tuple, const GCT::node_ptr_t &at);
+    /// The nodes `..operand` stands for: the elements of a compile-time tuple, or the
+    /// elements of the rest parameter it names.
+    std::vector<node_handle_t> expandRestArgument(
+        const GCT::node_ptr_t &operand, const std::string &written,
+        const GCT::node_ptr_t &call);
+    /// Expands `tmpl`, a rest function, at `call`: binds its type variables and fixed
+    /// parameters, checks the arguments, and builds its body in the caller's graph.
+    node_handle_t inlineRestCall(
+        const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+        std::vector<Argument> &normInputs, const GCT::node_ptr_t &call,
+        Type *expectedResult);
     // Type-directed tree intrinsics expand to ordinary accesses, calls and fills.
     node_handle_t expandTreeCall(
         const oper_group_ptr_t &ops, const std::vector<Argument> &with,
@@ -892,6 +1013,7 @@ class Builder {
     void registerTreeOrigin(node_handle_t node, const GCT::node_ptr_t &origin, const char *kind);
     compile_graph_ptr_t instantiateGeneric(
         const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
+        const camel::core::type::ExtentValues &extents, const ConstasValues &constas,
         const GCT::node_ptr_t &call);
     // Enters the scope of `graph`, an existing graph, as enterScope does for one it finds.
     void enterGraphScope(const compile_graph_ptr_t &graph, const std::string &name);
@@ -1199,7 +1321,8 @@ class Builder {
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
-    node_handle_t visitDRefNode(const GCT::node_ptr_t &gct);
+    /// A name: its value node, or the build-time tuple a rest parameter names (no node).
+    std::any visitDRefNode(const GCT::node_ptr_t &gct);
     node_handle_t visitCastNode(const GCT::node_ptr_t &gct);
     node_handle_t visitVariNode(const GCT::node_ptr_t &gct);
     node_handle_t visitWaitNode(const GCT::node_ptr_t &gct);
@@ -1220,7 +1343,8 @@ class Builder {
         Type **shape = nullptr);
     /// `{ static for ... }` / `( static for ... )`: the rounds' values are packed into a struct or
     /// tuple of the same fields with one FILL; the comprehension leaves no node of its own.
-    node_handle_t visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
+    /// The packed struct, or the build-time tuple of a tuple comprehension (no node).
+    std::any visitStaticComprehensionNode(const GCT::node_ptr_t &gct);
     /// `static loop s1 = a1, ..., sk = ak for (n, F) in fields T do body`: the body is built
     /// once per field, in the current graph, with the state names bound to the previous round's
     /// values; the value is the last state (a tuple FILL when there are several).
@@ -1231,6 +1355,11 @@ class Builder {
     node_handle_t packStaticValues(
         bool isStruct, Type *shape, const std::vector<node_handle_t> &values,
         const GCT::node_ptr_t &origin, const char *originKind);
+    /// The FILL of `type` over `values`: what materializeStaticTuple and the tuple half of
+    /// packStaticValues build.
+    node_handle_t fillStaticValues(
+        Type *type, const std::vector<node_handle_t> &values, const GCT::node_ptr_t &origin,
+        const char *originKind);
     /// `t.[key]`: the field or tuple element is chosen at compile time.
     node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
     bool typeCaseMatches(Type *subject, uint16_t patterns) const;

@@ -1,0 +1,13 @@
+/**
+ * `algo:sort` is declared with an array argument: a number is refused at the call, and the
+ * message names the declaration's type variable and parameter (`stdlib/algo.cml`, not the C++)
+ * (handover H202; H194 bucket 1).
+ */
+module algo_sort_type
+
+import { sort } from algo
+
+func main(): int sync {
+    println(sort(42))
+    return 0
+}

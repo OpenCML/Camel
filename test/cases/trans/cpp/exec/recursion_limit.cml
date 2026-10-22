@@ -1,6 +1,6 @@
 /// The recursion limit (design principles 3.9, 1000 calls that are open and not in tail
 /// position): 999 levels below main run, the next call is a fault at the call, reported as
-/// the schedulers report it (it had no limit, docs/design/cpp-memory appendix B D7).
+/// the schedulers report it (it had no limit, design principles 10.6).
 module recursion_limit
 
 func depth(n: int): int {

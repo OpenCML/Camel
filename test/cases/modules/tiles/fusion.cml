@@ -1,6 +1,6 @@
 module tiles_fusion
 import { Tensor, reshape, random, seed, exp, relu, sum, abs } from tensor
-import { run, inspect } from tiles
+import { inspect, run_preferred_resident, download } from tiles
 func pipeline(x: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
     return exp(relu((x + b) * 0.5 - 0.25))
 }
@@ -13,8 +13,8 @@ func main(): int sync {
     let x = random([7, 259], -1.0, 1.0)
     let b = random([1, 259], -1.0, 1.0)
     println(inspect<pipeline>((x, b)))
-    println(sum(abs(run<pipeline>((x, b)) - pipeline(x, b))))
+    println(sum(abs(download(run_preferred_resident<pipeline>((x, b))) - pipeline(x, b))))
     println(inspect<fork>((x, b)))
-    println(sum(abs(run<fork>((x, b)) - fork(x, b))))
+    println(sum(abs(download(run_preferred_resident<fork>((x, b))) - fork(x, b))))
     return 0
 }

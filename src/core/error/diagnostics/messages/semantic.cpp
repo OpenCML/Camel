@@ -1319,6 +1319,133 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RestParameterNotLast,
+            {
+                "RestParameterNotLast",
+                "The rest parameter '..{0}' must be the last parameter.",
+                "A rest parameter stands for every argument left over, so no parameter can "
+                "follow it. Move '..{0}' after the other parameters.",
+            },
+        },
+        {
+            SemanticDiag::RestParameterTypeNotSupported,
+            {
+                "RestParameterTypeNotSupported",
+                "The rest parameter '..{0}' cannot write a type.",
+                "A rest parameter is untyped: the tuple of the arguments left over is made at "
+                "the call, so its element types are decided there. Write '..{0}'.",
+            },
+        },
+        {
+            SemanticDiag::RestArgumentNotLast,
+            {
+                "RestArgumentNotLast",
+                "The rest argument '..{0}' must be the last positional argument.",
+                "'..e' expands to every element of 'e', so no positional argument can follow "
+                "it. Named arguments cannot follow it either: write '..e' last.",
+            },
+        },
+        {
+            SemanticDiag::RestArgumentNotTuple,
+            {
+                "RestArgumentNotTuple",
+                "The rest argument '..{0}' is not a compile-time tuple.",
+                "'..e' needs a tuple whose elements are known when the call is instantiated: a "
+                "tuple literal, a tuple comprehension, or the rest parameter of the enclosing "
+                "rest function. A runtime tuple value has no fixed arity here.",
+            },
+        },
+        {
+            SemanticDiag::RestFunctionNeedsExpansion,
+            {
+                "RestFunctionNeedsExpansion",
+                "The rest function '{0}' cannot be used here: {1}.",
+                "A function with a rest parameter has no runtime arity, so it has no function "
+                "value and no instance: call it directly, with the arguments it takes.",
+            },
+        },
+        {
+            SemanticDiag::RestArgumentsMismatch,
+            {
+                "RestArgumentsMismatch",
+                "The call to '{0}' gives {1} argument(s), but its fixed parameters need {2}.",
+                "A rest parameter only stands for the arguments after the fixed ones. Give at "
+                "least as many arguments as the declaration has fixed parameters.",
+            },
+        },
+        {
+            SemanticDiag::ConstasTypeRequired,
+            {
+                "ConstasTypeRequired",
+                "The 'constas' parameter '{0}' writes no type.",
+                "A 'constas' parameter is a compile-time value and its type is part of the "
+                "declaration's identity: write 'constas {0}: string', 'constas {0}: int', "
+                "'constas {0}: bool', or the type of whatever constant the call binds.",
+            },
+        },
+        {
+            SemanticDiag::ConstasValueNotConstant,
+            {
+                "ConstasValueNotConstant",
+                "The value given for the 'constas' parameter '{0}' is not a compile-time "
+                "constant of its parameter's type ('{1}').",
+                "The value selects the instance of the declaration, so it must be known before "
+                "the program runs: a literal or a constant of a type that has compile-time "
+                "constants. A runtime value would need one instance per possible value.",
+            },
+        },
+        {
+            SemanticDiag::ConstasFunctionNeedsCall,
+            {
+                "ConstasFunctionNeedsCall",
+                "The declaration '{0}' takes a 'constas' parameter, so it has no function "
+                "value.",
+                "The value must be known where the call is written. Call the declaration "
+                "directly with its constant ('{0}(4, ...)'), or wrap it in a function that "
+                "does.",
+            },
+        },
+        {
+            SemanticDiag::ConstasInNativeDeclaration,
+            {
+                "ConstasInNativeDeclaration",
+                "The body-less declaration '{0}' cannot take a 'constas' parameter.",
+                "A body-less declaration names a C++ operator whose signature is fixed; a "
+                "'constas' value would have to be part of the operator's compile-time identity, "
+                "which the native declaration mechanism does not carry yet. Write the function "
+                "with a body.",
+            },
+        },
+        {
+            SemanticDiag::ConstasArgumentMissing,
+            {
+                "ConstasArgumentMissing",
+                "The call gives no value for the 'constas' parameter '{0}'.",
+                "A 'constas' value is bound at the call, like any other argument, but it is not "
+                "a runtime argument: give the constant at the parameter's position, as in "
+                "'f(4, x)'.",
+            },
+        },
+        {
+            SemanticDiag::StaticTupleEscapes,
+            {
+                "StaticTupleEscapes",
+                "The build-time tuple '{0}' is not a value.",
+                "A rest parameter's tuple stands for the arguments a call left over: read it "
+                "with 'indices {0}', '{0}.[j]' or '..{0}', or write a tuple literal '(a, b)' "
+                "when a runtime tuple value is wanted.",
+            },
+        },
+        {
+            SemanticDiag::TagValueConflict,
+            {
+                "TagValueConflict",
+                "The tag '{0}' gives the fact '{1}' the value {2}, but the node already says {3}.",
+                "One node has one value for a fact. Write one of the tags here, or put the other "
+                "tag on a block of its own: an inner block's value wins.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",

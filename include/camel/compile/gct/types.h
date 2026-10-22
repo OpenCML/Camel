@@ -62,6 +62,7 @@ enum class NodeKind : uint8_t {
     SCOMP, // a comprehension: child: the SFOR that generates it; tag: 0 struct, 1 tuple
     SLOOP, // `static loop`: children: TYPE, the first values, EXEC body; payload: the
            // names of the state, then the field name and its type
+    SPRD,  // `..e`, a rest argument; child: the compile-time tuple it expands
 };
 
 std::string to_string(NodeKind kind);

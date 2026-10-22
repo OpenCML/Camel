@@ -18,7 +18,6 @@
  */
 #include <nlohmann/json.hpp>
 
-#include <cstdlib>
 #include <format>
 #include <optional>
 
@@ -60,23 +59,12 @@ using json = nlohmann::json;
 // a limit that a program can reach must be diagnosed). The limit is checked on the text before
 // parsing, so a document deeper than this is the error value JsonTooDeep, never a crash (design
 // principles 11.2: a document that is too deep is distinguished from text that is not JSON).
-// The default leaves room for the recursive walk on every scheduler's stack; a program that
-// needs deeper documents raises it with CAMEL_JSON_MAX_DEPTH (whole levels, at least 1).
-size_t jsonMaxDepth() {
-    static const size_t limit = [] {
-        const char *text = std::getenv("CAMEL_JSON_MAX_DEPTH");
-        if (text == nullptr || *text == '\0') {
-            return size_t{10000};
-        }
-        char *end             = nullptr;
-        const unsigned long long value = std::strtoull(text, &end, 10);
-        if (end == text || *end != '\0' || value == 0) {
-            return size_t{10000};
-        }
-        return static_cast<size_t>(value);
-    }();
-    return limit;
-}
+// The value is fixed and named here only (the author's ruling on H16 question 4: a limit is not
+// an environment-variable switch; it will become an optional parameter of `decode`, design
+// principles 11.2). It leaves room for the recursive walk on every scheduler's stack.
+// test/cases/modules/std/json/depth_limit.cml pins it: a document of 10001 levels is the error
+// and one of 10000 decodes, so raising this constant fails that case.
+constexpr size_t kJsonMaxDepth = 10000;
 
 // Whether `text` nests arrays/objects deeper than `limit`, ignoring brackets inside strings.
 // When it does, `line` and `column` (1-based) are the position of the bracket that goes too
@@ -121,8 +109,7 @@ bool jsonTooDeep(std::string_view text, size_t limit, size_t &line, size_t &colu
 std::string jsonTooDeepMessage(size_t limit, size_t line, size_t column) {
     return std::format(
         "the JSON document nests deeper than the limit of {} levels (at line {}, column {}); "
-        "decoding a deeper document would exhaust the native stack: decode a shallower "
-        "document or set CAMEL_JSON_MAX_DEPTH to a larger limit",
+        "decoding a deeper document would exhaust the native stack: decode a shallower document",
         limit,
         line,
         column);
@@ -487,7 +474,7 @@ slot_t __json_decode__(ArgsView &, ArgsView &norm, Context &) {
     String *str                    = norm.get<String *>(0);
     const std::string_view text    = str ? str->view() : std::string_view();
     size_t line = 0, column = 0;
-    if (const size_t limit = jsonMaxDepth(); jsonTooDeep(text, limit, line, column)) {
+    if (const size_t limit = kJsonMaxDepth; jsonTooDeep(text, limit, line, column)) {
         return makeError("JsonTooDeep", jsonTooDeepMessage(limit, line, column), "<json::decode>");
     }
     try {
@@ -580,7 +567,7 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
         String *str = norm.get<String *>(0);
         const std::string_view text = str ? str->view() : std::string_view();
         size_t line = 0, column = 0;
-        if (const size_t limit = jsonMaxDepth(); jsonTooDeep(text, limit, line, column)) {
+        if (const size_t limit = kJsonMaxDepth; jsonTooDeep(text, limit, line, column)) {
             return makeError("JsonTooDeep", jsonTooDeepMessage(limit, line, column), kWhere);
         }
         try {

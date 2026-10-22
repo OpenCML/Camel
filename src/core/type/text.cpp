@@ -36,6 +36,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 
+#include <format>
 #include <optional>
 #include <string>
 #include <utility>
@@ -199,6 +200,77 @@ std::vector<TextItem> structParts(const StructType *record, bool mangle) {
     return parts;
 }
 
+/// The resource clause of a function type, as written: "pure" or "uses s, fs". `mangle` writes
+/// the stable encoding that takes part in the mangled name instead.
+std::string resourceClause(const FunctionType *fn, bool mangle) {
+    const sem::ResourceSignature &sig = fn->resources();
+    if (sig.mode == sem::ResourceSignature::Mode::Generic) {
+        return {};
+    }
+    std::string out;
+    if (mangle) {
+        out = "K";
+        out += std::to_string(static_cast<int>(sig.mode));
+        out += "P" + std::to_string(sig.params.size()) + "C" +
+               std::to_string(sig.captures.size()) + "A" + std::to_string(sig.ambient.size()) +
+               "Y" + std::to_string(sig.anyOf.size());
+        for (const auto &use : sig.params) {
+            out += std::format(
+                "p{}{}{}{}{}",
+                use.index,
+                static_cast<int>(use.cls),
+                static_cast<int>(use.mode),
+                use.name.size(),
+                use.name);
+        }
+        for (uint8_t capture : sig.captures) {
+            out += "c" + std::to_string(capture);
+        }
+        for (const auto &use : sig.ambient) {
+            out += "a" + std::to_string(static_cast<int>(use.mode)) +
+                   std::to_string(use.name.size()) + use.name;
+        }
+        for (sem::ResourceClass cls : sig.anyOf) {
+            out += "y" + std::to_string(static_cast<int>(cls));
+        }
+        out += "r" + std::to_string(static_cast<int>(sig.result.kind)) +
+               std::to_string(sig.result.operand);
+        out += sig.allocates
+                   ? "o" + std::to_string(static_cast<int>(sig.allocates->cls)) +
+                         std::to_string(sig.allocates->name.size()) + sig.allocates->name
+                   : "o-";
+        out += sig.external ? "e" : "-";
+        return out;
+    }
+    if (sig.pure()) {
+        return "pure";
+    }
+    out = "uses ";
+    bool first = true;
+    const auto add = [&](const std::string &name) {
+        out += (first ? "" : ", ") + name;
+        first = false;
+    };
+    for (const auto &use : sig.params) {
+        if (fn->hasArgNames() &&
+            use.index < fn->withTypesCount() + fn->normTypesCount()) {
+            add(std::string(fn->argNameAt(use.index)));
+        } else {
+            add(std::format("#{}", use.index));
+        }
+    }
+    for (const auto &use : sig.ambient) {
+        add(use.name);
+    }
+    for (sem::ResourceClass cls : sig.anyOf) {
+        add(std::format("any {}", sem::resourceClassName(cls)));
+    }
+    for (uint8_t capture : sig.captures) {
+        add(std::format("capture {}", capture));
+    }
+    return out;
+}
+
 std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
     std::vector<TextItem> parts;
     const size_t withCount = fn->withTypesCount();
@@ -215,16 +287,29 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             }
         }
         if (normCount > 0) {
-            parts.push_back(literal("N" + std::to_string(normCount)));
+            parts.push_back(literal((fn->hasRest() ? "X" : "") + std::string("N") +
+                                    std::to_string(normCount)));
+            if (fn->hasConstas()) {
+                parts.push_back(literal("C" + std::to_string(fn->constasCount())));
+                for (uint16_t index : fn->constasIndices()) {
+                    parts.push_back(literal(std::to_string(index)));
+                }
+            }
             for (size_t i = 0; i < normCount; ++i) {
                 if (fn->normIsVarAt(i)) {
                     parts.push_back(literal("V"));
                 }
                 parts.push_back(typeItem(fn->normTypeAt(i)));
             }
+        } else if (fn->hasRest()) {
+            parts.push_back(literal("X"));
         }
         parts.push_back(literal("R"));
         parts.push_back(fn->hasExitType() ? typeItem(fn->exitType()) : literal("v"));
+        const std::string resources = resourceClause(fn, true);
+        if (!resources.empty()) {
+            parts.push_back(literal(resources));
+        }
         return parts;
     }
     const std::string modifiers = static_cast<std::string>(fn->modifiers());
@@ -252,6 +337,16 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
         if (i > 0) {
             parts.push_back(literal(", "));
         }
+        if (fn->hasRest() && i + 1 == normCount) {
+            parts.push_back(literal(".."));
+            if (fn->hasArgNames()) {
+                parts.push_back(literal(std::string(fn->argNameAt(withCount + i))));
+            }
+            continue;
+        }
+        if (fn->normIsConstasAt(i)) {
+            parts.push_back(literal("constas "));
+        }
         if (fn->normIsVarAt(i)) {
             parts.push_back(literal("var "));
         }
@@ -262,6 +357,10 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
     }
     parts.push_back(literal(") => "));
     parts.push_back(fn->hasExitType() ? typeItem(fn->exitType()) : literal("<null>"));
+    const std::string resources = resourceClause(fn, false);
+    if (!resources.empty()) {
+        parts.push_back(literal(" " + resources));
+    }
     return parts;
 }
 
@@ -327,8 +426,25 @@ std::vector<TextItem> enumParts(const EnumType *enumType, bool mangle) {
 
 std::vector<TextItem> typeParts(const Type *type, bool mangle) {
     switch (type->code()) {
-    case TypeCode::Array:
-        return {typeItem(static_cast<const ArrayType *>(type)->elemType()), literal("[]")};
+    case TypeCode::Array: {
+        const auto *array = static_cast<const ArrayType *>(type);
+        if (array->isNumericUnknown()) {
+            if (mangle) {
+                return {literal("Array_Tensor_" + array->shapeMangle())};
+            }
+            if (array->extents().empty() && array->anyRank() && array->packName().empty()) {
+                return {literal("Tensor")};
+            }
+            return {literal("Tensor<" + array->tensorShapeText() + ">")};
+        }
+        if (mangle) {
+            return {
+                literal("Array_"),
+                typeItem(array->elemType()),
+                literal("_" + array->shapeMangle())};
+        }
+        return {typeItem(array->elemType()), literal(array->shapeText())};
+    }
     case TypeCode::Tuple:
         return tupleParts(static_cast<const TupleType *>(type), mangle);
     case TypeCode::Struct:
@@ -420,9 +536,24 @@ bool sameType(const Type *a, const Type *b) {
         }
         switch (left->code()) {
         case TypeCode::Array: {
-            pending.emplace_back(
-                static_cast<const ArrayType *>(left)->elemType(),
-                static_cast<const ArrayType *>(right)->elemType());
+            const auto *lhs = static_cast<const ArrayType *>(left);
+            const auto *rhs = static_cast<const ArrayType *>(right);
+            // The shape is part of the type: a fixed rank and an open rank are different
+            // types, and so are two different constant extents. An extent that is not a
+            // constant asks for nothing at the call, so two such extents are the same
+            // dimension here; dimension names are signature metadata, as parameter names are
+            // for function types (this is what the tensor type's equality did before).
+            if (lhs->anyRank() != rhs->anyRank() ||
+                lhs->isNumericUnknown() != rhs->isNumericUnknown() ||
+                lhs->extents().size() != rhs->extents().size()) {
+                return false;
+            }
+            for (size_t i = 0; i < lhs->extents().size(); ++i) {
+                if (!sameExtentConstraint(lhs->extents()[i], rhs->extents()[i])) {
+                    return false;
+                }
+            }
+            pending.emplace_back(lhs->elemType(), rhs->elemType());
             break;
         }
         case TypeCode::Tuple: {
@@ -478,7 +609,9 @@ bool sameType(const Type *a, const Type *b) {
             const auto *lhs = static_cast<const FunctionType *>(left);
             const auto *rhs = static_cast<const FunctionType *>(right);
             if (lhs->withTypesCount() != rhs->withTypesCount() ||
-                lhs->normTypesCount() != rhs->normTypesCount()) {
+                lhs->normTypesCount() != rhs->normTypesCount() ||
+                lhs->hasRest() != rhs->hasRest() ||
+                lhs->constasIndices() != rhs->constasIndices()) {
                 return false;
             }
             for (size_t i = 0; i < lhs->withTypesCount(); ++i) {
@@ -498,6 +631,10 @@ bool sameType(const Type *a, const Type *b) {
             }
             if (lhs->hasExitType()) {
                 pending.emplace_back(lhs->exitType(), rhs->exitType());
+            }
+            // What a function promises about resources is part of its type (effects plan 2.2).
+            if (!(lhs->resources() == rhs->resources())) {
+                return false;
             }
             break;
         }

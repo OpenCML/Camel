@@ -1,7 +1,0 @@
-import { fb } from b
-import { fc } from c
-
-func main(): int sync {
-    println(fb(1) + fc(1))
-    return 0
-}

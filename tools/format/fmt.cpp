@@ -757,6 +757,14 @@ any Formatter::visitSpreadValue(cst::SpreadValue context) {
 }
 
 /*
+indexValue   : '..' dataExpr ;
+The rest argument (`..(a, b)`, `..ts`), expanded at the call.
+*/
+any Formatter::visitRestValue(cst::RestValue context) {
+    return ".." + any_cast<string>(visitExpr(context->expr()));
+}
+
+/*
 keyTypePair  : identDef ':' typeExpr ;
 */
 any Formatter::visitKeyTypePair(cst::KeyTypePair context) {
@@ -782,10 +790,15 @@ any Formatter::visitKeyValuePair(cst::KeyValuePair context) {
 }
 
 /*
-keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)? ;
+keyParamPair : ('var' | 'const' | 'constas')? identDef (':' typeExpr ('=' dataExpr)?)?
+             | '..' identDef (':' typeExpr)? ;
 */
 any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
-    string result = context->tok(TK::KwVar) ? "var " : context->tok(TK::KwConst) ? "const " : "";
+    string result = context->tok(TK::DotDot)      ? ".."
+                    : context->tok(TK::KwConstas) ? "constas "
+                    : context->tok(TK::KwVar)     ? "var "
+                    : context->tok(TK::KwConst)   ? "const "
+                                                  : "";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
     const auto &typeExpr = context->type();
     const auto &dataExpr = context->expr();
@@ -1793,6 +1806,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(IdentDef)
         CAMEL_FORMAT(IdentRef)
         CAMEL_FORMAT(SpreadValue)
+        CAMEL_FORMAT(RestValue)
         CAMEL_FORMAT(WaitExpr)
         CAMEL_FORMAT(AssignExpr)
         CAMEL_FORMAT(LogicalOrExpr)

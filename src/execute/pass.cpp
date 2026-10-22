@@ -20,6 +20,7 @@
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
 #include "camel/core/array/block_selftest.h"
+#include "camel/core/type/array_type_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
@@ -261,6 +262,18 @@ class GcBlocksPass final : public GraphIRPass {
             camel::core::mm::blockBytesPeak(),
             camel::core::mm::blockLiveCount(),
             camel::core::mm::blockCreations());
+        return program;
+    }
+};
+
+class ArrayTypeSelfTestPass final : public GraphIRPass {
+  public:
+    explicit ArrayTypeSelfTestPass(const context_ptr_t &ctx) : GraphIRPass(ctx) {}
+
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override {
+        os << "ARRAY_TYPE_SELFTEST ok "
+           << camel::core::type::debugRunArrayTypeSelfTest() << "\n";
         return program;
     }
 };
@@ -745,7 +758,7 @@ PassScopePtr initPassScope() {
                     {"rgir_regions",
                      def(PASS1(
                          GraphVizDumpPass, (GraphVizDumpConfig{.rich = true, .regions = true})))},
-                    {"jgir", def(PASS(JsonGirDumpPass))},
+                    {"jgir", def(jgirDescriptor())},
                     {"agir",
                      def(PASS1(GraphVizDumpPass, GraphVizDumpConfig{.annotateRoles = true}))},
                     {"argir",
@@ -775,6 +788,10 @@ PassScopePtr initPassScope() {
                          {"remembered_set", def(PASS(GcRememberedSetPass))},
                          {"foreign_resource", def(PASS(GcForeignResourcePass))},
                          {"poison", def(PASS(GcPoisonPass))},
+                     })},
+                    {"type",
+                     scope({
+                         {"array", def(PASS(ArrayTypeSelfTestPass))},
                      })},
                     {"nodevm", def(PASS(NodeVMSchedPass))},
                     {"fastvm",
@@ -883,6 +900,7 @@ std::unordered_map<std::string, std::string> passAliases = {
     {"std::gcremembered", "std::gc::remembered_set"},
     {"std::gcforeign", "std::gc::foreign_resource"},
     {"std::gcpoison", "std::gc::poison"},
+    {"std::arraytype", "std::type::array"},
     {"std::bc", "std::fastvm::bytecode"},
     {"std::lbc", "std::fastvm::linked_bytecode"},
     {"std::bin", "std::fastvm::jit::dump::bin"},

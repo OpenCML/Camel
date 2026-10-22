@@ -1,6 +1,6 @@
 module tiles_matmul_rounding
 import { Tensor, reshape, sum } from tensor
-import { run } from tiles
+import { run_preferred_resident, download } from tiles
 
 func product(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> {
     return a @ b
@@ -17,11 +17,11 @@ func main(): int sync {
     // The normative matmul FMA chain must retain the residual -2^-46.
     let a = reshape([-1.0, 1.00000011920928955078125], [1, 2])
     let b = reshape([1.0, 0.99999988079071044921875], [2, 1])
-    println(sum(run<product>((a, b))))
+    println(sum(download(run_preferred_resident<product>((a, b)))))
     // A continuous chain across two tile boundaries returns 1; independently
     // accumulated panels return 2. K=34 also exercises the masked final tile.
     let ordered = reshape(range(0, 34)->map<ordered_term>, [1, 34])
     let ones = reshape(range(0, 34)->map<one>, [34, 1])
-    println(sum(run<product>((ordered, ones))))
+    println(sum(download(run_preferred_resident<product>((ordered, ones)))))
     return 0
 }

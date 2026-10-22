@@ -621,6 +621,123 @@ expect_output_not_contains = ["InvalidPassParameter", "42"]
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
+# H210: the scope decides what is printed, not only whether the command stops. A pass library
+# on the command line is not a module the program is made of, so a run whose program compiles
+# and whose pass library does not reports the library through `InvalidPassParameter` (its first
+# error as a secondary location) and never through a bare parse diagnostic of its own.
+
+[[tests]]
+name = "run_reports_a_failing_pass_library_as_invalid_pass_parameter"
+desc = "A healthy program with an unparsable pass library on the pipeline reports InvalidPassParameter naming the library, with the parse error as a secondary location, and no bare SyntaxDiag of the library."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile. [SyntaxDiag::MissingClosingDelimiter:", "unparsable_pass_lib.cml:10:5"]
+expect_output_not_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "42"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The parse-error path: resolving the pass list loads the pass's library before the program is
+# parsed. When the program itself does not parse, that library is still not part of the program:
+# the report is the entry module's syntax error, and the library's file does not appear.
+
+[[tests]]
+name = "run_parse_failure_report_excludes_the_pass_library"
+desc = "A program that does not parse, with an unparsable pass library on the pipeline, reports only the program's syntax error; the pass library's file and diagnostic are absent."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/unparsable_pass.cml"
+args = ["${case}", "unparsable_pass_lib::run"]
+expect_exit = 1
+expect_output_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "unparsable_pass.cml:8:5"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "InvalidPassParameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "run_parse_failure_counts_only_the_program_files"
+desc = "The text format of the same parse failure prints one error in the summary (`camel: 1 error`) and no line from the pass library."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/unparsable_pass.cml"
+args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run"]
+expect_exit = 1
+expect_output_contains = ["error[SyntaxDiag::MissingClosingDelimiter]", "unparsable_pass.cml:8:5", "camel: 1 error"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "InvalidPassParameter", "camel: 2 errors"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The compile path: the program's own imported module fails, so the program fails as a program;
+# the pass library that was loaded with the pass list is outside the report and outside the
+# error count. Before H210 its parse error was printed as a second module's diagnostics and
+# counted in the summary (`camel: 3 errors`).
+
+[[tests]]
+name = "run_compile_failure_report_excludes_the_pass_library"
+desc = "A program whose imported module does not parse, with an unrelated unparsable pass library on the pipeline, reports the program's two modules and not the library's diagnostic or file."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["(name=SemanticDiag::ModuleParseFailed", "unparsable_pass.cml:8:5"]
+expect_output_not_contains = ["unparsable_pass_lib.cml"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "run_compile_failure_counts_only_the_program_modules"
+desc = "The text format of the same compile failure counts the program's two errors (`camel: 2 errors`), not a third from the pass library."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["--error-format", "text", "${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["[imported by main]", "unparsable_pass.cml:8:5", "camel: 2 errors"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "camel: 3 errors"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The same answer in JSON: `-E json` prints the failed modules of the scope. The library's module
+# object is in the context, but not in the answer.
+
+[[tests]]
+name = "run_json_compile_failure_report_excludes_the_pass_library"
+desc = "Under -E json the program's compile failure reports the program's modules only: the unrelated pass library's module and file do not appear."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/imports_unparsable.cml"
+args = ["-E", "json", "${case}", "unparsable_pass_lib::run", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["\"name\":\"SemanticDiag::ModuleParseFailed\"", "unparsable_pass.cml"]
+expect_output_not_contains = ["unparsable_pass_lib.cml", "\"moduleName\":\"unparsable_pass_lib\""]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# H198's remaining nuance: a `--timeit` iteration reports a failed pass library through the same
+# wrapper as a run. The iteration is a failed iteration (no elapsed time, no summary); the
+# library's raw parse diagnostic is not what the user sees.
+
+[[tests]]
+name = "timeit_reports_a_failing_pass_library_as_invalid_pass_parameter"
+desc = "`--timeit` on an unparsable pass library names the failed iteration, reports InvalidPassParameter with the library's parse error as a secondary location, and prints no bare SyntaxDiag, no elapsed time and no summary."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["--timeit", "unparsable_pass_lib::run/1", "${case}"]
+expect_exit = 1
+expect_output_contains = ["[timeit] 1/1 pass=unparsable_pass_lib::run failed", "RuntimeDiag::InvalidPassParameter", "its library 'unparsable_pass_lib' does not compile.", "unparsable_pass_lib.cml:10:5"]
+expect_output_not_contains = ["(name=SyntaxDiag::MissingClosingDelimiter", "elapsed=", "mean"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
+name = "timeit_json_reports_a_failing_pass_library_as_invalid_pass_parameter"
+desc = "The JSON form of the same failed iteration carries the InvalidPassParameter diagnostic with the library's file and location, not the bare SyntaxDiag object, and no summary fields."
+kind = "negative"
+case = "../../../cases/modules/graph_pass/tiny.cml"
+args = ["--output-format", "json", "--timeit", "unparsable_pass_lib::run/1", "${case}"]
+expect_exit = 1
+expect_output_contains = ["\"pass\": \"unparsable_pass_lib::run\"", "\"name\":\"RuntimeDiag::InvalidPassParameter\"", "unparsable_pass_lib.cml"]
+expect_output_not_contains = ["\"name\":\"SyntaxDiag::MissingClosingDelimiter\"", "\"mean_ms\""]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The `with` parameters of a pass function are the pass parameters written on the pipeline.
 
 [[tests]]

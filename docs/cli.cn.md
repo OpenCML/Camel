@@ -54,10 +54,10 @@
 - `--block-limit <megabytes>`：数据块空间的上限（默认 2048 MB，取值 1 到 2^20 MB）；它只防范失控的分配，最后一个持有者消失时块的内存立即归还  
 - `--graph-gc-mb <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
 - `--native-stack-guard <on|off>`：嵌套调用前是否检查原生栈（默认 `on`）；`off` 只用于测量栈真正到哪里结束，不供正常使用  
-- `--devices <cpu|ordinal[,ordinal...]>`：一条流水线可以使用的设备（设计原则 13.4）：`cpu` 表示只用主机，或者按流水线可用的次序写 CUDA 序号（例如 `0`、`0,1`）。这里点名的设备必须存在：缺失时是运行时故障 `DeviceUnavailable`，报告中点出这个设备以及机器上实际有的设备；不给这个选项时，缺失只意味着程序在主机上运行（见 `modules/tiles/README.md` 的 "Tiles"）。今天一条流水线在第一个序号上执行，多卡执行是 G7。`--devices cpu` 下 `tiles:available()` 为假，需要设备的操作报错，而不是悄悄移到 GPU 上。它取代环境变量 `CAMEL_TILES_DEVICE`，后者不再被读取  
+- `--devices <cpu|ordinal[,ordinal...]>`：一条流水线可以使用的设备（设计原则 13.4）：`cpu` 表示只用主机，或者按流水线可用的次序写 CUDA 序号（例如 `0`、`0,1`）。这里点名的设备必须存在：只要已加载的模块拥有设备，启动时就会在**任何图运行之前**检查一次（`--devices cpu` 永远通过；不给这个选项时，缺失只意味着程序在主机上运行）。缺失的序号是运行时诊断 `DeviceUnavailable`（`0x04000070`），报告中点出这个设备、机器上实际有多少 CUDA 设备（或为什么一台都问不到），以及其它同样缺失的序号；退出码为 1。程序即使一次都没有执行到设备操作，也照样报出（见 `modules/tiles/README.md` 的 "Tiles"）。今天一条流水线在第一个序号上执行，多卡执行是 G7。`--devices cpu` 下 `tiles:available()` 为假，需要设备的操作报错，而不是悄悄移到 GPU 上。它取代环境变量 `CAMEL_TILES_DEVICE`，后者不再被读取  
 - `--profile-mode <normal|full>`：`--profile` 启动的剖析器模式；`full` 在写出报告时同时打开 Perfetto 界面（需要 `--profile`）  
 - `-n`, `--no-cache`：不使用缓存模块  
-- `-I`, `--include <dir>`：添加模块搜索根（可多次使用）。查找顺序是：入口文件所在目录，然后是按给出顺序排列的每个 `-I` 目录，然后是 `CAMEL_PACKAGES` 列出的目录，然后是旧的 `CAMEL_MODULE_PATH`，最后是标准库。从文件加载的模块先在自己的目录里查找，再按这个顺序查找。相对路径按入口文件所在目录解析。不存在的 `-I` 根不会被静默跳过：无法解析的 import 是 `ModuleNotFound` 诊断，它会点出该根并说明路径不存在  
+- `-I`, `--include <dir>`：添加模块搜索根（可多次使用）。模块的 `import` 按这样的顺序查找：导入它的模块自己的目录，然后是按给出顺序排列的每个 `-I` 目录，然后是 `CAMEL_PACKAGES` 列出的目录，然后是旧的 `CAMEL_MODULE_PATH`，最后是标准库（设计原则 10.2）。入口程序与库模块同一条规则：它自己的目录就是入口文件所在目录，而这个目录不是任何别的模块的搜索根，所以一个库无论被谁导入，它的 import 都解析到同一处。`CAMEL_PACKAGES` 添加的是与 `-I` 同类的根：排在各个 `-I` 之后、标准库之前。相对路径按入口文件所在目录解析。不存在的 `-I` 根不会被静默跳过：无法解析的 import 是 `ModuleNotFound` 诊断，它按这个顺序列出试过的每个目录，并说明其中哪些不存在（缺的那个根就在其中）  
 - `-L`, `--stdlib <path>`：指定标准库路径，加入模块搜索路径。省略时用环境变量 `CAMEL_STD_LIB`；两者都没有时，标准库在可执行文件旁和安装根目录（`CAMEL_HOME`）下的 `stdlib` 目录里查找  
 - `-E`, `--error-format`, `--output-format <text|short|json>`：诊断的格式（默认：`text`），见下文“诊断”；`--timeit` 的输出也沿用这个选项
 - `--color`、`--max-errors`、`-N`/`--max-warning`、`-W...`：见下文“诊断”
@@ -263,7 +263,7 @@
 ]
 ```
 
-- `range` 从 0 开始计数；`data.modulePath` 是文件。没有源码位置的诊断（未知的遍名、永远不会运行的遍）的 range 全为零，`modulePath` 为空。
+- `range` 从 0 开始计数；`data.modulePath` 是诊断所在的文件，`data.moduleName` 是诊断为它的模块携带的名字（声明的 `module` 名——入口文件没有声明时是 `main`——或者，仅由位置定位的诊断是文件的词干）。没有源码位置的诊断（未知的遍名、模块不提供的遍、永远不会运行的遍）的 range 全为零，二者均为空：它说的是什么在 `data.stage`（`pass:<模块>::<遍>`）和 `message` 里。
 - `data.name` 是稳定的诊断名；`code` 是它的数字形式。
 - 遍提交的每一张图（以及前端编码的每一张图）都做结构校验，release 构建中也是如此：节点、槽和边的引用在范围内，输入和输出互为镜像，`BRCH`/`JOIN` 的分支臂数目，`GATE` 有一个值输入和一个控制输入，直接调用传入的实参个数与被调用者接受的一致。违反时是 `RuntimeDiag::PassInternalError`，指出提交该图的遍，在任何东西运行之前报告。
 - 从某个遍逃逸出来而又不是诊断的异常（提交重写时的图校验、调度器构建执行顺序时遇到环）报告为 `RuntimeDiag::PassInternalError`（`0x0400000C`），阶段为 `pass:<name>`，消息里是异常的文本，没有源码位置，退出码为 1。它标志的是编译器的缺陷，不是对程序的拒绝。即使那是调度遍，阶段给出的也是遍的名字，所以它不能说明程序是否已经运行了一部分。任何遍之外的异常报告为 `InternalDiag::UnknownInternalError`，阶段为 `internal`。

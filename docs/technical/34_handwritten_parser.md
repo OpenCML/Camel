@@ -384,7 +384,7 @@ The 11 corpus files that differ, all by a rule or a ruling:
 
 | Files | Cause |
 |---|---|
-| `test/cases/compile/surface/angle_then_name_line.cml`, `angle_then_string_line.cml`, and five document blocks that quote them or `f<a>(x), g<b>(y)` | rules 1 and 2: finding 12 of `docs/issues/2026-10-12-language-surface-findings.md`, now read as written |
+| `test/cases/compile/surface/angle_then_name_line.cml`, `angle_then_string_line.cml`, and five document blocks that quote them or `f<a>(x), g<b>(y)` | rules 1 and 2: the angle-bracket ruling of 2026-10-12, now read as written |
 | `test/cases/consistency/surface/minus.cml`, `test/cases/format/minus.cml`, `test/plans/feat/parse/golden/numbers_format.cml` | `- 1` is a negation, not the literal `-1` (same value) |
 | `test/cases/compile/semantic/raise_is_a_name.cml` | `raise` is a name |
 

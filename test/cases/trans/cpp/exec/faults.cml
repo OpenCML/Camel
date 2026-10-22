@@ -1,5 +1,5 @@
 /// A fault ends the program with the report the interpreters print, source excerpt included,
-/// after the output written before it (docs/design/cpp-memory appendix B D6).
+/// after the output written before it (design principles 10.6).
 module faults
 
 func quot(a: int, b: int): int {

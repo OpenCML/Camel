@@ -427,21 +427,6 @@ const std::vector<oper_group_ptr_t> &txnGroups() {
               functionRule(1, "(f: F) => Graph", [](Type *) -> Type * {
                   return HandleType::get(HandleKind::Graph);
               })}}));
-        // The result is a node, and the value may be a number, a bool or a string.
-        out.push_back(OperatorGroup::create(
-            "add_constant",
-            {{"graph:add_constant",
-              DynamicFuncTypeResolver::create(
-                  {{0, {}}, {3, {false, false, false}}},
-                  "(t: Txn, g: Graph, value: T) => Node, T a number, bool or string",
-                  [](const type_vec_t &, const type_vec_t &norm, const ModifierSet &)
-                      -> std::optional<Type *> {
-                      if (!HandleType::is(norm[0], HandleKind::Txn) ||
-                          !HandleType::is(norm[1], HandleKind::Graph) || !constantType(norm[2])) {
-                          return std::nullopt;
-                      }
-                      return HandleType::get(HandleKind::Node);
-                  })}}));
         return out;
     }();
     return groups;

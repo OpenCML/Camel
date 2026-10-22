@@ -190,4 +190,9 @@ class ExtentForm {
     std::vector<std::pair<std::string, int64_t>> terms_;
 };
 
+/// The dimension sequences bound to pack names (`T[..rest]`) at one call: name -> extents. The
+/// pack of a fixed-rank argument is its dimensions after the parameter's prefix; an empty
+/// sequence means the pack stood for no dimensions at all (design principles 5.4).
+using ExtentPacks = std::map<std::string, std::vector<ExtentForm>>;
+
 } // namespace camel::core::type

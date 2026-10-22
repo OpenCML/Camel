@@ -113,7 +113,9 @@ class TensorType : public type::OtherType {
     type::OtherType *cloneWithArguments(
         std::span<const type::TypeArgument> arguments, std::string &error) const override;
     bool extentForms(std::vector<type::ExtentForm> &out) const override;
-    type::OtherType *withExtentValues(const type::ExtentValues &values) const override;
+    /// Tensor shapes have no pack (`T[..rest]`), so the packs are not consulted.
+    const type::Type *withExtentValues(
+        const type::ExtentValues &values, const type::ExtentPacks &packs) const override;
 
   private:
     TensorType(

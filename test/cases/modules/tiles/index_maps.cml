@@ -1,6 +1,6 @@
 module tiles_index_maps
 import { Tensor, random, seed, sum, abs, transpose, permute, slice, reshape, zeros } from tensor
-import { run } from tiles
+import { run_preferred_resident, download } from tiles
 
 func trans(x: Tensor<f32>): Tensor<f32> { return transpose(x) }
 func axes(x: Tensor<f32>): Tensor<f32> { return permute(x, [-1, 0, 1]) }
@@ -12,11 +12,11 @@ func empty(x: Tensor<f32>): Tensor<f32> { return slice(x, 2, 7, 7) }
 func main(): int sync {
     seed(47)
     let x = random([2, 3, 7], -5.0, 5.0)
-    println(sum(abs(run<trans>(x) - trans(x))))
-    println(sum(abs(run<axes>(x) - axes(x))))
-    println(sum(abs(run<crop>(x) - crop(x))))
-    println(sum(abs(run<chain>(x) - chain(x))))
-    println(sum(run<empty>(x)))
-    println(sum(run<trans>(zeros([2, 0, 7]))))
+    println(sum(abs(download(run_preferred_resident<trans>(x)) - trans(x))))
+    println(sum(abs(download(run_preferred_resident<axes>(x)) - axes(x))))
+    println(sum(abs(download(run_preferred_resident<crop>(x)) - crop(x))))
+    println(sum(abs(download(run_preferred_resident<chain>(x)) - chain(x))))
+    println(sum(download(run_preferred_resident<empty>(x))))
+    println(sum(download(run_preferred_resident<trans>(zeros([2, 0, 7])))))
     return 0
 }

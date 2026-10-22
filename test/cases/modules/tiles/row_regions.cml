@@ -1,6 +1,6 @@
 module tiles_row_regions
 import { Tensor, random, seed, exp, sum, mean, max, sqrt, abs, reshape } from tensor
-import { run, inspect } from tiles
+import { inspect, run_preferred_resident, download } from tiles
 func softmax(x: Tensor<f32>): Tensor<f32> {
     let e = exp(x - max(x, 1, true))
     return e / sum(e, 1, true)
@@ -25,19 +25,19 @@ func main(): int sync {
     println(inspect<softmax>(x))
     println(inspect<normalize>((x, scale, bias)))
     println(inspect<reused>(x))
-    println(sum(abs(run<softmax>(x) - softmax(x))))
-    println(sum(abs(run<normalize>((x,scale,bias)) - normalize(x,scale,bias))))
-    println(sum(abs(run<reused>(x) - reused(x))))
+    println(sum(abs(download(run_preferred_resident<softmax>(x)) - softmax(x))))
+    println(sum(abs(download(run_preferred_resident<normalize>((x,scale,bias))) - normalize(x,scale,bias))))
+    println(sum(abs(download(run_preferred_resident<reused>(x)) - reused(x))))
     let small = random([1,3], -3.0, 3.0)
-    println(sum(abs(run<softmax>(small) - softmax(small))))
+    println(sum(abs(download(run_preferred_resident<softmax>(small)) - softmax(small))))
     let tail = random([65537,2], -1.0, 1.0)
-    println(sum(abs(run<reused>(tail) - reused(tail))))
+    println(sum(abs(download(run_preferred_resident<reused>(tail)) - reused(tail))))
     let narrow = random([3,1], -1.0, 1.0)
-    println(sum(abs(run<softmax>(narrow) - softmax(narrow))))
+    println(sum(abs(download(run_preferred_resident<softmax>(narrow)) - softmax(narrow))))
     let wide = random([2,2049], -1.0, 1.0)
-    println(sum(abs(run<reused>(wide) - reused(wide))))
+    println(sum(abs(download(run_preferred_resident<reused>(wide)) - reused(wide))))
     let cancellation = reshape([1267650600228229401496703205376.0, 1.0, -1267650600228229401496703205376.0, 1.0], [1,4])
-    println(sum(run<ordered_fallback>(cancellation)))
-    println(sum(abs(run<ordered_fallback>(cancellation) - ordered_fallback(cancellation))))
+    println(sum(download(run_preferred_resident<ordered_fallback>(cancellation))))
+    println(sum(abs(download(run_preferred_resident<ordered_fallback>(cancellation)) - ordered_fallback(cancellation))))
     return 0
 }

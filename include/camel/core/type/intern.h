@@ -75,6 +75,7 @@
 #pragma once
 
 #include "camel/core/type/base.h"
+#include "camel/core/type/extent.h"
 #include "camel/utils/append_only_table.h"
 
 #include <cstdint>
@@ -111,6 +112,19 @@ class TypeTable {
 
     /// The type with this id. Lock-free. `id` must come from Type::typeId() and be non-zero.
     Type *get(TypeId id) const { return byId_[id]; }
+
+    /**
+     * The canonical extent list of a shape: one entry per distinct shape text
+     * (`ExtentForm::toString`), which is normalized by construction (terms sorted and merged,
+     * zero coefficients dropped). The same shape written two ways therefore has one address,
+     * and an array type's intern key is four words instead of a variable-length shape. Empty
+     * input has no entry: it means "no dimensions", not a one-dimension shape, and maps to
+     * nullptr. The returned vector lives in the table and is immutable.
+     */
+    const std::vector<ExtentForm> *internExtents(std::span<const ExtentForm> extents);
+
+    /// An interned text (a dimension pack name), by value. Empty maps to nullptr.
+    const std::string *internText(std::string_view text);
 
     /// Number of ids handed out, the reserved id 0 included.
     uint32_t size() const { return byId_.size(); }
@@ -154,6 +168,8 @@ class TypeTable {
     mutable std::mutex mutex_;
     std::unordered_map<Key, Type *, KeyHash, KeyEqual> byKey_;
     camel::utils::AppendOnlyTable<Type *> byId_; // index 0 is reserved (kNoTypeId)
+    std::unordered_map<std::string, std::vector<ExtentForm>> extents_;
+    std::unordered_map<std::string, std::string> texts_;
     size_t hits_ = 0;
 };
 

@@ -1,0 +1,5 @@
+// The array type's dims self-test runs from the pass `std::type::array`; the program itself
+// does nothing.
+func main(): int sync {
+    return 0
+}

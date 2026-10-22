@@ -417,7 +417,7 @@ Value Evaluator::translate(GCGraph *graph, std::span<const Value> inputs) {
 bool isSourceName(std::string_view name) { return !name.empty() && !name.starts_with("__"); }
 
 /// How the export refuses a LOOP node: the translation of a LOOP to an ONNX Loop is the next
-/// step (docs/design/loops 5.7), so it is refused where it is written instead of being lowered
+/// step (design principles 3.10), so it is refused where it is written instead of being lowered
 /// to a recursion the export would have to recover again. The translation reports it when a
 /// LOOP node reaches it (evalNode); refuseLoopNodes reports the same text before the export
 /// simplifies the function.
@@ -724,7 +724,7 @@ Value Evaluator::evalNode(Activation &act, gc_node_ref_t ref) {
     case GCNodeKind::Call:
         return evalIndirectCall(act, ref);
     case GCNodeKind::Loop:
-        // A LOOP node maps one to one onto an ONNX Loop (docs/design/loops 5.7); that
+        // A LOOP node maps one to one onto an ONNX Loop (design principles 3.10); that
         // translation is the next step. Until then the export refuses it where it is written
         // rather than lowering it to a recursion it would have to recover again.
         throw ExportError(loopRefusalText(*g));

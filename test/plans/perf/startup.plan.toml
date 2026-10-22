@@ -1,9 +1,8 @@
 # The cost of everything `camel` does before a program runs (handover H142).
 #
 # A declaration module (`stdlib/<module>.cml`) is parsed and compiled like a library when it is
-# imported. The tool derives their set and their declaration count from the tree (H177), so a new
-# module is measured the day its `.cml` lands; the count below is the one those sources held when
-# this pin was last read. This plan pins three commands that run before any program code does: the
+# imported. The tool derives their set and their declaration count from the tree, so a new module is
+# measured the day its `.cml` lands; the printed count is the tool's, never a pinned one. This plan pins three commands that run before any program code does: the
 # process itself (`--version`), a one-line program with no imports, and `inspect --ops` on a
 # program that imports every standard library module. It also runs that program, so the same import
 # work is timed on the run path.
@@ -14,13 +13,17 @@
 # The numbers and their spread are in handover note ⟨c49da87⟩ (H142). They are a smoke alarm for "the
 # standard library is now loaded before the program runs", not a percentage budget: this host is
 # shared, and a few milliseconds of spread is normal. H177 re-measured them at load average 21-22:
-# 5.1 / 7.4 / 38.3 / 37.0 ms. The two full-import commands are now about 2.6 and 2.4 times the quiet
-# median, not four, because importing `pyplot` initialises CPython in `load()` (~9.5 ms) and the
-# other new modules load too. The ceilings were left unchanged (handover note ⟨83d6558⟩ (H177)); their margin over
-# a load-215 window is thinner than it was, though: H142's load factors project about 127 / 113 ms
-# for the two full-import commands, over the 100 / 90 ceilings, so a later re-baseline may need
-# 150 / 140. The gate passes at every load measured here. The test prints one `startup.cost` line per
-# command (median, p10, p90, min, max, n) and fails only when a median crosses its ceiling.
+# 5.1 / 7.4 / 38.3 / 37.0 ms. The two full-import commands were about 2.6 and 2.4 times the quiet
+# median, not four, because `tiles`, `tensor`, `nn` and `autodiff` load too and because importing
+# `pyplot` then initialised CPython in `load()` (~9.5 ms). H221 took that initialisation out of
+# every `load()` — `import` executes no code (design principles 3.1), the interpreter is created by
+# the first `plot` or `py_*` call — so at load 10.7 those two medians are 31.8 / 31.5 ms and sit
+# about three times below the ceilings. The ceilings were left unchanged (handover notes ⟨83d6558⟩
+# (H177) and the H221 report); their margin over a load-215 window is thinner than it was, though:
+# H142's load factors project about 127 / 113 ms for the two full-import commands, over the 100 / 90
+# ceilings, so a later re-baseline may need 150 / 140. The gate passes at every load measured here.
+# The test prints one `startup.cost` line per command (median, p10, p90, min, max, n) and fails only
+# when a median crosses its ceiling.
 #
 # `declaration.cost` is the same idea one level down (handover H152): the compiler's own
 # `--time-phases` report of the declaration modules, added up and divided by their declarations.
@@ -29,10 +32,15 @@
 # declaration and is gated at three times that. The line also prints the declarations' share of
 # the compile work of the whole run, which is the half of the pair that does not read as load.
 # H152 measured 18-19% with nine modules; H177 measured 17.8% with all twenty (10.9% with the old
-# nine only). The share fell because the run's import work grew (CPython's initialisation is not
-# declaration work), so the ceiling is a coarse alarm, not a declaration budget: a re-added H142
-# 4.6 ms would read about 24% today, under the 30% ceiling. H177 left the ceiling unchanged and
-# recorded the numbers and the per-module table in handover note ⟨83d6558⟩ (H177).
+# nine only). The share fell then because the run's import work grew (CPython's initialisation is
+# not declaration work). H221 removed that initialisation from the import path, so the same
+# declaration work is now 24.2% of a smaller denominator; the ceiling is still a coarse alarm, not a
+# declaration budget, and 24.2% is under it. H177 left the ceiling unchanged and recorded the
+# numbers and the per-module table in handover note ⟨83d6558⟩ (H177); H221 recorded its window in
+# docs/technical/50_pyplot_cpython_init.md §4.3.
+#
+# `declarations=` is how many declarations the run compiles; it is printed for the record and
+# moves whenever a module is migrated. It is not asserted: only the per-declaration ceiling is.
 id = "perf.startup"
 order = 401
 tier = "slow"
@@ -46,7 +54,7 @@ tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=309"]
+expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations="]
 # Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
 # well under half a minute under load. 120 s catches a hang, not a slow run.
 timeout_ms = 120000

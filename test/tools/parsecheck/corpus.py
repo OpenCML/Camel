@@ -20,6 +20,7 @@ The documents and progen groups belong to the differential harness this tool was
 they are still built on request, but nothing in the tree consumes them any more: check.py builds
 the snapshot list from the .cml groups alone.
 
+
 Run from the repository root.
 """
 import argparse

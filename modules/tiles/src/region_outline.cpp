@@ -10,6 +10,7 @@
 
 // Extract eligible regions and replace them with typed calls, independent of device backend.
 #include "camel/core/context/context.h"
+#include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/mm/gen.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/struct.h"
@@ -19,6 +20,7 @@
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
+#include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
 #include <algorithm>
 #include <mutex>
@@ -75,7 +77,8 @@ runtime::gc_node_ref_t transferAggregate(
 
 const runtime::Program *outlineRegions(
     core::context::Context &context, const runtime::Program *program, runtime::GCGraph *root,
-    operator_t run, const std::string &uri, size_t &count, const RegionDeviceOps *device) {
+    operator_t run, const std::string &uri, size_t &count, const RegionDeviceOps *device,
+    bool refuseGpuScopes) {
     namespace rt = runtime;
     if (device &&
         (!device->upload || !device->execute || !device->download || run != device->execute))
@@ -94,6 +97,39 @@ const runtime::Program *outlineRegions(
     std::unordered_map<rt::GCGraph *, RegionAnalysis> analyses;
     for (auto *graph : graphs) {
         analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts()));
+    }
+    if (refuseGpuScopes) {
+        // A `#gpu` scope promises the device runs everything written in it (design principles
+        // 13.4, GPU design 6.1). The capability list is the one the region compiler lowers; an
+        // operator outside it would otherwise stay on the CPU without a word, which is the
+        // silent fallback the design forbids. Report every such node and leave the graphs alone.
+        // The placement query is the only reader of `tiles.placement`: it answers Host for an
+        // untagged node and for `#cpu`, so only a device answer reaches this promise.
+        bool refused = false;
+        for (auto *graph : graphs) {
+            for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
+                const auto *node = graph->node(id);
+                if (node->kind != rt::GCNodeKind::Oper)
+                    continue;
+                if (!placementOf(*graph, id).onDevice())
+                    continue;
+                const auto oper = graph->nodeBodyAs<rt::GCOperBody>(id)->oper;
+                if (deviceCapable(oper))
+                    continue;
+                auto diag = context.rtmDiags()->of(core::error::RuntimeDiag::GpuScopeUnsupported);
+                const auto origin = graph->nodeOrigin(id);
+                if (origin != camel::source::kInvalidOriginId)
+                    diag.atOrigin(origin);
+                diag.commit(
+                    std::string(graph->name()),
+                    "operator '" +
+                        std::string(core::OperatorTable::instance().uri(oper)) + "'",
+                    "no device implementation");
+                refused = true;
+            }
+        }
+        if (refused)
+            return program;
     }
     for (auto *graph : graphs) {
         const auto &analysis = analyses.at(graph);

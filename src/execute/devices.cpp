@@ -13,6 +13,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <map>
+#include <mutex>
 #include <system_error>
 #include <utility>
 
@@ -24,6 +26,19 @@ namespace {
 DeviceSelection &selectionStorage() {
     static DeviceSelection selection;
     return selection;
+}
+
+/// The validators of the modules that have been loaded, keyed by module name (ordered, so a run
+/// that reports one failure reports the same one every time). A module registers its validator
+/// while it loads; the driver calls them all once, before the first graph runs.
+struct DeviceValidatorRegistry {
+    std::mutex mutex;
+    std::map<std::string, DeviceValidator> validators;
+};
+
+DeviceValidatorRegistry &deviceValidators() {
+    static DeviceValidatorRegistry registry;
+    return registry;
 }
 
 constexpr int kMaxDeviceOrdinal = 65535;
@@ -105,5 +120,38 @@ std::optional<DeviceSelection> parseDeviceSelection(std::string_view text, std::
 void selectDevices(DeviceSelection selection) { selectionStorage() = std::move(selection); }
 
 const DeviceSelection &selectedDevices() { return selectionStorage(); }
+
+void registerDeviceValidator(const std::string &module, DeviceValidator validator) {
+    auto &registry = deviceValidators();
+    std::lock_guard lock(registry.mutex);
+    registry.validators.insert_or_assign(module, std::move(validator));
+}
+
+std::optional<DeviceValidationFailure> validateSelectedDevices() {
+    const auto &selection = selectedDevices();
+    // The host-only selection is the plan's escape hatch and is answered here, before any module
+    // is asked: `--devices cpu` always passes. Without `--devices` the device is a preference,
+    // not a requirement, so there is nothing to check either.
+    if (!selection.given || selection.cpu || selection.cuda.empty()) {
+        return std::nullopt;
+    }
+    // Ask outside the lock: a validator may load another module or register a validator itself.
+    std::vector<DeviceValidator> validators;
+    {
+        auto &registry = deviceValidators();
+        std::lock_guard lock(registry.mutex);
+        validators.reserve(registry.validators.size());
+        for (const auto &[module, validator] : registry.validators) {
+            (void)module;
+            validators.push_back(validator);
+        }
+    }
+    for (const auto &validator : validators) {
+        if (auto failure = validator()) {
+            return failure;
+        }
+    }
+    return std::nullopt;
+}
 
 } // namespace camel::execute

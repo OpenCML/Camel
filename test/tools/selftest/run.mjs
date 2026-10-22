@@ -552,8 +552,7 @@ const forbiddenPlan = (name) =>
     name.startsWith('feat/mm/gc_') ||
     name === 'feat/opt/progen' ||
     name.startsWith('feat/opt/progen.') ||
-    name.includes('tiles_regions') ||
-    name.includes('tiles_decorator')
+    name.includes('tiles_regions')
 for (const rule of selectionDoc.rules || []) {
     for (const entry of rule.plans || []) {
         const name = typeof entry === 'string' ? entry : entry.plan
@@ -576,6 +575,10 @@ for (const rule of selectionDoc.rules || []) {
 // and for files no plan can read (vendored code, packaging, CI configuration).
 const RULELESS_ALLOWED = [
     {
+        match: /^hello\.cml$/,
+        why: 'a sample program at the repository root; no test plan reads it',
+    },
+    {
         match: /^benchmarks\//,
         why: 'the benchmarks and their PyTorch baselines are the manual perf layer (H167); a change here must not select a perf plan',
     },
@@ -596,7 +599,7 @@ const RULELESS_ALLOWED = [
         why: 'CI and editor configuration; no test plan reads it',
     },
     {
-        match: /^(LICENSE|ABOUT|ZEN|changes\.log|conanfile\.txt|package-lock\.json|hello\.cml|export_matrix\.(csv|md))$/,
+        match: /^(LICENSE|ABOUT|ZEN|changes\.log|conanfile\.txt|package-lock\.json|export_matrix\.(csv|md))$/,
         why: 'repository metadata and generated release artifacts; no plan reads them',
     },
     {

@@ -43,7 +43,7 @@ module lease, argument table, fault word, stream and pinned staging allocations.
 An event alone does not retain any of those objects. Every exit path after the
 first enqueue, including construction failure, must drain or transfer ownership
 of the submitted work before releasing its resources. `submitProgram` is an
-internal interface: `run`, `run_device`, and resident downloads observe its
+internal interface: `run_preferred_resident` and resident downloads observe its
 completion before returning to Camel. Completion events use their retained
 backend context for recording, querying, waiting and destruction.
 

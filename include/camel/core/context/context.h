@@ -105,7 +105,16 @@ class Context : public std::enable_shared_from_this<Context> {
     error::DiagsConfig diagConfig_;
 
     module_ptr_t mainModule_;
-    std::unordered_map<std::string, module_ptr_t> modules_;
+    /// The modules loaded from a file, by the canonical path of that file. A module's import
+    /// resolves in its own directory first (design principles 10.2), so two modules in different
+    /// directories that import the same name are two different modules: the cache is keyed by
+    /// the file a name resolved to, not by the name (H220).
+    std::unordered_map<std::string, module_ptr_t> modulesByPath_;
+    /// Every module loaded so far, in load order, once each: the iteration order of
+    /// `allUserModules` and `importedModules` cannot lose one of two same-named modules.
+    std::vector<module_ptr_t> loadedModules_;
+    /// The pointers in `loadedModules_`, so the same module is listed once.
+    std::unordered_set<const module::Module *> loadedModulePtrs_;
     /// The type declarations being built right now, outermost first, across every module (see
     /// enterTypeDeclaration).
     std::vector<std::pair<const module::Module *, std::string>> typeDeclarations_;
@@ -153,30 +162,64 @@ class Context : public std::enable_shared_from_this<Context> {
     std::unordered_map<std::string, DirectoryListing> directoryListings_;
 
     std::optional<module_ptr_t> getBuiltinModule(const std::string &name);
-    std::vector<std::string>
-    getModuleNameCandidates(const std::string &currentModule, const std::string &rawImportName);
-    std::string
-    resolveRelativeModuleName(const std::string &currentModule, const std::string &importName);
+    /// The module names an import spelling stands for, in the order they are looked up. The
+    /// grammar allows a relative prefix before a dotted name (`.`/`..`/`...`; see
+    /// docs/language/08_top_level_and_grammar.md): its dots drop that many components from the
+    /// importing module's own name, so the names returned here are resolved names, never the
+    /// spelling itself (design principles 10.2: an import names a module, not a path). `problem`
+    /// is set instead when the prefix drops more components than the name has; no candidate and
+    /// no directory lookup exists then.
+    std::vector<std::string> getModuleNameCandidates(
+        const std::string &currentModule,
+        const std::string &rawImportName,
+        std::string &problem);
+    /// The resolved name a relative spelling stands for (`..lib` in `a.b` is `lib`), or empty and
+    /// `problem` set when it drops more components than `currentModule` has.
+    std::string resolveRelativeModuleName(
+        const std::string &currentModule, const std::string &importName, std::string &problem);
     /** Look up the file for a module. Any suffix other than .cmo is treated as source code; .cmo is
-     * treated as a dynamic library. An empty first value means not found. */
+     * treated as a dynamic library. An empty first value means not found. This searches the
+     * module roots only; the importing module's own directory comes first in `resolveModulePath`.
+     */
     std::pair<std::string, bool> getModulePathAndKind(const std::string &moduleName);
-    /** `getModulePathAndKind` for one search root: `base/<name>.cmo` or `base/<name>.*`, then the
+    /// Resolve a module name in the order of design principles 10.2: the importing module's own
+    /// directory, then the module roots (`-I` in the order given, `CAMEL_PACKAGES`, the legacy
+    /// `CAMEL_MODULE_PATH`), then the standard library. An empty `importerDir` means the entry
+    /// program, whose own directory is `entryDir`.
+    std::pair<std::string, bool>
+    resolveModulePath(const std::string &moduleName, const std::string &importerDir);
+    /** `findModuleUnder` for one search root: `base/<name>.cmo` or `base/<name>.*`, then the
      * same inside `base/<name>/`. Used for the directory of the importing module, before the
-     * global search paths (H112). */
+     * global search paths (H112). `moduleName` is a resolved module name (`IDENT ('.' IDENT)*`),
+     * not an import spelling and not a path: a spelling with an empty component (the relative
+     * prefix of `..lib`) names no file here, because dots become separators and a leading dot
+     * would mean the filesystem root. */
     std::pair<std::string, bool>
     findModuleUnder(const std::string &baseDir, const std::string &moduleName);
+    /// The directory of the importing module: the directory of the file it was loaded from, or
+    /// the entry file's directory for the entry program and for a program-level import (a pass
+    /// library, a definition).
+    std::string importerDirectory(const module::Module *importer) const;
+    /// The module already loaded from the file `path`, if any: the import cache is keyed by the
+    /// file a name resolved to, so two modules that resolved to different files are two modules
+    /// even when they have the same name (H220).
+    module_ptr_t moduleAtPath(const std::string &path) const;
+    /// Register the module a name resolved to and finish loading it (a `.cmo` as a dynamic
+    /// library). Null when there is none. `resolvedPath` is the file the lookup found, which for
+    /// a `.cmo` with declarations beside it is not `module->path()`.
+    module_ptr_t acceptModule(
+        module_ptr_t module, const std::string &resolvedPath, const std::string &importName);
     std::string getModulePath(const std::string &moduleName);
-    module_ptr_t tryLoadModule(const std::string &moduleName);
     /// Load the module at a path that was resolved for it (a `.cmo` as a dynamic library, any
     /// other file as source). Kept apart from the lookup so a caller can name the directory the
     /// path was found in.
     module_ptr_t loadModuleFrom(const std::string &moduleName, const std::string &path, bool isCmo);
     /** Collect lookup attempts for a missing module so error messages can report them. */
-    std::vector<std::string> getModuleSearchDiagnostics(const std::string &moduleName) const;
+    std::vector<std::string>
+    getModuleSearchDiagnostics(const std::string &moduleName, const std::string &importerDir) const;
     /** Return the base search paths that were actually consulted; for .cmo load failures we only
-
-     * * list paths. */
-    std::vector<std::string> getSearchPathBases() const;
+     * list paths. */
+    std::vector<std::string> getSearchPathBases(const std::string &importerDir) const;
 
     Context(const EntryConfig &entryConf, const error::DiagsConfig &diagConf);
 
@@ -289,7 +332,8 @@ class Context : public std::enable_shared_from_this<Context> {
     const std::vector<TagUse> &tagUses() const { return tagUses_; }
     void clearTagUses() { tagUses_.clear(); }
 
-    /// Returns main module plus all UserDefinedModules from modules_ (excluding builtin)
+    /// Returns main module plus all UserDefinedModules loaded so far (excluding builtin), once
+    /// each even when two of them have the same name.
     std::vector<module_ptr_t> allUserModules() const;
 
     /// The built-in module and every module imported so far, sorted by name.
@@ -300,6 +344,15 @@ class Context : public std::enable_shared_from_this<Context> {
     /// written without the surrounding `[` and `]`, so a caller that is itself writing a JSON
     /// object can nest them.
     void dumpAllModuleDiagnostics(std::ostream &os, bool json, bool wrapInArray = true) const;
+
+    /// Dump the diagnostics of those of `modules` that have errors, in the order given, with
+    /// the rendering and the `[imported by ...]` lines of `dumpAllModuleDiagnostics`. A caller
+    /// that already decided which modules its command is about (a program's import closure and
+    /// not a pass library, `tools/camel-cli/module_failures.h`) prints those and does not
+    /// re-implement the rendering; `dumpAllModuleDiagnostics` is this over every user module.
+    void dumpModuleDiagnostics(
+        std::ostream &os, bool json, bool wrapInArray,
+        const std::vector<module_ptr_t> &modules) const;
 
     /// Dump the Warn-level diagnostics of the user modules that compiled without an error (the
     /// modules with errors show theirs through dumpAllModuleDiagnostics). Text: one line per
@@ -386,8 +439,13 @@ class Context : public std::enable_shared_from_this<Context> {
     /** Called by loadCmoModule to retain a loaded .cmo handle and prevent unloading. */
     void addLoadedDll(const std::string &path, void *handle) { loadedDllHandles_[path] = handle; }
 
-    module_ptr_t
-    importModule(const std::string &rawModuleName, const std::string &currentModuleName = "");
+    /// Import a module as `importer` does (design principles 10.2: its own directory, then the
+    /// module roots, then the standard library). `importer` is the module whose `import` this is;
+    /// null means the entry program, whose own directory is the entry file's directory, or a
+    /// program-level import (a pass library named on the command line, a definition) that stands
+    /// where the program does.
+    module_ptr_t importModule(
+        const std::string &rawModuleName, const module::Module *importer = nullptr);
     /// Whether a file for the module is found on the search paths, whether or not it can be
     /// loaded: what tells a name with no module behind it from a module that is there and cannot
     /// be used (H130).

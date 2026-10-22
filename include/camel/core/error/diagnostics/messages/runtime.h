@@ -82,6 +82,10 @@ enum class RuntimeDiag : uint32_t {
     // BackendUnavailable (the host runs the program); this is the run's own configuration
     // naming a device that must exist (design principles 13.4).
     DeviceUnavailable = 0x000070,
+    // An operator written inside a `#gpu` scope (design principles 13.4) has no device
+    // implementation: the scope promises the device runs it, so the compiler refuses the program
+    // instead of leaving the operator on the host (GPU design 6.1).
+    GpuScopeUnsupported = 0x000071,
     // Warnings (severity bits = Warn).
     PassesNeverRun           = 0x10000F,
     ConstantExpressionFaults = 0x100015,
