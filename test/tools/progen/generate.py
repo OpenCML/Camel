@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Random Camel programs with a reference output, from a seed.
 
 `generate(seed, features)` returns a program tree (model.N) whose reference evaluation

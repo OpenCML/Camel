@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T13 account 1: per-step FLOPs of the executed training-step graph, macro
 (camel_nvm) vs macro+simplify (camel_opt_nvm), for mlp_big and lenet_big.
 

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Uniform runner interface shared by every benchmark configuration.
 
 A ``Runner`` separates untimed input preparation (NumPy -> framework-native

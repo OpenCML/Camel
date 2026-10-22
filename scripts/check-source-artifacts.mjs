@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The source tree is not an install (handover H191). A `.cmo` is the binary of a C++ module and
 // comes out of a build; a `.so` / `.dll` / `.pdb` / `.o` beside the sources is build output that
 // belongs in `build/` or `out/<tag>/`. The module loader finds modules beside the executable and

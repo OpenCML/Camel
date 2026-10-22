@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Checks the relative links of the Markdown documents: the target file exists and, for a link
 // with a fragment into a Markdown file, a heading with that anchor exists.
 //

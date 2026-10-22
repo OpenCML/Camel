@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Fixture of test/tools/selftest/run.mjs: checks the runner's per-test scratch directory
 // (`${test_tmp}` / CAMEL_TEST_TMPDIR) and that a file another run keeps under tmp/test is
 // outside it and survives.

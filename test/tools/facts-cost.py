@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Measure a Camel pipeline's wall time and its own CPU time, interleaved between cases.
 
 H158: the cost of invalidating graph facts by the declaration epoch is a difference between two

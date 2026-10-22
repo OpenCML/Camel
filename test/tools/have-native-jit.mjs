@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Precondition of the tests that assert that std::jit compiled a function to native code
 // (`skip_unless = ["node", "test/tools/have-native-jit.mjs"]`).
 //

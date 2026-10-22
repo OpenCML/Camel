@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Training workload: agreement with PyTorch and training-step timing.
 
 For each model, the loss is ``mean(y * y)`` of the benchmark model's output ``y``

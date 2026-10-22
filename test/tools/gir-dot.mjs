@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 function splitAttributes(raw) {
     const parts = []
     let current = ''

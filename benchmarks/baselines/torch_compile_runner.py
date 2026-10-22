@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """torch.compile baseline for the E2 training-step benchmark (CPU).
 
 Same workload and step semantics as ``train.py``: for each model the loss is

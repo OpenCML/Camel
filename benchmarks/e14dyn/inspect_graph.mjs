@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import { readOnnxModel } from '../../test/cases/modules/onnx/onnx_ops.mjs'
 const m = readOnnxModel(process.argv[2])
 console.log('inputs', m.inputs.join())

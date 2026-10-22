@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Generate a multi-module Camel project for the compile benchmark.
 
     python3 benchmarks/compile/gen_modules.py OUT_DIR --modules 64 --shape chain --funcs 8

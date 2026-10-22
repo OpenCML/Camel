@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Deterministic weight and input generation plus artifact loading.
 
 Writes, for every model in ``common.models.MODELS``:

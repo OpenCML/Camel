@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Fixture of test/tools/selftest/run.mjs (H143): the payload a `verify_script_path` receives must
 // carry every field docs/test-plans.md documents. `case_path` used to be assembled from a result
 // that did not have the resolved case path yet, and `JSON.stringify` dropped the key, so this

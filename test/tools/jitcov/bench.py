@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Interleaved wall-clock comparison of camel command lines.
 
     bench.py [--runs 7] [--cpu 2] [--env K=V ...] LABEL=COMMAND [LABEL=COMMAND ...]

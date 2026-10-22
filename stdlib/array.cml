@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Array functions and higher-order functions, written in Camel on top of the built-in
  * operators (map, filter, reduce, range, zip, slice, len) and three primitives of the algo

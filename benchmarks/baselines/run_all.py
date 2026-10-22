@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E2 four-way training-step benchmark driver (CPU): Camel vs torch.compile vs
 JAX (jit+grad) vs ORT Training, against the PyTorch eager anchor.
 

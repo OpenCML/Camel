@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The parameter-tree library written in Camel (design principles 13.5): a tree is a value made
  * of nested structs and tuples, and everything else is a leaf.

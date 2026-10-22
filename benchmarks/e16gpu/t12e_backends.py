@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T12e cross-backend numerics net (MLSys 2027 eval).
 
 One single training step of each exported graph, executed unmodified by three

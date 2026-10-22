@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch implementation of the ``mlp`` benchmark model (see README.md).
 
 x[64,784] -> Linear(784,256) -> ReLU -> Linear(256,128) -> ReLU -> Linear(128,10)

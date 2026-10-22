@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Interleaved A/B comparison of two builds of camel (docs/performance/graph-store-baseline.md).
 
 A time measured in one build says little about another build: the layout of the code alone moves

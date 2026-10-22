@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
  * binary form, a NumPy file, and the module's worker threads and random generator.

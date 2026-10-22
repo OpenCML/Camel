@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A minimal LSP client for the tests of camel-ls.
 //
 // Starts the server, speaks JSON-RPC over stdio with `Content-Length` framing, and offers the

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * camel-profiler: 独立性能分析入口，链接 libcamel。
  * 可用于单独启动/停止 advanced tracing 或查看报告。

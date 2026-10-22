@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Code count reporter - runs tokei and formats output with:
  * 1. Markdown excluded from code total

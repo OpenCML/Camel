@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Fixture of test/tools/selftest/run.mjs, the plans parallel.plan.toml, serial.plan.toml and
 // tier.plan.toml: prints its name and, when SELFTEST_PROBE_LOG names a file, appends the time it
 // started and the time it ended. The self-test reads those intervals to show that tests run

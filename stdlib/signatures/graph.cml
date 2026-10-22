@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The computed signatures of the `graph` module: the four operators whose type C++ computes from
  * a function value's type (`program_of`, `graph_of`, `open_function` and `to_function`). A

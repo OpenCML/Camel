@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E9 (4): head-to-head vs ORT Training's frozen-params flow.
 
 The same LoRA-MLP (rank 8, pretrained backbone, zero-B adapters) is handed to

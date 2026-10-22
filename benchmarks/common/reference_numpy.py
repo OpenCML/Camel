@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """NumPy reference implementations of every benchmark model.
 
 These are the ground truth for numerical agreement checks. They follow the

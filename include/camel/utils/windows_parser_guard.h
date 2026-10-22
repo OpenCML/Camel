@@ -1,7 +1,7 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- *
  * @file windows_parser_guard.h
  * @brief Establish the Windows header options used by parser hosts.
  *

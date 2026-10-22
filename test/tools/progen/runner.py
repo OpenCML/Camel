@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Runs one generated program under a matrix of (rewrite passes x scheduler) and compares every
 run with the reference output computed by model.py.
 

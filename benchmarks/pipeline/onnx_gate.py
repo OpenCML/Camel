@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """The artifact gate of an ONNX cell: runs the model a pipeline wrote on ONNX Runtime and
 compares its outputs with the zero-pass run of the same program.
 

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import path from 'path'
 import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """
 Use pydriller to show code churn and cumulative total for a branch (window chart).
 Stats are computed by traversing ALL commits in branch history; only first-parent

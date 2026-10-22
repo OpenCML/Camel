@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T12d single-GPU multi-tenant LoRA fine-tuning (MLSys 2027 eval).
 
 One exported LoRA training-step graph (E9's lora_ce_step_lr01.onnx, backbone

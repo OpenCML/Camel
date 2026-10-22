@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Checks the tables of syntaxes/camel.tmLanguage.json against the language's own sources:
 //
 //   keywords       every keyword of include/camel/parse/syntax/token_kinds.def (the table the

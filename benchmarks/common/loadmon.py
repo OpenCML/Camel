@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Runtime load monitor for the E5 measurement protocol (MLSys 2027 eval).
 
 §A.5 discipline: trials run while system load is known and stable; a trial
