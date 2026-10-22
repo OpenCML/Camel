@@ -129,7 +129,7 @@ Device<{ a: A, b: (B, C) }>  ≡  { a: Device<A>, b: (Device<B>, Device<C>) }
 `params_ff.cml` 里的 12 个函数与镜像类型全部不再需要。优化器与 EMA 对所有结构通用：
 
 ```cml
-import { tree_map, tree_unzip, tree_reduce } from ckpt
+import { tree_map, tree_unzip, tree_reduce } from tree
 import { Tensor, sum, sqrt } from tensor
 
 func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h: Hyper): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {

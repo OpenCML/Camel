@@ -128,15 +128,15 @@ timeout_ms = 4000
 
 [[tests]]
 name = "any_typing.written_unknown_name"
-desc = "`any` is an ordinary unknown type name: writing it gives UnresolvedTypeReference, the same as any other name the type scope does not hold (design principles 5.10). There is no diagnostic for it (AnyNotAllowed was deleted)."
+desc = "`any` is an ordinary unknown type name: writing it gives UnresolvedTypeReference, the same as any other name the type scope does not hold (design principles 5.10). There is no diagnostic for it (AnyNotAllowed was deleted). The name is written in a body annotation, since a name first written in a parameter type would bind a type variable (5.5)."
 kind = "negative"
 case = "../../../cases/compile/any_typing/written_unknown_name.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UnresolvedTypeReference"
 expect_diagnostic_code = "0x0300000A"
-expect_diagnostic_line = 5
-expect_diagnostic_column = 14
+expect_diagnostic_line = 8
+expect_diagnostic_column = 12
 expect_output_contains = ["Unresolved type reference: 'any'."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000

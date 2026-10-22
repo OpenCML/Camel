@@ -25,6 +25,7 @@
 #include <regex>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "camel/common/scope.h"
@@ -146,6 +147,20 @@ class Builder {
     bool inDeclReturnType_ = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
+
+    // Type variables also bind automatically (design principles 5.5): a plain name that first
+    // appears in a parameter type of the declaration being visited (a `with` parameter's type
+    // included) and that no type name answers binds a type variable, the way `typeas T` does.
+    // `typeVarBindAllowed_` is true only while those parameter types are visited; a function
+    // type nested in one of them is part of that type, so it binds too. `typeVarOnlyInReturn_`
+    // is true while the declaration's return type is visited: a plain name no parameter bound
+    // is an error there. `typeVarUses_` counts the occurrences of every plain name written in
+    // the signature, and `autoBoundVars_` records the ones this rule bound and where, so one
+    // written only once can be warned about (a misspelt type name usually appears once).
+    bool typeVarBindAllowed_ = false;
+    bool typeVarOnlyInReturn_ = false;
+    std::shared_ptr<std::unordered_map<std::string, size_t>> typeVarUses_;
+    std::shared_ptr<std::unordered_map<std::string, camel::source::origin_id_t>> autoBoundVars_;
 
     // The lambda parameters whose type was left out, collected while the signature of the
     // function being defined is visited and given to its FUNC node (Tree::setUnwrittenParams).

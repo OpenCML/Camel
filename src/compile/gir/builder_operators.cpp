@@ -1456,10 +1456,38 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             }
             return at && at->type() == GCT::NodeKind::DREF ? at->name() : std::string("the name");
         };
+        // A with-argument of a rest call that names a generic function or a set of overloads
+        // has no single function value: the expansion resolves it per call in the body
+        // (inlineRestCall; `tree_map<twice>`, `tree_map<bump>`). Let it stay a name.
+        const auto callableName = [&](node_handle_t node) {
+            if (boundWithArgs_.contains(node)) {
+                return false;
+            }
+            if (!nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+                return false;
+            }
+            if (genericDrefs_.contains(node)) {
+                return true;
+            }
+            const auto &target = nodeGraphOf(node)->drefTarget(node);
+            if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+                auto graphs = asCompileGraphVec(target);
+                return graphs && graphs->size() != 1;
+            }
+            if (std::holds_alternative<oper_group_ptr_t>(target)) {
+                const auto &ops = std::get<oper_group_ptr_t>(target);
+                return ops->resolvers().size() != 1 ||
+                       ops->resolvers().front().second->fixedSignature() == nullptr;
+            }
+            return false;
+        };
         const auto settle = [&](std::vector<Argument> &inputs, type_vec_t &types, bool with) {
             for (size_t i = 0; i < inputs.size(); ++i) {
                 node_handle_t node = inputs[i].node;
                 if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+                    continue;
+                }
+                if (with && restTemplate != nullptr && callableName(node)) {
                     continue;
                 }
                 if (genericDrefs_.contains(node)) {

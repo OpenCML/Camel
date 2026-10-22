@@ -133,23 +133,41 @@ node_handle_t Builder::inlineRestCall(
             .commit(tmpl->name, normInputs.size(), fixedCount);
         throw BuildAbortException();
     }
-    // The body of a rest function of another module may name that module's values, which are
-    // not enclosing nodes of the caller's graph; expanding it here is not possible yet.
-    if (tmpl->module != module_) {
-        diags_->of(SemanticDiag::RestFunctionNeedsExpansion)
-            .atOrigin(call->origin())
-            .commit(
-                tmpl->name,
-                "the function is declared in another module; a rest function is expanded at "
-                "its call, and only a call in its own module is supported for now");
-        throw BuildAbortException();
-    }
+    // A rest function of another module is expanded here too: its body is built where it was
+    // declared (its names resolve there) but into the caller's graph, exactly like one of this
+    // module. A body that names a value of its own module has no node here, and the reference
+    // to it is refused where it is built (visitDRefNode), not by refusing the whole call.
 
     // The fixed arguments bind the type variables and are held to their parameters here, where
     // the expansion replaces the ordinary call.
     type_bindings_t bindings = tmpl->outerBindings;
+    // A `with`-argument that names a generic function or a set of overloads is a compile-time
+    // callable, not a value: the instance is inlined (design principles 5.5, H51 Q1/Q3), so
+    // the name stays a name and every call of the parameter in the body resolves it against
+    // that call's argument types, one leaf at a time (`tree_map<twice>`). It has no type of
+    // its own to bind the parameter's type variables with.
+    std::vector<bool> callableName(withCount, false);
+    const auto isCallableName = [&](const Argument &argument) {
+        if (genericDrefs_.contains(argument.node)) {
+            return true;
+        }
+        if (argument.node == nullptr || !nodeIsKind(argument.node, runtime::GCNodeKind::Dref) ||
+            boundWithArgs_.contains(argument.node)) {
+            return false;
+        }
+        const auto &target = nodeGraphOf(argument.node)->drefTarget(argument.node);
+        if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+            auto graphs = asCompileGraphVec(target);
+            return graphs && graphs->size() != 1;
+        }
+        return std::holds_alternative<oper_group_ptr_t>(target);
+    };
     const auto bindOne = [&](Type *pattern, Argument &argument, bool isWith, size_t index) {
         Type *actual = valueTypeOf(nodeTypeOf(argument.node));
+        if (isWith && isCallableName(argument)) {
+            callableName[index] = true;
+            return;
+        }
         if (genericDrefs_.contains(argument.node)) {
             diags_->of(SemanticDiag::GenericArgumentsMismatch)
                 .atOrigin(argument.expr != nullptr ? argument.expr->origin() : call->origin())
@@ -182,6 +200,9 @@ node_handle_t Builder::inlineRestCall(
     // Every type variable of the fixed parameters must be known: the rest parameter gives no
     // types of its own, and the body cannot be built around an open `T`.
     for (size_t i = 0; i < withCount; ++i) {
+        if (callableName[i]) {
+            continue;
+        }
         if (containsTypeVar(substituteTypeVars(signature->withTypeAt(i), bindings))) {
             diags_->of(SemanticDiag::GenericArgumentsMismatch)
                 .atOrigin(call->origin())
@@ -219,6 +240,11 @@ node_handle_t Builder::inlineRestCall(
         normInputs[i].node = entered;
     }
     for (size_t i = 0; i < withCount; ++i) {
+        if (callableName[i]) {
+            // The name is inserted into the body's scope as it is; the call of it resolves
+            // the generic function or the overload set.
+            continue;
+        }
         Type *wanted = substituteTypeVars(signature->withTypeAt(i), bindings);
         node_handle_t entered = checkValue(withInputs[i].node, wanted, withInputs[i].expr);
         if (entered == nullptr) {

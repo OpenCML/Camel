@@ -1,0 +1,59 @@
+id = "compile.generic_auto_bind"
+order = 342
+tier = "fast"
+tags = ["feat", "compile", "generics", "types"]
+desc = "Type variables bind automatically where they first appear in a parameter type, including the type of a `with` parameter (design principles 5.5); the return-only error and the once-only warning are reported."
+
+# The rule is the one named dimensions follow (5.4): a plain name in a parameter type that no
+# type answers binds a type variable, later occurrences refer to it, a name first written in
+# the return type is an error, and one written once draws a warning. `typeas` stays for a name
+# that also denotes a type (see generics.plan.toml, typeas_collision).
+
+[[tests]]
+name = "ordinary_and_with_parameters"
+desc = "Binding in an ordinary parameter, in a `with` parameter, and in a function type written inside either; a name written twice refers to the same binding."
+kind = "behavior"
+case = "../../../cases/compile/generic_auto_bind/parameters.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n42\n21\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "generic_calls_generic"
+desc = "A generic function calling generic functions: each instance is fixed by the types the chain gives it, with no `typeas` written anywhere."
+kind = "behavior"
+case = "../../../cases/compile/generic_auto_bind/chain.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "7\ns\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "return_only_name_is_an_error"
+desc = "A plain name written only in the return type binds nothing: there is no argument to take a type from, so it is an error (5.5), not an unresolved type and not a variable."
+kind = "negative"
+case = "../../../cases/compile/generic_auto_bind/err_return_only.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeVariableOnlyInReturn"
+expect_diagnostic_code = "0x0300019F"
+expect_diagnostic_line = 8
+expect_output_contains = ["The name 'T' appears only in the return type", "Write it in a parameter type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+[[tests]]
+name = "once_only_name_warns"
+desc = "A type variable bound automatically and written only once is warned about; the program still compiles and runs (5.5). A name written twice is not reported."
+kind = "behavior"
+case = "../../../cases/compile/generic_auto_bind/warn_used_once.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "x\n2\n"
+expect_stderr_contains = ["[Warn]", "name=SemanticDiag::TypeVariableUsedOnce, code=0x03100162", "is bound here and appears only once"]
+expect_output_not_contains = ["TypeVariableOnlyInReturn"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
