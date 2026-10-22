@@ -678,6 +678,14 @@ void Builder::exportOperatorOverloads(const std::string &group, const GCT::node_
         }
     }
     if (!exported) {
+        // A body-less declaration of an operator group (`export func operator ==(…): bool` in a
+        // C++ module's declaration file) has no graph and no template. Its group was made from
+        // the declaration and is already the module's own entity (`exportNativeOperators`), so
+        // there is nothing missing here (handover H19, H141).
+        if (const auto existing = module_->getNativeEntity(Reference(group));
+            existing.has_value() && existing->isOperGroup()) {
+            return;
+        }
         diags_->of(SemanticDiag::UnresolvedReference)
             .atOrigin(gct->origin())
             .commit(displayNameOf(group));
