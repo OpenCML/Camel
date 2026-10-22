@@ -2026,9 +2026,9 @@ Reseeds the module's random generator, which `random` and `randn` draw from.
 ## `array`: arrays and higher-order functions
 
 Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and three private primitives of this
-module (flatten, unique, argsort). Every function returns a new value; none changes its
-argument.
+operators (map, filter, reduce, range, zip, slice, len) and three primitives of this module
+(flatten, unique, argsort), whose kernels are the C++ module's. Every function returns a new
+value; none changes its argument.
 
 - The array a function works on is its ordinary argument; a function or a value that
   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
@@ -2042,6 +2042,22 @@ argument.
 - These are generic functions: there is one instance per set of element types in the whole
   program, whichever module calls it (one root graph, design principles 10.1). `group_by`
   is not here: it needs the map type.
+
+#### `argsort`
+
+```camel
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
+```
+
+The indices that sort the keys ascending; equal keys keep their order (stable).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `argsort([3, 1, 2])` gives `[1, 2, 0]`
 
 ### Rearranging
 
@@ -2173,7 +2189,7 @@ The number of elements for which pred is true.
 #### `sum`
 
 ```camel
-sum: (xs: T[]) => T
+sum: (xs: T[]) => T when is_numeric::<T>()
 ```
 
 The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
@@ -2184,7 +2200,7 @@ The sum of the elements, 0 for an empty array. Integers wrap around on overflow,
 #### `min`
 
 ```camel
-min: (xs: T[]) => T?
+min: (xs: T[]) => T? when is_numeric::<T>()
 ```
 
 The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
@@ -2196,7 +2212,7 @@ The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and 
 #### `max`
 
 ```camel
-max: (xs: T[]) => T?
+max: (xs: T[]) => T? when is_numeric::<T>()
 ```
 
 The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
