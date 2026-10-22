@@ -1,0 +1,35 @@
+# The cost of everything `camel` does before a program runs (handover H142).
+#
+# A declaration module (`stdlib/<module>.cml`) is parsed and compiled like a library when it is
+# imported. The standard library now has nine of them, so this plan pins three commands that run
+# before any program code does: the process itself (`--version`), a one-line program with no
+# imports, and `inspect --ops` on a program that imports every standard library module. It also
+# runs that program, so the same import work is timed on the run path.
+#
+# The ceilings are about three times the median measured on the Linux host at H142; the numbers
+# and their spread are in docs/handover/reports/H142.md. They are a smoke alarm for "the standard
+# library is now loaded before the program runs", not a percentage budget: this host is shared,
+# and a few milliseconds of spread is normal. The test prints one `startup.cost` line per command
+# (median, p10, p90, min, max, n) and fails only when a median crosses its ceiling.
+id = "perf.startup"
+order = 401
+tier = "slow"
+tags = ["perf", "startup"]
+
+[[tests]]
+name = "startup.cost"
+desc = "The whole-process cost of --version, a one-line program, and inspect --ops over the whole standard library."
+kind = "behavior"
+tool = "node"
+case = "../../tools/startup-cost.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = [
+    "startup.cost version",
+    "startup.cost imports_nothing",
+    "startup.cost inspect_ops",
+    "startup.cost imports_all",
+]
+# Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
+# well under half a minute under load. 120 s catches a hang, not a slow run.
+timeout_ms = 120000
