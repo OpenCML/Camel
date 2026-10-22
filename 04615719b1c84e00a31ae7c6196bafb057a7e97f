@@ -1,0 +1,176 @@
+# H139 — origin 编号不是结构：文本快照按源码位置比较
+
+分支 `handover/H139-origin-normalizer`，起点 `origin/develop` `cd39898fc`。
+
+H133 把 `time` 改成声明模块时，`test/plans/smoke/golden/rgir.dot` 里 24 个 `origin=` 值整体
+后移 44，只能把 golden 重新生成；`rename.*_graph_identity` 早就在算摘要前丢掉 `origin`
+（`test/cases/modules/rename/identity.mjs:66`）。本批把同一件事做到文本快照上：**origin 编号是
+标识符，不是结构**，比较时不看它；它指向的源码位置仍然逐字比较。
+
+## 1. 为什么 origin 编号不属于“断言结构”的 golden
+
+- **设计原则 2.5**（`docs/design-principles.cn.md:83`）：任何合法的图都能写成 Camel 源码，写回
+  再编译得到同一张图，“名字、源码位置等不计”。图结构相同的判据本来就不包含源码位置；origin
+  是源码位置的编号，更不是结构。
+- **它是给调试器用的标识符**：`include/camel/passes/trans/dot/graphviz.h:60-64` 写明 origin 属性是
+  “debugger-facing”，用来让 VSCode 的 GIR 面板把 DOT 节点对上 gir-json 的节点并跳到源码；真正
+  可读的位置就在它旁边——`src/passes/trans/dot/graphviz.cpp:224` 把 `origin`、`span`、`srcfile`
+  一起印出来。
+- **编号按解析/建 AST 的顺序发放**：`OriginTable::create`（`src/core/source/manager.cpp:263`）把
+  `origins_.size()` 当成下一个编号，每个 AST 节点在建树时取一个（`src/parse/ast/builder.cpp:79-95`）。
+  于是“在被打断言的程序之前解析了多少个 AST 节点”会整体平移这些编号，H133 的 44 就是 `time`
+  的三条声明新增的 AST 节点数。
+- **它不可观察**：程序的输出、诊断、图的形状都不随编号变化；编号只在一次构建内把节点和位置连起来。
+  把编号写进 golden，等于把“整棵树的解析进度”记进快照——一个与断言目标无关的量。
+
+因此 golden 应该 pin 的是 `span`/`srcfile`（诊断指向哪里），而不是 `origin`。`origin=<ORIGIN>`
+仍然断言“这个节点有来源”：真的没有来源时该属性整段不出现。
+
+## 2. 规范化器
+
+`test/tools/run-tests.mjs` 的 `normalize_origins`（`:557`）此前只处理 `std::jgir` 的 JSON 形式
+`"origin": "63"`；本批补上 DOT 形式 `origin=63`，两者都写成 `<ORIGIN>`：
+
+```js
+output = output
+    .replace(/"origin": "[0-9]+"/g, '"origin": "<ORIGIN>"')
+    .replace(/\borigin=[0-9]+/g, 'origin=<ORIGIN>')
+```
+
+- **比较时归一化**，不删字段、不改编译器输出：`std::gir`/`std::rgir`/`std::agir`/`std::argir` 打印的
+  仍然是真实编号；golden 也在比较前过同一个规范化器（`run-tests.mjs:1141`），所以 golden 里不需要
+  数字。
+- **保守**：只替换 `origin=` 后面紧跟十进制数字的形式，且要求词边界；`span`、`srcfile`、`type`、
+  `label`、`role`、`tooltip` 等属性一律不动。
+- **幂等**：`origin=<ORIGIN>` 再套一次不变，`--update-golden` 写出的就是规范化后的文本。
+- 该规范化器此前已在 `feat/modules/graph.plan.toml` 的 jgir 差分里使用，但 `docs/test-plans.md`
+  的“Supported Normalizers”没有列它；本批补上文档（`docs/test-plans.md:300`），说明两种形式、
+  为什么它不是结构、以及它保留“有没有来源”的断言。
+
+## 3. 应用到哪里
+
+golden 树里带 `origin=` 的文件共 13 个，按比较方式分两类：
+
+| 比较方式 | 文件 | 处理 |
+|---|---|---|
+| `text_exact` | `test/plans/smoke/golden/rgir.dot`（24 处） | 加 `normalize_origins`，重新生成 |
+| `text_exact` | `test/plans/feat/trans/golden/boundaries.agir.dot`（23 处） | 同上 |
+| `text_exact` | `test/plans/feat/trans/golden/boundaries.argir.dot`（23 处） | 同上 |
+| `gir_dot_isomorphic` | `smoke/golden/{gir,inline_gir}.dot`、`feat/compile/golden/tagged_null_then.dot`、`feat/consistency/golden/` 7 个 | 不动 |
+
+`gir_dot_isomorphic`（`test/tools/gir-dot.mjs`）只比较 type/shape/style 与入出度、边的
+type/label，本来就不读 `origin`，按要求保持原样。三个 `text_exact` 计划各加
+`"normalize_origins"`：
+
+- `test/plans/smoke/core.plan.toml` 的 `gir.rgir_snapshot`；
+- `test/plans/feat/trans/annotated_dump.plan.toml` 的 `boundaries.agir`、`boundaries.argir`。
+
+golden 用工具在主机上重新生成（`--update-golden`），**没有手改**：取回的三个文件与提交前的差异
+只有 origin 行——`rgir.dot` 24 行、两个 boundaries 各 23 行，`git show HEAD:<file>` 套一遍同一
+规范化器后与新文件逐字节相等。
+
+> 注：`--update-golden` 会把该计划里所有快照都写一遍，所以 smoke 计划里的 `gir.dot`/
+> `inline_gir.dot` 也被重写成了“当前（H133 之后）的数字编号”——它们用同构比较，本来就不看编号，
+> 提交前的编号只是过期数字。这属于与本批无关的漂移，**没有提交**（取回时只取了上述三个文件）。
+
+## 4. 三个证明
+
+### 4.1 收紧，而不是放宽：真正的结构变化仍然失败
+
+把 `test/cases/smoke/core/fib10_pipeline.cml` 的 `fib` 体从
+`fib(n - 1) + fib(n - 2)` 改成 `fib(n - 1) + fib(n - 2) + 0`（多一个 DATA 和一个 add 节点，
+程序输出不变），在主机上跑 `test/plans/smoke/core.plan.toml`：
+
+```
+[FAIL] inspect.tok_snapshot     snapshot differs from golden
+[FAIL] inspect.cst_snapshot     snapshot differs from golden
+[FAIL] inspect.ast_snapshot     snapshot differs from golden
+[FAIL] gir.gir_snapshot         node count mismatch          actual=36, expected=34
+[FAIL] gir.inline_gir_snapshot  node count mismatch          actual=36, expected=34
+[FAIL] gir.rgir_snapshot        snapshot differs from golden     <- text_exact + normalize_origins
+[SUMMARY] total: 10, pass: 4, fail: 6
+```
+
+开规范化器的 `gir.rgir_snapshot` 照样红，同构比较直接报节点数变化。撤销修改后恢复。规范化器只
+抹掉编号，任何结构差异（节点、边、标签、类型、span/srcfile）都还在比较里。
+
+### 4.2 只移动编号：重生成一次之后仍然全绿
+
+先说明两个与任务书设想不同的实测事实：
+
+1. **`-NoBuild` 跑不到改过的 `stdlib/*.cml`**：主机上的 `out/latest/stdlib/` 是构建时收集的副本
+   （`collect-out`），所以改声明模块后必须重新构建，`-NoBuild` 用的还是旧副本。第一次按任务书
+   “加注释行”试跑时 ids 没动，原因在此。
+2. **注释行不会移动 origin 编号**：origin 按 AST 节点发放（`src/parse/ast/builder.cpp:79-95`），
+   `//` 注释是 trivia，不进 AST；重新构建后再试，24 个 ids 仍是 271–309，计划仍 10/10。任务书
+   给的模拟（“加注释行会移动 ids”）在当前实现里不成立——这不是本批改出来的行为，记在这里以免
+   以后有人拿注释行当“只动编号”的证明。
+
+改用真正会新增 AST 节点、但不产生任何运行时节点或值的改动：在 `stdlib/time.cml` 的
+`module time` 之后加 `type H139Probe = int`，重新构建后跑同一计划：
+
+- 原始 stdout 里 24 个 ids：**271–309 → 275–313（+4）**（`test/results/log/.../pass/smoke.core/
+  gir.rgir_snapshot/stdout.txt`，原始输出仍是数字编号）；
+- 计划 **10/10 全绿**：golden 里是 `origin=<ORIGIN>`，编号怎么移都不影响；
+- 撤销 `stdlib/time.cml` 后恢复原状。
+
+同一轮还确认了“重新生成后的 golden 与树一致”：`--update-golden` 之后不带该参数再跑
+`smoke`、`feat/parse`、`feat/compile`、`feat/trans/annotated_dump`，1108/1108 通过（第 6 节）。
+
+### 4.3 真正要紧的“位置错了”：由诊断计划抓，不由这个 golden 抓
+
+本批改的是**编号**，没有改任何节点的源码位置。`origin` 指错行属于诊断问题，覆盖它的是按
+`path:line:column` 比较诊断的计划，而不是结构快照：
+
+- **`feat/parse/core`** 的 `syntax.missing_then`：断言 `SyntaxDiag::MissingThen` 在
+  `missing_then.cml` 的第 **8** 行第 **21** 列（`expect_diagnostic_line`/`_column`）；
+- **`feat/compile/native_declarations`**（H133 给声明补的三条）：`native.time_wrong_arity` 断言
+  消息里有 `time_arity.cml:10:21`，`native.time_wrong_type` 断言 `time_type.cml:11:21`；同一计划里
+  `native.time_declaration_import` 用 `expect_stdout_exact` 锁住导入方看到的行为。
+
+这些计划都不看 `origin` 编号，只看诊断落点；诊断若指错行，它们会红。反过来，结构 golden 里的
+`span`/`srcfile` 也仍然逐字比较，节点被指到错误位置时同样会红。
+
+## 5. 有没有 golden 必须保留编号
+
+没有。金库里没有“测编号分配本身”的快照；需要编号的场合是“这个节点有没有来源”，
+`origin=<ORIGIN>` 已经断言了这一点（无来源时属性整段消失）。`DAP` 的
+`initialGraph.body?.dot?.includes('origin=')`（`test/cases/tools/debugger/dap_session.test.mjs`）
+也只断言存在。规范化器是按计划点名的，将来真出现“测编号分配”的快照，只要不列
+`normalize_origins` 就会保留真实编号。
+
+## 6. 数字
+
+- `--update-golden` 重生成（主机，串行）：12/12（`smoke.core` 10 + `annotated_dump` 2）。
+- 最终验收（重生成后的树，`-Jobs 8`）：**1108/1108 通过、0 失败**，其中 `smoke` 10、
+  `feat/trans/annotated_dump` 2、`feat/parse` + `feat/compile` 合计 1096。
+- 另一条使用 `normalize_origins` 的计划 `feat/modules/graph`（jgir 差分）：51/51；扩展的 DOT 形式
+  匹配不到 jgir 的 JSON 形式，没有回归。
+- 证明 4.1：4 通过 / 6 失败（`gir.gir_snapshot` 节点数 36 vs 34）。
+- 证明 4.2：注释行 10/10、ids 未动；`type` 别名 10/10、ids 271–309 → 275–313。
+- 改动文件：运行器 1（`test/tools/run-tests.mjs`）、文档 1（`docs/test-plans.md`）、计划 2、
+  **golden 3**；另有本报告与 `docs/handover/README.cn.md` 的 H139 行。
+
+## 7. 提交
+
+1. `test(golden): compare origin ids as identifiers, not as build counters` —— 规范化器、文档、
+   两个计划的 `normalize_origins`、三个重生成的 golden。
+2. `docs(handover): H139 report and board row` —— 本报告与看板行。
+3. `docs(handover): record the stale sys import that keeps the runner self-test red` —— 只改本报告
+   第 8 节（发现，属别的批次）。
+
+## 8. 发现（未修，与本批无关）：运行器自检的 `sweep reuse` 在基线上就是红的
+
+改运行器会按 `test/plan-selection.json` 选中 `feat/consistency/runner.plan.toml`，于是顺带跑了它：
+`runner.backend_matrix` 失败。定位下来与本批无关：
+
+- `modules/sys` 已按 `bf1506ac4 refactor(stdlib): rename sys to env` 改名为 `env`，这个提交是
+  本批基线 `cd39898fc` 的祖先；
+- 自检夹具 `test/tools/selftest/sweep_names/reuse_sources/reuse.cml` 仍写
+  `import { get_env } from sys`，程序因此编译失败（exit 1），`sweep reuse` 的 4 个副本全红；
+- 在基线 `cd39898fc` 上该夹具同样是 `sys`，所以这是基线既有的红，不是 H139 引起的；`collision`
+  夹具不导入 `sys`，通过。
+
+建议单开一项把那一行改成 `from env`（一处导入），本批不动它，以免把无关修改混进来。
+
+同一个计划里的 `feat/docs_links`（1/1）与 `feat/tools/portability`（1/1）通过。
