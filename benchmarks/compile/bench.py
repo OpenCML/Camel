@@ -93,6 +93,16 @@ LARGE_SEED, LARGE_SIZE = 2, 20  # the generator rarely finds a usable program ab
 SCALE_FUNCTIONS = 4000
 SLOW_CASE_MS, SLOW_CASE_ROUNDS = 5000.0, 2  # a run longer than this is repeated only this often
 
+# The library modules a `passes` run compiles on demand, in the order they are loaded. `std::opt`'s
+# algebra step compiles stdlib/rules.cml, and `rules` imports `math`; loading the C++ `math` module
+# also loads its declaration module stdlib/math.cml, which is written in Camel and therefore
+# compiled (H100, H112). The lazy import is the real cost, not a defect: `rules` and `math` are
+# library modules, so the program's own module count stays what the input set says. This pin is
+# allowed to change when a library is restructured (a new/moved import in stdlib/rules.cml or a
+# declaration module that appears or goes away): that is exactly the regression the pin makes
+# visible, and the message says which modules were counted.
+PASS_LIBRARY_MODULES = ("rules", "math")
+
 # The order of the rows of the phase tables; phases not listed follow alphabetically.
 PHASE_ORDER = ["(process)", "startup", "mm_init", "context", "builtin_module", "parse", "resolve", "cmo_load",
                "import", "compile", "gct", "gir", "encode"]
@@ -163,7 +173,11 @@ def build_inputs(sets: List[str], work: Path, module_counts: List[int], large_si
             for count in module_counts:
                 project = work / f"modules_{shape}_{count}"
                 gen_modules.generate(project, count, shape, funcs=8, fan=4)
-                add(f"{shape}-{count}", "modules", project / "main.cml", True, modules=count, shape=shape)
+                # The project's own modules, by name: `main` plus the N generated ones. Anything
+                # else the run compiles is a library module (see module_names()).
+                own = ["main"] + [gen_modules.module_name(i) for i in range(count)]
+                add(f"{shape}-{count}", "modules", project / "main.cml", True, modules=count,
+                    shape=shape, own_modules=own)
     for item in inputs:
         text = Path(item["path"]).read_bytes()
         item["bytes"] = len(text)
@@ -260,6 +274,66 @@ def self_costs(report: dict) -> Dict[str, Dict[str, float]]:
     return out
 
 
+def module_names(report: dict) -> List[str]:
+    """Which modules a run compiled, in the order they first reached GCT.
+
+    Every module compiled from Camel source opens one `gct` phase whose detail is the module's
+    name (src/core/module/userdef.cpp), and the phase report keeps that name, so the list is
+    available without a counter of its own. It is exactly what `counters.modules` counts — and
+    that count includes library modules a pass compiles on demand: since H100 the algebra step
+    of `std::opt` compiles stdlib/rules.cml, and its `import math` also loads the declaration
+    module stdlib/math.cml, which is written in Camel and compiled too (H112, H121). The count
+    alone cannot tell the program's own modules from the libraries it caused to be loaded; the
+    names can, and those are two different cost numbers.
+    """
+    names: List[str] = []
+    for phase in report.get("phases", []):
+        if phase.get("name") == "gct":
+            name = phase.get("detail") or ""
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def module_split(entry: dict) -> Optional[Tuple[int, int]]:
+    """(user, total) module counts of a results entry, or None for a file written before the
+    phase report's module names were kept (rendering it must not claim 0 / 0)."""
+    if "modules_loaded" not in entry:
+        return None
+    return len(entry.get("modules_user", [])), len(entry["modules_loaded"])
+
+
+def entry_module(report: dict) -> Optional[str]:
+    """The name of the program's entry module, from the `gir` phase.
+
+    `gir` is opened only by the program's own build (src/core/module/userdef.cpp); a module built
+    as a library for a pass opens `library` instead. The entry module is the one module every
+    program has, so it anchors the split when the benchmark does not know the project's names.
+    """
+    for phase in report.get("phases", []):
+        if phase.get("name") == "gir" and phase.get("detail"):
+            return phase["detail"]
+    return None
+
+
+def classify_modules(item: dict, report: dict) -> Tuple[List[str], List[str], List[str]]:
+    """(loaded, own, library) modules of one run.
+
+    A generated project declares its own module names (`own_modules`); for a single-file program
+    the program's own module is its entry module. Every other compiled module is a library
+    module — loaded because a pass or the program imports it, not part of what was measured.
+    """
+    loaded = module_names(report)
+    own_names = item.get("own_modules")
+    if own_names is None:
+        entry = entry_module(report)
+        own_names = [entry] if entry else list(loaded)
+    own_set = set(own_names)
+    own = [name for name in loaded if name in own_set]
+    library = [name for name in loaded if name not in own_set]
+    return loaded, own, library
+
+
 def parse_bench(home: Path, source: str, cpu: Optional[int], rounds: int) -> Optional[dict]:
     """Lexer / CST / AST split of one file in microseconds (min and median)."""
     tool = tool_path(home, "camel-parsecheck")
@@ -313,6 +387,11 @@ def measure(inputs: List[dict], versions: List[Tuple[str, Path]], rounds: int, c
                 case["_phases"].setdefault(kind, []).append(row["wall_ns"] / 1e6)
             case["_phases"].setdefault("(process)", []).append(wall * 1e3 - data["total_ns"] / 1e6)
             case["counters"] = data.get("counters", {})
+            loaded, own, library = classify_modules(item, data)
+            case["modules_loaded"] = loaded
+            case["modules_user"] = own
+            case["modules_library"] = library
+            case["modules_entry"] = entry_module(data)
         loads.append(loadavg())
         print(f"bench: round {round_index + 1}/{rounds} done, load {loads[-1]}", file=sys.stderr)
     results = []
@@ -395,6 +474,12 @@ def phase_table(columns: List[dict], stat: str) -> str:
     rows = [[k] + [fmt_ms(r["phases_ms"][k][stat]) if k in r["phases_ms"] else "" for r in columns] for k in kinds]
     rows.append(["**wall**"] + [f"**{fmt_ms(r['wall_ms'][stat])}**" for r in columns])
     rows.append(["peak RSS (MB)"] + [f"{r['peak_rss_kb'] / 1024:.1f}" for r in columns])
+    # Both module numbers: the program's own modules are what the input set varies, and the
+    # library modules are what the pipeline cost on top of it. Neither may disappear.
+    split = [module_split(r) for r in columns]
+    rows.append(["modules (user / total)"] + ["—" if s is None else f"{s[0]} / {s[1]}" for s in split])
+    rows.append(["library modules"] + [
+        "—" if "modules_library" not in r else (", ".join(r["modules_library"]) or "—") for r in columns])
     return table(["phase (self, ms)"] + [f"{r['input']} ({r['lines']} lines)" for r in columns], rows)
 
 
@@ -466,12 +551,15 @@ def render(data: dict) -> str:
                     p = r["phases_ms"]
                     cell = lambda k: fmt_ms(p[k]["min"]) if k in p else ""  # noqa: E731
                     alloc = fmt_count(r["alloc"]["allocations"]) if "alloc" in r else ""
-                    rows.append([str(r["modules"]), fmt_ms(r["wall_ms"]["min"]), fmt_ms(r["wall_ms"]["median"]),
-                                 cell("resolve"), cell("parse"), cell("gct"), cell("gir"), cell("import"),
-                                 cell("encode"), cell("teardown"), alloc, f"{r['peak_rss_kb'] / 1024:.1f}"])
+                    split = module_split(r)
+                    rows.append([str(r["modules"]), "—" if split is None else str(split[0]),
+                                 "—" if split is None else str(split[1]), fmt_ms(r["wall_ms"]["min"]),
+                                 fmt_ms(r["wall_ms"]["median"]), cell("resolve"), cell("parse"), cell("gct"),
+                                 cell("gir"), cell("import"), cell("encode"), cell("teardown"), alloc,
+                                 f"{r['peak_rss_kb'] / 1024:.1f}"])
                 out += [f"Shape `{shape}` (minimum over the rounds unless stated):", "",
-                        table(["modules", "wall min", "wall median", "resolve", "parse", "gct", "gir", "import",
-                               "encode", "teardown", "allocations", "RSS MB"], rows)]
+                        table(["modules", "user", "total", "wall min", "wall median", "resolve", "parse", "gct",
+                               "gir", "import", "encode", "teardown", "allocations", "RSS MB"], rows)]
     if len(labels) > 1:
         out += [f"## Versions compared with `{first}` (wall and compile phases, minimum)", ""]
         rows = []
@@ -552,6 +640,7 @@ def cmd_check(_args) -> int:
         inputs = [i for i in inputs if i["id"] in ("arith10", "chain-3")]
         shim = build_shim(work)
         data = measure(inputs, [("current", default_home())], 1, None, work, ["compile", "passes", "fvm"], shim)
+        expected_own = {item["id"]: item.get("own_modules") for item in inputs}
         problems = []
         for r in data["results"]:
             name = f"{r['input']}/{r['pipeline']}"
@@ -565,8 +654,39 @@ def cmd_check(_args) -> int:
                     problems.append(f"{name}: no phase '{kind}'")
             if r["pipeline"] == "passes" and "pass:std::opt::inline" not in phases:
                 problems.append(f"{name}: the passes are not phases")
-            if r["input"] == "chain-3" and r.get("counters", {}).get("modules") != 4:
-                problems.append(f"{name}: expected 4 user modules, got {r.get('counters')}")
+            # The module numbers. `counters.modules` counts every module compiled from Camel
+            # source, libraries included; `modules_user` is the program's own modules (what the
+            # input set varies) and `modules_library` the ones a pass or the program imported
+            # (stdlib/rules.cml and its declaration module on the `passes` pipeline). Both are
+            # cost: the user count is pinned to what the project has, and so is the library set.
+            loaded = r.get("modules_loaded", [])
+            user = r.get("modules_user", [])
+            library = r.get("modules_library", [])
+            counter = r.get("counters", {}).get("modules")
+            if not loaded:
+                problems.append(f"{name}: the phase report names no module: {r.get('counters')}")
+            elif counter != len(loaded):
+                problems.append(
+                    f"{name}: the modules counter says {counter} but the phases name {len(loaded)}: "
+                    f"{loaded} (the program's own: {user}; library: {library})")
+            own = expected_own.get(r["input"])
+            if own is None:
+                own = [r["modules_entry"]] if r.get("modules_entry") else []
+            if sorted(user) != sorted(own):
+                problems.append(
+                    f"{name}: the program's own modules are {own} ({len(own)}), but the run loaded "
+                    f"{len(loaded)} in total: own {user}; library {library}")
+            if r["pipeline"] == "passes":
+                if sorted(library) != sorted(PASS_LIBRARY_MODULES):
+                    problems.append(
+                        f"{name}: loaded library modules {library}; expected "
+                        f"{list(PASS_LIBRARY_MODULES)} (see PASS_LIBRARY_MODULES: the on-demand "
+                        f"rules/math import of std::opt). The program's own modules were {user}")
+            elif library:
+                problems.append(
+                    f"{name}: the {r['pipeline']} pipeline loaded library modules {library}; "
+                    f"expected none (only a pass compiles a library on demand). The program's own "
+                    f"modules were {user}")
             if r.get("counters", {}).get("gct.nodes", 0) <= 0 or r.get("counters", {}).get("graph.nodes", 0) <= 0:
                 problems.append(f"{name}: object counters missing: {r.get('counters')}")
             if shim is not None and r.get("alloc", {}).get("allocations", 0) <= 0:
@@ -602,6 +722,12 @@ def cmd_check(_args) -> int:
             return 1
         print(f"ok compile benchmark: {len(data['results'])} cases, allocation shim "
               f"{'used' if shim is not None else 'not available'}")
+        # Which modules, not just how many: the count alone is what stayed red for so long.
+        for r in data["results"]:
+            own, library = r.get("modules_user", []), r.get("modules_library", [])
+            print(f"  {r['input']}/{r['pipeline']}: {len(r.get('modules_loaded', []))} modules loaded: "
+                  f"{len(own)} user ({', '.join(own)}); {len(library)} library "
+                  f"({', '.join(library) or 'none'})")
         return 0
 
 
