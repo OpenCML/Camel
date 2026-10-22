@@ -25,9 +25,10 @@
 //                      for one (a positional target, `--include`, `--plan`, `--tier all`,
 //                      `--all`, or any directory that contains one).
 //
-// The gate does not build. It verifies the install it finds (`CAMEL_HOME`, else `out/latest`) and
-// refuses to start without one, because a run against a missing or stale binary measures
-// nothing. Build once (`npm run build`, or `camel-remote.ps1` without `-Plan`), then run:
+// The gate does not build. It verifies the install it finds (`CAMEL_HOME`, else `out/latest`) -- both
+// that one exists and that its build stamp matches this tree's sources (H149) -- and refuses to
+// start otherwise, because a run against a missing or stale binary measures nothing. Build once
+// (`npm run build`, or `camel-remote.ps1` without `-Plan`), then run:
 //
 //   npm run release-gate                     # every layer, the whole gate
 //   node scripts/release-gate.mjs --jobs 8
@@ -260,6 +261,37 @@ function findCamel() {
     return null
 }
 
+// The gate never builds, and it never runs against an install it cannot prove: H149 found
+// `-NoBuild` silently reusing another revision's `out/latest`, and a gate that measured that
+// binary would report a tree nobody tested. `scripts/build-info.js check` compares the stamp's
+// content fingerprint with this tree (docs/, test/, scripts/ and benchmarks/ do not move it, so
+// a docs-only commit still passes); exit 4 there is the refusal. An install outside `out/`
+// carries no stamp this script can find, and the gate says so instead of pretending.
+function checkInstallStamp(camel) {
+    const home = path.dirname(path.dirname(camel))
+    const relative = path.relative(path.join(ROOT, 'out'), home)
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        console.log('[gate] build stamp: the install is outside out/, so its stamp cannot be checked; the caller owns staleness')
+        return
+    }
+    const tag = relative.split(path.sep)[0]
+    const check = spawnSync(process.execPath, ['scripts/build-info.js', 'check', '--tag', tag], {
+        cwd: ROOT,
+        encoding: 'utf8',
+        windowsHide: true,
+    })
+    if (check.status === 0) {
+        console.log(`[gate] build stamp: out/${tag} was built from this tree's sources`)
+        return
+    }
+    const detail = `${check.stdout || ''}${check.stderr || ''}`.trim()
+    console.error(detail ? `[gate] ${detail.replace(/\n/g, '\n[gate] ')}` : '[gate] build-info check failed')
+    die(
+        `the install at out/${tag} was not built from this tree (build-info exit ${check.status}).\n` +
+            '[gate] build once (`npm run build`), then run the gate; it never builds and never assumes.'
+    )
+}
+
 function git(...args) {
     const proc = spawnSync('git', args, { cwd: ROOT, encoding: 'utf8', windowsHide: true })
     if (proc.error || proc.status !== 0) return null
@@ -414,6 +446,7 @@ async function main() {
         )
     }
     console.log(`[gate] compiler: ${camel}`)
+    checkInstallStamp(camel)
 
     const phases = []
     if (layers.includes('fast')) {

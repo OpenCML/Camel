@@ -79,8 +79,10 @@ It runs, in order:
    --check`, `check-doc-links --all`, `check-retired-names`, `check-doc-snippets`,
    `stdlib-declarations --check`, `check-std-includes`;
 
-then exits non-zero when any phase failed. It does not build: build once first, and it verifies
-the install it finds (`CAMEL_HOME`, else `out/latest`).
+then exits non-zero when any phase failed. It does not build: build once first, and it checks the
+install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — H149's rule that a
+run must not measure another tree's binary — refusing (exit 2) when the stamp is missing or does
+not match this tree's sources.
 
 It also never runs the nineteen plan files `agents/test.md` forbids on a shared host (GC stress
 and poison, progen, the PyTorch comparisons, the benchmarks): it prints them by name with the
