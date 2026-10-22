@@ -62,6 +62,12 @@ OtherType::cloneWithArguments(std::span<const TypeArgument> arguments, std::stri
     return cloneWithParams(std::span<Type *const>(types.data(), types.size()));
 }
 
+const Type *
+OtherType::applyArguments(std::span<const TypeArgument> arguments, std::string &error) const {
+    // A module type decides what its arguments mean; the core only routes them here.
+    return cloneWithArguments(arguments, error);
+}
+
 Type **OtherType::copyParams(std::span<Type *const> params) {
     if (params.empty())
         return nullptr;

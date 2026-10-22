@@ -5037,9 +5037,9 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         LEAVE("SpecType");
         return base;
     }
-    // The arguments in source order: types, and constants written `const <data>`. What a
-    // constant means is the type's business (OtherType::cloneWithArguments); an argument the
-    // type does not accept is an error here, never dropped.
+    // The arguments in source order: types, and constants written `const <data>`. What an
+    // argument means is the type's business (`Type::applyArguments`); an argument the type does
+    // not accept is an error here, never dropped.
     std::vector<TypeArgument> arguments;
     const auto &argsNode = ast->atAs<AST::RepeatedLoad>(1);
     for (const auto &child : *argsNode) {
@@ -5135,14 +5135,11 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             }
         }
     }
-    if (!base->isOtherType()) {
-        diags_->of(SemanticDiag::InvalidTypeArgument)
-            .at(ast->load()->tokenRange())
-            .commit(base->toString(), "this type takes no arguments");
-        throw BuildAbortException();
-    }
     std::string error;
-    Type *res = static_cast<OtherType *>(base)->cloneWithArguments(arguments, error);
+    // What the arguments denote is the type's answer (`Type::applyArguments`): the core array
+    // type, a module type and a type that takes no arguments are all asked the same way, so a
+    // type the core gains does not need a second path here.
+    const Type *res = base->applyArguments(arguments, error);
     if (res == nullptr) {
         diags_->of(SemanticDiag::InvalidTypeArgument)
             .at(ast->load()->tokenRange())
@@ -5150,7 +5147,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         throw BuildAbortException();
     }
     LEAVE("SpecType");
-    return res;
+    return const_cast<Type *>(res);
 }
 
 namespace {

@@ -1,0 +1,26 @@
+id = "compile.type_array"
+order = 341
+tier = "fast"
+debug_tier = true # also selected by --tier debug (Debug build)
+tags = ["feat", "compile", "types", "array", "intern", "selftest"]
+desc = "The core array type carries dimensions (docs/design/arrays-memory/plan.cn.md section 3.1): one interned object per shape, the relations (equality, assignability, the checked conversion, unification, widening) on the dimensioned type, the call-site binding of dimension names and packs, and the runtime shape check that moved in from the tensor module."
+
+# `std::type::array` runs the array-type self-test and prints its summary; the program is empty.
+[defaults]
+kind = "behavior"
+case = "../../../cases/compile/type_array/selftest.cml"
+expect_exit = 0
+expect_stdout_contains = ["ARRAY_TYPE_SELFTEST ok", "conversion to 'f32[4]' failed: the array has shape [6]"]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "type_array.selftest"
+desc = "int[] and int[?] are one object, int[3, 4] written as constants or as forms is one object, a negative extent is refused, equality ignores dimension names, assignability and the checked conversion refuse what contradicts them, unification and widening keep the rank, and the binding of names and packs works, including a dimension fixed by a later argument."
+args = ["${case}", "std::type::array", "std::nvm"]
+
+[[tests]]
+name = "type_array.selftest_alias"
+desc = "The same self-test through its short alias."
+args = ["${case}", "std::arraytype", "std::nvm"]

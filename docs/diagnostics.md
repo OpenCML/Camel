@@ -2322,14 +2322,16 @@ Cannot import module '{0}': it has errors ({1}).
 The errors are reported for that module. This one follows from them and goes away when they are fixed.
 ```
 
-**Example** (`test/cases/compile/module_load/value_cycle_modules.cml`, run as `camel -E short test/cases/compile/module_load/value_cycle_modules.cml`)
+**Example** (`test/cases/compile/module_imports/import_order/relative_name/main_short.cml`, run as `camel -E short test/cases/compile/module_imports/import_order/relative_name/main_short.cml`)
 
 ```camel
-// Values of two modules that depend on each other: ModuleValueCycle across the modules.
-import cycle_x
+/// H232: imports `short`, whose `import ..lib` cannot be formed against its one-component name.
+module main_short
+
+import short
 
 func main(): int sync {
-    println(cycle_x::x)
+    println(short::name())
     return 0
 }
 ```

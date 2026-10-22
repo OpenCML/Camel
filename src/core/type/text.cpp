@@ -343,8 +343,25 @@ std::vector<TextItem> enumParts(const EnumType *enumType, bool mangle) {
 
 std::vector<TextItem> typeParts(const Type *type, bool mangle) {
     switch (type->code()) {
-    case TypeCode::Array:
-        return {typeItem(static_cast<const ArrayType *>(type)->elemType()), literal("[]")};
+    case TypeCode::Array: {
+        const auto *array = static_cast<const ArrayType *>(type);
+        if (array->isNumericUnknown()) {
+            if (mangle) {
+                return {literal("Array_Tensor_" + array->shapeMangle())};
+            }
+            if (array->extents().empty() && array->anyRank() && array->packName().empty()) {
+                return {literal("Tensor")};
+            }
+            return {literal("Tensor<" + array->tensorShapeText() + ">")};
+        }
+        if (mangle) {
+            return {
+                literal("Array_"),
+                typeItem(array->elemType()),
+                literal("_" + array->shapeMangle())};
+        }
+        return {typeItem(array->elemType()), literal(array->shapeText())};
+    }
     case TypeCode::Tuple:
         return tupleParts(static_cast<const TupleType *>(type), mangle);
     case TypeCode::Struct:
@@ -436,9 +453,24 @@ bool sameType(const Type *a, const Type *b) {
         }
         switch (left->code()) {
         case TypeCode::Array: {
-            pending.emplace_back(
-                static_cast<const ArrayType *>(left)->elemType(),
-                static_cast<const ArrayType *>(right)->elemType());
+            const auto *lhs = static_cast<const ArrayType *>(left);
+            const auto *rhs = static_cast<const ArrayType *>(right);
+            // The shape is part of the type: a fixed rank and an open rank are different
+            // types, and so are two different constant extents. An extent that is not a
+            // constant asks for nothing at the call, so two such extents are the same
+            // dimension here; dimension names are signature metadata, as parameter names are
+            // for function types (this is what the tensor type's equality did before).
+            if (lhs->anyRank() != rhs->anyRank() ||
+                lhs->isNumericUnknown() != rhs->isNumericUnknown() ||
+                lhs->extents().size() != rhs->extents().size()) {
+                return false;
+            }
+            for (size_t i = 0; i < lhs->extents().size(); ++i) {
+                if (!sameExtentConstraint(lhs->extents()[i], rhs->extents()[i])) {
+                    return false;
+                }
+            }
+            pending.emplace_back(lhs->elemType(), rhs->elemType());
             break;
         }
         case TypeCode::Tuple: {
