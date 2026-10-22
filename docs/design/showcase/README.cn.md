@@ -95,9 +95,9 @@
 
 **Camel 侧还缺什么**
 
-- **数值类型**：`Tensor` 的公开元素类型实际上只有 f32、i64、bool；没有 bf16、f16，也没有真正的
-  f64 张量（`modules/tensor/dtype.cpp` 的 `normalizeTensorDType` 把 f64、i32 归一为 f32、i64）。
-  因此 bf16 溢出与 fp64 误差的测量只能在 PyTorch 里做；Camel 的 f32 阈值与 PyTorch 的 f32 阈值逐项一致。
+- **数值类型**：`Tensor` 的公开元素类型是 f32、f64、i32、i64、bool，元素类型就是写下的那一个
+  （`modules/tensor/dtype.h`）；还没有 bf16、f16。因此 bf16 溢出的测量只能在 PyTorch 里做；fp64
+  误差现在也可以在 Camel 里测。Camel 的 f32 阈值与 PyTorch 的 f32 阈值逐项一致。
 - **算子与规则**：没有融合 QKV/注意力算子，也没有 `rules::accuracy`、`rules::fusion` 的规则流水线，
   所以朴素源码不会自动变成专家写法；`softmax`、`log_softmax` 与融合交叉熵作为普通算子已经存在，
   但示例刻意不调用它们。融合 QKV 可以手写成 `concat` 后切片，但还没有规则替用户做这件事。

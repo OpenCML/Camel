@@ -20,7 +20,7 @@ func noisy(t: Tensor): Tensor sync {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, 0.5], [4])
+    let x = reshape([1.0, -2.0, 3.0, 0.5] as f32[], [4])
     export_model((t: Tensor): Tensor => noisy(t), x, get_env('ONNX_OUT'))
     println('unreachable')
     return 0

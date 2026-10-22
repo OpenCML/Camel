@@ -1930,7 +1930,8 @@ from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
 type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+is `f32`, `f64`, `i32`, `i64` or `bool`, exactly the type given. A byte count that does not fit
+the shape is a fault.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.

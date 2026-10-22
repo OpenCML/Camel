@@ -23,8 +23,15 @@ using type::TypeCode;
 
 namespace {
 
+/// The gradient and update kernels compute in f32 only. An f64 or integer tensor is refused,
+/// naming the argument type and the supported set, never narrowed to f32 (design principles
+/// 5.1: no implicit conversion between numeric types).
 const Array *asFloat(const Array *t, mm::IAllocator &allocator) {
-    return t->dtype() == TypeCode::Float32 ? t : cast(t, TypeCode::Float32, allocator);
+    (void)allocator;
+    if (t->dtype() != TypeCode::Float32) {
+        refuseTensorElementType("the gradient kernels", t, {TypeCode::Float32});
+    }
+    return t;
 }
 
 std::string shapeText(std::span<const int64_t> shape) {
@@ -129,14 +136,17 @@ sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator)
     return out;
 }
 
+/// A pure layout op: every element type is copied as it is, so a bool or int64 tensor broadcasts
+/// without being converted (the element it is written with is the element it keeps).
 Array *
 broadcastTo(const Array *t, std::span<const int64_t> shape, mm::IAllocator &allocator) {
-    const Array *src = asFloat(t, allocator);
-    const auto strides      = broadcastStrides(src->shapeSpan(), shape, "broadcast");
-    Array *out       = createTensor(TypeCode::Float32, shape, allocator);
-    const float *in         = src->dataAs<float>();
-    float *dst              = out->dataAs<float>();
-    forEachBroadcast(shape, strides, [&](uint64_t i, int64_t j) { dst[i] = in[j]; });
+    const auto strides = broadcastStrides(t->shapeSpan(), shape, "broadcast");
+    Array *out         = createTensor(t->dtype(), shape, allocator);
+    dispatchDType(t->dtype(), [&]<typename T>() {
+        const T *in = t->dataAs<T>();
+        T *dst      = out->dataAs<T>();
+        forEachBroadcast(shape, strides, [&](uint64_t i, int64_t j) { dst[i] = in[j]; });
+    });
     return out;
 }
 

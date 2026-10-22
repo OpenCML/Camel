@@ -5406,17 +5406,6 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
             }
         }
     }
-    // A type whose argument this build would store as another type (`Tensor<f64>` holds f32) is
-    // refused here, at the type expression: the alternative is a value that silently runs at the
-    // type it was replaced with (design/arrays-memory, P4 "element type exact").
-    std::string writtenArgument;
-    std::string storedArgument;
-    if (base->argumentStoredAs(arguments, writtenArgument, storedArgument)) {
-        diags_->of(SemanticDiag::TensorElementTypeNotStored)
-            .at(ast->load()->tokenRange())
-            .commit(writtenArgument, storedArgument);
-        throw BuildAbortException();
-    }
     std::string error;
     // What the arguments denote is the type's answer (`Type::applyArguments`): the core array
     // type, a module type and a type that takes no arguments are all asked the same way, so a

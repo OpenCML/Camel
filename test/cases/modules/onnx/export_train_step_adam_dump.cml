@@ -31,12 +31,12 @@ sync func spin(m: Mlp, st: OptimizerState, x: Tensor, i: int, steps: int, dir: s
 
 func main(): int sync {
     let m = {
-        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25], [2, 3]),
-        b1: reshape([0.1, 0.0, -0.1], [3]),
-        w2: reshape([1.0, -1.0, 0.5], [3, 1]),
-        b2: reshape([0.2], [1])
+        w1: reshape([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[], [2, 3]),
+        b1: reshape([0.1, 0.0, -0.1] as f32[], [3]),
+        w2: reshape([1.0, -1.0, 0.5] as f32[], [3, 1]),
+        b2: reshape([0.2] as f32[], [1])
     }
-    let x = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
+    let x = reshape([1.0, 2.0, -1.0, 0.5] as f32[], [2, 2])
     spin(m, adam_state(m), x, 0, int(get_env('STEPS')), get_env('DUMP_DIR'))
     return 0
 }

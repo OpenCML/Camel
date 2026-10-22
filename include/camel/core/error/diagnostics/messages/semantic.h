@@ -230,10 +230,6 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
-    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 and up.
-    /// The tensor type's element type would be stored as another one (`Tensor<f64>` as f32).
-    TensorElementTypeNotStored = 0x0001A7,
-
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,

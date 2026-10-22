@@ -68,7 +68,7 @@ slot_t onesKernel(ArgsView &, ArgsView &norm, context::Context &) {
 slot_t fullKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("full", [&] {
         return wrap(k::full(
-            normalizeTensorDType(norm.type(1)->code()),
+            norm.type(1)->code(),
             shapeArg(norm, 0),
             numberArg(norm, 1),
             resultAllocator()));
@@ -76,7 +76,7 @@ slot_t fullKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 std::optional<Type *> fullInfer(const InferContext &ctx) {
-    return tensorOf(normalizeTensorDType(ctx.type(1)->code()), shapeFromArg(ctx, 0));
+    return tensorOf(ctx.type(1)->code(), shapeFromArg(ctx, 0));
 }
 
 slot_t randomKernel(ArgsView &, ArgsView &norm, context::Context &) {

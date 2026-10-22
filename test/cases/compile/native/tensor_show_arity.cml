@@ -8,7 +8,7 @@ module tensor_show_arity
 import { new, show } from tensor
 
 func main(): int sync {
-    let t = new([[1.0, 2.0]])
+    let t = new([[1.0, 2.0]] as f32[][])
     show(t, 1)
     return 0
 }

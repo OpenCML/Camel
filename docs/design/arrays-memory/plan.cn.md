@@ -354,7 +354,7 @@ Tensor<f32>               // f32[..]
 
 ### 5.2 元素类型精确
 
-- 删除 `normalizeTensorDType`（`modules/tensor/dtype.cpp:27 # "TypeCode normalizeTensorDType(TypeCode code) {"`）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
+- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp:85 # "if (dtype && !isSupportedTensorScalar(*dtype)) {"` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
 - 审计模块内核的 dtype 支持：elementwise 已支持 f32/f64/i32/i64（`modules/tensor/kernels/elementwise.cpp`）；conv/bn 的若干内核只接受 `const float*`（`kernels/conv.cpp` 283+、404+、572+）。这些算子的推断处要声明只支持 f32（今天没有声明，遇到 f64 会读错），遇到 f64 输入报运行时故障（而不是静默读错）。测试里没有 `Tensor<float>` 的用例（已核对），只有 `Tensor<int>` 出现在 `modules/nn` 的 checkpoint 用例里，`int` 就是 i64，与今天相同。
 - 删除 `TensorType::castSafetyFrom/castSlotFrom` 里的 dtype 归一化；`as` 的检查变成 `ArrayType::castSlotFrom` 的形状检查（P2）。
 

@@ -14,7 +14,7 @@ func f(x: Tensor): Tensor {
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3])
+    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
     export_model(f, ex, 'tmp/test/onnx/refusal_as_always_fails.onnx')
     return 0
 }

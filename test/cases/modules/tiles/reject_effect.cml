@@ -6,7 +6,7 @@ func noisy(x: Tensor<f32>): Tensor<f32> sync {
     return x + x
 }
 func main(): int sync {
-    let x = reshape([1.0, 2.0], [2])
+    let x = reshape([1.0, 2.0] as f32[], [2])
     println(source<noisy>(x))
     return 0
 }

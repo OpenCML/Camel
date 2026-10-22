@@ -21,7 +21,7 @@ env = ["MODE=dynamic", "ONNX_OUT={tmp}/shrink.onnx"]
 exit = 0
 output_contains = ["exported shrink"]
 onnx = "{tmp}/shrink.onnx"
-onnx_ops = "ReduceSum,Greater,If,Identity"
+onnx_ops = "Cast,ReduceSum,Greater,If,Identity"
 
 [[runs]]
 name = "linear-export"
@@ -29,7 +29,7 @@ env = ["MODE=linear", "ONNX_OUT={tmp}/pile.onnx"]
 exit = 0
 output_contains = ["exported pile"]
 onnx = "{tmp}/pile.onnx"
-onnx_ops = "ReduceSum,Greater,If,Identity"
+onnx_ops = "Cast,ReduceSum,Greater,If,Identity"
 
 [[runs]]
 name = "nontail-export"

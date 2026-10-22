@@ -1,0 +1,17 @@
+// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
+// diagnostic naming the operator, the argument's element type and the set the kernel takes.
+// It is never narrowed to f32 (design principles 5.1, 13.1).
+module tensor_dtype_f32_only
+
+import { new, reshape, ones, sum } from tensor
+import { conv2d } from nn
+
+func main(): int sync {
+    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
+    let x = reshape(new(values), [1, 1, 2, 2])
+    let kernel = ones([1, 1, 1, 1])
+    let bias = ones([1])
+    let y = conv2d(x, kernel, bias, 1, 0)
+    println(sum(y))
+    return 0
+}

@@ -10,11 +10,11 @@ module fuse_linear
 import { Tensor, reshape, relu, sum } from tensor
 
 func main(): int sync {
-    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5], [2, 3])
-    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25], [3, 2])
-    let u = reshape([1.0, 2.0, -1.0, 0.5], [2, 2])
-    let b = reshape([0.1, -0.2], [2])
-    let full = reshape([1.0, 2.0, 3.0, 4.0], [2, 2])
+    let x = reshape([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[], [2, 3])
+    let w = reshape([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[], [3, 2])
+    let u = reshape([1.0, 2.0, -1.0, 0.5] as f32[], [2, 2])
+    let b = reshape([0.1, -0.2] as f32[], [2])
+    let full = reshape([1.0, 2.0, 3.0, 4.0] as f32[], [2, 2])
     let a = relu(x @ w + b)
     let c = b + x @ w
     let chained = x @ w + b + a @ u

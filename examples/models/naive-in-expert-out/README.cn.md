@@ -79,10 +79,10 @@ that rounds a `1` away.  `accuracy.cml` repeats the f32 measurements in Camel.
 
 ## Gaps found (Camel side)
 
-- The public `Tensor` element types are effectively f32, i64 and bool: no bf16/f16, and f64 is
-  normalised to f32 by `normalizeTensorDType` on creation and cast.  bf16 overflow and the fp64
-  error of the step cannot be measured in Camel today; its f32 thresholds match PyTorch's f32
-  thresholds exactly.
+- The public `Tensor` element types are f32, f64, i32, i64 and bool: a tensor stores the element
+  type it is written with, so the fp64 error of the step can be measured in Camel today. There is
+  still no bf16/f16 element type, so bf16 overflow cannot be measured in Camel; its f32 thresholds
+  match PyTorch's f32 thresholds exactly.
 - No fused QKV/attention operator and no `rules::accuracy`/`rules::fusion` pipeline, so the
   expert form is not produced from the naive source.  `softmax`, `log_softmax` and the fused
   cross-entropy exist as operators and are used by the PyTorch expert and the accuracy probes.

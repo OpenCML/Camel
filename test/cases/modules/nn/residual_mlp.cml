@@ -39,9 +39,9 @@ func loss(x: Tensor, target: Tensor): float {
 
 func init(): ResidualMlp {
     return {
-        l0: { weight: full([2, 2], 0.05), bias: zeros([2]) },
-        l1: { weight: full([2, 2], 0.05), bias: zeros([2]) },
-        skip: { weight: full([2, 2], 0.05), bias: zeros([2]) },
+        l0: { weight: full([2, 2], f32(0.05)), bias: zeros([2]) },
+        l1: { weight: full([2, 2], f32(0.05)), bias: zeros([2]) },
+        skip: { weight: full([2, 2], f32(0.05)), bias: zeros([2]) },
         depth: 2
     }
 }
@@ -56,8 +56,8 @@ func train_adam(model: ResidualMlp, state: OptimizerState, x: Tensor, y: Tensor,
 }
 
 func main(): int sync {
-    let x = full([2, 2], 1.0)
-    let y = full([2, 2], 1.0)
+    let x = full([2, 2], f32(1.0))
+    let y = full([2, 2], f32(1.0))
     let model = init()
     let start = loss<model>(x, y)
     let vg = with_grad(loss)<model>(x, y)

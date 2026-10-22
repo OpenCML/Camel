@@ -21,8 +21,8 @@ func negative_axes(): float {
 func main(run_gpu: bool): int sync {
     let derivative = (v: Tensor<f32>): Tensor<f32> => grad(layout_loss)<v>()
     let negative_derivative = (v: Tensor<f32>): Tensor<f32> => grad(negative_axes)<v>()
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [1, 6])
-    let changed = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0], [2, 6])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [1, 6])
+    let changed = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0] as f32[], [2, 6])
     let first = source<derivative>(x)
     let second = source<derivative>(changed)
     let third = source<negative_derivative>(changed)

@@ -63,14 +63,43 @@ template <k::UnaryOp Op> slot_t unaryKernel(ArgsView &, ArgsView &norm, context:
     });
 }
 
+bool isTensorArg(const InferContext &ctx, size_t index) {
+    return asTensorType(ctx.type(index)) != nullptr;
+}
+
+/// The element type a binary operator's two operands are computed in, mirroring
+/// `kernels::operandType`: a scalar takes the tensor's element type (a float meeting an integer
+/// tensor computes in f32, as the operator always has), and two tensors promote only by
+/// widening. Unknown when an operand's element type is unknown.
+std::optional<TypeCode>
+operandType(const InferContext &ctx, const TensorFacts &lhs, const TensorFacts &rhs) {
+    if (isTensorArg(ctx, 0) != isTensorArg(ctx, 1)) {
+        const bool tensorFirst = isTensorArg(ctx, 0);
+        const TensorFacts &tensor = tensorFirst ? lhs : rhs;
+        const TypeCode scalar = tensorFirst ? ctx.type(1)->code() : ctx.type(0)->code();
+        if (!tensor.dtype) {
+            return std::nullopt;
+        }
+        if (isFloatingTensorType(*tensor.dtype)) {
+            return *tensor.dtype;
+        }
+        return isFloatingTensorType(scalar) ? std::optional(TypeCode::Float32) : tensor.dtype;
+    }
+    return promote(lhs.dtype, rhs.dtype);
+}
+
 InferFn binaryInfer(bool producesFloat) {
     return [producesFloat](const InferContext &ctx) -> std::optional<Type *> {
         if (!anyTensor(ctx, 2)) {
             return std::nullopt;
         }
         const TensorFacts lhs = ctx.facts(0), rhs = ctx.facts(1);
-        auto dtype =
-            producesFloat ? std::optional(TypeCode::Float32) : promote(lhs.dtype, rhs.dtype);
+        std::optional<TypeCode> dtype = operandType(ctx, lhs, rhs);
+        if (producesFloat && dtype) {
+            // Div and Pow produce a float: f64 when a tensor operand is f64, f32 otherwise.
+            dtype = *dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                                : std::optional(TypeCode::Float32);
+        }
         return tensorOf(dtype, broadcast(lhs.shape, rhs.shape));
     };
 }
@@ -85,7 +114,14 @@ std::optional<Type *> compareInfer(const InferContext &ctx) {
 InferFn unaryInfer(bool producesFloat) {
     return [producesFloat](const InferContext &ctx) -> std::optional<Type *> {
         const TensorFacts in = ctx.facts(0);
-        return tensorOf(producesFloat ? std::optional(TypeCode::Float32) : in.dtype, in.shape);
+        std::optional<TypeCode> dtype = in.dtype;
+        if (producesFloat && in.dtype) {
+            // A math function keeps f64: f64 in, f64 out. An f32 or integer input gives f32,
+            // the type these operators have always produced.
+            dtype = *in.dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                                   : std::optional(TypeCode::Float32);
+        }
+        return tensorOf(dtype, in.shape);
     };
 }
 
@@ -152,15 +188,25 @@ slot_t whereKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 std::optional<Type *> whereInfer(const InferContext &ctx) {
     const TensorFacts c = ctx.facts(0), a = ctx.facts(1), b = ctx.facts(2);
-    return tensorOf(promote(a.dtype, b.dtype), broadcast(c.shape, broadcast(a.shape, b.shape)));
+    return tensorOf(
+        operandType(ctx, a, b), broadcast(c.shape, broadcast(a.shape, b.shape)));
 }
 
-/// Storage dtype named by a cast target string ("float32", "int64", "bool", or Camel scalar names).
+/// Element type named by a cast target string. The names follow the language: `float` is f64
+/// (it is another spelling of `f64`), `f32` is float32, `int` is i64. A cast is the explicit
+/// conversion the language offers; it converts the values, and the result type is the one
+/// named, never a storage type the name was quietly replaced with.
 TypeCode dtypeFromName(const std::string &name) {
-    if (name == "float32" || name == "float" || name == "double" || name == "float64") {
+    if (name == "float32" || name == "f32") {
         return TypeCode::Float32;
     }
-    if (name == "int64" || name == "int" || name == "long" || name == "int32") {
+    if (name == "float64" || name == "float" || name == "double" || name == "f64") {
+        return TypeCode::Float64;
+    }
+    if (name == "int32" || name == "i32") {
+        return TypeCode::Int32;
+    }
+    if (name == "int64" || name == "int" || name == "long" || name == "i64") {
         return TypeCode::Int64;
     }
     if (name == "bool") {

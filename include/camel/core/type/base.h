@@ -237,16 +237,6 @@ class Type {
     virtual const Type *
     applyArguments(std::span<const TypeArgument> arguments, std::string &error) const;
 
-    /**
-     * The first written argument this type would not store as written, if any: a `Tensor<f64>`
-     * holds f32 here, so `written` is "f64" and `stored` is "f32". The compiler refuses such a
-     * declaration at the type expression, with a diagnostic of its own, so a program never runs
-     * at a type it did not write. A type whose arguments are exactly what it stores keeps the
-     * default (False, "nothing is replaced").
-     */
-    virtual bool argumentStoredAs(
-        std::span<const TypeArgument> arguments, std::string &written, std::string &stored) const;
-
     bool operator==(Type *other) const = delete;
     bool operator!=(Type *other) const = delete;
 
