@@ -579,6 +579,12 @@ class Builder {
     /// value does (design principles 4.4).
     std::unordered_map<node_handle_t, std::vector<std::optional<WithDefaultValue>>>
         withDefaultsOfValue_;
+    /// The static node that carries a declaration's default into a graph, so that every call in
+    /// that graph which leaves the parameter out reads the one node: the value is computed once,
+    /// at the declaration, not once per call. Keyed by the graph, then by the default's
+    /// expression (one per `with` parameter of a declaration).
+    std::unordered_map<const void *, std::unordered_map<const void *, node_handle_t>>
+        withDefaultNodes_;
     /// Evaluates the defaults `decl` writes and keeps them under `owner` (a graph or a generic
     /// template). `parametersInScope` is false when the declaration's own `with` parameters are
     /// not names of the scope (a declaration at a module's top level): a default that reads one
