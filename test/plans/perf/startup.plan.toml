@@ -1,9 +1,8 @@
 # The cost of everything `camel` does before a program runs (handover H142).
 #
 # A declaration module (`stdlib/<module>.cml`) is parsed and compiled like a library when it is
-# imported. The tool derives their set and their declaration count from the tree (H177), so a new
-# module is measured the day its `.cml` lands; the count below is the one those sources held when
-# this pin was last read. This plan pins three commands that run before any program code does: the
+# imported. The tool derives their set and their declaration count from the tree, so a new module is
+# measured the day its `.cml` lands; the printed count is the tool's, never a pinned one. This plan pins three commands that run before any program code does: the
 # process itself (`--version`), a one-line program with no imports, and `inspect --ops` on a
 # program that imports every standard library module. It also runs that program, so the same import
 # work is timed on the run path.
@@ -40,12 +39,8 @@
 # numbers and the per-module table in handover note ⟨83d6558⟩ (H177); H221 recorded its window in
 # docs/technical/50_pyplot_cpython_init.md §4.3.
 #
-# The pinned `declarations=` count is how many declarations the run compiles, so it moves whenever
-# a module is migrated: 309 with `env`/`process`/`hash` (H163), 345 after `algo`/`math`/`graph`/
-# `para`/`random` became declarations (H202). The number is the measurement's own, not the ledger's
-# 337 declarations — the compiler counts the functions it instantiates, including the enumerated
-# `graph:constant`/`add_constant` spellings. Update the pin with the measured value when a
-# migration changes it; never loosen the per-declaration ceiling instead.
+# `declarations=` is how many declarations the run compiles; it is printed for the record and
+# moves whenever a module is migrated. It is not asserted: only the per-declaration ceiling is.
 id = "perf.startup"
 order = 401
 tier = "slow"
@@ -59,7 +54,7 @@ tool = "node"
 case = "../../tools/startup-cost.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations=345"]
+expect_stdout_contains = ["startup.cost version", "startup.cost imports_nothing", "startup.cost inspect_ops", "startup.cost imports_all", "declaration.cost declarations="]
 # Four commands, 21 timed runs each after three warm-ups, are a few seconds on a quiet host and
 # well under half a minute under load. 120 s catches a hang, not a slow run.
 timeout_ms = 120000

@@ -1,5 +1,0 @@
-module b
-import { base } from d
-export func fb(x: int): int {
-    return base(x) * 2
-}

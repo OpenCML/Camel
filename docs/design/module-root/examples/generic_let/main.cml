@@ -1,6 +1,0 @@
-import { shift } from lib
-
-func main(): int sync {
-    println(shift([1, 2, 3]))
-    return 0
-}

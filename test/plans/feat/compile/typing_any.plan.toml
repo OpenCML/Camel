@@ -3,7 +3,7 @@ order = 140
 tier = "fast"
 tags = ["feat", "compile", "diagnostics", "any"]
 
-# `any` (design principles 5.10; docs/design/any-typing/README.cn.md). It is not a type today:
+# `any` (design principles 5.10). It is not a type today:
 # writing it is an ordinary unknown name. The remaining cases are reproducers of defects of the
 # study (appendix B) from when a slot could be typed `any` — it recorded nothing about what
 # entered it, so reading it as a type of its own crashed or retyped a value silently.

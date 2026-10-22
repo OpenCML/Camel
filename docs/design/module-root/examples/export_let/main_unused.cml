@@ -1,6 +1,0 @@
-import { pi } from lib
-
-func main(): int sync {
-    println('pi is imported but not used')
-    return 0
-}

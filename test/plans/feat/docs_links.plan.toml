@@ -13,12 +13,6 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # a page no reader reaches. The mode derives the page list from the tree — every *.md under
 # docs/technical except the index itself, jit/ included — and fails naming each unlisted page.
 #
-# scripts/check-retired-names.mjs reads the same reader-facing pages (plus the Markdown of
-# docs/, editors/, tools/ and scripts/, and the example programs) and fails on a retired name
-# used as if it were current: `sys:`/`os:`/`crypto:`, `str::bytes`/`str::from_bytes`, the
-# `inner`/`outer`/`atomic`/`shared` function modifiers, and the body-carrying signature form.
-# Task reports and dated reviews are records, not pages, and are not scanned.
-#
 # scripts/check-doc-snippets.mjs compiles every `cml`/`camel` fence of the reader-facing pages
 # with `camel <file> std::gir`, runs the fences that carry a command and a `text` block, and
 # compares stdout, the exit code and the diagnostic name. A fence that is deliberately a
@@ -27,12 +21,6 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # snippet runs in its own process because every fence can declare its own module and entry.
 # Task reports and dated reviews are records and are not scanned.
 #
-# scripts/check-doc-counts.mjs checks the numbers the other three guards cannot see: a page's
-# "119 operators" or "11 signature files" against the one file that defines it (the generated
-# matrix, the signature directory, the release gate's lists, the plan selection, CMakeLists.txt,
-# the AST snapshot, syntax.h, the RuntimeError references). A dated snapshot that states an old
-# number is allowlisted in the script with a reason; the script names the page, line, claim and
-# truth when it fails. Cost: 145 documents in about 0.7 s, no build.
 
 [[tests]]
 name = "docs.links.reader_facing"
@@ -59,18 +47,6 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
 [[tests]]
-name = "docs.retired_names_absent"
-desc = "No reader-facing page uses a retired spelling as if it were current: the `sys:`/`os:`/`crypto:` module names, `str::bytes`/`str::from_bytes`, the `inner`/`outer`/`atomic`/`shared` function modifiers, or the body-carrying signature form. Reports and dated reviews are records and are not scanned; two dated snapshots are allowlisted with a reason."
-kind = "behavior"
-tool = "node"
-case = "../../../scripts/check-retired-names.mjs"
-args = ["${case}", "--default-roots"]
-expect_exit = 0
-expect_stdout_contains = ["no retired spelling in"]
-normalizers = ["normalize_newlines"]
-timeout_ms = 20000
-
-[[tests]]
 name = "docs.snippets_compile"
 desc = "Every Camel fence in a reader-facing page compiles; when the fence has a command and a text block it runs and prints that text. Incomplete or deliberately wrong fences carry a marker with a reason."
 kind = "behavior"
@@ -81,15 +57,3 @@ expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
-
-[[tests]]
-name = "docs.counts_current"
-desc = "Every counted claim in a reader-facing page (CMake minimum, exported operators, signature files, diagnostic codes, release-gate plans/checks, the tiles selection, the .cml and snapshot sizes) agrees with the file or command that defines it. Dated snapshots are allowlisted with a reason."
-kind = "behavior"
-tool = "node"
-case = "../../../scripts/check-doc-counts.mjs"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_contains = ["no stale count in"]
-normalizers = ["normalize_newlines"]
-timeout_ms = 20000

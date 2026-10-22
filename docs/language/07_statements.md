@@ -413,7 +413,6 @@ func canonical(x: float, y: float): float {
 - **许可只是允许，不是要求**。CPU 后端（`std::nvm`、`std::fvm`、`std::jit`、`std::prl`、`std::cpp`）总是给出规范结果；以后的后端（如 Tiles）可以在有许可的节点上用别的算法。`std::opt` 默认使用 7.3 的默认许可，`std::opt(safe_fp=true)` 按 `#strict` 一样的策略工作。
 - 没有模块级的默认许可，也没有命令行或流水线开关；后端的入口（如 `tiles.run`）不接受许可。
 - 许可记在图的每个节点上，`std::rgir`、`std::gir` 在有许可的节点上显示 `numeric="..."`；`#strict` 是代码上的标签，出现在节点的 `attrs="strict"` 里。公共子表达式合并与张量的融合不把许可不同的节点合在一起。
-- **旧的 `@numeric(许可, ...)` 写法已删除**：它现在在标注处报 `SemanticDiag::InvalidAnnotation`，并指出应写成 `#[reassociate]` 这样的标签；空的 `@numeric()` 与任何 `@名字(参数)` 同样被拒绝。
 
 ### 7.6.2 标签：`#`
 
@@ -465,7 +464,7 @@ func main(): int {
 
 `on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
 
-形参类型还可以是 `func`：这时实参是一个函数名，标签的事实是那个函数的**图引用**（`attr::graphRef`），不是函数值。GIR 构建器把该图记进函数图的引用表（`kGraphRefRule`），于是冻结后的图直接指向这个函数，运行期不必再按名字解析，也不需要闭包捕获；因此 `func` 实参只能是程序里的静态函数，载不了捕获了外围值的闭包。自动微分模块就是这样声明 `export tag vjp<rule: func> on func` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。旧的 `@vjp<rule>` 标注已删除：在标注处报 `SemanticDiag::InvalidAnnotation`，并指出应写 `#vjp<rule>`。
+形参类型还可以是 `func`：这时实参是一个函数名，标签的事实是那个函数的**图引用**（`attr::graphRef`），不是函数值。GIR 构建器把该图记进函数图的引用表（`kGraphRefRule`），于是冻结后的图直接指向这个函数，运行期不必再按名字解析，也不需要闭包捕获；因此 `func` 实参只能是程序里的静态函数，载不了捕获了外围值的闭包。自动微分模块就是这样声明 `export tag vjp<rule: func> on func` 的：`#vjp<rule>` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。`@vjp<rule>` 在标注处报 `SemanticDiag::InvalidAnnotation`，应写 `#vjp<rule>`。
 
 `@名字(实参)` 不是标签的写法：它按标注报告，并指出应写 `#名字`。
 

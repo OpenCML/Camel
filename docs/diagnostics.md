@@ -2688,7 +2688,7 @@ module if_condition
 import { Json, decode } from json
 
 // A decoded value as the condition of an `if`: it used to be an `any` whose slot was read as a
-// bool (docs/design/any-typing, defect D5). It is a `Json` now, and a condition is a bool.
+// bool. It is a `Json` now, and a condition is a bool.
 func check(a: Json): int sync {
     println(if a then 1 else 2)
     return 0
@@ -2723,7 +2723,7 @@ module match_subject
 import { Json, decode } from json
 
 // A decoded value as the subject of a `match` on literals: as an `any` it was compared bit for
-// bit, a string by address, so `'ab'` fell to `case _` (docs/design/any-typing, defect D5). It
+// bit, a string by address, so `'ab'` fell to `case _`. It
 // is a `Json` now, and a case has the type of the value matched.
 func check(v: Json): int sync {
     let r = match v {

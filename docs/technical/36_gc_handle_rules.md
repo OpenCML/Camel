@@ -347,10 +347,9 @@ a stale pointer that is never used again; code that no test runs.
   typed value referred to through an `any` element or field was not kept alive either.
   Converting at once (`decode(s) as T`) was not safe either, contrary to what this section once
   said: `CAST` is a pure node without a control edge, so a back end runs it where its result is
-  used, not right after `decode` (`docs/design/any-typing/examples/t21_cast_at_once.cml` failed
+  used, not right after `decode` (a value converted after `decode` failed
   on all four back ends under forced collection). Design principles 5.10 settled it:
   `any` is removed from the language and from the type system, `json.decode` gives a `Json`
   (`modules/json/value.h`: a kind and a payload whose type the kind fixes, traced like a
   function value or a tensor), and a commit refuses a graph with an undetermined type.
-- **Whether the generational collector becomes the default** (measurements in
-  `37_generational_gc_report.md`).
+- **Whether the generational collector becomes the default.** `--gc generational` 可用；默认仍是标记-清除。

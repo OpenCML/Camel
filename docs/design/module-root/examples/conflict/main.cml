@@ -1,7 +1,0 @@
-import { f } from b
-import { f } from c
-
-func main(): int sync {
-    println(f(1))
-    return 0
-}

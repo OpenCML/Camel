@@ -575,6 +575,10 @@ for (const rule of selectionDoc.rules || []) {
 // and for files no plan can read (vendored code, packaging, CI configuration).
 const RULELESS_ALLOWED = [
     {
+        match: /^hello\.cml$/,
+        why: 'a sample program at the repository root; no test plan reads it',
+    },
+    {
         match: /^benchmarks\//,
         why: 'the benchmarks and their PyTorch baselines are the manual perf layer (H167); a change here must not select a perf plan',
     },

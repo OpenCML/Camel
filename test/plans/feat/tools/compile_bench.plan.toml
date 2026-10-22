@@ -8,7 +8,7 @@ The measuring tools of the compile pipeline keep working: the phase report of th
 allocator shim (test/tools/allocshim), the generator of multi-module projects and the benchmark
 script built on them (benchmarks/compile/). Nothing here asserts a time or a number of
 allocations: the test is that every part runs and that the report has the shape the scripts
-and docs/technical/38_compile_pipeline_cost.md rely on.
+rely on.
 """
 
 [[tests]]

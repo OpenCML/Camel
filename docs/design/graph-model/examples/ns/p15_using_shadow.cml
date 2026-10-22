@@ -1,8 +1,0 @@
-// A using-directive brings a name the module also declares with the same signature.
-import lib
-using namespace lib::Tools
-func inc(x: int): int { return x + 1000 }
-func main(): int sync {
-    println(inc(1))
-    return 0
-}

@@ -4,7 +4,7 @@ import { Json, decode, get } from json
 
 // A value entering a `T?` is boxed, so `??` opens a real box. An `any` value entering `any?`
 // used to be passed on unboxed and `??` read the integer 7 as the address of a box
-// (segmentation fault; docs/design/any-typing, defect D1). A decoded value is a `Json` now;
+// (segmentation fault). A decoded value is a `Json` now;
 // the branch with a `null` arm makes it a `Json?`.
 func pick(seven: Json, zero: Json): Json {
     let n = len('ab')

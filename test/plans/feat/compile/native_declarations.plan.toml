@@ -826,7 +826,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 
 [[tests]]
 name = "native.tensor_show_empty_array"
-desc = "The umbrella boundary: `show([])` binds the second rule's type variable to the empty array's element type, so the call is accepted as it was under the C++ `TensorLike` resolver, and the kernel faults with the same `Unsupported Tensor dtype` — the declaration narrows nothing (H175, docs/technical/47_declaration_syntax.md §2.3)."
+desc = "The umbrella boundary: `show([])` binds the second rule's type variable to the empty array's element type, so the call is accepted as it was under the C++ `TensorLike` resolver, and the kernel faults with the same `Unsupported Tensor dtype` — the declaration narrows nothing (H175, docs/stdlib-conventions.cn.md 第 8 节)."
 kind = "negative"
 case = "../../../cases/compile/native/tensor_show_empty_array.cml"
 args = ["${case}"]

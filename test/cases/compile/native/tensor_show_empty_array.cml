@@ -2,7 +2,7 @@
  * The boundary of the umbrella parameter: `show([])` holds an empty array, whose element type
  * binds no type variable. The C++ `TensorLike` resolver accepted it and the kernel then faulted
  * ("Unsupported Tensor dtype"); the declaration may refuse it earlier. This case records which
- * (handover H175, `docs/technical/47_declaration_syntax.md` §2.3).
+ * (H175, `docs/stdlib-conventions.cn.md` 第 8 节).
  */
 module tensor_show_empty_array
 

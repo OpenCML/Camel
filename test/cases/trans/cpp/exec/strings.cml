@@ -1,5 +1,5 @@
 /// Strings: concatenation, comparison by bytes, one byte by index, length, contains, a string
-/// held in a local and returned (it did not compile, docs/design/cpp-memory appendix B D1),
+/// held in a local and returned (it did not compile, design principles 10.6),
 /// `match` on strings (it compared addresses, D3) and format specifications.
 module strings
 

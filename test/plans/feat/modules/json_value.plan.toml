@@ -53,7 +53,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "json.gc.default.nvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=20000", "${run_nvm}"]
@@ -65,7 +65,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.generational.nvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=20000", "${run_nvm}"]
@@ -76,7 +76,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.forced_major.nvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=300", "${run_nvm}"]
@@ -88,7 +88,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.forced_minor.nvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=300", "${run_nvm}"]
@@ -100,7 +100,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.poison.nvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; nvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; nvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=300", "${run_nvm}"]
@@ -112,7 +112,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.default.fvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; fvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=20000", "${run_fvm}"]
@@ -124,7 +124,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.generational.fvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; fvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=20000", "${run_fvm}"]
@@ -135,7 +135,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.forced_major.fvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; fvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=300", "${run_fvm}"]
@@ -147,7 +147,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.forced_minor.fvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=300", "${run_fvm}"]
@@ -159,7 +159,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.poison.fvm"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; fvm). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; fvm). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=300", "${run_fvm}"]
@@ -171,7 +171,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.default.prl"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, no forced collection; prl). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=20000", "${run_prl}"]
@@ -183,7 +183,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.generational.prl"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational; prl). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=20000", "${run_prl}"]
@@ -194,7 +194,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.forced_major.prl"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (mark-sweep, a major collection at every safepoint; prl). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=300", "${run_prl}"]
@@ -206,7 +206,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.forced_minor.prl"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); prl). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=300", "${run_prl}"]
@@ -218,7 +218,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc.poison.prl"
-desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; prl). As an `any` it was not (docs/design/any-typing, defect D0)."
+desc = "A Json kept across allocation in a frame slot, through a function and in an array of Json is traced (safepoint poisoning; prl). As an `any` it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc.cml"
 args = ["${case}", "--arg", "n=300", "${run_prl}"]
@@ -230,7 +230,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.default.nvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, no forced collection; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, no forced collection; nvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["${case}", "--arg", "n=20000", "std::macro", "${run_nvm}"]
@@ -242,7 +242,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.generational.nvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational; nvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=20000", "std::macro", "${run_nvm}"]
@@ -253,7 +253,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.forced_major.nvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, a major collection at every safepoint; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, a major collection at every safepoint; nvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
@@ -265,7 +265,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.forced_minor.nvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); nvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
@@ -277,7 +277,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.poison.nvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (safepoint poisoning; nvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (safepoint poisoning; nvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["${case}", "--arg", "n=300", "std::macro", "${run_nvm}"]
@@ -289,7 +289,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.default.fvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, no forced collection; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, no forced collection; fvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["${case}", "--arg", "n=20000", "std::macro", "${run_fvm}"]
@@ -301,7 +301,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.generational.fvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational; fvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=20000", "std::macro", "${run_fvm}"]
@@ -312,7 +312,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.forced_major.fvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, a major collection at every safepoint; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (mark-sweep, a major collection at every safepoint; fvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]
@@ -324,7 +324,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.forced_minor.fvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (generational, a minor collection at every safepoint, everything promoted at once (the write-barrier check of docs/technical/36, section 6); fvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["--gc", "generational", "${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]
@@ -336,7 +336,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "json.gc_macro.poison.fvm"
-desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (safepoint poisoning; fvm). As an `any` constant it was not (docs/design/any-typing, t16)."
+desc = "A Json computed by std::macro is a constant in the static area of main and is traced there (safepoint poisoning; fvm). As an `any` constant it was not."
 kind = "behavior"
 case = "../../../cases/modules/std/json/json_gc_macro.cml"
 args = ["${case}", "--arg", "n=300", "std::macro", "${run_fvm}"]

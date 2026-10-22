@@ -1,9 +1,0 @@
-// A type declared in a namespace, named without the qualifier by a sibling.
-namespace Models {
-    type Box = { x: int }
-    func mk(x: int): Box { return { x: x } }
-}
-func main(): int sync {
-    println(Models::mk(3).x)
-    return 0
-}

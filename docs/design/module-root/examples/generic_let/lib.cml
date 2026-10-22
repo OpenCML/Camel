@@ -1,7 +1,0 @@
-module lib
-
-let bias = 100
-
-export func shift(xs: (typeas T)[]): int {
-    return len(xs) + bias
-}

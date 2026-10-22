@@ -1,3 +1,0 @@
-module lib
-
-export let pi = 3.14159

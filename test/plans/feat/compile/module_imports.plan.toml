@@ -4,7 +4,7 @@ tier = "fast"
 tags = ["feat", "compile", "semantic", "negative", "modules", "import"]
 desc = "Imports that used to compute with the wrong value or crash the compiler: now correct programs, or located compile-time errors"
 
-# docs/design/module-root/README.cn.md, appendix B (D1 to D6). No program here may crash.
+# Design principles 10.1 (modules). No program here may crash.
 
 [defaults]
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast", ":?:?"]

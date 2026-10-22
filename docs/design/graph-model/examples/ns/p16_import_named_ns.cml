@@ -1,6 +1,0 @@
-// import { Tools } from lib : a namespace imported by name
-import { Tools } from lib
-func main(): int sync {
-    println(Tools::inc(1))
-    return 0
-}

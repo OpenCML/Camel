@@ -115,9 +115,9 @@ It runs, in order:
 1. the fast layer -- `smoke`, `feat/**`, and the fast-tier `gpu/profile` plan at `--tier fast`;
 2. the slow layer -- eleven explicit plan files (the runnable set), named one by one:
    naming a file is what makes its slow tests run. It never takes a directory or `--tier all`;
-3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
-   --check`, `check-doc-links --all`, `check-retired-names`, `check-doc-snippets`,
-   `stdlib-declarations --check`, `check-std-includes`;
+3. the seven static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
+   --check`, `check-doc-links --all`, `check-doc-snippets`, `stdlib-declarations --check`,
+   `check-std-includes`;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
 install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — the rule that a

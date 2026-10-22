@@ -1,6 +1,0 @@
-import { even } from a
-
-func main(): int sync {
-    println(even(10))
-    return 0
-}

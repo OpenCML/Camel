@@ -1,9 +1,0 @@
-/// std::cpp writes float constants with std::to_string: six digits after the point.
-/// Schedulers print 3e-07; the emitted program prints 0.
-module d01_float_literal
-
-func main(): int sync {
-    println(1.0e-7 * 3.0)
-    println(3.141592653589793)
-    return 0
-}

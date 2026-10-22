@@ -33,37 +33,66 @@ How to read an entry:
 
 Not in this reference: the profiler (`perf`).
 
-| Module | Import | Written in | Functions |
-|---|---|---|---|
-| [built-in](#built-in-functions) | none | C++ | 52 |
-| [str](#str) | `import { ... } from str` | C++ | 14 |
-| [bytes](#bytes) | `import { ... } from bytes` | C++ | 6 |
-| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ | 7 |
-| [tensor](#tensor) | `import { ... } from tensor` | C++ | 64 |
-| [array](#array) | `import { ... } from array` | Camel | 17 |
-| [math](#math) | `import { ... } from math` | C++ | 48 |
-| [statistics](#statistics) | `import { ... } from statistics` | C++ | 5 |
-| [algo](#algo) | `import { ... } from algo` | C++ | 8 |
-| [random](#random) | `import { ... } from random` | C++ | 10 |
-| [time](#time) | `import { ... } from time` | C++ | 3 |
-| [fs](#fs) | `import { ... } from fs` | C++ | 15 |
-| [io](#io) | `import { ... } from io` | C++ | 5 |
-| [process](#process) | `import { ... } from process` | C++ | 3 |
-| [env](#env) | `import { ... } from env` | C++ | 2 |
-| [json](#json) | `import { ... } from json` | C++ | 12 |
-| [hash](#hash) | `import { ... } from hash` | C++ | 2 |
-| [re](#re) | `import { ... } from re` | C++ | 1 |
-| [para](#para) | `import { ... } from para` | C++ | 3 |
-| [this](#this) | `import { ... } from this` | C++ | 1 |
-| [graph](#graph) | `import { ... } from graph` | C++ | 41 |
-| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ | 8 |
-| [tiles](#tiles) | `import { ... } from tiles` | C++ | 9 |
-| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
-| [python](#python) | `import { ... } from python` | C++ | 11 |
-| [nn](#nn) | `import { ... } from nn` | C++ | 19 |
-| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ | 3 |
-| [sim](#sim) | `import { ... } from sim` | C++ | 2 |
-| [onnx](#onnx) | `import { ... } from onnx` | C++ | 2 |
+| Module | Import | Written in |
+|---|---|---|
+| [built-in](#built-in-functions) | none | C++ |
+| [str](#str) | `import { ... } from str` | C++ |
+| [bytes](#bytes) | `import { ... } from bytes` | C++ |
+| [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
+| [tensor](#tensor) | `import { ... } from tensor` | C++ |
+| [array](#array) | `import { ... } from array` | Camel |
+| [math](#math) | `import { ... } from math` | C++ |
+| [statistics](#statistics) | `import { ... } from statistics` | C++ |
+| [algo](#algo) | `import { ... } from algo` | C++ |
+| [random](#random) | `import { ... } from random` | C++ |
+| [time](#time) | `import { ... } from time` | C++ |
+| [fs](#fs) | `import { ... } from fs` | C++ |
+| [io](#io) | `import { ... } from io` | C++ |
+| [process](#process) | `import { ... } from process` | C++ |
+| [env](#env) | `import { ... } from env` | C++ |
+| [json](#json) | `import { ... } from json` | C++ |
+| [hash](#hash) | `import { ... } from hash` | C++ |
+| [re](#re) | `import { ... } from re` | C++ |
+| [para](#para) | `import { ... } from para` | C++ |
+| [this](#this) | `import { ... } from this` | C++ |
+| [graph](#graph) | `import { ... } from graph` | C++ |
+| [rewrite](#rewrite) | `import { ... } from rewrite` | C++ |
+| [tiles](#tiles) | `import { ... } from tiles` | C++ |
+| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ |
+| [python](#python) | `import { ... } from python` | C++ |
+| [nn](#nn) | `import { ... } from nn` | C++ |
+| [autodiff](#autodiff) | `import { ... } from autodiff` | C++ |
+| [sim](#sim) | `import { ... } from sim` | C++ |
+| [onnx](#onnx) | `import { ... } from onnx` | C++ |
+| [built-in](#built-in-functions) | none |  |
+| [str](#str) | `import { ... } from str` |  |
+| [bytes](#bytes) | `import { ... } from bytes` |  |
+| [ckpt](#ckpt) | `import { ... } from ckpt` |  |
+| [tensor](#tensor) | `import { ... } from tensor` |  |
+| [array](#array) | `import { ... } from array` |  |
+| [math](#math) | `import { ... } from math` |  |
+| [statistics](#statistics) | `import { ... } from statistics` |  |
+| [algo](#algo) | `import { ... } from algo` |  |
+| [random](#random) | `import { ... } from random` |  |
+| [time](#time) | `import { ... } from time` |  |
+| [fs](#fs) | `import { ... } from fs` |  |
+| [io](#io) | `import { ... } from io` |  |
+| [process](#process) | `import { ... } from process` |  |
+| [env](#env) | `import { ... } from env` |  |
+| [json](#json) | `import { ... } from json` |  |
+| [hash](#hash) | `import { ... } from hash` |  |
+| [re](#re) | `import { ... } from re` |  |
+| [para](#para) | `import { ... } from para` |  |
+| [this](#this) | `import { ... } from this` |  |
+| [graph](#graph) | `import { ... } from graph` |  |
+| [rewrite](#rewrite) | `import { ... } from rewrite` |  |
+| [tiles](#tiles) | `import { ... } from tiles` |  |
+| [pyplot](#pyplot) | `import { ... } from pyplot` |  |
+| [python](#python) | `import { ... } from python` |  |
+| [nn](#nn) | `import { ... } from nn` |  |
+| [autodiff](#autodiff) | `import { ... } from autodiff` |  |
+| [sim](#sim) | `import { ... } from sim` |  |
+| [onnx](#onnx) | `import { ... } from onnx` |  |
 
 <a id="built-in-functions"></a>
 
@@ -300,20 +329,6 @@ one line end.
 
 - With effects: writes to standard output.
 - Example: `println('a', 1)` gives `a 1`
-
-#### `eprintln`
-
-```camel
-eprintln: (x: T, ...rest: U...) => T
-```
-
-Writes the arguments, separated by spaces, and a line end, to standard error, and gives back
-the first one (so that the write can be part of the data flow). The other arguments may each
-have a type of their own. With a format, eprintln<fmt>(...), writes the format with the
-arguments put in and one line end.
-
-- With effects: writes to standard error.
-- Example: `eprintln('a', 1)` gives `a 1`
 
 #### `input`
 
@@ -3585,7 +3600,7 @@ its error is passed on unchanged); read a part whose shape is known with decode_
 its JSON text. In the examples below, `j` is a Json decoded so.
 
 - Pure.
-- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 levels; the message gives the line and column of the bracket that goes too deep).
+- Failure: error value `JsonParseError` when the text is not JSON (the message gives the position in the text and its beginning); error value `JsonTooDeep` when the document nests deeper than the limit (10000 by default, set by `CAMEL_JSON_MAX_DEPTH`; the message gives the line and column of the bracket that goes too deep).
 - Example: `decode('{"port": 80}') ?-> ((j: Json): int => j->get<'port'>->as_int ?? 0) !! -1` gives `80`
 
 #### `kind`
@@ -4448,12 +4463,26 @@ How many constants the rule `r` adds to the program.
 ## `tiles`: programs on a CUDA device
 
 Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
-the device computes, and the results come back to the host. `tiles::compile` outlines the regions
-the device can run, `source`/`inspect`/`benchmark` show what would run, and `upload`/`download`
-move a value by hand. Placement is asked for in the source with the `#gpu` label (design
-principles 13.4), which `tiles::compile` reads; the card is chosen at run time with `--devices`.
-The device holds a foreign resource (`tiles:device`) and the driver is ambient state
-(`tiles:driver`), so every operator of this module has effects and none is folded or dropped.
+the device computes, and the results come back to the host. `gpu` marks a function to prefer the
+device, `run`/`run_device` run one explicitly, `source`/`inspect`/`benchmark` show what would
+run, and `upload`/`download` move a value by hand. The device holds a foreign resource
+(`tiles:device`) and the driver is ambient state (`tiles:driver`), so every operator of this
+module has effects and none is folded or dropped.
+
+#### `gpu`
+
+```camel
+gpu: (fn: (x: float) => float) => (x: float) => float
+```
+
+Compiles the function to device code and returns a function of the same type that prefers the
+device: it runs there when the device can take it, and on the host otherwise. The function
+takes no with-parameter, has at least one ordinary parameter, and every leaf of its parameters
+and result is a float or an f32 tensor. The result is the argument's own type, which a
+declaration cannot say without also dropping that restriction.
+
+- With effects: marks a function to prefer the device.
+- Example: `let fast = gpu((x: float): float => x + 1.0)`
 
 #### `upload`
 
@@ -4480,16 +4509,39 @@ leaf that is not a device value is refused when the call is compiled.
 - With effects: transfers from the device.
 - Example: `download(resident)` gives `the tensor resident holds`
 
+#### `run`
+
+```camel
+run: <fn: (a: float, b: float) => float> (inputs: (float, float)) => float
+```
+
+Runs the function on the CUDA device: its parameter (or the tuple of its parameters) is
+uploaded, the device computes, and the result is downloaded again. The result type is the
+function's result type.
+
+- With effects: transfers both ways and runs device code.
+- Example: `run<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `5.0`
+
+#### `run_device`
+
+```camel
+run_device: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
+```
+
+Runs the function as `run` does but leaves the result on the device: each leaf of it comes back
+wrapped in `Device<...>`.
+
+- With effects: transfers to the device and runs device code.
+- Example: `run_device<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`
+
 #### `run_preferred_resident`
 
 ```camel
 run_preferred_resident: <fn: (a: float, b: float) => float> (inputs: (float, float)) => Device<float>
 ```
 
-Runs the function through the device path the pipeline prepared for it — the device when a
-program can be made for it, the host otherwise — and answers the resident form of its result.
-This is the operator `tiles::compile` inserts for an outlined region; a `#gpu` scope asks for
-the device explicitly, and an operator the device cannot run is a compile error there.
+Runs the function the way `@gpu` does — a prepared device program when one can be made, the
+host otherwise — and answers the resident form of its result.
 
 - With effects: transfers to the device and runs device code.
 - Example: `run_preferred_resident<(a: float, b: float): float => a + b>((2.0, 3.0))` gives `a Device<float>`

@@ -1,7 +1,0 @@
-module t05f_branch
-func main(): int sync {
-    let t = 1 < 2
-    let a = t as any
-    println(if a then 1 else 2)
-    return 0
-}
