@@ -2,7 +2,7 @@ id = "parse.frontend"
 order = 305
 tier = "fast"
 tags = ["feat", "parse", "grammar", "format"]
-desc = "The hand-written front end as a whole: the grammar in the language reference is the one the parser implements, every file of the repository is read as recorded, the formatter keeps the meaning of what it formats, and the parser returns a lossless tree for wrong programs."
+desc = "The hand-written front end as a whole: the grammar in the language reference is the one the parser implements, every case of the parse corpus is read as recorded, the formatter keeps the meaning of what it formats, and the parser returns a lossless tree for wrong programs."
 
 [[tests]]
 name = "grammar.reference_in_step"
@@ -18,7 +18,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "frontend.ast_snapshot"
-desc = "Every .cml file of the repository and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced."
+desc = "Every case of the parse corpus (test/cases/parse) and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced. The snapshot is of the parser's tests, not of the repository: a .cml file under examples/, stdlib/, benchmarks/ or another plan's cases is checked by the plan that owns it (H188)."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/parsecheck/check.py"

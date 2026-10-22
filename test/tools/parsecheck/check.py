@@ -5,14 +5,18 @@
     python3 test/tools/parsecheck/check.py format
     python3 test/tools/parsecheck/check.py fuzz [ITERATIONS [SEED]]
 
-snapshot  Every .cml file of the repository and every probe (probes.py) is parsed; a hash of the
-          normalized AST of each (or of its diagnostics, when it is rejected) is compared with
-          test/plans/feat/parse/golden/ast_hashes.txt. The golden list was recorded when the
-          hand-written parser was last compared, tree for tree, with the ANTLR parser it
-          replaced; a line that changes means the parser reads that file differently.
+snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe (probes.py) is
+          parsed; a hash of the normalized AST of each (or of its diagnostics, when it is
+          rejected) is compared with test/plans/feat/parse/golden/ast_hashes.txt. The golden list
+          was recorded when the hand-written parser was last compared, tree for tree, with the
+          ANTLR parser it replaced; a line that changes means the parser reads that file
+          differently. The snapshot is a snapshot of the parser's own tests, not of the
+          repository (H188): a .cml file outside test/cases/parse is checked by the plan that
+          owns it, and editing one does not move this file.
           --update rewrites the list (say in the commit why the reading changed).
-format    Formatting every accepted file gives a text with the same AST.
-fuzz      Mutated programs: the parser returns a lossless tree for each (camel-parsecheck fuzz).
+format    Formatting every accepted file of the repository gives a text with the same AST.
+fuzz      Mutated programs of the repository: the parser returns a lossless tree for each
+          (camel-parsecheck fuzz).
 
 Run from the repository root; the tools are those of out/latest unless CAMEL_HOME is set.
 """
@@ -49,8 +53,16 @@ def run(args):
 
 
 def repository_files():
+    """Every .cml file of the repository: the input of the format and fuzz checks, which are not
+    snapshots and gain from the breadth (H188 kept them as they were)."""
     os.chdir(ROOT)
     return [str(p).replace("\\", "/") for p in corpus.walk(Path("."), ".cml")]
+
+
+def parse_cases():
+    """The parse corpus: the cases under test/cases/parse. This is what the snapshot hashes."""
+    os.chdir(ROOT)
+    return [str(p).replace("\\", "/") for p in corpus.parse_cases()]
 
 
 def write_list(folder, files):
@@ -64,7 +76,7 @@ def snapshot(update):
         sys.argv = ["probes.py", tmp]
         probes.main()
         probe_files = sorted(str(p).replace("\\", "/") for p in Path(tmp).glob("probe_*.cml"))
-        code, out, err = run(["hashes", write_list(tmp, repository_files() + probe_files)])
+        code, out, err = run(["hashes", write_list(tmp, parse_cases() + probe_files)])
         if code != 0:
             print(err or out)
             return 1

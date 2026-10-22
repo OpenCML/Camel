@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 """Assembles the corpus the parser harness (camel-parsecheck) runs on.
 
-    python3 test/tools/parsecheck/corpus.py --out DIR [--progen N] [--progen-big M]
+    python3 test/tools/parsecheck/corpus.py --out DIR [--scope parse|repository]
+                                            [--progen N] [--progen-big M]
 
 Writes DIR/list.txt, one source path per line:
 
-  * every .cml file of the repository (tests, benchmarks, exemplars, examples, the standard
-    library, the tutorial), the syntax-negative cases included;
+  * every .cml file of the parse corpus, test/cases/parse/ (the cases that own the parser), or,
+    with --scope repository, every .cml file of the repository (tests, benchmarks, exemplars,
+    examples, the standard library, the tutorial), the syntax-negative cases included. The
+    snapshot that check.py compares (test/plans/feat/parse/golden/ast_hashes.txt) is the parse
+    corpus: a snapshot of the parser's tests, not of the repository (H188). The repository scope
+    is what check.py's format and fuzz checks traverse;
   * every ```cml block of the Markdown documents, extracted to DIR/docs/;
   * N programs of the random generator test/tools/progen (seeds 1..N) and M at --size 4,
     written to DIR/progen/.
+
+The documents and progen groups belong to the differential harness this tool was written for;
+they are still built on request, but nothing in the tree consumes them any more: check.py builds
+the snapshot list from the .cml groups alone.
 
 Run from the repository root.
 """
@@ -22,6 +31,8 @@ from pathlib import Path
 SKIP_DIRS = {".git", "node_modules", "build", "out", "tmp", "third_party", "dist", "vendor",
              ".cache", "__pycache__", "tmp_q", "results"}
 
+PARSE_ROOT = Path("test/cases/parse")
+
 
 def walk(root: Path, suffix: str):
     for base, dirs, files in os.walk(root):
@@ -29,6 +40,12 @@ def walk(root: Path, suffix: str):
         for name in sorted(files):
             if name.endswith(suffix):
                 yield Path(base) / name
+
+
+def parse_cases():
+    """The parse corpus: every .cml case under test/cases/parse/. The AST snapshot hashes these
+    and the probes: the snapshot is a snapshot of the tests that own the parser (H188)."""
+    return walk(PARSE_ROOT, ".cml")
 
 
 def doc_blocks(out: Path):
@@ -75,13 +92,24 @@ def progen(out: Path, count: int, size: int):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
+    ap.add_argument(
+        "--scope",
+        choices=["parse", "repository"],
+        default="parse",
+        help="the .cml files of list.txt: the parse corpus test/cases/parse (the default) or every"
+             " .cml file of the repository",
+    )
     ap.add_argument("--progen", type=int, default=0)
     ap.add_argument("--progen-big", type=int, default=0)
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    if args.scope == "parse":
+        cml = list(parse_cases())
+    else:
+        cml = list(walk(Path("."), ".cml"))
     groups = {
-        "repository": [p for p in walk(Path("."), ".cml")],
+        args.scope: cml,
         "documents": doc_blocks(out),
         "progen": progen(out, args.progen, 1),
         "progen size 4": progen(out, args.progen_big, 4),

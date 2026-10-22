@@ -60,7 +60,7 @@
   ```
 
   其中几项（AST 快照、诊断目录、签名一致性）会被正在进行的地基工作修掉；合并 `origin/fsh-dev` 后基线可能变短，以合并后的为准。
-- 改了语法或 `.cml` 测试文件：更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。
+- 改了语法、`test/cases/parse` 下的用例或 `test/tools/parsecheck/probes.py`：更新 AST 快照 `python3 test/tools/parsecheck/check.py snapshot --update`。快照只含解析用例与探针（H188），改 `examples/`、`stdlib/`、`benchmarks/` 或别的计划的用例不会再动它。
 - 改了诊断：`node scripts/diagnostics-catalog.mjs --write`。
 - 每次提交前：`node scripts/check-doc-links.mjs --all`、`node scripts/check-std-includes.mjs`。
 
@@ -353,6 +353,7 @@
 
 | H186 | **声明迁移的账本（H19 第 1、10 步的结果页）**：把迁移的结果从树里读出来，写成 reader-facing 的账本——每模块的名字 / 声明 / 计算 / 阻塞与缺口、机制（声明唯一来源、C++ 留什么、`kDeclaredOperators`、计算签名一处、检查器的五条）、剩余项与 owner、迁移下一个模块的七步；不重复 47 的缺口目录 | 无（H19 计划、H137、H140、H151、H157、H170、H173、H174、H179；缺口见 47） | **已完成**（文档 `docs/technical/48_declaration_migration.md`，技术索引已加；树上重跑：**22 个声明模块 / 170 个声明名 / 283 条声明 / 112 个计算名 / 522 条注册重载**（含 `<builtin>` 96；282 个公开名 = 170 + 112），22 个模块的 403 条重载 = 283 声明 + 120 计算；22 个里 **14 个阻塞**（`json` 2、`onnx` 1、`python` 5、`tensor` 1、`tiles` 5），另有 `ckpt` 7 与 `rewrite` 3；`stdlib/signatures/` 16 个文件 = 10 个计算签名 + 6 个尚未迁移（`ckpt`/`env`/`globals`/`hash`/`process`/`rewrite`）；`--check` 22 个模块 / 112 个计算签名 / 0 问题，`--verify-ops` 522 条一致；`feat/docs_links` 4/4 + `smoke` 10/10；未改 `changes.log`、版本文件、设计原则） |
 | H187 | **清理 handover 的过程残留**：原报告目录的 204 个文件（202 篇 `.md` 报告、1 份 H80 失败清单、1 个 `.gitkeep`，36,479 行、3.5 MB）作为 git note 挂到引入提交后从树中删除；看板改用 `note ⟨sha7⟩` 指针；扫掉一份 96 KB 任务计划与一份 9 KB 未编译草稿头文件 | 无（H179 之后） | **已完成**（报告 note ⟨963624c⟩；203 份报告/清单 → 201 条 note（两个提交各带两份），树内 `docs/handover/` 只剩看板与作者 `reviews/`（16 个文件）；35 个文档、测试计划与源码文件里的 72 处报告路径改为 note 指针，`git grep` 无残留路径；`check-doc-links` 31 篇（`--all` 212）、`check-doc-counts` 146 篇、`check-retired-names` 410 份；`feat/docs_links` + `smoke` 主机绿） |
+| H188 | **AST 快照收窄到解析用例，并补齐构造覆盖**：`ast_hashes.txt` 原先把整仓 `.cml`（用例、示例、`stdlib`、基准、教程、设计稿）加探针一起哈希，声明迁移和任何新增用例都会改它；把快照限定为 `test/cases/parse/**` 与探针，其余条目删除，并为过去只被“顺带”覆盖的构造在 `test/cases/parse/constructs/` 下各加一条小用例（enum、tag、static loop、comprehension、analysis、operator 名、类型实参、`constas`、字符串字面量、格式串）；`corpus.py` 加 `--scope parse\|repository`，format/fuzz 仍走整仓 | 无 | **已完成**（无报告文件，结论在交接消息里；快照 **2,577 → 274** 条 = `test/cases/parse` 38 条 + 探针 236 条，新增 10 条用例与 `parse.constructs` 计划；红证：改 `constructs/enum.cml` 后 `feat/parse` 红；改 `examples/` 的 `.cml` 后快照不动；`feat/parse`、`feat/compile`、`feat/docs_links`、`smoke` 全绿） |
 
 **按队列顺序连续做下去**（队列顺序以 `docs/roadmap.cn.md` 与依赖为准，不是本表的编号顺序）：一项完成、报告写好、合入 `develop` 后，接着做下一项，不必等检查意见；检查意见到了再回头处理。遇到需要设计判断的地方，按第 4 节写进报告的"待决问题"，跳过被挡住的部分继续做后面的。H2、H7 是语言表面的较大改动，规格已写全，但涉及的判断较多，宁可多问。
 
