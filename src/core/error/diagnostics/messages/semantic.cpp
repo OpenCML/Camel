@@ -1779,6 +1779,82 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "module it comes from ('m::p').",
             },
         },
+        {
+            SemanticDiag::WithArgumentUnknown,
+            {
+                "WithArgumentUnknown",
+                "'{0}' is not a 'with' parameter of '{1}'.",
+                "A name in a 'with' argument is written as in a struct literal, "
+                "'name: value', and must be one of the callee's 'with' parameters.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentDuplicate,
+            {
+                "WithArgumentDuplicate",
+                "The 'with' parameter '{0}' of '{1}' is given twice.",
+                "Give each 'with' parameter once: positionally, or by name after the positional "
+                "arguments.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentMissing,
+            {
+                "WithArgumentMissing",
+                "The call gives no value for the 'with' parameter '{0}' of '{1}', and it has no "
+                "default.",
+                "Give the parameter, or write a default where the parameter is declared "
+                "('with <name: type = value>').",
+            },
+        },
+        {
+            SemanticDiag::WithDefaultNotConstant,
+            {
+                "WithDefaultNotConstant",
+                "The default of the 'with' parameter '{0}' is not a compile-time constant: {1}.",
+                "A default is evaluated where the declaration is, not at each call, so it can "
+                "only be a constant expression: a literal, or operands of an operator that is "
+                "computed at compile time.",
+            },
+        },
+        {
+            SemanticDiag::WithDefaultWrongType,
+            {
+                "WithDefaultWrongType",
+                "The default of the 'with' parameter '{0}' has type '{1}', not '{2}'.",
+                "The default is a value of the parameter's type, as an argument at the call "
+                "would be.",
+            },
+        },
+        {
+            SemanticDiag::WithParameterAfterDefault,
+            {
+                "WithParameterAfterDefault",
+                "The 'with' parameter '{0}' has no default and follows '{1}', which has one.",
+                "A parameter after one with a default must have a default too, so that a call "
+                "that leaves the first out can be read as giving the others by name.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentCallee,
+            {
+                "WithArgumentCallee",
+                "The 'with' argument '{0}' is given by name, and the signature of '{1}' is not "
+                "known where the binding is written.",
+                "Name the one function the binding is for, or give the 'with' arguments "
+                "positionally.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentInValue,
+            {
+                "WithArgumentInValue",
+                "The 'with' argument '{0}' is given by name, and this binding is used as a "
+                "function value.",
+                "A function value binds the 'with' arguments it is given in order; name a "
+                "parameter only in a call, 'f<name: value>(x)'.",
+            },
+        },
     };
 
     return infoMap;

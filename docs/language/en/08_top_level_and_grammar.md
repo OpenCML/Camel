@@ -293,7 +293,7 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | Tuple patterns, struct patterns; identifier patterns on ordinary types | `ConstructNotSupported` | `if` chain; take the members first |
 | Struct destructuring `let { x, y } = p`, array destructuring `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring is available) |
 | Keyword arguments `f(a: 1)` | `FeatureNotSupported` | Pass by position |
-| Parameter default values `b: int = 5` | `FeatureNotSupported` | Overloading; `with` parameters |
+| Parameter default values `b: int = 5` of ordinary parameters | `FeatureNotSupported` | Overloading; a `with` parameter, whose default is available: `with <b: int = 5>` |
 | A slice subscript that slices a dimension other than the first, `xs[:, 0]`, `xs[a:b, c]` | `SemanticDiag::ConstructNotSupported` (the diagnostic names H17) | Take the rows with `take`, or slice one dimension at a time |
 | A slice subscript whose step is not 1, `xs[a:b:s]` | Array: the run-time `RuntimeDiag::InvalidArgument`; tensor: the compile-time `ArgumentsRejected` (both name H17) | `xs->slice<0, a, b, s>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |

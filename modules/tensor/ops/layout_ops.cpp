@@ -655,7 +655,9 @@ void permuteVjp(VjpBuilder &b, const VjpCall &call) {
 // concat(a, b, axis): each part receives its slice of dy. A part may be a numeric array
 // instead of a tensor; a float array is continuous, and its adjoint (the elements of its slice
 // of dy) has no operator here, so an array part that depends on a differentiated input is
-// refused rather than dropped. A constant array part takes no gradient and is skipped.
+// refused rather than dropped. A constant array part takes no gradient of its own and is
+// skipped — only that part: its length still places the tensor part's slice, and the tensor
+// part is accumulated whether or not the other part is an array.
 void concatVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 3, 3);
     auto dy = b.gradientOf(call.output);
@@ -675,17 +677,28 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
                     b.nodeType(part)->toString()));
         }
     }
-    if (!isTensorNode(b, lhs) || !isTensorNode(b, rhs)) {
-        return; // constant numeric array parts take no gradient
+    const bool lhsTensor = isTensorNode(b, lhs), rhsTensor = isTensorNode(b, rhs);
+    if (!lhsTensor && !rhsTensor) {
+        return; // every part is a constant numeric array: no part carries a gradient
     }
+    // Where the second part starts along the axis: the first part's own length when it is a
+    // tensor, and the array's length (an int the array value answers with) when it is one.
+    const std::array<vjp_node_t, 1> arrayOnly{lhs};
     const std::array<vjp_node_t, 2> lhsAxis{lhs, axis};
-    const vjp_node_t split = b.addOper(Type::Int64(), "tensor:dim", lhsAxis);
-    const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
-    const vjp_node_t total = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
-    b.accumulateGradient(
-        lhs,
-        addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
-    b.accumulateGradient(rhs, addTensorOper(b, "tensor:slice", {*dy, axis, split, total}));
+    const vjp_node_t split = lhsTensor
+                                 ? b.addOper(Type::Int64(), "tensor:dim", lhsAxis)
+                                 : b.addOper(Type::Int64(), ":struct/len_arr", arrayOnly);
+    if (lhsTensor) {
+        b.accumulateGradient(
+            lhs,
+            addTensorOper(b, "tensor:slice", {*dy, axis, staticInt(b, 0), split}));
+    }
+    if (rhsTensor) {
+        const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
+        const vjp_node_t total = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
+        b.accumulateGradient(
+            rhs, addTensorOper(b, "tensor:slice", {*dy, axis, split, total}));
+    }
 }
 
 // slice(t, axis, start, end, step?)

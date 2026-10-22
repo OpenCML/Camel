@@ -184,6 +184,42 @@ const std::vector<std::string> *Tree::headTypeParamsOf(const Node *func) const {
     return it == headTypeParams_.end() ? nullptr : &it->second;
 }
 
+void Tree::setWithDefaults(const Node *func, std::vector<WithDefault> defaults) {
+    if (func != nullptr && !defaults.empty()) {
+        withDefaults_[func] = std::move(defaults);
+    }
+}
+
+const std::vector<Tree::WithDefault> *Tree::withDefaultsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = withDefaults_.find(func);
+    return it == withDefaults_.end() ? nullptr : &it->second;
+}
+
+void Tree::setWithArgumentNames(
+    const Node *with, std::vector<std::optional<std::string>> names) {
+    if (with == nullptr || names.empty()) {
+        return;
+    }
+    const bool named = std::any_of(
+        names.begin(), names.end(), [](const auto &name) { return name.has_value(); });
+    if (named) {
+        withArgumentNames_[with] = std::move(names);
+    }
+}
+
+const std::vector<std::optional<std::string>> *Tree::withArgumentNamesOf(
+    const Node *with) const {
+    if (with == nullptr) {
+        return nullptr;
+    }
+    const auto it = withArgumentNames_.find(with);
+    return it == withArgumentNames_.end() ? nullptr : &it->second;
+
+}
+
 Tree *Tree::of(const Node *node) {
     const auto address = reinterpret_cast<uintptr_t>(node);
     return reinterpret_cast<const Chunk *>(address & ~(static_cast<uintptr_t>(kChunkBytes) - 1))
@@ -600,6 +636,17 @@ node_ptr_t Tree::clone(const Node *node) {
         }
         if (const auto *head = Tree::of(node)->headTypeParamsOf(node)) {
             headTypeParams_[copy] = *head;
+        }
+        // The defaults of the declaration's `with` parameters come with it too: the copy is
+        // called with the same rules.
+        if (const auto *defaults = Tree::of(node)->withDefaultsOf(node)) {
+            std::vector<WithDefault> copies;
+            copies.reserve(defaults->size());
+            for (const WithDefault &written : *defaults) {
+                copies.push_back(
+                    {written.expr != nullptr ? clone(written.expr) : nullptr, written.origin});
+            }
+            withDefaults_[copy] = std::move(copies);
         }
     }
     return copy;

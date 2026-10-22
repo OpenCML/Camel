@@ -293,7 +293,7 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | 元组模式、结构体模式；对普通类型的标识符模式 | `ConstructNotSupported` | `if` 链；先取成员 |
 | 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
 | 关键字实参 `f(a: 1)` | `FeatureNotSupported` | 按位置传 |
-| 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
+| 普通形参的默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参，它的默认值可用 `with <b: int = 5>` |
 | 切片下标切的是第一维以外的维度 `xs[:, 0]`、`xs[a:b, c]` | `SemanticDiag::ConstructNotSupported`（诊断里点名 H17） | 先用 `take` 取行，或一次只切一维 |
 | 切片下标的步长不是 1 `xs[a:b:s]` | 数组是运行时 `RuntimeDiag::InvalidArgument`，张量是编译期的 `ArgumentsRejected`（都点名 H17） | `xs->slice<0, a, b, s>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |

@@ -246,6 +246,25 @@ enum class SemanticDiag : uint32_t {
     /// No candidate of a call applies: every condition that could take it is false.
     WhenConditionUnmet = 0x0001AC,
 
+    // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
+    // handover H235). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
+    /// A named `with` argument does not name a `with` parameter of the callee.
+    WithArgumentUnknown = 0x0001B7,
+    /// A `with` parameter is given twice, once by position and once by name.
+    WithArgumentDuplicate = 0x0001B8,
+    /// A call gives no value for a `with` parameter that has no default.
+    WithArgumentMissing = 0x0001B9,
+    /// The default of a `with` parameter is not a compile-time constant.
+    WithDefaultNotConstant = 0x0001BA,
+    /// The default of a `with` parameter has a type that does not fit the parameter.
+    WithDefaultWrongType = 0x0001BB,
+    /// A `with` parameter without a default follows one that has a default.
+    WithParameterAfterDefault = 0x0001BC,
+    /// A `with` argument is given by name where the callee's signature is not known.
+    WithArgumentCallee = 0x0001BD,
+    /// A `with` argument is given by name in a binding used as a function value.
+    WithArgumentInValue = 0x0001BE,
+
     // Predicate lookup in a `when` condition (design principles 5.13, 10.2). 0x1BF and up.
     /// A predicate another module declares, but this module does not import it.
     WhenPredicateNotImported = 0x0001BF,
