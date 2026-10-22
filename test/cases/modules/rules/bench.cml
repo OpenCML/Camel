@@ -27,3 +27,38 @@ export func measure(p: Program): Program! sync {
         }
     }
 }
+
+/// Runs the same application twice on the same program, once without the attribution record and
+/// once with it (`run`'s fifth parameter), and prints both costs (rewrite design 8.7). The two
+/// applications see the same program, so the record is the only difference between them.
+func one_pair(p: Program): Program! sync {
+    return match run(p, [int_add_zero, int_mul_one], 16, false) {
+        case error e => { throw e }
+        case off => sync {
+            match run(p, [int_add_zero, int_mul_one], 16, false, true) {
+                case error e => { throw e }
+                case on => sync {
+                    println(
+                        'bench',
+                        'off_seconds', off.seconds,
+                        'on_seconds', on.seconds,
+                        'off_rewrites', off.rewrites,
+                        'on_rewrites', on.rewrites,
+                        'off_rounds', off.rounds,
+                        'on_rounds', on.rounds,
+                        'off_visited', off.visited,
+                        'on_visited', on.visited)
+                    return p
+                }
+            }
+        }
+    }
+}
+
+/// Measures the two modes on the same program and leaves the program as it was.
+export func compare(p: Program): Program! sync {
+    return match one_pair(p) {
+        case error e => { throw e }
+        case done => done
+    }
+}

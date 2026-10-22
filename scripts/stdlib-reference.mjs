@@ -1099,14 +1099,23 @@ async function probeImport(name, moduleName) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-type-'))
     try {
         const file = path.join(dir, 'main.cml')
-        fs.writeFileSync(
-            file,
-            `import { ${name} } from ${moduleName}\nfunc __doc_type(v: ${name}): void {\n    let _ = v\n}\n` +
-                'func main(): int sync { return 0 }\n',
-        )
-        const result = await runCamelCompile(file, dir)
-        probeImportCache.set(key, result.ok)
-        return result.ok
+        // A type with parameters (`Run<F>`) cannot be written by its bare name, so the probe tries
+        // it as a type constructor too: `Run<int>` is a type for any payload, and a name that is
+        // not generic simply fails the second spelling after passing the first.
+        for (const spelling of [name, `${name}<int>`]) {
+            fs.writeFileSync(
+                file,
+                `import { ${name} } from ${moduleName}\nfunc __doc_type(v: ${spelling}): void {\n    let _ = v\n}\n` +
+                    'func main(): int sync { return 0 }\n',
+            )
+            const result = await runCamelCompile(file, dir)
+            if (result.ok) {
+                probeImportCache.set(key, true)
+                return true
+            }
+        }
+        probeImportCache.set(key, false)
+        return false
     } finally {
         fs.rmSync(dir, { recursive: true, force: true })
     }
