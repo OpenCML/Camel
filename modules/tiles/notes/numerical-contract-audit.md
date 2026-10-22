@@ -9,7 +9,7 @@ declared ULP error bound. Five independent explicit permissions govern relaxatio
 
 ## Reproduced subnormal difference
 
-On 2026-10-15, the isolated `88zjwei` evaluation checkout, with Tiles and tensor
+On 2026-10-15, an isolated evaluation checkout, with Tiles and tensor
 registry sources from commit `18148014`, was rebuilt using `npm run build`.
 RTX 3090 device 7 passed the existing 82 relevant tests. The additional manual
 program below nevertheless produced a CPU/GPU difference on all three host

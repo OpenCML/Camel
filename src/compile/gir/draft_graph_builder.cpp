@@ -182,17 +182,17 @@ runtime::DraftNodeRef DraftGraphBuilder::addCopyNode(camel::core::type::Type *ty
     return ref(draft_->addCopyNode(type));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, const runtime::GCFillBody &body) {
     return ref(draft_->addFillNode(type, body));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addFillNode(camel::core::type::Type *type, std::span<const std::byte> payload) {
     return ref(draft_->addFillNode(type, payload));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addAccsNode(camel::core::type::Type *type, uint32_t tupleIndex) {
     return ref(draft_->addAccsNode(type, tupleIndex));
 }
@@ -211,12 +211,12 @@ runtime::DraftNodeRef DraftGraphBuilder::addJoinNode(
     return ref(draft_->addJoinNode(type, brchNode.id, armCount));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addCallNode(camel::core::type::Type *type, const runtime::GCCallBody &body) {
     return ref(draft_->addCallNode(type, body));
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addFuncNode(const FuncTarget &target, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(target != nullptr, "DraftGraphBuilder function target cannot be null.");
     const uint8_t runtimeFlags =
@@ -247,7 +247,7 @@ DraftGraphBuilder::addRegionPortNode(camel::core::type::Type *type, std::string 
     return node;
 }
 
-runtime::DraftNodeRef 
+runtime::DraftNodeRef
 DraftGraphBuilder::addOperNode(const oper_idx_ptr_t &op, runtime::gc_slot_idx_t dataIndex) {
     ASSERT(op != nullptr, "DraftGraphBuilder operator target cannot be null.");
     const runtime::gc_node_ref_t id =

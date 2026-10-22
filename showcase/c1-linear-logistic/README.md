@@ -40,7 +40,7 @@ Nothing is downloaded, and the `.npy` files are not committed (`artifacts/` is i
 
 ```powershell
 python showcase/c1-linear-logistic/make_data.py --out showcase/c1-linear-logistic/artifacts/small
-$env:CAMEL_HOME = "D:\Projects\Camel-wt\h13-showcase\out\latest"
+$env:CAMEL_HOME = "out\latest"
 $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 camel showcase/c1-linear-logistic/train.cml --arg model=linear `
     --arg data=showcase/c1-linear-logistic/artifacts/small/linear `

@@ -34,7 +34,7 @@ showcase/d5-tree-lstm/
 
 ```powershell
 python showcase/d5-tree-lstm/make_data.py --out showcase/d5-tree-lstm/artifacts/small
-$env:CAMEL_HOME = "D:\Projects\Camel-wt\h13-showcase\out\latest"
+$env:CAMEL_HOME = "out\latest"
 $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 camel showcase/d5-tree-lstm/train.cml --arg data=showcase/d5-tree-lstm/artifacts/small `
     --arg steps=200 --arg lr=0.01 --arg log_every=20 --arg threads=1 std::macro std::nvm

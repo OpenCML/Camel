@@ -21,7 +21,7 @@ Profiles:
 Examples:
 
   python compare.py --profile small
-  python compare.py --profile standard --mnist D:/Projects/Camel/.cache/mnist/mnist.npz
+  python compare.py --profile standard --mnist .cache/mnist/mnist.npz
   python compare.py --profile standard --source synthetic --steps 300
 """
 
@@ -463,7 +463,16 @@ def build_report(args, manifest, camel_run, torch_run, compile_times, compile_st
     machine = f"{platform.system()} {platform.release()} ({platform.machine()})"
     processor = platform.processor() or "unknown"
     stamp = dt.datetime.now().astimezone().isoformat(timespec="seconds")
-    command_line = " ".join([Path(sys.executable).name, *sys.argv])
+    def display_arg(arg: str) -> str:
+        path = Path(arg)
+        if not path.is_absolute() or not path.exists():
+            return arg
+        try:
+            return str(path.resolve().relative_to(REPO))
+        except ValueError:
+            return arg
+
+    command_line = " ".join([Path(sys.executable).name, *[display_arg(a) for a in sys.argv]])
     stats_line = ""
     if compile_stats:
         stats_line = f"\nCamel graph after `std::macro` (from `std::stats`): `{json.dumps(compile_stats)}`\n"

@@ -168,7 +168,7 @@ npm run test
 When manually invoking `camel.exe`, set the runtime environment first:
 
 ```powershell
-$env:CAMEL_HOME = "D:\Projects\Camel\out\latest"
+$env:CAMEL_HOME = "<repo>\out\latest"
 $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 ```
 

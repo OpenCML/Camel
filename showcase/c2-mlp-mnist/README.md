@@ -71,7 +71,7 @@ python showcase\c2-mlp-mnist\compare.py --profile small
 
 # the reported configuration: MNIST when the cache has it, the stand-in otherwise
 python showcase\c2-mlp-mnist\compare.py --profile standard `
-    --mnist D:\Projects\Camel\.cache\mnist\mnist.npz
+    --mnist .cache\mnist\mnist.npz
 ```
 
 `--profile`: `small` (1000/200, 200 steps, batch 50), `standard` (10000/2000, 1000 steps,

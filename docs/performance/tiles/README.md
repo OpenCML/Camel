@@ -65,8 +65,8 @@ retain the raw records; do not interpret small differences as proven speedups.
 ## Remote build notes
 
 The baseline revision 75776da8 built and passed 35/35 host/GPU/tensor tests on
-88zjwei's RTX 3090 device 3. It used an isolated source archive under
-`/home/zjwei/camel-eval/tiles-75776da8`, the pre-existing Conda Clang 23.1.2
+an RTX 3090 (device 3) on the Linux build host. It used an isolated source
+checkout, the pre-existing Conda Clang 23.1.2
 toolchain and build virtual environment (CMake 4.4.3, Conan 2.33), and CUDA 12.3.
 The Conda sysroot required a private `CPLUS_INCLUDE_PATH` exposing only the
 system Python multiarch configuration header directory. No system toolchain or

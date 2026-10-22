@@ -68,19 +68,19 @@ reusable external verifier. Full field constraints and examples live in
 
 `npm run release-gate` (`scripts/release-gate.mjs`) owns the release evidence a release decision
 needs, because `npm run test` is only the fast layer: a directory target drops every `tier =
-"slow"` test, and `gpu/**` / `perf/**` are in no gate target at all (H154 §6).
+"slow"` test, and `gpu/**` / `perf/**` are in no gate target at all.
 
 It runs, in order:
 
 1. the fast layer -- `smoke`, `feat/**`, and the fast-tier `gpu/profile` plan at `--tier fast`;
-2. the slow layer -- eleven explicit plan files (the runnable set of H154 §3), named one by one:
+2. the slow layer -- eleven explicit plan files (the runnable set), named one by one:
    naming a file is what makes its slow tests run. It never takes a directory or `--tier all`;
 3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
    --check`, `check-doc-links --all`, `check-retired-names`, `check-doc-snippets`,
    `stdlib-declarations --check`, `check-std-includes`;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
-install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — H149's rule that a
+install it finds (`CAMEL_HOME`, else `out/latest`) against that build's stamp — the rule that a
 run must not measure another tree's binary — refusing (exit 2) when the stamp is missing or does
 not match this tree's sources.
 

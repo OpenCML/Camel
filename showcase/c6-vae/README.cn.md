@@ -38,7 +38,7 @@ showcase/c6-vae/
 
 ```powershell
 python showcase/c6-vae/make_data.py --out showcase/c6-vae/artifacts/small
-$env:CAMEL_HOME = "D:\Projects\Camel-wt\h13-showcase\out\latest"
+$env:CAMEL_HOME = "out\latest"
 $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 camel showcase/c6-vae/train.cml --arg data=showcase/c6-vae/artifacts/small `
     --arg steps=200 --arg batch=32 --arg lr=0.005 --arg log_every=20 --arg threads=1 `
