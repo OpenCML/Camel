@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-232 diagnostics: 213 errors, 19 warnings.
+234 diagnostics: 215 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -189,11 +189,12 @@ prints one entry.
 | `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
 | `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
 | `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
-| `0x030001A7` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
-| `0x030001A8` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
-| `0x030001A9` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
-| `0x030001AA` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error |
-| `0x030001AB` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error |
+| `0x030001A7` | [SemanticDiag::TensorElementTypeNotStored](#tensorelementtypenotstored) | Error |
+| `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
+| `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
+| `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
+| `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error |
+| `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -247,6 +248,7 @@ prints one entry.
 | `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
+| `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -894,7 +896,22 @@ Tuple unpacking requires the same number of references and data nodes, or exactl
 Ensure the number of variables matches the number of unpacked data elements, or use a single tuple value.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/err_lambda_tuple_arity.cml`, run as `camel test/cases/compile/err_lambda_tuple_arity.cml`)
+
+```camel
+module lambda_tuple_arity
+
+// More names than the tuple has elements is refused, not read past the end.
+with <f: (p: (int, int)) => int>
+func apply_all(ps: (int, int)[]): int[] {
+    return ps->map<f>
+}
+
+func main(): int sync {
+    println(apply_all<((a, b, c)) => a + b + c>([(1, 2)]))
+    return 0
+}
+```
 
 ### InvalidLiteral
 
@@ -5042,9 +5059,45 @@ Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a m
 
 *No example: no test small enough to show raises it.*
 
+### TensorElementTypeNotStored
+
+`0x030001A7` · Error · `SemanticDiag::TensorElementTypeNotStored`
+
+**Message**
+
+```text
+'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this declaration would silently run with '{1}'. Tensors that keep the element type they are written with are not implemented yet.
+```
+
+**Help**
+
+```text
+Write '{1}' and convert the values explicitly where they enter the tensor; element-type-exact tensor storage (design/arrays-memory, P4) removes this restriction. 'zeros' and 'ones' already build f32 tensors.
+```
+
+**Example** (`test/cases/modules/tensor/dtype/f64_refused.cml`, run as `camel test/cases/modules/tensor/dtype/f64_refused.cml`)
+
+```camel
+// `Tensor<f64>` asks for f64 elements. This build stores every tensor as f32, int64 or bool, so
+// the declaration is refused at the type expression (SemanticDiag::TensorElementTypeNotStored)
+// instead of the program silently running in f32.
+//
+// Before the diagnostic this program compiled: the cast target was normalized to `Tensor<f32>`,
+// and `sum` answered 10.0 from f32 storage.
+module tensor_dtype_f64_refused
+
+import { Tensor, new, sum } from tensor
+
+func main(): int sync {
+    let x = new([[1.0, 2.0], [3.0, 4.0]]) as Tensor<f64>
+    println(sum(x))
+    return 0
+}
+```
+
 ### WhenConditionNotBool
 
-`0x030001A7` · Error · `SemanticDiag::WhenConditionNotBool`
+`0x030001A8` · Error · `SemanticDiag::WhenConditionNotBool`
 
 **Message**
 
@@ -5074,7 +5127,7 @@ func main(): int sync {
 
 ### WhenConditionNotConstant
 
-`0x030001A8` · Error · `SemanticDiag::WhenConditionNotConstant`
+`0x030001A9` · Error · `SemanticDiag::WhenConditionNotConstant`
 
 **Message**
 
@@ -5108,7 +5161,7 @@ func main(): int sync {
 
 ### WhenUnknownName
 
-`0x030001A9` · Error · `SemanticDiag::WhenUnknownName`
+`0x030001AA` · Error · `SemanticDiag::WhenUnknownName`
 
 **Message**
 
@@ -5138,7 +5191,7 @@ func main(): int sync {
 
 ### WhenTypeQueryNotConcrete
 
-`0x030001AA` · Error · `SemanticDiag::WhenTypeQueryNotConcrete`
+`0x030001AB` · Error · `SemanticDiag::WhenTypeQueryNotConcrete`
 
 **Message**
 
@@ -5168,7 +5221,7 @@ func main(): int sync {
 
 ### WhenConditionUnmet
 
-`0x030001AB` · Error · `SemanticDiag::WhenConditionUnmet`
+`0x030001AC` · Error · `SemanticDiag::WhenConditionUnmet`
 
 **Message**
 
@@ -6728,6 +6781,48 @@ module main
 func main(): int sync {
     println(42)
     return 0
+}
+```
+
+### GpuScopeNoDeviceProgram
+
+`0x040001A7` · Error · `RuntimeDiag::GpuScopeNoDeviceProgram`
+
+**Message**
+
+```text
+`#gpu` scope '{0}': operator '{1}' has no device program ({2}).
+```
+
+**Help**
+
+```text
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+```
+
+**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+
+```camel
+/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
+/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
+/// no device implementation, and the compiler refuses the program instead of running it on the
+/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
+module gpu_nofallback_refused_operator
+
+import { Tensor, tanh, reshape } from tensor
+
+func activate(x: Tensor<f32>): Tensor<f32> {
+    return tanh(x)
+}
+
+#gpu
+func step(x: Tensor<f32>): Tensor<f32> {
+    return activate(x)
+}
+
+func main() {
+    let x = reshape([1.0, 2.0], [2])
+    println(step(x))
 }
 ```
 

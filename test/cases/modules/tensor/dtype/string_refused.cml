@@ -1,0 +1,14 @@
+// `Tensor<string>` names an element type this build cannot store. It is rejected with
+// InvalidTypeArgument, naming the element types a tensor takes; it used to escape the type
+// constructor as an exception.
+module tensor_dtype_string_refused
+
+import { Tensor } from tensor
+
+func count(x: Tensor<string>): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}

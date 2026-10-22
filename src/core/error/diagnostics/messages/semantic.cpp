@@ -1625,6 +1625,18 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::TensorElementTypeNotStored,
+            {
+                "TensorElementTypeNotStored",
+                "'{0}' is not stored as written: a tensor of '{0}' holds '{1}' here, so this "
+                "declaration would silently run with '{1}'. Tensors that keep the element type "
+                "they are written with are not implemented yet.",
+                "Write '{1}' and convert the values explicitly where they enter the tensor; "
+                "element-type-exact tensor storage (design/arrays-memory, P4) removes this "
+                "restriction. 'zeros' and 'ones' already build f32 tensors.",
+            },
+        },
+        {
             SemanticDiag::WhenConditionNotBool,
             {
                 "WhenConditionNotBool",

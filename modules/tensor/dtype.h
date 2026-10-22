@@ -8,6 +8,11 @@
  * byte per element). Camel scalar types map onto them (float/double ->
  * float32, int/long -> int64). Kernels never branch on the element type per
  * element: `dispatchDType` selects a typed instantiation once per call.
+ *
+ * A tensor whose declared element type is not one of the three is refused at
+ * the type expression (see `storedTensorDType`): it is never built as the
+ * type the declaration would have been replaced with. Element-type-exact
+ * storage is design/arrays-memory P4 and is not implemented yet.
  */
 
 #pragma once
@@ -16,7 +21,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <type_traits>
 
@@ -36,8 +43,17 @@ bool isSupportedTensorScalar(type::TypeCode code);
 /// True for the floating storage dtype.
 bool isFloatingTensorType(type::TypeCode code);
 
+/// The storage dtype a tensor of `code` would get when that is not `code` itself: f64 would be
+/// stored as f32 and i32 as i64. Empty when the code is the dtype the tensor stores. The type
+/// expression is refused with this answer, so the substitution is never silent.
+std::optional<type::TypeCode> storedTensorDType(type::TypeCode code);
+
 /// Maps a scalar or storage type code to its storage dtype. Throws for non-numeric codes.
 type::TypeCode normalizeTensorDType(type::TypeCode code);
+
+/// The element type as a program writes it inside `Tensor<...>`: "f32", "f64", "i32", "i64",
+/// "bool"; other codes fall back to their source name (`type::typeCodeToString`).
+std::string elementTypeSpelling(type::TypeCode code);
 
 /// NumPy-style promotion restricted to the storage dtypes: bool < int64 < float32.
 type::TypeCode promoteTensorTypes(type::TypeCode lhs, type::TypeCode rhs);

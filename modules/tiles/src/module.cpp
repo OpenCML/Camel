@@ -28,6 +28,7 @@
 #include "tiles/internal/capability.h"
 #include "tiles/internal/compiled_region.h"
 #include "tiles/internal/graph_values.h"
+#include "tiles/internal/placement.h"
 #include "tiles/internal/profile_hooks.h"
 #include "tiles/internal/regions.h"
 #include "tiles/internal/tree_transfer.h"
@@ -394,30 +395,58 @@ slot_t retainPreferredKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
 }
 slot_t runPreferredResidentKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     std::shared_ptr<Program> program;
-    const bool gpu = checked([&] {
+    std::string refusalOper;
+    bool refusalShape = false;
+    // Whether the run has a device at all. A run without one is not a missing program: the host
+    // runs the program, and `--devices cpu` names that on purpose.
+    const bool device = checked([&] {
         if (!configuredCudaOrdinal())
             return false;
         try {
             (void)deviceInfo();
-            // The graph-bound template is the reusable form, but it needs the parameter
-            // types to fix the shapes. When the call site is the only place that knows
-            // them, specialize from the actual arguments instead of sending the work to
-            // the host: the host path is a different execution of the same graph, and it
-            // neither raises a Tile's own fault nor uses a granted contraction.
-            try {
-                program = std::make_shared<Program>(prepare(with, norm, ctx, true));
-            } catch (const UnsupportedComputation &) {
-                program = std::make_shared<Program>(prepare(with, norm, ctx));
-            }
             return true;
         } catch (const BackendUnavailable &) {
             return false;
-        } catch (const UnsupportedComputation &) {
-            return false;
         }
     });
-    if (!gpu)
+    if (device) {
+        checked([&] {
+            try {
+                program = std::make_shared<Program>(prepare(with, norm, ctx, true));
+            } catch (const UnsupportedComputation &) {
+                // The graph-bound template is the reusable form, but it needs the parameter
+                // types to fix the shapes. When the call site is the only place that knows
+                // them, specialize from the actual arguments instead of sending the work to
+                // the host: the host path is a different execution of the same graph, and it
+                // neither raises a Tile's own fault nor uses a granted contraction.
+                try {
+                    program = std::make_shared<Program>(prepare(with, norm, ctx));
+                } catch (const UnsupportedComputation &e) {
+                    refusalOper  = e.oper();
+                    refusalShape = e.reason() == UnsupportedComputation::Reason::Shape;
+                }
+            }
+            return slot_t{};
+        });
+    }
+    if (!program) {
+        // A `#gpu` graph is a device unit (GPU design 2.3): a run that cannot make its device
+        // program must report it, not replay the graph on the host (GPU design 6.1). Outside a
+        // `#gpu` scope the host path stays for now; it is scheduled for deletion with the
+        // preference path itself.
+        auto *fn = with.get<::Function *>(0);
+        if (device && bodyPlacementOf(*fn->graph()).placement == Placement::GpuRequired) {
+            // A refusal with no operator names the class the compiler could not build, which is
+            // always about the use's shapes or types; one with an operator says which one.
+            const bool shape = refusalOper.empty() || refusalShape;
+            core::error::throwRuntimeFault(
+                core::error::RuntimeDiag::GpuScopeNoDeviceProgram,
+                std::string(fn->graph()->name()),
+                refusalOper.empty() ? std::string(fn->graph()->name()) : refusalOper,
+                shape ? "no device program for this shape" : "no device program for this operator");
+        }
         return runHostResidentKernel(with, norm, ctx);
+    }
     // Selection is complete before transfers. Transfer/compile/launch faults
     // propagate; none trigger replay of the graph on another target.
     checked([&] {
@@ -708,12 +737,7 @@ class TilesModule final : public BuiltinModule {
         // private copy of the program with its loops lowered hands them the program's own
         // graph, LOOP nodes included (OperatorTraits::readsGraphs; op-semantics 11.4).
         for (const char *name :
-             {"run_compiled",
-              "run_compiled_device",
-              "source",
-              "inspect",
-              "benchmark",
-              "regions"}) {
+             {"run_compiled", "run_compiled_device", "source", "inspect", "benchmark", "regions"}) {
             core::OperatorTable::instance().set(
                 std::string("tiles:") + name,
                 {.pure = false, .readsGraphs = true});

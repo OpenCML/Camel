@@ -142,6 +142,20 @@ const std::vector<Tree::UnwrittenParam> *Tree::unwrittenParamsOf(const Node *fun
     return it == unwrittenParams_.end() ? nullptr : &it->second;
 }
 
+void Tree::setTupleParams(const Node *func, std::vector<TupleParamBinding> params) {
+    if (func != nullptr && !params.empty()) {
+        tupleParams_[func] = std::move(params);
+    }
+}
+
+const std::vector<Tree::TupleParamBinding> *Tree::tupleParamsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = tupleParams_.find(func);
+    return it == tupleParams_.end() ? nullptr : &it->second;
+}
+
 void Tree::setWhen(const Node *func, WhenClause clause) {
     if (func != nullptr && clause.condition != nullptr) {
         whenClauses_[func] = std::move(clause);
@@ -534,6 +548,9 @@ node_ptr_t Tree::clone(const Node *node) {
         // A lambda's unwritten parameters come with it: the copy is the same lambda.
         if (const auto *params = Tree::of(node)->unwrittenParamsOf(node)) {
             unwrittenParams_[copy] = *params;
+        }
+        if (const auto *tuples = Tree::of(node)->tupleParamsOf(node)) {
+            tupleParams_[copy] = *tuples;
         }
         // A declaration's `when` condition is part of the copy too: the copy is instantiated
         // with the same rules.

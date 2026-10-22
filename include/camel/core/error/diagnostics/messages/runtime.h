@@ -70,6 +70,12 @@ enum class RuntimeDiag : uint32_t {
     // implementation: the scope promises the device runs it, so the compiler refuses the program
     // instead of leaving the operator on the host (GPU design 6.1).
     GpuScopeUnsupported = 0x000071,
+    // A `#gpu` scope whose program the device back end cannot build, even though the operator is
+    // one it may run: the shape or the calling convention of this use has no device program, or
+    // the graph the scope calls brings an operator that has none. The scope promises the device
+    // runs everything it contains, and GPU design 6.1 makes that a compile-time error rather than
+    // a host execution; unlike GpuScopeUnsupported this is about the use, not the operator.
+    GpuScopeNoDeviceProgram = 0x0001A7,
     // Warnings (severity bits = Warn).
     PassesNeverRun           = 0x10000F,
     ConstantExpressionFaults = 0x100015,

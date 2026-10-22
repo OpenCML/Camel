@@ -214,6 +214,17 @@ class Tree {
     void setUnwrittenParams(const Node *func, std::vector<UnwrittenParam> params);
     const std::vector<UnwrittenParam> *unwrittenParamsOf(const Node *func) const;
 
+    /// A parameter of a function that is destructured as a tuple (`((a, b)) => ...`): the names
+    /// the elements are bound to, in order, and the parameter's index over all parameters.
+    struct TupleParamBinding {
+        size_t index = 0;
+        std::vector<std::string> names;
+    };
+
+    /// The parameters of `func` destructured as tuples. Null when there are none.
+    void setTupleParams(const Node *func, std::vector<TupleParamBinding> params);
+    const std::vector<TupleParamBinding> *tupleParamsOf(const Node *func) const;
+
     /// The applicability condition a declaration was written with: the expression after its
     /// `when`, and the source text as written, for the report at a call site. Null when the
     /// declaration has no condition. The condition is not a child of the FUNC: it is evaluated
@@ -285,6 +296,7 @@ class Tree {
     std::unordered_map<const Node *, std::map<size_t, std::vector<TagUse>>> fieldTagUses_;
     std::unordered_map<const Node *, literal::Value> literalValues_;
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
+    std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
     std::unordered_map<const Node *, WhenClause> whenClauses_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.

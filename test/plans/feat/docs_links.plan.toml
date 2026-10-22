@@ -23,17 +23,11 @@ desc = "The relative links of the reader-facing documents point at files and hea
 #
 # scripts/check-doc-links.mjs --citations covers what a link checker cannot see: a `*.md` path
 # cited in a code comment, a `.cml` comment, a plan description or README prose is not a Markdown
-# link, but it still promises that the file exists. A `file:line` or `file:start-end` citation
-# promises more: that the cited line holds what the sentence says. It carries that proof as a
-# trailing anchor, `path:12 # "text on that line"`, and the mode fails when the anchor is not in
-# the cited range, naming the citing file and line, what the line holds, what was claimed and,
-# when the text moved, the line that now holds it. A citation with no anchor fails too: the mode
-# will not certify a claim it cannot read. `--list test/plans/feat/docs_links/unanchored.txt` is the
-# checked exception: it names each tolerated unanchored citation, one line per citation with a
-# reason. An unanchored citation that is not in the file fails (a new one cannot enter), and a line
-# whose citation has since been anchored or deleted fails too (the file only shrinks). The summary
-# prints the counts every run, e.g. `64 anchored, 143 unanchored (0 new)`. A run that verified none
-# fails, so a green run always checked something.
+# link, but it still promises that the file exists. A source citation names a file and a symbol,
+# `path#Symbol`, never a line: a line number moves with every edit, so the check reports one as a
+# defect instead of verifying it. The file must exist and must name the symbol; an ambiguous short
+# name is resolved by the symbol. A run that verified no citation fails, so a green run checked
+# something. What the check cannot know is whether the symbol still supports the sentence.
 #
 
 [[tests]]
@@ -62,74 +56,73 @@ timeout_ms = 20000
 
 [[tests]]
 name = "docs.links.citations"
-desc = "Every citation that carries a quoted anchor points at a range that holds that text; a wrong line fails naming the citing file, the line, what the line holds, what was claimed and where the text is; the checked-in list tolerates the unanchored citations it names, and only those; a run that verified none fails."
+desc = "Every cited file exists and every path#Symbol citation names a symbol in that file; a citation with a line number is a defect."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
-args = ["${case}", "--citations", "--list", "test/plans/feat/docs_links/unanchored.txt"]
+args = ["${case}", "--citations"]
 expect_exit = 0
-expect_stdout_contains = ["no unverified anchored citation", "0 new"]
+expect_stdout_contains = ["no unverified citation", "symbol citation(s) verified"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
-name = "docs.links.citations_unverifiable"
-desc = "A line citation with no quoted anchor fails by default, naming the citing file, the cited line and what the line holds; the run verified nothing and does not report a pass."
+name = "docs.links.citations_symbol"
+desc = "A path#Symbol citation whose file exists and names the symbol passes, and the run reports the count."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
-args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/unverifiable"]
-expect_exit = 1
-expect_stdout_contains = ["notes.md:3: 'src/thing.c:3': cannot be verified: no quoted anchor; the cited line holds \"int value = 2;\"", "1 unverified citation(s); 0 anchored, 1 unanchored (1 new, 0 stale list entries)"]
-normalizers = ["normalize_newlines"]
-timeout_ms = 30000
-
-[[tests]]
-name = "docs.links.citations_anchor"
-desc = "A citation one line off fails: the fixture's second citation claims text that is on line 3 while pointing at line 4, and the check names the citing file, the cited line, what the line holds, what was claimed and the line that holds the text; the citation that does match in the same fixture is not reported."
-kind = "behavior"
-tool = "node"
-case = "../../../scripts/check-doc-links.mjs"
-args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/anchored"]
-expect_exit = 1
-expect_stdout_contains = ["wrong.md:5: 'src/thing.c:4': line 4 holds \"int value = 3;\"", "the citation claims \"int value = 2;\"", "that text is at line 3", "1 unverified citation(s); 2 anchored, 0 unanchored (0 new, 0 stale list entries)"]
-expect_stdout_not_contains = ["good.md:", "wrong.md:3:"]
-normalizers = ["normalize_newlines"]
-timeout_ms = 30000
-
-[[tests]]
-name = "docs.links.citations_ratchet"
-desc = "The unanchored citation the list names is tolerated, and the run prints the counts: one anchored, one unanchored, none new."
-kind = "behavior"
-tool = "node"
-case = "../../../scripts/check-doc-links.mjs"
-args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/ratchet", "--list", "test/plans/feat/docs_links/fixture/ratchet/list.txt"]
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/symbol/good"]
 expect_exit = 0
-expect_stdout_contains = ["1 anchored, 1 unanchored (0 new)"]
+expect_stdout_contains = ["1 of 1 symbol citation(s) verified"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
-name = "docs.links.citations_ratchet_new"
-desc = "An unanchored citation that the list does not name fails, naming the citing file and line and the list; the number of new citations is reported."
+name = "docs.links.citations_missing_symbol"
+desc = "A cited file that does not name the symbol fails, naming the citing file and line, the citation and which half is missing."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
-args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/ratchet-new", "--list", "test/plans/feat/docs_links/fixture/ratchet-new/list.txt"]
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/symbol/missing-symbol"]
 expect_exit = 1
-expect_stdout_contains = ["notes.md:4: 'src/thing.c:4': unanchored citation is not in", "1 unverified citation(s); 1 anchored, 1 unanchored (1 new, 0 stale list entries)"]
+expect_stdout_contains = ["notes.md:3: 'src/thing.c#Missing': the file exists but does not name 'Missing'"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
-name = "docs.links.citations_ratchet_stale"
-desc = "A list line whose citation has since been anchored is a failure, so the list can only shrink; the stale count is reported."
+name = "docs.links.citations_missing_file"
+desc = "A cited file that does not exist fails, naming the citing file and line, the citation and which half is missing."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
-args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/ratchet-stale", "--list", "test/plans/feat/docs_links/fixture/ratchet-stale/list.txt"]
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/symbol/missing-file"]
 expect_exit = 1
-expect_stdout_contains = ["1 listed unanchored citation(s) no longer exist", "1 unverified citation(s); 1 anchored, 0 unanchored (0 new, 1 stale list entry)"]
+expect_stdout_contains = ["notes.md:3: 'src/nope.c#Thing': no such file"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "docs.links.citations_line_number"
+desc = "A citation that names a line fails and asks for a symbol, because a line number moves with every edit."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/symbol/line"]
+expect_exit = 1
+expect_stdout_contains = ["notes.md:3: 'src/thing.c:2': names a line; cite 'src/thing.c#Symbol' instead"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
+name = "docs.links.citations_empty"
+desc = "A scan that finds no citation at all exits 2: a check of nothing is not a pass."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--citations", "--root", "test/plans/feat/docs_links/fixture/symbol/empty"]
+expect_exit = 2
+expect_stdout_contains = ["no citation in 1 file(s): nothing was checked"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 

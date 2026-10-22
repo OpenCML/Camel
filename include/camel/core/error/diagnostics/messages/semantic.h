@@ -230,17 +230,21 @@ enum class SemanticDiag : uint32_t {
     /// A constant is larger than the printer's max_literal_bytes.
     CmlBigConstant = 0x0001A6,
 
-    // Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A7 and up.
+    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 and up.
+    /// The tensor type's element type would be stored as another one (`Tensor<f64>` as f32).
+    TensorElementTypeNotStored = 0x0001A7,
+
+    // Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A8 and up.
     /// The condition's value is not a bool.
-    WhenConditionNotBool = 0x0001A7,
+    WhenConditionNotBool = 0x0001A8,
     /// The condition is not a compile-time predicate the compiler can evaluate.
-    WhenConditionNotConstant = 0x0001A8,
+    WhenConditionNotConstant = 0x0001A9,
     /// The condition names something outside the declaration.
-    WhenUnknownName = 0x0001A9,
+    WhenUnknownName = 0x0001AA,
     /// A type query is asked about a type that is still open (a type variable).
-    WhenTypeQueryNotConcrete = 0x0001AA,
+    WhenTypeQueryNotConcrete = 0x0001AB,
     /// No candidate of a call applies: every condition that could take it is false.
-    WhenConditionUnmet = 0x0001AB,
+    WhenConditionUnmet = 0x0001AC,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
@@ -292,4 +296,3 @@ constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }
 const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap();
 
 } // namespace camel::core::error
-
