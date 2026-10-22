@@ -88,7 +88,7 @@ npm install          # 安装 npm 包，并执行 conan install
 npm run build        # Release 构建；可执行文件落在 out/latest/bin
 ```
 
-Linux 与 macOS 上可执行文件是 `out/latest/bin/camel`，Windows 上是 `out/latest/bin/camel.exe`。把 `out/latest/bin` 加入 `PATH`，并把 `CAMEL_HOME` 设为 `out/latest`（包含 `bin/`、`libs/`、`include/` 与 `stdlib/` 的目录）。
+Linux 与 macOS 上可执行文件是 `out/latest/bin/camel`，Windows 上是 `out/latest/bin/camel.exe`。把 `out/latest/bin` 加入 `PATH`，并把 `CAMEL_HOME` 设为 `out/latest`（包含 `bin/`、`libs/`、`include/` 与 `stdlib/` 的目录）。发布 CI 构建并测试 Linux x64 与 Windows x64；macOS arm64 是手动选择的试验任务，因此 macOS 未经 CI 验证。
 
 只有找到带开发头文件的 CPython 时才会构建 `python` 与 `pyplot` 模块；没有就跳过，`CAMEL_SKIP_PYTHON=1` 可显式跳过。同一棵源码树还可以用 `npm run pypi:rollup` 打出名为 `camel-lang` 的 Python wheel，见 [pypi-packaging.md](pypi-packaging.md)。
 

@@ -88,7 +88,7 @@ npm install          # installs the npm packages and runs conan install
 npm run build        # Release build; the executable lands in out/latest/bin
 ```
 
-The executable is `out/latest/bin/camel` on Linux and macOS and `out/latest/bin/camel.exe` on Windows. Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest` (the directory that holds `bin/`, `libs/`, `include/` and `stdlib/`).
+The executable is `out/latest/bin/camel` on Linux and macOS and `out/latest/bin/camel.exe` on Windows. Put `out/latest/bin` on your `PATH` and set `CAMEL_HOME` to `out/latest` (the directory that holds `bin/`, `libs/`, `include/` and `stdlib/`). Release CI builds and tests Linux x64 and Windows x64; the macOS arm64 leg is an opt-in experimental job, so treat macOS as untested by CI.
 
 The `python` and `pyplot` modules are built only when a CPython with development headers is found; without one they are skipped, and `CAMEL_SKIP_PYTHON=1` skips them explicitly. A Python wheel named `camel-lang` can be built from the same tree with `npm run pypi:rollup`; see [docs/pypi-packaging.md](docs/pypi-packaging.md).
 
