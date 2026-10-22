@@ -1,0 +1,25 @@
+/**
+ * A `when` condition that holds: the declaration applies.
+ *
+ * `double` asks a query about a written type, `twice` asks about its own type parameter T,
+ * which the call binds (int and float here). The condition is evaluated when the declaration
+ * is instantiated, before its body is built (design principles 5.13).
+ */
+module when_applied
+
+/// `is_integer::<int>()` is true: `double` is selectable.
+func double(x: int): int when is_integer::<int>() {
+    return x * 2
+}
+
+/// The condition uses the declaration's own type parameter T.
+func twice::<T>(x: T): T when is_numeric::<T>() {
+    return x + x
+}
+
+func main(): int sync {
+    println(double(21))
+    println(twice(4))
+    println(twice(1.5))
+    return 0
+}

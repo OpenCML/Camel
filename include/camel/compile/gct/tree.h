@@ -225,6 +225,19 @@ class Tree {
     void setTupleParams(const Node *func, std::vector<TupleParamBinding> params);
     const std::vector<TupleParamBinding> *tupleParamsOf(const Node *func) const;
 
+    /// The applicability condition a declaration was written with: the expression after its
+    /// `when`, and the source text as written, for the report at a call site. Null when the
+    /// declaration has no condition. The condition is not a child of the FUNC: it is evaluated
+    /// when the declaration is instantiated (design principles 5.13), not when its body is
+    /// built.
+    struct WhenClause {
+        node_ptr_t condition               = nullptr;
+        std::string text;
+        camel::source::origin_id_t origin = camel::source::kInvalidOriginId;
+    };
+    void setWhen(const Node *func, WhenClause clause);
+    const WhenClause *whenOf(const Node *func) const;
+
     /// The number of nodes made so far, attached to the root or not.
     size_t nodeCount() const { return nodeCount_; }
     /// The bytes taken from the system for nodes, child arrays and name lists.
@@ -284,6 +297,7 @@ class Tree {
     std::unordered_map<const Node *, literal::Value> literalValues_;
     std::unordered_map<const Node *, std::vector<UnwrittenParam>> unwrittenParams_;
     std::unordered_map<const Node *, std::vector<TupleParamBinding>> tupleParams_;
+    std::unordered_map<const Node *, WhenClause> whenClauses_;
     // Keyed by the data object: a composite literal's elements are converted from it, and a
     // nested literal keeps its own entry.
     std::unordered_map<const camel::core::data::Data *, std::vector<LiteralElement>>

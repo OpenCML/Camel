@@ -1,0 +1,18 @@
+/**
+ * `is_function::<F>()`: a pass-shaped declaration applies only where its function parameter F
+ * really is a function (handover H233/H234).
+ */
+module when_function
+
+func apply::<F>(f: F, x: int): int when is_function::<F>() {
+    return f(x)
+}
+
+func inc(x: int): int {
+    return x + 1
+}
+
+func main(): int sync {
+    println(apply(inc, 41))
+    return 0
+}

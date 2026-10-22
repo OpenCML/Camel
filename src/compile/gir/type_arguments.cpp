@@ -125,6 +125,22 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 .commit(tmpl->name);
             throw BuildAbortException();
         }
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            const WhenResult verdict =
+                evaluateWhenCondition(when->condition, tmpl->funcType, bindings, {});
+            if (verdict.fails()) {
+                diags_->of(SemanticDiag::WhenConditionUnmet)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        tmpl->name,
+                        "explicit type arguments",
+                        tmpl->name + " — when " + when->text);
+                throw BuildAbortException();
+            }
+            if (!verdict.holds()) {
+                reportWhenProblem(verdict, tmpl->name, when->condition);
+            }
+        }
         auto graph = instantiateGeneric(tmpl, bindings, {}, {}, gct);
         currGraph_->addDependencyGraph(graph);
         return createFuncDataNode(graph, true, false);
