@@ -1,0 +1,11 @@
+module constas_unused
+
+// A value no type reads is a decoration: it would make two instances that differ in nothing.
+func bad(constas n: int, x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println(bad(3, 1.0))
+    return 0
+}

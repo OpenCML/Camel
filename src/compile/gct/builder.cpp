@@ -4571,6 +4571,59 @@ void collectDimensionNames(const AST::node_ptr_t &ast, std::set<std::string> &na
     }
 }
 
+/// Whether `name` is one of the extents of `type`, anywhere in it.
+bool typeMentionsExtent(Type *type, const std::string &name) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->isOtherType()) {
+        std::vector<ExtentForm> forms;
+        if (static_cast<OtherType *>(type)->extentForms(forms)) {
+            for (const auto &form : forms) {
+                for (const auto &[term, coefficient] : form.terms()) {
+                    (void)coefficient;
+                    if (term == name) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    switch (type->code()) {
+    case TypeCode::Array:
+        return typeMentionsExtent(static_cast<ArrayType *>(type)->elemType(), name);
+    case TypeCode::Tuple: {
+        const auto types = static_cast<TupleType *>(type)->types();
+        return std::any_of(types.begin(), types.end(), [&](Type *member) {
+            return typeMentionsExtent(member, name);
+        });
+    }
+    case TypeCode::Struct: {
+        auto *record     = static_cast<StructType *>(type);
+        const auto types = record->named() ? record->typeArgs() : record->types();
+        return std::any_of(types.begin(), types.end(), [&](Type *member) {
+            return typeMentionsExtent(member, name);
+        });
+    }
+    case TypeCode::Function: {
+        auto *func = static_cast<FunctionType *>(type);
+        for (Type *param : func->withTypesSpan()) {
+            if (typeMentionsExtent(param, name)) {
+                return true;
+            }
+        }
+        for (Type *param : func->normTypesSpan()) {
+            if (typeMentionsExtent(param, name)) {
+                return true;
+            }
+        }
+        return func->hasExitType() && typeMentionsExtent(func->exitType(), name);
+    }
+    default:
+        return false;
+    }
+}
+
 } // namespace
 
 Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
@@ -4620,6 +4673,16 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     }
     dimBindAllowed_ = false;
     if (signature) {
+        // A `constas n: int` parameter binds the name `n` for the signature, like the `constas`
+        // of a `const [constas n]` shape: the parameter types and the result type may use it.
+        // The name is bound before any parameter type is read, so a parameter may write it
+        // before the parameter that declares it (the order is checked below).
+        for (const auto &paramPair : *ast->atAs<AST::RepeatedLoad>(1)) {
+            const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
+            if (paramLoad->isConstas()) {
+                dimNames_->insert(paramLoad->getRef().ident());
+            }
+        }
         // A name is bound by the `constas` occurrence anywhere in the parameters, the way
         // `typeas T` declares a type variable for the whole signature: an extent may write the
         // name before the parameter that binds it.
@@ -4719,6 +4782,12 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
 
     // Process normal parameters
     const auto &normParams = *ast->atAs<AST::RepeatedLoad>(1);
+    // The `constas n: int` parameter of this signature, if any (design principles 5.4): its
+    // value is known at each call and reaches the instance as an extent binding, never as a
+    // runtime argument.
+    std::string constasName;
+    AST::node_ptr_t constasPair;
+    bool sawRest = false;
     for (size_t pi = 0; pi < normParams.size(); ++pi) {
         const auto &paramPair = normParams[pi];
         const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
@@ -4731,6 +4800,52 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         const string &name = paramRef.ident();
+        if (paramLoad->isConstas()) {
+            // Only a function declaration offers `constas` in its parameter list (the parser
+            // admits it nowhere else).
+            if (!signature) {
+                ASSERT(false, "A constas parameter outside a function declaration.");
+                diags_->of(SemanticDiag::FeatureNotSupported)
+                    .at(paramLoad->tokenRange())
+                    .commit("a constas parameter outside a function declaration");
+                throw BuildAbortException();
+            }
+            if (constasPair) {
+                diags_->of(SemanticDiag::ConstasParameterOnlyOne)
+                    .at(paramLoad->tokenRange())
+                    .commit(name, constasName);
+                throw BuildAbortException();
+            }
+            if (pi != 0) {
+                diags_->of(SemanticDiag::ConstasParameterNotFirst)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            if (paramPair->size() == 0) {
+                diags_->of(SemanticDiag::ConstasTypeRequired)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            constasName      = name;
+            constasPair      = paramPair;
+            Type *const type  = visitType(paramPair->at(0));
+            if (type->code() != TypeCode::Int64) {
+                diags_->of(SemanticDiag::ConstasTypeNotInt)
+                    .at(paramPair->at(0)->load()->tokenRange())
+                    .commit(name, type->toString());
+                throw BuildAbortException();
+            }
+            if (!paramNames.insert(name).second) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .at(paramLoad->tokenRange())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+            factory.addConstasArg(name, type);
+            continue;
+        }
         if (paramLoad->isRest()) {
             // A rest parameter is untyped and last (design principles 5.5); it stands in the
             // signature as a `void` parameter that no call passes a value for.
@@ -4761,6 +4876,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
                 throw BuildAbortException();
             }
             factory.addRestArg(name);
+            sawRest = true;
             continue;
         }
         bool isVar = paramLoad->isVar();
@@ -4816,7 +4932,28 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast) {
     if (!unwrittenParams.empty()) {
         pendingUnwrittenParams_ = std::move(unwrittenParams);
     }
-    return open ? static_cast<Type *>(factory.buildOpen()) : factory.build();
+    FunctionType *built = open ? static_cast<FunctionType *>(factory.buildOpen())
+                               : factory.build();
+    if (constasPair) {
+        const auto &paramLoad = constasPair->loadAs<AST::NamedPairLoad>();
+        if (sawRest) {
+            diags_->of(SemanticDiag::ConstasWithRest)
+                .at(paramLoad->tokenRange())
+                .commit(constasName);
+            throw BuildAbortException();
+        }
+        // A value the types never read decides nothing at the call: refuse the decoration.
+        if (!typeMentionsExtent(built, constasName)) {
+            diags_->of(SemanticDiag::ConstasNotUsedInType)
+                .at(paramLoad->tokenRange())
+                .commit(
+                    constasName,
+                    built->toString(),
+                    "the value is not used by a type of the declaration");
+            throw BuildAbortException();
+        }
+    }
+    return built;
 }
 
 /*

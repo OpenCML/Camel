@@ -317,7 +317,35 @@ func main(): int sync {
 - 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明里（lambda、函数类型和规则里写 `..` 是语法错误）。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。
 - 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。目前调用还必须和声明在同一个模块里：跨模块展开要等 `tree_*` 任务把函数体按调用点带过去，现在会报 `SemanticDiag::RestFunctionNeedsExpansion`。
 
-**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值。
+**常量值参数（`constas`）**：普通形参之前可以写一个 `constas n: int`，它的值在编译期已知，是声明身份的一部分，而不是运行时的实参。
+
+```cml
+import { Tensor, ones, sum } from tensor
+
+func total(constas n: int, x: Tensor<f32, const [n]>): float {
+    return sum(x)
+}
+
+func main(): int sync {
+    println(total(3, ones([3])))
+    println(total(5, ones([5])))
+    return 0
+}
+```
+
+```text
+3.0
+5.0
+```
+
+- **值进入实例键。** 每个不同的常量值实例化出一张子图（`total<3>`、`total<5>`），同一组类型和值只实例化一次。`n` 用在该声明的类型里：形参类型、返回类型，写法与类型里的具名维度相同（`Tensor<f32, const [n]>`；`[n]` 也行）。
+- **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。`n` 因此也不能当函数体里的运行时值使用。
+- 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`），且是 `int`（`SemanticDiag::ConstasValueNotInt`）。目前只支持一个 `constas` 参数（`SemanticDiag::ConstasParameterOnlyOne`），且必须在普通形参的最前面（`SemanticDiag::ConstasParameterNotFirst`），类型只支持 `int`（`SemanticDiag::ConstasTypeNotInt`），类型不能省（`SemanticDiag::ConstasTypeRequired`）。
+- **值必须真的决定一个类型。** 没有任何类型用到 `n` 的声明会被拒绝（`SemanticDiag::ConstasNotUsedInType`）：两个只有值不同的实例若类型完全相同，这个值就只是装饰。
+- 带 `constas` 参数的声明**没有函数值**：常量必须在写调用时给出，不能赋给变量或作为实参传走（`SemanticDiag::ConstasFunctionNeedsCall`）。无体声明（C++ 算子的声明）也不能带 `constas`（`SemanticDiag::ConstasInNativeDeclaration`）；和剩余参数组合暂不支持（`SemanticDiag::ConstasWithRest`），要等类型级元组（`StaticTuple`）。
+- 目前 `n` 只绑定在声明的形参类型和返回类型里；函数体里的类型位置（`let z: Tensor<f32, const [n]>`）还没有这个作用域。`f32[n]` 这种数组维度也还没落地（见 [7.5 的限制](#75-泛型函数)）；今天能用的是 `Tensor<f32, const [n]>`。
+
+**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明、剩余参数组合，`f32[n]` 数组维度尚未实现。
 
 ## 7.6 标注
 

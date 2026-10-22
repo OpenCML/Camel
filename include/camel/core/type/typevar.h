@@ -39,6 +39,7 @@
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/extent.h"
 
 #include <string>
 #include <utility>
@@ -113,13 +114,24 @@ bool containsTypeVar(Type *type);
 Type *substituteTypeVars(Type *type, const type_bindings_t &bindings);
 
 /**
+ * `type` with every named extent that `values` binds replaced by its value (`Tensor<f32, [n]>`
+ * with n = 4 is `Tensor<f32, [4]>`). A `constas` parameter is not substituted: it is a
+ * parameter, not an extent. Returns `type` itself when nothing in it was replaced.
+ */
+Type *substituteExtentValues(Type *type, const ExtentValues &values);
+
+/**
  * A new open function type (camel/core/type/composite/func.h): `type` with the variables
  * replaced as substituteTypeVars does, and with its parameter names, `var` marks, modifiers and
- * implementation mark kept. Always a new object, also when nothing was replaced: it is the
- * signature of a graph about to be built, whose result type the body may still decide, so two
- * graphs never share one.
+ * implementation mark kept. When `extents` is given, its named extents are replaced too and the
+ * `constas` parameter those values bind is left out of the result: the instance is called with
+ * the runtime arguments only (design principles 5.4). Always a new object, also when nothing was
+ * replaced: it is the signature of a graph about to be built, whose result type the body may
+ * still decide, so two graphs never share one.
  */
-OpenFunctionType *instantiateFunctionType(FunctionType *type, const type_bindings_t &bindings);
+OpenFunctionType *instantiateFunctionType(
+    FunctionType *type, const type_bindings_t &bindings,
+    const ExtentValues *extents = nullptr);
 
 /**
  * Binds the variables `pattern` binds (its `typeas` occurrences) from the type `actual` found

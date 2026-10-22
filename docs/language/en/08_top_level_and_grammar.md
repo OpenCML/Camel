@@ -84,7 +84,7 @@ variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
 - `typeas T`: [7.5](07_statements.md#75-generic-functions).
-- `constas n`: names a dimension in a `const` argument ([design principles 5.4](../../design-principles.en.md)): the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards; it is allowed only in an array literal of a `const` argument, and anywhere else it is a syntax error.
+- `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter is written first in the parameter list of a function declaration.
 - `enum`: [3.5](03_data_model.md#35-enums).
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
@@ -142,6 +142,7 @@ bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
 keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
                      | '..' identDef (':' typeExpr)?
+                     | 'constas' identDef (':' typeExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'

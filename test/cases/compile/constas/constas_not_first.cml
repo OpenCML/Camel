@@ -1,0 +1,11 @@
+module constas_not_first
+
+// The `constas` value is bound before the runtime arguments, so it comes first.
+func bad(x: int, constas n: int): int {
+    return x + n
+}
+
+func main(): int sync {
+    println(bad(1, 2))
+    return 0
+}

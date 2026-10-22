@@ -51,6 +51,15 @@ expect_exit = 0
 expect_stdout_contains = ["6", "9", "13"]
 
 [[tests]]
+name = "constructs.constas_param"
+desc = "`constas n: int`, a compile-time value parameter written before the ordinary parameters and read as an extent of another parameter's type."
+kind = "behavior"
+case = "../../../cases/parse/constructs/constas_param.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["3.0", "5.0"]
+
+[[tests]]
 name = "constructs.comprehensions"
 desc = "A `static for` written where a value is needed: the struct comprehension `{ ... }`, the tuple comprehension `( ... )`, a round whose body is a block, and the empty struct."
 kind = "behavior"

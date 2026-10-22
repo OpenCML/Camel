@@ -210,6 +210,30 @@ enum class SemanticDiag : uint32_t {
     /// A call passes fewer arguments than the fixed parameters of a rest function.
     RestArgumentsMismatch = 0x000190,
 
+    // `constas` value parameters (design principles 5.4): 0x191 and up. 0x18C stays free.
+    /// A `constas` parameter is not the first ordinary parameter.
+    ConstasParameterNotFirst = 0x000191,
+    /// A declaration has more than one `constas` parameter.
+    ConstasParameterOnlyOne = 0x000192,
+    /// A `constas` parameter writes no type.
+    ConstasTypeRequired = 0x000193,
+    /// A `constas` parameter has a type other than `int`.
+    ConstasTypeNotInt = 0x000194,
+    /// The argument bound to a `constas` parameter is not a compile-time constant.
+    ConstasValueNotConstant = 0x000195,
+    /// The constant bound to a `constas` parameter is not an `int`.
+    ConstasValueNotInt = 0x000196,
+    /// The value of a `constas` parameter is not used by any type of the declaration.
+    ConstasNotUsedInType = 0x000197,
+    /// A `constas` parameter is combined with a rest parameter.
+    ConstasWithRest = 0x000198,
+    /// A `constas` declaration was used where a function value is needed.
+    ConstasFunctionNeedsCall = 0x000199,
+    /// A `constas` declaration is a body-less declaration of a C++ operator.
+    ConstasInNativeDeclaration = 0x00019A,
+    /// A call to a `constas` declaration gives no value for the parameter.
+    ConstasArgumentMissing = 0x00019B,
+
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
     NativeDeclarationIncomplete = 0x00017B,

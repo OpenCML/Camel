@@ -1,0 +1,185 @@
+id = "compile.constas"
+order = 341
+tier = "fast"
+tags = ["feat", "compile", "generics", "constas"]
+desc = "'constas' value parameters (design principles 5.4): the value is a compile-time constant, selects the instance, is substituted into the extents of the signature and is not a runtime parameter; refusals cover position, count, type, use in a type, the call value, rest parameters, function values and body-less declarations."
+
+[[tests]]
+name = "constas_instances"
+desc = "`total(3, ...)` and `total(5, ...)` are two instances, each with its parameter's extent fixed by the value; the same value reuses the instance."
+kind = "behavior"
+case = "../../../cases/compile/constas/constas_param.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ["3.0", "5.0", "3.0"].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `constas instances changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_graph"
+desc = "The instance has no port for the `constas` value (`total<3>` takes only `x`), and the call passes no argument for it: the CALL node has one normal input, the tensor."
+kind = "behavior"
+case = "../../../cases/compile/constas/constas_param.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const doc = JSON.parse(input.normalized.stdout)
+const instance = (value) => doc.graphs.find((g) => g.name.endsWith(`total<${value}>`))
+const at3 = instance(3), at5 = instance(5)
+assert(at3 && at5, `expected the instances total<3> and total<5>, got ${doc.graphs.map((g) => g.name).join(', ')}`)
+for (const graph of [at3, at5]) {
+  assert(graph.normalPorts.length === 1, `${graph.name} has ${graph.normalPorts.length} normal ports`)
+  const port = graph.nodes.find((n) => n.id === graph.normalPorts[0])
+  assert(port && port.parameter && port.parameter.name === 'x', `${graph.name} must take x, got ${JSON.stringify(port && port.parameter)}`)
+  assert(graph.normalPorts.every((id) => { const n = graph.nodes.find((x) => x.id === id); return !n.parameter || n.parameter.name !== 'n' }), `${graph.name} still has a port for n`)
+}
+const main = doc.graphs.find((g) => g.name.endsWith('main'))
+assert(main, 'the graph of main is missing')
+const calls = main.nodes.filter((n) => n.kind === 'FUNC' && n.callee === at3.id)
+assert(calls.length === 2, `expected two calls of total<3>, got ${calls.length}`)
+for (const call of calls) {
+  const inputs = main.edges.filter((e) => e.target === call.id && e.kind === 'normal')
+  assert(inputs.length === 1, `the call of total<3> passes ${inputs.length} argument(s)`)
+}
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_twice"
+desc = "A declaration takes at most one `constas` parameter."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_twice.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasParameterOnlyOne"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_not_first"
+desc = "The `constas` parameter comes first among the ordinary parameters."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_not_first.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasParameterNotFirst"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_no_type"
+desc = "A `constas` parameter writes its type."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_no_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasTypeRequired"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_type_not_int"
+desc = "Only an `int` `constas` value can become an extent."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_type_not_int.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasTypeNotInt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_unused"
+desc = "A `constas` value no type reads is refused."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_unused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasNotUsedInType"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_value_not_constant"
+desc = "The value given at a call is a compile-time constant."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_value_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasValueNotConstant"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_value_not_int"
+desc = "The constant given at a call is an `int`."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_value_not_int.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasValueNotInt"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_missing_argument"
+desc = "A call gives a value for the `constas` parameter."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_missing_argument.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasArgumentMissing"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_argument_shape"
+desc = "The value fixes the extent of the parameter, so an argument of another extent is refused."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_argument_shape.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::GenericArgumentsMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_with_rest"
+desc = "A `constas` parameter cannot be combined with a rest parameter yet."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_with_rest.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasWithRest"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_as_value"
+desc = "A declaration with a `constas` parameter has no function value: the value must be given at the call."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_as_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasFunctionNeedsCall"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "constas_native"
+desc = "A body-less declaration cannot carry a `constas` parameter."
+kind = "negative"
+case = "../../../cases/compile/constas/constas_native.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ConstasInNativeDeclaration"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

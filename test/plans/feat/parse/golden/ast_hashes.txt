@@ -2,6 +2,7 @@
 c7a4953d8ed5e850 ok test/cases/parse/constructs/analysis.cml
 d3a33132872dd146 ok test/cases/parse/constructs/comprehensions.cml
 11c6bdc4678327e6 ok test/cases/parse/constructs/constas.cml
+07084ec072111165 ok test/cases/parse/constructs/constas_param.cml
 ce74d4080198588d ok test/cases/parse/constructs/enum.cml
 a0ff4481152866ba ok test/cases/parse/constructs/fstring.cml
 3bb4efc9848f9c19 ok test/cases/parse/constructs/literals.cml
