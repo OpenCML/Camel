@@ -29,14 +29,14 @@
 //
 // `fragment` and `counter-example` are not compiled. A `counter-example` must also say so on
 // the page: the fence or the paragraph before it has to contain `counter-example`, `wrong`,
-// `反例` or `错误`. A marker without a reason is an error.
+// `反例`, `错误`, `does not compile` or `is an error`. A marker without a reason is an error.
 //
 // On a `docs/design/` or `docs/technical/` page a fence without an entry point is an excerpt,
 // not a program: those pages quote fragments, proposed syntax and measurements. Only their
 // fences that contain `func main` are compiled. The rule is in EXCERPTS below, with the reason.
-// The record directories (docs/handover, docs/reviews) are not pages and are not scanned; two
-// generated references are allowlisted because their `camel` fences are signatures and
-// diagnostics, not programs.
+// The record directories (docs/handover, docs/reviews) are not pages and are not scanned; three
+// generated or dated references are allowlisted because their `camel` fences are signatures,
+// diagnostics or excerpts of an earlier state, not programs.
 //
 // The run is parallel (one camel process per snippet, up to JOBS at a time) because every
 // snippet is its own entry file and its own temp directory; batching them into one process
