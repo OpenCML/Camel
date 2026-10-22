@@ -1485,6 +1485,16 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::StaticTupleEscapes,
+            {
+                "StaticTupleEscapes",
+                "The build-time tuple '{0}' is not a value.",
+                "A rest parameter's tuple stands for the arguments a call left over: read it "
+                "with 'indices {0}', '{0}.[j]' or '..{0}', or write a tuple literal '(a, b)' "
+                "when a runtime tuple value is wanted.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",

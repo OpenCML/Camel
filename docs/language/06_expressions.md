@@ -441,11 +441,12 @@ func first(t: (int, float)) {
 
 **`indices`：按元组的位置展开。** `static for (j) in indices ts => 块` 把元组值 `ts` 的**位置**在实例化时展开：每个位置执行一次块，`j` 是这一轮的位置（`int`），轮数是元组的元数。
 
-- `ts` 必须是元组类型的值（普通元组；`T?`、`T!`、可变单元格是叶子）。不是元组时报 `SemanticDiag::StaticIndicesNotTuple`；类型还没具体化时报 `SemanticDiag::StaticTypeNotConcrete`。轮数在实例化时由 `ts` 的类型确定。
+- `ts` 必须是元组类型（普通元组；`T?`、`T!`、可变单元格是叶子）。不是元组时报 `SemanticDiag::StaticIndicesNotTuple`；类型还没具体化时报 `SemanticDiag::StaticTypeNotConcrete`。轮数在实例化时由 `ts` 的类型确定。
+- **操作数只用来取类型。** 操作数是编译期元组（剩余参数的 `ts`，或元组推导式）时不建容器结点：`indices ts` 不建 `FILL`，块里的 `ts.[j]` 直接取元素结点、不建 `ACCS`。运行期元组变量或参数本来就有自己的结点，`indices` 不会为它再建一个。
 - `j` 可以当值用（例如 `print(j)` 或参与计算），也可以当 `t.[j]` 的键：每轮它都是编译期常量。块里再声明同名变量仍会遮蔽它，此时当键报 `SemanticDiag::StaticAccessNotConstant`（与 `fields` 的 `n` 相同）。
 - `indices` 只绑定一个名字（没有 `F`）；元素的类型由 `ts` 的类型给出，目前不另给名字。写 `static for (j, F) in indices ts` 是语法错误。
 - `indices` 只遍历元组：结构体有字段名，用 `fields T`。`{ static for (j) in indices ts => e }` 没有字段名可给，报 `SemanticDiag::ConstructNotSupported`；需要值的位置写 `( static for (j) in indices ts => e )`。
-- 图与手写的展开相同：生成器本身没有节点，每轮的 `ts.[j]` 建一个 `ACCS`，与手写的 `ts.[0]`、`ts.[1]` 相同。
+- 图与手写的展开相同：生成器本身没有节点。编译期元组的 `ts.[j]` 直接是元素结点，与手写的 `ts.[0]`、`ts.[1]` 的选择相同；运行期元组值的 `ts.[j]` 仍建一个 `ACCS`。
 
 ```cml
 func sum(t: (int, int, int)): int {
@@ -462,7 +463,7 @@ func positions(t: (int, string)): (int, int) {
 - 块的**值就是那一轮的值**：与语句形式不同，这里不丢弃。块里可以用 `let`，最后一句话的值就是字段的值；没有值（空块，或以一条没有值的语句结尾）报 `SemanticDiag::StaticComprehensionVoidElement`。
 - 每个字段/元素的**类型取自那一轮的值**，不强制等于 `F`：`F` 是 `int` 而值是 `float` 时结果字段就是 `float`。字段名与顺序仍来自 `T` 的声明顺序，所以 `tree_map` 这类改变叶子类型、保持形状的展开可以直接写。
 - 空结构体、空元组没有轮次，结果是 `{}` / `()`（一个零槽的 `FILL`）。
-- 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，最后每个结构体/元组一个 `FILL` 把各轮的值装回同形状，comprehension 本身没有节点。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
+- 图上是直线代码：每轮按声明顺序建出它读的 `ACCS`，comprehension 本身没有节点。元组推导式的结果先保持为编译期元组：只被 `indices`、`..` 或 `.[j]` 使用时元素保持独立、不建 `FILL`；作为值用（打印、返回、赋给运行期位置）时，在使用处一个 `FILL` 把各轮的值装回同形状。结构体推导式总是装成一个 `FILL`。`t.[n].[m]` 里对父的访问只建一次，内层各字段共用同一个 `ACCS`，因此与 C++ `tree_map` 对同一棵树建出的图相同。
 - `{ static for ... }` 在需要块的位置（`case struct => { ... }`、`if c then { ... }`）也读作 comprehension，所以语句形式不能再套一层花括号：直接写 `static for (n, F) in fields T => 块`。
 - 要把各轮的值折成一个结果（而不是装回同一形状），用 [6.8.5](#685-static-loop) 的 `static loop`。
 

@@ -441,7 +441,7 @@ void Builder::orderAfterLastWriter(node_handle_t variable, node_handle_t node) {
     }
 }
 
-node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
+std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
     if (const auto oper = tree_->operRefOf(gct); oper.has_value()) {
         // A DREF the compiler made for an operator it knows by id: the group is the built-in
         // module's, which registered it; no name of the program takes part.
@@ -477,12 +477,15 @@ node_handle_t Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
         return drefNode;
     }
     ENTER("DREF");
-    // `..ts` names the rest parameter of the expansion being built: as a value it is the tuple
-    // of the arguments left over (a FILL; a use only as `..ts` reads the elements directly).
+    // `..ts` names the rest parameter of the expansion being built: the build-time tuple of the
+    // arguments left over, not a value. `indices ts`, `ts.[j]` and `..ts` read it directly; any
+    // other use is StaticTupleEscapes (valueNodeOf).
     if (const RestBinding *binding = restBindingNamed(gct->name()); binding != nullptr) {
-        node_handle_t node = materializeRestBinding(*binding, gct);
+        StaticTuple tuple = binding->tuple;
+        tuple.name        = binding->name;
+        tuple.origin      = gct;
         LEAVE("DREF");
-        return node;
+        return tuple;
     }
     // `n` of a `static for`: a compile-time string, not a name of the enclosing scope. A use
     // of it as a value (not as the key of `t.[n]`) becomes a constant; the `j` of `indices`
@@ -925,11 +928,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (valueNode == nullptr) {
-        const auto &res = visit(gct->at(0));
-        ASSERT(
-            res.type() == typeid(node_handle_t),
-            "Unexpected result type from child of CAST node.");
-        valueNode = any_cast<node_handle_t>(res);
+        valueNode = valueNodeOf(visit(gct->at(0)));
     }
     ASSERT(valueNode != nullptr, "Cast node value is null.");
     Type *sourceType = nodeTypeOf(valueNode);
@@ -1012,11 +1011,7 @@ node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     bool oldDeclares  = declaresVariable_;
     varied_           = true;
     declaresVariable_ = true;
-    const auto &res   = visit(gct->at(0));
-    ASSERT(
-        res.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of VARI node.");
-    node_handle_t node = any_cast<node_handle_t>(res);
+    node_handle_t node = valueNodeOf(visit(gct->at(0)));
     varied_            = old;
     declaresVariable_  = oldDeclares;
     LEAVE("VARI");
@@ -1027,11 +1022,7 @@ node_handle_t Builder::visitWaitNode(const GCT::node_ptr_t &gct) {
     ENTER("WAIT");
     bool old        = waited_;
     waited_         = true;
-    const auto &res = visit(gct->at(0));
-    ASSERT(
-        res.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of WAIT node.");
-    node_handle_t node = any_cast<node_handle_t>(res);
+    node_handle_t node = valueNodeOf(visit(gct->at(0)));
     waited_            = old;
     LEAVE("WAIT");
     return node;
@@ -1156,11 +1147,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     ENTER("ACCS");
-    any res = visit(gct->at(0));
-    ASSERT(
-        res.type() == typeid(node_handle_t),
-        "Unexpected result type from Enter the child of ACCS node.");
-    node_handle_t tgtNode = any_cast<node_handle_t>(res);
+    node_handle_t tgtNode = valueNodeOf(visit(gct->at(0)));
     ASSERT(tgtNode != nullptr, "Access node target is null.");
     if (EnumType *enumType = asEnumType(nodeTypeOf(tgtNode))) {
         // A value of an enum has the fields of the variant it is, and which one that is the

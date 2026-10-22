@@ -1,0 +1,19 @@
+/**
+ * A tuple comprehension returned by a function (H51 step 6) is a value: it is materialized by
+ * one FILL at the `return`, so the caller sees an ordinary tuple. The build-time tuple does not
+ * cross the call; a runtime tuple is still not a rest argument.
+ */
+module static_tuple_function
+
+func positions(t: (int, int)): (int, int) {
+    return ( static for (j) in indices t => j )
+}
+
+func firstPosition(t: (int, int)): int {
+    return positions(t).[0]
+}
+
+func main(): int sync {
+    println(firstPosition((7, 8)))
+    return 0
+}
