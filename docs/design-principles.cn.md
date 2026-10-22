@@ -323,6 +323,7 @@ func main(): int sync {
 - **类型参数在函数头声明**：`func first::<T>(xs: T[]): T`。函数名后有 `::<…>` 就是泛型，没有就不是——一个函数是不是泛型，在函数头一眼可见。声明的写法与调用处显式给类型实参的写法（5.9 的 `first::<int>(xs)`）相同；调用处通常不必写，由实参推出。函数头声明的名字在函数里优先于同名的类型。规则（`rule`）与事实（`fact`）同样在名字后声明类型参数。不用 `typeas`。
 
   <!-- camel-snippet: fragment: a generic signature, not a program -->
+
   ```camel
   func first::<T>(xs: T[]): T { return xs[0] }
 

@@ -179,6 +179,7 @@ for (const m of readText(NODES).matchAll(/^CAMEL_NODE\((\w+), \w+\)\s*\/\/\s*(.*
         spreadValue: 'indexValue', restValue: 'indexValue', ifExpr: 'ctrlExpr', matchExpr: 'ctrlExpr', tryExpr: 'ctrlExpr',
         castExpr: 'unaryExpr', refData: 'primaryData', constData: 'typeOrData', refType: 'primaryType',
         parenType: 'primaryType', typeOfType: 'primaryType', typeAsType: 'primaryType',
+        tupleParam: 'keyParamPair',
     }
     const owner = NODE_OF[production] || production
     if (!names.has(owner)) {

@@ -546,10 +546,39 @@ bool ParserImpl::lambdaAhead() const {
     }
     if (t1 == TK::LParen) {
         // A parameter destructured as a tuple (`((a, b)) => ...`): the list starts with a
-        // parenthesised parameter, so the first `)` is not the end of the list. Count to the
-        // matching one, as the identifier branch does, and read what follows.
-        uint32_t depth = 0;
-        for (uint32_t i = 0;; ++i) {
+        // parenthesised parameter, so the first `)` is not the end of the list. Only a list of
+        // names can be a tuple parameter, so the head decides at once: a `(` that opens anything
+        // else is the parenthesised expression (or tuple) it looks like, and is not scanned.
+        if (peek(2) != TK::Identifier) {
+            return false;
+        }
+        uint32_t i = 2;
+        while (true) {
+            if (peek(i) != TK::Identifier) {
+                return false;
+            }
+            ++i;
+            if (peek(i) == TK::Comma) {
+                ++i;
+                continue;
+            }
+            break;
+        }
+        if (peek(i) != TK::RParen) {
+            return false;
+        }
+        ++i;
+        if (peek(i) == TK::RParen) {
+            const TK after = peek(i + 1);
+            return after == TK::FatArrow || after == TK::Colon;
+        }
+        // More parameters after the tuple: find the end of the list, which the names keep
+        // short, so counting parentheses stays cheap.
+        if (peek(i) != TK::Comma) {
+            return false;
+        }
+        uint32_t depth = 1;
+        for (; ; ++i) {
             switch (peek(i)) {
             case TK::Eof:
                 return false;

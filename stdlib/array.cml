@@ -46,7 +46,7 @@ export func reverse(xs: T[]): T[] {
 /// @example [1, 2, 3, 4]->take<2>    // [1, 2]
 with <n: int>
 export func take(xs: T[]): T[] {
-    return xs[:math::clamp(n, 0, len(xs))]
+    return xs[: math::clamp(n, 0, len(xs))]
 }
 
 /// The elements after the first n; none when there are fewer, all when n is not positive.

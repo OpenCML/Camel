@@ -326,6 +326,7 @@ A `sync` written before a block (including the postfix form on a function body, 
 - **Type parameters are declared at the head of the function**: `func first::<T>(xs: T[]): T`. A function with `::<…>` after its name is generic, one without is not, so whether a function is generic is visible at its head. The declaration is spelled as an explicit type argument at a call (5.9, `first::<int>(xs)`); at a call it is usually inferred from the arguments. A name declared at the head takes precedence over a type of the same name inside the function. Rules (`rule`) and facts (`fact`) declare type parameters after their name in the same way. There is no `typeas`.
 
   <!-- camel-snippet: fragment: a generic signature, not a program -->
+
   ```camel
   func first::<T>(xs: T[]): T { return xs[0] }
 
