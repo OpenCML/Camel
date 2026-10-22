@@ -1545,6 +1545,61 @@ expect_stdout_exact = "loop_grad_iterable_length n2=3.0 n4=10.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
+# The two cases below are twins: one loop body, iterating a literal array or an array built from
+# the parameter. `std::stats` runs before and after `std::macro`, so the first GRAPH_STATS line
+# counts the program's own graph and the second the graph with the gradient's reverse loop in it.
+# The counts are pinned exactly, so the cost is in the output rather than in prose:
+#   literal   19 nodes ->  92 nodes (5 -> 18 operators)
+#   parameter 24 nodes -> 122 nodes (7 -> 33 operators)
+# The parameter twin's forward array costs 5 nodes, and its own backward pass 25 more nodes than
+# the literal twin's. The reach test is worth 8 of those nodes: with `dependsOnTangentPort` removed
+# from the loop rule, the literal twin prints 100 nodes, 115 edges and 21 operators instead of 92,
+# 102 and 18, so this pair fails if every loop carries an array gradient unconditionally.
+
+[[tests]]
+name = "loop_grad_literal_array.stats"
+desc = "A differentiated loop over an array literal: nothing that can carry a gradient reaches the array, so the reverse pass carries no array gradient for it. std::stats before and after std::macro pins the program graph at 19 nodes and the graph with the gradient at 92 nodes, 102 edges and 18 operators, against 24 and 122, 148 and 33 for the parameter-built twin."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_literal_array.cml"
+args = ["${case}", "std::stats", "std::macro", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
+assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
+const [before, after] = stats
+assert(before.nodes === 19 && before.opers === 5, `program graph changed: ${JSON.stringify(before)}`)
+assert(after.nodes === 92 && after.edges === 102 && after.opers === 18, `gradient graph changed: ${JSON.stringify(after)}`)
+assert(after.loops === 3, `expected the forward and the reverse loop: ${JSON.stringify(after)}`)
+assert(out.includes('loop_grad_literal_array d=7.0'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "loop_grad_parameter_array.stats"
+desc = "The twin of loop_grad_literal_array.stats over an array built from the parameter: the array takes part in the gradient, so the reverse loop carries its gradient and the gradient graph is 122 nodes, 148 edges and 33 operators, 25 nodes of gradient more than the literal twin's 92 (5 of them its forward array)."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/loop_grad_parameter_array.cml"
+args = ["${case}", "std::stats", "std::macro", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const stats = [...out.matchAll(/GRAPH_STATS ([{].*[}])/g)].map((m) => JSON.parse(m[1]))
+assert(stats.length === 2, `expected two GRAPH_STATS lines: ${out}`)
+const [before, after] = stats
+assert(before.nodes === 24 && before.opers === 7, `program graph changed: ${JSON.stringify(before)}`)
+assert(after.nodes === 122 && after.edges === 148 && after.opers === 33, `gradient graph changed: ${JSON.stringify(after)}`)
+assert(after.loops === 3, `expected the forward and the reverse loop: ${JSON.stringify(after)}`)
+assert(out.includes('loop_grad_parameter_array d=25.0'), `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 8000
+
 [[tests]]
 name = "loop_grad_refuse_no_element_tangent"
 desc = "A loop that iterates over a `string[]` computed from the differentiated parameter is refused at the loop: the element type has no tangent, so the array has none and each round's element gradient could not be scattered back. The diagnostic is located at the loop (line 15) and names the array's type, its element type, and what to do instead."
