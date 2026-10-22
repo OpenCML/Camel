@@ -1,0 +1,8 @@
+// A group names resources, or other groups that name resources, in an order: `a` contains itself
+// through `b` (ResourceGroupCycle).
+resource a = [b]
+resource b = [a]
+
+func main(): int {
+    return 0
+}

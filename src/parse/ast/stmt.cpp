@@ -115,6 +115,35 @@ const std::string TypeDeclLoad::toString() const {
     return result + docSuffix();
 }
 
+const std::string ResourceDeclLoad::toString() const {
+    std::string result = "ResourceDecl: " + ref_.toString();
+    if (isGroup()) {
+        result += " = [";
+        for (size_t i = 0; i < members_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + members_[i].toString();
+        }
+        result += "]";
+    } else if (unordered_) {
+        result += " unordered";
+    }
+    return result + docSuffix();
+}
+
+const std::string ResourceDeclLoad::geneCode() const {
+    std::string result = "resource " + ref_.toString();
+    if (isGroup()) {
+        result += " = [";
+        for (size_t i = 0; i < members_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + members_[i].toString();
+        }
+        return result + "]";
+    }
+    if (unordered_) {
+        result += " unordered";
+    }
+    return result;
+}
+
 const std::string ExitStmtLoad::toString() const {
     switch (type_) {
     case ExitType::Yield:

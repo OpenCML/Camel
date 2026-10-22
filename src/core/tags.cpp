@@ -181,6 +181,26 @@ void declareStandardTags() {
         independent.on    = Func;
         declare(std::move(independent));
 
+        // `#resource` on a type declaration (design effects plan 3.1): a value of the type is a
+        // handle, one resource per value, named by the declaration. It is a standard tag, so a
+        // program writes it without an import, and it is declaration-only: it says nothing about
+        // the nodes of a body, so the placement facts of `#gpu`/`#cpu` are untouched. The fact
+        // is a mark; the declaration's own flag (StructDecl::handle) is what the type predicate
+        // reads, so the two labels cannot be combined into a second meaning.
+        const attr::AttrKey resourceKey = attr::registerKey(
+            "resource",
+            attr::KeySpec{
+                attr::ValueKind::Unit,
+                attr::rules::inner(),
+                attr::rules::equalOnly(),
+            });
+        Decl resource;
+        resource.name  = "resource";
+        resource.ident = "resource";
+        resource.on    = Type;
+        resource.key   = resourceKey;
+        declare(std::move(resource));
+
         // The one placement fact (design principles 13.4, docs/design/gpu/plan.cn.md 2.1): a
         // Symbol, `gpu` or `cpu`. Two labels write it, so a consumer reads one key whichever
         // label the program wrote. The inner value wins where scopes nest; two different

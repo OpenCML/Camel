@@ -29,7 +29,7 @@ namespace camel::parse::ast {
 
 // `Name` was the retired `use` declaration (design principles 10.2); the value is kept so that
 // the numbering of the others does not change.
-enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace, Tag };
+enum class StmtType { Name, Data, Type, Func, Expr, Exit, Block, UsingNamespace, Tag, Resource };
 
 /// Where a tag may be written (design principles 6.2). The bits are those of
 /// camel::core::tag::Position: the AST builder converts them with a cast.
@@ -143,6 +143,40 @@ class TypeDeclLoad : public StmtLoad {
     Reference ref_;
     std::string uri_;
     std::vector<std::string> params_;
+};
+
+/// A resource declaration (design effects plan 3.1, design principles 3.3):
+///
+///   resource fs
+///   resource io = [stdout, fs]
+///   resource net unordered
+///
+/// A single resource names ambient state that no value carries; `unordered` says a call's
+/// accesses to it may be reordered (step 8 gives that meaning); the list form makes the name a
+/// group of the resources and groups it lists, expanded where it is used.
+class ResourceDeclLoad : public StmtLoad {
+  public:
+    ResourceDeclLoad(Reference ref) : StmtLoad(StmtType::Resource), ref_(ref) {}
+
+    const Reference &ref() const { return ref_; }
+
+    bool unordered() const { return unordered_; }
+    void setUnordered(bool unordered) { unordered_ = unordered; }
+
+    void addMember(Reference member) { members_.push_back(std::move(member)); }
+    const std::vector<Reference> &members() const { return members_; }
+    /// A group (`resource io = [stdout, fs]`): every use of it stands for its members.
+    bool isGroup() const { return group_; }
+    void setGroup(bool group) { group_ = group; }
+
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    Reference ref_;
+    bool unordered_ = false;
+    bool group_     = false;
+    std::vector<Reference> members_;
 };
 
 class UsingNamespaceLoad : public StmtLoad {

@@ -481,6 +481,9 @@ class Formatter {
 
     std::any visitDataDecl(cst::DataDecl context);
 
+    std::any visitResourceDecl(cst::ResourceDecl context);
+    std::any visitResourceClause(cst::ResourceClause context);
+
     std::any visitTypeDecl(cst::TypeDecl context);
 
     std::any visitRetStmt(cst::RetStmt context);

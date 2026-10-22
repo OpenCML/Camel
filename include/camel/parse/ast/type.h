@@ -168,6 +168,28 @@ class FuncTypeLoad : public TypeLoad {
     std::string uri_;
 };
 
+/// The resources a function type publishes (design effects plan 3.1): `pure` says a call
+/// touches none, `uses x, fs` names the parameters and the resources it touches. Attached to the
+/// function type it is written after; a declaration's clause is attached to the function type of
+/// its signature, so a body-less declaration and a function type carry the same thing.
+class ResourceClauseLoad : public Load {
+  public:
+    ResourceClauseLoad() : Load(LoadType::ResourceClause) {}
+
+    bool pure() const { return pure_; }
+    void setPure(bool pure) { pure_ = pure; }
+
+    void addUse(Reference use) { uses_.push_back(std::move(use)); }
+    const std::vector<Reference> &uses() const { return uses_; }
+
+    const std::string toString() const override;
+    const std::string geneCode() const override;
+
+  private:
+    bool pure_ = false;
+    std::vector<Reference> uses_;
+};
+
 class UnitTypeLoad : public TypeLoad {
   public:
     UnitTypeLoad(Reference ref) : TypeLoad(TypeType::Unit), ref_(ref) {}
