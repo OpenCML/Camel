@@ -21,6 +21,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -737,6 +738,30 @@ bool PythonModule::load() {
     }
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("python", [ctx]() { return createPythonExecutor(ctx); });
+    // The purity of every operator of the module (design principles 3.3), which the declaration
+    // loader requires before it accepts a body-less declaration (`Builder::declareNativeOperator`,
+    // src/compile/gir/builder_modules.cpp:385; H157, H166). All twelve are effectful: each one
+    // observes or advances the interpreter, which no argument names. `py_call`, `py_exec`,
+    // `py_eval` and `py_run` execute arbitrary Python; `py_attr` may run a descriptor or a
+    // property; `py_import` runs a module body and writes `sys.modules`; `py_print`/`py_println`
+    // write the interpreter's standard output; `py_wrap` creates an object whose identity and
+    // reference count are interpreter state, `py_unwrap` reads an object that Python code can
+    // have changed, and `py_dispose` drops a reference. None is state-only: their state is the
+    // interpreter, not a variable of the program.
+    camel::core::OperatorTable::instance().declare(
+        "python",
+        {{"py_call", false},
+         {"py_call_kw", false},
+         {"py_exec", false},
+         {"py_eval", false},
+         {"py_run", false},
+         {"py_attr", false},
+         {"py_import", false},
+         {"py_print", false},
+         {"py_println", false},
+         {"py_wrap", false},
+         {"py_unwrap", false},
+         {"py_dispose", false}});
     loaded_ = true;
     return true;
 }

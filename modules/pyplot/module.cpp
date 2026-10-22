@@ -18,6 +18,7 @@
 #include "camel/compile/gir.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/operator_traits.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/other.h"
@@ -341,6 +342,11 @@ bool PyplotModule::load() {
     }
     context_ptr_t ctx = context_;
     context_->registerExecutorFactory("pyplot", [ctx]() { return createPyplotExecutor(ctx); });
+    // The purity of the module's operator (design principles 3.3). `plot` writes an image file
+    // (or opens a window when matplotlib shows one): no pass may fold, merge or drop the call.
+    // Without this entry the declaration loader refuses a body-less declaration of `pyplot:plot`
+    // (`Builder::declareNativeOperator`, src/compile/gir/builder_modules.cpp:385; H157, H166).
+    camel::core::OperatorTable::instance().declare("pyplot", {{"plot", false}});
     loaded_ = true;
     return true;
 }
