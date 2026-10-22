@@ -1,0 +1,83 @@
+# H27d 报告
+
+分支：`handover/H27d-partial-overload`，从 `develop` 切出。任务书：`reviews/H17-H22.md` 的「追加：H27c 检查意见」第 2 条 —— 部分应用的上下文实参必须与普通调用一样选重载：**先按精确匹配选，没有精确匹配时才让字面量进入形参类型**；`with <k: int>` 与 `with <k: f32>` 同时存在时 `scale<2>` 选 `int`。依据设计原则 4.4（`with` 参数、`f<w>` 是部分应用）与 5.1（字面量按上下文取类型）。工作树里完成，未提交、未建分支、未推送。
+
+## 1. 规则与位置
+
+### 规则
+
+上下文实参的重载选择与普通调用同构：
+
+1. 先只让「实参值本身的类型就是形参类型」的候选参与选择（**精确匹配**）。
+2. 精确匹配恰有一个，选它；一个都没有时，才允许字面量进入形参类型（隐含进入 `T?` / `T!`、数字字面量按值进入、复合字面量按元素进入），再在这一批里选。
+3. 被采用的那一批里仍不止一个时，维持 H27c 的 `PartialApplicationRefused`（部分应用作值时没有「按声明顺序取第一个」的既定规则，见第 6 节）。
+4. 名字不是字面量：精确匹配不到就仍被拒，永不转换（5.1）。
+
+### 位置
+
+实现在 `Builder::partialApplicationOf`（`src/compile/gir/builder_calls.cpp`）。`fits` 增加 `entering` 参数：
+
+- **精确那遍**只认 `param->assignableFrom(boundTypes[i])`；
+- **进入那遍**再依次认 `entersImplicitly`、`literalValueOfExpr` + `literal::kindEnters`（数字字面量），以及 `compositeLiteralEntersIn`（数组 / 结构体字面量，元素转换与报错沿用 H27b / H27c 的做法）。
+
+这与普通调用的两遍完全对应：`visitLinkNode` 里 `accepts(funcType, false)` 用 `StaticFuncTypeResolver::resolve(withInputTypes, normInputTypes)`（实参类型原样），`accepts(funcType, true)` 才用 `enteringTypes`（`builder_operators.cpp`）；后者的注释明确写了「先按实参原类型试，使 `f(5)` 在 `f(x: int)` 与 `f(x: int?)` 之间有精确匹配时选 `int`」。所以「精确」只等于可赋值，`entersImplicitly`（`null`、`[]`、`T?` 包装）属于第二遍。
+
+候选先按声明顺序收集（程序函数去掉被装饰的；算子的固定签名；函数类型的值本身），再做两遍筛选；`expected`（位置要求的函数类型，例如 `apply(scale<3>, 4)`）对两遍都先做过滤，因此「位置指定了函数」仍然优先于精确 / 进入。
+
+### 与本工作树实际代码位置的出入
+
+任务书点名 `builder_operators.cpp` 的 `partialApplicationOf` / `fits`；本工作树里 `partialApplicationOf` 与它的 `fits` 在 `builder_calls.cpp`（H27c 的改动也在这里），`builder_operators.cpp` 里的是普通调用的 `enteringTypes`，本次按它对齐。`builder_generics.cpp` 里的 `fits`（约 661 行）是泛型实例化的类型变量合一，不参与上下文实参的选择；泛型函数本身仍不能部分应用（`partialApplicationOf` 对 `genericDrefs_` 直接返回空），本次未触及。
+
+## 2. 用例
+
+新增 `test/cases/consistency/partial_application/overload_choice.cml`（四后端一致）：
+
+| 写法 | 候选 | 期望 | 反证 |
+|---|---|---|---|
+| `scale<2>`（`s(3)`） | `with <k: int>`、`with <k: f32>` | `int`，输出 `6` | 若选 `f32` 会输出 `6.0` |
+| `at<[7.0, 8.0]>`（`a(1)`） | `with <xs: float[]>`、`with <xs: f32[]>` | `float[]`（小数默认 `float`），输出 `16.0` | 若选 `f32[]` 会输出 `8.0` |
+| `half<3>`（`h(1.5)`） | 只有 `with <k: f32>` | 没有精确匹配，字面量进入，输出 `4.5` | — |
+
+新增负例 `test/cases/consistency/partial_application/err_overload_choice_name.cml`：`let n = 2`（`int`）配 `with <k: f32>` 与 `with <k: float>` 两个候选，名字在两个候选上都不精确、也不进入，报 `PartialApplicationRefused`（`18:18`，消息列出两个候选）。H27c 的 `err_context_argument_name.cml`（只有一个 `with <k: f32>` 候选）原样保留并通过 —— 这就是「必须保留的拒绝：名字不转换」。
+
+计划里新增 5 个测试条目：`partial_application.overload_choice`（nvm / fvm / jit / prl 各一条）与 `partial_application.err_overload_choice_name`。
+
+## 3. 生成文件
+
+| 文件 | 生成器 | 变化 |
+|---|---|---|
+| `test/plans/feat/parse/golden/ast_hashes.txt` | `python test/tools/parsecheck/check.py snapshot --update` | 2107 个文件：新增 2 个用例（各 1 行）；另**补上 H17c 合入 `develop` 时漏掉的两处**（`loops/state_in_place.cml` 的哈希、新文件 `trans/cpp/loop_state_in_place.cml`）。后两处不是本次改动造成的：`develop` 的 `ast_hashes.txt` 在本次改动前就与工作树不一致，若不一起重生成，`snapshot` 检查会失败。 |
+| `docs/diagnostics.md` | `node scripts/diagnostics-catalog.mjs --write` | 未变：没有新增 / 删除 / 改写的诊断（167 条；`--check`、`--verify-doc` 通过），因此没有重写。 |
+
+## 4. 验证
+
+构建：`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h27d-overload`，Release，退出 0。逐个计划 `node scripts/test.js <plan> --jobs 8`：
+
+| 目标 | 结果 |
+|---|---|
+| `test/plans/feat/consistency/partial_application.plan.toml` | 25 / 25（原有 20 条 + 新增 5 条） |
+| `test/plans/feat/compile/overloads.plan.toml` | 12 / 12 |
+| `test/plans/feat/consistency/entering.plan.toml` | 57 / 57 |
+| `test/plans/feat/compile/function_values.plan.toml` | 14 / 14 |
+| `test/plans/feat/compile/function_value_positions.plan.toml` | 6 / 6 |
+| `test/plans/feat/compile/call_syntax.plan.toml` | 4 / 4 |
+| `test/plans/feat/compile/literal_context.plan.toml` | 45 / 45 |
+| `test/plans/feat/compile/generics.plan.toml` | 63 / 63 |
+| `test/plans/feat/parse/frontend.plan.toml` | 4 / 4（`frontend.ast_snapshot` 读重生成后的快照） |
+| `test/plans/smoke` | 10 / 10 |
+| `python test/tools/parsecheck/check.py snapshot` | 2107 个文件全部按记录读，0 处不同 |
+| `node scripts/diagnostics-catalog.mjs --check` / `--verify-doc` | 167 条；`docs/diagnostics.md` 是最新的 |
+
+合计 240 个测试条目，0 失败。改动只在部分应用的候选选择上，因此除 `partial_application` 外只跑了同一条路径的计划（重载、隐含进入、函数值及其位置、管道 `f<w>`、字面量上下文、泛型）与 `smoke`。
+
+## 5. 改动的期望
+
+无。没有为了让测试通过而改任何既有期望或基准输出；新增用例全部是新文件 / 新条目，`overload_choice` 用 `verify_script` 断言，不引入 golden 文件。
+
+## 6. 未决 / 语言问题
+
+1. **「进入那遍」有多个候选时怎么办**：例如 `with <k: f32>` 与 `with <k: float>` 同时存在、实参是 `2`，两个字面量都进入。当前仍按 H27c 的做法拒绝（不是本次任务要求改变的行为）；普通调用在第二遍会按声明顺序取第一个，部分应用作值是否也要这样，评审只回答了「精确优先」，没有裁定，未擅自决定。`err_ambiguous.cml`（两个精确候选同名）同样保持拒绝。
+2. **被采用那批里的多候选**：同上，本实现要求「恰有一个」。这与 H27c 一致；若语言作者希望与普通调用完全同构（声明顺序兜底），需要另立一条并改 `err_ambiguous` 的期望。
+3. **位置指定函数类型仍先于两遍**：`apply(scale<3>, 4)` 由 `expected`（`(x: int) => int`）筛掉 `f32` 重载，然后精确匹配取 `int`。这是既有行为，本次未改。
+4. **泛型函数的上下文实参**：泛型函数不能作部分应用（`partialApplicationOf` 对 `genericDrefs_` 返回空），本次的精确优先规则没有泛型实例这一路；若以后允许 `f<T><w>` 的部分应用，需要把同一两遍规则接到泛型解析上。
+5. **普通调用的第二遍与部分应用的差异**：普通调用第二遍允许「多个候选时取声明顺序」，部分应用拒绝；这是本次保留下来的唯一不对称，已在第 1 条列出。
