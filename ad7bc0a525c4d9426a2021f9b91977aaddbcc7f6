@@ -1,0 +1,102 @@
+# H96：步骤 6 的 `indices`（`..ts`、`..e`、`constas` 未做）
+
+分支 `handover/H96-static-loop-step6`，从 `origin/develop` 的 `0a4161ec4` 起（该提交已含 H86 的 `static loop` 与 H90 的两条裁定）。本报告只覆盖计划 §6 中真正落地的那一部分：`static for (j) in indices ts` 与 `static loop ... for (j) in indices ts`。计划 §6 的其余部分（rest 参数、`f(t, ..ts)`、`..e` 拼接、`constas` 值参数、`StaticTuple`）**没有做**，原因与建议见 §6。
+
+## 1. 语法与语义
+
+`indices` 是 `static for` 与 `static loop` 共用的头的第二种 iterable，与 `fields` 并列：
+
+```
+staticForHeader
+    : 'for' '(' identDef (',' identDef)? ')' 'in' ('fields' typeExpr | 'indices' dataExpr)
+    ;
+```
+
+- `static for (j) in indices ts => 块`：在实例化时把元组值 `ts` 的**位置**展开，每个位置执行一次块；`static loop s = init ... for (j) in indices ts do 体` 是同一组轮次上的折叠。轮数就是元组的元数，所以空元组零轮、零轮时 `static loop` 的值是初值。
+- `indices` 后是**值位置**，不是类型位置：`ts` 是任意元组类型的表达式，`TypeHeadScope` 只在 `fields` 分支进入。这是 H90 对“`fields` / `match type` 后是类型位置”的裁定的另一面——`indices` 不继承它，因为它的操作数是值。
+- `j` 是这一轮的位置，类型 `int`。它在体内有两种用法，且两种都成立：
+  - **值**：`acc + j`、`print(j)` 等；每轮的 `j` 是普通 `int` 的 `DATA` 节点。
+  - **键**：`t.[j]`、`ts.[j]`；`j` 同时把十进制位置放进编译期的值绑定，`t.[j]` 走与 `t.[0]` 相同的 `ACCS` 选择。
+- `indices` 只绑定一个名字。`static for (j, F) in indices ts` 在第二个名字处报语法错误（`SyntaxDiag::UnexpectedToken`），而不是默默忽略 `F`：`F` 是 `fields` 的字段类型名，`indices` 没有字段类型可给。元素类型可以由 `ts` 的类型读出；要不要给它一个名字（`F`）留给作者（§6 待决 3）。
+- 生成器只在体内可见：`j` 不泄漏到生成器之外，也不参与外层作用域。块自己的 `let j = ...` 仍会遮蔽生成器的 `j`；此后 `t.[j]` 是运行期键，照常报 `StaticAccessNotConstant`（已有行为，不因 `indices` 放宽）。
+- 操作数必须是**普通元组**（内部节点）。`T?`、`T!`、可变单元格是叶子（设计原则 13.5），结构体有字段名而没有位置：
+  - 不是元组：新增 `SemanticDiag::StaticIndicesNotTuple`（`0x000182`）。
+  - 类型尚未具体化：沿用 `SemanticDiag::StaticTypeNotConcrete`。
+- `indices` 的 `static for` 也可以写成语义推导式 `( static for (j) in indices ts => e )`，得到元组。结构体推导式 `{ static for (j) in indices ts => e }` **没有字段名可给**，本步选择明确拒绝（`SemanticDiag::ConstructNotSupported`，帮助文本指向元组形式），而不是悄悄生成一个字段名为 `"0"`、`"1"` 的结构体。这条是取舍，不是计划的规定（§6 待决 4）。
+
+```cml
+func sum(t: (int, int, int)): int {
+    return static loop acc = 0 for (j) in indices t do acc + t.[j]
+}
+
+func positions(t: (int, string)): (int, int) {
+    return (static for (j) in indices t => j)
+}
+```
+
+## 2. 图
+
+`indices` 与 `fields` 一样是**展开机制**，不是运行期循环：
+
+- 生成器本身没有节点；每轮是当前图里的直线代码。
+- `ts.[j]` 与手写的 `ts.[0]`、`ts.[1]` 建同一个 `ACCS`，按位置升序。
+- `j` 作为值时是 `DATA`（`int`）；它不建端口、不建变量、不建 `FILL`。
+- 操作数只用来确定元组类型与元数；本实现会为它建一次值节点（见 §6 待决 2）。对局部变量/参数，这个节点就是变量本身的节点（不额外复制），所以 `loopSum` 与手写 `((0 + t.0) + t.1) + t.2` 的图逐节点、逐边相同；对带副作用的调用操作数，则会保留一次求值。
+- 多状态 `static loop` 与 H86 相同：体的元组仍物化成 k 个 `ACCS` 再取分量（`StaticTuple` 未引入）。
+
+## 3. 诊断
+
+| 诊断 | 代码 | 触发 |
+|---|---|---|
+| `SemanticDiag::StaticIndicesNotTuple` | `0x000182` | `indices` 的操作数不是普通元组（结构体、标量、`T?`/`T!`、单元格、数组、函数） |
+| `SemanticDiag::StaticTypeNotConcrete` | `0x000172` | 操作数的类型在实例化后仍未具体化 |
+| `SemanticDiag::StaticAccessNotConstant` | `0x000179` | 体内同名局部遮蔽 `j` 后，`t.[j]` 是运行期键 |
+| `SemanticDiag::ConstructNotSupported` | `0x00001F` | 结构体推导式用 `indices` 生成（没有字段名） |
+| `SyntaxDiag::UnexpectedToken` | 语法 | `static for (j, F) in indices ...` 的第二个名字 |
+
+`0x17B`–`0x17D` 已属于 body-less declaration；`StaticIndicesNotTuple` 取 `0x182`，`docs/diagnostics.md` 由生成器重排。`StaticForNotComposite` 的语义保持给 `fields`（结构体/元组都算 composite）；`indices` 用更贴切的 `StaticIndicesNotTuple`，因为它要的是“元组”而不是“可遍历的复合类型”。
+
+## 4. H86 的四个待决，按本步落地情况回答
+
+1. **多状态拆元组的中间节点**：仍未引入 `StaticTuple`。`static loop` 多状态仍是“体的元组 → k 个 `ACCS` → 取分量”，与 H86 相同；`indices` 不改变这一点。计划 §6.3 的 `StaticTuple` 是解决它的正确位置，见 §6。
+2. **`static loop` 作语句、值被丢弃**：没有新增规则。`static loop` 是表达式；写成语句时按普通表达式语句丢弃值，若整条语句是纯的，仍由现有“未使用值”规则（`rejectUnusedPureResult`）拒绝。纯效应的折叠要写回状态或用 `sync` 块，与 H86 的行为一致。是否给 `static loop` 单独开“值可丢弃”的口子，仍留给作者。
+3. **`indices` 与 `fields` 头如何合并**：`indices` 与 `fields` 共用 `parseStaticForHeader`，因此 `static loop` 直接接受 `for (j) in indices ts`，不需要另写一个头。`indices` 只绑一个名字，`(j, F)` 在第二个名字处拒绝；`fields` 仍绑两个名字。H86 问的“`static loop` 是否也接受 `indices`”，本步的答案是**接受**，与计划 §6.1 的共享头一致。
+4. **展开出的绑定是否可遮蔽外层**：现状是**可以**，本步没有加新的遮蔽诊断。`j` 与 H86 的 `n` 走同一条路径；体内 `let j` 遮蔽生成器的 `j`，并因此把 `t.[j]` 变成运行期键（`StaticAccessNotConstant`），而不是静默选中位置。这是一条“遮蔽可见、后果明确”的现状，不是裁定。
+
+## 5. 测试与验收
+
+- 新增 `test/cases/compile/static_expansion/indices.cml`：`static loop` 对元组求和、`j` 当值（`positions` 推导式）、外层泛型类型参数给元数与元组类型、空元组返回初值、`j` 参与算术、`fields` 体内嵌套 `indices`。
+- 新增 `indices_graph.cml` 与 `indices_graph_matches_unrolled`：`static loop ... indices` 与手写 `((0 + t.0) + t.1) + t.2` 逐节点逐边相同。`positions`（`( static for (j) in indices t => j )`）留在同一文件里进入 GIR 快照，但不与手写的 `(0, 1)` 比较——两者签名不同，`positions` 是函数体、`(0, 1)` 是调用点的值，端口集合本来就不一样；它的值由 `indices.cml` 的 stdout 锁定。图里没有 `SFOR`/`SLOOP`/`SACC`/`LOOP` 节点。
+- 负例：`indices_not_tuple.cml`（`StaticIndicesNotTuple`）、`indices_shadowed_key.cml`（`StaticAccessNotConstant`）、`indices_two_names.cml`（`SyntaxDiag::UnexpectedToken`）、`indices_struct_comprehension.cml`（`ConstructNotSupported`）。
+- 格式化：`test/cases/format/indices.cml` 与 golden；`format_keeps_ast` 覆盖 `indices` 头的两种写法。
+- 语言参考中英双语在 6.8.4 增加 `indices` 小节，6.8.5 的遍历说明改为共享头；两份 `08_top_level_and_grammar.md` 由 `node scripts/check-grammar.mjs --write` 重新生成（121 个产生式）；`docs/diagnostics.md` 由 `node scripts/diagnostics-catalog.mjs --write` 重新生成。
+- 解析前端 AST 快照在主机已有本次提交后重新生成并取回。生成时发现基线本身有 4 个文件（`comprehensions.cml`、`fields_and_access.cml`、`format/static_for_and_access.cml` 与其 golden）自 H90 的 `c8e71dca4` 起就与 `ast_hashes.txt` 不一致：H90 改了这四个文件的 `fields ()` / `fields ((x: int) => int)` 写法，但没有重新生成快照（快照最后一次更新在 H89 的 `c62861793`）。本次 `--update` 一并修正；`feat/parse/frontend` 在基线上本来就是红的。新的清单还把 H89 之后新增、旧清单里没有的文件补了进去（`comprehension_field_order.cml`、`comprehension_value_type.cml`、`type_position_empty_tuple.cml`、`tags/independent.cml` 等）。快照共 2401 个文件。
+
+验收（Linux 主机，Release，`-Jobs 8`，`890bfa314` 上 `-NoBuild` 一次跑完）：
+
+| 计划 | 结果 |
+|---|---|
+| `feat/compile/static_expansion` | 33/33 |
+| `feat/parse/frontend` | 4/4（AST 快照 2401 个文件） |
+| `feat/format/core` | 14/14 |
+| `smoke` | 10/10 |
+
+四个计划合计 61/61。
+
+## 6. 待决与未做
+
+**未做（计划 §6 的其余部分）**：
+
+1. **rest 参数与 `..ts`**：需要 `ParamDecl` 的 rest 标记、`FunctionType` 的 rest 元数据、模板实例化时按实参元组展开端口、调用点 `..` 展开，以及“rest 函数不可当值”的约束。这是 §6 的主体，改动面远大于 `indices`，本步没有把它做 Half-way。
+2. **`..e` 与 `StaticTuple`**：计划 §6.1/§6.3 的关键是“编译期元组不物化”。`indices` 的本次实现没有引入 `StaticTuple`，因此 `static loop` 的多状态中间元组仍物化，`..e` 拼接无从谈起。计划明确建议先做“只支持 `..ts` 和 `static for indices`”的最小提交；本步把 `indices` 做完整，`..ts` 留给下一步。
+3. **`constas` 值参数**：`column(constas n, ts)` 的 `n` 要进实例键、调用点必须是常量。计划 §0.3 把它列为作者问题（Q2），没有裁定；本步不猜。
+
+**本步需要作者确认的取舍**：
+
+1. **操作数是否求值**：计划 §6.3 说 `indices` 的操作数“只用于取类型，不建值节点”。在 `StaticTuple` 尚未存在时，要拿到 `ts` 的具体类型必须把它构建成值；本实现对局部变量/参数不产生额外节点，但对调用等有副作用的操作数会求值一次。若作者要求严格“只取类型、不求值”，需要在 AST/GCT 里给 `indices` 保留类型而不求值，或等 `StaticTuple`。
+2. **`indices` 是否接受结构体**：本步只接受元组，结构体报 `StaticIndicesNotTuple`。如果作者希望 `indices` 也遍历结构体（位置即声明顺序），需要改诊断与文档；计划 §6.1 写的是“`ts` 必须是元组类型”，所以本步从严。
+3. **`indices` 要不要第二个名字 `F`**：计划 §6.1 只给 `indices` 一个上下文名，没有说 `F`。本步拒绝 `(j, F)`；如果作者希望元素类型也有名字，语法与 GCT 都要加一个绑定。
+4. **结构体推导式 + `indices`**：本步明确拒绝，理由是结构体字段必须有名字。另一种可能是“自动用 `"0"`、`"1"` 作字段名”或“把 `{ ... }` 读成元组”，两者都是新语义，计划没有规定，因此没有选。
+5. **空元组的 `indices`**：零轮，`static loop` 返回初值，`static for` 什么都不建。这与 `fields {}` 的零轮一致；若作者认为空元组不该能写 `indices`，需要另加诊断。
+
+**已知差异**：计划 §6.3 的“`indices` 不建值节点”和 §6.3 的 `StaticTuple` 是同一个设计的两半。本步只落地了“位置展开”这一半；图等价测试覆盖的是“操作数是参数/局部元组”的常见形态，不覆盖“操作数是带副作用调用”的形态。
