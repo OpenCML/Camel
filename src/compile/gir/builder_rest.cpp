@@ -1,0 +1,400 @@
+/**
+ * Copyright (c) 2024 the OpenCML Organization
+ * Camel is licensed under the MIT license.
+ * You can use this software according to the terms and conditions of the
+ * MIT license. You may obtain a copy of the MIT license at:
+ * [https://opensource.org/license/mit]
+ *
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
+ * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+ * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ *
+ * See the the MIT license for more details.
+ *
+ * Author: Zhenjie Wei
+ * Created: Oct. 22, 2026
+ * Updated: Oct. 22, 2026
+ * Supported by: National Key Research and Development Program of China
+ */
+
+/*
+ * Rest parameters (design principles 5.5, H51 step 6). A function with a rest parameter has no
+ * runtime arity, so it is not given a graph and is not a value: each direct call expands its
+ * body into the caller's graph (inlineRestCall). The fixed parameters are bound to the nodes of
+ * the arguments, and the rest parameter is bound to the nodes the call leaves over, whether
+ * written out or expanded from `..e`. The expansion is straight-line code in the caller: no
+ * call node, no instance and no runtime tuple for `..ts`.
+ */
+
+#include "builder.h"
+#include "builder_helpers.h"
+#include "builder_support.h"
+
+#include "camel/core/data/composite/tuple.h"
+#include "camel/core/rtdata/tuple.h"
+#include "camel/core/type/composite/tuple.h"
+
+#include <algorithm>
+
+#define DEBUG_LEVEL -1
+
+namespace camel::compile::gir {
+
+using namespace camel::core::error;
+using namespace camel::core::type;
+
+const Builder::RestBinding *Builder::restBindingNamed(const std::string &name) const {
+    // A local of the same name shadows the rest parameter, exactly as a parameter does.
+    if (nodeScope_->has(name, false)) {
+        return nullptr;
+    }
+    for (auto it = restBindings_.rbegin(); it != restBindings_.rend(); ++it) {
+        if (it->name == name) {
+            return &*it;
+        }
+    }
+    return nullptr;
+}
+
+node_handle_t
+Builder::materializeRestBinding(const RestBinding &binding, const GCT::node_ptr_t &at) {
+    return packStaticValues(false, binding.type, binding.values, at, "gir.rest.fill");
+}
+
+std::vector<node_handle_t> Builder::expandRestArgument(
+    const GCT::node_ptr_t &operand, const std::string &written, const GCT::node_ptr_t &call) {
+    if (operand->type() == GCT::NodeKind::DREF) {
+        if (const RestBinding *binding = restBindingNamed(operand->name());
+            binding != nullptr) {
+            return binding->values;
+        }
+    }
+    const node_handle_t value = valueNodeOf(visit(operand));
+    if (value == nullptr) {
+        diags_->of(SemanticDiag::RestArgumentNotTuple)
+            .atOrigin(operand->origin() != 0 ? operand->origin() : call->origin())
+            .commit(written);
+        throw BuildAbortException();
+    }
+    Type *type = valueTypeOf(nodeTypeOf(value));
+    // A tuple comprehension is packed into a FILL whose With inputs are all its elements. A
+    // tuple literal has already been expanded at GCT, so a FILL here has no constant slots.
+    if (nodeIsKind(value, runtime::GCNodeKind::Fill) && type->code() == TypeCode::Tuple) {
+        const auto payload = nodeDraftOf(value)->payloadOf(nodeIdOf(value));
+        if (payload.size() >= sizeof(runtime::GCFillBody)) {
+            const auto *fill = reinterpret_cast<const runtime::GCFillBody *>(payload.data());
+            const auto with  = withInputsOf(value);
+            if (fill->fillKind == runtime::GCFillKind::Tuple &&
+                with.size() == tt::as_ptr<TupleType>(type)->size()) {
+                std::vector<node_handle_t> values;
+                values.reserve(with.size());
+                for (const auto ref : with) {
+                    values.emplace_back(nodeDraftOf(value), ref);
+                }
+                return values;
+            }
+        }
+    }
+    diags_->of(SemanticDiag::RestArgumentNotTuple)
+        .atOrigin(operand->origin() != 0 ? operand->origin() : call->origin())
+        .commit(written);
+    throw BuildAbortException();
+}
+
+node_handle_t Builder::inlineRestCall(
+    const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
+    std::vector<Argument> &normInputs, const GCT::node_ptr_t &call, Type *expectedResult) {
+    FunctionType *signature = tmpl->funcType;
+    const size_t withCount  = signature->withTypesCount();
+    const size_t normCount  = signature->normTypesCount();
+    ASSERT(signature->hasRest() && normCount > 0 && restBindings_.size() < 64,
+           "A rest signature has its rest parameter last.");
+    const size_t fixedCount = normCount - 1;
+    const std::string restName(signature->argNameAt(withCount + normCount - 1));
+
+    if (withInputs.size() != withCount) {
+        diags_->of(SemanticDiag::ArgumentsMismatch)
+            .atOrigin(call->origin())
+            .commit(signature->toString(), "the with-arguments given at the call");
+        throw BuildAbortException();
+    }
+    if (normInputs.size() < fixedCount) {
+        diags_->of(SemanticDiag::RestArgumentsMismatch)
+            .atOrigin(call->origin())
+            .commit(tmpl->name, normInputs.size(), fixedCount);
+        throw BuildAbortException();
+    }
+    // The body of a rest function of another module may name that module's values, which are
+    // not enclosing nodes of the caller's graph; expanding it here is not possible yet.
+    if (tmpl->module != module_) {
+        diags_->of(SemanticDiag::RestFunctionNeedsExpansion)
+            .atOrigin(call->origin())
+            .commit(
+                tmpl->name,
+                "the function is declared in another module; a rest function is expanded at "
+                "its call, and only a call in its own module is supported for now");
+        throw BuildAbortException();
+    }
+
+    // The fixed arguments bind the type variables and are held to their parameters here, where
+    // the expansion replaces the ordinary call.
+    type_bindings_t bindings = tmpl->outerBindings;
+    const auto bindOne = [&](Type *pattern, Argument &argument, bool isWith, size_t index) {
+        Type *actual = valueTypeOf(nodeTypeOf(argument.node));
+        if (genericDrefs_.contains(argument.node)) {
+            diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                .atOrigin(argument.expr != nullptr ? argument.expr->origin() : call->origin())
+                .commit(
+                    tmpl->name,
+                    actual->toString(),
+                    "a rest function's fixed parameter takes a value, not a generic function",
+                    signature->toString());
+            throw BuildAbortException();
+        }
+        if (!bindTypeVars(pattern, actual, bindings)) {
+            diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                .atOrigin(argument.expr != nullptr ? argument.expr->origin() : call->origin())
+                .commit(
+                    tmpl->name,
+                    actual->toString(),
+                    isWith ? "the with-argument does not have the form of its parameter"
+                           : "the argument does not have the form of its parameter",
+                    signature->toString());
+            throw BuildAbortException();
+        }
+    };
+    for (size_t i = 0; i < withCount; ++i) {
+        bindOne(signature->withTypeAt(i), withInputs[i], true, i);
+    }
+    for (size_t i = 0; i < fixedCount; ++i) {
+        bindOne(signature->normTypeAt(i), normInputs[i], false, i);
+    }
+    // Every type variable of the fixed parameters must be known: the rest parameter gives no
+    // types of its own, and the body cannot be built around an open `T`.
+    for (size_t i = 0; i < withCount; ++i) {
+        if (containsTypeVar(substituteTypeVars(signature->withTypeAt(i), bindings))) {
+            diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    signature->toString(),
+                    "a type variable is not determined by the fixed arguments",
+                    signature->toString());
+            throw BuildAbortException();
+        }
+    }
+    for (size_t i = 0; i < fixedCount; ++i) {
+        Type *wanted = substituteTypeVars(signature->normTypeAt(i), bindings);
+        if (containsTypeVar(wanted)) {
+            diags_->of(SemanticDiag::GenericArgumentsMismatch)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    signature->toString(),
+                    "a type variable is not determined by the fixed arguments",
+                    signature->toString());
+            throw BuildAbortException();
+        }
+        node_handle_t entered = checkValue(normInputs[i].node, wanted, normInputs[i].expr);
+        if (entered == nullptr) {
+            diags_->of(SemanticDiag::ArgumentsMismatch)
+                .atOrigin(normInputs[i].expr != nullptr ? normInputs[i].expr->origin()
+                                                        : call->origin())
+                .commit(
+                    signature->toString(),
+                    valueTypeOf(nodeTypeOf(normInputs[i].node))->toString());
+            throw BuildAbortException();
+        }
+        normInputs[i].node = entered;
+    }
+    for (size_t i = 0; i < withCount; ++i) {
+        Type *wanted = substituteTypeVars(signature->withTypeAt(i), bindings);
+        node_handle_t entered = checkValue(withInputs[i].node, wanted, withInputs[i].expr);
+        if (entered == nullptr) {
+            diags_->of(SemanticDiag::ArgumentsMismatch)
+                .atOrigin(withInputs[i].expr != nullptr ? withInputs[i].expr->origin()
+                                                        : call->origin())
+                .commit(signature->toString(), valueTypeOf(nodeTypeOf(withInputs[i].node))->toString());
+            throw BuildAbortException();
+        }
+        withInputs[i].node = entered;
+    }
+
+    std::vector<node_handle_t> restValues;
+    restValues.reserve(normInputs.size() - fixedCount);
+    type_vec_t restTypes;
+    restTypes.reserve(normInputs.size() - fixedCount);
+    for (size_t i = fixedCount; i < normInputs.size(); ++i) {
+        restValues.push_back(normInputs[i].node);
+        restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
+    }
+    RestBinding rest;
+    rest.name   = restName;
+    rest.values = std::move(restValues);
+    rest.type   = TupleType::create(std::move(restTypes));
+
+    Type *exitType =
+        signature->hasExitType() ? substituteTypeVars(signature->exitType(), bindings) : nullptr;
+    if (exitType != nullptr && containsTypeVar(exitType)) {
+        diags_->of(SemanticDiag::GenericArgumentsMismatch)
+            .atOrigin(call->origin())
+            .commit(
+                tmpl->name,
+                signature->toString(),
+                "the result type holds a type variable that the fixed arguments do not determine",
+                signature->toString());
+        throw BuildAbortException();
+    }
+
+    if (instantiationDepth_ >= kMaxInstantiationDepth) {
+        diags_->of(SemanticDiag::GenericInstantiationCycle)
+            .atOrigin(call->origin())
+            .commit(tmpl->name);
+        throw BuildAbortException();
+    }
+
+    // The expansion is built where the function was declared (its names resolve there), but
+    // into the caller's graph: there is no instance graph and no call node.
+    struct ExpansionState {
+        Builder &self;
+        compile_graph_ptr_t graph;
+        node_scope_ptr_t nodeScope;
+        graph_scope_ptr_t graphScope;
+        decorated_scope_ptr_t decoratedScope;
+        template_scope_ptr_t templateScope;
+        type_bindings_t bindings;
+        bool waited, synced, varied, declaresVariable, calleeAllowed;
+        node_handle_t lastSynced;
+        const GCT::Node *syncedOverride, *unused;
+        std::pair<GCT::node_ptr_t, node_handle_t> lastBlock;
+        StaticBodyScope *staticBody;
+        size_t staticDepth;
+        RestBody *restBody;
+        size_t restCount;
+        Type *expected;
+        camel::core::module::module_ptr_t module;
+        std::vector<std::string> namespacePath;
+        std::vector<const std::vector<Reference> *> usingFrames;
+        ExpansionState(Builder &b)
+            : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
+              decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
+              bindings(b.typeBindings_), waited(b.waited_), synced(b.synced_),
+              varied(b.varied_), declaresVariable(b.declaresVariable_),
+              calleeAllowed(b.genericCalleeAllowed_), lastSynced(b.lastSyncedNode_),
+              syncedOverride(b.syncedBlockOverride_),
+              unused(b.unusedStatement_), lastBlock(b.lastBlockStatement_),
+              staticBody(std::exchange(b.activeStaticBody_, nullptr)),
+              staticDepth(std::exchange(b.staticDepth_, 0)),
+              restBody(std::exchange(b.activeRestBody_, nullptr)),
+              restCount(b.restBindings_.size()), expected(b.expectedValueType_),
+              module(b.module_), namespacePath(b.namespacePath_), usingFrames(b.usingFrames_) {
+            ++self.instantiationDepth_;
+        }
+        ~ExpansionState() {
+            --self.instantiationDepth_;
+            self.currGraph_            = graph;
+            self.nodeScope_            = nodeScope;
+            self.graphScope_           = graphScope;
+            self.decoratedScope_       = decoratedScope;
+            self.templateScope_        = templateScope;
+            self.typeBindings_         = std::move(bindings);
+            self.waited_               = waited;
+            self.synced_               = synced;
+            self.varied_               = varied;
+            self.declaresVariable_     = declaresVariable;
+            self.genericCalleeAllowed_ = calleeAllowed;
+            self.lastSyncedNode_       = lastSynced;
+            self.syncedBlockOverride_  = syncedOverride;
+            self.unusedStatement_      = unused;
+            self.lastBlockStatement_   = lastBlock;
+            self.activeStaticBody_     = staticBody;
+            self.staticDepth_          = staticDepth;
+            self.activeRestBody_       = restBody;
+            self.restBindings_.resize(restCount);
+            self.expectedValueType_    = expected;
+            self.module_               = module;
+            self.namespacePath_        = std::move(namespacePath);
+            self.usingFrames_          = std::move(usingFrames);
+        }
+    } state(*this);
+
+    AttrScope attrs(currentAttrs_, tmpl->attrs);
+    currGraph_      = tmpl->ownerGraph; // only while the scopes are entered; see below
+    module_         = tmpl->module;
+    namespacePath_  = tmpl->namespacePath;
+    usingFrames_    = tmpl->usingFrames;
+    nodeScope_      = tmpl->nodeScope;
+    graphScope_     = tmpl->graphScope;
+    decoratedScope_ = tmpl->decoratedScope;
+    templateScope_  = tmpl->templateScope;
+    typeBindings_   = tmpl->outerBindings;
+    typeBindings_.insert(typeBindings_.end(), bindings.begin(), bindings.end());
+    waited_               = false;
+    synced_               = state.synced;
+    varied_               = false;
+    declaresVariable_     = false;
+    genericCalleeAllowed_ = false;
+    // Expand into the caller's graph, not into the graph the function was declared in.
+    currGraph_            = state.graph;
+    expectedValueType_    = exitType != nullptr ? exitType : expectedResult;
+    activeRestBody_       = nullptr;
+    restBindings_.push_back(std::move(rest));
+
+    RestBody bodyScope;
+    bodyScope.exitType = exitType;
+    activeRestBody_    = &bodyScope;
+    const bool outerSynced = synced_;
+    if (outerSynced) {
+        syncedBlockOverride_ = tmpl->func->at(1);
+    }
+
+    enterBlockScope();
+    try {
+        for (size_t i = 0; i < withCount; ++i) {
+            if (!insertNode(std::string(signature->argNameAt(i)), withInputs[i].node)) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .atOrigin(call->origin())
+                    .commit(std::string(signature->argNameAt(i)));
+                throw BuildAbortException();
+            }
+        }
+        for (size_t i = 0; i < fixedCount; ++i) {
+            const std::string name(signature->argNameAt(withCount + i));
+            if (!insertNode(name, normInputs[i].node)) {
+                diags_->of(SemanticDiag::DuplicateParameter)
+                    .atOrigin(call->origin())
+                    .commit(name);
+                throw BuildAbortException();
+            }
+        }
+        node_handle_t bodyResult = visitExecNode(
+            tmpl->func->at(1), exitType != nullptr ? exitType : expectedResult);
+        if (bodyScope.returned) {
+            bodyResult = bodyScope.value;
+        }
+        if (exitType != nullptr && exitType->code() != TypeCode::Void && bodyResult != nullptr) {
+            node_handle_t entered = checkValue(bodyResult, exitType, call);
+            if (entered == nullptr) {
+                diags_->of(SemanticDiag::ReturnTypeMismatch)
+                    .atOrigin(call->origin())
+                    .commit(
+                        valueTypeOf(nodeTypeOf(bodyResult))->toString(),
+                        exitType->toString(),
+                        tmpl->name + ": " + signature->toString());
+                throw BuildAbortException();
+            }
+            bodyResult = entered;
+        }
+        if (exitType != nullptr && exitType->code() == TypeCode::Void) {
+            bodyResult = nullptr;
+        }
+        leaveBlockScope();
+        LEAVE("REST");
+        return bodyResult;
+    } catch (...) {
+        leaveBlockScope();
+        throw;
+    }
+}
+
+} // namespace camel::compile::gir

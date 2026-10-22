@@ -151,6 +151,8 @@ class Tree {
         const std::string &typeName, bool byIndices = false);
     /// `t.[key]` (children: the target, the key expression).
     node_ptr_t makeStaticAccess();
+    /// `..e` (child: the operand): the elements of the compile-time tuple are the arguments.
+    node_ptr_t makeSpreadArg();
     /// A comprehension (child: the `static for` that generates it): `isStruct` for
     /// `{ static for ... }`, false for `( static for ... )` (H51 step 4).
     node_ptr_t makeComprehension(bool isStruct);

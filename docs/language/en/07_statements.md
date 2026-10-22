@@ -293,6 +293,30 @@ func main(): int sync {
 - When nothing determines the variables it is the compile-time error `SemanticDiag::GenericFunctionAsValue` (or, for an argument, `SemanticDiag::GenericArgumentsMismatch`), which names them: `let g = id` has no context (write the type); in `apply(id, id)` each argument waits for the other.
 - An imported generic function can be a value too (`xss->map<reverse>`, with `reverse` from the `array` module).
 
+**Rest parameters**: the last parameter of a function declaration may be written `..ts`. It has no type and stands for every argument left over at a call. The fixed arguments written at the call bind the fixed parameters in order, and the remaining arguments become the elements of `ts`; `ts` is a tuple known at compile time and can be read with `indices ts`, `ts.[j]` and `..ts`.
+
+```cml
+func sum(..ts): int {
+    return static loop acc = 0 for (j) in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    println(sum(1, 2, 3))
+    println(sum(..(4, 5)))
+    return 0
+}
+```
+
+```text
+6
+9
+```
+
+- **The call is expanded at compile time.** A function with a rest parameter has no runtime arity, so no instance graph is built for it and no call node is made: every direct call expands its body into the caller's graph, with the fixed parameters bound to the argument nodes and `ts` bound to the remaining nodes. `ts` may have 0 elements.
+- **A rest argument** is written `..e` and must be the last argument of the call. `e` must be a compile-time tuple: a tuple literal, a tuple comprehension, or the `..ts` of an enclosing rest function. A runtime tuple value has no fixed arity and is `SemanticDiag::RestArgumentNotTuple`; an argument after `..e` is `SemanticDiag::RestArgumentNotLast`.
+- A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration (writing `..` in a lambda, a function type or a rule is a syntax error). Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
+- A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. For now the call must also be in the same module as the declaration: expanding a function body into another module is left to the `tree_*` task, and is reported as `SemanticDiag::RestFunctionNeedsExpansion`.
+
 **Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value.
 
 ## 7.6 Annotations

@@ -725,6 +725,10 @@ void Builder::buildFuncBody(
     // A function (or a lambda) written inside a `match type` arm has returns of its own.
     StaticBodyScope *outerStaticBody = std::exchange(activeStaticBody_, nullptr);
     const size_t outerStaticDepth    = std::exchange(staticDepth_, 0);
+    // A nested function is a boundary for rest parameters too: `..ts` of an enclosing
+    // expansion cannot be spread inside another graph.
+    RestBody *outerRestBody         = std::exchange(activeRestBody_, nullptr);
+    const size_t outerRestBindings  = restBindings_.size();
     try {
         registerGraphOrigin(context_, graph, gct, "gir.func.graph");
         const auto withPorts = graph->draft().withPorts();
@@ -779,6 +783,8 @@ void Builder::buildFuncBody(
         bodyStates_[graph.get()] = BodyState::Built;
         activeStaticBody_        = outerStaticBody;
         staticDepth_             = outerStaticDepth;
+        activeRestBody_          = outerRestBody;
+        restBindings_.resize(outerRestBindings);
         leaveScope();
         throw e.during(
             std::format("compiling function '{}'", name.empty() ? graph->name() : name),
@@ -789,11 +795,15 @@ void Builder::buildFuncBody(
         failedBodies_.insert(graph.get());
         activeStaticBody_        = outerStaticBody;
         staticDepth_             = outerStaticDepth;
+        activeRestBody_          = outerRestBody;
+        restBindings_.resize(outerRestBindings);
         leaveScope();
         throw;
     }
     activeStaticBody_ = outerStaticBody;
     staticDepth_      = outerStaticDepth;
+    activeRestBody_   = outerRestBody;
+    restBindings_.resize(outerRestBindings);
 }
 
 

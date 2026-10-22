@@ -1321,16 +1321,52 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     const bool isAssignment = gct->size() == 3 && gct->at(0)->type() == GCT::NodeKind::DREF &&
                               gct->at(0)->name() == "__assn__";
     Type *assignedType = nullptr;
+    // The declaration of a rest function, when this call names one: its arguments are expanded
+    // into a body in place of the call, and no instance is made (inlineRestCall).
+    template_ptr_t restTemplate;
+    if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end() &&
+                                                       generic->second->funcType->hasRest()) {
+        restTemplate = generic->second;
+    }
+    const size_t restFixedCount =
+        restTemplate != nullptr ? restTemplate->funcType->normTypesCount() - 1 : 0;
     for (size_t i = 1; i < gct->size(); i++) {
         Type *wanted = argumentSignature && i <= argumentSignature->normTypesCount()
                            ? argumentSignature->normTypeAt(i - 1)
                            : nullptr;
+        if (restTemplate != nullptr && i - 1 >= restFixedCount) {
+            wanted = nullptr; // the rest parameter takes every remaining argument
+        }
         if (isAssignment && i == 2 && assignedType != nullptr) {
             wanted = assignedType;
         }
         ExpectedValueScope argumentScope(
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
+        if (gct->at(i)->type() == GCT::NodeKind::SPRD) {
+            // `..e`: the elements are arguments of their own. The marker is last, so nothing
+            // follows that could be mistaken for an element.
+            if (i + 1 != gct->size()) {
+                const GCT::node_ptr_t operand = gct->at(i)->at(0);
+                diags_->of(SemanticDiag::RestArgumentNotLast)
+                    .atOrigin(operand->origin() != 0 ? operand->origin() : gct->origin())
+                    .commit(
+                        operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                               : std::string("expression"));
+                throw BuildAbortException();
+            }
+            const GCT::node_ptr_t operand = gct->at(i)->at(0);
+            std::vector<node_handle_t> elements = expandRestArgument(
+                operand,
+                operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                       : std::string("expression"),
+                gct);
+            for (const node_handle_t &element : elements) {
+                normInputs.push_back({element, operand});
+                normInputTypes.push_back(valueTypeOf(callableValueType(element)));
+            }
+            continue;
+        }
         node_handle_t inputNode = visitOperand(gct->at(i), gct);
         normInputs.push_back({inputNode, gct->at(i)});
         normInputTypes.push_back(valueTypeOf(callableValueType(inputNode)));
@@ -1714,6 +1750,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         currGraph_->addDependencyGraph(targetGraph);
         targetNode     = createFuncDataNode(targetGraph, false, true);
         targetFuncType = targetGraph->funcType();
+    } else if (restTemplate != nullptr) {
+        // A rest function is expanded here, into the caller's graph: its fixed parameters take
+        // the arguments and the rest parameter takes the nodes left over. No call node is
+        // made and the function is never an instance.
+        return inlineRestCall(restTemplate, withInputs, normInputs, gct, expectedResult);
     } else if (auto generic = genericDrefs_.find(targetNode); generic != genericDrefs_.end()) {
         // A call of a generic function: the argument types select (and, the first time,
         // build) the instance, which is then called like any other function.

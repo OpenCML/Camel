@@ -1951,6 +1951,20 @@ Value Builder::visitSpreadValue(cst::SpreadValue context) {
 }
 
 /*
+restValue : '..' dataExpr ;
+The argument is a compile-time tuple whose elements are the arguments (design principles 5.5);
+GCT keeps the marker and GIR expands it at the call.
+*/
+Value Builder::visitRestValue(cst::RestValue context) {
+    ENTER("RestValue");
+    node_ptr_t res = createNodeAs<DataLoad>(DataType::SpreadArg);
+    setNodeTokenRangeByContext(res, context);
+    *res << any2node(visitExpr(context->expr()));
+    LEAVE("RestValue");
+    return res;
+}
+
+/*
 keyTypePair  : identDef ':' typeExpr ;
 */
 Value Builder::visitKeyTypePair(cst::KeyTypePair context) {
@@ -1999,27 +2013,36 @@ which GCT lowers to a hole and GIR fills from the function type the position exp
 */
 Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
-    bool isVar = false;
+    const bool isRest = static_cast<bool>(context->tok(TK::DotDot));
+    bool isVar        = false;
     if (context->tok(TK::KwVar)) {
         isVar = true;
     }
     const bool isConst = context->has(TK::KwConst);
     Reference ref(context->get<cst::IdentDef>()->text());
-    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst);
+    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest);
     setNodeTokenRangeByContext(namedPairNode, context);
-    if (context->type()) {
+    if (isRest) {
+        // `..ts` is untyped: the tuple of the arguments left over is made at the call. A type
+        // written after it is still read, so that GCT can report it.
+        if (context->type()) {
+            *namedPairNode << any2node(visitType(context->type()));
+        }
+    } else if (context->type()) {
         *namedPairNode << any2node(visitType(context->type()));
     } else {
         node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
         setNodeTokenRangeByContext(inferNode, context->get<cst::IdentDef>());
         *namedPairNode << inferNode;
     }
-    node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
-    if (context->expr()) {
-        setNodeTokenRangeByContext(dataExprOptNode, context->expr());
-        *dataExprOptNode << any2node(visitExpr(context->expr()));
+    if (!isRest) {
+        node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
+        if (context->expr()) {
+            setNodeTokenRangeByContext(dataExprOptNode, context->expr());
+            *dataExprOptNode << any2node(visitExpr(context->expr()));
+        }
+        *namedPairNode << dataExprOptNode;
     }
-    *namedPairNode << dataExprOptNode;
     LEAVE("KeyParamPair");
     return namedPairNode;
 }
@@ -4649,6 +4672,8 @@ Value Builder::visitExpr(syn::Node context) {
     switch (context.kind()) {
     case NK::SpreadValue:
         return visitSpreadValue(cst::SpreadValue(context));
+    case NK::RestValue:
+        return visitRestValue(cst::RestValue(context));
     case NK::WaitExpr:
         return visitWaitExpr(cst::WaitExpr(context));
     case NK::IfExpr:

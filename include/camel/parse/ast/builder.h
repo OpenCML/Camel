@@ -142,6 +142,7 @@ class Builder {
     Value visitTypeDecl(syntax::cst::TypeDecl context);
     Value visitRetStmt(syntax::cst::RetStmt context);
     Value visitSpreadValue(syntax::cst::SpreadValue context);
+    Value visitRestValue(syntax::cst::RestValue context);
     Value visitKeyTypePair(syntax::cst::KeyTypePair context);
     Value visitKeyValuePair(syntax::cst::KeyValuePair context);
     Value visitKeyParamPair(syntax::cst::KeyParamPair context);

@@ -489,6 +489,8 @@ class Formatter {
 
     std::any visitSpreadValue(cst::SpreadValue context);
 
+    std::any visitRestValue(cst::RestValue context);
+
     std::any visitKeyTypePair(cst::KeyTypePair context);
 
     std::any visitKeyValuePair(cst::KeyValuePair context);

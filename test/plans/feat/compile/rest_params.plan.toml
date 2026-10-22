@@ -1,0 +1,123 @@
+id = "compile.rest_params"
+order = 340
+tier = "fast"
+tags = ["feat", "compile", "generics", "rest"]
+desc = "Rest parameters (design principles 5.5, H51 step 6): `..ts` is the last parameter, a call expands the body in place, and `..e` passes the elements of a compile-time tuple."
+
+[[tests]]
+name = "rest_params"
+desc = "A rest function takes every argument left over: written out, expanded from a tuple literal, forwarded as `..ts`, with a fixed parameter before it, with no rest arguments at all, and read by position."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/rest_params.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ["6", "9", "13", "8", "0", "9 10"].join(String.fromCharCode(10))
+assert(input.normalized.stdout.trim() === want, `rest parameters changed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_call_has_no_call_node"
+desc = "The instance is the caller's code: the graph of `main` has the expanded body and no CALL node (and no static node left)."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/rest_inline.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.stdout.split(String.fromCharCode(10))
+const at = lines.findIndex((line) => line.includes('label="main"'))
+assert(at > 0, "the graph of main is missing")
+const indent = lines[at - 1].slice(0, lines[at - 1].indexOf(lines[at - 1].trim()))
+const end = lines.findIndex((line, i) => i > at && line === indent + "}")
+assert(end > at, "the graph of main has no end")
+const body = lines.slice(at, end)
+const calls = body.filter((line) => line.includes('type="CALL"'))
+assert(calls.length === 0, `the rest call was not expanded: ${calls[0]}`)
+const staticNodes = body.filter((line) => /type="(SFOR|SLOOP|SACC|SCCS)"/.test(line))
+assert(staticNodes.length === 0, `a static node was left in the graph: ${staticNodes[0]}`)
+}
+"""
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_parameter_not_last"
+desc = "A rest parameter is last in the signature."
+kind = "negative"
+case = "../../../cases/compile/rest_params/rest_param_not_last.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RestParameterNotLast"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_parameter_typed"
+desc = "The rest parameter is untyped: its element types are those of the arguments at each call."
+kind = "negative"
+case = "../../../cases/compile/rest_params/rest_param_typed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RestParameterTypeNotSupported"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_argument_not_last"
+desc = "`..e` is the last argument: what follows it cannot be told from its elements."
+kind = "negative"
+case = "../../../cases/compile/rest_params/rest_arg_not_last.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RestArgumentNotLast"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_argument_not_tuple"
+desc = "`..e` needs a compile-time tuple, not a runtime value."
+kind = "negative"
+case = "../../../cases/compile/rest_params/rest_arg_not_tuple.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RestArgumentNotTuple"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_function_as_value"
+desc = "A rest function has no runtime arity, so it is not a value: it is called, not named."
+kind = "negative"
+case = "../../../cases/compile/rest_params/rest_as_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RestFunctionNeedsExpansion"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_arguments_too_many"
+desc = "Expanding `..e` at a call to a fixed-arity function gives too many arguments: the ordinary arity check sees every element."
+kind = "negative"
+case = "../../../cases/compile/rest_params/rest_too_many.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["NoMatchingFunction"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rest_arguments_too_few"
+desc = "A rest parameter stands for the arguments after the fixed ones: a fixed parameter still needs its argument."
+kind = "negative"
+case = "../../../cases/compile/rest_params/rest_too_few.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RestArgumentsMismatch"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

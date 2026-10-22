@@ -253,9 +253,9 @@ class ParserImpl {
     void parseIdentRef(NK kind);
     void parseIdentList();
     void parseBracketedIdents(TK closer, NK kind);
-    void parseKeyParamPair();
-    void parsePairedParams(TK closer);
-    void parseParentParams();
+    void parseKeyParamPair(bool allowRest);
+    void parsePairedParams(TK closer, bool allowRest);
+    void parseParentParams(bool allowRest = false);
     void parseAngledParams();
     void parseEnumType();
     void parseEnumVariant();
