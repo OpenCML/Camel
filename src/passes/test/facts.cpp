@@ -361,9 +361,25 @@ std::unordered_map<GraphId, GCGraph *> graphsById(const Program &program, GCGrap
     return byId;
 }
 
+/// Prints the revision of every graph of the program of `root` (`FACTS <prefix> revision <graph>
+/// <n>`). A commit keeps a graph's revision unless it changed that graph (graph.h), so comparing
+/// these lines before and after a pass says which graphs the pass changed.
+void printRevisions(
+    std::ostream &os, const Program &program, GCGraph *root, std::string_view prefix) {
+    const auto byId = graphsById(program, root);
+    for (GCGraph *graph : collectReachableGraphs(program, root)) {
+        if (byId.at(graph->id()) != graph) {
+            continue;
+        }
+        os << std::format("FACTS {} revision {} {}\n", prefix, graph->name(), graph->revision());
+    }
+}
+
 /// Reads every stored fact against the program of `root`, prints the tallies per graph (lines
-/// `FACTS <prefix> <graph> valid=.. revalidated=.. stale=..`) and returns how many facts are
-/// about graphs the program does not have.
+/// `FACTS <prefix> <graph> valid=.. revalidated=.. stale=..`) and per kind on that graph (lines
+/// `FACTS <prefix> kind <graph> <kind> valid=.. revalidated=.. stale=..`), and returns how many
+/// facts are about graphs the program does not have. The per-kind lines are how a case says
+/// *which* facts a rewrite invalidated, not just how many.
 size_t tally(
     std::ostream &os, FactStore &store, const Program &program, GCGraph *root,
     std::string_view prefix) {
@@ -379,6 +395,7 @@ size_t tally(
         size_t valid = 0, revalidated = 0, stale = 0;
     };
     std::map<std::string, Tally> perGraph;
+    std::map<std::pair<std::string, std::string>, Tally> perKind;
     size_t gone = 0;
     std::vector<StoredFact> stored;
     store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
@@ -393,7 +410,14 @@ size_t tally(
             ++gone;
             continue;
         }
-        Tally &t = perGraph[anchors[0].graph->name()];
+        const std::string graphName = anchors[0].graph->name();
+        const std::string kindName  = kindInfo(fact.kind).key;
+        Tally &t                    = perGraph[graphName];
+        Tally &k                    = perKind[{graphName, kindName}];
+        const auto bump             = [&](size_t Tally::*field) {
+            ++(t.*field);
+            ++(k.*field);
+        };
         // A node the graph no longer has (a rewrite took it out) is a fact about nothing: stale.
         const bool present = std::ranges::all_of(anchors, [](const Anchor &anchor) {
             return anchor.node == kInvalidNodeRef ||
@@ -401,24 +425,29 @@ size_t tally(
                     anchor.graph->node(anchor.node) != nullptr);
         });
         if (!present) {
-            ++t.stale;
+            bump(&Tally::stale);
             continue;
         }
         switch (store.probe(fact.kind, anchors, fact.stamp.targetHash)) {
         case Status::Valid:
-            ++t.valid;
+            bump(&Tally::valid);
             break;
         case Status::Revalidated:
-            ++t.revalidated;
+            bump(&Tally::revalidated);
             break;
         default:
-            ++t.stale;
+            bump(&Tally::stale);
             break;
         }
     }
     for (const auto &[name, t] : perGraph) {
         os << std::format(
             "FACTS {} {} valid={} revalidated={} stale={}\n", prefix, name, t.valid, t.revalidated, t.stale);
+    }
+    for (const auto &[key, t] : perKind) {
+        os << std::format(
+            "FACTS {} kind {} {} valid={} revalidated={} stale={}\n", prefix, key.first, key.second,
+            t.valid, t.revalidated, t.stale);
     }
     return gone;
 }
@@ -434,6 +463,12 @@ FactSeedTestPass::apply(const camel::runtime::Program *program, std::ostream &os
     for (const auto &[kind, n] : perKind) {
         os << "FACTS seeded " << kind << " " << n << "\n";
     }
+    // The stamp of a kind that reads declarations holds this epoch; comparing it with the check's
+    // line says whether a declaration was added between the two passes (docs/design/op-semantics
+    // 10.3: the epoch is one reason a fact goes stale even when its graph did not change).
+    os << std::format(
+        "FACTS epoch seed={}\n", camel::core::OperatorTable::instance().declarationEpoch());
+    printRevisions(os, *program, program->root(), "seed");
     return program;
 }
 
@@ -441,8 +476,11 @@ const camel::runtime::Program *
 FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     camel::runtime::GCGraph *graph = program->root();
     FactStore &store = context_->facts();
-    const size_t gone              = tally(os, store, *program, graph, "graph");
+    os << std::format(
+        "FACTS epoch check={}\n", camel::core::OperatorTable::instance().declarationEpoch());
+    const size_t gone = tally(os, store, *program, graph, "graph");
     os << "FACTS gone " << gone << "\n";
+    printRevisions(os, *program, graph, "check");
 
     // What was stale is computed again; then every stored fact must equal a fresh computation.
     const Counts before = store.counts();
@@ -450,21 +488,43 @@ FactCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << "FACTS recomputed " << store.counts().computed - before.computed << "\n";
     const auto byId = graphsById(*program, graph);
     size_t equal = 0, differ = 0;
+    // Every fact a consumer could read — one whose graphs and nodes the program still has — must
+    // be valid now: what the tally above found stale was recomputed, and a fact about a node or a
+    // graph that is gone is not readable (the probe drops it). This is the no-silent-staleness
+    // check: after the recompute pass, no readable fact is stale.
+    size_t readableValid = 0, readableStale = 0, unreadable = 0;
     std::vector<StoredFact> stored;
     store.forEach([&](const StoredFact &fact) { stored.push_back(fact); });
     for (const StoredFact &fact : stored) {
         std::vector<Anchor> anchors;
+        bool present = true;
         for (const auto &[id, node] : fact.anchors) {
             if (auto it = byId.find(id); it != byId.end()) {
                 anchors.push_back(Anchor{program, it->second, node});
+                const bool nodePresent =
+                    node == kInvalidNodeRef ||
+                    (it->second->containsNodeRef(node) && it->second->node(node) != nullptr);
+                present = present && nodePresent;
+            } else {
+                present = false;
             }
         }
-        if (anchors.size() == fact.anchors.size()) {
-            if (const auto same = store.verify(fact.kind, anchors)) {
-                ++(*same ? equal : differ);
-            }
+        if (anchors.size() != fact.anchors.size() || !present) {
+            ++unreadable;
+            continue;
+        }
+        const Status status = store.probe(fact.kind, anchors, fact.stamp.targetHash);
+        if (status == Status::Valid || status == Status::Revalidated) {
+            ++readableValid;
+        } else {
+            ++readableStale;
+        }
+        if (const auto same = store.verify(fact.kind, anchors)) {
+            ++(*same ? equal : differ);
         }
     }
+    os << std::format(
+        "FACTS after recompute valid={} stale={} gone={}\n", readableValid, readableStale, unreadable);
     os << std::format("FACTS verify equal={} differ={}\n", equal, differ);
     return program;
 }

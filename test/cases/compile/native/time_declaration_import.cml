@@ -1,0 +1,18 @@
+/**
+ * The declarations of `time` are what an importer sees: `now` gives a float, `strftime` takes a
+ * timestamp and a format and gives a string, `strptime` takes two strings and gives a float.
+ * Every call reaches the C++ operator (handover H19, step 10).
+ */
+module time_declaration_import
+
+import { now, strftime, strptime } from time
+
+func main(): int sync {
+    let t: float = now()
+    println(t > 0.0)
+    let text: string = strftime(0.0, '%Y-%m-%d')
+    println(text)
+    let parsed: float = strptime('1970-01-02', '%Y-%m-%d')
+    println(parsed > 0.0)
+    return 0
+}

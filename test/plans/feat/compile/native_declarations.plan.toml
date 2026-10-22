@@ -405,6 +405,35 @@ args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "re_type.cml:11:17", "argument types: <> (int, string)", "<re:test>: (pattern: string, text: string) => bool"]
 
+# ---- The declarations of `time`: the clock and its text forms (handover H133) ----
+
+[[tests]]
+name = "native.time_declaration_import"
+desc = "`time`'s declarations are the module's signature: an importer calls `now`, `strftime` and `strptime` with the declared float and string types and reads their declared results from `stdlib/time.cml`, and every call reaches the C++ operator."
+kind = "behavior"
+case = "../../../cases/compile/native/time_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "true\n1970-01-01\ntrue\n"
+
+[[tests]]
+name = "native.time_wrong_arity"
+desc = "`time:strftime` is declared with two ordinary arguments: a missing one is refused at the call, and the overload the message lists is the declaration's, parameter names included."
+kind = "negative"
+case = "../../../cases/compile/native/time_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_arity.cml:10:21", "(float)", "<time:strftime>: (timestamp: float, format: string) => string"]
+
+[[tests]]
+name = "native.time_wrong_type"
+desc = "An `int` where the declaration says `string`: refused at the declaration's type, and the signature in the message has the declaration's own parameter names (`text`, `format`) — `stdlib/time.cml`, not the C++, is the source."
+kind = "negative"
+case = "../../../cases/compile/native/time_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "time_type.cml:11:21", "argument types: <> (int, string)", "<time:strptime>: (text: string, format: string) => float"]
+
 # ---- Retired names are unknown names, not aliases (handover H122; design principles 1) ----
 #
 # `str::bytes` and `str::from_bytes` were deleted, not renamed: `bytes::encode`/`bytes::decode` are

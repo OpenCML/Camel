@@ -1156,6 +1156,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kSaturateSafeTestPass, SaturateSafeTestPass),
         TEST_PASS(kSaturateWideTestPass, SaturateWideTestPass),
         TEST_PASS(kSaturateOneRoundTestPass, SaturateOneRoundTestPass),
+        TEST_PASS(kSaturatePropsTestPass, SaturatePropsTestPass),
         TEST_PASS(kRegionsTestPass, RegionsTestPass),
         TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
         TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
