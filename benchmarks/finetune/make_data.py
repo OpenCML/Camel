@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E1 data: two separable Gaussian blobs with structure, pre-split into batches.
 
 The exported training-step graphs are shape-specialized (MLP: input [64,784],

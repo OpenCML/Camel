@@ -226,7 +226,8 @@ false
 
 - entering the nullable or fallible form: `5 as int?`, `null as int?`, `v as int!` (not needed where the target type is known, see [3.4](03_data_model.md));
 - constructing maps and sets: `[...] as Map<K, V>`, `[...] as Set<T>`;
-- checked conversion of module types: `t as Tensor<f32, const [3]>`, where the shape is checked at the conversion.
+- checked conversion of module types: `t as Tensor<f32, [3]>`, where the shape is checked at the conversion.
+- checked conversion of arrays: `a as f32[4]`, where the shape is checked at the conversion.
 
 `as` never changes the type of a value unchecked. The result of `json::decode` is a `Json`, which does not convert to another type with `as`; JSON of a known shape is decoded with `json::decode_as(s, [0])`, which checks the shape while decoding and gives a `T!`.
 
@@ -386,26 +387,32 @@ Tuple patterns, struct patterns, and identifier patterns on values of ordinary t
 
 ### 6.8.3 `match type`
 
-`match type` selects a branch by the **shape of a type**, for generic functions (design principles 5.5): `T` is concrete when the function is instantiated, the compiler builds only the selected branch, and the other branches are neither built nor type-checked (their names are still resolved).
+`match type` selects a branch by the **shape or the identity of a type**, for generic functions (design principles 5.5): `T` is concrete when the function is instantiated, the compiler builds only the selected branch, and the other branches are neither built nor type-checked (their names are still resolved).
 
 ```
 match type type {
     case struct => branch
     case tuple  => branch
+    case func   => branch
     case #leaf  => branch
+    case int    => branch
+    case MyStruct => branch
+    case T      => branch
     case _      => branch
 }
 ```
 
-- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
-- `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape.
-- The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`.
-- With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct does not compare concrete type names: `case int` or `case MyStruct` is not part of it, and every scalar goes through `#leaf`.
+- `struct` selects a structure; `tuple` selects an **ordinary** tuple; `func` selects a function type; `#leaf` selects every other type (scalars, `string`, arrays, functions, `T?`, `T!`, cells, ...). `struct` and `tuple` are the two shapes of an [R3 inner node](../../design/generic-structure/README.cn.md): `T?` and `T!` are tagged tuples and, like mutable cells, fall into `#leaf`, not `tuple`.
+- A type written in the pattern is an **identity pattern**: `case int`, `case Tensor<f32, [..]>`, `case MyStruct`, `case T`. Identity is **exact**: `case float` does not select `int` (`float` and `f64` are the same type, and so are `int` and `i64`; `int` and `i32` are not); `case f32` does not select `f64`; `case MyStruct` selects the declared name, not another structure with the same fields; `case T` substitutes the binding of `T` at the instantiation, so it selects exactly that type. Shapes and identities share one case and one `|` (`case tuple | MyStruct`), judged in the order written: a type an earlier case already selects is `SemanticDiag::StaticMatchPatternCannotMatch` in a later identity pattern.
+- `_` selects everything, like `#leaf`, and is the fallback spelling; both must be the last case. `case struct | tuple` selects either shape. `case int` before `case #leaf` is normal; after `#leaf`/`_` it is `SemanticDiag::StaticMatchUnreachableCase`.
+- The type after `match type` is a type position: a `(` there is always the start of a type, so `match type () { ... }` matches the empty tuple type; a function type takes one more pair of parentheses, `match type ((x: int) => int) { ... }`. The pattern after `case` is a type position too, with the same rule: `case (int, int)` and `case ()` are tuples, and a function type is written `case ((x: int) => int)`.
+- The type name in an identity pattern is resolved here: an unknown name is `SemanticDiag::UnresolvedTypeReference`; `void` and a `typeof` expression are not a type identity, and are `SemanticDiag::StaticMatchPatternCannotMatch`. Writing the same type twice in one case is also `StaticMatchPatternCannotMatch`.
+- With no matching case the error is `SemanticDiag::StaticMatchNotExhaustive`; a case after `#leaf`/`_` is `SemanticDiag::StaticMatchUnreachableCase`. The construct compares concrete type names: `case int` or `case MyStruct` is part of it, and a scalar no longer has to go through `#leaf`.
 - The selected branch becomes straight-line code at that position; the graph has no branch node. Its value is the value of the `match type`, and an empty branch has type `void`.
 - A generic function may omit its return type: each instance gets it from the selected branch (return-type inference). A recursive call that comes back to the **same type instance** while that instance's return type is still unknown reports `SemanticDiag::GenericInstantiationCycle`; recursion with strictly smaller type arguments finishes the child instance first as usual.
 
 ```cml
-func duplicate(t: typeas T) {
+func duplicate::<T>(t: T) {
     return match type T {
         case struct => (t, t)
         case tuple  => (t, t)
@@ -419,16 +426,16 @@ func duplicate(t: typeas T) {
 `static for (n, F) in fields T => block` expands the **field list** of `T` when the function is instantiated (design principles 5.5): the block runs once per field, and the expanded code becomes straight-line code at that position. The graph has no loop node.
 
 - `T` must be concrete and an [R3 inner node](../../design/generic-structure/README.cn.md): a struct or an **ordinary** tuple. `T?`, `T!`, a mutable cell, a scalar, an array and a function are leaves and report `SemanticDiag::StaticForNotComposite`; handle them with `match type` first.
-- `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type. Both are visible in the block only; `F` may be written in a type position (`let x: F`, `typeas F`) but is not a value.
+- `n` is the field name; for a tuple it is the decimal index (`"0"`, `"1"`, ...), in declaration order. `F` is the field type. Both are visible in the block only; `F` may be written in a type position (`let x: F`) but is not a value. Writing `_` instead of either name binds nothing for that round, as `_` does in `match`: `static for (n, _) in fields T => e` takes the field name only, `static for (_, F) in fields T => e` the type only (`_` is not a name, so writing it in the block stays undefined).
 - The type after `fields` is a type position too: a `(` there is always the start of a type, so the empty tuple is written `fields ()` without a `type EmptyTuple = ()` first; a function type takes one more pair of parentheses, `fields ((x: int) => int)`.
 - Fields are expanded in declaration order, each with its own block scope. An empty struct or tuple expands zero times and the block is not built at all.
 - As a statement, `static for` always drops the value of the block, and the construct has type `void`; where a value is needed, write the comprehension form (below).
-- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, or the `n` of an enclosing `static for`. Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
+- `t.[n]` takes a struct field or a tuple element; `n` must be a compile-time constant: a string or integer literal, the `n`/`j` of an enclosing `static for`, a `let` name bound to a constant (`let first = ...; t.[first]`; a `var` does not count, since it can be assigned another key before the access), an expression whose value is known at compile time (such as `( static for (n, F) in fields S => n ).[0]`), or a call of a pure function whose arguments are compile-time constants (`t.[first_field::<S>()]`), which the compiler folds to its value. A call whose body cannot be read at build time is refused by its own name (`SemanticDiag::FoldCallNotEvaluable`, and the other `FoldCall*` diagnostics for the reason it stopped). Only the selected field is built into the graph (one `ACCS`); no field is chosen at run time, so a run-time value cannot be the key (`SemanticDiag::StaticAccessNotConstant`).
 - A struct without that field reports `SemanticDiag::StaticAccessUnknownField`; a tuple index past the end (or a key that is not an index) reports `SemanticDiag::StaticAccessIndexOutOfRange`; a target that is not a struct or an ordinary tuple reports `SemanticDiag::StaticAccessNotInternal`. For a tuple, `t.["0"]` and `t.[0]` are the same element.
 - When the field's value is dropped (a `t.[n];` statement on its own), the field is checked but no `ACCS` is built; the target expression is still evaluated, so its effects remain.
 
 ```cml
-func show(t: typeas T) {
+func show::<T>(t: T) {
     static for (n, F) in fields T => {
         print(n, t.[n])
     }
@@ -462,6 +469,7 @@ func positions(t: (int, string)): (int, int) {
 
 - The **value of the block is the round's value**: unlike the statement form, it is not dropped. The block may use `let`, and its last statement's value is the field's value; a block that gives none (an empty block, or one ending in a statement without a value) reports `SemanticDiag::StaticComprehensionVoidElement`.
 - Each field's or element's **type comes from that round's value**, not from `F`: with `F` an `int` and the value a `float`, the result field is a `float`. The field names and their order still come from `T` in declaration order, which is what lets an expansion such as `tree_map` change the leaves and keep the shape.
+- **The same shape is written `T { ... }`**: `T { static for (n, F) in fields T => e }` takes both the field names and the kind (struct or tuple) from the one type `T`, so one `case struct | tuple` branch is enough. `T` must be the type the generator walks, or the comprehension reports `SemanticDiag::SameShapeComprehensionMismatch`; a leaf `T` (no fields) reports `SemanticDiag::SameShapeComprehensionNotComposite`. `{ ... }` and `( ... )` still pack a struct and a tuple only.
 - An empty struct or tuple has no round; the value is `{}` / `()` (a `FILL` with no slot).
 - The graph is straight-line code: each round builds the `ACCS` it reads, in declaration order, and the comprehension leaves no node of its own. A tuple comprehension first stays a compile-time tuple: used only by `indices`, `..` or `.[j]`, its elements stay separate and no `FILL` is built; used as a value (printed, returned, assigned to a runtime position), one `FILL` at the use packs the rounds' values into the same shape. A struct comprehension always packs one `FILL`. In `t.[n].[m]` the parent is read once and all inner fields share that `ACCS`, so the graph is the one the C++ `tree_map` builds for the same tree.
 - `{ static for ... }` in a position that needs a block (`case struct => { ... }`, `if c then { ... }`) is a comprehension too, so the statement form is not wrapped in another pair of braces: write `static for (n, F) in fields T => block`.
@@ -472,10 +480,9 @@ func doubled(t: {a: int, b: int}): {a: int, b: int} {
     return { static for (n, F) in fields {a: int, b: int} => t.[n] * 2 }
 }
 
-func rebuild(t: typeas T) {
+func rebuild::<T>(t: T) {
     return match type T {
-        case struct => { static for (n, F) in fields T => rebuild(t.[n]) }
-        case tuple => ( static for (n, F) in fields T => rebuild(t.[n]) )
+        case struct | tuple => T { static for (n, F) in fields T => rebuild(t.[n]) }
         case _ => t
     }
 }
@@ -496,7 +503,7 @@ static loop name = init (, name = init)* (for (n, F) in fields T | for (j) in in
 - Its effects are those of straight-line code: whether the body is a sync block is decided by the body itself (3.2), and each round's effects run in field order.
 
 ```cml
-func count(t: typeas T): int {
+func count::<T>(t: T): int {
     return static loop n = 0 for (name, F) in fields T do n + 1
 }
 
@@ -530,7 +537,7 @@ let found    = loop hit = -1 for x in xs while hit < 0 do if x > 9 then x else h
   - **Array**: the element itself; `range(a, b)` is one.
   - **String**: by code point, each element the one-character string of that code point, as `s[i]` gives it (11.1): the two rounds of `for c in '中文'` are `'中'` and `'文'`, and a multi-byte character counts once.
   - **Map**: the `(key, value)` pairs in key order (the traversal order of 11.3, as `items(m)` gives them), not insertion order: in `for kv in m` the keys are strictly ascending, and `kv.0` and `kv.1` take the pair apart.
-  - **Tensor**: along the first dimension, each element the sub-tensor with the first dimension dropped (sharing that slice of the data, not copied): a rank-2 `Tensor<f32, const [2, 3]>` gives two `Tensor<f32, const [3]>`, and a rank-1 tensor gives rank-0 sub-tensors (`sum(x)` is its number). The element type of a `Tensor` whose shape is unknown is `Tensor`. A rank-0 tensor has no first dimension and is not a sequence.
+  - **Tensor**: along the first dimension, each element the sub-tensor with the first dimension dropped (sharing that slice of the data, not copied): a rank-2 `Tensor<f32, [2, 3]>` gives two `Tensor<f32, [3]>`, and a rank-1 tensor gives rank-0 sub-tensors (`sum(x)` is its number). The element type of a `Tensor` whose shape is unknown is `Tensor`. A rank-0 tensor has no first dimension and is not a sequence.
   An empty array, empty string, empty map, or a tensor whose first extent is 0 runs no round, and the loop's value is the first state. **`while c`** goes on as long as the condition holds; the condition is a `bool` (`SemanticDiag::LoopConditionNotBool`). With both, each round looks at the condition first and then takes the next element: the loop ends when the condition fails or the elements are used up. At least one of them is written.
 - **No `break` and no `continue`**: ending early is written as the `while` condition, skipping the rest of a round as an `if`.
 - **Scope.** The first values and the sequence are evaluated once, where the loop is, and do not see the names of the head; the condition sees the names of the state, the body those and the name of `for`. A name of the head is given once (`SemanticDiag::LoopNameRepeated`). The condition and the body see the names around the loop (a `var` is read anew in every round).

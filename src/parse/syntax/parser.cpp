@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 12, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The parser: infrastructure, program, declarations and statements.
@@ -312,7 +296,7 @@ bool ParserImpl::startsDecl(TK kind) const {
     case TK::Hash:
         return true;
     case TK::Identifier:
-        return atTagDecl(0);
+        return atTagDecl(0) || atResourceDecl(0);
     default:
         return false;
     }
@@ -380,7 +364,7 @@ uint32_t ParserImpl::afterModifiers() const {
 }
 
 /// decl : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-///      | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+///      | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 /// Decided on the first token; after `export` on the next one (`export let`, `export type`, ...).
 /// The word `tag` is not reserved: a declaration starts with it only when a tag name follows
 /// (`atTagDecl`), so a value called `tag` still reads as a value.
@@ -413,6 +397,9 @@ void ParserImpl::parseDecl() {
         if (atTagDecl(1)) {
             return parseTagDecl();
         }
+        if (atResourceDecl(1)) {
+            return parseResourceDecl();
+        }
         if (next == TK::KwLet || next == TK::KwVar || next == TK::KwType || next == TK::LBrace) {
             return parseExportDecl();
         }
@@ -421,6 +408,9 @@ void ParserImpl::parseDecl() {
     default:
         if (atTagDecl(0)) {
             return parseTagDecl();
+        }
+        if (atResourceDecl(0)) {
+            return parseResourceDecl();
         }
         if (atAnalysisDecl(0)) {
             return parseAnalysisDecl();
@@ -671,6 +661,8 @@ void ParserImpl::parseImportItem() {
 }
 
 /// exportDecl : 'export' (dataDecl | typeDecl | bracedIdents)
+/// `export resource` is not this: the word after `export` decides, and `parseDecl` reads it as a
+/// resource declaration that carries its own `export` (see `resourceDecl`).
 void ParserImpl::parseExportDecl() {
     const size_t m = mark();
     bump();
@@ -695,7 +687,7 @@ void ParserImpl::parseUsingNamespaceDecl() {
 
 /// namespaceDecl : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 /// namespaceItem : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-///               | typeDecl | dataDecl
+///               | typeDecl | dataDecl | resourceDecl
 void ParserImpl::parseNamespaceDecl() {
     Depth depth(*this);
     const size_t m = mark();
@@ -789,10 +781,14 @@ void ParserImpl::parseFrontMatter() {
 }
 
 /// funcDecl : frontMatter ('with' angledParams)? 'export'? modifiers?
-///            'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+///            'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+///            resourceClause? whenClause? stmtBlock?
 ///
 /// Without a body the declaration stands for a C++ operator of the module the name is bound in
-/// (design principles 6.4): it has no block, and what it declares is its signature.
+/// (design principles 6.4): it has no block, and what it declares is its signature. The
+/// `uses`/`pure` clause after the result type says which resources a call touches (design
+/// effects plan 3.1). The optional `when` after it is the applicability condition (design
+/// principles 5.13, handover H234).
 void ParserImpl::parseFuncDecl() {
     const size_t m = mark();
     parseFrontMatter();
@@ -928,6 +924,21 @@ void ParserImpl::parseTagRef() {
     close(m, NK::TagRef);
 }
 
+/// whenClause : IDENTIFIER logicalOrExpr
+/// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
+/// after its signature (design principles 5.13). It is evaluated when the declaration is
+/// instantiated, not when it is parsed, and a false condition makes the declaration
+/// inapplicable rather than erroneous. It follows the return type and the resource clause and
+/// precedes the body, so a body-less native declaration may carry one too.
+/// The `funcDecl` production above gains this clause between `resourceClause` and `stmtBlock`;
+/// see the comment there.
+void ParserImpl::parseWhenClause() {
+    const size_t m = mark();
+    bump(); // `when`
+    parseExpr();
+    close(m, NK::WhenClause);
+}
+
 /// The part of funcDecl after its annotations; `m` marks where the declaration began.
 void ParserImpl::parseFuncDeclRest(size_t m) {
     if (eat(TK::KwWith)) {
@@ -946,9 +957,18 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     } else {
         parseIdentRef(NK::IdentRef);
     }
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
     parseParentParams(true, true);
     if (eat(TK::Colon)) {
         parseType();
+    }
+    if (atWord(0, "uses") || atWord(0, "pure")) {
+        parseResourceClause();
+    }
+    if (atWord(0, "when")) {
+        parseWhenClause();
     }
     // A function written without a body is the declaration of an operator of a C++ module: the
     // signature is the whole of it (design principles 6.4, handover H19 step 1). A block is
@@ -960,6 +980,35 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
         parseStmtBlock();
     }
     close(m, NK::FuncDecl);
+}
+
+/// typeParams : '::' '<' identDef (',' identDef)* ','? '>'
+///
+/// The type parameters of a generic declaration, written at its head right after the name
+/// (design principles 5.5): `func first::<T>(xs: T[]): T`. The spelling is the one a call site
+/// uses for explicit type arguments (`first::<int>(xs)`), so whether a declaration is generic is
+/// visible in its head; without `::<...>` it is not generic. `rule` and `fact` declare theirs the
+/// same way. A dimension name still binds where a shape first writes it (5.4) and may be listed
+/// here too, which is why the list can name one.
+void ParserImpl::parseTypeParams() {
+    const size_t m = mark();
+    bump(); // `::`
+    if (!panic_ && cur_ != TK::Lt && cur_ != TK::LAngle) {
+        unexpected({e(TK::Lt)});
+        return close(m, NK::TypeParams);
+    }
+    bump(); // `<`
+    {
+        Scope scope(*this, false);
+        parseIdentDef();
+        while (!panic_ && eat(TK::Comma) && cur_ == TK::Identifier) {
+            parseIdentDef();
+        }
+    }
+    if (!panic_ && !eat(TK::Gt)) {
+        unexpected({e(TK::Comma), e(TK::Gt)});
+    }
+    close(m, NK::TypeParams);
 }
 
 /// operatorName : IDENTIFIER (OPERATOR | '[' ']')
@@ -1094,6 +1143,31 @@ void ParserImpl::parseTypeDeclRest(size_t m) {
     close(m, NK::TypeDecl);
 }
 
+/// resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+///
+/// A resource declaration (design effects plan 3.1, design principles 3.3): `resource fs` names
+/// an ambient resource of the module, `resource io = [stdout, fs]` a group of resources and other
+/// groups, and `resource net unordered` says the accesses of a call may be reordered (step 8
+/// gives that meaning). `resource` and `unordered` are contextual: they are not reserved words,
+/// and a declaration starts with `resource` only when a name follows it.
+void ParserImpl::parseResourceDecl() {
+    const size_t m = mark();
+    eat(TK::KwExport);
+    bump(); // `resource`
+    expectName(NK::IdentDef);
+    if (eat(TK::Assign)) {
+        parseBracketedIdents(TK::RBracket, NK::BracketIdents);
+    } else if (atWord(0, "unordered")) {
+        bump();
+    }
+    close(m, NK::ResourceDecl);
+}
+
+/// Whether a resource declaration starts at offset `n`: `resource` followed by a name.
+bool ParserImpl::atResourceDecl(uint32_t n) const {
+    return atWord(n, "resource") && peek(n + 1) == TK::Identifier;
+}
+
 /// retStmt : ('return' | 'throw') dataList
 void ParserImpl::parseRetStmt() {
     const size_t m = mark();
@@ -1187,6 +1261,22 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind) {
 /// report it; the parameter lists of a lambda, a function type and a rule take neither.
 void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas) {
     const size_t m = mark();
+    if (lambdaParams_ && cur_ == TK::LParen) {
+        // A lambda parameter destructured as a tuple: `((a, b)) => ...`. The rule is the one of
+        // `let (a, b) = p`: the names take the elements of the tuple the position passes.
+        bump();
+        parseIdentDef();
+        while (cur_ == TK::Comma && peek(1) != TK::RParen && !panic_) {
+            bump();
+            parseIdentDef();
+        }
+        eat(TK::Comma);
+        if (!panic_) {
+            expect(TK::RParen);
+        }
+        close(m, NK::TupleParam);
+        return;
+    }
     if (allowRest && cur_ == TK::DotDot) {
         bump();
         parseIdentDef();
@@ -1243,6 +1333,7 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
     {
         Scope scope(*this, false);
         if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
+            (lambdaParams_ && cur_ == TK::LParen) ||
             (allowRest && cur_ == TK::DotDot) || (allowConstas && cur_ == TK::KwConstas)) {
             parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {

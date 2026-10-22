@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Aug. 17, 2024
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "builder.h"
 #include "builder_support.h"
@@ -407,7 +391,7 @@ any Builder::dispatch(const GCT::node_ptr_t &node) {
     case GCT::NodeKind::DECL:
         return visitDeclNode(node);
     case GCT::NodeKind::FUNC:
-        if (node->name().empty() && isGenericHere(node->at(0)->dataType())) {
+        if (node->name().empty() && isGenericHere(node->at(0)->dataType(), node)) {
             return anonymousTemplateOf(node);
         }
         return visitFuncNode(node);
@@ -495,7 +479,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
 
-    if (isGenericHere(type)) {
+    if (isGenericHere(type, gct)) {
         // A generic function is a template: its graphs are its instances.
         LEAVE("DECL");
         return nullptr;
@@ -504,6 +488,10 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     rejectRedeclaredFunction(gct->name(), funcType, gct);
     rejectOperatorConflict(gct->name(), funcType, gct);
     compile_graph_ptr_t graph = enterScope(funcType, gct->name());
+    // The declaration's parameter defaults are evaluated here, where the declaration is,
+    // before any body is built: a call written above the definition fills them too, and every
+    // call shares the one value (design principles 4.4, handover H235/H276).
+    evaluateDefaults(gct, funcType, graph.get(), false);
     leaveScope();
 
     LEAVE("DECL");
@@ -544,7 +532,7 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         camel::core::tag::attachPermissionsToDeclaration(
             *module_, Reference(name), signature, tags.permissions);
     }
-    if (isGenericHere(type)) {
+    if (isGenericHere(type, gct)) {
         // A generic function: registered as a template when its block was entered
         // (registerGenericTemplates), built when a call asks for an instance.
         LEAVE("FUNC");
@@ -565,6 +553,23 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name);
+    if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
+        // The condition belongs to the function, not to its instance: it is evaluated when
+        // this graph is selected by a call, where the types and the `with` arguments of the
+        // call are known (design principles 5.13).
+        whenClauses_[graph.get()] = *when;
+        // A condition that is malformed -- not a bool, a name the declaration does not make
+        // visible, a query an open type cannot answer -- is a declaration-site error, and is
+        // reported here rather than only when a call happens to select the function. A
+        // condition that reads a `with` parameter is left for the call, which alone knows the
+        // value.
+        const WhenResult early =
+            evaluateWhenCondition(when->condition, funcType, typeBindings_, {});
+        if (early.outcome != WhenOutcome::Holds && early.outcome != WhenOutcome::Fails &&
+            early.outcome != WhenOutcome::NeedsWithValue) {
+            reportWhenProblem(early, name, when->condition);
+        }
+    }
     if (camel::core::tag::declaresMacro(tags.declaration)) {
         graph->draft().setFlags(static_cast<uint8_t>(
             graph->draft().flags() | camel::runtime::kGraphFlagMacro));
@@ -592,6 +597,11 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     if (!annoNodes.empty()) {
         graph_ptr_t decorated = buildDecoratedGraph(name, graph, annoNodes);
         attachRuleGraphs(decorated, tags.declaration);
+        // The decorated function has the declaration's parameters: a call that leaves a
+        // defaulted one out fills the same value through it.
+        if (const auto found = defaults_.find(graph.get()); found != defaults_.end()) {
+            defaults_[decorated.get()] = found->second;
+        }
         insertDecoratedGraph(name, decorated);
         decoratedOf_[graph.get()] = decorated;
     }
@@ -778,6 +788,42 @@ void Builder::buildFuncBody(
             }
         }
         bodyStates_[graph.get()] = BodyState::Open;
+        // The defaults of the declaration's parameters, in the scope of its body: a
+        // declaration at a module's top level was evaluated already, where it is written
+        // (visitDeclNode), and an instance of a generic one takes its template's (H235).
+        evaluateDefaults(gct, funcType, graph.get(), true);
+        // A parameter destructured as a tuple: the port is the tuple, and the names take its
+        // elements (`((a, b)) => ...` binds as `let (a, b) = p` does). The parameter is one
+        // value, so nothing about the call changes; only the names of the body do.
+        if (const auto *tuples = GCT::Tree::of(gct)->tupleParamsOf(gct)) {
+            for (const auto &tupleParam : *tuples) {
+                const std::string paramName(funcType->argNameAt(tupleParam.index));
+                const bool isWith = tupleParam.index < funcType->withTypesCount();
+                Type *paramType   = isWith
+                                        ? funcType->withTypeAt(tupleParam.index)
+                                        : funcType->normTypeAt(
+                                              tupleParam.index - funcType->withTypesCount());
+                if (paramType->code() != TypeCode::Tuple ||
+                    tt::as_ptr<TupleType>(paramType)->size() != tupleParam.names.size()) {
+                    diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
+                        .atOrigin(gct->origin())
+                        .commit();
+                    throw BuildAbortException();
+                }
+                const auto *tuple = tt::as_ptr<TupleType>(paramType);
+                const auto port   = nodeAt(paramName);
+                ASSERT(port.has_value(), "A tuple parameter has its port.");
+                for (size_t i = 0; i < tupleParam.names.size(); ++i) {
+                    node_handle_t access = graph->addAccsNode(tuple->typeAt(i), i);
+                    linkNodes(LinkType::Norm, *port, access);
+                    registerNodeOrigin(context_, access, gct, "gir.tuple.param");
+                    insertNode(tupleParam.names[i], access);
+                    if (recorder_) {
+                        recordDeclaration(tupleParam.names[i], access, gct);
+                    }
+                }
+            }
+        }
         if (!funcType->hasExitType()) {
             inferredExitGraphs_.insert(graph.get()); // the body sets it from now on
         }

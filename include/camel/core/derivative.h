@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 29, 2026
- * Updated: Oct. 02, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Derivative metadata of operators and types.
@@ -80,6 +64,11 @@ class VjpBuilder {
     virtual std::optional<vjp_node_t> gradientOf(vjp_node_t primal) const = 0;
     /// Adds `gradient` to the gradient of `primal`. Ignored for values without a tangent space.
     virtual void accumulateGradient(vjp_node_t primal, vjp_node_t gradient) = 0;
+    /// True when a differentiated input flows into `node`, so a gradient reaching it must be
+    /// carried back. False for a compile-time constant and for anything computed from data
+    /// alone. A rule uses it to tell an input whose contribution has to be returned from one
+    /// that is a constant: the two have the same type and the same shape.
+    virtual bool isActive(vjp_node_t node) const = 0;
 
     vjp_node_t addStaticFloat(double value);
 };
@@ -93,6 +82,10 @@ struct VjpCall {
     /// gradient flows through them, but an operator may take a value this way (`append`).
     std::span<const vjp_node_t> withInputs;
     vjp_node_t output;
+    /// Source origin of the operator node, so that a rule which cannot carry this call's
+    /// gradient can refuse at the operator instead of at the `grad` call that ran the
+    /// transformation (`kInvalidOriginId` when unknown). See `tensor::ops::refuseVjp`.
+    uint64_t origin = 0;
 };
 
 /// Emits the backward computation of `call`: reads the gradient of its output and accumulates
@@ -129,6 +122,17 @@ class DerivativeRegistry {
     /// The tangent space of `type`'s code, or nullptr when values of that type have no tangent.
     const TangentSpace *findTangentSpace(const type::Type *type) const;
 
+    /// Registers a predicate for the values of type code `code` that says they are discrete (an
+    /// integer or a boolean held by a module type, such as a tensor of integers): their
+    /// derivative is zero by definition (design principles 9.9), even though they have no
+    /// tangent space of their own. The builtin scalar codes are recognised without one.
+    void setDiscretePredicate(type::TypeCode code, bool (*predicate)(const type::Type *));
+    /// True for values whose derivative is zero by definition: integers and booleans, scalar or
+    /// held by a module type that registered a predicate. A module type without one (a Map, an
+    /// enum) is not discrete, and a value of it computed from a parameter must be refused
+    /// rather than silently differentiated to zero.
+    bool isDiscrete(const type::Type *type) const;
+
   private:
     struct StringHash {
         using is_transparent = void;
@@ -138,6 +142,7 @@ class DerivativeRegistry {
     mutable std::shared_mutex mutex_;
     std::unordered_map<std::string, VjpRule, StringHash, std::equal_to<>> rules_;
     std::unordered_map<type::TypeCode, TangentSpace> tangents_;
+    std::unordered_map<type::TypeCode, bool (*)(const type::Type *)> discrete_;
 };
 
 /// Tangent type of values of type `primal`, or nullptr when they have no tangent.

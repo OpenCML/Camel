@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Counts what each recorded deviation (D2, D4, D5, D7; see classify.DEVIATIONS) reclassifies
 on one set of records, and writes the summary of every rule set involved.
 

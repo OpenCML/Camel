@@ -26,13 +26,13 @@ func train(layer: Linear, X: Tensor, y: Tensor, rate: float, steps: int): Linear
 }
 
 func init(): Linear {
-    return { weight: reshape([0.0, 0.0], [2, 1]) }
+    return { weight: reshape([0.0, 0.0] as f32[], [2, 1]) }
 }
 
 func main(): int sync {
     // Four samples of y = 2 * x1 - 1 * x2.
-    let X = reshape([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0], [4, 2])
-    let y = reshape([2.0, -1.0, 1.0, 3.0], [4, 1])
+    let X = reshape([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[], [4, 2])
+    let y = reshape([2.0, -1.0, 1.0, 3.0] as f32[], [4, 1])
     let start = init()
 
     println(format<mse_loss<start, y>(X)>('loss before training: {:.4f}'))

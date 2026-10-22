@@ -1,32 +1,16 @@
-// Signatures of the native module ckpt: operations on a parameter tree, a value made of structs and tuples
-// (design principles 13.5), and the checkpoints that save such a value to a directory and
-// read it back. These declarations are reference metadata.
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// Signatures of the native module ckpt: what a checkpoint saves (a parameter tree, a value made
+// of structs and tuples, design principles 13.5) and the directory that holds it. These
+// declarations are reference metadata.
 //
-// The tree operations that remain native: `tree_map`, `tree_reduce`, `tree_unzip` and
-// `tree_leaves` are expanded by the compiler, for the types of the call, into ordinary nodes;
-// `save_tree` and `load_tree` are the checkpoint operators that run. The Camel tree library
-// (`stdlib/tree.cml`) holds `tree_paths`; a checkpoint's file for a leaf is named by the same
-// path.
-
-/// Applies f to the leaves in the same place of the trees (one tree, or several of the same
-/// shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
-/// is that of the first tree.
-/// @effect whatever the callback does
-/// @example tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
-with <f: (leaf: A) => B>
-export func tree_map(tree: T): U
-
-/// Folds the leaves from the first to the last with f, starting from init.
-/// @effect whatever the callback does
-/// @example tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)    // 6
-with <f: (acc: R, leaf: A) => R>
-export func tree_reduce(tree: T, init: R): R
-
-/// Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
-/// leaf of `tree` at a leaf of the reference is a tuple of the same length.
-/// @pure
-/// @example tree_unzip({ a: (1, 2.0) }, { a: 0 })    // ({ a: 1 }, { a: 2.0 })
-export func tree_unzip(tree: T, reference: S): U
+// `tree_leaves` is the one tree operation still native: the leaves are one flat tuple whose
+// length is the sum of the leaves of every field, which a Camel function cannot build (a tuple
+// value's elements cannot be spliced into a tuple being built). `save_tree` and `load_tree` are
+// the checkpoint operators that run. The other tree operations -- `tree_paths`, `tree_map`,
+// `tree_reduce` and `tree_unzip` -- are in the Camel tree library `stdlib/tree.cml`, and the
+// file of a leaf in a checkpoint is named by `tree_paths`' path.
 
 /// The leaves of a tree, as a tuple.
 /// @pure

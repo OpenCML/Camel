@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Sep. 11, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/core/error/diagnostics/messages/semantic.h"
 
@@ -359,22 +343,24 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::TypeVariableNotAllowed,
-            {
-                "TypeVariableNotAllowed",
-                "'typeas {0}' cannot bind a type variable here: {1}.",
-                "A type variable is declared where it first appears in the parameters or result of "
-                "a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is "
-                "written as plain '{0}' everywhere after that.",
-            },
-        },
-        {
             SemanticDiag::TypeVariableRedeclared,
             {
                 "TypeVariableRedeclared",
-                "'typeas {0}' cannot bind '{0}': the name already denotes a type here.",
-                "Write 'typeas' only at the first occurrence of a type variable and plain "
-                "'{0}' afterwards, or choose a name that is not a type in scope.",
+                "The type parameter '{0}' is declared twice at the head of this declaration.",
+                "A declaration declares each type parameter once, after its name: "
+                "'func first::<T>(xs: T[]): T'. A call names them by position or by name "
+                "('f::<T = int>').",
+            },
+        },
+        {
+            SemanticDiag::TypeVariableUnused,
+            {
+                "TypeVariableUnused",
+                "The type parameter '{0}' is declared at the head but never written in the "
+                "signature.",
+                "A type parameter is one the declaration uses in a parameter or result type; a "
+                "declaration that writes it nowhere can never take a type for it. Write it in a "
+                "type, or remove it from '::<...>'.",
             },
         },
         {
@@ -392,7 +378,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "GenericArgumentsMismatch",
                 "The generic function '{0}' cannot be called with argument types {1}: {2}.",
-                "A type variable takes the type of the argument found at its 'typeas' position, "
+                "A type variable takes the type of the argument found at its first binding position, "
                 "or, when that argument says nothing (a 'null', a generic function that is "
                 "itself waiting for its types), at another occurrence; every parameter is then "
                 "checked against its type with the variables replaced. Result-only variables take "
@@ -1005,9 +991,9 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ConstasNotAllowed",
                 "The dimension name '{0}' is bound here, but only a parameter type can bind one.",
-                "Write 'constas n' where the dimension first appears in a parameter type, "
-                "'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in "
-                "the return type, writes 'n'.",
+                "A dimension name binds where it first appears in a parameter type, "
+                "'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return "
+                "type, writes 'n'.",
             },
         },
         {
@@ -1015,20 +1001,20 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "DimensionNameNotBound",
                 "The dimension name '{0}' is not bound by any parameter of this signature.",
-                "A name in a type's extents is bound by 'constas name' where it first appears in "
-                "a parameter type. A name that appears only in the return type is an error: the "
-                "caller has no argument that could say what it is.",
+                "A name in a type's extents is bound by its first plain occurrence in a parameter "
+                "type, 'x: f32[n]', and later occurrences write it. A name that appears only in "
+                "the return type is an error: the caller has no argument that could say what it "
+                "is.",
             },
         },
         {
             SemanticDiag::DimensionNameAlreadyBound,
             {
                 "DimensionNameAlreadyBound",
-                "The dimension name '{0}' is already bound; write '{0}' here instead of "
-                "'constas {0}'.",
-                "Only the first occurrence of a dimension name in the parameter types binds it "
-                "('constas n'). Writing 'constas' again would ask for a second binding of the "
-                "same name.",
+                "The dimension name '{0}' is already bound; write '{0}' here.",
+                "Only the first occurrence of a dimension name in the parameter types binds it; "
+                "later occurrences write it. Dimension names and pack names are separate "
+                "namespaces, so one name cannot be both.",
             },
         },
         {
@@ -1048,10 +1034,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "InvalidExtentExpression",
                 "This is not a shape: the extents of a type written with dimension names are "
-                "integers, bound names, or linear expressions over them ('const [n, 3]').",
-                "Each extent is an integer, a dimension name bound by the signature, or a linear "
-                "expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is "
-                "not linear is unknown.",
+                "integers, bound names, or linear expressions over them ('f32[n, 3]').",
+                "Each extent is a non-negative integer, a dimension name bound by the signature, "
+                "or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A "
+                "dimension that is not linear is unknown, and an unknown extent is written '?'.",
             },
         },
         {
@@ -1204,9 +1190,10 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StaticMatchNotExhaustive",
                 "No case of this 'match type' selects the type '{0}'.",
-                "The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a "
-                "structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every "
-                "type. Add the case for this shape, or end with '#leaf' or '_'.",
+                "The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is "
+                "not a structure or an ordinary tuple, including 'T?' and 'T!'), '_' for every "
+                "type, and a type's identity ('int', 'MyStruct', T). Add the case for this type, "
+                "or end with '#leaf' or '_'.",
             },
         },
         {
@@ -1215,7 +1202,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticMatchUnreachableCase",
                 "The case '{0}' selects every type the cases after it could select.",
                 "'#leaf' and '_' select every type, so they must be the last case of a "
-                "'match type'.",
+                "'match type'. An identity pattern that repeats a type an earlier case already "
+                "selects is the same kind of dead case.",
             },
         },
         {
@@ -1291,9 +1279,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StaticAccessNotConstant",
                 "The key '{0}' of a 't.[...]' access is not known when the function is "
                 "compiled.",
-                "The key is a string or integer literal, or the 'n' of an enclosing "
-                "'static for'. A runtime value cannot choose a field, because only the "
-                "selected field is built into the graph.",
+                "The key is a string or integer literal, the 'n' of an enclosing "
+                "'static for', or an expression whose value is known at compile time, such "
+                "as a 'let' bound once to such a value. A run-time value (a 'var', a "
+                "parameter) cannot choose a field, because only the selected field is built "
+                "into the graph.",
             },
         },
         {
@@ -1446,12 +1436,139 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::DimensionAfterAnyRank,
+            {
+                "DimensionAfterAnyRank",
+                "A dimension pack ('..') must be the last item of its '[...]', and only one may "
+                "be written.",
+                "A pack stands for the dimensions the type does not name, so nothing can follow "
+                "it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.",
+            },
+        },
+        {
+            SemanticDiag::UnknownResource,
+            {
+                "UnknownResource",
+                "The name '{0}' in the resource clause of '{1}' is neither a parameter nor a "
+                "resource.",
+                "A clause names a parameter of the function (the value a call touches), a "
+                "resource the module declares (`resource {0}`), one of the resources every "
+                "program has (stdout, stderr, stdin, clock, env, fs), or a resource imported "
+                "from another module. Check the spelling, or declare the resource.",
+            },
+        },
+        {
+            SemanticDiag::PureAndUses,
+            {
+                "PureAndUses",
+                "The signature of '{0}' says both 'pure' and 'uses'.",
+                "'pure' says the call touches no resource at all; 'uses' names the resources it "
+                "touches. Write one of the two.",
+            },
+        },
+        {
+            SemanticDiag::ResourceGroupCycle,
+            {
+                "ResourceGroupCycle",
+                "The resource group '{0}' contains itself: {1}.",
+                "A group names resources, or other groups that name resources. Expand them in "
+                "an order: a group cannot be one of its own members.",
+            },
+        },
+        {
+            SemanticDiag::HandleTypeNotNominal,
+            {
+                "HandleTypeNotNominal",
+                "'{0}' is not a nominal type declaration, so '#resource' says nothing about it.",
+                "A handle is a type with an identity of its own, one resource per value. Write "
+                "the tag before a struct or an enum declaration (a `type` that names its fields "
+                "or variants), not before an alias or a type function.",
+            },
+        },
+        {
+            SemanticDiag::NativeResourceMismatch,
+            {
+                "NativeResourceMismatch",
+                "The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.",
+                "A body-less declaration is the whole signature of a C++ operator, its resources "
+                "included: write the clause the operator declares, or remove the clause and let "
+                "the operator's declaration be the one the module publishes.",
+            },
+        },
+        {
+            SemanticDiag::CmlUnsupportedConstruct,
+            {
+                "CmlUnsupportedConstruct",
+                "std::cml cannot print {0}: {1}.",
+                "This version prints expressions, `let` and `var`, branches, loops, closures, "
+                "`with` and `var` parameters, and `sync` blocks (handover H240). Tags, named "
+                "types, generic instances and the other region kinds are refused.",
+            },
+        },
+        {
+            SemanticDiag::CmlBigConstant,
+            {
+                "CmlBigConstant",
+                "std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over "
+                "max_literal_bytes ({4}).",
+                "Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a "
+                "module the printed program imports.",
+            },
+        },
+        {
             SemanticDiag::NativeDeclarationIncomplete,
             {
                 "NativeDeclarationIncomplete",
                 "The body-less declaration '{0}' is incomplete: it has no result type.",
                 "A body-less declaration is the whole signature of a C++ operator, result "
                 "included; write the result type (`: T`).",
+            },
+        },
+        {
+            SemanticDiag::TypeOfNotAValue,
+            {
+                "TypeOfNotAValue",
+                "typeof {0} has no value type: {1}.",
+                "`typeof` takes the type of a value. Write an expression that produces one, or "
+                "name the type directly.",
+            },
+        },
+        {
+            SemanticDiag::TypeOfNotWholeType,
+            {
+                "TypeOfNotWholeType",
+                "typeof is written inside the larger type {0}.",
+                "`typeof` stands for a whole type. Bind the value in a `let` and name its type, "
+                "or write the enclosing type out.",
+            },
+        },
+        {
+            SemanticDiag::SameShapeComprehensionNotComposite,
+            {
+                "SameShapeComprehensionNotComposite",
+                "{0} is not a struct or a tuple, so it has no shape to fill.",
+                "A same-shape comprehension names a struct or a tuple type; a leaf has no "
+                "fields.",
+            },
+        },
+        {
+            SemanticDiag::SameShapeComprehensionMismatch,
+            {
+                "SameShapeComprehensionMismatch",
+                "The shape {0} is filled from the fields of {1}.",
+                "Write `T {{ static for (n, F) in fields T => ... }}`: the generator must walk the "
+                "shape the comprehension constructs.",
+            },
+        },
+        {
+            SemanticDiag::StaticMatchPatternCannotMatch,
+            {
+                "StaticMatchPatternCannotMatch",
+                "The identity pattern '{0}' cannot select a type here: {1}.",
+                "An identity pattern is exact: it selects only the type it names, after the "
+                "declaration's type variables are bound. Name a concrete type, do not write the "
+                "same type twice in one case, and put a pattern an earlier case already selects "
+                "before that case or remove it.",
             },
         },
         {
@@ -1547,6 +1664,309 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "The tag '{0}' is written, but none of the passes it names ({1}) is in the pipeline.",
                 "A tag only allows a pass to do something; with no such pass in the pipeline the "
                 "tag has no effect. Add the pass it names ('read_by'), or remove the tag.",
+            },
+        },
+        {
+            SemanticDiag::DimensionNameUsedOnce,
+            {
+                "DimensionNameUsedOnce",
+                "The dimension name '{0}' is written once in this signature, so it relates nothing.",
+                "A name relates the extents that write it. If the size is not a relation, write "
+                "'?' instead; if it is, write the name in another parameter or in the return type.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionNotBool,
+            {
+                "WhenConditionNotBool",
+                "The 'when' condition of '{0}' is not a bool (it is '{1}').",
+                "A 'when' is a compile-time predicate over the declaration's type parameters "
+                "and 'with' parameters: call a generic function this module declares that "
+                "reduces to a constant over its type arguments ('is_numeric::<T>()' is one, "
+                "written in the standard module 'types'), possibly combined with '!', '&&' "
+                "and '||'. It is not a runtime value.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionNotConstant,
+            {
+                "WhenConditionNotConstant",
+                "The 'when' condition of '{0}' cannot be evaluated when the declaration is "
+                "instantiated: {1}.",
+                "The condition is checked at instantiation, before the body is built, so it "
+                "can only read what is known there: the types bound to the declaration's type "
+                "parameters, and the 'with' arguments the call writes as compile-time "
+                "constants. Move a runtime test into the body, or make the value a constant.",
+            },
+        },
+        {
+            SemanticDiag::WhenUnknownName,
+            {
+                "WhenUnknownName",
+                "'{0}' is not visible to the 'when' condition of '{1}'.",
+                "A condition sees the declaration's type parameters and its 'with' "
+                "parameters. Ordinary parameters and the names of the body do not exist yet "
+                "when the condition is evaluated: test those in the body, or move the value "
+                "to a 'with' parameter.",
+            },
+        },
+        {
+            SemanticDiag::WhenTypeQueryNotConcrete,
+            {
+                "WhenTypeQueryNotConcrete",
+                "The type query '{0}' cannot be answered for '{1}' in the 'when' condition of "
+                "'{2}': the type still has a type variable.",
+                "A predicate is evaluated when the declaration is instantiated, where every type "
+                "parameter has a type. Give the predicate a type parameter the call binds, or "
+                "guard the declaration so that it is only instantiated for a concrete type.",
+            },
+        },
+        {
+            SemanticDiag::WhenConditionUnmet,
+            {
+                "WhenConditionUnmet",
+                "No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is "
+                "false. Candidates: {2}",
+                "A 'when' that is false makes its declaration inapplicable, not erroneous, and "
+                "the call goes on to the other candidates. Pass an argument or a type that "
+                "satisfies a condition, or write another overload for this call.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateNotImported,
+            {
+                "WhenPredicateNotImported",
+                "'{1}' is declared in module '{2}', but that name is not imported where the "
+                "'when' condition of '{0}' is written.",
+                "A condition resolves names where its declaration is written, as a call in its "
+                "body does: the module's own names, then what it imports by name, selectively "
+                "or as a module prefix, then the prelude. Import the module that declares the "
+                "predicate, or move the predicate into the module that uses it.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateNotCompileTime,
+            {
+                "WhenPredicateNotCompileTime",
+                "'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can "
+                "call: {2}.",
+                "A condition calls a generic function whose body reduces to a constant over the "
+                "types it is given: a 'match type', a 'static for' or a 'static loop' over "
+                "'fields T', and the comparison operators. An ordinary function runs at run "
+                "time, and a value is read there too.",
+            },
+        },
+        {
+            SemanticDiag::WhenPredicateAmbiguous,
+            {
+                "WhenPredicateAmbiguous",
+                "The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is "
+                "imported from {2}.",
+                "Two imports that bring one name do not choose between them. Import the "
+                "predicate by another name ('import {{ p as q }} from m') or qualify it with the "
+                "module it comes from ('m::p').",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentUnknown,
+            {
+                "WithArgumentUnknown",
+                "'{0}' is not a 'with' parameter of '{1}'.",
+                "A name in a 'with' argument is written as in a struct literal, "
+                "'name: value', and must be one of the callee's 'with' parameters.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentDuplicate,
+            {
+                "WithArgumentDuplicate",
+                "The 'with' parameter '{0}' of '{1}' is given twice.",
+                "Give each 'with' parameter once: positionally, or by name after the positional "
+                "arguments.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentMissing,
+            {
+                "WithArgumentMissing",
+                "The call gives no value for the 'with' parameter '{0}' of '{1}', and it has no "
+                "default.",
+                "Give the parameter, or write a default where the parameter is declared "
+                "('with <name: type = value>').",
+            },
+        },
+        {
+            SemanticDiag::WithDefaultNotConstant,
+            {
+                "WithDefaultNotConstant",
+                "The default of the 'with' parameter '{0}' is not a compile-time constant: {1}.",
+                "A default is evaluated where the declaration is, not at each call, so it can "
+                "only be a constant expression: a literal, or operands of an operator that is "
+                "computed at compile time.",
+            },
+        },
+        {
+            SemanticDiag::WithDefaultWrongType,
+            {
+                "WithDefaultWrongType",
+                "The default of the 'with' parameter '{0}' has type '{1}', not '{2}'.",
+                "The default is a value of the parameter's type, as an argument at the call "
+                "would be.",
+            },
+        },
+        {
+            SemanticDiag::WithParameterAfterDefault,
+            {
+                "WithParameterAfterDefault",
+                "The 'with' parameter '{0}' has no default and follows '{1}', which has one.",
+                "A parameter after one with a default must have a default too, so that a call "
+                "that leaves the first out can be read as giving the others by name.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentCallee,
+            {
+                "WithArgumentCallee",
+                "The 'with' argument '{0}' is given by name, and the signature of '{1}' is not "
+                "known where the binding is written.",
+                "Name the one function the binding is for, or give the 'with' arguments "
+                "positionally.",
+            },
+        },
+        {
+            SemanticDiag::WithArgumentInValue,
+            {
+                "WithArgumentInValue",
+                "The 'with' argument '{0}' is given by name, and this binding is used as a "
+                "function value.",
+                "A function value binds the 'with' arguments it is given in order; name a "
+                "parameter only in a call, 'f<name: value>(x)'.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentUnknown,
+            {
+                "ParamArgumentUnknown",
+                "'{0}' is not a parameter of '{1}'.",
+                "A named argument is written as in a struct literal, 'name: value', and must "
+                "be one of the callee's ordinary parameters.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentDuplicate,
+            {
+                "ParamArgumentDuplicate",
+                "The parameter '{0}' of '{1}' is given twice.",
+                "Give each parameter once: positionally, or by name after the positional "
+                "arguments.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentMissing,
+            {
+                "ParamArgumentMissing",
+                "The call gives no value for the parameter '{0}' of '{1}', and it has no "
+                "default.",
+                "Give the parameter, or write a default where the parameter is declared "
+                "('name: type = value').",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentCallee,
+            {
+                "ParamArgumentCallee",
+                "The argument '{0}' is given by name, and the signature of '{1}' is not known "
+                "where the call is written.",
+                "Name one function, or give the arguments positionally.",
+            },
+        },
+        {
+            SemanticDiag::ParamArgumentPositionalAfterNamed,
+            {
+                "ParamArgumentPositionalAfterNamed",
+                "A positional argument follows a named one in the call of '{0}'.",
+                "Write the positional arguments first, then the named ones ('f(1, by: 2)').",
+            },
+        },
+        {
+            SemanticDiag::ParamDefaultNotConstant,
+            {
+                "ParamDefaultNotConstant",
+                "The default of the parameter '{0}' is not a compile-time constant: {1}.",
+                "A default is evaluated where the declaration is, not at each call, so it can "
+                "only be a constant expression.",
+            },
+        },
+        {
+            SemanticDiag::ParamDefaultWrongType,
+            {
+                "ParamDefaultWrongType",
+                "The default of the parameter '{0}' has type '{1}', not '{2}'.",
+                "The default is a value of the parameter's type, as an argument at the call "
+                "would be.",
+            },
+        },
+        {
+            SemanticDiag::ParamAfterDefault,
+            {
+                "ParamAfterDefault",
+                "The parameter '{0}' has no default and follows '{1}', which has one.",
+                "Write a default here too, so that a call that leaves '{1}' out can still give "
+                "'{0}' by name.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallArgumentNotConstant,
+            {
+                "FoldCallArgumentNotConstant",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "A call in a place that needs a compile-time constant is evaluated only when "
+                "every argument is a constant itself: a literal, the 'n' of a 'static for', a "
+                "'constas' value, or an expression the compiler can evaluate. Make the argument "
+                "a constant, or move the call to a place where a runtime value is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallHasEffects,
+            {
+                "FoldCallHasEffects",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "Only a pure call is evaluated: a function with no effects and no reads of "
+                "mutable state. Remove the effect from the declaration, or call it where a "
+                "runtime value is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallTooDeep,
+            {
+                "FoldCallTooDeep",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "A call that recurses without reaching a value for the constants it is given "
+                "is not a compile-time constant. Give the recursion a base case that the "
+                "constants reach, or move the call to a place where a runtime value is "
+                "accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallResultNotConstant,
+            {
+                "FoldCallResultNotConstant",
+                "The call of '{0}' cannot be used as a compile-time constant: {1}.",
+                "A compile-time value is a number, a bool, a string or a character. Return one "
+                "of those from the function, or move the call to a place where a runtime value "
+                "is accepted.",
+            },
+        },
+        {
+            SemanticDiag::FoldCallNotEvaluable,
+            {
+                "FoldCallNotEvaluable",
+                "The call of '{0}' cannot be evaluated at build time: {1}.",
+                "The body of a folded call is read from the same constructs a 'when' condition "
+                "reads: data, names, blocks, 'match type', 'static for'/'static loop', branches, "
+                "fields, arithmetic and comparisons, and calls of other pure functions. Rewrite "
+                "the body with those, or move the call to a place where a runtime value is "
+                "accepted.",
             },
         },
     };

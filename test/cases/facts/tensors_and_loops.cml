@@ -3,12 +3,12 @@
 module tensors_and_loops
 import { Tensor, reshape, sum, matmul } from tensor
 
-func layer(x: Tensor<f32, const [2, 3]>, w: Tensor<f32, const [3, 4]>): Tensor<f32, const [2, 4]> {
+func layer(x: Tensor<f32, [2, 3]>, w: Tensor<f32, [3, 4]>): Tensor<f32, [2, 4]> {
     return matmul(x, w)
 }
 
 #[reassociate]
-func total(x: Tensor<f32, const [2, 4]>): float {
+func total(x: Tensor<f32, [2, 4]>): float {
     return sum(x)
 }
 
@@ -21,8 +21,8 @@ func count(n: int): int {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
-    let w = reshape([1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0], [3, 4])
+    let x = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
+    let w = reshape([1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0] as f32[], [3, 4])
     println(total(layer(x, w)))
     println(twice(x))
     println(count(5))

@@ -44,10 +44,10 @@ digraph GraphIR {
             N0B -> N0C [label="0|1", type="NORM"];
         }
         O01 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-        N0D [label="[1.0, -\n2.0,...", type="DATA", shape=circle, style=solid, value_type="float[]", origin=<ORIGIN>, span="16:25-16:46", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[1.0, -2.0, 3.0, 0.5]\nmain::node#-1"];
-        N0E [label="[4]", type="DATA", shape=circle, style=solid, value_type="int[]", origin=<ORIGIN>, span="16:48-16:51", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[4]\nmain::node#-2"];
+        N0D [label="[1.0, -\n2.0,...", type="DATA", shape=circle, style=solid, value_type="f32[]", origin=<ORIGIN>, span="16:25-16:55", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[1.0, -2.0, 3.0, 0.5]\nmain::node#-1"];
+        N0E [label="[4]", type="DATA", shape=circle, style=solid, value_type="int[]", origin=<ORIGIN>, span="16:57-16:60", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="[4]\nmain::node#-2"];
         N0F [label="tensor:\nreshape", type="OPER", shape=diamond, style=solid, value_type="Tensor<float32, [4]>", origin=<ORIGIN>, span="16:17-16:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="tensor:reshape\nmain::node#1"];
-        N10 [label="gate", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="Tensor", origin=<ORIGIN>, span="16:12-16:53", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="gate\nmain::node#2"];
+        N10 [label="gate", type="FUNC", shape=Mdiamond, style=solid, width=1.1, height=1.1, value_type="Tensor", origin=<ORIGIN>, span="16:12-16:62", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="gate\nmain::node#2"];
         N11 [label="0", type="DATA", shape=circle, style=solid, value_type="int", origin=<ORIGIN>, span="17:24-17:25", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="0\nmain::node#-3"];
         N12 [label="tenso\nr:idx", type="OPER", shape=diamond, style="filled,solid", value_type="float", origin=<ORIGIN>, span="17:23-17:24", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", fillcolor="#fff2cc", role="scalar-boundary", tooltip="tensor:idx\nmain::node#3\nrole scalar-boundary: tensor -> host float"];
         N13 [label="gate={}", type="DATA", shape=circle, style=solid, value_type="string", origin=<ORIGIN>, span="17:4-17:13", srcfile="<ROOT>/test/cases/trans/annotated/boundaries.cml", tooltip="gate={}\nmain::node#-4"];

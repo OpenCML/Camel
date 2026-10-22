@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The resource declarations of operators (see resource_semantics.h): names, builders, the
@@ -25,7 +9,12 @@
 #include "camel/core/resource_semantics.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
+
+#include "camel/core/type/base.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/enum.h"
 
 namespace camel::core::sem {
 
@@ -377,6 +366,53 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     std::sort(sig.captures.begin(), sig.captures.end());
     sig.captures.erase(std::unique(sig.captures.begin(), sig.captures.end()), sig.captures.end());
     return sig;
+}
+
+std::span<const std::string_view> standardResourceNames() {
+    // Design principles 3.3: the state the language gives every program, with the names a
+    // declaration uses for it. `rng`, `tensor:generator` and the other module resources are
+    // declared by their modules, not here.
+    static constexpr std::array<std::string_view, 6> names{
+        "stdout", "stderr", "stdin", "clock", "env", "fs"};
+    return names;
+}
+
+bool isStandardResource(std::string_view name) {
+    const std::span<const std::string_view> names = standardResourceNames();
+    return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+bool isHandleType(const type::Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    if (type->code() == type::TypeCode::Struct) {
+        const auto *structType = static_cast<const type::StructType *>(type);
+        return structType->decl() != nullptr && structType->decl()->handle();
+    }
+    if (type->code() == type::EnumType::typeCode()) {
+        const auto *enumType = static_cast<const type::EnumType *>(type);
+        return enumType->decl() != nullptr && enumType->decl()->handle();
+    }
+    return false;
+}
+
+std::string handleResourceName(const type::Type *type) {
+    if (!isHandleType(type)) {
+        return {};
+    }
+    std::string name;
+    std::string module;
+    if (type->code() == type::TypeCode::Struct) {
+        const type::StructDecl *decl = static_cast<const type::StructType *>(type)->decl();
+        name                         = decl->name();
+        module                       = decl->moduleName();
+    } else {
+        const type::EnumDecl *decl = static_cast<const type::EnumType *>(type)->decl();
+        name                       = decl->name();
+        module                     = decl->moduleName();
+    }
+    return module.empty() ? name : module + "::" + name;
 }
 
 std::string toString(const ResourceSignature &signature) {

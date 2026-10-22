@@ -1,0 +1,177 @@
+id = "compile.param_defaults"
+order = 344
+tier = "fast"
+tags = ["feat", "compile", "params", "defaults", "named"]
+desc = "Defaults of ordinary parameters and ordinary arguments given by name (design principles 4.4, handover H276): one rule with the `with` parameters — a default is a compile-time constant evaluated where the declaration is, and a call gives the parameters by position, or by name after the positional ones, in the declaration's order."
+
+# The rule the `with` parameters got in H235 is the rule for every parameter. A default is the
+# declaration's node, not something the call evaluates, so `2 + 3` is one constant, two calls
+# that leave the parameter out read the one node, and a function value carries no default. A name
+# selects its parameter by the declaration's order, so a call can skip the parameter in between.
+
+[[tests]]
+name = "param_defaults.applied"
+desc = "A call may leave a defaulted parameter out, override it by position, or give it by name after the positional ones, in any written order (`add(y: 7, x: 1)`). A name selects a non-adjacent parameter (`three(1, c: 3)` skips `b`), a middle parameter may be given by name with the later one by name too, and a default is the declaration's constant (`2 + 3`)."
+kind = "behavior"
+case = "../../../cases/compile/param_defaults/defaults.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "3\n6\n8\n14\n6\n103\n10\nhello you\nhi you\n14\n3\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "param_defaults.positional_after_name"
+desc = "A positional argument may not follow a named one: `f(a: 1, 2)` is ParamArgumentPositionalAfterNamed, at the argument out of place, and the report names the call."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/positional_after_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentPositionalAfterNamed"
+expect_diagnostic_line = 12
+expect_output_contains = ["A positional argument follows a named one in the call of 'f'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.duplicate"
+desc = "A parameter is given once: `f(1, a: 2)` is ParamArgumentDuplicate at the named argument."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/duplicate.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentDuplicate"
+expect_diagnostic_line = 12
+expect_output_contains = ["The parameter 'a' of 'f' is given twice"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.unknown_name"
+desc = "A named argument names a parameter of the callee: `f(1, z: 2)` is ParamArgumentUnknown at the argument."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/unknown_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentUnknown"
+expect_diagnostic_line = 12
+expect_output_contains = ["'z' is not a parameter of 'f'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.missing"
+desc = "A middle parameter with no default cannot be skipped by naming the one after it: `f(1, c: 5)` is ParamArgumentMissing for `b`, at the call."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/missing.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentMissing"
+expect_diagnostic_line = 12
+expect_output_contains = ["The call gives no value for the parameter 'b' of 'f'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.after_default"
+desc = "A parameter without a default may not follow one with a default: the declaration is ParamAfterDefault, at the parameter."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/after_default.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamAfterDefault"
+expect_diagnostic_line = 7
+expect_output_contains = ["The parameter 'b' has no default and follows 'a'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.not_constant"
+desc = "A default that reads a parameter of the same declaration is not a compile-time constant: the declaration is ParamDefaultNotConstant, at the default expression, not at a call."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/default_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamDefaultNotConstant"
+expect_diagnostic_line = 7
+expect_output_contains = ["default of the parameter 'b' is not a compile-time constant"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.wrong_type"
+desc = "A default is a value of its parameter's type: a string default of an `int` parameter is ParamDefaultWrongType, at the default expression."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/default_wrong_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamDefaultWrongType"
+expect_diagnostic_line = 7
+expect_output_contains = ["default of the parameter 'a' has type 'string', not 'int'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.callee_unknown"
+desc = "A named argument needs a callee whose signature is one declaration: with two overloads of `f`, the name does not say whose parameter it means, and the call is ParamArgumentCallee."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/callee_unknown.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamArgumentCallee"
+expect_diagnostic_line = 16
+expect_output_contains = ["is given by name"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.one_constant"
+desc = "The claim that the default is evaluated once is visible in the graph: two calls that leave `label` out make two call nodes, and both read the one constant node holding \"once\", printed by `std::gir` (design principles 4.4)."
+kind = "behavior"
+case = "../../../cases/compile/param_defaults/one_constant.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const calls = out.split('label="tag", type="FUNC"').length - 1
+assert(calls === 2, `two call nodes, got ${calls}; ${out}`)
+const marker = 'label="once"'
+const nodes = out.split(marker).length - 1
+assert(nodes === 1, `the default is one constant node, got ${nodes}; ${out}`)
+const line = out.split('\n').find((l) => l.includes(marker)) || ''
+const id = line.trim().split(' ')[0]
+const readers = out.split(id + ' ->').length - 1
+assert(readers === 2, `both calls read that one node, got ${readers} edges; ${out.split('\n').filter((l) => l.includes(' ->') && l.includes(id)).join(' | ')}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.function_value"
+desc = "A function value made from a declaration carries no default (the default belongs to the declaration, not to the value), so calling the value with one argument is a call that leaves a parameter without a value."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/function_value.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
+expect_diagnostic_line = 14
+expect_output_contains = ["'(a: int, b: int) => int' cannot be called with argument types"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "param_defaults.struct_not_constant"
+desc = "A struct literal is not a compile-time constant in Camel: a struct default would be constructed at the call, so it is refused as ParamDefaultNotConstant, at the default expression."
+kind = "negative"
+case = "../../../cases/compile/param_defaults/default_struct_not_constant.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ParamDefaultNotConstant"
+expect_diagnostic_line = 10
+expect_output_contains = ["default of the parameter 'p' is not a compile-time constant"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

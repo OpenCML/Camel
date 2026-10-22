@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Shared plumbing for operator definitions:
@@ -28,6 +12,7 @@
 #pragma once
 
 #include "../kernels/elementwise.h"
+#include "camel/core/error/runtime.h"
 #include "op_def.h"
 
 namespace camel::tensor::ops {
@@ -70,6 +55,10 @@ template <typename Fn> slot_t runKernel(std::string_view op, Fn &&body) {
         return body();
     } catch (const ShapeError &e) {
         reportShapeError(op, e.what());
+    } catch (const core::error::RuntimeFault &) {
+        // A kernel that refuses an argument type raises a runtime fault already naming the
+        // operator, the argument and what it takes; it passes through as it was raised.
+        throw;
     } catch (const std::exception &e) {
         reportKernelError(op, e.what());
     }

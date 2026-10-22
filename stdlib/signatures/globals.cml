@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Signatures of the built-in functions: they need no import.
  *
@@ -243,13 +246,13 @@ export func format(fmt: string): string
 with <sep: string>
 export func join(xs: string[]): string
 
-/// The number of bytes of a string, or of elements of an array.
+/// The number of bytes of a string, or of the first dimension of an array of any rank.
 /// @pure
 /// @example len('h€')    // 4
 #op<':struct/len_*'>
 export func len(x: string): int
 #op<':struct/len_*'>
-export func len(x: T[]): int
+export func len(x: T[..]): int
 
 // ---- arrays ----
 
@@ -340,7 +343,8 @@ export func extend(xs: T[]): T[]
 //
 // `map` and `filter` apply f to the elements with no order among the calls: the parallel
 // scheduler may run them at the same time, and the result is by position. `foreach` and
-// `reduce` call f element by element in order. They are declared with effects because what a
+// `reduce` call f element by element in order. `T[]` is an array of that element type (rank 1); the rank-n meaning is P5
+// work. They are declared with effects because what a
 // call does is what f does.
 
 /// f applied to every element; the calls have no order among them.

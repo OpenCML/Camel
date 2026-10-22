@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """D13: the repaired training benchmark, end to end, with its evidence folder.
 
 One command runs, in this order:

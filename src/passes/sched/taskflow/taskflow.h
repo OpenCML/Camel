@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 05, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -323,13 +307,10 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     };
 
     static size_t workerCount(const ctx::context_ptr_t &ctx, size_t requested) {
-        if (requested == 0 && ctx) {
-            requested = ctx->maxThreads();
+        if (requested != 0) {
+            return std::max<size_t>(1, requested);
         }
-        if (requested == 0) {
-            requested = std::thread::hardware_concurrency();
-        }
-        return std::max<size_t>(1, requested);
+        return ctx ? ctx->threadLimit() : ctx::hardwareThreadCount();
     }
     /// Runs `flow` to completion on the pass's executor, from any thread.
     void runOnExecutor(tf::Taskflow &flow);
@@ -509,7 +490,7 @@ class TaskflowExecSchedPass : public RuntimeGraphSchedulePass {
     //
     // A graph is heavy when its body, or the body of a graph it calls directly or indirectly,
     // contains a higher-order operator (`:mark/...`), an operator of a module (a URI with a
-    // protocol, `tensor:matmul`, `algo:sort`: anything but the built-in `:...` operators), or
+    // protocol, `tensor:matmul`, `array:sort`: anything but the built-in `:...` operators), or
     // a call of a function value (the callee is not known when the plan is built). A graph
     // that only does built-in arithmetic, comparisons and calls of such graphs (the body of
     // `fib`) is light: a task per call costs more than the call. A recursive graph is

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The standard rules of arithmetic (rewrite design 7): the ones that hold bit for bit, for the
  * integers and for the floats, written as rules. `check_rules.cml`-style checking runs over every
@@ -6,12 +9,19 @@
  * `simplify` applies the rules that always make an expression smaller, one way, to a fixpoint;
  * `saturate_all` adds the rules that rearrange (commutation, association, distribution) to the
  * saturation and extracts the smallest writing of each value.
+ *
+ * A rule is a `Rule` value, so a rule set is an ordinary `Rule[]`. The scheduling combinators at
+ * the end compose rule sets without new syntax (rewrite design 2 (second version) 8.5): `seq` runs
+ * the stages in the written order once each, `first` takes the first stage that rewrites
+ * something, `repeat` applies one round at a time to a fixpoint, `until` stops on a predicate of
+ * the program, and `alternate` alternates two stages until a full pair changes nothing. Each
+ * answers the program and what the application cost.
  */
 module rules
 import { Program, Node, constant } from graph
-import { abs, trunc } from math
-import { rewrite, saturate, extract } from rewrite
-import { Tensor } from tensor
+import { abs, exp as math_exp, expm1, log as math_log, log1p, trunc } from math
+import { Proof, Rule, Run, rewrite, saturate, extract, run } from rewrite
+import { Tensor, exp, log, log_softmax, sigmoid, softmax, sum } from tensor
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 
@@ -546,6 +556,8 @@ func simplifyWith(p: Program, strict: bool): Program! {
         tensor_f32_div_one, tensor_f32_neg_neg, tensor_f32_add_self, tensor_f32_combine,
         tensor_f32_combine_mixed, tensor_f32_fold, tensor_f32_double, tensor_f32_combine_one,
         tensor_f32_combine_one_mixed, tensor_f32_one_combine, tensor_f32_one_combine_mixed,
+        // Accuracy rules (8.10): their `#requires<refine_accuracy>` decides whether they fire.
+        tensor_log_softmax_of_softmax, float_log1p, f32_log1p, float_expm1, f32_expm1,
     ], strict)
 }
 
@@ -600,4 +612,272 @@ export func saturate_all(p: Program): Program! {
 /// The saturation under the strict numeric policy, as `simplify_strict` is the simplification.
 export func saturate_all_strict(p: Program): Program! {
     return saturateWith(p, true)
+}
+
+// ---- scheduling rule sets (rewrite design 2 (second version) 8.5) ----
+//
+// A stage is a `Rule[]`: `run` applies it one way to a fixpoint. The combinators are ordinary
+// Camel functions over stages, written with `loop` and `?->`: no helper carries an index or an
+// accumulator. Each answers a `Run`: the program, the rewrites applied, the rounds made, the nodes
+// visited, the nodes erased, whether the last application reached a fixpoint, and the wall time
+// (H226). No combinator reorders a stage's rules or drops a match: a stage that applies nothing
+// stays applied nothing.
+//
+// The rule sets and the choices are configuration, so they are `with` parameters (design
+// principles 4.4): `f->seq<[[algebra], [fusion]], false>`, `f->repeat<algebra, 8, false>`. A
+// pass that only wants the program reads `.result`.
+
+/// The schedule before its first stage: `f` unchanged, nothing applied, no fixpoint reached. A
+/// schedule does not open the attribution record, so its proof is null.
+func start(f: Program): Run<Program> {
+    return {
+        result: f,
+        rewrites: 0,
+        rounds: 0,
+        visited: 0,
+        erased: 0,
+        fixpoint: false,
+        seconds: 0.0,
+        proof: null as Proof?,
+    }
+}
+
+// The same value as a run that has not failed, so a loop can start from it and go on with `?->`.
+func started(f: Program): Run<Program>! {
+    return start(f)
+}
+
+/// The state after one more application `next`: its program, and the costs of `r` and `next`
+/// added. `fixpoint` is the last application's, so it says whether the schedule has just stopped
+/// changing, which is what `repeat` and `alternate` read.
+func plus(r: Run<Program>, next: Run<Program>): Run<Program> {
+    return {
+        result: next.result,
+        rewrites: r.rewrites + next.rewrites,
+        rounds: r.rounds + next.rounds,
+        visited: r.visited + next.visited,
+        erased: r.erased + next.erased,
+        fixpoint: next.fixpoint,
+        seconds: r.seconds + next.seconds,
+        proof: null as Proof?,
+    }
+}
+
+/// One application of `rules` on the result of `r`, at most `rounds` rounds, its cost added.
+func stage(r: Run<Program>, rules: Rule[], rounds: int, strict: bool): Run<Program>! {
+    return run(r.result, rules, rounds, strict) ?-> (next: Run<Program>) => plus(r, next)
+}
+
+/// Whether the last application reached a fixpoint. An error stops the loop that asks, and the
+/// loop's value is then that error.
+func settled(r: Run<Program>!): bool {
+    return (r ?-> (x: Run<Program>) => x.fixpoint) !! false
+}
+
+/// Whether `r` has not rewritten anything yet; an error stops the loop and is handed on.
+func untouched(r: Run<Program>!): bool {
+    return (r ?-> (x: Run<Program>) => x.rewrites == 0) !! false
+}
+
+/// Whether `done` holds for the program `r` holds; an error stops the loop and is handed on.
+func finished(r: Run<Program>!, done: (q: Program) => bool): bool {
+    return (r ?-> (x: Run<Program>) => done(x.result)) !! true
+}
+
+/// `seq`: the stages once each, in the written order, each to a fixpoint; a stage that fails fails
+/// the whole sequence. The stages are not interleaved or reordered.
+/// @effect runs the rules' functions
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example-fragment the tests apply a schedule to a real graph
+with <stages: Rule[][], strict: bool>
+export func seq(f: Program): Run<Program>! {
+    return loop r = started(f) for s in stages do
+        r ?-> (x: Run<Program>) => stage(x, s, 16, strict)
+}
+
+/// `first`: the stages tried in the written order, and the first one that rewrites something is
+/// the result. A stage that matches nothing does not stop the choice; when no stage rewrites
+/// anything the program is returned unchanged. A failing stage fails the choice.
+/// @effect runs the rules' functions
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example-fragment the tests apply a schedule to a real graph
+with <stages: Rule[][], strict: bool>
+export func first(f: Program): Run<Program>! {
+    return loop r = started(f) for s in stages while untouched(r) do
+        r ?-> (x: Run<Program>) => stage(x, s, 16, strict)
+}
+
+/// `repeat`: one round of the rule set at a time, until a round applies nothing or `rounds`
+/// rounds were made. A rule is therefore applied at most once per round, and the round that
+/// proves the fixpoint is made and counted.
+/// @effect runs the rules' functions
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example-fragment the tests apply a schedule to a real graph
+with <rules: Rule[], rounds: int, strict: bool>
+export func repeat(f: Program): Run<Program>! {
+    return loop r = started(f) for i in range(0, rounds) while !settled(r) do
+        r ?-> (x: Run<Program>) => stage(x, rules, 1, strict)
+}
+
+/// `until`: a round at a time, while `done` is false for the program; stops at a fixpoint, at
+/// `rounds` rounds, or when `done` holds. `done` is read before a round, so the program it holds
+/// for already has every rewrite before it.
+/// @effect runs the rules' functions
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example-fragment a predicate, a rule set and a program come from the caller
+with <rules: Rule[], done: (q: Program) => bool, rounds: int, strict: bool>
+export func until(f: Program): Run<Program>! {
+    return loop r = started(f) for i in range(0, rounds) while !finished(r, done) do
+        r ?-> (x: Run<Program>) => stage(x, rules, 1, strict)
+}
+
+/// `alternate`: one round of `left`, then one round of `right`, until a full pair applies nothing
+/// or `rounds` pairs were made. Both stages see the program the other produced, in that order.
+/// @effect runs the rules' functions
+/// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out
+/// @example-fragment two rule sets and a program come from the caller
+with <left: Rule[], right: Rule[], rounds: int, strict: bool>
+export func alternate(f: Program): Run<Program>! {
+    return loop r = started(f) for i in range(0, rounds) while !settled(r) do
+        r ?-> (x: Run<Program>) => pair(x, left, right, strict)
+}
+
+/// One round of `left` and one round of `right`, in that order; `fixpoint` says whether the pair
+/// changed anything, which ends `alternate`.
+func pair(r: Run<Program>, left: Rule[], right: Rule[], strict: bool): Run<Program>! {
+    return stage(r, left, 1, strict) ?-> (a: Run<Program>) => {
+        return stage(a, right, 1, strict) ?-> (b: Run<Program>) => {
+            let out: Run<Program> = {
+                result: b.result,
+                rewrites: b.rewrites,
+                rounds: b.rounds,
+                visited: b.visited,
+                erased: b.erased,
+                fixpoint: b.rewrites == r.rewrites,
+                seconds: b.seconds,
+                proof: null as Proof?,
+            }
+            return out
+        }
+    }
+}
+
+// ---- rules::accuracy (rewrite design 2 (second version) 8.10) ----
+//
+// These rules compute the same value in a form with no larger error. They change the bits on
+// purpose, so each one carries the numeric permission `refine_accuracy` ("replace a form with one
+// whose error is not larger"). The permission is not granted by default and is not applicable
+// under `#strict`; both the pass policy and the strict tag keep the rules from firing. `check`
+// measures them against a higher-precision reference, sample by sample, and rejects a right side
+// that is worse anywhere.
+//
+// The naive softmax and naive log-softmax are deliberately not here. `exp(x) / sum(exp(x), axis,
+// true) => softmax(x, axis)` is rejected by `check` on f32 `[-1e-16, 27.004, -33.563]`: the naive
+// form's small element has error 7.76e-8, the stable form's 1.91e-6. The stable form subtracts
+// the maximum first, and `exp`'s argument-scaling error grows with the magnitude of its argument:
+// `x - max` is about -27, so the relative error of `exp` is about 27 * 2^-24 * ln 2, near 1e-6.
+// The exclusion is pinned by `test/cases/modules/rules/check_rejected_softmax.cml`; the mechanism
+// and the trade are in `docs/handover/reports/accuracy-softmax-trade.md`.
+//
+// `log(softmax(x, axis))` is different: both sides share the same subtraction, so the log-of-
+// softmax rule is accepted and `check` passes it on vectors, matrices and rank-3 tensors.
+
+/// `log(softmax(x, axis))` where the program already calls `softmax`: rounding each probability to
+/// f32 becomes an absolute error in its log, and a probability that rounds to zero gives -inf where
+/// the true log-softmax is finite. `log_softmax` avoids both.
+#requires<refine_accuracy>
+export rule tensor_log_softmax_of_softmax(x: Tensor<f32>, const axis: int) {
+    log(softmax(x, axis)) => log_softmax(x, axis)
+}
+
+/// The design's own scalar example, `log(1 + x) => log1p(x)`, in f64 and in f32.
+///
+/// `1 + x` rounds before the log: for |x| below the spacing of 1 the naive log is 0 and its
+/// relative error is 100%; `log1p` computes log(1 + x) without forming 1 + x, and its error does
+/// not grow as x -> 0.
+#requires<refine_accuracy>
+export rule float_log1p(x: float) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+#requires<refine_accuracy>
+export rule f32_log1p(x: f32) {
+    math_log(1.0 + x) => log1p(x)
+}
+
+/// The design's second scalar example, `exp(x) - 1 => expm1(x)`, in f64 and in f32.
+///
+/// For |x| below the spacing of 1 the naive `exp(x)` rounds to exactly 1 and the subtraction gives
+/// 0; `expm1` evaluates exp(x) - 1 directly, without that cancellation.
+#requires<refine_accuracy>
+export rule float_expm1(x: float) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+#requires<refine_accuracy>
+export rule f32_expm1(x: f32) {
+    math_exp(x) - 1.0 => expm1(x)
+}
+
+/// The design's third scalar example, `sqrt(x*x + y*y) => hypot(x, y)`, is deliberately absent:
+/// `hypot` returns +inf when one operand is +inf and the other NaN, where squaring first returns
+/// NaN, so the rewrite would not be "no worse" on the whole domain.
+
+/// The accuracy library, as the opt-in pass `rules::accuracy`. Every rule carries
+/// `#requires<refine_accuracy>`, so an unlicensed or `#strict` program is returned unchanged.
+/// The naive softmax and naive log-softmax are not in the set: the check rejects the first on the
+/// sample above, and the second shares its subtraction.
+export func accuracy(p: Program): Program! {
+    return rewrite(p, [
+        tensor_log_softmax_of_softmax, float_log1p, f32_log1p, float_expm1, f32_expm1,
+    ])
+}
+
+// ---- rules::fusion ----
+//
+// What is here: one chain of elementwise operators replaced by one operator whose kernel does the
+// same work in a single pass over the data, bit for bit.
+//
+// What is deliberately *not* here, and the mechanism each would need. Writing a rule that only
+// renames the same chain would not be a fusion, and a fusion that changes a bit is not a rule of
+// this library.
+//
+//   - `exp` then `sum` (a fused logsumexp): no such operator is registered. A rule's right side
+//     can only write operators, constants and its parameters (src/runtime/rules.cpp,
+//     SideReader::term), so the fused form has to exist as an operator with a kernel and a
+//     normative definition. Needed: a `tensor:logsumexp` operator, its definition in
+//     stdlib/tensor_definitions.cml, and a kernel that agrees with it.
+//   - `mul` then `add` (a fused multiply-add): no `tensor:mul_add` operator, and the two
+//     roundings of `a*b + c` must not collapse into one without `#contract` (design principles
+//     7.2), so the operator has to say which of the two it rounds. Needed: the operator and its
+//     permission.
+//   - a fusion *region*: `tensor::fuse` marks `x @ w + b` with the `tensor.fusion` attribute and
+//     a backend runs the group as one kernel while the graph keeps the operators (modules/tensor/
+//     passes/fuse.h). A rule cannot do that: its right side writes nodes, and neither the rule
+//     form nor the `graph` module's transaction has an attribute or region writer. Needed: an
+//     attribute/region form on a rule's right side (rewrite design 2 (second version) 4 and 7).
+//   - the QKV multi-root fusion `(x @ wq, x @ wk, x @ wv) => split(x @ concat(...))`: a rule's
+//     left side must be one operator applied to something (src/runtime/rules.cpp refuses a tuple),
+//     so the multi-root patterns of v2 section 3 are the missing piece.
+//
+// These are gaps in the engine, not in this file: none of them can be written as a rule today
+// without either changing the answer or merely renaming the chain.
+
+/// The sigmoid chain of the showcase and of every hand-written logistic: `1/(1+exp(-x))`.
+///
+/// It is exactly the definition of `tensor:sigmoid` (stdlib/tensor_definitions.cml:
+/// `1.0 / (1.0 + exp(-x))`), and a kernel must agree with its operator's definition bit for bit
+/// (design principles 7.1; the definition file's header). The same `vmath::exp` runs on both
+/// sides, the negation is exact, and the `+` and `/` are the same f32 IEEE operations in the same
+/// order, so the rewrite changes no bit -- the test `rules.fusion_bit_identical` prints the chain
+/// and `sigmoid(x)` next to each other before the pass and the same text after it. What changes
+/// is the cost: neg, exp, add and divide are four kernels and four passes over the data; sigmoid
+/// is one kernel and one pass.
+export rule tensor_sigmoid_chain(x: Tensor<f32>) {
+    1.0 / (1.0 + exp(-x)) => sigmoid(x)
+}
+
+/// The fusion library, as the opt-in pass `rules::fusion`.
+export func fusion(p: Program): Program! {
+    return rewrite(p, [tensor_sigmoid_chain])
 }

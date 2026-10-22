@@ -133,7 +133,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
 expect_diagnostic_line = 4
-expect_diagnostic_column = 54
+expect_diagnostic_column = 48
 expect_output_contains = ["The dimension name 'n' is not bound by any parameter of this signature."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
@@ -153,30 +153,13 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 4000
 
 [[tests]]
-name = "err_constas_return"
-desc = "`constas` in the return type binds nothing: only a parameter type binds a name."
+name = "err_name_only_in_return"
+desc = "A name written only in the return type binds nothing: only a parameter type binds it."
 kind = "negative"
 case = "../../../../cases/modules/tensor/named_dims/err_constas_return.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ConstasNotAllowed"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 46
-expect_output_contains = ["The dimension name 'n' is bound here, but only a parameter type can bind one."]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
-timeout_ms = 4000
-
-[[tests]]
-name = "err_constas_twice"
-desc = "A second `constas` of the same name would bind it twice: the first occurrence binds, later ones write the name."
-kind = "negative"
-case = "../../../../cases/modules/tensor/named_dims/err_constas_twice.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::DimensionNameAlreadyBound"
-expect_diagnostic_line = 4
-expect_diagnostic_column = 67
-expect_output_contains = ["The dimension name 'n' is already bound; write 'n' here instead of 'constas n'."]
+expect_diagnostic_name = "SemanticDiag::DimensionNameNotBound"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 4000
 

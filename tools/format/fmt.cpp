@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: May. 17, 2024
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "fmt.h"
 #include <algorithm>
@@ -189,10 +173,18 @@ any Formatter::visitProgram(cst::Program context) {
     string headStr, tailStr;
     if (moduleDecl) {
         // The comments above `module` (the description of the file) stay above it; they used
-        // to be dropped.
+        // to be dropped. A blank line between two of them is kept: it is what separates the
+        // licence header from the file's own description, and without it the two runs of
+        // comments become one, which changes how the parser reads the file.
+        size_t previousEnd = 0;
         for (size_t i = 0; i < moduleDecl.firstToken().index(); i++) {
             if (tokens[i].channel > 1) {
+                const size_t line = tokens[i].line();
+                if (previousEnd != 0 && line > previousEnd + 1) {
+                    headStr += lineEnd();
+                }
                 headStr += tokens[i].text() + lineEnd();
+                previousEnd = line + std::count(tokens[i].text().begin(), tokens[i].text().end(), '\n');
             }
         }
         headStr += any_cast<string>(visit(moduleDecl));
@@ -523,10 +515,25 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
     } else {
         result += "func " + any_cast<string>(visitIdentRef(identRef));
     }
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
     result += any_cast<string>(visitParentParams(parentParams));
 
     if (typeExpr) {
         result += ": " + any_cast<string>(visitType(typeExpr));
+    }
+
+    if (const auto clause = context->get<cst::ResourceClause>()) {
+        // `uses s, fs` / `pure` after the result type (design effects plan 3.1).
+        result += " " + any_cast<string>(visitResourceClause(clause));
+    }
+
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        // The declaration's applicability condition, after the signature and before the body
+        // (design principles 5.13): it is part of the declaration, so leaving it out changes
+        // the AST the text parses to and, with it, the names synthesized from positions.
+        result += " " + any_cast<string>(visitWhenClause(whenClause));
     }
 
     if (!stmtBlock) {
@@ -535,6 +542,15 @@ any Formatter::visitFuncDecl(cst::FuncDecl context) {
         return result;
     }
     return result + " " + any_cast<string>(visitStmtBlock(stmtBlock));
+}
+
+/*
+whenClause : IDENTIFIER logicalOrExpr
+*/
+any Formatter::visitWhenClause(cst::WhenClause context) {
+    // The applicability condition of a declaration (design principles 5.13): `when` and the
+    // expression, as written, after the signature and before the body.
+    return "when " + any_cast<string>(visitExpr(context->expr()));
 }
 
 /*
@@ -550,6 +566,9 @@ any Formatter::visitRuleDecl(cst::RuleDecl context) {
     }
     result += context->has(TK::KwExport) ? "export rule " : "rule ";
     result += any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        result += any_cast<string>(visitTypeParams(typeParams));
+    }
     if (const auto ruleContext = context->get<cst::RuleContext>()) {
         result += any_cast<string>(visitRuleContext(ruleContext));
     }
@@ -695,6 +714,43 @@ any Formatter::visitDataDecl(cst::DataDecl context) {
     }
     if (dataList) {
         result += " = " + any_cast<string>(visitDataList(dataList));
+    }
+    return result;
+}
+
+/*
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+*/
+any Formatter::visitResourceDecl(cst::ResourceDecl context) {
+    string result = context->tok(TK::KwExport) ? "export " : "";
+    result += "resource " + any_cast<string>(visitIdentDef(context->get<cst::IdentDef>()));
+    if (const auto members = context->get<cst::BracketIdents>()) {
+        result += " = " + any_cast<string>(visitBracketIdents(members));
+    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
+        // The contextual `unordered` (design effects plan 3.1): any order of the accesses is
+        // allowed, so the resource has no order to keep.
+        result += " unordered";
+    }
+    return result;
+}
+
+/*
+resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+*/
+any Formatter::visitResourceClause(cst::ResourceClause context) {
+    // `pure` has no name to print; `uses` prints the names as written. A clause that says both
+    // is refused by the semantic check (PureAndUses), and formatting keeps what was written.
+    const auto refs = context->all<cst::IdentRef>();
+    const bool pure = context->firstToken() && context->firstToken()->text() == "pure";
+    string result   = pure ? "pure" : "";
+    if (!refs.empty()) {
+        if (!result.empty()) {
+            result += " ";
+        }
+        result += "uses ";
+        for (size_t i = 0; i < refs.size(); ++i) {
+            result += (i > 0 ? ", " : "") + any_cast<string>(visitIdentRef(refs[i]));
+        }
     }
     return result;
 }
@@ -853,13 +909,30 @@ any Formatter::visitPairedValues(cst::PairedValues context) {
 /*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
+any Formatter::visitTupleParam(cst::TupleParam context) {
+    string result = "(";
+    bool first    = true;
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        if (!first) {
+            result += ", ";
+        }
+        first   = false;
+        result += any_cast<string>(visitIdentDef(identDef));
+    }
+    return result + ")";
+}
+
+/*
+pairedParams : keyParamPair (',' keyParamPair)* ;
+*/
 any Formatter::visitPairedParams(cst::PairedParams context) {
-    return formatList(
-        vec(context->all<cst::KeyParamPair>()),
-        context,
-        ", ",
-        ",",
-        PaddingNL | PushScope);
+    std::vector<syn::Node> params;
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyParamPair) || child.is(NK::TupleParam)) {
+            params.push_back(child);
+        }
+    }
+    return formatList(params, context, ", ", ",", PaddingNL | PushScope);
 }
 
 /*
@@ -908,16 +981,14 @@ sliceIndices : dataExpr? ':' dataExpr? (':' dataExpr?)?, a part not written left
 */
 any Formatter::visitSliceIndices(cst::SliceIndices context) {
     // The tree keeps the colons it consumed, so the text is the parts and the colons in the
-    // order they were written. A colon is followed by a space only when a part follows it.
+    // order they were written. Nothing separates a colon from the part that follows it: a
+    // slice is written `xs[a:b:s]`, `xs[:n]`, `xs[n:]` and `xs[::-1]`.
     string result;
     for (size_t i = 0; i < context->childCount(); ++i) {
         const auto child = context->child(i);
         if (child.isToken()) {
-            result += ":";
+            result += child.token().kind() == TK::ColonColon ? "::" : ":";
             continue;
-        }
-        if (!result.empty() && result.back() == ':') {
-            result += " ";
         }
         result += any_cast<string>(visitExpr(child.node()));
     }
@@ -1535,16 +1606,60 @@ any Formatter::visitTypeUnit(cst::TypeUnit context) {
 
 /*
 arrayType
-    : specType ('[' ']')*
+    : specType arrayDim+
     ;
 */
 any Formatter::visitArrayType(cst::ArrayType context) {
-    string result     = any_cast<string>(visitType(context->type()));
-    const size_t size = (context->childCount() - 1) / 2;
-    for (size_t i = 0; i < size; i++) {
-        result += "[]";
+    string result = any_cast<string>(visitType(context->type()));
+    for (const auto dim : context->all<cst::ArrayDim>()) {
+        result += any_cast<string>(visitArrayDim(dim));
     }
     return result;
+}
+
+/*
+arrayDim
+    : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+    ;
+arrayDimItem : '?' | '..' identDef? | dataExpr
+*/
+any Formatter::visitArrayDim(cst::ArrayDim context) {
+    string result;
+    bool first    = true;
+    bool packName = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            const TK kind = child.token()->kind();
+            if (kind == TK::Question) {
+                if (!first) {
+                    result += ", ";
+                }
+                first = false;
+                result += "?";
+            } else if (kind == TK::DotDot) {
+                if (!first) {
+                    result += ", ";
+                }
+                first    = false;
+                result += "..";
+                packName = true;
+            }
+            continue;
+        }
+        const auto node = child.node();
+        if (packName && node.is(NK::IdentDef)) {
+            result += node.text();
+            packName = false;
+        } else if (node.isExpr()) {
+            if (!first) {
+                result += ", ";
+            }
+            first = false;
+            result += any_cast<string>(visitExpr(node));
+        }
+    }
+    return "[" + result + "]";
 }
 
 /*
@@ -1671,6 +1786,16 @@ any Formatter::visitTypeList(cst::TypeList context) {
 }
 
 /*
+typeParams
+    : '::' '<' identDef (',' identDef)* ','? '>'
+    ;
+*/
+any Formatter::visitTypeParams(cst::TypeParams context) {
+    const auto names = vec(context->all<cst::IdentDef>());
+    return "::<" + formatList(names, context, ", ", ",", PaddingNL | PushScope) + ">";
+}
+
+/*
 typeArguments
     : '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
     ;
@@ -1727,7 +1852,11 @@ any Formatter::visitFuncType(cst::FuncType context) {
         result += any_cast<string>(visitAngledParams(angledParams));
     }
     result += any_cast<string>(visitParentParams(parentParams));
-    return result + " => " + any_cast<string>(visitType(context->type()));
+    result += " => " + any_cast<string>(visitType(context->type()));
+    if (const auto clause = context->get<cst::ResourceClause>()) {
+        result += " " + any_cast<string>(visitResourceClause(clause));
+    }
+    return result;
 }
 
 /*
@@ -1768,11 +1897,15 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(TagRef)
         CAMEL_FORMAT(FuncDecl)
         CAMEL_FORMAT(RuleDecl)
+        CAMEL_FORMAT(WhenClause)
         CAMEL_FORMAT(AnalysisDecl)
         CAMEL_FORMAT(AnalysisClause)
         CAMEL_FORMAT(RuleContext)
+        CAMEL_FORMAT(TypeParams)
         CAMEL_FORMAT(RuleBody)
         CAMEL_FORMAT(DataDecl)
+        CAMEL_FORMAT(ResourceDecl)
+        CAMEL_FORMAT(ResourceClause)
         CAMEL_FORMAT(TypeDecl)
         CAMEL_FORMAT(RetStmt)
         CAMEL_FORMAT(Modifiers)
@@ -1782,6 +1915,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(KeyTypePair)
         CAMEL_FORMAT(KeyValuePair)
         CAMEL_FORMAT(KeyParamPair)
+        CAMEL_FORMAT(TupleParam)
         CAMEL_FORMAT(DataList)
         CAMEL_FORMAT(IdentList)
         CAMEL_FORMAT(IndexValues)
@@ -1864,6 +1998,7 @@ any Formatter::visit(syn::Node context) {
         CAMEL_FORMAT(KeyInterType)
         CAMEL_FORMAT(TypeUnit)
         CAMEL_FORMAT(ArrayType)
+        CAMEL_FORMAT(ArrayDim)
         CAMEL_FORMAT(SpecType)
         CAMEL_FORMAT(ConstData)
         CAMEL_FORMAT(StructType)
@@ -1891,8 +2026,14 @@ any Formatter::visit(syn::Node context) {
         return "(" + any_cast<string>(visit(context.type())) + ")";
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
-    case NK::TypeAsType:
-        return "typeas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
+    case NK::ShapeComp: {
+        // `T { static for (n, F) in fields U => e }`: the shape is written as a type, and the
+        // generator prints as it does on its own; the braces are tokens, so the generator is
+        // taken by kind and not by child index.
+        const auto generator = context.get<cst::StaticForExpr>();
+        return formatTypeInTypePosition(context.type()) + " { " +
+               any_cast<string>(visitStaticForExpr(generator)) + " }";
+    }
     case NK::ConstasData:
         return "constas " + any_cast<string>(visitIdentDef(context.get<cst::IdentDef>()));
     case NK::SliceIndices:

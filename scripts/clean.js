@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // `npm run clean` (H195).
 //
 // A build, an install and a test run each leave a tree behind that no source file needs. This

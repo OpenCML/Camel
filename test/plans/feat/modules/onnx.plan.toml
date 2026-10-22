@@ -109,7 +109,7 @@ const url = await import('url')
 const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs')
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'export_branch.onnx'))
-assert(model.ops.join() === 'Gather,Greater,If,Identity', `unexpected top-level ops ${model.ops}`)
+assert(model.ops.join() === 'Cast,Gather,Greater,If,Identity', `unexpected top-level ops ${model.ops}`)
 }
 """
 timeout_ms = 4000
@@ -332,7 +332,13 @@ const count = (op) => model.ops.filter((o) => o === op).length
 assert(count('If') === 2, `expected an If per branched value (loss, pullback result), got ${model.ops}`)
 assert(count('MatMul') === 5, `expected 5 MatMul, got ${model.ops}`)
 assert(count('Sub') >= 4, `expected an SGD update per parameter, got ${model.ops}`)
-assert(model.initializers.length <= 8, `weights must be inputs, not initializers: ${model.initializers}`)
+// The count of initializers was a proxy for "no weight was folded into a constant", and the
+// constants themselves are numbers: two of them are 2.0 because the loss multiplies by 2.0 in
+// the double its mean now computes in while the mean's gradient divides by two in the
+// parameter's float32. A folded weight keeps the name of its field (export_fold.cml's model has
+// `w` and `b` as initializers), so the names are the property the count only approximated.
+const weights = ['w1', 'b1', 'w2', 'b2']
+assert(!model.initializers.some((n) => weights.includes(n)), `weights must be inputs, not initializers: ${model.initializers}`)
 }
 """
 timeout_ms = 6000
@@ -544,7 +550,7 @@ const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs'
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const file = path.join(input.test_tmp, 'export_gated_gru_forward.onnx')
 const model = readOnnxModel(file)
-assert(model.ops.join() === 'Slice,Reshape,Abs,ReduceMean,Greater,If,Slice,Reshape,Abs,ReduceMean,Greater,If,MatMul,Add,Mul,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
+assert(model.ops.join() === 'Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,Slice,Reshape,Abs,Cast,ReduceMean,Greater,If,MatMul,Add,Mul,Cast,ReduceMean,Identity', `unexpected top-level ops ${model.ops}`)
 assert(model.inputs.join() === 'w_ir,w_iz,w_in,w_hr,w_hz,w_hn,b_ir,b_iz,b_in,b_hr,b_hz,b_hn,fc_w,fc_b,input1', `unexpected inputs ${model.inputs}`)
 assert(model.outputs.join() === 'output', `unexpected outputs ${model.outputs}`)
 // One If per gate decision (three gates, four If nodes: the last cell's branch nests in one arm).
@@ -1860,7 +1866,7 @@ const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs'
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'export_var_compound.onnx'))
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
-assert(ops === 'ReduceSum Add Mul Sub Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
+assert(ops === 'Cast ReduceSum Add Mul Sub Cast Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
 }
 """
 timeout_ms = 8000
@@ -1882,7 +1888,7 @@ const helper = path.join(input.repo_root, 'test/cases/modules/onnx/onnx_ops.mjs'
 const { readOnnxModel } = await import(url.pathToFileURL(helper).href)
 const model = readOnnxModel(path.join(input.test_tmp, 'pass_export_var_compound.onnx'))
 const ops = model.ops.filter((o) => o !== 'Identity').join(' ')
-assert(ops === 'ReduceSum Add Mul Sub Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
+assert(ops === 'Cast ReduceSum Add Mul Sub Cast Mul Add', `the chain of the float variable and nothing for the integer one, got ${model.ops}`)
 }
 """
 timeout_ms = 8000

@@ -52,7 +52,7 @@ signatures and examples in the [standard library reference](../docs/stdlib-refer
 
 | File | What it shows | Run |
 |------|------|------|
-| [`merge_sort.cml`](algorithms/merge_sort.cml) | Merge sort written with recursion, checked against `algo.sorted` and `array.sort_by`, the library functions a program would call | `camel examples/algorithms/merge_sort.cml` |
+| [`merge_sort.cml`](algorithms/merge_sort.cml) | Merge sort written with recursion, checked against `array.sort` and `array.sort_by`, the library functions a program would call | `camel examples/algorithms/merge_sort.cml` |
 | [`binary_search.cml`](algorithms/binary_search.cml) | Binary search by tail recursion; a missing value gives `null` (`int?`). For an array in any order there is `array.index_of` | `camel examples/algorithms/binary_search.cml` |
 
 ### Functions: `functions/`
@@ -60,7 +60,7 @@ signatures and examples in the [standard library reference](../docs/stdlib-refer
 | File | What it shows | Run |
 |------|------|------|
 | [`closures.cml`](functions/closures.cml) | Functions as values: closures, composition, `with` parameters, a counter with its own state | `camel examples/functions/closures.cml` |
-| [`generic_helpers.cml`](functions/generic_helpers.cml) | Generic helper functions with `typeas`, built on the generic functions of `array` | `camel examples/functions/generic_helpers.cml` |
+| [`generic_helpers.cml`](functions/generic_helpers.cml) | Generic helper functions with head type parameters (`::<T>`), built on the generic functions of `array` | `camel examples/functions/generic_helpers.cml` |
 
 ### Command-line tools: `cli/`
 

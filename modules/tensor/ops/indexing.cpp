@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The index semantics of the tensor operators (see indexing.h). Each instantiation function
@@ -927,14 +911,12 @@ const std::unordered_map<std::string_view, Indexing> &indexings() {
                 {positionLaw("argmin_axis_f32", false, f32),
                  positionLaw("argmin_axis_i64", false, i64),
                  positionLaw("argmin_axis_bool", false, boolean)}});
-        // sum_to converts g to f32 and accumulates in f32 from +0.
+        // sum_to is the gradient reduction of a broadcast and computes in f32 only: it accumulates
+        // in f32 from +0. An int64 or bool tensor is refused by the kernel (P4: a kernel that
+        // computes in f32 says so at the call) instead of being converted to f32 here.
         t.emplace(
             "sum_to",
-            Indexing{
-                sumToIndexing,
-                {sumLaw("sum_to_f32", f32, f32, f32),
-                 sumLaw("sum_to_i64", i64, f32, f32),
-                 sumLaw("sum_to_bool", boolean, f32, f32)}});
+            Indexing{sumToIndexing, {sumLaw("sum_to_f32", f32, f32, f32)}});
         // matmul: the fused multiply-add chain in ascending k from +0 (design principles 7.1,
         // Q7); merging partial sums (with reassociate) is an addition, which commutes.
         t.emplace(

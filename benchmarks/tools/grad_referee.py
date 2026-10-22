@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Three-way referee for a benchmark model's training gradient: Camel (float32), PyTorch
 float32 and PyTorch float64, with the evidence that tells a wrong derivative rule from a
 reference that computes something else and from a gradient float32 cannot pin down.

@@ -1,0 +1,9 @@
+// `pure` says a call touches no resource at all; `uses` names the resources it touches. A
+// signature cannot say both (PureAndUses).
+func f(): int pure uses fs {
+    return 0
+}
+
+func main(): int {
+    return f()
+}

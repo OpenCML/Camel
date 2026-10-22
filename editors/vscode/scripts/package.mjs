@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Builds the installable extension: checks the grammar and the manifest, compiles the TypeScript
 // source and runs `vsce package`. The .vsix lands in editors/vscode (or where --out says).
 //

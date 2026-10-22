@@ -41,10 +41,10 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` | C++ |
 | [tree](#tree) | `import { ... } from tree` | Camel |
 | [tensor](#tensor) | `import { ... } from tensor` | C++ |
+| [types](#types) | `import { ... } from types` | Camel |
 | [array](#array) | `import { ... } from array` | Camel |
 | [math](#math) | `import { ... } from math` | C++ |
 | [statistics](#statistics) | `import { ... } from statistics` | C++ |
-| [algo](#algo) | `import { ... } from algo` | C++ |
 | [random](#random) | `import { ... } from random` | C++ |
 | [time](#time) | `import { ... } from time` | C++ |
 | [fs](#fs) | `import { ... } from fs` | C++ |
@@ -71,10 +71,10 @@ Not in this reference: the profiler (`perf`).
 | [ckpt](#ckpt) | `import { ... } from ckpt` |  |
 | [tree](#tree) | `import { ... } from tree` |  |
 | [tensor](#tensor) | `import { ... } from tensor` |  |
+| [types](#types) | `import { ... } from types` |  |
 | [array](#array) | `import { ... } from array` |  |
 | [math](#math) | `import { ... } from math` |  |
 | [statistics](#statistics) | `import { ... } from statistics` |  |
-| [algo](#algo) | `import { ... } from algo` |  |
 | [random](#random) | `import { ... } from random` |  |
 | [time](#time) | `import { ... } from time` |  |
 | [fs](#fs) | `import { ... } from fs` |  |
@@ -410,10 +410,10 @@ The strings of xs joined with sep between them.
 
 ```camel
 len: (x: string) => int
-len: (x: T[]) => int
+len: (x: T[..]) => int
 ```
 
-The number of bytes of a string, or of elements of an array.
+The number of bytes of a string, or of the first dimension of an array of any rank.
 
 - Pure.
 - Example: `len('h€')` gives `4`
@@ -557,7 +557,8 @@ A new array: the elements of xs, then those of other. xs is unchanged.
 
 `map` and `filter` apply f to the elements with no order among the calls: the parallel
 scheduler may run them at the same time, and the result is by position. `foreach` and
-`reduce` call f element by element in order. They are declared with effects because what a
+`reduce` call f element by element in order. `T[]` is an array of that element type (rank 1); the rank-n meaning is P5
+work. They are declared with effects because what a
 call does is what f does.
 
 #### `map`
@@ -1079,42 +1080,6 @@ Concatenates two binary values without decoding either one.
 
 ## `ckpt`: parameter trees and checkpoints
 
-#### `tree_map`
-
-```camel
-tree_map: <f: (leaf: A) => B> (tree: T) => U
-```
-
-Applies f to the leaves in the same place of the trees (one tree, or several of the same
-shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
-is that of the first tree.
-
-- With effects: whatever the callback does.
-- Example: `tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
-
-#### `tree_reduce`
-
-```camel
-tree_reduce: <f: (acc: R, leaf: A) => R> (tree: T, init: R) => R
-```
-
-Folds the leaves from the first to the last with f, starting from init.
-
-- With effects: whatever the callback does.
-- Example: `tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)` gives `6`
-
-#### `tree_unzip`
-
-```camel
-tree_unzip: (tree: T, reference: S) => U
-```
-
-Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
-leaf of `tree` at a leaf of the reference is a tuple of the same length.
-
-- Pure.
-- Example: `tree_unzip({ a: (1, 2.0) }, { a: 0 })` gives `({ a: 1 }, { a: 2.0 })`
-
 #### `tree_leaves`
 
 ```camel
@@ -1180,10 +1145,19 @@ standard error; the next save restores it before replacing it.
 The parameter-tree library written in Camel (design principles 13.5): a tree is a value made
 of nested structs and tuples, and everything else is a leaf.
 
-`tree_paths` is here. `tree_map`, `tree_reduce`, `tree_unzip` and `tree_leaves` still live in
-the native module `ckpt`: they need the compiler's per-leaf expansion of a callback or of a
-value tuple, which arrives with H51 step 13; keeping them in `ckpt` until then is the split
-this library exists for, not a wrapper around them.
+`tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
+`static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
+expanded at each call into ordinary access and fill nodes, with no function of its own per
+leaf type. Each exported function recurses itself. `paths_at` and `unzip_at` stay because
+they carry a value the exported signature does not have (the path built so far, the component
+of the leaf tuple): a default argument would fold the first one into `tree_paths` (the
+language has none yet), and the second is not a hand-off but the walk of one component.
+
+`tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
+leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
+built: `( ..ts )` is not written (a rest argument is only a call argument), and a function
+with a rest parameter has no value to return. It stays `ckpt:tree_leaves` until value-tuple
+expansion exists.
 
 The path of a leaf is its field names (tuple indices) from the root, joined by dots; the
 root's own path is the empty string. The path values are ordinary strings, so the result is
@@ -1192,13 +1166,49 @@ the same tree with a `string` at every leaf.
 #### `tree_paths`
 
 ```camel
-tree_paths: (t: typeas T) => ?
+tree_paths: (t: T) => ?
 ```
 
 The path of every leaf, as a tree of the same shape.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `tree_paths({ a: 1, b: (2, 3) })` gives `{ a: 'a', b: ('b.0', 'b.1') }`
+
+#### `tree_map`
+
+```camel
+tree_map: <f: F> (t: T, ..ts) => ?
+```
+
+Applies f to the leaves in the same place of the trees (one tree, or several of the same
+shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
+is that of the first tree.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })` gives `{ a: 2, b: (3, 4) }`
+
+#### `tree_reduce`
+
+```camel
+tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
+```
+
+Folds the leaves from the first to the last with f, starting from init.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)` gives `6`
+
+#### `tree_unzip`
+
+```camel
+tree_unzip: (r: R, s: S) => ?
+```
+
+Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
+leaf of `tree` at a leaf of the reference is a tuple of the same length.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `tree_unzip({ a: (1, 2.0) }, { a: 0 })` gives `({ a: 1 }, { a: 2.0 })`
 
 <a id="tensor"></a>
 
@@ -1906,7 +1916,7 @@ not change.
 
 ```camel
 show: (t: Tensor) => void
-show: (t: (typeas A)[]) => void
+show: (t: A[]) => void
 ```
 
 Prints t to the console, in the module's layout.
@@ -1924,7 +1934,8 @@ from_bytes: (bytes: Bytes, shape: int[]) => Tensor
 
 A tensor of the given shape made of little-endian elements. The element type is the explicit
 type argument (`from_bytes::<f32>(b, [2])`) or comes from the expected type of the result; it
-is `f32`, `i64` or `bool`. A byte count that does not fit the shape is a fault.
+is `f32`, `f64`, `i32`, `i64` or `bool`, exactly the type given. A byte count that does not fit
+the shape is a fault.
 
 - Pure.
 - Failure: fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type.
@@ -1953,7 +1964,7 @@ the program runs (check them with `as`, or read them with `shape`).
 
 - With effects: reads a file.
 - Failure: fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read.
-- Example: `load_npy('x.npy') as Tensor<f32, const [2, 2]>`
+- Example: `load_npy('x.npy') as Tensor<f32, [2, 2]>`
 
 #### `save_npy`
 
@@ -2015,36 +2026,209 @@ Reseeds the module's random generator, which `random` and `randn` draw from.
 - With effects: writes the random generator.
 - Example: `seed(42)`
 
+<a id="types"></a>
+
+## `types`: the properties of types
+
+The properties of types that an applicability condition asks about. These are ordinary Camel
+functions: each one matches the type it is given with `match type` and returns a constant, so
+`func f::<T>(x: T) when is_numeric::<T>()` is applicable exactly where `T` is a number.
+
+`match type` compares a type's identity as well as its shape (design principles 5.5): the
+cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `c64`, `c128`,
+`string`, `bool`), and `case func` is the shape of every function type.
+
+#### `is_numeric`
+
+```camel
+is_numeric: () => bool
+```
+
+True when `T` is a number: an integer, a float or a complex number.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_numeric::<int>()` gives `true`
+- Example: `is_numeric::<string>()` gives `false`
+
+#### `is_integer`
+
+```camel
+is_integer: () => bool
+```
+
+True when `T` is an integer type (`int` is 64-bit, `i32` is 32-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_integer::<int>()` gives `true`
+- Example: `is_integer::<float>()` gives `false`
+
+#### `is_float`
+
+```camel
+is_float: () => bool
+```
+
+True when `T` is a floating-point type (`float` is 64-bit, `f32` is 32-bit).
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_float::<float>()` gives `true`
+- Example: `is_float::<int>()` gives `false`
+
+#### `is_ordered`
+
+```camel
+is_ordered: () => bool
+```
+
+True when `T` has a total order: the number types, `string` and `bool`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_ordered::<string>()` gives `true`
+- Example: `is_ordered::<bool>()` gives `true`
+
+#### `is_function`
+
+```camel
+is_function: () => bool
+```
+
+True when `T` is a function type, whatever its parameters and result.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_function::<(x: int) => int>()` gives `true`
+
+#### `is_string`
+
+```camel
+is_string: () => bool
+```
+
+True when `T` is `string`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_string::<string>()` gives `true`
+- Example: `is_string::<int>()` gives `false`
+
+#### `is_bool`
+
+```camel
+is_bool: () => bool
+```
+
+True when `T` is `bool`.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `is_bool::<bool>()` gives `true`
+- Example: `is_bool::<int>()` gives `false`
+
 <a id="array"></a>
 
-## `array`: arrays and higher-order functions
+## `array`: arrays, sorting and higher-order functions
 
 Array functions and higher-order functions, written in Camel on top of the built-in
-operators (map, filter, reduce, range, zip, slice, len) and three primitives of the algo
-module (flatten, unique, argsort). Every function returns a new value; none changes its
-argument.
+operators (map, filter, reduce, range, zip, slice, len) and a few native primitives of this
+module (the sorts, argsort, flatten, unique). Every function returns a new value; none changes
+its argument.
 
 - The array a function works on is its ordinary argument; a function or a value that
   configures it is a with-argument, as for the built-in `map<f>(xs)` and `slice<a, b>(xs)`,
   so calls chain: `xs->filter<p>->sort_by<key>->take<3>`.
 - A result that may not exist is `T?` (`find`, `index_of`, `min`, `max`). Nothing here
   returns an error value, and a wrong argument is a fault of the operator that meets it.
-- Order of evaluation (design principles 3.6). A function passed to one of these is applied
-  with `map`: its calls on different elements have NO order among them and the parallel
-  scheduler may run them at the same time; the result is put together by position and is
-  the same on every back end. That holds for `find`, `any`, `all`, `count`, `flat_map`,
-  `sort_by` and `zip_with`. None of them stops early: the function is applied to every
-  element. A function with side effects belongs in `foreach` or `reduce`, which are ordered.
-- These are generic functions: there is one instance per set of element types in the whole
-  program, whichever module calls it (one root graph, design principles 10.1). `group_by`
-  is not here: it needs the map type.
+- A function passed to any of these must be pure. The implementation may stop early
+  (`find`, `index_of`, `any`, `all`) or, when a fast path is added under `#impl`, apply it to
+  several elements at once; the result is the same either way, and no call observes another.
+  A function with side effects belongs in `foreach` or `reduce`, which run in order.
+- The functions written here are generic: there is one instance per set of element types in
+  the whole program, whichever module calls it (one root graph, design principles 10.1).
+  `group_by` is not here: it needs the map type.
+
+### Sorting
+
+#### `argsort`
+
+```camel
+argsort: (keys: i32[]) => int[]
+argsort: (keys: int[]) => int[]
+argsort: (keys: f32[]) => int[]
+argsort: (keys: float[]) => int[]
+argsort: (keys: bool[]) => int[]
+argsort: (keys: string[]) => int[]
+```
+
+The positions of the keys in ascending order of key; equal keys keep their order (a stable
+sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
+primitive behind `sort_by`.
+
+- A native operator of this module: an opaque node, pure.
+- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
+
+#### `sort`
+
+```camel
+sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs (quicksort).
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `insert_sort`
+
+```camel
+insert_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by insertion sort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `quick_sort`
+
+```camel
+quick_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by quicksort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sort`
+
+```camel
+merge_sort: (xs: T[]) => T[]
+```
+
+A sorted copy of xs, by merge sort.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
+
+#### `merge_sorted_arrays`
+
+```camel
+merge_sorted_arrays: (left: T[], right: T[]) => T[]
+```
+
+The sorted array made of the elements of two sorted arrays of numbers.
+
+- A native operator of this module: an opaque node, pure.
+- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
+- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
 
 ### Rearranging
 
 #### `reverse`
 
 ```camel
-reverse: (xs: (typeas T)[]) => T[]
+reverse: (xs: T[]) => T[]
 ```
 
 The elements in reverse order.
@@ -2055,7 +2239,7 @@ The elements in reverse order.
 #### `take`
 
 ```camel
-take: <n: int> (xs: (typeas T)[]) => T[]
+take: <n: int> (xs: T[]) => T[]
 ```
 
 The first n elements; all of them when there are fewer, none when n is not positive.
@@ -2066,7 +2250,7 @@ The first n elements; all of them when there are fewer, none when n is not posit
 #### `drop`
 
 ```camel
-drop: <n: int> (xs: (typeas T)[]) => T[]
+drop: <n: int> (xs: T[]) => T[]
 ```
 
 The elements after the first n; none when there are fewer, all when n is not positive.
@@ -2077,7 +2261,7 @@ The elements after the first n; none when there are fewer, all when n is not pos
 #### `enumerate`
 
 ```camel
-enumerate: (xs: (typeas T)[]) => (int, T)[]
+enumerate: (xs: T[]) => (int, T)[]
 ```
 
 Each element with its index.
@@ -2088,24 +2272,24 @@ Each element with its index.
 #### `flatten`
 
 ```camel
-flatten: (xss: (typeas T)[][]) => T[]
+flatten: (xss: T[][]) => T[]
 ```
 
-The elements of the inner arrays, in order. (Primitive: algo::flatten.)
+The elements of the inner arrays, in order. The primitive behind `flat_map`.
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
 
 #### `unique`
 
 ```camel
-unique: (xs: (typeas T)[]) => T[]
+unique: (xs: T[]) => T[]
 ```
 
-The first occurrence of every value, in order; values are compared as `==` compares them.
-(Primitive: algo::unique.)
+The first occurrence of every value, in order; values are compared as `==` compares them
+(a NaN equals nothing, so every NaN is kept).
 
-- Written in Camel: a subgraph, pure when the functions passed to it are.
+- A native operator of this module: an opaque node, pure.
 - Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
 
 ### Searching
@@ -2113,7 +2297,7 @@ The first occurrence of every value, in order; values are compared as `==` compa
 #### `index_of`
 
 ```camel
-index_of: <x: typeas T> (xs: T[]) => int?
+index_of: <x: T> (xs: T[]) => int?
 ```
 
 The index of the first element equal to x, or null.
@@ -2124,7 +2308,7 @@ The index of the first element equal to x, or null.
 #### `find`
 
 ```camel
-find: <pred: (x: typeas T) => bool> (xs: T[]) => T?
+find: <pred: (x: T) => bool> (xs: T[]) => T?
 ```
 
 The first element for which pred is true, or null.
@@ -2135,7 +2319,7 @@ The first element for which pred is true, or null.
 #### `any`
 
 ```camel
-any: <pred: (x: typeas T) => bool> (xs: T[]) => bool
+any: <pred: (x: T) => bool> (xs: T[]) => bool
 ```
 
 True when pred is true for at least one element; false for an empty array.
@@ -2146,7 +2330,7 @@ True when pred is true for at least one element; false for an empty array.
 #### `all`
 
 ```camel
-all: <pred: (x: typeas T) => bool> (xs: T[]) => bool
+all: <pred: (x: T) => bool> (xs: T[]) => bool
 ```
 
 True when pred is true for every element; true for an empty array.
@@ -2157,7 +2341,7 @@ True when pred is true for every element; true for an empty array.
 #### `count`
 
 ```camel
-count: <pred: (x: typeas T) => bool> (xs: T[]) => int
+count: <pred: (x: T) => bool> (xs: T[]) => int
 ```
 
 The number of elements for which pred is true.
@@ -2170,14 +2354,10 @@ The number of elements for which pred is true.
 #### `sum`
 
 ```camel
-sum: (xs: int[]) => int
-sum: (xs: float[]) => float
-sum: (xs: i32[]) => i32
-sum: (xs: f32[]) => f32
+sum: (xs: T[]) => T when is_numeric::<T>()
 ```
 
-The sum of the elements, 0 for an empty array. One function per numeric type (the zero of a
-type variable cannot be written). Integers wrap around on overflow, as `+` does.
+The sum of the elements, 0 for an empty array. Integers wrap around on overflow, as `+` does.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `sum([1, 2, 3])` gives `6`
@@ -2185,12 +2365,11 @@ type variable cannot be written). Integers wrap around on overflow, as `+` does.
 #### `min`
 
 ```camel
-min: (xs: (typeas T)[]) => T?
+min: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
-The smallest element by `<` (numbers, or strings by byte), or null for an empty array;
-among equal elements the first. A NaN compares false with everything: it is the result only
-when it is the first element.
+The smallest number (IEEE 754 minimum: a NaN anywhere makes the result NaN, and -0 is below
++0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `min([3, 9, 2]) ?? 0` gives `2`
@@ -2198,20 +2377,21 @@ when it is the first element.
 #### `max`
 
 ```camel
-max: (xs: (typeas T)[]) => T?
+max: (xs: T[]) => T? when is_ordered::<T>()
 ```
 
-The largest element by `>`, or null for an empty array; among equal elements the first.
+The largest number (IEEE 754 maximum: a NaN anywhere makes the result NaN, and +0 is above
+-0), or null for an empty array.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `max(['pear', 'fig']) ?? ''` gives `'pear'`
+- Example: `max([3, 9, 2]) ?? 0` gives `9`
 
 ### Transforming
 
 #### `flat_map`
 
 ```camel
-flat_map: <f: (x: typeas T) => (typeas U)[]> (xs: T[]) => U[]
+flat_map: <f: (x: T) => U[]> (xs: T[]) => U[]
 ```
 
 f applied to every element, the resulting arrays joined in order.
@@ -2222,13 +2402,13 @@ f applied to every element, the resulting arrays joined in order.
 #### `sort_by`
 
 ```camel
-sort_by: <key: (x: typeas T) => typeas K> (xs: T[]) => T[]
+sort_by: <key: (x: T) => K> (xs: T[]) => T[]
 ```
 
 The elements in ascending order of key(x); elements with equal keys keep their order (the
-sort is stable, so sorting by one key and then by another works). A key is a number, a
-string (ordered by byte) or a bool; NaN keys come last. For a descending order of numbers
-use the negated key. (Primitive: algo::argsort.)
+sort is stable, so sorting by one key and then by another works). A key is a number, a string
+(ordered by byte) or a bool; NaN keys come last. For a descending order of numbers use the
+negated key.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `['pear', 'fig', 'apple']->sort_by<(w: string) => len(w)>` gives `['fig', 'pear', 'apple']`
@@ -2236,14 +2416,14 @@ use the negated key. (Primitive: algo::argsort.)
 #### `zip_with`
 
 ```camel
-zip_with: <f: (a: typeas T, b: typeas U) => typeas V> (xs: T[], ys: U[]) => V[]
+zip_with: <f: (a: T, b: U) => V> (xs: T[], ys: U[]) => V[]
 ```
 
 f(xs[i], ys[i]) for every i.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Failure: fault `InvalidArgument` (of zip) when the two arrays differ in length.
-- Example: `zip_with<(a: int, b: int): int => a + b>([1, 2], [10, 20])` gives `[11, 22]`
+- Example: `zip_with<(a: int, b: int) => a + b>([1, 2], [10, 20])` gives `[11, 22]`
 
 <a id="math"></a>
 
@@ -2648,13 +2828,17 @@ min: (a: i32, b: i32) => i32
 min: (a: int, b: int) => int
 min: (a: f32, b: f32) => f32
 min: (a: float, b: float) => float
+min: (a: string, b: string) => string
+min: (a: bool, b: bool) => bool
 ```
 
-The smaller of two numbers of one type (IEEE 754 minimum). With a NaN on either side
-the result is NaN; -0 is below +0.
+The smaller of two values of one ordered type. For numbers this is the IEEE 754 minimum: a
+NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+prefix first), and false is below true.
 
 - Pure.
 - Example: `min(3, 5)` gives `3`
+- Example: `min('b', 'a')` gives `'a'`
 
 #### `max`
 
@@ -2663,13 +2847,17 @@ max: (a: i32, b: i32) => i32
 max: (a: int, b: int) => int
 max: (a: f32, b: f32) => f32
 max: (a: float, b: float) => float
+max: (a: string, b: string) => string
+max: (a: bool, b: bool) => bool
 ```
 
-The larger of two numbers of one type (IEEE 754 maximum). With a NaN on either side
-the result is NaN; -0 is below +0.
+The larger of two values of one ordered type. For numbers this is the IEEE 754 maximum: a
+NaN on either side gives NaN, and -0 is below +0. Strings compare by their bytes (a proper
+prefix first), and false is below true.
 
 - Pure.
 - Example: `max(3, 5)` gives `5`
+- Example: `max('a', 'b')` gives `'b'`
 
 #### `clamp`
 
@@ -2954,119 +3142,6 @@ element is NaN.
 - Failure: fault `InvalidArgument` when q is not between 0 and 1.
 - Example: `[1.0, 2.0, 3.0, 4.0, 5.0]->quantile<0.25> ?? 0.0` gives `2`
 
-<a id="algo"></a>
-
-## `algo`: sorting and array primitives
-
-Sorting works on arrays of numbers (i32, int, f32, float) in ascending order. Every function
-returns a new array and leaves its argument unchanged (design principles 11.3); to sort a
-variable, bind it to the result: `xs = xs->sort`. That rebinding sorts the variable's own
-array in place when nothing else refers to it, an optimisation that does not change what the
-program means (11.3). To sort anything else, or by a key, use `sort_by` of the `array` module.
-
-#### `argsort`
-
-```camel
-argsort: (keys: i32[]) => int[]
-argsort: (keys: int[]) => int[]
-argsort: (keys: f32[]) => int[]
-argsort: (keys: float[]) => int[]
-argsort: (keys: bool[]) => int[]
-argsort: (keys: string[]) => int[]
-```
-
-The positions of the keys in ascending order of key; equal keys keep their order (a stable
-sort). Keys are numbers, strings (ordered by byte) or bools; NaN keys come last. The
-primitive behind `sort_by` of the `array` module.
-
-- Pure.
-- Example: `argsort([30, 10, 20])` gives `[1, 2, 0]`
-
-#### `sort`
-
-```camel
-sort: (xs: (typeas T)[]) => T[]
-```
-
-A sorted copy of xs (quicksort).
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `insert_sort`
-
-```camel
-insert_sort: (xs: (typeas T)[]) => T[]
-```
-
-A sorted copy of xs, by insertion sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `insert_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `quick_sort`
-
-```camel
-quick_sort: (xs: (typeas T)[]) => T[]
-```
-
-A sorted copy of xs, by quicksort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `quick_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sort`
-
-```camel
-merge_sort: (xs: (typeas T)[]) => T[]
-```
-
-A sorted copy of xs, by merge sort.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sort([3, 1, 2])` gives `[1, 2, 3]`
-
-#### `merge_sorted_arrays`
-
-```camel
-merge_sorted_arrays: (left: (typeas T)[], right: T[]) => T[]
-```
-
-The sorted array made of the elements of two sorted arrays of numbers.
-
-- Pure.
-- Failure: fault `OperandTypeUnsupported` when the elements are not numbers.
-- Example: `merge_sorted_arrays([1, 4], [2, 3])` gives `[1, 2, 3, 4]`
-
-#### `flatten`
-
-```camel
-flatten: (xss: (typeas T)[][]) => T[]
-```
-
-The elements of the inner arrays, in order. The primitive behind `flatten` and `flat_map`
-of the `array` module.
-
-- Pure.
-- Example: `flatten([[1, 2], [3]])` gives `[1, 2, 3]`
-
-#### `unique`
-
-```camel
-unique: (xs: (typeas T)[]) => T[]
-```
-
-The first occurrence of every value, in order; values are compared as `==` compares them
-(a NaN equals nothing, so every NaN is kept). The primitive behind `unique` of the `array`
-module.
-
-- Pure.
-- Example: `unique([3, 1, 3, 2, 1])` gives `[3, 1, 2]`
-
 <a id="random"></a>
 
 ## `random`
@@ -3131,7 +3206,7 @@ above high.
 #### `choice`
 
 ```camel
-choice: (xs: (typeas T)[]) => T
+choice: (xs: T[]) => T
 ```
 
 One element of xs, drawn uniformly.
@@ -3143,7 +3218,7 @@ One element of xs, drawn uniformly.
 #### `sample`
 
 ```camel
-sample: (xs: (typeas T)[], n: int) => T[]
+sample: (xs: T[], n: int) => T[]
 ```
 
 n elements of xs drawn without replacement, as a new array.
@@ -3155,7 +3230,7 @@ n elements of xs drawn without replacement, as a new array.
 #### `shuffle`
 
 ```camel
-shuffle: (xs: (typeas T)[]) => T[]
+shuffle: (xs: T[]) => T[]
 ```
 
 The elements of xs in a random order, as a new array; xs is not changed.
@@ -3166,7 +3241,7 @@ The elements of xs in a random order, as a new array; xs is not changed.
 #### `key`
 
 ```camel
-key: (seed: int) => Key
+key: (seed: int) => { hi: int, lo: int }
 ```
 
 A 128-bit key derived from a seed, as the struct `{ hi: int, lo: int }` (the high and the low
@@ -3179,7 +3254,7 @@ on every scheduler, in translated C++, and on every platform.
 #### `split`
 
 ```camel
-split: (key: Key) => (Key, Key)
+split: (key: { hi: int, lo: int }) => ({ hi: int, lo: int }, { hi: int, lo: int })
 ```
 
 Two independent keys derived from key: split(key) gives the same pair every time, and does
@@ -3191,7 +3266,7 @@ not change key.
 #### `permutation`
 
 ```camel
-permutation: (key: Key, n: int) => int[]
+permutation: (key: { hi: int, lo: int }, n: int) => int[]
 ```
 
 A uniformly random permutation of [0, n) by a Fisher-Yates shuffle driven by key's Philox
@@ -3859,7 +3934,7 @@ were waiting). A tool for showing that calls really run at the same time.
 #### `unordered_foreach`
 
 ```camel
-unordered_foreach: <f: (item: typeas T) => typeas R> (xs: T[]) => void
+unordered_foreach: <f: (item: T) => R> (xs: T[]) => void
 ```
 
 Calls f for every element; the calls have no order among them.
@@ -3870,7 +3945,7 @@ Calls f for every element; the calls have no order among them.
 #### `unordered_reduce`
 
 ```camel
-unordered_reduce: <f: (acc: typeas T, item: T) => T, initial: T> (xs: T[]) => T
+unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 ```
 
 Combines the elements with f starting from initial; the order in which elements are
@@ -4384,11 +4459,14 @@ traced.
 
 ## `rewrite`: rules applied to a program
 
-Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of the
-functions that make a rule to a `Program`, `check` tests rules on random programs, and the four
-readers report a `Rule`'s name, direction, required rewrites and added constants. The rules
-passed in are function values; a rule that stops a rewrite without changing the program is a
-fault, and `strict` restricts the float rules to the ones that hold bit for bit.
+Rewrite engines and rule readers: `rewrite`, `saturate` and `extract` apply an array of `Rule`
+values to a `Program`, `check` tests rules on random programs, and the four readers report a
+`Rule`'s name, direction, required rewrites and added constants. `run` is `rewrite` with the
+round budget explicit and the cost kept: it answers a `Run`, the program and what the
+application cost (H226). Its fifth parameter opens the attribution record, and `explain` prints
+it as the chain of rewrites, each with the rule, round, graph and nodes that made it (rewrite
+design 8.7). A rule that stops a rewrite without changing the program is a fault,
+and `strict` restricts the float rules to the ones that hold bit for bit.
 
 The module also exports the reserved groups the language's own `rule`, `rule` with `when`, and
 `analysis` declarations compile to (`rewrite:rule`, `rewrite:rule_when`,
@@ -4398,8 +4476,8 @@ The module also exports the reserved groups the language's own `rule`, `rule` wi
 #### `rewrite`
 
 ```camel
-rewrite: (p: Program, rules: (() => Rule)[]) => Program!
-rewrite: (p: Program, rules: (() => Rule)[], strict: bool) => Program!
+rewrite: (p: Program, rules: Rule[]) => Program!
+rewrite: (p: Program, rules: Rule[], strict: bool) => Program!
 ```
 
 Applies `rules` to `p` until no rule changes the program, and gives the rewritten program.
@@ -4411,8 +4489,8 @@ Applies `rules` to `p` until no rule changes the program, and gives the rewritte
 #### `saturate`
 
 ```camel
-saturate: (p: Program, rules: (() => Rule)[], rounds: int) => Program!
-saturate: (p: Program, rules: (() => Rule)[], rounds: int, strict: bool) => Program!
+saturate: (p: Program, rules: Rule[], rounds: int) => Program!
+saturate: (p: Program, rules: Rule[], rounds: int, strict: bool) => Program!
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and gives the smallest
@@ -4437,7 +4515,7 @@ Extracts the program `p` in the cost model named `cost` (for example `"size"`).
 #### `check`
 
 ```camel
-check: (rules: (() => Rule)[], samples: int, seed: int) => string
+check: (rules: Rule[], samples: int, seed: int) => string
 ```
 
 Checks `rules` on `samples` random programs drawn with `seed`, and reports the first rule
@@ -4445,6 +4523,39 @@ that fails, or that all of them hold.
 
 - With effects: runs the rules' functions and draws random programs.
 - Example: `check(rules, 1000, 7)` gives `the report`
+
+#### `run`
+
+```camel
+run: (p: Program, rules: Rule[], rounds: int, strict: bool) => Run<Program>!
+run: (p: Program, rules: Rule[], rounds: int, strict: bool, explain: bool) => Run<Program>!
+```
+
+Applies `rules` to `p` one way, for at most `rounds` rounds, and gives the program it produced
+and what the application cost. This is `rewrite` with the round budget explicit and the cost
+kept (H226). The fifth parameter of the same call opens the attribution record (rewrite design
+8.7): `explain` then reads back the rule that made each rewrite, its round, its graph and the
+nodes it matched, produced and erased. Recording is off unless it is asked for, so a plain
+application pays nothing for it.
+
+- With effects: runs the rules' functions, and nothing else.
+- Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow; error value `RewriteInvalid` when a rewrite cannot be carried out.
+- Example: `run(p, rules, 16, false)` gives `the run`
+
+#### `explain`
+
+```camel
+explain: (r: Run<Program>) => Proof!
+```
+
+The proof of the run `r`: the chain of the rewrites it made, in the order it made them, each
+naming the rule that made it, the round and the graph it was made in, and the nodes that
+matched, were produced and were erased (rewrite design 8.7). A run that applied nothing is
+explained as such, not as an empty table.
+
+- Pure.
+- Failure: error value `NoAttribution` when the run was made without `explain: true`.
+- Example: `explain(r)` gives `the chain of rewrites`
 
 #### `rule_name`
 
@@ -4627,7 +4738,7 @@ keeps the kernel, the executor, the operator traits and the purity.
 
 `plot` is one operator with one URI, over four element types and two arities: an array of
 `i32`, `int`, `f32` or `float`, with or without the name of the output file. A declaration
-cannot write "an array of one of these four" as one rule, and a `(typeas T)[]` declaration
+cannot write "an array of one of these four" as one rule, and a declaration generic over `T`
 would accept a `string[]` that the kernel refuses, so the four types are written out for each
 arity: eight declarations of the one operator. A declaration cannot write the optional
 parameter `filename?: string` either, which is why the two arities are separate.
@@ -5075,7 +5186,7 @@ One step of Adam on a parameter tree: answers `(new_params, new_state)`, both sh
 #### `save_params`
 
 ```camel
-save_params: (params: typeas P, dir: string) => void
+save_params: (params: P, dir: string) => void
 ```
 
 Saves every tensor leaf of `params` under `dir`, as `<dir>/<path>.npy`, the path joining struct
@@ -5128,7 +5239,7 @@ applies.
 #### `stop_gradient`
 
 ```camel
-stop_gradient: (x: typeas T) => T
+stop_gradient: (x: T) => T
 ```
 
 Returns its argument unchanged, and cuts the gradient at this point: a value passed through

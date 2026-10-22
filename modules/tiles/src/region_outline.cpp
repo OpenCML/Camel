@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 16, 2026
- * Updated: Oct. 18, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // Extract eligible regions and replace them with typed calls, independent of device backend.
+
 #include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics/messages/runtime.h"
 #include "camel/core/mm/gen.h"
@@ -98,39 +92,140 @@ const runtime::Program *outlineRegions(
     for (auto *graph : graphs) {
         analyses.emplace(graph, analyzeRegions(*program, *graph, context.facts()));
     }
+    // A `#gpu` scope promises that the device runs everything written in it, and (GPU design 2.3,
+    // 2.4) the functions it calls are part of that scope. Two answers follow, both compile-time
+    // errors and neither a host execution: an operator outside the device capability list is
+    // `GpuScopeUnsupported` (the module has no device implementation), and an operator the device
+    // compiler cannot build a program for at this use is `GpuScopeNoDeviceProgram`. The scope map
+    // names, for every graph the promise reaches, the graph whose tag made it part of the scope.
+    std::unordered_map<rt::GCGraph *, rt::GCGraph *> scopeOf;
     if (refuseGpuScopes) {
-        // A `#gpu` scope promises the device runs everything written in it (design principles
-        // 13.4, GPU design 6.1). The capability list is the one the region compiler lowers; an
-        // operator outside it would otherwise stay on the CPU without a word, which is the
-        // silent fallback the design forbids. Report every such node and leave the graphs alone.
-        // The placement query is the only reader of `tiles.placement`: it answers Host for an
-        // untagged node and for `#cpu`, so only a device answer reaches this promise.
-        bool refused = false;
+        std::vector<rt::GCGraph *> scopes;
+        // A body tag makes the whole graph a device unit.
+        for (auto *graph : graphs) {
+            if (bodyPlacementOf(*graph).placement == Placement::GpuRequired) {
+                scopeOf.emplace(graph, graph);
+                scopes.push_back(graph);
+            }
+        }
+        // A call written in a device scope (a `#gpu` body or block) makes the callee one too,
+        // even when the code around the block is the host's; that call is still a device call.
+        const auto addCall = [&](rt::GCGraph &graph, rt::gc_node_ref_t id) {
+            if (graph.node(id)->kind != rt::GCNodeKind::Func)
+                return;
+            if (placementOf(graph, id).fact == "cpu")
+                return;
+            auto *callee = program->calleeOf(graph, id);
+            if (!callee || scopeOf.contains(callee))
+                return;
+            const auto found = scopeOf.find(&graph);
+            scopeOf.emplace(callee, found == scopeOf.end() ? &graph : found->second);
+            scopes.push_back(callee);
+        };
         for (auto *graph : graphs) {
             for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
-                const auto *node = graph->node(id);
-                if (node->kind != rt::GCNodeKind::Oper)
+                if (placementOf(*graph, id).onDevice())
+                    addCall(*graph, id);
+            }
+        }
+        // Transitive: a helper of a helper is called by the scope as well.
+        for (size_t next = 0; next < scopes.size(); ++next) {
+            auto *graph = scopes[next];
+            for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id)
+                addCall(*graph, id);
+        }
+    }
+    // Whether `id` is inside a `#gpu` scope: a device answer places it there directly, and a graph
+    // the scope reaches places every node it did not explicitly tag for the host. A `#cpu` fact
+    // is the host escape the design keeps, so it is never part of a device promise.
+    const auto nodeInScope =
+        [&](rt::GCGraph &graph, rt::gc_node_ref_t id, PlacementDecision &decision) {
+            decision = placementOf(graph, id);
+            if (decision.onDevice())
+                return true;
+            return decision.scope == PlacementScope::Default && scopeOf.contains(&graph);
+        };
+    const auto scopeNameOf = [&](rt::GCGraph &graph) {
+        const auto found = scopeOf.find(&graph);
+        return std::string((found == scopeOf.end() ? &graph : found->second)->name());
+    };
+    const auto regionInScope = [&](rt::GCGraph &graph, const Region &region) {
+        if (!refuseGpuScopes)
+            return false;
+        for (const auto member : region.members) {
+            PlacementDecision decision;
+            if (nodeInScope(graph, static_cast<rt::gc_node_ref_t>(member), decision))
+                return true;
+        }
+        return false;
+    };
+    const auto reportRefusal = [&](rt::GCGraph &graph,
+                                   rt::gc_node_ref_t id,
+                                   core::error::RuntimeDiag code,
+                                   const std::string &detail) {
+        auto diag         = context.rtmDiags()->of(code);
+        const auto origin = graph.nodeOrigin(id);
+        if (origin != camel::source::kInvalidOriginId)
+            diag.atOrigin(origin);
+        diag.commit(
+            scopeNameOf(graph),
+            "operator '" +
+                std::string(
+                    core::OperatorTable::instance().uri(
+                        graph.nodeBodyAs<rt::GCOperBody>(id)->oper)) +
+                "'",
+            detail);
+    };
+    if (refuseGpuScopes) {
+        // Report every node the promise cannot keep and leave the graphs alone; the pass fails on
+        // the diagnostics rather than running part of the program somewhere else.
+        bool refused = false;
+        for (auto *graph : graphs) {
+            const auto &analysis = analyses.at(graph);
+            for (rt::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
+                if (graph->node(id)->kind != rt::GCNodeKind::Oper)
                     continue;
-                if (!placementOf(*graph, id).onDevice())
+                PlacementDecision decision;
+                if (!nodeInScope(*graph, id, decision))
                     continue;
                 const auto oper = graph->nodeBodyAs<rt::GCOperBody>(id)->oper;
-                if (deviceCapable(oper))
+                if (!deviceCapable(oper)) {
+                    // A device answer on the node itself is the operator having no device
+                    // implementation; an untagged graph the scope reaches adds this operator to a
+                    // device unit, and the module that provides it has no device program.
+                    if (decision.onDevice())
+                        reportRefusal(
+                            *graph,
+                            id,
+                            core::error::RuntimeDiag::GpuScopeUnsupported,
+                            "no device implementation");
+                    else
+                        reportRefusal(
+                            *graph,
+                            id,
+                            core::error::RuntimeDiag::GpuScopeNoDeviceProgram,
+                            "the module provides none");
+                    refused = true;
                     continue;
-                auto diag = context.rtmDiags()->of(core::error::RuntimeDiag::GpuScopeUnsupported);
-                const auto origin = graph->nodeOrigin(id);
-                if (origin != camel::source::kInvalidOriginId)
-                    diag.atOrigin(origin);
-                diag.commit(
-                    std::string(graph->name()),
-                    "operator '" +
-                        std::string(core::OperatorTable::instance().uri(oper)) + "'",
-                    "no device implementation");
-                refused = true;
+                }
+                // A lowering exists; the use may still have no program (a shape or element type
+                // the back end refuses). An unresolved type or index instance is not a refusal:
+                // the run specializes it from the actual arguments before it decides (h251).
+                const char *reason = gpuRefusal(*graph, analysis, id);
+                if (reason && *reason) {
+                    reportRefusal(
+                        *graph,
+                        id,
+                        core::error::RuntimeDiag::GpuScopeNoDeviceProgram,
+                        reason);
+                    refused = true;
+                }
             }
         }
         if (refused)
             return program;
     }
+    bool regionRefused = false;
     for (auto *graph : graphs) {
         const auto &analysis = analyses.at(graph);
         if (analysis.regions.empty())
@@ -167,9 +262,33 @@ const runtime::Program *outlineRegions(
                 // preserves this unedited callee's id and revision, including copies.
                 try {
                     (void)compileTypes(fn, context.facts());
-                } catch (const UnsupportedComputation &) {
+                } catch (const UnsupportedComputation &e) {
+                    // A region is compiled from the static types its nodes carry; unlike a direct
+                    // call there is no later run with actual shapes that could fix it. Inside a
+                    // `#gpu` scope that is the refusal the design asks for; outside one the host
+                    // may still run the region, which is what the pass did before.
+                    if (!regionInScope(*graph, region))
+                        continue;
+                    auto diag =
+                        context.rtmDiags()->of(core::error::RuntimeDiag::GpuScopeNoDeviceProgram);
+                    const auto origin =
+                        graph->nodeOrigin(static_cast<rt::gc_node_ref_t>(region.members.front()));
+                    if (origin != camel::source::kInvalidOriginId)
+                        diag.atOrigin(origin);
+                    const bool shape =
+                        e.oper().empty() || e.reason() == UnsupportedComputation::Reason::Shape;
+                    diag.commit(
+                        scopeNameOf(*graph),
+                        "operator '" + (e.oper().empty() ? std::string("<region>") : e.oper()) +
+                            "'",
+                        shape ? "no device program for this shape"
+                              : "no device program for this operator");
+                    regionRefused = true;
+                    break;
                 }
             }
+            if (regionRefused)
+                break;
             auto fnNode =
                 draft.materializeStaticValue(core::rtdata::toSlot(fn), callee->funcType());
             auto *type = callee->funcType()->exitType();
@@ -259,6 +378,8 @@ const runtime::Program *outlineRegions(
             for (auto it = region.members.rbegin(); it != region.members.rend(); ++it)
                 draft.eraseNode(static_cast<rt::gc_node_ref_t>(*it));
     }
+    if (regionRefused)
+        return program;
     return count ? session.commit() : program;
 }
 } // namespace camel::tiles

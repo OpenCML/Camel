@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Apr. 07, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Runtime graph allocation, native payload storage, and payload accessors.
@@ -25,7 +9,6 @@
  * bridge-style node-record arrays. The payload
  * keeps one variable-length node
  * blob, one unified edge arena, and a compact branch-arm arena.
-
  */
 
 #include "camel/runtime/graph.h"
@@ -1008,6 +991,33 @@ void recordDraftDebugData(GCGraphDebugRecord *record, const GraphDraft &draft) {
         return;
     }
     record->captureNames.assign(draft.captureNames().begin(), draft.captureNames().end());
+    record->nodeNames.clear();
+    bool named = false;
+    for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
+        if (draft.alive(ref) && draft.nodeName(ref) != camel::core::kEmptySym) {
+            named = true;
+        }
+    }
+
+    if (named) {
+        // The names are indexed by runtime node id, not by draft place: the commit drops dead
+        // places and may number the rest differently.
+        const DraftPayloadPlan plan = planDraftPayload(draft);
+        record->nodeNames.assign(plan.nodes.size(), camel::core::kEmptySym);
+
+        for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
+            if (!draft.alive(ref) || draft.nodeName(ref) == camel::core::kEmptySym) {
+                continue;
+            }
+            const gc_node_ref_t runtime =
+                ref < plan.runtimeRefsByDraftId.size() ? plan.runtimeRefsByDraftId[ref]
+                                                       : kInvalidNodeRef;
+
+            if (runtime != kInvalidNodeRef && runtime < record->nodeNames.size()) {
+                record->nodeNames[runtime] = draft.nodeName(ref);
+            }
+        }
+    }
 }
 
 GCGraphNativePayload
@@ -1599,6 +1609,24 @@ std::span<const camel::core::SymId> GCGraph::captureNames() const {
     return debug_ ? std::span<const camel::core::SymId>(debug_->captureNames)
                   : std::span<const camel::core::SymId>();
 }
+
+std::string_view GCGraph::nodeName(gc_node_ref_t ref) const {
+    if (!debug_ || ref >= debug_->nodeNames.size()) {
+        return {};
+    }
+    const camel::core::SymId name = debug_->nodeNames[ref];
+    return name == camel::core::kEmptySym ? std::string_view()
+                                          : camel::core::symbolText(name);
+}
+
+camel::core::SymId GCGraph::nodeNameSym(gc_node_ref_t ref) const {
+    if (!debug_ || ref >= debug_->nodeNames.size()) {
+        return camel::core::kEmptySym;
+    }
+    return debug_->nodeNames[ref];
+}
+
+bool GCGraph::hasNodeNames() const { return debug_ && !debug_->nodeNames.empty(); }
 
 uint32_t GCGraph::nodeAttrs(gc_node_ref_t ref) const {
     return containsNodeRef(ref) && chunkOf(ref).attrs ? chunkOf(ref).attrs[ref & (kNodeChunkNodes - 1)] : 0;

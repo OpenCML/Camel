@@ -1,11 +1,23 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The parameter-tree library written in Camel (design principles 13.5): a tree is a value made
  * of nested structs and tuples, and everything else is a leaf.
  *
- * `tree_paths` is here. `tree_map`, `tree_reduce`, `tree_unzip` and `tree_leaves` still live in
- * the native module `ckpt`: they need the compiler's per-leaf expansion of a callback or of a
- * value tuple, which arrives with H51 step 13; keeping them in `ckpt` until then is the split
- * this library exists for, not a wrapper around them.
+ * `tree_paths`, `tree_map`, `tree_reduce` and `tree_unzip` are written here, with `match type`,
+ * `static for`/`static loop`, `fields`, `indices`, `typeof` and rest parameters: the walk is
+ * expanded at each call into ordinary access and fill nodes, with no function of its own per
+ * leaf type. Each exported function recurses itself. `paths_at` and `unzip_at` stay because
+ * they carry a value the exported signature does not have (the path built so far, the component
+ * of the leaf tuple): a default argument would fold the first one into `tree_paths` (the
+ * language has none yet), and the second is not a hand-off but the walk of one component.
+ *
+ * `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
+ * leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
+ * built: `( ..ts )` is not written (a rest argument is only a call argument), and a function
+ * with a rest parameter has no value to return. It stays `ckpt:tree_leaves` until value-tuple
+ * expansion exists.
  *
  * The path of a leaf is its field names (tuple indices) from the root, joined by dots; the
  * root's own path is the empty string. The path values are ordinary strings, so the result is
@@ -16,18 +28,82 @@ module tree
 /// The path of every leaf, as a tree of the same shape.
 /// @pure
 /// @example tree_paths({ a: 1, b: (2, 3) })    // { a: 'a', b: ('b.0', 'b.1') }
-export func tree_paths(t: typeas T) {
+export func tree_paths::<T>(t: T) {
     return paths_at(t, '')
 }
 
-func paths_at(t: typeas T, here: string) {
+/// `here` is the path of `t` itself; the public one starts it as the empty string.
+func paths_at::<T>(t: T, here: string) {
     return match type T {
-        case struct => { static for (n, F) in fields T => paths_at(t.[n], join(here, n)) }
-        case tuple => ( static for (n, F) in fields T => paths_at(t.[n], join(here, n)) )
+        // `T { ... }`: the result has the field names and the kind of `T`, and a string at each
+        // one. The old spelling needed one branch for structs and one for tuples.
+        case struct | tuple =>
+            T { static for (n, _) in fields T => paths_at(t.[n], dotted(here, n)) }
         case _ => here
     }
 }
 
-func join(a: string, b: string): string {
+/// `here` and the next field name, separated by a dot; the root has no dot before its first
+/// field. The name is `dotted`, not `join`: `join` already names the rule-language clause.
+func dotted(a: string, b: string): string {
     return if a == '' then b else a + '.' + b
+}
+
+/// Applies f to the leaves in the same place of the trees (one tree, or several of the same
+/// shape: the callback then takes one leaf of each), and gives a tree of the results. The shape
+/// is that of the first tree.
+/// @effect whatever the callback does
+/// @example tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
+with <f: F>
+export func tree_map::<T, F>(t: T, ..ts) {
+    return match type T {
+        case struct | tuple => T { static for (n, _) in fields T =>
+            tree_map<f>(t.[n], ..( static for (j) in indices ts => ts.[j].[n] )) }
+        case _ => f(t, ..( static for (j) in indices ts => ts.[j] ))
+    }
+}
+
+/// Folds the leaves from the first to the last with f, starting from init.
+/// @effect whatever the callback does
+/// @example tree_reduce<(acc: int, x: int): int => acc + x>({ a: 1, b: (2, 3) }, 0)    // 6
+with <f: (acc: R, leaf: A) => R>
+export func tree_reduce::<T, R, A>(t: T, init: R): R {
+    return match type T {
+        case struct | tuple =>
+            static loop a = init for (n, _) in fields T do tree_reduce<f>(t.[n], a)
+        case _ => f(init, t)
+    }
+}
+
+/// Turns a tree of tuples into a tuple of trees: the shape is that of `reference`, and every
+/// leaf of `tree` at a leaf of the reference is a tuple of the same length.
+/// @pure
+/// @example tree_unzip({ a: (1, 2.0) }, { a: 0 })    // ({ a: 1 }, { a: 2.0 })
+export func tree_unzip::<R, S>(r: R, s: S) {
+    return ( static for (j, _) in fields typeof(first_leaf(r, s)) => unzip_at(r, s, j) )
+}
+
+/// The name of the first field of `T`: a compile-time constant, so it can be a static access
+/// key. The compiler folds the call to its value where a constant is required (design
+/// principles 5.1, 6.5).
+func first_field::<T>(): string {
+    return ( static for (n, _) in fields T => n ).[0]
+}
+
+/// Any leaf of `r`: its type is the leaf tuple. The first field name is a compile-time constant
+/// (a fold of `first_field`), used as the key of both trees.
+func first_leaf::<R, S>(r: R, s: S) {
+    return match type S {
+        case struct | tuple =>
+            first_leaf(r.[first_field::<S>()], s.[first_field::<S>()])
+        case _ => r
+    }
+}
+
+/// The tree of one component of the leaf tuples: `j` names the component everywhere.
+func unzip_at::<R, S>(r: R, s: S, constas j: string) {
+    return match type S {
+        case struct | tuple => S { static for (n, _) in fields S => unzip_at(r.[n], s.[n], j) }
+        case _ => r.[j]
+    }
 }

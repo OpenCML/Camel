@@ -129,7 +129,7 @@ Device<{ a: A, b: (B, C) }>  ≡  { a: Device<A>, b: (Device<B>, Device<C>) }
 `params_ff.cml` 里的 12 个函数与镜像类型全部不再需要。优化器与 EMA 对所有结构通用：
 
 ```cml
-import { tree_map, tree_unzip, tree_reduce } from ckpt
+import { tree_map, tree_unzip, tree_reduce } from tree
 import { Tensor, sum, sqrt } from tensor
 
 func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h: Hyper): (Tensor<f32>, Tensor<f32>, Tensor<f32>) {
@@ -138,18 +138,18 @@ func adam_leaf(p: Tensor<f32>, g: Tensor<f32>, m: Tensor<f32>, v: Tensor<f32>, h
     return (p - h.rate * (nm / h.bc1) / (sqrt(nv / h.bc2) + 0.00000001), nm, nv)
 }
 
-export func adam(p: typeas P, g: P, m: P, v: P, h: Hyper): (P, P, P) {
+export func adam::<P>(p: P, g: P, m: P, v: P, h: Hyper): (P, P, P) {
     let r = tree_map<(a: Tensor<f32>, b: Tensor<f32>, c: Tensor<f32>, d: Tensor<f32>) => adam_leaf(a, b, c, d, h)>(p, g, m, v)
     return tree_unzip(r, p)       // 按 p 的叶子边界拆成 (新参数, 新 m, 新 v)
 }
-export func ema(avg: typeas P, p: P): P {
+export func ema::<P>(avg: P, p: P): P {
     return tree_map<(a: Tensor<f32>, b: Tensor<f32>): Tensor<f32> => a * 0.999 + b * 0.001>(avg, p)
 }
-export func sq_distance(p: typeas P, q: P): float {
+export func sq_distance::<P>(p: P, q: P): float {
     return tree_map<(a: Tensor<f32>, b: Tensor<f32>): float => sum((a - b) * (a - b))>(p, q)
         ->tree_reduce<(acc: float, x: float): float => acc + x>(0.0)
 }
-export func sq_norm(p: typeas P): float {
+export func sq_norm::<P>(p: P): float {
     return p->tree_reduce<(acc: float, x: Tensor<f32>): float => acc + sum(x * x)>(0.0)
 }
 ```
@@ -226,7 +226,7 @@ func main(): int sync {
 }
 ```
 
-`Params` 是模型参数的结构体类型；泛型函数用 `typeas P` 就地绑定类型（设计原则中的类型变量规则）。`Device<State>` 按 3.4 分配到每个叶子；`key`、`step` 这类叶子需要 Tiles 支持 `Device<Key>`、`Device<int>`，或把它们留在主机作为参数（技术选择）。Tiles 把 `train_step` 编成一个区域：状态常驻设备，每步只有在报告时才下载一个标量。
+`Params` 是模型参数的结构体类型；泛型函数在名字后声明 `::<P>`（设计原则中的类型变量规则）。`Device<State>` 按 3.4 分配到每个叶子；`key`、`step` 这类叶子需要 Tiles 支持 `Device<Key>`、`Device<int>`，或把它们留在主机作为参数（技术选择）。Tiles 把 `train_step` 编成一个区域：状态常驻设备，每步只有在报告时才下载一个标量。
 
 ### 4.4 搬运（2026-10-19 修订）
 

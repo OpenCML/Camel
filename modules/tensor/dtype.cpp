@@ -1,24 +1,12 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Element type helpers shared by kernels, type inference, and serialization.
+ *
+ * There is no normalization here (design/arrays-memory plan 5.2): a tensor's
+ * element type is the one the program wrote, so `Tensor<f64>` is f64 and
+ * `Tensor<i32>` is i32. Promotion only picks one of the two operand types.
  */
 
 #include "dtype.h"
@@ -40,37 +28,57 @@ bool isFloatingTensorType(TypeCode code) {
     return code == TypeCode::Float32 || code == TypeCode::Float64;
 }
 
-TypeCode normalizeTensorDType(TypeCode code) {
+std::string elementTypeSpelling(TypeCode code) {
     switch (code) {
     case TypeCode::Float32:
+        return "f32";
     case TypeCode::Float64:
-        return TypeCode::Float32;
+        return "f64";
     case TypeCode::Int32:
+        return "i32";
     case TypeCode::Int64:
-        return TypeCode::Int64;
+        return "i64";
     case TypeCode::Bool:
-        return TypeCode::Bool;
+        return "bool";
     default:
-        throw std::invalid_argument("Unsupported Tensor dtype");
+        return type::typeCodeToString(code);
     }
 }
 
 TypeCode promoteTensorTypes(TypeCode lhs, TypeCode rhs) {
-    lhs = normalizeTensorDType(lhs);
-    rhs = normalizeTensorDType(rhs);
-    if (lhs == TypeCode::Float32 || rhs == TypeCode::Float32) {
-        return TypeCode::Float32;
+    if (!isSupportedTensorScalar(lhs)) {
+        throw std::invalid_argument("Unsupported Tensor dtype");
     }
-    if (lhs == TypeCode::Int64 || rhs == TypeCode::Int64) {
-        return TypeCode::Int64;
+    if (!isSupportedTensorScalar(rhs)) {
+        throw std::invalid_argument("Unsupported Tensor dtype");
     }
-    return TypeCode::Bool;
+    // Widening only: the result is one of the two element types, so promotion never
+    // replaces an operand's type with a third one. f64 > f32 > i64 > i32 > bool.
+    const auto rank = [](TypeCode code) {
+        switch (code) {
+        case TypeCode::Float64:
+            return 4;
+        case TypeCode::Float32:
+            return 3;
+        case TypeCode::Int64:
+            return 2;
+        case TypeCode::Int32:
+            return 1;
+        default:
+            return 0;
+        }
+    };
+    return rank(lhs) >= rank(rhs) ? lhs : rhs;
 }
 
 std::string_view dtypeName(TypeCode dtype) {
     switch (dtype) {
     case TypeCode::Float32:
         return "float32";
+    case TypeCode::Float64:
+        return "float64";
+    case TypeCode::Int32:
+        return "int32";
     case TypeCode::Int64:
         return "int64";
     case TypeCode::Bool:
@@ -78,6 +86,19 @@ std::string_view dtypeName(TypeCode dtype) {
     default:
         return "unknown";
     }
+}
+
+std::string supportedElementTypes(std::initializer_list<TypeCode> codes) {
+    std::string text;
+    size_t index = 0;
+    for (TypeCode code : codes) {
+        if (index > 0) {
+            text += index + 1 == codes.size() ? " and " : ", ";
+        }
+        text += elementTypeSpelling(code);
+        ++index;
+    }
+    return text;
 }
 
 } // namespace camel::tensor

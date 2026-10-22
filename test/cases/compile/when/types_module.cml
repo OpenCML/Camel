@@ -1,0 +1,19 @@
+/**
+ * The standard type-predicate module is a library module like any other: importing it compiles
+ * its declarations, seven head-only generic functions written with `match type` identity cases,
+ * and a program calls one through the import as it calls any other generic function. The
+ * condition of `describe` resolves `is_numeric` where that declaration is written, and the
+ * imported predicate's template is instantiated with `T` and folded over identity cases.
+ */
+module when_types_module
+
+import { is_numeric } from types
+
+func describe::<T>(x: T): string when is_numeric::<T>() {
+    return "numeric"
+}
+
+func main(): int sync {
+    println(describe(1))
+    return 0
+}

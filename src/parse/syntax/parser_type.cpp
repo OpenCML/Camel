@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 12, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The parser: type expressions.
@@ -28,7 +12,7 @@
  *   typeUnit          name of T
  *   arrayType         T[]
  *   specType          T<arguments>
- *   primaryType       name, {struct}, (T), (tuple), function type, typeof e, typeas name
+ *   primaryType       name, {struct}, (T), (tuple), function type, typeof e
  *
  * A type often stands where an expression goes on after it (`x as T + 1`, `x as T ^ 2`), and
  * `+`, `-`, `^` are operators of both. The type keeps the operator when a type can follow it,
@@ -55,7 +39,6 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     case TK::LBrace:
     case TK::Lt:
     case TK::KwTypeof:
-    case TK::KwTypeas:
     case TK::KwEnum:
         return true;
     default:
@@ -155,14 +138,13 @@ void ParserImpl::parseTypeUnit() {
     parseArrayType();
 }
 
-/// arrayType : specType ('[' ']')*
+/// arrayType : specType arrayDim+
 void ParserImpl::parseArrayType() {
     const size_t m = mark();
     parseSpecType();
     bool any = false;
-    while (cur_ == TK::LBracket && peek(1) == TK::RBracket && !lineBreak() && !panic_) {
-        bump();
-        bump();
+    while (cur_ == TK::LBracket && !lineBreak() && !panic_) {
+        parseArrayDim();
         any = true;
     }
     if (any) {
@@ -170,9 +152,46 @@ void ParserImpl::parseArrayType() {
     }
 }
 
+/// arrayDim     : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+/// arrayDimItem : '?' | '..' identDef? | dataExpr
+/// A dimension is an unknown extent (`?`, or the empty `[]`), an expression over integers and
+/// dimension names, or the trailing pack (`..`, `..rest`). The parser keeps a pack that is not
+/// last (and a second pack) so the tree still holds what was written; GCT reports it.
+void ParserImpl::parseArrayDim() {
+    const size_t m = mark();
+    bump();
+    {
+        Scope scope(*this, false);
+        if (cur_ != TK::RBracket && !panic_) {
+            while (!panic_) {
+                if (cur_ == TK::Question) {
+                    bump();
+                } else if (cur_ == TK::DotDot) {
+                    bump();
+                    if (cur_ == TK::Identifier) {
+                        parseIdentDef();
+                    }
+                } else {
+                    parseExpr();
+                }
+                if (!eat(TK::Comma) || cur_ == TK::RBracket) {
+                    break;
+                }
+            }
+        }
+        if (!panic_ && cur_ != TK::RBracket) {
+            unexpected({e(TK::Comma), e(TK::RBracket)});
+        }
+    }
+    eat(TK::RBracket);
+    close(m, NK::ArrayDim);
+}
+
 /// specType   : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-/// typeOrData : typeExpr | 'const' dataExpr
+/// typeOrData : typeExpr | arrayDim | 'const' dataExpr
 /// Rule 1: the `<` of type arguments touches the type (LAngle), as that of `with` arguments.
+/// A shape argument (`Tensor<f32, [n, 784]>`) is written without `const`; the `const` branch
+/// stays for the other constant arguments a module type may take.
 void ParserImpl::parseSpecType() {
     const size_t m = mark();
     parsePrimaryType();
@@ -193,6 +212,8 @@ void ParserImpl::parseSpecType() {
                     parseExpr();
                 }
                 close(cm, NK::ConstData);
+            } else if (cur_ == TK::LBracket) {
+                parseArrayDim();
             } else {
                 parseType();
             }
@@ -206,7 +227,7 @@ void ParserImpl::parseSpecType() {
 }
 
 /// primaryType : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-///             | 'typeof' dataExpr | 'typeas' identDef
+///             | 'typeof' dataExpr
 /// tupleType   : '(' typeList? ','? ')'
 /// A `(` opens a function type when its head is that of a parameter list (`(name:`, `(var`, or
 /// an empty list followed by `=>`); otherwise `(T)` is the parenthesized type and anything
@@ -239,12 +260,6 @@ void ParserImpl::parsePrimaryType() {
             parseLogicalOr();
         }
         return close(m, NK::TypeOfType);
-    }
-    case TK::KwTypeas: {
-        const size_t m = mark();
-        bump();
-        parseIdentDef();
-        return close(m, NK::TypeAsType);
     }
     case TK::LParen: {
         const TK t1 = peek(1);
@@ -320,7 +335,7 @@ void ParserImpl::parseStructType() {
     close(m, NK::StructType);
 }
 
-/// funcType : modifiers? angledParams? parentParams '=>' typeExpr
+/// funcType : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
 void ParserImpl::parseFuncType() {
     const size_t m = mark();
     if (isModifier(cur_)) {
@@ -337,7 +352,34 @@ void ParserImpl::parseFuncType() {
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
     }
+    if (atWord(0, "uses") || atWord(0, "pure")) {
+        parseResourceClause();
+    }
     close(m, NK::FuncType);
+}
+
+/// resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+///
+/// What a function type says about the resources a call touches (design effects plan 3.1):
+/// `pure` says none; `uses` names parameters (the values a call touches) and resources
+/// (ambient state, a module's resource, or a group of them). `uses` and `pure` are contextual.
+/// A `pure` followed by a `uses` is read here and refused when the clause is compiled
+/// (PureAndUses), so the error names the two words rather than the token after them.
+void ParserImpl::parseResourceClause() {
+    const size_t m = mark();
+    while (!panic_ && (atWord(0, "pure") || atWord(0, "uses"))) {
+        if (atWord(0, "pure")) {
+            bump();
+            continue;
+        }
+        bump(); // `uses`
+        parseIdentRef(NK::IdentRef);
+        while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+            bump();
+            parseIdentRef(NK::IdentRef);
+        }
+    }
+    close(m, NK::ResourceClause);
 }
 
 /// typeList : typeExpr (',' typeExpr)*

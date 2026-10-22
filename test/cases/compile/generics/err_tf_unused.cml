@@ -2,7 +2,7 @@ module err_tf_unused
 
 type Tag<T> = int
 
-func f(p: Tag<typeas T>): int {
+func f::<T>(p: Tag<T>): int {
     return 1
 }
 

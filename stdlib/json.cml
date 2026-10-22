@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * A Json is a JSON value whose shape is known only when the program runs: `decode` reads a
  * text, or gives an error value when the text is not JSON, and the accessors below look into

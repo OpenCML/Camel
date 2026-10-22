@@ -107,7 +107,26 @@ func hello(name: string) sync {      // no return value; a sync function body
 - The return type can be omitted and is inferred from the function body; a recursive function must write out its return type. When the body has no `return`, the value of the function is the value of the last statement of the body: that value when the statement is an expression with one, `void` otherwise. Note that the value of `println(x)` is `x` (so that `x->println->f` can go on), so `func main() sync { println('a') }` returns the string `'a'`, and the default pipeline writes the result of `main` to the output: the line appears twice. Declare the return type `: void`, or end with `return 0`.
 - A `sync` before the function body makes the function body a sync block; a `sync` before `func` is a function modifier. The two have different meanings ([4.3](04_execution_model.md#43-sync)).
 - A function can be declared at the module top level, in a namespace, or in a block (a local function). Functions can be mutually recursive, and need not be declared before use.
-- Parameter default values `b: int = 5` are reserved, not implemented (`SemanticDiag::FeatureNotSupported`); use overloading or `with` parameters.
+- An ordinary parameter may write a default, and a call may give its ordinary arguments by position or by name. The rules are the `with` rules ([7.4.2](#742-with-parameters)):
+
+```cml
+func scale(x: int, by: int = 2, rounds: int = 1): int {
+    return x * by * rounds
+}
+
+func main(): int sync {
+    println(scale(3))                    // both defaults: 6
+    println(scale(3, 4))                 // by by position: 12
+    println(scale(3, rounds: 5))         // skip by, give rounds by name: 10
+    println(scale(3, by: 4, rounds: 5))  // both by name: 60
+    return 0
+}
+```
+
+- **A default is a compile-time constant expression**, evaluated once where the declaration is and filled into each call: it is not evaluated again at a call. So it cannot read a parameter of the same declaration (`ParamDefaultNotConstant`), nor be a value computed at run time; a type that does not fit is `ParamDefaultWrongType`.
+- **A parameter after one with a default must have a default too** (`ParamAfterDefault`), so that giving the parameters by position leaves no hole.
+- **A named argument comes after the positional ones**, spelled as in a struct literal: `scale(3, by: 4)`. A name that is not a parameter of the function is `ParamArgumentUnknown`, the same parameter given twice is `ParamArgumentDuplicate`, a parameter with no default left without a value is `ParamArgumentMissing`, and a positional argument after a named one is `ParamArgumentPositionalAfterNamed`. A name is resolved at the call, so the callee must be one known declaration: with several overloads, an ordinary argument given by name is `ParamArgumentCallee`.
+- **A function value carries no defaults**: after `let g = scale`, every parameter of `g` has to be given. A default belongs to the declaration, not to the type.
 
 ### 7.4.2 `with` parameters
 
@@ -132,6 +151,28 @@ func main(): int sync {
 ```
 
 `with` parameters are not generic parameters and cannot be used to declare type parameters.
+
+A `with` parameter may write a default, and a call may give its `with` arguments by position or by name:
+
+```cml
+with <rounds: int = 8, strict: bool = false>
+func repeat(x: int): int {
+    return if strict then x * rounds else x + rounds
+}
+
+func main(): int sync {
+    println(repeat(10))                 // both defaults: 18
+    println(repeat<2, true>(10))        // both by position: 20
+    println(repeat<strict: true>(10))   // rounds skipped, strict by name: 80
+    println(repeat<16>(10))             // rounds by position: 26
+    return 0
+}
+```
+
+- **A default is a compile-time constant expression**, evaluated once where the declaration is and filled into the graph at each call: it is not re-evaluated per call. It therefore cannot read a `with` parameter of the same declaration (`WithDefaultNotConstant`), nor be a value computed at run time; a value of the wrong type is `WithDefaultWrongType`.
+- **A parameter after one with a default must also have a default** (`WithParameterAfterDefault`), so that a positional call never leaves a gap before a value.
+- **A named argument comes after the positional ones**, spelled as in a struct literal: `f<rounds: 16>`, `f<strict: true>`. A name that is not one of the function's `with` parameters is `WithArgumentUnknown`, giving one parameter twice is `WithArgumentDuplicate`, and leaving out a parameter with no default is `WithArgumentMissing`. A named argument may only be used in a call; the function value `f<rounds: 8>` binds the arguments it is given in order and applies no default.
+- **A function value carries no defaults**: after `let g = repeat`, every `with` parameter of `g` has to be given. A default belongs to the declaration, not to the type.
 
 ### 7.4.3 Overloading
 
@@ -200,7 +241,7 @@ func main(): int sync {
 - **Can be overloaded**: the binary `+` `-` `*` `/` `%` `^` `@` `==` `<` `<=` `>` `>=` `&` `|`, indexing `[]` (the indexed value and at least one index), and the unary `-` `!` `~`. `-` with one parameter is negation, with two subtraction.
 - **Overloading `==` gives `!=`** (design principles 4.3): an `a != b` that uses that overload of `==` is `!(a == b)`, so the two cannot disagree. The overload must return a `bool`, otherwise the `!=` that uses it is `SemanticDiag::OperatorOverloadInvalid`. `!=` cannot be overloaded by itself (`SemanticDiag::OperatorNotOverloadable`).
 - **Cannot be overloaded**: `&&`, `||` (branches), `??`, `!!`, `?->` (branches on a null or an error), `->` (passes a value to a function), `..`, `as`, assignment, `!=` (it follows `==`), and `===`, `!==`. Declaring one is `SemanticDiag::OperatorNotOverloadable`, with the reason. A compound assignment has no overload of its own: `a += b` is `a = a + b` and follows the overload of `+`.
-- An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload writes `typeas` in a parameter's type (`func operator +(a: (typeas T)[], b: T[]): T[]`), not in angle brackets: angle brackets are with-parameters.
+- An operator with the wrong number of parameters, with with-parameters or with a `var` parameter is `SemanticDiag::OperatorOverloadInvalid`. A generic overload declares its type parameters after the operator's name (`func operator +::<T>(a: T[], b: T[]): T[]`), not in a parameter's type.
 - **The overloads of every layer form one set.** Every other name takes the nearest layer only (local > this module > imported > built-in); operators are the exception (design principles 10.2): the overloads of this module, those exported by imported modules, and the built-in and C++ module ones are one set, and a call takes the one that accepts its operands.
 - **The more specific overload wins** (design principles 4.3). "More specific" means: an overload of the program whose parameter types are exactly the operands' types (without a value entering `T?` or `T!`), while every other one that accepts the operands takes them only as members of a family of types: a built-in or C++ module operator whose type rule accepts several types (comparing arrays, tuples and structs by content, arithmetic over tensors), or a generic overload. The call then takes the program's overload. So a struct can have an equality of its own: `func operator ==(a: V, b: V): bool` makes `p == q` (both `V`) call it instead of comparing by content; other struct types are still compared by content. A built-in operator declared for exactly those types (`int + int`, `float == float`) is as specific: declaring such an overload is `SemanticDiag::OperatorOverloadConflict`.
 - Otherwise two that accept the operands are `SemanticDiag::AmbiguousCall`, which lists them (two generic overloads, or two modules each giving one for the same parameter types); two overloads with the same parameter types in one module are `SemanticDiag::Redeclaration`. An ordinary call, and a partial application (`f<w>` used as a value), report the same diagnostic when several candidates fit in the pass being used.
@@ -210,18 +251,18 @@ func main(): int sync {
 
 ## 7.5 Generic functions
 
-At the position in the parameter types where a type variable first appears, write `typeas T`, which binds the type at that position as `T`; afterwards (the remaining parameters, the return type, the function body) write `T` directly.
+A generic function declares its type parameters at its head, after its name in `::<…>`. A function with `::<…>` is generic, one without is not.
 
 ```cml
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func pick(c: bool, a: typeas T, b: T): T {
+func pick::<T>(c: bool, a: T, b: T): T {
     return if c then a else b
 }
 
-func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
     return xs->map<f>
 }
 
@@ -240,20 +281,20 @@ func main(): int sync {
 ```
 
 - A generic function is a **subgraph template**. Each call with a set of concrete types instantiates a subgraph in which all types are concrete (the same set of types is instantiated only once; in `std::rgir` one can see subgraphs named `first<int>` and `first<string>`). The graph contains only concrete types, and no type information is needed at run time.
-- **A type variable takes its type from the arguments.** First the type of the argument at its `typeas` position; when the argument there says nothing (it is `null`, or a generic function that is itself waiting for its types), the type found at another occurrence. The constraints of all arguments are collected before any is checked: every parameter is then checked against its type with the variables replaced, without implicit conversion (except that a value enters a `T?`/`T!` parameter, see [3.4](03_data_model.md)). `pick(true, 1, 2.5)` is an error (`T` is bound to `int`); a variable that cannot be determined is a compile-time error, and the diagnostic says which.
-- `typeas` can appear in these positions: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot appear as an argument of a module type.
-- `typeas` can appear in the parameters (including `with` parameters) or result type of a function declaration. A variable must be declared before use (`with` parameters first); declaring it twice or using an existing type name is an error.
-- A result-only variable is inferred from an expected type: `let xs: int[] = empty()`, a known parameter type, or a declared return position. Without sufficient context, provide explicit type arguments: `empty::<int>()`. Types follow their first occurrence in the signature (`with` parameters first) or can be given by name, which does not depend on position: `pair::<A = int, B = string>(..)`. One list is all positional or all named, never mixed; by name every type variable must be given, and a wrong or repeated name is a compile-time error; built-in operators take their type arguments by position only. Type arguments are consumed at compile time. Value context arguments remain `f<w>`; combine them as `f::<T><w>(x)`. An explicit instance can also be a function value: `let f = id::<int>`.
+- **A type variable takes its type from the arguments.** Each argument is unified with its parameter's type; when the argument there says nothing (it is `null`, or a generic function that is itself waiting for its types), the type found at another occurrence. The constraints of all arguments are collected before any is checked: every parameter is then checked against its type with the variables replaced, without implicit conversion (except that a value enters a `T?`/`T!` parameter, see [3.4](03_data_model.md)). `pick(true, 1, 2.5)` is an error (`T` is bound to `int`); a variable that cannot be determined is a compile-time error, and the diagnostic says which.
+- A name declared at the head can be written in any type position of the signature: array elements, tuple elements, struct fields, the parameters and return value of a function type, the inner type of `T?`/`T!`, the arguments of `Map`/`Set` and of type functions. It cannot be an argument of a module type.
+- Only a name declared at the head is a type variable. A plain name in a parameter type that denotes no type and is not declared at the head is an unknown type (`SemanticDiag::UnresolvedTypeReference`); it is not bound automatically. One name declared twice at the head is `SemanticDiag::TypeVariableRedeclared`; one declared but never written in the signature is the warning `SemanticDiag::TypeVariableUnused`, and the declaration stays usable. When a head name also denotes a type, it is the type parameter inside its declaration: the head declaration wins.
+- A result-only variable is inferred from an expected type: `let xs: int[] = empty()`, a known parameter type, or a declared return position. Without sufficient context, provide explicit type arguments: `empty::<int>()`. Positional type arguments follow the order of the head declaration, and they can be given by name, which does not depend on position: `pair::<A = int, B = string>(..)`. One list is all positional or all named, never mixed; by name every type variable must be given, and a wrong or repeated name is a compile-time error; built-in operators take their type arguments by position only. Type arguments are consumed at compile time. Value context arguments remain `f<w>`; combine them as `f::<T><w>(x)`. An explicit instance can also be a function value: `let f = id::<int>`.
 - **The function body is checked at instantiation.** Type errors in the function body are reported at instantiation; the diagnostic gives the position of the error in the function body and states which instance it is and which call instantiated it. A generic function that is never called is not checked.
 - Recursive generic functions can be used (the return type must be written out). A function that switches to a larger type at every recursion cannot terminate instantiation, and an error is reported when the nesting reaches 8 levels.
 - `T` can be used in the function body: the parameter types of a lambda, `let z: T = 0`, `e as T`.
 - **Export**: a generic function can be `export`ed, and after an `import` another module calls it as usual (the qualified name `lib::f(x)` can also be written). What is exported is the template; there is one instance per set of types in the whole program, whichever module calls it. Names in the function body are resolved in the module that declares it, so it can use functions of that module that are not exported, other generic functions, its own imports and the values of its top level.
 
-Binding is equally possible in `with` parameters:
+The types of `with` parameters use the names declared at the head too:
 
 ```cml
-with <f: (acc: typeas U, x: typeas T) => U, init: U>
-func my_fold(xs: T[]): U {
+with <f: (acc: U, x: T) => U, init: U>
+func my_fold::<T, U>(xs: T[]): U {
     return xs->reduce<f, init>
 }
 
@@ -270,9 +311,9 @@ func main(): int sync {
 **A generic function may stand wherever a function is expected**, also as an argument of another generic function. The compiler delays its instantiation until the type variables can be determined from the context; the delay exists at compile time only, and the graph holds the concrete instances.
 
 ```cml
-func apply(f: (x: typeas T) => typeas U, x: T): U { return f(x) }
-func id(x: typeas A): A { return x }
-func pair(x: typeas A): (A, A) { return (x, x) }
+func apply::<T, U>(f: (x: T) => U, x: T): U { return f(x) }
+func id::<A>(x: A): A { return x }
+func pair::<A>(x: A): (A, A) { return (x, x) }
 
 func main(): int sync {
     println(apply(id, 3), apply(pair, 'a'))   // T comes from 3: id becomes id<int>, so U = int
@@ -316,14 +357,15 @@ func main(): int sync {
 - **`ts` is a compile-time tuple, not a value.** It has three uses only: `indices ts` reads its positions, `ts.[j]` reads one element, and `..ts` spreads the elements as arguments. None of the three builds a `FILL` for `ts` or an `ACCS` for an element. Putting `ts` itself where a runtime value is needed (printing it, returning it, assigning it, passing it as an ordinary argument) reports `SemanticDiag::StaticTupleEscapes`; it is not silently materialized into a runtime tuple. Write a tuple literal `(a, b)` when a runtime tuple is wanted.
 - **A rest argument** is written `..e` and must be the last argument of the call. `e` must be a compile-time tuple: a tuple literal, a tuple comprehension, or the `..ts` of an enclosing rest function. A runtime tuple value has no fixed arity and is `SemanticDiag::RestArgumentNotTuple`; an argument after `..e` is `SemanticDiag::RestArgumentNotLast`.
 - A rest parameter must be last (`SemanticDiag::RestParameterNotLast`), cannot write a type (`SemanticDiag::RestParameterTypeNotSupported`), and can appear only in a function declaration (writing `..` in a lambda, a function type or a rule is a syntax error). Too few arguments for the fixed parameters is `SemanticDiag::RestArgumentsMismatch`.
-- A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. For now the call must also be in the same module as the declaration: expanding a function body into another module is left to the `tree_*` task, and is reported as `SemanticDiag::RestFunctionNeedsExpansion`.
+- A function with a rest parameter is **not a value**: it cannot be assigned, passed as an argument, or exported and used as a function value (`SemanticDiag::RestFunctionNeedsExpansion`); it can only be called directly. A call may be in another module: the body's names are still resolved in the module that declares it (as for a generic instance), while the expansion happens in the caller's graph. A body that names a top-level **value** of its own module has no node for it in the caller's graph and reports `SemanticDiag::RestFunctionNeedsExpansion`; functions and the call's own arguments are unaffected.
+- A `with`-argument that names a generic function or a set of overloads (`tree_map<twice>`, `tree_map<bump>`) is resolved inside the callee for each call's argument types; this needs a callee with a rest parameter (the instance is expanded at the call). An ordinary generic function still takes one function value, chosen by the parameter types.
 
 **Constant value parameters (`constas`)**: among the ordinary parameters a declaration may write `constas n: int`. Its value is known at compile time and is part of the declaration's identity, not a runtime argument.
 
 ```cml
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -342,7 +384,7 @@ func main(): int sync {
 - **The value enters the instance key.** Every distinct constant instantiates a subgraph (`total<3>`, `total<5>`); the same types and value instantiate once. Types and values together are the key: two calls that differ only in a string are two instances (`label<"w">`, `label<"h">`).
 - **Any number, any position.** A declaration may take several `constas` parameters, at any position among the ordinary ones; the call writes each value at its parameter's position (`place(1, 2)` binds `x = 1`, `n = 2`). Each value is its own part of the instance key.
 - **The type is not limited to `int`.** `string`, `int`, `float`, `bool` and any other type with compile-time constants work; the value must be compatible with the parameter's type. The type must be written (`SemanticDiag::ConstasTypeRequired`). An `enum` member cannot be passed as a compile-time value yet (`SemanticDiag::ConstasValueNotConstant`) until `enum` values have a compile-time representation.
-- **The body reads the value.** Inside an instance `n` is a compile-time constant: it can be a named dimension in a type (`Tensor<f32, const [n]>`, `[n]`), a field name (`t.[n]`), or an ordinary value in arithmetic, conditions and printing. No type has to read it: a body that is the only reader is legal.
+- **The body reads the value.** Inside an instance `n` is a compile-time constant: it can be a named dimension in a type (`Tensor<f32, [n]>`, `[n]`), a field name (`t.[n]`), or an ordinary value in arithmetic, conditions and printing. No type has to read it: a body that is the only reader is legal.
 - **It is not a runtime parameter.** The call gives the constant, but it does not enter the call node: the instance's parameter list has no `n`, and the call passes only the other arguments (`total(3, xs)` has one argument, `xs`).
 - **A value can be handed on.** A `constas` value may be passed to another `constas` parameter, and it may come from a compile-time name such as the field name `static for` binds or a position of `indices`. `func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` is legal: this is how `tree_map` hands the field name and the trees to `column`.
 - **It combines with a rest parameter.** `func column(constas n: string, ..ts)` is legal: the value is bound before the expansion and `ts` takes the arguments left over. The `column` of design note 3.1.1 can be written today as
@@ -355,10 +397,10 @@ func main(): int sync {
 
   Two calls that differ only in the string are two graphs, each reading the field its value names.
 - A declaration with a `constas` parameter **has no function value**: the constant must be written at the call, so it cannot be assigned or passed on (`SemanticDiag::ConstasFunctionNeedsCall`). A body-less declaration (the declaration of a C++ operator) cannot take one (`SemanticDiag::ConstasInNativeDeclaration`).
-- The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`): a runtime value cannot select an instance. Constants today are literals, another `constas` value, and compile-time names such as the `n` of `static for` and the `j` of `indices`.
-- `n` is bound only inside the instance body; a type position in the body (`let z: Tensor<f32, const [n]>`) has no such scope yet. Array dimensions such as `f32[n]` have not landed either (see the restrictions below); what works today is `Tensor<f32, const [n]>`.
+- The value must be a compile-time constant (`SemanticDiag::ConstasValueNotConstant`): a runtime value cannot select an instance. Constants today are literals, another `constas` value, compile-time names such as the `n` of `static for` and the `j` of `indices`, and a call of a pure function whose arguments are compile-time constants (`label(first_field::<S>())`), which the compiler folds to its value; a call it cannot read at build time is refused by its own name (`SemanticDiag::FoldCallNotEvaluable`, and the other `FoldCall*` diagnostics).
+- `n` is bound only inside the instance body; a type position in the body (`let z: Tensor<f32, [n]>`) has no such scope yet. The array spelling `f32[n]` works as well.
 
-**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; a function with a `constas` parameter cannot be a value, cannot be combined with a body-less declaration, `f32[n]` array dimensions are not implemented yet, and an `enum` value cannot yet be a `constas` argument. The design note's `column(constas n, ts)` omits the type; today it is written `column(constas n: string, ..ts)`.
+**Current restrictions**: a generic function cannot be decorated; a generic function with context arguments bound (`f<w>`) cannot be a value; a function with a `constas` parameter cannot be a value, cannot be combined with a body-less declaration, and an `enum` value cannot yet be a `constas` argument. The design note's `column(constas n, ts)` omits the type; today it is written `column(constas n: string, ..ts)`.
 
 ## 7.6 Annotations
 
@@ -529,11 +571,11 @@ type PairList<T> = Pair<T>[]
 
 func sum_pair(p: Pair<int>): int { return p.0 + p.1 }
 
-func swap(p: Pair<typeas T>): Pair<T> {       // combined with typeas
+func swap::<T>(p: Pair<T>): Pair<T> {          // combined with the head type parameters
     return (p.1, p.0)
 }
 
-func key_of(e: Entry<typeas K, typeas V>): K {
+func key_of::<K, V>(e: Entry<K, V>): K {
     return e.key
 }
 
@@ -554,7 +596,7 @@ id
 - It can be `export`ed, and is used in another module as `module::Pair<int>`.
 - The angle brackets of a module type (such as `Tensor<f32, const [2, 3]>`) are interpreted by the type itself, and the arguments can be types or `const data`.
 
-The parts of type expressions that are reserved and not implemented: the type operations `&`, `\`, `+`, `-`, `^`, and `typeof`, `keyof`, `name of T` (`SemanticDiag::FeatureNotSupported` or a syntax error); their meaning is not yet decided.
+The parts of type expressions that are reserved and not implemented: the type operations `&`, `\`, `+`, `-`, `^`, and `keyof`, `name of T` (`SemanticDiag::FeatureNotSupported` or a syntax error); their meaning is not yet decided. `typeof e` is implemented: it is a whole type, the type of the value of `e`, expanded by the compiler where the type is used. It cannot be nested inside a larger type (`typeof(1)[]` is `SemanticDiag::TypeOfNotWholeType`), and an operand with no value (`void`) is `SemanticDiag::TypeOfNotAValue`.
 
 ## 7.8 Blocks
 
@@ -565,3 +607,5 @@ sync? { statement ... }
 A block is an expression: its value is given by the `return` in the block, and without a `return` it has no value. A block introduces a scope. A block with `sync` executes its statements in the order written ([4.3.1](04_execution_model.md#431-sync-blocks-block-modifier)); a block without `sync` is evaluated by dependency.
 
 A block is used as a function body, a branch arm or a lambda body, and can also stand alone as a statement.
+
+

@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Mar. 10, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Tensor construction: a dtype and a shape map to an Array of the matching numeric element
@@ -25,10 +9,12 @@
 
 #include "tensor.h"
 
+#include "camel/core/error/runtime.h"
 #include "camel/core/mm.h"
 #include "camel/utils/assert.h"
 
 #include <cstring>
+#include <string>
 
 namespace camel::tensor {
 
@@ -48,7 +34,9 @@ uint64_t numelOf(std::span<const int64_t> shape) {
 Array *
 createTensor(TypeCode dtype, std::span<const int64_t> shape, mm::IAllocator &allocator,
              bool zeroInit) {
-    dtype                          = normalizeTensorDType(dtype);
+    if (!isSupportedTensorScalar(dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
+    }
     const type::ArrayType *arrType = type::ArrayType::create(type::Type::create(dtype));
     return Array::create(allocator, arrType, shape, zeroInit);
 }
@@ -74,6 +62,15 @@ Array *viewTensor(
     }
     Array *unwrapped = const_cast<Array *>(source);
     return Array::view(unwrapped, shape, elementOffset);
+}
+
+void refuseTensorElementType(
+    std::string_view op, const Array *tensor, std::initializer_list<TypeCode> supported) {
+    camel::core::error::throwRuntimeFault(
+        camel::core::error::RuntimeDiag::OperandTypeUnsupported,
+        std::string(op),
+        "Tensor<" + elementTypeSpelling(tensor->dtype()) + ">",
+        supportedElementTypes(supported) + " tensors");
 }
 
 } // namespace camel::tensor

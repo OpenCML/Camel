@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Program model of the random program generator: the tree, its Camel source text and its
 reference evaluation.
 

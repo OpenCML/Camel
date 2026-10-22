@@ -227,7 +227,7 @@
         },
         {
             "comment": "The declaration modules with no plan of their own: their cases live under test/cases/modules/std, which feat/modules/std.plan.toml runs, and their signatures are checked by the registry plan.",
-            "paths": ["modules/algo/", "modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
+            "paths": ["modules/env/", "modules/fs/", "modules/hash/", "modules/process/", "modules/pyplot/", "modules/re/", "modules/sim/", "modules/statistics/", "modules/str/", "modules/this/", "modules/time/"],
             "plans": ["feat/modules/std.plan.toml", "feat/modules/stdlib_registry.plan.toml"]
         },
         {
@@ -281,9 +281,19 @@
             "plans": ["feat/compile/diag_catalog.plan.toml"]
         },
         {
+            "comment": "The header sweep: docs.headers runs headers.mjs --check over the tree, and --check --root over its own fixture (test/plans/feat/headers/fixture).",
+            "paths": ["scripts/headers.mjs"],
+            "plans": ["feat/docs_headers.plan.toml"]
+        },
+        {
             "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]
+        },
+        {
+            "comment": "The showcase's training step: the plan runs the naive Transformer example on the three CPU back ends and pins the fixed-seed losses.",
+            "paths": ["examples/models/naive-in-expert-out/"],
+            "plans": ["feat/modules/naive_in_expert_out.plan.toml"]
         },
         {
             "comment": "Example programs and their recorded output.",
@@ -339,6 +349,11 @@
             "comment": "The smoke cases: test/plans/smoke is outside the feat/ tree, so no directory rule can mirror test/cases/smoke.",
             "paths": ["test/cases/smoke/"],
             "plans": ["smoke"]
+        },
+        {
+            "comment": "The resource-surface cases (`resource`/`unordered`, `#resource` on a nominal type, `uses`/`pure` on a declaration or a function type): they are front-end/compile cases, and their plan is a file under feat/compile with no `test/plans/feat/effects` directory to mirror the case directory, so the generic test/cases directory rule resolves them to nothing. Name the one plan that reads them. The runtime plans (feat/modules, feat/tools, feat/trans) do not read these cases, so they are not added.",
+            "paths": ["test/cases/effects/"],
+            "plans": ["feat/compile/effects_syntax.plan.toml"]
         },
         {
             "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear loop plans. loops.plan.toml is not the only one: hof_declared (higher-order declarations), loops_in_arms and loop_collect each name cases in this directory, and a change to those cases has no other rule to select them (H201).",

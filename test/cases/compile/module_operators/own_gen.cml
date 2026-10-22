@@ -11,6 +11,6 @@ func operator +(a: Box, b: Box): Box {
     return { v: 300 }
 }
 
-export func twice(x: typeas T): T {
+export func twice::<T>(x: T): T {
     return x + x
 }

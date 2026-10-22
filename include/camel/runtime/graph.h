@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Apr. 07, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Native runtime GCGraph layout.
@@ -514,6 +498,13 @@ class GCGraph : public camel::core::rtdata::Object {
     const std::string &name() const;
     /// Source origin (camel::source::origin_id_t) of node `ref`, 0 when unknown.
     uint64_t nodeOrigin(gc_node_ref_t ref) const;
+    /// The source name of the value at node `ref` (`let x`, `var x`), empty when it has none
+    /// (camel::core::kEmptySym). Cold debug data: it is not a column of the graph.
+    std::string_view nodeName(gc_node_ref_t ref) const;
+    /// The symbol of the source name of node `ref` (kEmptySym when it has none).
+    camel::core::SymId nodeNameSym(gc_node_ref_t ref) const;
+    /// True when some node of the graph has a source name.
+    bool hasNodeNames() const;
     /// Numeric permissions (camel/core/operator_semantics.h, PermissionMask) the program granted
     /// to node `ref`, 0 when none; the graph has no permission column when no node has any.
     camel::core::sem::PermissionMask nodePermissions(gc_node_ref_t ref) const;

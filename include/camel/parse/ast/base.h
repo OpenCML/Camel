@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Jul. 03, 2025
- * Updated: May. 05, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -54,6 +38,10 @@ enum class LoadType {
     /// A tag use (`#name`, `#name<args>`, design principles 6.2), attached to the declaration or
     /// block it is written on.
     TagUse,
+
+    /// The resources a function type says a call touches (`uses s, fs`, `pure`; design effects
+    /// plan 3.1), attached to the function type it is written after.
+    ResourceClause,
 };
 
 std::string to_string(LoadType type);
@@ -280,6 +268,12 @@ class NamedPairLoad : public Load {
     /// `constas n: T`, a compile-time value parameter of a function declaration: the value is
     /// part of the declaration's identity, not a runtime argument (design principles 5.4).
     bool isConstas() const { return isConstas_; }
+    /// A lambda parameter destructured as a tuple (`((a, b)) => ...`): the names the elements
+    /// are bound to, in order. The parameter itself has a name the program does not write; the
+    /// binding of its elements follows the rule of `let (a, b) = p`.
+    const std::vector<std::string> &tupleNames() const { return tupleNames_; }
+    void setTupleNames(std::vector<std::string> names) { tupleNames_ = std::move(names); }
+    bool isTupleParam() const { return !tupleNames_.empty(); }
     const std::string geneCode() const override;
 
   private:
@@ -288,6 +282,7 @@ class NamedPairLoad : public Load {
     bool isConst_;
     bool isRest_;
     bool isConstas_;
+    std::vector<std::string> tupleNames_;
 };
 
 class NullLoad : public Load {

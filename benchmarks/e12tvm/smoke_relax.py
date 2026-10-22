@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E12 smoke: minimal Relax function build + VM run on apache-tvm.
 
 Builds `main(x) = relu(x @ w + b)` via relax.BlockBuilder, compiles with

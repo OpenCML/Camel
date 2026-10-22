@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: May. 17, 2024
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include <algorithm>
 #include <regex>
@@ -346,16 +330,28 @@ class Formatter {
             if (i == 0 && list[0]->firstToken()->index() > 0) {
                 auto [predCmtStart, predCmtEnd] = findCmtRange(0, true);
                 int cmtSkips                    = 0;
+                bool firstComment               = true;
                 for (size_t j = predCmtStart; j < predCmtEnd; j++) {
-                    const auto &comment     = tokens[j];
+                    const auto &comment = tokens[j];
+                    // A token that is not a comment gets no line of its own: the range may
+                    // include the separator after the element, and writing a line end for it
+                    // left a blank line that the next pass turned into two.
+                    if (comment.channel <= 1) {
+                        continue;
+                    }
                     const auto &commentText = comment.text();
 
-                    cmtSkips = comment.line() - lastStopLine;
+                    // The break after `{` (or after `;`) has been written already: the first
+                    // comment goes on the line it opened, not one line further down. Counting
+                    // from the element's own last line made every pass add another blank line
+                    // before a comment that starts a `match type` body.
+                    cmtSkips = firstComment ? 0 : comment.line() - lastStopLine;
 
                     for (int k = 0; k < cmtSkips; k++) {
                         result += lineEnd();
                     }
 
+                    firstComment = false;
                     insertComment(comment, result);
                     lastStopLine = comment.line() + countLines(commentText);
                 }
@@ -375,7 +371,15 @@ class Formatter {
             lastStopLine                    = list[i]->lastToken()->endLine();
             auto [predCmtStart, predCmtEnd] = findCmtRange(i, false);
             for (size_t j = predCmtStart; j < predCmtEnd; j++) {
-                const auto &comment     = tokens[j];
+                const auto &comment = tokens[j];
+                // A token that is not a comment still ends the line a comment above it is on:
+                // skipping it joined `} from ...` onto the comment, which commented the code out
+                // (the fuzz check caught it).
+                if (comment.channel <= 1) {
+                    result += lineEnd();
+                    ++lastStopLine;
+                    continue;
+                }
                 const auto &commentText = comment.text();
 
                 const int cmtSkips = comment.line() - lastStopLine;
@@ -465,10 +469,12 @@ class Formatter {
     std::any visitTagRef(cst::TagRef context);
 
     std::any visitFuncDecl(cst::FuncDecl context);
+    std::any visitWhenClause(cst::WhenClause context);
     std::any visitRuleDecl(cst::RuleDecl context);
     std::any visitAnalysisDecl(cst::AnalysisDecl context);
     std::any visitAnalysisClause(cst::AnalysisClause context);
     std::any visitRuleContext(cst::RuleContext context);
+    std::any visitTypeParams(cst::TypeParams context);
     std::any visitRuleBody(cst::RuleBody context);
 
     std::any visitNamespaceDecl(cst::NamespaceDecl context);
@@ -480,6 +486,9 @@ class Formatter {
     std::any visitBracketIdents(cst::BracketIdents context);
 
     std::any visitDataDecl(cst::DataDecl context);
+
+    std::any visitResourceDecl(cst::ResourceDecl context);
+    std::any visitResourceClause(cst::ResourceClause context);
 
     std::any visitTypeDecl(cst::TypeDecl context);
 
@@ -496,6 +505,7 @@ class Formatter {
     std::any visitKeyValuePair(cst::KeyValuePair context);
 
     std::any visitKeyParamPair(cst::KeyParamPair context);
+    std::any visitTupleParam(cst::TupleParam context);
 
     std::any visitDataList(cst::DataList context);
 
@@ -594,6 +604,8 @@ class Formatter {
     std::any visitTypeUnit(cst::TypeUnit context);
 
     std::any visitArrayType(cst::ArrayType context);
+
+    std::any visitArrayDim(cst::ArrayDim context);
 
     std::any visitConstData(cst::ConstData context);
 

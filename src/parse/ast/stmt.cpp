@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Jul. 03, 2025
- * Updated: May. 05, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/stmt.h"
 #include "camel/core/operator_semantics.h"
@@ -113,6 +97,35 @@ const std::string TypeDeclLoad::toString() const {
         result += " [" + uri_ + "]";
     }
     return result + docSuffix();
+}
+
+const std::string ResourceDeclLoad::toString() const {
+    std::string result = "ResourceDecl: " + ref_.toString();
+    if (isGroup()) {
+        result += " = [";
+        for (size_t i = 0; i < members_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + members_[i].toString();
+        }
+        result += "]";
+    } else if (unordered_) {
+        result += " unordered";
+    }
+    return result + docSuffix();
+}
+
+const std::string ResourceDeclLoad::geneCode() const {
+    std::string result = "resource " + ref_.toString();
+    if (isGroup()) {
+        result += " = [";
+        for (size_t i = 0; i < members_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + members_[i].toString();
+        }
+        return result + "]";
+    }
+    if (unordered_) {
+        result += " unordered";
+    }
+    return result;
 }
 
 const std::string ExitStmtLoad::toString() const {

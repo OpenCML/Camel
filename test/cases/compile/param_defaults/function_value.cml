@@ -1,0 +1,15 @@
+/**
+ * A function value made from a declaration carries no defaults (design principles 4.4,
+ * handover H276): the default belongs to the declaration, not to the value, so calling the
+ * value with one argument is a call that leaves a parameter without a value.
+ */
+module param_default_no_value
+
+func f(a: int, b: int = 2): int {
+    return a + b
+}
+
+func main(): int sync {
+    let g = f
+    return g(1)
+}

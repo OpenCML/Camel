@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Self-test of the plan runner. It covers:
 //
 //   * the back-end matrix (`backends`, `backends_agree`, `known_fail`, the `[defaults]` table):

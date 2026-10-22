@@ -72,3 +72,75 @@
 4. **第四批（切分、调度注入、导出完善后）**：I1、I3、I4。
 
 每一批开始前，协调者检查前一批示例的写法是否体现了设计原则，再决定是否调整语言或示例。
+
+## 6. 旗舰示例的当前状态：朴素写法进，专家写法出
+
+设计稿：`docs/design/showcase/naive-in-expert-out.cn.md`（已定，本分支合并 `develop` 后已在树内）。示例在
+`examples/models/naive-in-expert-out/`；本节的"现在能跑"指这个目录今天的代码，不是设计稿里的全部目标。
+
+**今天能跑**
+
+- `train_step.cml`：一个小 Transformer 的一个训练步——两段 pre-LN、4 头注意力、RMSNorm、
+  GELU MLP、逐位置的朴素 softmax 交叉熵、Adam——在 `std::nvm`、`std::fvm`、`std::jit` 上输出
+  相同的固定种子损失，16 步内从 3.4656 降到 1.5680。朴素写法就是教科书写法：`exp(s)/sum(exp(s))`、
+  `log(softmax)`、Q/K/V 三个独立投影，没有减最大值、没有 `log_softmax`、没有融合 QKV。
+  源码的每个签名和字段都写着形状（`Tensor<f32, [8, 16, 64]>` 与 `TokenStates` 等别名），
+  `1 / sqrt(d_head)` 是算出来的而不是字面量 `4.0`，参数计数是模型的 `param_count` 函数。
+  `main` 的输入是 `--arg bench=... --arg init_dir=... --arg final_dir=...`，程序不读环境变量；
+  线程数由命令行 `-t` 给出，运行时的每个池都从这一个数取大小（`CAMEL_NUM_THREADS` 已不再读取）。
+- `torch_impl.py`：同一模型、同一份初始权重与数据的 PyTorch 朴素、专家（`F.scaled_dot_product_attention`、
+  `F.log_softmax`、融合 QKV）与 `torch.compile(朴素)` 三个实现，外加一个 float64 参考；四个实现由
+  `measure.py` 一条命令驱动。
+- `measure.py`：每个实现每步耗时（去掉预热后的中位数）、整进程峰值常驻内存、最终损失与逐参数相对
+  float64 参考的最大绝对差。四个实现按轮转顺序交错跑三轮，表里给出轮间范围；机器、线程数、版本、
+  构建提交、负载均值与逐轮原始数据写进同一个 JSON，并打印一张人看的表。
+- `accuracy.py` 与 `accuracy.cml`：softmax、log_softmax、交叉熵、矩阵乘归约在 bf16/f32/f64 下的
+  首个非有限输入、朴素与专家形式在同一输入上的行为，以及矩阵乘归约的 fp64 误差。Camel 侧跑的是
+  f32 的可测部分。
+
+**测得的数字（2026-10-22 19:27 UTC）**
+
+同一模型、同一份初始权重与数据、固定种子、`-t 1`；四个实现按轮转顺序交错跑 3 轮，取每轮预热后
+13 步的中位数：
+
+| 实现 | ms/步 | 3 轮范围 | 峰值 RSS MiB | 最终损失 | \|dloss\|（对 fp64） | max \|dparam\|（对 fp64） |
+|---|---|---|---|---|---|---|
+| Camel（`std::jit`） | **2.091** | 2.029–2.195 | 40.5 | 1.568042986 | 1.8e-08 | 7.0e-06 |
+| PyTorch 朴素 | 4.762 | 4.595–4.849 | 643.7 | 1.568042994 | 1.1e-08 | 7.5e-06 |
+| PyTorch 专家 | 3.919 | 3.750–4.013 | 643.7 | 1.568043113 | 1.1e-07 | 1.0e-05 |
+| `torch.compile(朴素)` | 3.005 | 2.985–3.287 | 924.1 | 1.568042994 | 1.1e-08 | 1.4e-05 |
+| float64 参考 | 5.802 | — | 648.4 | 1.568043004 | 0 | 0 |
+
+机器是 AMD EPYC 7343（32 硬件线程、503 GiB）、Ubuntu 22.04；Python 3.10.12、PyTorch
+2.14.1+cu130、Camel v0.2.24（提交 `ab9cb4579` 干净构建）。主机是共享的：测量期间 1 分钟负载
+31.7→34.1，所以小于约 0.3 ms 的差异不算数，绝对值也不能当成跨机器常数。命令、版本、方差与
+早期数字的讨论见示例的 [README](../../../examples/models/naive-in-expert-out/README.cn.md)，
+原始 JSON 在
+[`results/2026-10-23-linux.json`](../../../examples/models/naive-in-expert-out/results/2026-10-23-linux.json)。
+
+**Camel 侧还缺什么**
+
+- **数值类型**：`Tensor` 的公开元素类型是 f32、f64、i32、i64、bool，元素类型就是写下的那一个
+  （`modules/tensor/dtype.h`）；还没有 bf16、f16。因此 bf16 溢出的测量只能在 PyTorch 里做；fp64
+  误差现在也可以在 Camel 里测。Camel 的 f32 阈值与 PyTorch 的 f32 阈值逐项一致。
+- **块只是元组，不是 `Block[]`**：H17 的原生数组语法与带形状的 `Tensor<f32, [...]>` 已经可用，但
+  "循环迭代一个依赖可微参数的张量数组"仍被拒绝（反向要把每轮的梯度散射回数组，而数组元素还没有零切向量）。
+  模型因此写 `blocks: (Block, Block)`，前向用
+  `static loop ... for (i, B) in fields (Block, Block)`；没有 `block0`/`block1` 字段，也没有复制块体。
+  H17 能对 `Block[]` 求导后，元组换成数组、静态循环换成
+  `loop h = x for b in m.blocks`。
+- **`f32[b, t, d]` 还进不了张量算子**：`exp`、`@`、`sum` 接收的是 `Tensor`，不是核心数组类型；
+  `let x: f32[2, 3] = randn(...)` 是 `DeclaredTypeMismatch`。示例用带形状的
+  `Tensor<f32, [8, 16, 64]>`（以及 `TokenStates` 等别名），每个形状都写全；但
+  `Tensor<f32, [b, t, d]>` 里的维度名不绑定（会报 `DimensionNameUsedOnce`），所以只写常量形状，
+  由别名与顶部注释说明含义。
+- **没有写成类型的 dtype 转换**：`f32(oh)` 没有张量重载，`oh as f32[...]` 是
+  `DynamicCastForbidden`；示例用数值提升（f32 * int64 得 f32）代替旧的 `cast(oh, 'float32')`
+  字符串。带类型的张量转换仍是缺口。
+- **算子与规则**：没有融合 QKV/注意力算子，也没有 `rules::accuracy`、`rules::fusion` 的规则流水线，
+  所以朴素源码不会自动变成专家写法；`softmax`、`log_softmax` 与融合交叉熵作为普通算子已经存在，
+  但示例刻意不调用它们。融合 QKV 可以手写成 `concat` 后切片，但还没有规则替用户做这件事。
+- **自动微分**：`one_hot`、`argmax`、比较与下标的位置等以离散值为输入的算子，回传按定义为零（9.9），
+  标签不需要 `stop_gradient`；`one_hot` 注册的是空规则，不是让用户给标签加标记。
+- **解释与对照**：`explain` 的改写链依赖规则语言第二版；PyTorch 侧没有做设计的第 5 节
+  "杀死搜索"（Inductor 的模式匹配实测），因此"别人做不到"这一句还不能写。

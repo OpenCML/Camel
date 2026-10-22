@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The semantics of an operator: the versioned record that every pass and back end reads to
@@ -125,6 +109,9 @@ enum Permission : uint16_t {
     kNoSignedZeros    = 1 << 6, //                   the sign of a zero does not matter
     kFlushSubnormals  = 1 << 7, //                   subnormal inputs and results may become zero
     kNonDeterministic = 1 << 8, // nondeterministic: the result may change with the schedule
+    kRefineAccuracy   = 1 << 9, // refine_accuracy:  replace a form with one whose error is not
+                                //                   larger; the bits may change (rewrite 8.10).
+                                //                   Default not granted; #strict revokes it.
 };
 
 /// A set of permissions: 0 when none is granted. Two bytes since `nondeterministic` (review of
@@ -252,7 +239,10 @@ struct NumericPolicy {
  *                      relative per step;
  *   finite_math        the check excludes the NaN, infinity, signed zero and subnormal samples
  *                      the assumptions rule out; the finite values keep the rounding bound;
- *   nondeterministic   no numeric bound exists, so the check cannot certify the rule.
+ *   nondeterministic   no numeric bound exists, so the check cannot certify the rule;
+ *   refine_accuracy    the two sides are compared by their error against a higher-precision
+ *                      reference, not by bits: the rewrite holds when its error is not larger
+ *                      on every sample (rewrite 8.10).
  */
 struct RewriteErrorBound {
     /// False when the permissions have no numeric contract (`nondeterministic`): the check can

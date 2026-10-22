@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E14/T7 probe driver: dynamic-batch TRAINING step export (with_grad + sgd).
 
 One graph exported with dynamic_axes = [0] (benchmarks/e14dyn/dyn_train_step.cml,

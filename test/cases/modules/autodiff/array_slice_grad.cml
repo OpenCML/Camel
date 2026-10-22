@@ -1,0 +1,80 @@
+// The gradient of a slice of an array: a slice takes a range of positions, so its adjoint is the
+// upstream gradient placed back in that range of the parent's zeros — the range scatter
+// `tangent/scatter_slice_arr`, the array counterpart of the tensor's `slice_grad`. Every
+// expected adjoint below is written out by hand from the forward expression, and `nonzero` is
+// the summed squared distance between the five gradients and the zero array: it is 115.0 from
+// the tree, so a rule that returned zeros would print 0.0 and the case would fail.
+//
+//   a[1:3]          = [a1, a2]      with weights 2, 3    -> [0, 2, 3, 0, 0]
+//   a->slice<1, 3>  the same slice through the function form of the operator
+//   (a[0:4])[1:3]   = a[1:3]: a slice of a slice must give the direct slice's adjoint
+//   a[4:1:-1]       = [a4, a3, a2]  with weights 2, 3, 5 -> [0, 0, 5, 3, 2]
+//   a[0:5:2]        = [a0, a2, a4]  with weights 2, 3, 5 -> [2, 0, 3, 0, 5]
+//
+// Red when the rules for `:op/slice_sub` or `:struct/slice_arr` are removed (the case refuses
+// with "no derivative rule"), when the scatter places the gradient at the wrong position
+// (subscript_d, reversed_d, stepped_d become nonzero), when a slice of a slice shifts it
+// (roundtrip_d), or when the rule returns zeros (nonzero=0.0).
+import { grad } from autodiff
+
+with <xs: float[]>
+func subscript(): float {
+    let s = xs[1:3]
+    return s[0] * 2.0 + s[1] * 3.0
+}
+
+with <xs: float[]>
+func call_form(): float {
+    let s = xs->slice<1, 3>
+    return s[0] * 2.0 + s[1] * 3.0
+}
+
+with <xs: float[]>
+func nested(): float {
+    let s = xs[0:4]
+    let t = s[1:3]
+    return t[0] * 2.0 + t[1] * 3.0
+}
+
+with <xs: float[]>
+func reversed(): float {
+    let s = xs[4:1:-1]
+    return s[0] * 2.0 + s[1] * 3.0 + s[2] * 5.0
+}
+
+with <xs: float[]>
+func stepped(): float {
+    let s = xs[0:5:2]
+    return s[0] * 2.0 + s[1] * 3.0 + s[2] * 5.0
+}
+
+func square(v: float): float {
+    return v * v
+}
+
+// The squared distance between a gradient of five elements and an expected adjoint, written out
+// element by element: the language has no array arithmetic that could hide a mistake in it.
+func distance(g: float[], e0: float, e1: float, e2: float, e3: float, e4: float): float {
+    return square(g[0] - e0) + square(g[1] - e1) + square(g[2] - e2) + square(g[3] - e3) + square(g[4] - e4)
+}
+
+func main(): int sync {
+    let xs = [1.0, 2.0, 3.0, 4.0, 5.0]
+    let g1 = grad(subscript)<xs>()
+    let g2 = grad(call_form)<xs>()
+    let g3 = grad(nested)<xs>()
+    let g4 = grad(reversed)<xs>()
+    let g5 = grad(stepped)<xs>()
+    let nonzero = distance(g1, 0.0, 0.0, 0.0, 0.0, 0.0) + distance(g2, 0.0, 0.0, 0.0, 0.0, 0.0) + distance(g3, 0.0, 0.0, 0.0, 0.0, 0.0) + distance(g4, 0.0, 0.0, 0.0, 0.0, 0.0) + distance(g5, 0.0, 0.0, 0.0, 0.0, 0.0)
+    println(g1)
+    println(g4)
+    'array_slice_grad subscript_d={:.1f} call_d={:.1f} nested_d={:.1f} roundtrip_d={:.1f} reversed_d={:.1f} stepped_d={:.1f} nonzero={:.1f}'->format<
+        distance(g1, 0.0, 2.0, 3.0, 0.0, 0.0),
+        distance(g2, 0.0, 2.0, 3.0, 0.0, 0.0),
+        distance(g3, 0.0, 2.0, 3.0, 0.0, 0.0),
+        distance(g3, g1[0], g1[1], g1[2], g1[3], g1[4]),
+        distance(g4, 0.0, 0.0, 5.0, 3.0, 2.0),
+        distance(g5, 2.0, 0.0, 3.0, 0.0, 5.0),
+        nonzero>->println
+    return 0
+}

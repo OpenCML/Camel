@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import { execSync, spawnSync } from 'child_process'
 import { createHash } from 'crypto'
 import fs from 'fs'

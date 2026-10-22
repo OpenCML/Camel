@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 13, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The graph construction tree: its arena, the node factory, appending children, copying a
@@ -156,6 +140,83 @@ const std::vector<Tree::UnwrittenParam> *Tree::unwrittenParamsOf(const Node *fun
     }
     const auto it = unwrittenParams_.find(func);
     return it == unwrittenParams_.end() ? nullptr : &it->second;
+}
+
+void Tree::setTupleParams(const Node *func, std::vector<TupleParamBinding> params) {
+    if (func != nullptr && !params.empty()) {
+        tupleParams_[func] = std::move(params);
+    }
+}
+
+const std::vector<Tree::TupleParamBinding> *Tree::tupleParamsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = tupleParams_.find(func);
+    return it == tupleParams_.end() ? nullptr : &it->second;
+}
+
+void Tree::setWhen(const Node *func, WhenClause clause) {
+    if (func != nullptr && clause.condition != nullptr) {
+        whenClauses_[func] = std::move(clause);
+    }
+}
+
+const Tree::WhenClause *Tree::whenOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = whenClauses_.find(func);
+    return it == whenClauses_.end() ? nullptr : &it->second;
+}
+
+void Tree::setHeadTypeParams(const Node *func, std::vector<std::string> names) {
+    if (func != nullptr && !names.empty()) {
+        headTypeParams_[func] = std::move(names);
+    }
+}
+
+const std::vector<std::string> *Tree::headTypeParamsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = headTypeParams_.find(func);
+    return it == headTypeParams_.end() ? nullptr : &it->second;
+}
+
+void Tree::setParameterDefaults(const Node *func, ParameterDefaults defaults) {
+    if (func != nullptr && !defaults.empty()) {
+        parameterDefaults_[func] = std::move(defaults);
+    }
+}
+
+const Tree::ParameterDefaults *Tree::parameterDefaultsOf(const Node *func) const {
+    if (func == nullptr) {
+        return nullptr;
+    }
+    const auto it = parameterDefaults_.find(func);
+    return it == parameterDefaults_.end() ? nullptr : &it->second;
+}
+
+void Tree::setArgumentNames(
+    const Node *call, std::vector<std::optional<std::string>> names) {
+    if (call == nullptr || names.empty()) {
+        return;
+    }
+    const bool named = std::any_of(
+        names.begin(), names.end(), [](const auto &name) { return name.has_value(); });
+    if (named) {
+        argumentNames_[call] = std::move(names);
+    }
+}
+
+const std::vector<std::optional<std::string>> *Tree::argumentNamesOf(
+    const Node *call) const {
+    if (call == nullptr) {
+        return nullptr;
+    }
+    const auto it = argumentNames_.find(call);
+    return it == argumentNames_.end() ? nullptr : &it->second;
 }
 
 Tree *Tree::of(const Node *node) {
@@ -329,9 +390,18 @@ node_ptr_t Tree::makeCase(CaseType type, const std::string &binding) {
 
 node_ptr_t Tree::makeTypeMatch() { return makeNode(NodeKind::TMTCH); }
 
-node_ptr_t Tree::makeTypeCase(uint16_t patterns) {
+node_ptr_t Tree::makeTypeCase(uint16_t patterns, const std::vector<Type *> &types) {
     Node *node = makeNode(NodeKind::TCASE);
     node->tag_ = patterns;
+    if (!types.empty()) {
+        auto *list =
+            static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(types.size())));
+        list->count = types.size();
+        for (size_t i = 0; i < types.size(); ++i) {
+            list->items[i] = types[i];
+        }
+        node->payload_.types = list;
+    }
     return node;
 }
 
@@ -375,6 +445,12 @@ node_ptr_t Tree::makeSpreadArg() { return makeNode(NodeKind::SPRD); }
 node_ptr_t Tree::makeComprehension(bool isStruct) {
     Node *node = makeNode(NodeKind::SCOMP);
     node->tag_ = static_cast<uint16_t>(isStruct ? 0 : 1);
+    return node;
+}
+
+node_ptr_t Tree::makeShapeComprehension() {
+    Node *node = makeNode(NodeKind::SCOMP);
+    node->tag_ = 2;
     return node;
 }
 
@@ -511,6 +587,18 @@ node_ptr_t Tree::clone(const Node *node) {
             copy->payload_.name = intern(*node->payload_.name);
         }
         break;
+    case NodeKind::TCASE:
+        if (node->typeCaseTypeCount() > 0) {
+            const size_t count = node->typeCaseTypeCount();
+            auto *list =
+                static_cast<Node::TypeList *>(allocate(Node::TypeList::bytesFor(count)));
+            list->count = count;
+            for (size_t i = 0; i < count; ++i) {
+                list->items[i] = node->typeCaseTypeAt(i);
+            }
+            copy->payload_.types = list;
+        }
+        break;
     case NodeKind::EXPT:
     case NodeKind::LOOP:
     case NodeKind::SFOR:
@@ -536,6 +624,32 @@ node_ptr_t Tree::clone(const Node *node) {
         // A lambda's unwritten parameters come with it: the copy is the same lambda.
         if (const auto *params = Tree::of(node)->unwrittenParamsOf(node)) {
             unwrittenParams_[copy] = *params;
+        }
+        if (const auto *tuples = Tree::of(node)->tupleParamsOf(node)) {
+            tupleParams_[copy] = *tuples;
+        }
+        // A declaration's `when` condition is part of the copy too: the copy is instantiated
+        // with the same rules.
+        if (const auto *when = Tree::of(node)->whenOf(node)) {
+            whenClauses_[copy] = WhenClause{clone(when->condition), when->text, when->origin};
+        }
+        if (const auto *head = Tree::of(node)->headTypeParamsOf(node)) {
+            headTypeParams_[copy] = *head;
+        }
+        // The defaults of the declaration's parameters come with it too: the copy is called
+        // with the same rules.
+        if (const auto *defaults = Tree::of(node)->parameterDefaultsOf(node)) {
+            const auto copyOf = [&](const std::vector<ParameterDefault> &written) {
+                std::vector<ParameterDefault> copies;
+                copies.reserve(written.size());
+                for (const ParameterDefault &one : written) {
+                    copies.push_back(
+                        {one.expr != nullptr ? clone(one.expr) : nullptr, one.origin});
+                }
+                return copies;
+            };
+            parameterDefaults_[copy] =
+                ParameterDefaults{copyOf(defaults->with), copyOf(defaults->norm)};
         }
     }
     return copy;
@@ -630,8 +744,12 @@ std::string Node::toString() const {
         return "SACC";
     case NodeKind::SPRD:
         return "SPRD";
-    case NodeKind::SCOMP:
-        return std::string("SCOMP: ") + (comprehensionIsStruct() ? "struct" : "tuple");
+    case NodeKind::SCOMP: {
+        const char *kind = comprehensionSameShape() ? "same shape"
+                           : comprehensionIsStruct() ? "struct"
+                                                     : "tuple";
+        return std::string("SCOMP: ") + kind;
+    }
     case NodeKind::SLOOP: {
         std::string text = "SLOOP: ";
         for (size_t j = 0; j < staticLoopStateCount(); ++j) {
@@ -643,7 +761,7 @@ std::string Node::toString() const {
         std::string text = "TCASE: (";
         bool first       = true;
         for (const TypeCaseKind kind :
-             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Leaf,
+             {TypeCaseKind::Struct, TypeCaseKind::Tuple, TypeCaseKind::Func, TypeCaseKind::Leaf,
               TypeCaseKind::Wildcard}) {
             if ((typeCasePatterns() & typeCaseBit(kind)) == 0) {
                 continue;
@@ -657,13 +775,23 @@ std::string Node::toString() const {
             case TypeCaseKind::Tuple:
                 text += "tuple";
                 break;
+            case TypeCaseKind::Func:
+                text += "func";
+                break;
             case TypeCaseKind::Leaf:
                 text += "#leaf";
                 break;
             case TypeCaseKind::Wildcard:
                 text += "_";
                 break;
+            case TypeCaseKind::Identity:
+                break;
             }
+        }
+        for (size_t i = 0; i < typeCaseTypeCount(); ++i) {
+            text += first ? "" : " | ";
+            first = false;
+            text += typeCaseTypeAt(i)->toString();
         }
         return text + ")";
     }

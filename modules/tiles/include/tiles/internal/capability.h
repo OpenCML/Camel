@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // Capability misses are dispatch decisions; compiler/runtime faults are not.
+
 #pragma once
 #include <optional>
 #include <stdexcept>
@@ -23,7 +17,20 @@ class BackendUnavailable : public std::runtime_error {
 };
 class UnsupportedComputation : public std::runtime_error {
   public:
-    using std::runtime_error::runtime_error;
+    /// What the compiler refused. `Operator` is a lowering the back end does not have at any
+    /// shape; `Shape` is a use whose types, shapes or element types it cannot take even though
+    /// the operator itself has a lowering. A refusal that reaches the user says which one.
+    enum class Reason { Operator, Shape };
+    /// `oper` is the operator the compiler stopped at, when it knows one.
+    explicit UnsupportedComputation(
+        const std::string &what, std::string oper = {}, Reason reason = Reason::Operator)
+        : std::runtime_error(what), oper_(std::move(oper)), reason_(reason) {}
+    const std::string &oper() const noexcept { return oper_; }
+    Reason reason() const noexcept { return reason_; }
+
+  private:
+    std::string oper_;
+    Reason reason_;
 };
 /// A device the run named with `--devices` that is not there. It is not a capability miss: the
 /// run named the device, so it is RuntimeDiag::DeviceUnavailable naming it (with the ordinal the

@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // Fails when a reader-facing page shows a Camel snippet that the current language does not
 // accept, or whose printed output is not what the page says it is.
 //

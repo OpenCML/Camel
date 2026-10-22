@@ -303,7 +303,7 @@ T1–T3 不必等核心，可以立刻开始；T4 起与核心同步。
 Tiles 里按类型工作的三处已机械地改用它，行为变化只有两点：`supportedLeaves` 不再拒绝空元组/空结构体（与 `tree_map` 一致），`Device<T>` 的诊断里路径不再带 `$.` 前缀（根写作 `<root>`）。其余各处是按值或按节点遍历的同类展开，不是机械替换，留给 Tiles：
 
 - `tree_transfer.cpp` 的 `walk` 与 `rebuild`（按值）；
-- `graph_values.cpp:31/42/69`、`compiler.cpp:139/475/495/941`、`region_outline.cpp:45`、`module.cpp` 的 `acceptsInput` 与 126/199/239/459 行（按节点或按类型对位）。
+- `graph_values.cpp#graph_values/36/63`、`/469/489/935`、`region_outline.cpp#graph_values`、`module.cpp` 的 `acceptsInput` 与 120/193/233/453 行（按节点或按类型对位）。
 
 这些应改为调用 `tree::isInternal`/`arity`/`childType`，不要再自己写 `code() == Tuple || Struct`。
 

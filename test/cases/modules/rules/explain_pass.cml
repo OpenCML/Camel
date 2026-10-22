@@ -1,0 +1,83 @@
+/**
+ * The attribution passes of `explain_target.cml` and `explain_twice.cml` (rewrite design 8.7):
+ * each runs a rule set with `run(..., explain: true)` and prints the proof `explain` gives. The
+ * four cases are the ones the design asks a proof to get right: two rules that could both match
+ * (only the one that fired is named), a `seq` schedule (the chain follows the schedule), a rule
+ * that fires twice in one round (two steps), and a run where nothing matched (said plainly).
+ *
+ * No function here holds a pattern a rule matches, so a proof never counts this module's own
+ * code: there is no sum, product or `+ 1` in it.
+ */
+module explain_pass
+
+import { Program } from graph
+import { Run, explain, run } from rewrite
+
+rule zero_to_one(x: int) { x + 0 => x + 1 }
+rule zero_to_two(x: int) { x + 0 => x + 2 }
+rule bump_one(x: int) { x + 1 => x + 2 }
+rule add_zero(x: int) { x + 0 => x }
+rule mul_zero(x: int) { x * 0 => 0 }
+
+/// Prints the proof of `r` and gives the program it produced.
+func show(r: Run<Program>): Program! sync {
+    return match explain(r) {
+        case error e => { throw e }
+        case proof => sync {
+            println(proof)
+            return r.result
+        }
+    }
+}
+
+/// The first of two rules that match the same site: only `zero_to_one` may be named.
+export func two_rules(p: Program): Program! sync {
+    return match run(p, [zero_to_one, zero_to_two], 16, false, true) {
+        case error e => { throw e }
+        case r => show(r)
+    }
+}
+
+/// `seq`: `zero_to_one`'s stage, then `bump_one`'s. The two proofs print in that order, and each
+/// stage runs to a fixpoint before the next one starts (rewrite design 8.5).
+export func seq_order(p: Program): Program! sync {
+    return match run(p, [zero_to_one], 16, false, true) {
+        case error e => { throw e }
+        case first => sync {
+            match show(first) {
+                case error e => { throw e }
+                case staged => sync {
+                    return match run(staged, [bump_one], 16, false, true) {
+                        case error e => { throw e }
+                        case second => show(second)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// One rule, one round, two sites: the proof must carry two steps, both of round 1.
+export func twice_one_round(p: Program): Program! sync {
+    return match run(p, [add_zero], 16, false, true) {
+        case error e => { throw e }
+        case r => show(r)
+    }
+}
+
+/// A rule set that matches nothing: the proof says so instead of printing an empty table.
+export func nothing(p: Program): Program! sync {
+    return match run(p, [mul_zero], 16, false, true) {
+        case error e => { throw e }
+        case r => show(r)
+    }
+}
+
+/// A run made without attribution has no proof to read, and saying so is the point of the
+/// optional record: the plain run paid nothing.
+export func without_attribution(p: Program): Program! sync {
+    return match run(p, [add_zero], 16, false) {
+        case error e => { throw e }
+        case r => show(r)
+    }
+}

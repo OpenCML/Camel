@@ -7,9 +7,9 @@
 module native_generic
 
 #op<':op/idx_arr'>
-export func at(xs: (typeas T)[], i: int): T
+export func at::<T>(xs: T[], i: int): T
 
 /// The second element, through `at`: the call of a generic declaration inside a body.
-export func second(xs: (typeas T)[]): T {
+export func second::<T>(xs: T[]): T {
     return at(xs, 1)
 }

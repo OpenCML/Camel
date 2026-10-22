@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The Python bridge: run code in the embedded interpreter, import modules, read attributes and
  * dispose of the handles the calls return. Every operator observes or advances the interpreter,

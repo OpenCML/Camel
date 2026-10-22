@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * GEMM backend selection and the matmul/linear operators built on it.
@@ -91,11 +75,28 @@ const BuiltinBackend &builtinBackend() {
     return backend;
 }
 
-/// Integer matmul for int64 (and promoted bool) operands; not performance critical.
-void integerGemm(int64_t M, int64_t N, int64_t K, const int64_t *A, const int64_t *B, int64_t *C) {
+/// Integer matmul for int32 and int64 (and promoted bool) operands; not performance critical.
+/// The accumulator is the element type, so int32 products and sums wrap the way int32
+/// arithmetic does (design principles 5.1, 7.7).
+template <typename T>
+void integerGemm(int64_t M, int64_t N, int64_t K, const T *A, const T *B, T *C) {
     for (int64_t i = 0; i < M; ++i) {
         for (int64_t j = 0; j < N; ++j) {
-            int64_t acc = 0;
+            T acc = 0;
+            for (int64_t k = 0; k < K; ++k) {
+                acc = static_cast<T>(acc + static_cast<T>(A[i * K + k] * B[k * N + j]));
+            }
+            C[i * N + j] = acc;
+        }
+    }
+}
+
+/// f64 matmul: the same summation order as sgemm (ascending k), in double. A separate loop
+/// rather than the f32 kernel: an f64 tensor is computed in f64, never narrowed to f32.
+void dgemm(int64_t M, int64_t N, int64_t K, const double *A, const double *B, double *C) {
+    for (int64_t i = 0; i < M; ++i) {
+        for (int64_t j = 0; j < N; ++j) {
+            double acc = 0.0;
             for (int64_t k = 0; k < K; ++k) {
                 acc += A[i * K + k] * B[k * N + j];
             }
@@ -236,8 +237,24 @@ Array *matmul(
                     0.0f,
                     out->dataAs<float>() + batch * cSize,
                     plan.N);
+            } else if (compute == TypeCode::Float64) {
+                dgemm(
+                    plan.M,
+                    plan.N,
+                    plan.K,
+                    a->dataAs<double>() + aOff,
+                    b->dataAs<double>() + bOff,
+                    out->dataAs<double>() + batch * cSize);
+            } else if (compute == TypeCode::Int32) {
+                integerGemm<int32_t>(
+                    plan.M,
+                    plan.N,
+                    plan.K,
+                    a->dataAs<int32_t>() + aOff,
+                    b->dataAs<int32_t>() + bOff,
+                    out->dataAs<int32_t>() + batch * cSize);
             } else {
-                integerGemm(
+                integerGemm<int64_t>(
                     plan.M,
                     plan.N,
                     plan.K,

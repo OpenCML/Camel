@@ -123,7 +123,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "format.type_params_snapshot"
-desc = "A type declaration with parameters keeps them (`type Pair<T> = ...`, also written `Pair<T>=`), as do `typeas` and applied type functions in signatures."
+desc = "A type declaration with parameters keeps them (`type Pair<T> = ...`, also written `Pair<T>=`), as do head type parameters and applied type functions in signatures."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/type_params.cml"
@@ -165,6 +165,7 @@ timeout_ms = 4000
 
 [[tests]]
 name = "format.subscript_snapshot"
+desc = "Every subscript form prints with no space around a slice's colons: `xs[a:b]`, `xs[:b]`, `xs[:]`, `xs[a:4:1]`, `xs[::-1]`, `xs[::2]`, `xs[start:]`, `xs[a:b:step]`, and a plain index."
 kind = "snapshot"
 tool = "camel-format"
 case = "../../../cases/format/subscript.cml"
@@ -173,6 +174,20 @@ expect_exit = 0
 snapshot_stream = "stdout"
 snapshot_compare = "text_exact"
 golden = "./golden/subscript.cml"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 4000
+
+[[tests]]
+name = "format.when_clause_snapshot"
+desc = "A declaration's applicability condition follows the result type: `when is_ordered::<T>()` is one space after it, whatever spacing the source used, and it is not dropped."
+kind = "snapshot"
+tool = "camel-format"
+case = "../../../cases/format/when_clause.cml"
+args = ["${case}"]
+expect_exit = 0
+snapshot_stream = "stdout"
+snapshot_compare = "text_exact"
+golden = "./golden/when_clause.cml"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 4000
 

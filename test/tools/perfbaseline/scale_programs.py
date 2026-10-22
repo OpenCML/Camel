@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Generated programs of a given size for the size-scaling rows of the graph-store baseline.
 
 The six programs of baseline.py are tiny (the largest has 495 nodes), so they cannot show a cost
@@ -60,7 +63,7 @@ def unit(i):
 def program(units):
     parts = [
         f"module scale_{units}\n",
-        "func pick(a: typeas T, b: T, c: bool): T {\n    return if c then a else b\n}\n",
+        "func pick::<T>(a: T, b: T, c: bool): T {\n    return if c then a else b\n}\n",
     ]
     parts.extend(unit(i) for i in range(units))
     helpers = []

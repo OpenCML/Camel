@@ -1,0 +1,27 @@
+/**
+ * A `match type` case may name a type, not only a shape. Identity is exact: `int` and `float`
+ * are different cases, `f32` is not `float`, `i32` is not `int`, and `#leaf` still selects
+ * every scalar that no identity case named (design principles 5.5).
+ */
+module type_identity
+
+func kind::<T>(x: T): string {
+    return match type T {
+        case int => 'int'
+        case i32 => 'i32'
+        case float => 'float'
+        case f32 => 'f32'
+        case #leaf => 'leaf'
+    }
+}
+
+func main(): int sync {
+    let small: f32 = 1.5
+    let narrow: i32 = 1
+    println(kind(1))
+    println(kind(1.5))
+    println(kind(small))
+    println(kind(narrow))
+    println(kind('x'))
+    return 0
+}

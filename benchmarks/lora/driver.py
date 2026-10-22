@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E9 three-way on-device LoRA fine-tuning driver (MLSys 2027 eval).
 
 Three parties run the SAME LoRA fine-tune (rank 8, backbone frozen, lr 0.1,

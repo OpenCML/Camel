@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Apr. 10, 2026
- * Updated: Oct. 16, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Runtime draft inline helpers.
@@ -269,6 +253,9 @@ DraftNodeInit snapshotNodeInit(const GraphDraft &draft, gc_node_ref_t nodeId) {
         .dataType     = header->dataType,
         .kind         = header->kind,
         .runtimeFlags = header->runtimeFlags,
+        .attrs        = header->attrs,
+        .region       = header->region,
+        .name         = header->name,
         .payload      = draft.payloadOf(nodeId),
         .normInputs   = draft.normInputsOf(nodeId),
         .withInputs   = draft.withInputsOf(nodeId),
@@ -1321,11 +1308,21 @@ DraftInlineResult inlineCallableInDraft(
         "The call of an arm is the node of the region of its arm.");
     const size_t slotsBefore = draft.nodeSlotCount();
     // The call is the whole of its arm, which already has its region: the body goes into it.
+    // The region records the function this code is a copy of, which is what the inline history
+    // asks it (GraphDraft::inlinedCopyOf, H44c). A type specialization is that function with a
+    // more precise type, and the program the next round sees makes it again, under a new id, when
+    // its copy of the specialization is gone: recording the specialization's id would leave a
+    // record nothing resolves, the history would not recognize the call, and a recursion would
+    // be unrolled a level per round without bound. Recording the function it derives from keeps
+    // the record resolvable for as long as the function is.
+    const GraphId inlineSource = isValid(calleeGraph->typeSpecializationRoot())
+                                     ? calleeGraph->typeSpecializationRoot()
+                                     : calleeGraph->id();
     const uint32_t inlineRegion =
         intoArm ? draft.nodeRegion(funcNodeId)
                 : draft.addInlineRegion(
                       draft.nodeRegion(funcNodeId),
-                      calleeGraph->id(),
+                      inlineSource,
                       kInvalidNodeRef);
     draft.setRegionOrigin(inlineRegion, static_cast<uint32_t>(draft.nodeOrigin(funcNodeId)));
     if (intoArm) {

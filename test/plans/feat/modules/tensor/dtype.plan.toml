@@ -1,0 +1,89 @@
+id = "modules.tensor.dtype"
+order = 367
+tier = "fast"
+tags = ["feat", "modules", "tensor", "types"]
+desc = "A tensor's element type is the one the program writes (design/arrays-memory, P4 \"element type exact\"): Tensor<f64> holds f64 and Tensor<i32> holds i32 end to end — creation, arithmetic, reduction, to_bytes/from_bytes — with no storage dtype a written type is replaced with. A kernel that computes in f32 only refuses the other element types at the call, naming the operator, the argument type and the set it takes, instead of narrowing. f32 programs keep their bytes."
+
+# The element type is the one written, through every step of the value's life.
+
+[[tests]]
+name = "f64_exact"
+desc = "`Tensor<f64>` is f64 end to end: the sum of 16777217.0 (16777216.0 in f32), an f64 scalar product, an f64 mean, 8-byte elements in `to_bytes`, and a `from_bytes` round trip. Under f32 normalization the first line printed 16777216 and every element was four bytes."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/f64_exact.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "16777217.0\n33554434.0\n4194305.0\n8\n[0, 0, 0, 16, 0, 0, 112, 65]\n16777217.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "i32_exact"
+desc = "`Tensor<i32>` is i32 end to end: four-byte elements in `to_bytes`, int32 wrapping in arithmetic (`2147483647 * 2` is -2, so the products sum to -4; under int64 normalization they summed to 4294967296), and a `from_bytes` round trip that gives the four bytes back."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/i32_exact.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "2147483646.0\n16\n[255, 255, 255, 127, 1, 0, 0, 0, 254, 255, 255, 255, 0, 0, 0, 0]\n-4.0\n[254, 255, 255, 255, 2, 0, 0, 0, 252, 255, 255, 255, 0, 0, 0, 0]\n[255, 255, 255, 127, 1, 0, 0, 0]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# A kernel whose declaration is f32 only says so where it is called: it never converts.
+
+[[tests]]
+name = "f32_only_kernel_refuses_f64"
+desc = "`conv2d` computes in f32 only; an f64 tensor is refused at the call with RuntimeDiag::OperandTypeUnsupported, naming the operator, the argument's element type and the supported set. Before, the kernel silently cast the tensor to f32 (design principles 5.1, 13.1)."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/f32_only.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::OperandTypeUnsupported"
+expect_output_contains = ["'conv2d' does not support a value of type 'Tensor<f64>'", "it takes f32 tensors."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+# An element type that is not a tensor element type at all is the type's own refusal, and it says
+# which ones it takes (it used to leave the constructor as an exception).
+[[tests]]
+name = "string_refused"
+desc = "`Tensor<string>` is rejected with InvalidTypeArgument, naming the element types a tensor takes."
+kind = "negative"
+case = "../../../../cases/modules/tensor/dtype/string_refused.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::InvalidTypeArgument"
+expect_output_contains = ["the element type is f32, f64, i32, i64 or bool, not 'string'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 4000
+
+# f32 keeps working, on every backend: the same values, the same bits.
+
+[[tests]]
+name = "f32_works"
+desc = "`Tensor<f32>` is accepted as a parameter type and as the element type of a literal, and creation, arithmetic, reduction and `to_bytes` give the f32 values and IEEE-754 bytes on every backend."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/dtype/f32_works.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout = "10.0\n20.0\n0.0\n4.0\n[0, 0, 128, 63, 0, 0, 0, 64, 0, 0, 64, 64, 0, 0, 128, 64]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+# An f32 program that predates this change, whose bytes are pinned on their own here: the element
+# type change cannot move f32 storage, signed zero or NaN payloads without failing this.
+[[tests]]
+name = "f32_program_bytes_unchanged"
+desc = "The existing binary_bytes program (modules.tensor) prints the same bytes as before the element-type change: f32 signed zero, an int64 value that f32 cannot hold, bool bytes, an empty tensor and a view of the same block."
+kind = "behavior"
+case = "../../../../cases/modules/tensor/binary_bytes.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout = "[0, 0, 128, 63, 0, 0, 32, 192, 0, 0, 0, 0, 0, 0, 0, 128]\n[1, 0, 0, 0, 0, 0, 32, 0, 254, 255, 255, 255, 255, 255, 255, 255]\n[1, 0, 1]\n0\n[0, 0, 128, 63, 0, 0, 32, 192, 0, 0, 0, 0, 0, 0, 0, 128]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

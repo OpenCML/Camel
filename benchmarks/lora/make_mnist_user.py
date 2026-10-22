@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E9 on-device personalization data: a user whose MNIST digits are rotated by a
 fixed angle (+15 deg) — a small, honest distribution shift. The base model is
 pretrained on upright MNIST (pretrain_torch.py); the user's device holds only

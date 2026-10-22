@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Tensor creation operators. Shape arguments are int[] values; when their
@@ -84,7 +68,7 @@ slot_t onesKernel(ArgsView &, ArgsView &norm, context::Context &) {
 slot_t fullKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("full", [&] {
         return wrap(k::full(
-            normalizeTensorDType(norm.type(1)->code()),
+            norm.type(1)->code(),
             shapeArg(norm, 0),
             numberArg(norm, 1),
             resultAllocator()));
@@ -92,7 +76,7 @@ slot_t fullKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 std::optional<Type *> fullInfer(const InferContext &ctx) {
-    return tensorOf(normalizeTensorDType(ctx.type(1)->code()), shapeFromArg(ctx, 0));
+    return tensorOf(ctx.type(1)->code(), shapeFromArg(ctx, 0));
 }
 
 slot_t randomKernel(ArgsView &, ArgsView &norm, context::Context &) {
@@ -148,6 +132,32 @@ slot_t seedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 }
 
 const std::vector<ParamSpec> kShapeParam = {{"shape", ParamKind::IntArray}};
+
+// new(values): an array's elements in a tensor of the inferred shape. A tensor argument is that
+// tensor in a new value, so its gradient passes through; an array argument is continuous when
+// its elements are (design principles 9.9), and its adjoint would put the elements of dy back in
+// an array of the same shape. No operator of this module produces an array from a tensor's
+// gradient, so an array that depends on a differentiated parameter is refused by name instead of
+// silently dropped — the refusal `reshape` and `concat` make for the same reason. A constant
+// array starts no gradient flow, so the call that converts one is never visited.
+void newVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 1, 1);
+    if (isTensorNode(b, call.inputs[0])) {
+        if (auto dy = b.gradientOf(call.output)) {
+            b.accumulateGradient(call.inputs[0], *dy);
+        }
+        return;
+    }
+    if (b.isActive(call.inputs[0])) {
+        refuseVjp(
+            call,
+            "its input is a numeric array of type '" + b.nodeType(call.inputs[0])->toString() +
+                "', not a tensor, and this module has no operator that carries a tensor's "
+                "gradient back into an array; the array's gradient would be dropped silently. "
+                "Build the tensor from a differentiable tensor (a parameter, a slice of one) "
+                "instead of converting an array");
+    }
+}
 
 } // namespace
 
@@ -243,6 +253,7 @@ std::vector<OpDef> creationOps() {
         .infer     = [](const InferContext &) -> std::optional<Type *> { return Type::Void(); },
         .kernel    = &seedKernel,
         .traits    = impure});
+    setVjp(defs, "new", &newVjp);
     return defs;
 }
 

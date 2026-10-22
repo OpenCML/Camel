@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -137,6 +121,20 @@ class Module : public std::enable_shared_from_this<Module> {
         size_t tokenEnd;
     };
 
+    /// A resource this module declares (design effects plan 3.2): `resource NAME` (an ambient
+    /// resource of its own), `resource NAME unordered` (the accesses of a call may be
+    /// reordered) or `resource NAME = [a, b]` (a group naming resources and other groups). A
+    /// group's `members` are names as written; expand them once all modules are read (the GCT
+    /// builder's resourceSignatureOf). Design principles 3.3: a resource is state with an
+    /// identity, and a name no value carries (`fs`, `rng`) is an ambient resource of that name.
+    struct ResourceDecl {
+        bool unordered = false;
+        bool exported  = false;
+        /// The members of a group, as written; empty for a single resource.
+        std::vector<Reference> members;
+        bool group() const { return !members.empty(); }
+    };
+
   protected:
     /// The export tables of one program read a module's import bindings directly: which name
     /// comes from which module is a fact of the module (the source), not of the program.
@@ -193,6 +191,8 @@ class Module : public std::enable_shared_from_this<Module> {
     // Tags (design principles 6.2): the declarations this module makes, and the facts written
     // on its declarations and on the fields of its type declarations.
     std::map<std::string, uint32_t> declaredTags_;
+    // ---- Resources (design effects plan 3.2) -----------------------------------------------
+    std::map<std::string, ResourceDecl> resources_;
     // The declaration's name, then the signature of one overload (empty when the name cannot be
     // overloaded), to the facts or the granted numeric permissions.
     std::map<std::string, std::map<std::string, camel::core::attr::AttrSetId>> declarationTags_;
@@ -376,6 +376,17 @@ class Module : public std::enable_shared_from_this<Module> {
     std::vector<std::pair<std::string, std::shared_ptr<Module>>> importedNamespaces() const;
     type_ns_ptr_t exportedTypeNS() const;
     entity_ns_ptr_t nativeEntityNS() const;
+
+    // ---- Resources (design effects plan 3.2) -----------------------------------------------
+
+    /// Declares `name` (namespace-qualified as written) as a resource. A second declaration of
+    /// the same name replaces nothing: the caller reports it.
+    void declareResource(const Reference &name, ResourceDecl decl);
+    void setResourceExported(const Reference &name, bool exported = true);
+    /// The resource this module declares under `name`; nullptr when it declares none.
+    const ResourceDecl *resource(const Reference &name) const;
+    /// Every resource the module declares, by its qualified name.
+    const std::map<std::string, ResourceDecl> &resources() const { return resources_; }
 
     // ---- Tags (design principles 6.2; camel/core/tags.h) -----------------------------------
 

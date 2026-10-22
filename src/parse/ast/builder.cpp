@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Mar. 26, 2024
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/builder.h"
 #include "camel/core/operator_names.h"
@@ -435,6 +419,8 @@ Value Builder::visitDecl(syn::Node context) {
         return visitFuncDecl(cst::FuncDecl(context));
     case NK::TypeDecl:
         return visitTypeDecl(cst::TypeDecl(context));
+    case NK::ResourceDecl:
+        return visitResourceDecl(cst::ResourceDecl(context));
     case NK::TagDecl:
         return visitTagDecl(cst::TagDecl(context));
     case NK::RuleDecl:
@@ -810,9 +796,9 @@ Value Builder::visitFuncAnno(cst::FuncAnno context) {
     node_ptr_t annoNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
     setNodeTokenRangeByContext(annoNode, context);
     *annoNode << createNodeAs<RefDataLoad>(ref);
-    auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+    const ArgumentValues values = value_cast<ArgumentValues>(
         visitAngledValues(context->get<cst::AngledValues>()));
-    *annoNode << dataList << namedDataList;
+    *annoNode << values.data << values.named;
 
     LEAVE("FuncAnno");
     return annoNode;
@@ -831,17 +817,17 @@ ruleDecl : 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody 
 ruleBody : dataExpr ('=>' | '<=>') dataExpr ;
 
 A rule is the shorthand of a pair of functions with the same parameters, the left one the pattern
-and the right one what it becomes (rewrite design 2.1, graph store 5.2), and of the function that
-makes the rule from them:
+and the right one what it becomes (rewrite design 2.1, graph store 5.2), and of the value that
+holds them (rewrite design 2 (second version) 8.5):
 
     func name__lhs(params) => left
     func name__rhs(params) => right
-    func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+    let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
 
 `__rule` is an operator of the module `rewrite`, imported by the declaration itself. The rule is
-the function `name`: it is exported, imported and listed like any function (a library function
-has no module-level values), and the engines of the module call the functions of a list to get
-the rules. `consts` has bit i set when the parameter i is `const`.
+the value `name` (type `Rule`): it is held in a variable, passed and returned like any value,
+stored in a `Rule[]`, exported and imported. `consts` has bit i set when the parameter i is
+`const`.
 */
 Value Builder::visitRuleDecl(cst::RuleDecl context) {
     ENTER("RuleDecl");
@@ -860,6 +846,15 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     const bool twoWay = body->has(TK::Equiv);
     const auto params = context->get<cst::ParentParams>();
     const auto when   = context->expr();
+    // A rule declares its type parameters the way a function does, after its name
+    // (`rule sub_self::<T>(x: T) { ... }`): every function the rule becomes is generic over
+    // them, so the sides bind and instantiate like an ordinary generic function.
+    std::vector<std::string> typeParams;
+    if (const auto declared = context->get<cst::TypeParams>()) {
+        for (const auto ident : declared->all<cst::IdentDef>()) {
+            typeParams.emplace_back(ident->text());
+        }
+    }
     int64_t consts    = 0;
     if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
         int bit = 0;
@@ -973,6 +968,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         const Reference sideRef = qualifyRef(Reference(name + suffix));
         node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcTypeNode, context);
+        unwrapNodeAs<FuncTypeLoad>(funcTypeNode)->setTypeParams(typeParams);
         *funcTypeNode << createNodeAs<RepeatedLoad>("NamedPair");
         if (params) {
             *funcTypeNode << any2node(visitParentParams(params));
@@ -1048,7 +1044,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         *whenFunc << whenData;
     }
 
-    // func name() => __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
+    // let name = __rule('name', twoWay, needs, consts, name__lhs, name__rhs)
     const auto literal = [&](LiteralType type, const std::string &text) {
         node_ptr_t literalNode = createNodeAs<LiteralLoad>(Literal(type, text));
         setNodeTokenRangeByContext(literalNode, context);
@@ -1076,37 +1072,42 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     setNodeTokenRangeByContext(call, context);
     *call << reference(makerName) << args << createNodeAs<RepeatedLoad>("NamedData");
 
-    node_ptr_t exprStmt = createNodeAs<ExprStmtLoad>();
-    setNodeTokenRangeByContext(exprStmt, context);
-    *exprStmt << call;
-    node_ptr_t stmts = createNodeAs<RepeatedLoad>("Stmt");
-    setNodeTokenRangeByContext(stmts, context);
-    *stmts << exprStmt;
-    node_ptr_t block = createNodeAs<StmtBlockLoad>();
-    setNodeTokenRangeByContext(block, context);
-    *block << stmts;
-
-    node_ptr_t makerType = createNodeAs<FuncTypeLoad>();
-    setNodeTokenRangeByContext(makerType, context);
-    *makerType << createNodeAs<RepeatedLoad>("NamedPair")
-               << createNodeAs<RepeatedLoad>("NamedPair");
-    node_ptr_t makerTypeOpt = createNodeAs<OptionalLoad>("Type");
-    setNodeTokenRangeByContext(makerTypeOpt, context);
-    *makerType << makerTypeOpt;
-    node_ptr_t makerNode = createNodeAs<FuncDataLoad>(ref);
-    setNodeTokenRangeByContext(makerNode, context);
-    *makerNode << makerType << block;
-    node_ptr_t makerDecl = createNodeAs<FuncDeclLoad>(ref);
-    unwrapNodeAs<FuncDeclLoad>(makerDecl)->setDoc(docOf(context));
-    *makerDecl << makerNode;
-    setNodeTokenRangeByContext(makerDecl, context);
+    // The rule is a module-level value, not a function: `let name = __rule(...)` (rewrite design
+    // 2 (second version) 8.5). A value can be held, passed, returned and put in a `Rule[]`; a
+    // function that made one could only be called.
+    node_ptr_t typeList = createNodeAs<RepeatedLoad>("Type");
+    setNodeTokenRangeByContext(typeList, context);
+    node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
+    setNodeTokenRangeByContext(dataList, context);
+    *dataList << call;
+    node_ptr_t valueDecl =
+        createNodeAs<DataDeclLoad>(false, UnpackType::Tuple, std::vector<Reference>{ref});
+    unwrapNodeAs<DataDeclLoad>(valueDecl)->setDoc(docOf(context));
+    setNodeTokenRangeByContext(valueDecl, context);
+    *valueDecl << typeList << dataList;
+    // The AST tooling reads the binding and the initializer of a declaration; a rule declaration
+    // has the same two, under the name of the rule.
+    std::vector<camel::source::SemanticPart> parts;
+    const auto nameToken = context->get<cst::IdentDef>();
+    parts.push_back(semanticPart(
+        camel::source::SemanticRole::BindingName,
+        nameToken ? deriveAstAnchorOrigin(valueDecl, nameToken, "ast.data.binding")
+                  : nodeOrigin(valueDecl),
+        0,
+        name));
+    parts.push_back(semanticPart(
+        camel::source::SemanticRole::ValueProducer,
+        nodeOrigin(valueDecl->atAs<RepeatedLoad>(1)),
+        -1,
+        "initializer"));
+    registerAstSemanticBundle(valueDecl, std::move(parts));
 
     LEAVE("RuleDecl");
     std::vector<node_ptr_t> declarations{lhsFunc, rhsFunc};
     if (whenFunc) {
         declarations.push_back(whenFunc);
     }
-    declarations.push_back(makerDecl);
+    declarations.push_back(valueDecl);
     return declarations;
 }
 
@@ -1563,16 +1564,15 @@ std::vector<node_ptr_t> Builder::tagUsesOf(cst::TagUse context) {
                 uses.push_back(use);
                 continue;
             }
-            auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
-                visitAngledValues(values));
-            if (namedDataList && namedDataList->size() > 0) {
+            const ArgumentValues args = value_cast<ArgumentValues>(visitAngledValues(values));
+            if (args.named && args.named->size() > 0) {
                 // A tag takes positional arguments only: it names its parameters where it is
                 // declared, and the pass that reads the tag matches them by position.
                 diags_->of(SemanticDiag::TagArgumentNamed)
                     .at(rangeOf(values->firstToken(), values->lastToken()))
-                    .commit(namedDataList->at(0)->load()->toString());
+                    .commit(args.named->at(0)->load()->toString());
             }
-            *use << dataList;
+            *use << args.data;
         }
         uses.push_back(use);
     }
@@ -1638,6 +1638,17 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     }
     funcType->setModifiers(modSet);
 
+    // The type parameters declared at the head (`func first::<T>(...)`, design principles 5.5).
+    // They are the names the declaration's type variables are; the GCT builder puts them in
+    // scope before it visits a parameter type, so one of them wins over a type of the same name.
+    if (const auto typeParams = context->get<cst::TypeParams>()) {
+        std::vector<std::string> names;
+        for (const auto ident : typeParams->all<cst::IdentDef>()) {
+            names.emplace_back(ident->text());
+        }
+        funcType->setTypeParams(std::move(names));
+    }
+
     if (context->get<cst::AngledParams>()) {
         node_ptr_t withParams = any2node(visitAngledParams(context->get<cst::AngledParams>()));
         *funcTypeNode << withParams;
@@ -1664,6 +1675,9 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
+    if (context->get<cst::ResourceClause>()) {
+        *funcTypeNode << any2node(visitResourceClause(context->get<cst::ResourceClause>()));
+    }
 
     // The name: an identifier, or the operator of an overload (`func operator +(a, b)`, design
     // principles 4.3). An overload is a function under the reserved name of its operator
@@ -1695,8 +1709,17 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
         blockNode = any2node(visitStmtBlock(blockContext));
     }
 
+    node_ptr_t whenNode = nullptr;
+    std::string whenText;
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        whenNode = any2node(visitExpr(whenClause->expr()));
+        whenText = std::string(whenClause->expr().sourceText());
+    }
+
     node_ptr_t funcNode = createNodeAs<FuncDataLoad>(ref);
     setNodeTokenRangeByContext(funcNode, context);
+    unwrapNodeAs<FuncDataLoad>(funcNode)->setWhen(whenNode);
+    unwrapNodeAs<FuncDataLoad>(funcNode)->setWhenText(std::move(whenText));
     *funcNode << funcTypeNode;
     *funcNode << blockNode;
 
@@ -1878,6 +1901,62 @@ typeDecl
       (typeExpr | STRING)
     ;
 */
+/*
+resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
+*/
+Value Builder::visitResourceDecl(cst::ResourceDecl context) {
+    ENTER("ResourceDecl");
+    const auto name  = context->get<cst::IdentDef>();
+    node_ptr_t declNode = createNodeAs<ResourceDeclLoad>(
+        qualifyRef(Reference(name ? name->text() : std::string{})));
+    setNodeTokenRangeByContext(declNode, context);
+    auto decl = declNode->loadAs<ResourceDeclLoad>();
+    decl->setDoc(docOf(context));
+    if (const auto group = context->get<cst::BracketIdents>()) {
+        decl->setGroup(true);
+        if (const auto list = group->get<cst::IdentList>()) {
+            for (const auto member : list->all<cst::IdentDef>()) {
+                // A member is a name as written: `stdout` is the resource every program has,
+                // and `m::r` one of another module's. An enclosing namespace is not implied
+                // (a group may name a standard resource from inside a namespace block).
+                decl->addMember(Reference(member->text()));
+            }
+        }
+    } else if (context->lastToken() && context->lastToken()->text() == "unordered") {
+        // `resource net unordered`: the word after the name is the contextual `unordered`.
+        decl->setUnordered(true);
+    }
+    if (context->tok(TK::KwExport)) {
+        // `export resource` is this declaration, not an `ExportDecl` around it (the word
+        // `resource` follows `export`): it is exported like a type or a data declaration.
+        export_->addRef(decl->ref());
+    }
+    LEAVE("ResourceDecl");
+    return declNode;
+}
+
+/*
+resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+*/
+Value Builder::visitResourceClause(cst::ResourceClause context) {
+    ENTER("ResourceClause");
+    node_ptr_t clauseNode = createNodeAs<ResourceClauseLoad>();
+    setNodeTokenRangeByContext(clauseNode, context);
+    auto clause = unwrapNodeAs<ResourceClauseLoad>(clauseNode);
+    // The clause's tokens run together without white space or comments: a leading `pure` is the
+    // word, while `uses pure` (a parameter of that name) starts with `uses`. The parser reads
+    // both words so that `pure uses fs` is reported where it is written (PureAndUses) rather
+    // than as a syntax error.
+    if (context->text().starts_with("pure")) {
+        clause->setPure(true);
+    }
+    for (const auto use : context->all<cst::IdentRef>()) {
+        clause->addUse(value_cast<Reference>(visitIdentRef(use)));
+    }
+    LEAVE("ResourceClause");
+    return clauseNode;
+}
+
 Value Builder::visitTypeDecl(cst::TypeDecl context) {
     ENTER("TypeDecl");
     string uri;
@@ -2054,6 +2133,31 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
 }
 
 /*
+tupleParam : '(' identDef (',' identDef)* ','? ')' ;
+A lambda parameter destructured as a tuple: the parameter has a name the program does not write,
+and the names take the elements of the tuple it is passed (the rule of `let (a, b) = p`).
+*/
+Value Builder::visitTupleParam(cst::TupleParam context) {
+    ENTER("TupleParam");
+    std::vector<std::string> names;
+    for (const auto &identDef : context->all<cst::IdentDef>()) {
+        names.push_back(identDef->text());
+    }
+    // The name is internal: no program writes it, and the position makes it unique.
+    Reference ref("_tuple_" + std::to_string(context->begin()));
+    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref);
+    namedPairNode->loadAs<NamedPairLoad>()->setTupleNames(std::move(names));
+    setNodeTokenRangeByContext(namedPairNode, context);
+    node_ptr_t inferNode = createNodeAs<InferTypeLoad>(Reference());
+    setNodeTokenRangeByContext(inferNode, context);
+    *namedPairNode << inferNode;
+    node_ptr_t dataExprOptNode = createNodeAs<OptionalLoad>("DataExpr");
+    *namedPairNode << dataExprOptNode;
+    LEAVE("TupleParam");
+    return namedPairNode;
+}
+
+/*
 dataList     : dataExpr (',' dataExpr)* ;
 */
 Value Builder::visitDataList(cst::DataList context) {
@@ -2096,6 +2200,9 @@ Value Builder::visitIndexValues(cst::IndexValues context) {
 
 /*
 pairedValues : keyValuePair (',' keyValuePair)* ;
+In a call's parentheses the list may also hold a positional argument written after a named one
+(handover H276): it is a StrayPositional, and the call refuses it. The named arguments are all
+this function returns.
 */
 Value Builder::visitPairedValues(cst::PairedValues context) {
     ENTER("PairedValues");
@@ -2109,14 +2216,31 @@ Value Builder::visitPairedValues(cst::PairedValues context) {
 }
 
 /*
+strayPositional : indexValue ;
+*/
+Value Builder::visitStrayPositional(cst::StrayPositional context) {
+    ENTER("StrayPositional");
+    node_ptr_t value = nullptr;
+    if (context->expr()) {
+        value = any2node(visitExpr(context->expr()));
+    }
+    LEAVE("StrayPositional");
+    return value;
+}
+
+/*
 pairedParams : keyParamPair (',' keyParamPair)* ;
 */
 Value Builder::visitPairedParams(cst::PairedParams context) {
     ENTER("PairedParams");
     node_ptr_t rep = createNodeAs<RepeatedLoad>("NamedPair");
     setNodeTokenRangeByContext(rep, context);
-    for (const auto &keyParamPair : context->all<cst::KeyParamPair>()) {
-        *rep << any2node(visitKeyParamPair(keyParamPair));
+    for (const syn::Node child : context->nodes()) {
+        if (child.is(NK::KeyParamPair)) {
+            *rep << any2node(visitKeyParamPair(cst::KeyParamPair(child)));
+        } else if (child.is(NK::TupleParam)) {
+            *rep << any2node(visitTupleParam(cst::TupleParam(child)));
+        }
     }
     LEAVE("PairedParams");
     return rep;
@@ -2133,12 +2257,20 @@ Value Builder::visitArgumentList(cst::ArgumentList context) {
         dataList = any2node(visitIndexValues(context->get<cst::IndexValues>()));
     }
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t strayPositional = nullptr;
     if (context->get<cst::PairedValues>()) {
-        setNodeTokenRangeByContext(namedDataList, context->get<cst::PairedValues>());
-        namedDataList = any2node(visitPairedValues(context->get<cst::PairedValues>()));
+        const auto &paired = context->get<cst::PairedValues>();
+        setNodeTokenRangeByContext(namedDataList, paired);
+        namedDataList = any2node(visitPairedValues(paired));
+        for (const auto &stray : paired->all<cst::StrayPositional>()) {
+            // The first one is where the report points; more than one is the same refusal.
+            if (strayPositional == nullptr) {
+                strayPositional = any2node(visitStrayPositional(stray));
+            }
+        }
     }
     LEAVE("ArgumentList");
-    return make_pair(dataList, namedDataList);
+    return ArgumentValues{dataList, namedDataList, strayPositional};
 }
 
 /*
@@ -2165,6 +2297,9 @@ Value Builder::visitIndices(cst::Indices context) {
                 if (child.isToken()) {
                     if (child.token().kind() == TK::Colon) {
                         ++colons;
+                    } else if (child.token().kind() == TK::ColonColon) {
+                        // `xs[:: -1]`: the two colons of an omitted start and end are one token.
+                        colons += 2;
                     }
                     continue;
                 }
@@ -2211,14 +2346,16 @@ Value Builder::visitParentArgues(cst::ParentArgues context) {
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t strayPositional = nullptr;
     if (context->get<cst::ArgumentList>()) {
-        auto res = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+        ArgumentValues values = value_cast<ArgumentValues>(
             visitArgumentList(context->get<cst::ArgumentList>()));
-        dataList      = res.first;
-        namedDataList = res.second;
+        dataList          = values.data;
+        namedDataList     = values.named;
+        strayPositional   = values.positionalAfterNamed;
     }
     LEAVE("ParentArgues");
-    return make_pair(dataList, namedDataList);
+    return ArgumentValues{dataList, namedDataList, strayPositional};
 }
 
 /*
@@ -2244,14 +2381,16 @@ Value Builder::visitAngledValues(cst::AngledValues context) {
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t strayPositional = nullptr;
     if (context->get<cst::ArgumentList>()) {
-        auto res = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+        ArgumentValues values = value_cast<ArgumentValues>(
             visitArgumentList(context->get<cst::ArgumentList>()));
-        dataList      = res.first;
-        namedDataList = res.second;
+        dataList          = values.data;
+        namedDataList     = values.named;
+        strayPositional   = values.positionalAfterNamed;
     }
     LEAVE("AngledValues");
-    return make_pair(dataList, namedDataList);
+    return ArgumentValues{dataList, namedDataList, strayPositional};
 }
 
 /*
@@ -2525,6 +2664,9 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     if (text == "tuple") {
         return TypeCaseKind::Tuple;
     }
+    if (text == "func") {
+        return TypeCaseKind::Func;
+    }
     if (text == "#leaf") {
         return TypeCaseKind::Leaf;
     }
@@ -2539,9 +2681,18 @@ typeCase
 */
 Value Builder::visitTypeCase(cst::TypeCase context) {
     ENTER("TypeCase");
-    std::vector<TypeCaseKind> patterns;
+    std::vector<TypeCasePattern> patterns;
     for (const auto pattern : context->all<cst::TypeCasePattern>()) {
-        patterns.push_back(typeCaseKindOf(pattern));
+        TypeCasePattern entry;
+        // A pattern with a type child is an identity pattern (`case int`, `case T`); the
+        // shape words carry no type.
+        if (const auto typeNode = pattern.type()) {
+            entry.kind = TypeCaseKind::Identity;
+            entry.type = any2node(visitType(typeNode));
+        } else {
+            entry.kind = typeCaseKindOf(pattern);
+        }
+        patterns.push_back(std::move(entry));
     }
     node_ptr_t caseNode = createNodeAs<TypeCaseLoad>(std::move(patterns));
     setNodeTokenRangeByContext(caseNode, context);
@@ -3344,6 +3495,10 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
             // applied to. The call keeps its callee and its named arguments.
             calleeNode    = rhsNode->at(0);
             namedDataList = rhsNode->at(2);
+            // The merged call stands for the one on the right: a positional argument written
+            // after a name there is still the same refusal (handover H276).
+            linkNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
+                rhsNode->loadAs<ReservedExprLoad>()->positionalAfterNamed());
             calleeNode->setParent(nullptr);
             namedDataList->setParent(nullptr);
             dataList = createNodeAs<RepeatedLoad>("Data");
@@ -3497,8 +3652,16 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::ParentArgues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
                 setNodeTokenRangeByContext(exprNode, cst::ParentArgues(child.node()));
-                auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+                const ArgumentValues values = value_cast<ArgumentValues>(
                     visitParentArgues(cst::ParentArgues(child.node())));
+                node_ptr_t dataList      = values.data;
+                node_ptr_t namedDataList = values.named;
+                if (values.positionalAfterNamed != nullptr) {
+                    // `f(a: 1, 2)`: the call refuses it, at the argument out of place
+                    // (design principles 4.4, handover H276).
+                    exprNode->loadAs<ReservedExprLoad>()->setPositionalAfterNamed(
+                        nodeOrigin(values.positionalAfterNamed));
+                }
                 *exprNode << lhsNode << dataList << namedDataList;
                 std::vector<camel::source::SemanticPart> parts = {
                     semanticPart(
@@ -3593,8 +3756,10 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::AngledValues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(exprNode, cst::AngledValues(child.node()));
-                auto [dataList, namedDataList] = value_cast<std::pair<node_ptr_t, node_ptr_t>>(
+                const ArgumentValues values = value_cast<ArgumentValues>(
                     visitAngledValues(cst::AngledValues(child.node())));
+                node_ptr_t dataList      = values.data;
+                node_ptr_t namedDataList = values.named;
                 *exprNode << lhsNode << dataList << namedDataList;
                 std::vector<camel::source::SemanticPart> parts = {
                     semanticPart(
@@ -3874,6 +4039,21 @@ Value Builder::visitTupleData(cst::TupleData context) {
     }
     LEAVE("TupleData");
     return dataNode;
+}
+
+/*
+shapeComp : typeExpr '{' staticForExpr '}' ;
+The shape is child 0, the generator child 1. The tree keeps both: the graph builder reads the
+generator's rounds and takes the field names and the kind from the shape.
+*/
+Value Builder::visitShapeComp(cst::ShapeComp context) {
+    ENTER("ShapeComp");
+    node_ptr_t compNode = createNodeAs<ShapeCompLoad>();
+    setNodeTokenRangeByContext(compNode, context);
+    *compNode << any2node(visitType(context->type()));
+    *compNode << any2node(visitStaticForExpr(context->get<cst::StaticForExpr>()));
+    LEAVE("ShapeComp");
+    return compNode;
 }
 
 /*
@@ -4434,17 +4614,29 @@ Value Builder::visitTypeUnit(cst::TypeUnit context) {
 
 /*
 arrayType
-    : specType ('[' ']')*
+    : specType arrayDim+
     ;
 */
 Value Builder::visitArrayType(cst::ArrayType context) {
     ENTER("ArrayType");
     node_ptr_t res = any2node(visitType(context->type()));
-    if (context->childCount() > 1) {
-        size_t dims              = (context->childCount() - 1) / 2;
-        node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(dims);
+    std::vector<DimGroup> groups;
+    for (const auto dim : context->all<cst::ArrayDim>()) {
+        groups.push_back(dimGroupOf(dim));
+    }
+    if (!groups.empty()) {
+        node_ptr_t arrayTypeNode = createNodeAs<ArrayTypeLoad>(std::move(groups));
         setNodeTokenRangeByContext(arrayTypeNode, context);
         *arrayTypeNode << res;
+        // The extent expressions stay children of the node as well: everything written is in
+        // the tree, and a reader that walks it sees `?` as the one item that has no node.
+        for (const DimGroup &group : arrayTypeNode->loadAs<ArrayTypeLoad>()->dims()) {
+            for (const auto &extent : group.extents) {
+                if (extent) {
+                    *arrayTypeNode << extent;
+                }
+            }
+        }
         res = arrayTypeNode;
     }
     LEAVE("ArrayType");
@@ -4452,7 +4644,62 @@ Value Builder::visitArrayType(cst::ArrayType context) {
 }
 
 /*
-typeOrData : typeExpr | CONST dataExpr ;
+arrayDim
+    : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+    ;
+arrayDimItem : '?' | '..' identDef? | dataExpr
+*/
+Value Builder::visitArrayDim(cst::ArrayDim context) {
+    node_ptr_t res = createNodeAs<ArrayDimLoad>(dimGroupOf(context));
+    setNodeTokenRangeByContext(res, context);
+    for (const auto &extent : res->loadAs<ArrayDimLoad>()->dim().extents) {
+        if (extent) {
+            *res << extent;
+        }
+    }
+    return res;
+}
+
+DimGroup Builder::dimGroupOf(cst::ArrayDim context) {
+    DimGroup group;
+    bool packNameNext = false;
+    for (size_t i = 0; i < context->childCount(); ++i) {
+        const auto child = context->child(i);
+        if (child.isToken()) {
+            if (child.token().is(TK::Question)) {
+                group.extents.push_back(nullptr);
+                ++group.itemCount;
+                packNameNext = false;
+            } else if (child.token().is(TK::DotDot)) {
+                if (group.pack != DimPack::None) {
+                    group.packRepeated = true;
+                } else {
+                    group.pack     = DimPack::Anonymous;
+                    group.packItem = group.itemCount;
+                }
+                ++group.itemCount;
+                packNameNext = true;
+            }
+            continue;
+        }
+        const auto node = child.node();
+        if (packNameNext && node.is(NK::IdentDef)) {
+            group.pack     = DimPack::Named;
+            group.packName = node.text();
+            packNameNext   = false;
+            continue;
+        }
+        packNameNext = false;
+        if (node.isExpr()) {
+            group.extents.push_back(any2node(visitExpr(node)));
+            ++group.itemCount;
+        }
+    }
+    return group;
+}
+
+/*
+typeOrData : typeExpr | arrayDim | CONST dataExpr ;
 The tree has a node for the second alternative only.
 */
 Value Builder::visitConstData(cst::ConstData context) { return visitExpr(context->expr()); }
@@ -4473,6 +4720,18 @@ Value Builder::visitSpecType(cst::SpecType context) {
         node_ptr_t repeatNode = createNodeAs<RepeatedLoad>("TypeOrData");
         setNodeTokenRangeBetween(repeatNode, types[1], types[count - 1]);
         for (size_t i = 1; i < count; ++i) {
+            if (types[i].is(NK::ConstData) &&
+                types[i].get<cst::ConstData>()->expr().is(NK::ArrayData)) {
+                // A shape is the constant it is made of; `const` was how the shape of a module
+                // type was written before array types took it over (plan P3, 4.1).
+                diags_->of(SemanticDiag::InvalidTypeArgument)
+                    .at(rangeOf(types[i].firstToken(), types[i].lastToken()))
+                    .commit(
+                        types[0].text(),
+                        std::format(
+                            "a shape is written without 'const': '{}<f32, [3]>'",
+                            types[0].text()));
+            }
             *repeatNode << any2node(visitType(types[i]));
         }
         *specTypeNode << res << repeatNode;
@@ -4498,15 +4757,6 @@ Value Builder::visitTypeOfType(cst::TypeOfType context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
     *res << any2node(visitExpr(context->expr()));
-    return res;
-}
-
-Value Builder::visitTypeAsType(cst::TypeAsType context) {
-    node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeAs);
-    setNodeTokenRangeByContext(res, context);
-    Reference ref(context->get<cst::IdentDef>()->text());
-    *res << createNodeAs<RefTypeLoad>(ref);
-    setNodeTokenRangeByContext(res, context->get<cst::IdentDef>());
     return res;
 }
 
@@ -4608,6 +4858,10 @@ Value Builder::visitFuncType(cst::FuncType context) {
         *typeOptNode << typeNode;
     }
     *funcTypeNode << typeOptNode;
+
+    if (context->get<cst::ResourceClause>()) {
+        *funcTypeNode << any2node(visitResourceClause(context->get<cst::ResourceClause>()));
+    }
 
     LEAVE("FuncType");
     return funcTypeNode;
@@ -4736,6 +4990,8 @@ Value Builder::visitExpr(syn::Node context) {
         return visitStructData(cst::StructData(context));
     case NK::TupleData:
         return visitTupleData(cst::TupleData(context));
+    case NK::ShapeComp:
+        return visitShapeComp(cst::ShapeComp(context));
     case NK::FuncData:
         return visitFuncData(cst::FuncData(context));
     default:
@@ -4761,6 +5017,8 @@ Value Builder::visitType(syn::Node context) {
         return visitTypeUnit(cst::TypeUnit(context));
     case NK::ArrayType:
         return visitArrayType(cst::ArrayType(context));
+    case NK::ArrayDim:
+        return visitArrayDim(cst::ArrayDim(context));
     case NK::SpecType:
         return visitSpecType(cst::SpecType(context));
     case NK::ConstData:
@@ -4777,8 +5035,6 @@ Value Builder::visitType(syn::Node context) {
         return visitFuncType(cst::FuncType(context));
     case NK::TypeOfType:
         return visitTypeOfType(cst::TypeOfType(context));
-    case NK::TypeAsType:
-        return visitTypeAsType(cst::TypeAsType(context));
     case NK::EnumType:
         return visitEnumType(cst::EnumType(context));
     default:

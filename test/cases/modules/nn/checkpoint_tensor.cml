@@ -14,14 +14,16 @@ func main(mode: int, dir: string): int sync {
         let _ = println(load_tree::<Tensor<int>>(dir))
         return 0
     } else if mode == 2 then sync {
-        let _ = println(load_tree::<Tensor<f32, const [3]>>(dir))
+        let _ = println(load_tree::<Tensor<f32, [3]>>(dir))
         return 0
     } else if mode == 3 then sync {
         let loaded: Tensor<f32>! = load_tree(dir)
         let _ = println(loaded)
         return 0
     } else if mode == 4 then sync {
-        save_tree(dir, new([9.0]))
+        // f32 is written, not assumed: an array of float literals is f64, and a typed restore
+        // refuses a stored tensor of another element type instead of narrowing it.
+        save_tree(dir, new([9.0] as f32[]))
         return 0
     } else if mode == 5 then sync {
         let loaded = load_tree::<Tensor<f32>>(dir) !! original()

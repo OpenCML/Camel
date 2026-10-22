@@ -1,0 +1,20 @@
+/**
+ * A generic declaration's default belongs to the declaration and reaches every instance: each
+ * of the instances below leaves `n` out and takes 3, while the type `T` is its own in each
+ * (what the value is printed with differs). A default whose type depends on a type parameter
+ * cannot be a constant, and is refused where the template is registered.
+ */
+module with_default_instances
+
+with <n: int = 3>
+func tag::<T>(x: T): string {
+    return string(n) + ':' + string(x)
+}
+
+func main(): int sync {
+    println(tag::<int>(7))
+    println(tag::<string>('a'))
+    println(tag::<float>(2.5))
+    println(tag::<int><9>(7))
+    return 0
+}

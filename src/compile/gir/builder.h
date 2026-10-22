@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: May. 29, 2024
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include <any>
 #include <deque>
@@ -23,6 +7,7 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <set>
 #include <unordered_map>
 
@@ -61,6 +46,34 @@ using graph_scope_t         = Scope<std::string, graph_set_ptr_t>;
 using graph_scope_ptr_t     = std::shared_ptr<graph_scope_t>;
 using decorated_scope_t     = Scope<std::string, compile_graph_ptr_t>;
 using decorated_scope_ptr_t = std::shared_ptr<decorated_scope_t>;
+
+/// What a declaration's `when` condition says at one instantiation (design principles 5.13).
+/// The condition is a compile-time predicate over the declaration's type parameters and `with`
+/// parameters; it is evaluated when the declaration is instantiated or selected, never when it
+/// is parsed. A condition the compiler cannot answer is never taken for `true`.
+enum class WhenOutcome {
+    Holds,          // it is true
+    Fails,          // it is false: the declaration is not applicable here
+    NeedsWithValue, // it reads a `with` parameter whose value the call did not give
+    NotBool,        // its value is not a bool
+    NotEvaluable,   // it is not a compile-time predicate (a runtime value, a user call, ...)
+    TypeNotConcrete,// a type query still sees a type variable
+    UnknownName,    // a name outside the declaration (an ordinary parameter, a body name, ...)
+    // A predicate call the condition cannot make, though the name exists.
+    NotImported,    // declared by a module this one does not import
+    NotCompileTime, // imported, but not a generic function answered at compile time
+    PredicateAmbiguous, // two imports bring predicates of that name, and neither is chosen
+};
+
+struct WhenResult {
+    WhenOutcome outcome = WhenOutcome::NotEvaluable;
+    /// The name, type or expression the outcome is about, for the report.
+    std::string subject;
+    /// A sentence saying what is wrong or missing, for the report.
+    std::string detail;
+    bool holds() const { return outcome == WhenOutcome::Holds; }
+    bool fails() const { return outcome == WhenOutcome::Fails; }
+};
 
 /// The value of a `constas` constant as the key it stands for when it names a field or a
 /// position (`t.[n]`): the text of a string, the digits of an integer, `true` / `false`.
@@ -457,10 +470,13 @@ class Builder {
     // one, and a call of it would be reported as a call of an incomplete function.
     std::unordered_set<const void *> failedBodies_;
 
-    // An argument of a call: its value node and the expression it was written as.
+    // An argument of a call: its value node and the expression it was written as. An argument
+    // may be written by name (`f(1, by: 2)`, `f<rounds: 8>`, design principles 4.4); the name
+    // is resolved against the callee when the call is bound (bindArguments).
     struct Argument {
         node_handle_t node;
-        GCT::node_ptr_t expr = nullptr;
+        GCT::node_ptr_t expr               = nullptr;
+        std::optional<std::string> name;
     };
 
     using node_modifier_map_t = std::unordered_map<draft_node_ref_t, draft_node_ref_t>;
@@ -545,6 +561,60 @@ class Builder {
     // that may still say which function is meant (`apply(scale<2>, 1.5)`).
     std::unordered_map<node_handle_t, std::vector<camel::core::type::FunctionType *>>
         ambiguousBindings_;
+    // The default of a parameter (design principles 4.4, handover H235/H276): the constant a call
+    // fills in when it leaves the parameter out, and the expression it was written as (where a
+    // diagnostic about it points). Evaluated once, where the declaration is, and the same value
+    // goes into every call: a default is never evaluated at a call site, and it is not part of
+    // the function's type, so a function value made from the declaration does not carry it.
+    // Ordinary parameters and `with` parameters follow the same rule, each aligned with its own
+    // parameter list.
+    struct ParameterDefaultValue {
+        data_ptr_t data;
+        GCT::node_ptr_t expr;
+    };
+    struct DeclarationDefaults {
+        std::vector<std::optional<ParameterDefaultValue>> with;
+        std::vector<std::optional<ParameterDefaultValue>> norm;
+    };
+    // Keyed by the declaration's graph (an instance for a generic declaration) or by the
+    // template of a generic declaration.
+    std::unordered_map<const void *, DeclarationDefaults> defaults_;
+    /// A function value made by explicit type arguments (`f::<int>`) is instantiated where it is
+    /// written, so the call cannot reach the declaration's graph: the defaults are kept under
+    /// the value here. A value that is then bound to a name carries no defaults, as any function
+    /// value does (design principles 4.4).
+    std::unordered_map<node_handle_t, DeclarationDefaults> defaultsOfValue_;
+    /// The static node that carries a declaration's default into a graph, so that every call in
+    /// that graph which leaves the parameter out reads the one node: the value is computed once,
+    /// at the declaration, not once per call. Keyed by the graph, then by the default's
+    /// expression (one per parameter of a declaration).
+    std::unordered_map<const void *, std::unordered_map<const void *, node_handle_t>> defaultNodes_;
+    /// Evaluates the defaults `decl` writes and keeps them under `owner` (a graph or a generic
+    /// template). `parametersInScope` is false when the declaration's own parameters are not
+    /// names of the scope (a declaration at a module's top level): a default that reads one is
+    /// then reported as not constant, not as an unknown name.
+    void evaluateDefaults(
+        const GCT::node_ptr_t &decl, FunctionType *funcType, const void *owner,
+        bool parametersInScope);
+    /// The defaults of a callee, when the callee is one declaration: its graph, or the template
+    /// of a generic declaration. Null for a function value, an operator, or an overload set.
+    const std::vector<std::optional<ParameterDefaultValue>> *defaultsOfCallee(
+        node_handle_t callee, bool isWith) const;
+    /// Binds the arguments written at a call to the callee's parameters: a name to the parameter
+    /// it names, an omitted parameter to its default (design principles 4.4). Reports an unknown
+    /// name, a parameter given twice, and a parameter left without a value. `isWith` selects the
+    /// `with` parameters or the ordinary ones; the rule is one rule.
+    ///
+    /// The list comes back in the declaration's order and as long as the declaration's parameter
+    /// list, which is the one order the call reads by index: `parameterOf(i)` in the deferred
+    /// typing, the edges, and the types the call builds from them. `signature` is the callee's
+    /// signature where the call knows it (the same one the caller computed): the names are
+    /// resolved against it, and its absence is the unknown-callee report. The types are not
+    /// filled here: they follow the nodes, in that same order, where the call builds them once
+    /// the deferred arguments have their nodes.
+    void bindArguments(
+        std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
+        FunctionType *signature, bool isWith);
     // Variables: the nodes bound by `var` (declarations, `var` parameters, the ports that capture
     // them). Such a node does not hold a value but the variable's cell (TupleType::cell), which
     // is what a `var` parameter or a capture receives; a value is read out of it by `:var/get`
@@ -779,7 +849,7 @@ class Builder {
 
     // ---- Generic functions (design principles 5.5) ----
     //
-    // A function whose signature binds type variables (`typeas T`) is a subgraph template:
+    // A function whose signature declares its type parameters at its head is a subgraph template:
     // no graph is built for its declaration. Each direct call binds the variables from the
     // argument types and asks for the instance of those types, which is built once from the
     // function's GCT with the variables replaced (typeBindings_) wherever the body names a
@@ -819,6 +889,9 @@ class Builder {
         // The declared type with the variables of enclosing instances replaced; the function's
         // own variables remain.
         FunctionType *funcType = nullptr;
+        // The type parameters the declaration put at its head, in order, whether or not the
+        // signature writes them; an explicit `::<...>` binds them by position or by name.
+        std::vector<std::string> headParams;
         // The bindings in force where the template was declared (a generic function declared
         // inside an instance of another one).
         camel::core::type::type_bindings_t outerBindings;
@@ -863,6 +936,12 @@ class Builder {
     // Set while the callee of a call is visited: the one place the name of a generic function
     // may stand. The DREF nodes that name one, and the template each names.
     bool genericCalleeAllowed_ = false;
+    // Set while the callee of a call is visited, when that callee is a `WITH`: the arguments
+    // bound there are arguments of this call, so one whose parameter type is only known after
+    // the ordinary arguments are typed can be built at the call instead (design principles 5.9:
+    // a lambda's parameter types come from the parameter it is passed to, and `reduce<f, 0>`
+    // binds the element type from the array it reduces).
+    bool withArgsOfCall_ = false;
     // The type of the position the expression being built stands at: the value the expression
     // produces must be of this type (design principles 5.1). Every syntax position that knows
     // the type passes it down with an ExpectedValueScope or visitInPosition; checkValue applies
@@ -902,6 +981,19 @@ class Builder {
         return rest || constas || (camel::core::type::containsTypeVar(type) &&
                                    camel::core::type::containsTypeVar(boundType(type)));
     }
+    // Whether the declaration `node` is a template: its head may declare type parameters that
+    // its signature never writes (a predicate such as `is_plain::<T>()` matched in its body),
+    // and those are bound by an explicit `::<...>` at the call all the same.
+    bool isGenericHere(Type *type, const GCT::node_ptr_t &node) const {
+        if (node != nullptr &&
+            camel::compile::gct::Tree::of(node)->headTypeParamsOf(node) != nullptr) {
+            return true;
+        }
+        return isGenericHere(type);
+    }
+    // The type parameters of a template in declaration order: the head names first, then the
+    // variables its signature writes that the head did not declare.
+    std::vector<std::string> typeParameterNames(const template_ptr_t &tmpl) const;
     // Registers the generic functions declared directly in the block `exec`, before anything
     // in the block is built: a call may precede the declaration.
     void registerGenericTemplates(const GCT::node_ptr_t &exec);
@@ -1006,11 +1098,11 @@ class Builder {
         const template_ptr_t &tmpl, std::vector<Argument> &withInputs,
         std::vector<Argument> &normInputs, const GCT::node_ptr_t &call,
         Type *expectedResult);
-    // Type-directed tree intrinsics expand to ordinary accesses, calls and fills.
+    /// The leaves of a tree as one flat tuple: the one tree intrinsic still expanded here, because
+    /// the result type is a concatenation of the leaves of every field (see tree.cpp).
     node_handle_t expandTreeCall(
         const oper_group_ptr_t &ops, const std::vector<Argument> &with,
         const std::vector<Argument> &norm, const GCT::node_ptr_t &call);
-    void registerTreeOrigin(node_handle_t node, const GCT::node_ptr_t &origin, const char *kind);
     compile_graph_ptr_t instantiateGeneric(
         const template_ptr_t &tmpl, const camel::core::type::type_bindings_t &bindings,
         const camel::core::type::ExtentValues &extents, const ConstasValues &constas,
@@ -1071,6 +1163,100 @@ class Builder {
     void buildFuncBody(
         const GCT::node_ptr_t &gct, const compile_graph_ptr_t &graph, FunctionType *funcType,
         const std::string &name, const TagFacts &bodyTags);
+
+    /// Evaluates a declaration's `when` condition at one instantiation. `signature` is the
+    /// declaration's signature with the instance's types bound, so the `with` parameter names
+    /// are known; `bindings` substitutes the declaration's type variables in the condition's
+    /// type arguments. `withValues` holds the call's `with` arguments that are compile-time
+    /// constants, by parameter name. The condition is a bool expression over the compiler's
+    /// type queries (`is_numeric`, `is_integer`, `is_float`, `is_ordered`, `is_function`,
+    /// `is_string`, `is_bool`), `!`, `&&`, `||` and parentheses.
+    /// A condition belongs to the declaration that writes it, and is answered in that module
+    /// even when another one selects the declaration: `declaring` is the generic template, and
+    /// `contextUnit` the module of a function that is not generic. Names are resolved there,
+    /// as a call in the declaration's body would be.
+    WhenResult evaluateWhenCondition(
+        const GCT::node_ptr_t &condition, FunctionType *signature,
+        const camel::core::type::type_bindings_t &bindings,
+        const std::unordered_map<std::string, data_ptr_t> &withValues,
+        const template_ptr_t &declaring = nullptr, const ModuleUnit *contextUnit = nullptr);
+    /// Switches the builder to the module a condition is written in for as long as it lives:
+    /// the search for a predicate is the declaration's, wherever the selection happens.
+    class ConditionContext;
+    /// The template a condition's call names where the declaration is written: the module's
+    /// own generic functions first, then those its imports bring by name or through a module
+    /// prefix, then the prelude. `problem` is set when the name exists but cannot be called at
+    /// compile time (imported and not a generic function, or two imports that both bring it).
+    /// nullopt with `problem` still NotEvaluable when the name is not found by those layers.
+    std::optional<template_ptr_t> whenPredicateNamed(
+        const std::string &written, const GCT::node_ptr_t &at, WhenResult &problem);
+    /// Whether two selective imports bring a predicate of the name, in which case `problem`
+    /// says so and neither is chosen.
+    bool whenPredicateAmbiguous(const std::string &written, WhenResult &problem);
+    /// The module that declares a predicate called `written` when this module does not import
+    /// it, for the "not imported" report; empty when no loaded module declares it.
+    std::string whenPredicateElsewhere(const std::string &written) const;
+    /// The module of a top-level function or of an instance of one, by its graph.
+    const ModuleUnit *unitOfFunction(const compile_graph_ptr_t &graph) const;
+    /// Reports why a condition is not applicable at `origin`, for the declaration named `name`.
+    /// Never returns: every outcome except Holds is a diagnostic.
+    [[noreturn]] void reportWhenProblem(
+        const WhenResult &result, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The graphs whose declaration has a `when` condition, with its source text.
+    std::unordered_map<const DraftGraphBuilder *, GCT::Tree::WhenClause> whenClauses_;
+
+    // ---- A call of a pure function with constant arguments is that constant ----
+    // The same evaluator a `when` condition uses reads the call's body; a call in a place that
+    // needs a compile-time constant is a diagnostic when it does not reduce to one.
+
+    /// Why a call in a constant position did not become one. `NotAProgramCall` is not a
+    /// refusal: the call is not one this evaluation knows (a function value, an operator, a
+    /// name with several candidates), so the ordinary build decides and its diagnostics apply.
+    enum class FoldRefusal {
+        None,
+        NotAProgramCall,
+        ArgumentNotConstant,
+        HasEffects,
+        TooDeep,
+        ResultNotConstantKind,
+        NotEvaluable,
+    };
+    struct FoldedCall {
+        FoldRefusal refusal = FoldRefusal::NotAProgramCall;
+        data_ptr_t data;
+        /// The call as written (`first_field`), for a diagnostic.
+        std::string call;
+        std::string reason;
+    };
+    /// How many nested calls a build-time evaluation follows before it says the call is not a
+    /// constant here (`FoldCallTooDeep`). A recursion that reaches its base case in fewer steps
+    /// folds; one that does not is reported where a constant is required.
+    static constexpr size_t kMaxFoldedCallDepth = 64;
+    /// Evaluates `call` as a constant when it is a call of a pure function whose arguments are
+    /// constants.
+    FoldedCall foldConstantCall(const GCT::node_ptr_t &call);
+    /// The evaluation of one call: resolves the callee, checks its purity, and runs its body
+    /// through the evaluator `when` conditions use. `arguments` are the ordinary arguments,
+    /// already evaluated; `evalArgument` evaluates a `with` argument expression. `buildFirst`
+    /// builds the callee's body (and the generic instance) before reading it, so a body that
+    /// does not build keeps its own diagnostics instead of disappearing into a folded value.
+    FoldedCall evaluateCallAtBuildTime(
+        const GCT::node_ptr_t &call, GCT::node_ptr_t callee,
+        const std::vector<data_ptr_t> &arguments,
+        const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
+        const camel::core::type::type_bindings_t &vars, size_t depth, bool buildFirst);
+    /// evaluateCallAtBuildTime for a call inside a body being evaluated: a refusal becomes an
+    /// exception carrying the matching problem.
+    data_ptr_t evaluateCallInsideBody(
+        const GCT::node_ptr_t &call, const GCT::node_ptr_t &callee,
+        const std::vector<data_ptr_t> &arguments,
+        const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
+        const camel::core::type::type_bindings_t &vars, size_t depth);
+    /// The value of an expression the compiler can compute at build time. Throws when it cannot
+    /// (the evaluator's failure type is internal to builder_when.cpp).
+    data_ptr_t compileTimeExpression(const GCT::node_ptr_t &expression);
+    /// Reports a refusal at `origin`, naming `folded.call`. Never returns.
+    [[noreturn]] void reportFoldRefusal(const FoldedCall &folded, const GCT::node_ptr_t &origin);
 
     std::optional<node_handle_t> nodeAt(const std::string &name) {
         EXEC_WHEN_DEBUG({
@@ -1320,6 +1506,13 @@ class Builder {
     completeLambdaSignature(const GCT::node_ptr_t &gct, FunctionType *funcType, Type *expected);
     node_handle_t visitDataNode(const GCT::node_ptr_t &gct);
     Type *visitTypeNode(const GCT::node_ptr_t &gct);
+    /**
+     * The type a type expression denotes once its `typeof` placeholders are resolved: the
+     * expression is built where the type is used, and the placeholder is replaced by its value
+     * type. Any other type is bound by `boundType`. A placeholder nested inside a larger type
+     * is refused: `typeof` stands for a whole type.
+     */
+    Type *resolveTypeNode(Type *type, const GCT::node_ptr_t &at);
     node_handle_t visitNRefNode(const GCT::node_ptr_t &gct);
     /// A name: its value node, or the build-time tuple a rest parameter names (no node).
     std::any visitDRefNode(const GCT::node_ptr_t &gct);
@@ -1349,9 +1542,9 @@ class Builder {
     /// once per field, in the current graph, with the state names bound to the previous round's
     /// values; the value is the last state (a tuple FILL when there are several).
     node_handle_t visitStaticLoopNode(const GCT::node_ptr_t &gct);
-    /// The pack the C++ `tree_map` expansion makes: a static value of `values.size()` slots and a
-    /// FILL whose type has the fields of `shape` (a tuple of the values' types when `shape` is not
-    /// a struct). The origins are recorded against `origin` under `originKind`.
+    /// The pack a `static for` over a struct or tuple makes: a static value of `values.size()`
+    /// slots and a FILL whose type has the fields of `shape` (a tuple of the values' types when
+    /// `shape` is not a struct). The origins are recorded against `origin` under `originKind`.
     node_handle_t packStaticValues(
         bool isStruct, Type *shape, const std::vector<node_handle_t> &values,
         const GCT::node_ptr_t &origin, const char *originKind);
@@ -1362,7 +1555,7 @@ class Builder {
         const char *originKind);
     /// `t.[key]`: the field or tuple element is chosen at compile time.
     node_handle_t visitStaticAccessNode(const GCT::node_ptr_t &gct);
-    bool typeCaseMatches(Type *subject, uint16_t patterns) const;
+    bool typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const;
 
     /// Whether a name read in a case body that is not selected names something. It walks the
     /// same layers as visitDRefNode, but builds no node and checks no type (H51 step 1, Q10).
@@ -1543,7 +1736,7 @@ class Builder {
     struct OperatorOverloads {
         /// The program's own, from every enclosing scope and every module that exports some.
         std::vector<compile_graph_ptr_t> graphs;
-        /// The generic ones (`typeas` in a parameter), in this module and imported.
+        /// The generic ones (a head that declares type parameters), in this module and imported.
         std::vector<template_ptr_t> templates;
         /// Those of the built-in module and of the C++ modules imported, one group.
         oper_group_ptr_t ops;

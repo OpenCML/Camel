@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 19, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // A type argument or expected Tensor dtype selects one concrete kernel; no type value is run.
+
 #include "binary_ops.h"
 #include "../binary.h"
 #include "camel/core/rtdata/bytes.h"
@@ -125,6 +119,8 @@ std::vector<OpDef> binaryOps() {
                 .traits = {}});
     };
     add("from_bytes_f32", TypeCode::Float32, fromBytesKernel<TypeCode::Float32>);
+    add("from_bytes_f64", TypeCode::Float64, fromBytesKernel<TypeCode::Float64>);
+    add("from_bytes_i32", TypeCode::Int32, fromBytesKernel<TypeCode::Int32>);
     add("from_bytes_i64", TypeCode::Int64, fromBytesKernel<TypeCode::Int64>);
     add("from_bytes_bool", TypeCode::Bool, fromBytesKernel<TypeCode::Bool>);
     return defs;
@@ -135,6 +131,8 @@ oper_group_ptr_t fromBytesOperatorGroup() {
         "from_bytes",
         {
             {"tensor:from_bytes_f32", std::make_shared<FromBytesResolver>(TypeCode::Float32)},
+            {"tensor:from_bytes_f64", std::make_shared<FromBytesResolver>(TypeCode::Float64)},
+            {"tensor:from_bytes_i32", std::make_shared<FromBytesResolver>(TypeCode::Int32)},
             {"tensor:from_bytes_i64", std::make_shared<FromBytesResolver>(TypeCode::Int64)},
             {"tensor:from_bytes_bool", std::make_shared<FromBytesResolver>(TypeCode::Bool)},
         });

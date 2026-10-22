@@ -8,7 +8,7 @@ module tensor_arity
 import { Tensor, new, numel } from tensor
 
 func main(): int sync {
-    let t = new([[1.0, 2.0]])
+    let t = new([[1.0, 2.0]] as f32[][])
     println(numel(t, 2))
     return 0
 }

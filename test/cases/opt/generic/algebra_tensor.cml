@@ -8,7 +8,7 @@ module algebra_tensor
 
 import { Tensor, reshape } from tensor
 
-type Vec = Tensor<f32, const [3]>
+type Vec = Tensor<f32, [3]>
 
 func merged(x: Vec): Vec {
     return x * 3.0 + x * 5.0
@@ -34,7 +34,7 @@ func shared_product(x: Vec): Vec sync {
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(merged(x))
     println(merged_explicit(x))
     println(chain(x))

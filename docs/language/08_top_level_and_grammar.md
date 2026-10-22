@@ -77,14 +77,14 @@ typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (类型 | const 数据), ... '>')?
 primaryType : 名字 | '(' 类型 ')' | '(' 类型, ... ')' | '{' 名字: 类型, ... '}'
-            | 修饰符* '(' 形参 ')' '=>' 类型 | typeas 名字
+            | 修饰符* '(' 形参 ')' '=>' 类型
 enumBody  : 'enum' '{' 变体, ... '}'
 变体      : 名字 | 名字 '(' 类型, ... ')' | 名字 '{' 名字: 类型, ... '}'
 ```
 
 - `T?`、`T!`：[3.4](03_data_model.md#34-可能为空-t-与可能出错-t)。
-- `typeas T`：[7.5](07_statements.md#75-泛型函数)。
-- `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参可以写在形参表的任意位置，个数不限；每个值各自进入实例键。
+- `::<T>`：函数、`rule` 与 `fact` 在名字后声明类型参数（[7.5](07_statements.md#75-泛型函数)）。
+- `constas n`：两种用法，都是编译期的名字（[设计原则 5.4](../design-principles.cn.md)）：在 `const` 实参里给维度命名——名字在形参类型里第一次出现时用 `constas` 绑定，之后直接写 `n`；或者作为函数声明的一个**值形参**（`func f(constas n: int, ...)`），由调用点的常量绑定（[7.5](07_statements.md#75-泛型函数)）。值形参可以写在形参表的任意位置，个数不限；每个值各自进入实例键。形状里的维度名不再写 `constas`：名字在形参类型里第一次出现时自动绑定，之后直接写 `n`。
 - `enum`：[3.5](03_data_model.md#35-枚举-enum)。
 - 尖括号：类型函数的实参（[7.7](07_statements.md#77-类型声明)）或模块类型的实参。
 
@@ -97,7 +97,7 @@ enumBody  : 'enum' '{' 变体, ... '}'
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+                     | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
 blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
@@ -113,11 +113,12 @@ exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | dataDecl
+                     | typeDecl | dataDecl | resourceDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+                     'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+                     resourceClause? whenClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -125,6 +126,8 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef angledValues?
+whenClause         : IDENTIFIER logicalOrExpr
+typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
@@ -132,6 +135,7 @@ carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
+resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'throw') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
@@ -172,6 +176,7 @@ compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+shapeComp          : typeExpr '{' staticForExpr '}'
 primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
                      | funcData
 constasData        : 'constas' identDef
@@ -180,6 +185,7 @@ literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_S
 indexValue         : ('...' | '..')? dataExpr
 keyValuePair       : identDef ':' dataExpr | '...' dataExpr
 pairedValues       : keyValuePair (',' keyValuePair)*
+argumentValues     : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
 dataList           : dataExpr (',' dataExpr)*
 argumentList       : indexValues (',' pairedValues)? | pairedValues
 indexValues        : indexValue (',' indexValue)*
@@ -197,10 +203,10 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
-staticForHeader    : 'for' '(' identDef (',' identDef)? ')' 'in' ('fields' typeExpr
-                     | 'indices' dataExpr)
+staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
+                     ('fields' typeExpr | 'indices' dataExpr)
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
-typeCasePattern    : 'struct' | 'tuple' | '#' 'leaf' | '_'
+typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
                      | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
@@ -217,21 +223,24 @@ diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
 keyInterType       : typeUnit ('^' typeUnit)*
 typeUnit           : (identDef 'of')? arrayType
-arrayType          : specType ('[' ']')*
+arrayType          : specType arrayDim+
+arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-typeOrData         : typeExpr | 'const' dataExpr
+typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-                     | 'typeof' dataExpr | 'typeas' identDef
+                     | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
-funcType           : modifiers? angledParams? parentParams '=>' typeExpr
+funcType           : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
-ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
-                     '}' (IDENTIFIER dataExpr)?
+ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
+                     '{' ruleBody '}' (IDENTIFIER dataExpr)?
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
@@ -284,12 +293,10 @@ analysisClause     : IDENTIFIER '=>' dataExpr
 | `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage`（不属于语言） | `T!` 与 `!!`、`?->`、`case error e` |
 | 元组模式、结构体模式；对普通类型的标识符模式 | `ConstructNotSupported` | `if` 链；先取成员 |
 | 结构体解构 `let { x, y } = p`、数组解构 `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`、`xs[0]`（元组解构可用） |
-| 关键字实参 `f(a: 1)` | `FeatureNotSupported` | 按位置传 |
-| 形参默认值 `b: int = 5` | `FeatureNotSupported` | 重载；`with` 形参 |
 | 切片下标切的是第一维以外的维度 `xs[:, 0]`、`xs[a:b, c]` | `SemanticDiag::ConstructNotSupported`（诊断里点名 H17） | 先用 `take` 取行，或一次只切一维 |
 | 切片下标的步长不是 1 `xs[a:b:s]` | 数组是运行时 `RuntimeDiag::InvalidArgument`，张量是编译期的 `ArgumentsRejected`（都点名 H17） | `xs->slice<0, a, b, s>` |
 | 类型运算 `A & B`、`A \ B`、`A + B`、`A - B`、`A ^ B` | `FeatureNotSupported` | 无 |
-| `typeof e`、`名字 of T` | `FeatureNotSupported` | 无 |
+| `名字 of T` | `FeatureNotSupported` | 无 |
 | `keyof` | 语法错误 | 无 |
 
 此外有一处“能写出来但目前用不了”：带函数类型的声明 `let f: (x: int) => int = g`。

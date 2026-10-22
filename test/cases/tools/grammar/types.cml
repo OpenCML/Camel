@@ -12,12 +12,12 @@ type Tight<T>= T[]
 type Predicate = (p: Point) => bool
 type Effect = sync (x: int) => void
 type Grid = float[][]
-type Shape = Tensor<f32, const [3, 4]>
+type Shape = Tensor<f32, [3, 4]>
 type Lookup = Map<string, Set<i64>>
 type Maybe = (int?)[]
 type Words = string[]
 
-func or_else(x: (typeas T)?, d: T): T {
+func or_else::<T>(x: T?, d: T): T {
     return x ?? d
 }
 

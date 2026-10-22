@@ -22,12 +22,12 @@ func corner(xs: f32[][]): f32 { return xs[1][0] }
 func pairSum(t: (f32, f32)): f32 { return t.0 + t.1 }
 
 // A parameter another argument fixes: `T` is f32 here, so `[2.0]` is an `f32[]` too.
-func join(a: (typeas T)[], b: T[]): T { return a[0] + b[0] }
-func first(xs: (typeas T)[]): T { return xs[0] }
+func join::<T>(a: T[], b: T[]): T { return a[0] + b[0] }
+func first::<T>(xs: T[]): T { return xs[0] }
 
 // Operators of the program, exact and generic: an array literal works as their operand.
 func operator +(a: f32[], b: f32[]): f32 { return a[0] + b[0] }
-func operator -(a: (typeas T)[], b: T[]): T[] { return a->extend<b> }
+func operator -::<T>(a: T[], b: T[]): T[] { return a->extend<b> }
 
 with <xs: f32[]>
 func at(i: int): f32 { return xs[i] }

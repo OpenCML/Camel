@@ -1,0 +1,830 @@
+{
+  "schema": 2,
+  "generated_at": "2026-10-22T15:27:25-04:00",
+  "machine": {
+    "host": "tangshan88",
+    "platform": "Linux-6.8.0-138-generic-x86_64-with-glibc2.35",
+    "cpu": "AMD EPYC 7343 16-Core Processor",
+    "cpus": 32,
+    "memory_bytes": 540891693056,
+    "threads": 1,
+    "python": "3.10.12",
+    "numpy": "2.2.6",
+    "torch": "2.14.1+cu130"
+  },
+  "git": {
+    "commit": "ab9cb45798ec6980139c39d1713eda2daa3f7f6d",
+    "branch": "handover/h268-measure",
+    "dirty": true,
+    "dirty_paths": [
+      "M examples/models/naive-in-expert-out/measure.py",
+      "?? results/"
+    ]
+  },
+  "build": {
+    "revision": "ab9cb45798ec6980139c39d1713eda2daa3f7f6d",
+    "dirty": false,
+    "dirtyCount": 0,
+    "builtAt": "2026-10-22T19:04:34.933Z",
+    "config": "Release",
+    "fingerprint": "0dc0fec4c9b188147555ae6b22779ab2e38cb06763a4f49e26208a31fd0e8c93",
+    "fingerprintFiles": 1152
+  },
+  "camel_version": "Camel v0.2.24 (Build 261022_190123_ab9cb4579)",
+  "commands": {
+    "camel": "/home/zjwei/camel-work/h268-measure/out/latest/bin/camel -t 1 /home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/train_step.cml std::jit --arg bench=true --arg init_dir=/tmp/naive-in-out-epbqwfqu/init --arg final_dir=/tmp/naive-in-out-epbqwfqu/final/camel",
+    "torch": {
+      "naive": "/home/zjwei/camel-eval/venv-bench/bin/python /home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py --variant naive --init /tmp/naive-in-out-epbqwfqu/init --steps 16 --warmup 3 --threads 1 --save-final /tmp/naive-in-out-epbqwfqu/final/naive.npz",
+      "expert": "/home/zjwei/camel-eval/venv-bench/bin/python /home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py --variant expert --init /tmp/naive-in-out-epbqwfqu/init --steps 16 --warmup 3 --threads 1 --save-final /tmp/naive-in-out-epbqwfqu/final/expert.npz",
+      "compiled": "/home/zjwei/camel-eval/venv-bench/bin/python /home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py --variant compiled --init /tmp/naive-in-out-epbqwfqu/init --steps 16 --warmup 3 --threads 1 --save-final /tmp/naive-in-out-epbqwfqu/final/compiled.npz",
+      "reference": "/home/zjwei/camel-eval/venv-bench/bin/python /home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py --variant reference --init /tmp/naive-in-out-epbqwfqu/init --steps 16 --warmup 3 --threads 1 --save-final /tmp/naive-in-out-epbqwfqu/final/reference.npz"
+    }
+  },
+  "measurement": {
+    "repeats": 3,
+    "interleaved": true,
+    "order": "rotating: each round starts with the next implementation",
+    "steps": 16,
+    "warmup": 3,
+    "timed_steps_per_round": 13,
+    "threads": 1,
+    "thread_control": "camel: -t on the command line; torch: set_num_threads and OMP/MKL",
+    "load_average": {
+      "start": {
+        "1m": 31.68,
+        "5m": 42.6,
+        "15m": 46.88
+      },
+      "end": {
+        "1m": 34.1,
+        "5m": 42.17,
+        "15m": 46.6
+      }
+    }
+  },
+  "model": {
+    "batch": 8,
+    "sequence": 16,
+    "d_model": 64,
+    "heads": 4,
+    "d_ff": 128,
+    "vocab": 32,
+    "blocks": 2,
+    "params": 68288,
+    "steps": 16,
+    "warmup": 3,
+    "lr": 0.003
+  },
+  "tolerance": {
+    "loss_abs": 1e-05,
+    "param_abs": 0.0002
+  },
+  "reference": {
+    "variant": "float64 expert (stable softmax, log_softmax)",
+    "init_loss": 3.465590839737065,
+    "final_loss": 1.5680430044000218,
+    "median_ms": 5.8019799762405455,
+    "step_ms": [
+      333.40447198133916,
+      13.394973997492343,
+      6.98986102361232,
+      6.078239006455988,
+      5.57963497703895,
+      5.607958999462426,
+      9.080247022211552,
+      8.370420022401959,
+      8.740417018998414,
+      5.779798026196659,
+      5.605295009445399,
+      5.8019799762405455,
+      5.858568998519331,
+      5.605234007816762,
+      5.955274042207748,
+      5.585716979112476
+    ],
+    "peak_bytes": 679890944,
+    "command": [
+      "/home/zjwei/camel-eval/venv-bench/bin/python",
+      "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+      "--variant",
+      "reference",
+      "--init",
+      "/tmp/naive-in-out-epbqwfqu/init",
+      "--steps",
+      "16",
+      "--warmup",
+      "3",
+      "--threads",
+      "1",
+      "--save-final",
+      "/tmp/naive-in-out-epbqwfqu/final/reference.npz"
+    ]
+  },
+  "variants": {
+    "camel": {
+      "backend": "std::jit",
+      "init_loss": 3.465590829,
+      "final_loss": 1.568042986,
+      "losses": [
+        3.465590829,
+        3.37501462,
+        3.28424366,
+        3.191206614,
+        3.094355665,
+        2.992476523,
+        2.884662131,
+        2.770436967,
+        2.649947222,
+        2.524101002,
+        2.394365807,
+        2.262098976,
+        2.127907269,
+        1.991368954,
+        1.851875052,
+        1.710085423
+      ],
+      "step_ms": [
+        3.100395,
+        2.722979,
+        2.216101,
+        2.316236,
+        2.19512,
+        2.180815,
+        2.142668,
+        2.166033,
+        2.278328,
+        2.159834,
+        2.168894,
+        2.321243,
+        2.142668
+      ],
+      "timed_steps": 13,
+      "median_ms": 2.091408,
+      "pooled_median_ms": 2.0865205,
+      "mean_ms": 2.2224462820512816,
+      "spread": {
+        "min": 2.029181,
+        "max": 2.19512,
+        "spread": 0.16593900000000028
+      },
+      "peak_bytes": 42467328,
+      "vs_reference": {
+        "max_abs": 6.979467870886838e-06,
+        "max_rel": 0.06624863824775183
+      },
+      "loss_vs_reference": 1.8400021728481875e-08,
+      "rounds": [
+        {
+          "median_ms": 2.029181,
+          "mean_ms": 2.1405953076923074,
+          "final_loss": 1.568042986,
+          "peak_bytes": 42467328,
+          "step_ms": [
+            2.89607,
+            2.486944,
+            2.061367,
+            2.059698,
+            2.01869,
+            2.041578,
+            2.022743,
+            2.029181,
+            2.023935,
+            2.022028,
+            2.02632,
+            2.125263,
+            2.013922
+          ],
+          "command": [
+            "/home/zjwei/camel-work/h268-measure/out/latest/bin/camel",
+            "-t",
+            "1",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/train_step.cml",
+            "std::jit",
+            "--arg",
+            "bench=true",
+            "--arg",
+            "init_dir=/tmp/naive-in-out-epbqwfqu/init",
+            "--arg",
+            "final_dir="
+          ]
+        },
+        {
+          "median_ms": 2.091408,
+          "mean_ms": 2.2104886153846155,
+          "final_loss": 1.568042986,
+          "peak_bytes": 42467328,
+          "step_ms": [
+            3.024578,
+            2.560139,
+            2.138138,
+            2.124071,
+            2.071619,
+            2.104282,
+            2.074003,
+            2.080202,
+            2.080917,
+            2.081633,
+            2.091408,
+            2.231359,
+            2.074003
+          ],
+          "command": [
+            "/home/zjwei/camel-work/h268-measure/out/latest/bin/camel",
+            "-t",
+            "1",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/train_step.cml",
+            "std::jit",
+            "--arg",
+            "bench=true",
+            "--arg",
+            "init_dir=/tmp/naive-in-out-epbqwfqu/init",
+            "--arg",
+            "final_dir="
+          ]
+        },
+        {
+          "median_ms": 2.19512,
+          "mean_ms": 2.3162549230769227,
+          "final_loss": 1.568042986,
+          "peak_bytes": 42467328,
+          "step_ms": [
+            3.100395,
+            2.722979,
+            2.216101,
+            2.316236,
+            2.19512,
+            2.180815,
+            2.142668,
+            2.166033,
+            2.278328,
+            2.159834,
+            2.168894,
+            2.321243,
+            2.142668
+          ],
+          "command": [
+            "/home/zjwei/camel-work/h268-measure/out/latest/bin/camel",
+            "-t",
+            "1",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/train_step.cml",
+            "std::jit",
+            "--arg",
+            "bench=true",
+            "--arg",
+            "init_dir=/tmp/naive-in-out-epbqwfqu/init",
+            "--arg",
+            "final_dir=/tmp/naive-in-out-epbqwfqu/final/camel"
+          ]
+        }
+      ]
+    },
+    "naive": {
+      "backend": "torch",
+      "init_loss": 3.465590715408325,
+      "final_loss": 1.5680429935455322,
+      "losses": [
+        3.465590715408325,
+        3.3750147819519043,
+        3.284243583679199,
+        3.191206693649292,
+        3.094355583190918,
+        2.99247670173645,
+        2.88466215133667,
+        2.770437002182007,
+        2.649947166442871,
+        2.5241010189056396,
+        2.3943655490875244,
+        2.262099027633667,
+        2.1279072761535645,
+        1.9913690090179443,
+        1.8518751859664917,
+        1.710085391998291
+      ],
+      "step_ms": [
+        206.99661900289357,
+        5.804736050777137,
+        5.302997014950961,
+        4.892192024271935,
+        4.995078954380006,
+        4.6961570042185485,
+        4.915025027003139,
+        4.722929035779089,
+        4.861572990193963,
+        4.785608034580946,
+        4.733096982818097,
+        4.899746039882302,
+        4.78416500845924,
+        4.840312991291285,
+        4.957325989380479,
+        4.849440010730177
+      ],
+      "timed_steps": 13,
+      "median_ms": 4.762494005262852,
+      "pooled_median_ms": 4.762494005262852,
+      "mean_ms": 5.291970288500381,
+      "spread": {
+        "min": 4.594683006871492,
+        "max": 4.849440010730177,
+        "spread": 0.2547570038586855
+      },
+      "peak_bytes": 674951168,
+      "vs_reference": {
+        "max_abs": 7.493736432738485e-06,
+        "max_rel": 0.06595470938891945
+      },
+      "loss_vs_reference": 1.0854489529421585e-08,
+      "rounds": [
+        {
+          "median_ms": 4.594683006871492,
+          "mean_ms": 4.628360701295046,
+          "final_loss": 1.5680429935455322,
+          "peak_bytes": 674525184,
+          "step_ms": [
+            238.93444502027705,
+            5.787794012576342,
+            4.856984014622867,
+            4.545798990875483,
+            4.518567002378404,
+            4.769737017340958,
+            4.922338004689664,
+            4.638166050426662,
+            4.51272603822872,
+            4.500002018176019,
+            4.646079964004457,
+            4.491976054850966,
+            4.773343971464783,
+            4.742956021800637,
+            4.5123149757273495,
+            4.594683006871492
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "naive",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1"
+          ]
+        },
+        {
+          "median_ms": 4.762494005262852,
+          "mean_ms": 6.406577080130004,
+          "final_loss": 1.5680429935455322,
+          "peak_bytes": 674013184,
+          "step_ms": [
+            311.4428559783846,
+            5.733589990995824,
+            4.93063498288393,
+            4.604190995451063,
+            4.762494005262852,
+            5.158270010724664,
+            4.65839501703158,
+            4.605774010997266,
+            4.653155046980828,
+            4.7234289813786745,
+            9.692516992799938,
+            11.593971983529627,
+            10.669124021660537,
+            7.769190997350961,
+            5.768877977970988,
+            4.626112000551075
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "naive",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1"
+          ]
+        },
+        {
+          "median_ms": 4.849440010730177,
+          "mean_ms": 4.840973084076093,
+          "final_loss": 1.5680429935455322,
+          "peak_bytes": 674951168,
+          "step_ms": [
+            206.99661900289357,
+            5.804736050777137,
+            5.302997014950961,
+            4.892192024271935,
+            4.995078954380006,
+            4.6961570042185485,
+            4.915025027003139,
+            4.722929035779089,
+            4.861572990193963,
+            4.785608034580946,
+            4.733096982818097,
+            4.899746039882302,
+            4.78416500845924,
+            4.840312991291285,
+            4.957325989380479,
+            4.849440010730177
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "naive",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1",
+            "--save-final",
+            "/tmp/naive-in-out-epbqwfqu/final/naive.npz"
+          ]
+        }
+      ]
+    },
+    "expert": {
+      "backend": "torch",
+      "init_loss": 3.465590715408325,
+      "final_loss": 1.5680431127548218,
+      "losses": [
+        3.465590715408325,
+        3.3750147819519043,
+        3.284243583679199,
+        3.191206693649292,
+        3.094355583190918,
+        2.99247670173645,
+        2.88466215133667,
+        2.770437002182007,
+        2.649947166442871,
+        2.5241012573242188,
+        2.3943655490875244,
+        2.262099027633667,
+        2.1279072761535645,
+        1.9913690090179443,
+        1.8518750667572021,
+        1.710085391998291
+      ],
+      "step_ms": [
+        212.99555100267753,
+        4.5695950393565,
+        4.256136016920209,
+        3.822997969109565,
+        4.195620014797896,
+        3.7580429925583303,
+        3.8883229717612267,
+        4.0098250028677285,
+        3.7392080412246287,
+        3.7232169997878373,
+        3.743415989447385,
+        4.072745039593428,
+        3.7398679996840656,
+        3.7504889769479632,
+        3.7411010125651956,
+        3.734238969627768
+      ],
+      "timed_steps": 13,
+      "median_ms": 3.918681002687663,
+      "pooled_median_ms": 3.9202430052682757,
+      "mean_ms": 4.30811831029132,
+      "spread": {
+        "min": 3.7504889769479632,
+        "max": 4.012860998045653,
+        "spread": 0.26237202109768987
+      },
+      "peak_bytes": 674959360,
+      "vs_reference": {
+        "max_abs": 1.0092879237826383e-05,
+        "max_rel": 0.051820796545534446
+      },
+      "loss_vs_reference": 1.0835480002135967e-07,
+      "rounds": [
+        {
+          "median_ms": 3.918681002687663,
+          "mean_ms": 4.388346690505457,
+          "final_loss": 1.5680431127548218,
+          "peak_bytes": 673349632,
+          "step_ms": [
+            231.11845698440447,
+            5.024723999667913,
+            4.151795990765095,
+            3.9153440156951547,
+            3.9245220250450075,
+            3.918681002687663,
+            3.9202430052682757,
+            3.8460519863292575,
+            3.847614978440106,
+            3.833336988463998,
+            3.9083000156097114,
+            3.8364430074580014,
+            8.446494990494102,
+            5.21025899797678,
+            4.276103980373591,
+            4.165111982729286
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "expert",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1"
+          ]
+        },
+        {
+          "median_ms": 4.012860998045653,
+          "mean_ms": 4.696078088062887,
+          "final_loss": 1.5680431127548218,
+          "peak_bytes": 673673216,
+          "step_ms": [
+            325.0559489824809,
+            5.532215000130236,
+            4.7444290248677135,
+            4.118472046684474,
+            4.087503009941429,
+            4.206380050163716,
+            3.934620996005833,
+            3.932927967980504,
+            3.9696579915471375,
+            3.8836930179968476,
+            3.8972499896772206,
+            6.874350016005337,
+            6.93231204058975,
+            4.012860998045653,
+            3.9408429875038564,
+            7.258144032675773
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "expert",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1"
+          ]
+        },
+        {
+          "median_ms": 3.7504889769479632,
+          "mean_ms": 3.839930152305617,
+          "final_loss": 1.5680431127548218,
+          "peak_bytes": 674959360,
+          "step_ms": [
+            212.99555100267753,
+            4.5695950393565,
+            4.256136016920209,
+            3.822997969109565,
+            4.195620014797896,
+            3.7580429925583303,
+            3.8883229717612267,
+            4.0098250028677285,
+            3.7392080412246287,
+            3.7232169997878373,
+            3.743415989447385,
+            4.072745039593428,
+            3.7398679996840656,
+            3.7504889769479632,
+            3.7411010125651956,
+            3.734238969627768
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "expert",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1",
+            "--save-final",
+            "/tmp/naive-in-out-epbqwfqu/final/expert.npz"
+          ]
+        }
+      ]
+    },
+    "compiled": {
+      "backend": "torch",
+      "init_loss": 3.465590715408325,
+      "final_loss": 1.5680429935455322,
+      "losses": [
+        3.4655909538269043,
+        3.3750147819519043,
+        3.284243583679199,
+        3.191206693649292,
+        3.094355583190918,
+        2.992476463317871,
+        2.88466215133667,
+        2.7704367637634277,
+        2.649947166442871,
+        2.5241007804870605,
+        2.3943657875061035,
+        2.262098789215088,
+        2.1279072761535645,
+        1.9913688898086548,
+        1.8518750667572021,
+        1.7100855112075806
+      ],
+      "step_ms": [
+        1566.1929119960405,
+        4.201120988000184,
+        3.210948023479432,
+        3.2174010411836207,
+        3.159049025271088,
+        3.305107995402068,
+        3.34922201000154,
+        3.2866019755601883,
+        3.4101789933629334,
+        3.2567959860898554,
+        3.0403819982893765,
+        3.3758929930627346,
+        3.736973972991109,
+        3.125504998024553,
+        3.191240015439689,
+        3.513325995299965
+      ],
+      "timed_steps": 13,
+      "median_ms": 3.0048430198803544,
+      "pooled_median_ms": 3.0789559823460877,
+      "mean_ms": 3.1321573008496606,
+      "spread": {
+        "min": 2.9851460130885243,
+        "max": 3.2866019755601883,
+        "spread": 0.30145596247166395
+      },
+      "peak_bytes": 969003008,
+      "vs_reference": {
+        "max_abs": 1.3514092715676343e-05,
+        "max_rel": 0.027650447435637465
+      },
+      "loss_vs_reference": 1.0854489529421585e-08,
+      "rounds": [
+        {
+          "median_ms": 3.0048430198803544,
+          "mean_ms": 3.0321913744466236,
+          "final_loss": 1.5680429935455322,
+          "peak_bytes": 968859648,
+          "step_ms": [
+            1432.8475040383637,
+            3.186449990607798,
+            3.1380780274048448,
+            3.275191003922373,
+            3.0185399809852242,
+            3.0701979994773865,
+            2.9052839963696897,
+            2.9714599950239062,
+            3.324986028019339,
+            3.0048430198803544,
+            3.0277479672804475,
+            2.906565961893648,
+            2.9118660022504628,
+            2.9924799455329776,
+            2.908669994212687,
+            3.100655972957611
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "compiled",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1"
+          ]
+        },
+        {
+          "median_ms": 2.9851460130885243,
+          "mean_ms": 3.0590746050270705,
+          "final_loss": 1.5680429935455322,
+          "peak_bytes": 966832128,
+          "step_ms": [
+            3092.571783985477,
+            3.7246799911372364,
+            3.106067015323788,
+            3.5871370346285403,
+            2.895805984735489,
+            3.1268869643099606,
+            2.9218949493952096,
+            3.293265006504953,
+            3.1137819751165807,
+            3.0789559823460877,
+            2.9316539876163006,
+            2.920212980825454,
+            2.9851460130885243,
+            2.9770610271953046,
+            2.902728971093893,
+            3.033438988495618
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "compiled",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1"
+          ]
+        },
+        {
+          "median_ms": 3.2866019755601883,
+          "mean_ms": 3.3052059230752864,
+          "final_loss": 1.5680429935455322,
+          "peak_bytes": 969003008,
+          "step_ms": [
+            1566.1929119960405,
+            4.201120988000184,
+            3.210948023479432,
+            3.2174010411836207,
+            3.159049025271088,
+            3.305107995402068,
+            3.34922201000154,
+            3.2866019755601883,
+            3.4101789933629334,
+            3.2567959860898554,
+            3.0403819982893765,
+            3.3758929930627346,
+            3.736973972991109,
+            3.125504998024553,
+            3.191240015439689,
+            3.513325995299965
+          ],
+          "command": [
+            "/home/zjwei/camel-eval/venv-bench/bin/python",
+            "/home/zjwei/camel-work/h268-measure/examples/models/naive-in-expert-out/torch_impl.py",
+            "--variant",
+            "compiled",
+            "--init",
+            "/tmp/naive-in-out-epbqwfqu/init",
+            "--steps",
+            "16",
+            "--warmup",
+            "3",
+            "--threads",
+            "1",
+            "--save-final",
+            "/tmp/naive-in-out-epbqwfqu/final/compiled.npz"
+          ]
+        }
+      ]
+    }
+  },
+  "pairwise": {
+    "camel:naive": {
+      "max_abs_param": 7.158145308494568e-06,
+      "loss": 7.54553219906029e-09
+    },
+    "camel:expert": {
+      "max_abs_param": 7.031485438346863e-06,
+      "loss": 1.2675482174984154e-07
+    },
+    "camel:compiled": {
+      "max_abs_param": 6.534624844789505e-06,
+      "loss": 7.54553219906029e-09
+    },
+    "expert:naive": {
+      "max_abs_param": 8.228234946727753e-06,
+      "loss": 1.1920928955078125e-07
+    },
+    "compiled:naive": {
+      "max_abs_param": 1.1649448424577713e-05,
+      "loss": 0.0
+    },
+    "compiled:expert": {
+      "max_abs_param": 7.789582014083862e-06,
+      "loss": 1.1920928955078125e-07
+    }
+  }
+}

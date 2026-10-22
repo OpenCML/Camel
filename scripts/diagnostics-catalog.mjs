@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The diagnostics catalog, read from the sources of the compiler.
 //
 //   node scripts/diagnostics-catalog.mjs --check      consistency of the code tables (exit 1 on a defect)

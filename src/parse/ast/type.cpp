@@ -1,26 +1,38 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Jul. 03, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/type.h"
 #include "camel/utils/str.h"
 
 namespace camel::parse::ast {
+
+namespace {
+
+/// One `[extent, ...]` as it is written: `[]` for the unknown dimension, `?` for an unknown
+/// extent next to others, `..name` for a pack (design principles 5.4).
+std::string dimGroupCode(const DimGroup &group) {
+    if (group.empty()) {
+        return "[]";
+    }
+    std::string result = "[";
+    bool first         = true;
+    for (const node_ptr_t &extent : group.extents) {
+        if (!first) {
+            result += ", ";
+        }
+        first = false;
+        result += extent ? extent->load()->geneCode() : "?";
+    }
+    if (group.pack != DimPack::None) {
+        if (!first) {
+            result += ", ";
+        }
+        result += group.pack == DimPack::Named ? ".." + group.packName : "..";
+    }
+    return result + "]";
+}
+
+} // namespace
 
 std::string to_string(TypeType type) {
     switch (type) {
@@ -30,6 +42,8 @@ std::string to_string(TypeType type) {
         return "Expr";
     case TypeType::Array:
         return "List";
+    case TypeType::ArrayDim:
+        return "ArrayDim";
     case TypeType::Struct:
         return "Struct";
     case TypeType::Tuple:
@@ -68,12 +82,32 @@ std::string to_string(TypeOp op) {
         return "SPEC";
     case TypeOp::TypeOf:
         return "typeof";
-    case TypeOp::TypeAs:
-        return "typeas";
     default:
         ASSERT(false, "Unknown TypeOp");
         return "Unknown";
     }
+}
+
+const std::string ResourceClauseLoad::toString() const {
+    if (pure_) {
+        return "ResourceClause: pure";
+    }
+    std::string result = "ResourceClause: ";
+    for (size_t i = 0; i < uses_.size(); ++i) {
+        result += (i > 0 ? ", " : "") + uses_[i].toString();
+    }
+    return result;
+}
+
+const std::string ResourceClauseLoad::geneCode() const {
+    if (pure_) {
+        return "pure";
+    }
+    std::string result = "uses ";
+    for (size_t i = 0; i < uses_.size(); ++i) {
+        result += (i > 0 ? ", " : "") + uses_[i].toString();
+    }
+    return result;
 }
 
 const std::string FuncTypeLoad::toString() const {
@@ -95,11 +129,13 @@ const std::string SpecTypeLoad::geneCode() const { return "<>"; }
 
 const std::string ArrayTypeLoad::geneCode() const {
     std::string result = "";
-    for (size_t i = 0; i < dims_; i++) {
-        result += "[]";
+    for (const DimGroup &group : dims_) {
+        result += dimGroupCode(group);
     }
     return result;
 }
+
+const std::string ArrayDimLoad::geneCode() const { return dimGroupCode(dim_); }
 
 const std::string StructTypeLoad::geneCode() const { return "{}"; }
 
@@ -120,6 +156,13 @@ const std::string FuncTypeLoad::geneCode() const {
     std::string result = "";
     if (!modifiers_.empty()) {
         result += std::string(modifiers_) + " ";
+    }
+    if (!typeParams_.empty()) {
+        result += "::<";
+        for (size_t i = 0; i < typeParams_.size(); ++i) {
+            result += (i > 0 ? ", " : "") + typeParams_[i];
+        }
+        result += "> ";
     }
     return result;
 }

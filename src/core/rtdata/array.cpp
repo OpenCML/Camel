@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The runtime array value: two storage classes, shapes, views and the object protocol.
@@ -1276,6 +1260,17 @@ std::string Array::formatTensorElement(uint64_t flatIndex) const {
         oss << buf;
         break;
     }
+    case TypeCode::Float64: {
+        const double value = getAsDouble(flatIndex);
+        if (value == std::floor(value) && std::abs(value) < 1e10) {
+            (void)std::snprintf(buf, sizeof(buf), "% 7.0f.", value);
+        } else {
+            (void)std::snprintf(buf, sizeof(buf), "% 11.7g", value);
+        }
+        oss << buf;
+        break;
+    }
+    case TypeCode::Int32:
     case TypeCode::Int64:
         oss << std::setw(7) << getAsInt64(flatIndex);
         break;

@@ -1,29 +1,15 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Jul. 09, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
 #include <iostream>
+#include <map>
 #include <memory>
 #include <regex>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include "camel/common/scope.h"
@@ -32,6 +18,7 @@
 #include "camel/core/error/abort.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/module/module.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/type/enum.h"
 #include "camel/parse/ast.h"
 
@@ -39,6 +26,8 @@ namespace camel::compile::gct {
 
 using FunctionType = camel::core::type::FunctionType;
 using void_ptr_t   = void *;
+// The resource model a function type publishes (design effects plan 2.2).
+namespace sem = camel::core::sem;
 
 class Builder {
   public:
@@ -126,12 +115,11 @@ class Builder {
     extractData(const node_ptr_t &node, node_ptr_t &execNode, bool &dangling);
 
     // Type variables and type functions (design principles 5.6; camel/core/type/typevar.h).
-    // `typeas T` binds a variable only among the parameters of a function declaration: the
-    // builder notes that the function type it is about to visit is such a signature
-    // (declSignature_, set from funcDeclPending_), allows binding while it visits the
-    // parameters (typeasAllowed_), and records what was bound (declaredTypeVars_) so the
-    // declaration can be checked. A type function may only appear as the base of
-    // `Name<...>` (typeFunctionBase_).
+    // A generic declaration declares its type parameters at its head (`func first::<T>(...)`);
+    // the builder puts them in scope before it visits a parameter type, so one of them wins over
+    // a type of the same name (design principles 5.5), and records them in declaredTypeVars_ so
+    // the signature can be checked. A type function may only appear as the base of `Name<...>`
+    // (typeFunctionBase_).
     node_ptr_t makeExec(bool synced = false, bool operands = false);
 
     bool funcDeclPending_ = false;
@@ -141,28 +129,44 @@ class Builder {
     // builder can set the result type the body decides when none is written. Every other
     // function type is interned.
     bool openSignature_    = false;
-    bool typeasAllowed_    = false;
-    bool inDeclReturnType_ = false;
     bool typeFunctionBase_ = false;
     std::vector<std::string> declaredTypeVars_;
+
+    // The head names written somewhere in the signature being visited. A name declared at the
+    // head but written nowhere is 'unused'; one written only where type construction drops it
+    // (the argument of a type function that does not use it) is 'not bindable'.
+    std::unordered_set<std::string> writtenHeadVars_;
+    bool signatureVisit_ = false;
+
+    // The type variables the declaration being visited declares at its head, and the occurrence
+    // in scope for each (inserted into the signature's type scope). A use of one in the signature
+    // is a binding occurrence: any argument position of that type can fill it, and the first one
+    // that does fixes it (camel/core/type/typevar.h, bindTypeVars). The map is per declaration so
+    // that a name of an enclosing declaration stays a plain use.
+    std::shared_ptr<std::unordered_map<std::string, Type *>> headTypeVarTypes_;
 
     // The lambda parameters whose type was left out, collected while the signature of the
     // function being defined is visited and given to its FUNC node (Tree::setUnwrittenParams).
     // Only the signature of a FuncData (openSignature_) may leave one out; the flag is taken
     // by visitFuncData right after the signature.
     std::vector<Tree::UnwrittenParam> pendingUnwrittenParams_;
+    // Head type parameters the signature never wrote, held until the body is built: a body that
+    // uses the name (`match type T`) makes it a used parameter, not an unused one.
+    std::vector<std::string> pendingUnusedHeadVars_;
 
     // Named dimensions of type extents (design principles 5.4): a name denotes an extent, not a
-    // type. Like `typeas T`, a name is bound only in the parameter types of the function
-    // declaration being visited (`constas n`), and the rest of its signature writes `n`.
-    // `dimNames_` is the binding of the signature being visited (empty outside a signature);
-    // it is filled from every parameter type before the extents are read, so a parameter may
-    // write a name that another parameter binds. `boundDims_` holds the names whose `constas`
-    // has been visited, so a second `constas` of the same name is reported.
-    // `dimBindAllowed_` is true only while its parameter types are visited, so a `constas` in a
-    // return type, in a body, or inside a nested function type is reported.
+    // type. A name is bound the first time it is written in the parameter types of the function
+    // declaration being visited; later occurrences in the same signature use it, and the return
+    // type may use the names the parameters bound. `dimNames_` holds the names the signature
+    // binds (empty outside a signature); `boundDims_` holds the names already visited, so a
+    // second plain name binds as a reference, not a new dimension. `dimUses_` counts the
+    // occurrences in the parameter types so a name used only once can be suggested as `?`.
+    // `dimBindAllowed_` is true only while the parameter types are visited, so a name in a
+    // return type, in a body, or inside a nested function type is reported as unbound.
     std::shared_ptr<std::set<std::string>> dimNames_;
     std::shared_ptr<std::set<std::string>> boundDims_;
+    std::shared_ptr<std::set<std::string>> dimPacks_;
+    std::shared_ptr<std::map<std::string, size_t>> dimUses_;
     bool dimBindAllowed_ = false;
 
     // Where the value of what is being lowered goes, as far as the warning
@@ -211,6 +215,29 @@ class Builder {
     /// A `tag` declaration (design principles 6.2): the tag is registered here, before the types
     /// are declared, and lowers to no node.
     void visitTagDecl(const AST::node_ptr_t &ast);
+    /// A `resource` declaration (design effects plan 3.2): the resource is registered in the
+    /// module before any declaration is lowered, and lowers to no node.
+    node_ptr_t visitResourceDecl(const AST::node_ptr_t &ast);
+    /// The declaration each registered resource was written at, for the diagnostics of
+    /// checkResourceGroups.
+    std::map<std::string, AST::node_ptr_t> resourceDecls_;
+    /// Checks the members of every group the module declares: a member that is neither a
+    /// parameter nor a resource (UnknownResource) and a group that contains itself
+    /// (ResourceGroupCycle) are reported here, before a clause expands one.
+    void checkResourceGroups();
+    /// The resources a function type's `uses`/`pure` clause publishes (design effects plan 3.1),
+    /// in the numbering of `built`: parameters by class (a handle type a Handle, a `var` a
+    /// Variable, any other an Object), ambient resources (a group expanded), or nothing for
+    /// `pure`. Generic when the type writes no clause.
+    sem::ResourceSignature
+    resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionType *built);
+    /// The ambient resources a name stands for, as written: a standard resource, one the module
+    /// declares, one it imports, or a group of them (expanded). False when the name is none of
+    /// those; `where` locates the diagnostic (UnknownResource, ResourceGroupCycle).
+    bool resolveAmbientResource(
+        const camel::core::module::module_ptr_t &in, const Reference &name,
+        std::vector<std::string> &out, std::vector<std::string> &active,
+        std::string *failed, const AST::node_ptr_t &where);
     /// The tag uses written before `ast`, lowered: the `RepeatedLoad("TagUse")` child of a
     /// function, type or block declaration, and the one of each of its fields.
     std::vector<GCT::TagUse> tagUsesOf(const AST::node_ptr_t &ast);
@@ -320,6 +347,8 @@ class Builder {
     /// `{ static for ... }` / `( static for ... )` (H51 step 4): an SCOMP holding the generator.
     /// The rounds are packed into a shape of the same fields in the graph builder.
     node_ptr_t visitStaticComprehension(const AST::node_ptr_t &ast, bool isStruct);
+    /// `T { static for ... }`: an SCOMP holding the generator and the type node naming `T`.
+    node_ptr_t visitShapeComprehension(const AST::node_ptr_t &ast);
     node_ptr_t visitFuncData(const AST::node_ptr_t &ast);
     node_ptr_t visitRefData(const AST::node_ptr_t &ast);
 
@@ -330,20 +359,17 @@ class Builder {
     Type *visitArrayType(const AST::node_ptr_t &ast);
     Type *visitStructType(const AST::node_ptr_t &ast);
     Type *visitTupleType(const AST::node_ptr_t &ast);
-    Type *visitFuncType(const AST::node_ptr_t &ast);
+    Type *visitFuncType(
+        const AST::node_ptr_t &ast, Tree::ParameterDefaults *defaultsOut = nullptr);
     Type *visitUnitType(const AST::node_ptr_t &ast);
     Type *visitInferType(const AST::node_ptr_t &ast);
     Type *visitDataType(const AST::node_ptr_t &ast);
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
-    /// Whether the expression of a `const` type argument writes a dimension name: `constas n`, or
-    /// a name already bound in `dimNames_`.
-    bool namesDimension(const AST::node_ptr_t &ast) const;
-    /// The extents of `const [e0, e1, ...]` as linear forms (design principles 5.4). Reports a
-    /// `constas` that cannot bind here, a name that is not bound, and an expression that is not
-    /// a shape. nullptr with a diagnostic reported.
+    /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
+    /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>
-    visitNamedExtents(const AST::node_ptr_t &ast);
+    visitExtents(const AST::DimGroup &group, const AST::node_ptr_t &ast);
     /// One extent as a linear form: a constant, a name, `+`/`-`, and `*` by a constant. Any
     /// other expression is unknown.
     camel::core::type::ExtentForm visitExtent(const AST::node_ptr_t &ast);

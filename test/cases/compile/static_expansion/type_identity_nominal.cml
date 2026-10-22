@@ -1,0 +1,28 @@
+/**
+ * A named struct is matched by the name it was declared with, not by its shape: `Point` and
+ * `Pair` have the same fields and are different types, and an anonymous struct of that shape
+ * is a third type (design principles 5.2, 5.5).
+ */
+module type_identity_nominal
+
+type Point = {x: int, y: int}
+type Pair = {x: int, y: int}
+
+func name_of::<T>(t: T): string {
+    return match type T {
+        case Point => 'Point'
+        case Pair => 'Pair'
+        case struct => 'struct'
+        case _ => 'other'
+    }
+}
+
+func main(): int sync {
+    let p: Point = {x: 1, y: 2}
+    let q: Pair = {x: 1, y: 2}
+    println(name_of(p))
+    println(name_of(q))
+    println(name_of({x: 1, y: 2}))
+    println(name_of((1, 2)))
+    return 0
+}

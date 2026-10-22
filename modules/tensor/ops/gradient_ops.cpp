@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 29, 2026
- * Updated: Sep. 29, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Operators serving differentiation: the gradient-shaped counterparts of
@@ -250,6 +234,20 @@ Type *tensorTangentType(Type *primal) {
     return primal;
 }
 
+/// An integer or boolean tensor is discrete: its derivative is zero by definition (design
+/// principles 9.9). It has no tangent space, but a value computed from a parameter and held in
+/// one -- an argmax result, a comparison mask -- neither loses a gradient nor must be refused
+/// when it is converted back to float: the derivative there is zero.
+bool tensorIsDiscrete(const type::Type *type) {
+    const TensorType *tensor = asTensorType(type);
+    if (tensor == nullptr) {
+        return false;
+    }
+    const auto dtype = tensor->dtype();
+    return dtype && (*dtype == TypeCode::Int32 || *dtype == TypeCode::Int64 ||
+                     *dtype == TypeCode::Bool);
+}
+
 // ---------------------------------------------------------------- VJP rules
 // The gradient operators are differentiable too, so a gradient can be differentiated again.
 
@@ -459,6 +457,13 @@ std::vector<OpDef> gradientOps() {
     setVjp(defs, "slice_grad", &sliceGradVjp);
     setVjp(defs, "zeros_like", &camel::core::noGradient);
     setVjp(defs, "ones_like", &camel::core::noGradient);
+    // numel and dim answer with an integer, and a discrete value's derivative is zero by
+    // definition (design principles 9.9): reading a shape is locally constant in the tensor it
+    // reads. Without a rule the backward pass, which visits any operator one of whose inputs is
+    // active, refused them with "no derivative rule" — a shape query in a loss was refused
+    // although its contribution is exactly zero, exactly as `shape` already was.
+    setVjp(defs, "numel", &camel::core::noGradient);
+    setVjp(defs, "dim", &camel::core::noGradient);
     return defs;
 }
 
@@ -468,6 +473,8 @@ void registerTensorTangentSpace() {
     space.addUri       = "tensor:add";
     space.zerosLikeUri = "tensor:zeros_like";
     camel::core::DerivativeRegistry::instance().setTangentSpace(TensorType::typeCode(), space);
+    camel::core::DerivativeRegistry::instance().setDiscretePredicate(
+        TensorType::typeCode(), &tensorIsDiscrete);
 }
 
 } // namespace camel::tensor::ops

@@ -1,0 +1,15 @@
+/**
+ * A call that declares effects does not fold: `reveal` writes to stdout, and a constant position
+ * refuses it by name (FoldCallHasEffects). Its body is never run while the program is built.
+ */
+module fold_call_effect
+
+func reveal(s: string): string uses stdout {
+    println(s)
+    return s
+}
+
+func main(): int {
+    let t = { x: 1 }
+    return t.[reveal('x')]
+}

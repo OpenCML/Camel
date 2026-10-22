@@ -1,0 +1,14 @@
+/**
+ * The program for the "twice in one round" case: two additions with `+ 0` in one function, so one
+ * round of the zero law rewrites both, and a proof that reports one step is missing a rewrite.
+ */
+module explain_twice
+
+func g(x: int, y: int): int {
+    return (x + 0) + (y + 0)
+}
+
+func main(): int sync {
+    println(g(5, 7))
+    return 0
+}

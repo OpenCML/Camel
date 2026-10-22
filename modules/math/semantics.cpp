@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The declared numeric semantics of the `math` module's operators
@@ -308,6 +292,16 @@ void declareElementaryFunctions() {
     declare("math:min_l", exactInteger("the smaller of two integers (equal values are the same)"));
     declare("math:max_i", exactInteger("the larger of two integers (equal values are the same)"));
     declare("math:max_l", exactInteger("the larger of two integers (equal values are the same)"));
+    // min and max also take the other ordered types: strings by their bytes and bools with false
+    // below true. Comparing and returning an operand is not arithmetic.
+    declare(
+        "math:min_s",
+        exactInteger("the smaller of two strings by their bytes (a proper prefix comes first)"));
+    declare(
+        "math:max_s",
+        exactInteger("the larger of two strings by their bytes (a proper prefix comes first)"));
+    declare("math:min_b", exactInteger("the smaller of two bools, false below true"));
+    declare("math:max_b", exactInteger("the larger of two bools, false below true"));
     declare(
         "math:clamp_i",
         exactInteger("x bounded to [lo, hi]; lo above hi is a fault (the result is one operand)"));

@@ -1,0 +1,21 @@
+/**
+ * A type query the declaration cannot answer: T is declared at the head but written nowhere in
+ * the signature, so at instantiation it still has no type. The query is reported, not taken for
+ * false (design principles 5.13).
+ */
+module when_open_type
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | c64 | c128 => true
+        case _ => false
+    }
+}
+
+func bad::<T>(x: int): int when is_numeric::<T>() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}

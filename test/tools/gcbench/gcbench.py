@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Compare the two collectors on allocation benchmarks.
 
     python3 test/tools/gcbench/gcbench.py [--rounds N] [--only NAME[,NAME...]] [--json FILE]

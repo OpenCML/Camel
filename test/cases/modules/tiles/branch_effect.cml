@@ -6,4 +6,4 @@ func selected(flag: bool, x: Tensor<f32>): string {
     let choose = (a: Tensor<f32>): Tensor<f32> => if flag then a + 1.0 else forbidden(a)
     return source<choose>(x)
 }
-func main(): string { return selected(false, reshape([1.0, 2.0], [2])) }
+func main(): string { return selected(false, reshape([1.0, 2.0] as f32[], [2])) }

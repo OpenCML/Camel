@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 12, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Builds the abstract syntax tree from the concrete syntax tree of the hand-written parser.
@@ -43,6 +27,16 @@
 #include "camel/parse/syntax/cst.h"
 
 namespace camel::parse::ast {
+
+/// The arguments of a call or a binding, as they are written: the positional ones, the named
+/// ones, and the first positional one written after a named one (`f(a: 1, 2)`), which the call
+/// refuses where it is built (design principles 4.4, handover H276). The parser keeps the two
+/// lists apart; the third field is the evidence that they were interleaved.
+struct ArgumentValues {
+    node_ptr_t data                   = nullptr;
+    node_ptr_t named                  = nullptr;
+    node_ptr_t positionalAfterNamed   = nullptr;
+};
 
 class Builder {
   public:
@@ -140,17 +134,21 @@ class Builder {
     /// `Config::limit`, design principles 10.2); a local declaration does not.
     Value visitDataDecl(syntax::cst::DataDecl context, bool topLevel = false);
     Value visitTypeDecl(syntax::cst::TypeDecl context);
+    Value visitResourceDecl(syntax::cst::ResourceDecl context);
+    Value visitResourceClause(syntax::cst::ResourceClause context);
     Value visitRetStmt(syntax::cst::RetStmt context);
     Value visitSpreadValue(syntax::cst::SpreadValue context);
     Value visitRestValue(syntax::cst::RestValue context);
     Value visitKeyTypePair(syntax::cst::KeyTypePair context);
     Value visitKeyValuePair(syntax::cst::KeyValuePair context);
     Value visitKeyParamPair(syntax::cst::KeyParamPair context);
+    Value visitTupleParam(syntax::cst::TupleParam context);
     Value visitDataList(syntax::cst::DataList context);
     Value visitIdentList(syntax::cst::IdentList context);
     Value visitIndexValues(syntax::cst::IndexValues context);
     Value visitPairedValues(syntax::cst::PairedValues context);
     Value visitPairedParams(syntax::cst::PairedParams context);
+    Value visitStrayPositional(syntax::cst::StrayPositional context);
     Value visitArgumentList(syntax::cst::ArgumentList context);
     Value visitIndices(syntax::cst::Indices context);
     Value visitParentParams(syntax::cst::ParentParams context);
@@ -193,6 +191,8 @@ class Builder {
     Value visitStructData(syntax::cst::StructData context);
     Value visitArrayData(syntax::cst::ArrayData context);
     Value visitTupleData(syntax::cst::TupleData context);
+    /// `T { static for ... }`: the rounds' values under the field names and kind of `T`.
+    Value visitShapeComp(syntax::cst::ShapeComp context);
     Value visitRefData(syntax::cst::RefData context);
     Value visitConstasData(syntax::cst::ConstasData context);
     Value visitLiteralData(syntax::cst::Literal context);
@@ -206,11 +206,13 @@ class Builder {
     Value visitKeyInterType(syntax::cst::KeyInterType context);
     Value visitTypeUnit(syntax::cst::TypeUnit context);
     Value visitArrayType(syntax::cst::ArrayType context);
+    Value visitArrayDim(syntax::cst::ArrayDim context);
+    /// The extents and the pack one `[...]` was written with.
+    DimGroup dimGroupOf(syntax::cst::ArrayDim context);
     Value visitConstData(syntax::cst::ConstData context);
     Value visitSpecType(syntax::cst::SpecType context);
     Value visitRefType(syntax::cst::RefType context);
     Value visitTypeOfType(syntax::cst::TypeOfType context);
-    Value visitTypeAsType(syntax::cst::TypeAsType context);
     Value visitStructType(syntax::cst::StructType context);
     Value visitEnumType(syntax::cst::EnumType context);
     Value visitEnumPattern(syntax::cst::Pattern context, syntax::cst::IdentRef ref);

@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Tensor module wiring: exports the operator groups and types derived from
@@ -37,6 +21,7 @@
 #include "camel/runtime/node_roles.h"
 #include "camel/utils/path.h"
 #include "dtype.h"
+#include "kernels/parallel.h"
 #include "npy.h"
 #include "ops/binary_ops.h"
 #include "ops/registry.h"
@@ -108,6 +93,11 @@ module_ptr_t TensorModule::create(context_ptr_t ctx) { return std::make_shared<T
 bool TensorModule::load() {
     if (loaded_)
         return true;
+    // The run's thread limit, installed once into the kernel pool before any kernel can size it:
+    // `-t` sets every pool of the run, the schedulers and the modules alike, and nothing else
+    // does (design principles 9.3: a setting is not an environment variable). Without `-t` this
+    // is the hardware concurrency.
+    camel::tensor::kernels::setNumThreads(static_cast<int>(context_->threadLimit()));
     context_->registerExecutorFactory("tensor", [ctx = context_]() -> executor_ptr_t {
         return std::make_shared<TensorExecutor>(ctx, OpRegistry::instance().kernelMap("tensor"));
     });

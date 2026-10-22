@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Oct. 03, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * ONNX graph construction and value helpers for the exporter (see emitter.h).
@@ -61,18 +45,14 @@ const Array *constantTensor(const Value &value) {
     return rtdata::fromSlot<Array *>(value.slot);
 }
 
-/// The ONNX element dtype an operand of Camel dtype `dtype` takes: float64 survives (a
-/// scalar-only dtype in Camel but a real ONNX tensor dtype); the rest normalizes to the
-/// tensor storage dtypes (float32, int64, bool).
-TypeCode operandTarget(TypeCode dtype) {
-    return dtype == TypeCode::Float64 ? TypeCode::Float64 : tensor::normalizeTensorDType(dtype);
-}
+/// The ONNX element dtype an operand of Camel dtype `dtype` takes: exactly the Camel type.
+/// A tensor is the element type it is written with here too, so `Tensor<f64>` is an ONNX
+/// double and `Tensor<i32>` an ONNX int32, never a normalized stand-in.
+TypeCode operandTarget(TypeCode dtype) { return dtype; }
 
 /// Encodes `count` elements read through `read(i)` into raw little-endian bytes of `dtype`.
 template <typename Read>
 std::vector<std::byte> encodeElements(TypeCode dtype, uint64_t count, Read &&read) {
-    // float64 is not a Camel tensor storage dtype (elementSize dispatches storage dtypes),
-    // but ONNX initializers may hold it.
     const size_t elemSize =
         dtype == TypeCode::Float64 ? sizeof(double) : tensor::elementSize(dtype);
     std::vector<std::byte> raw(count * elemSize);
@@ -85,6 +65,10 @@ std::vector<std::byte> encodeElements(TypeCode dtype, uint64_t count, Read &&rea
         } break;
         case TypeCode::Float64: {
             std::memcpy(raw.data() + i * sizeof(double), &v, sizeof(double));
+        } break;
+        case TypeCode::Int32: {
+            const int32_t n = static_cast<int32_t>(v);
+            std::memcpy(raw.data() + i * sizeof(int32_t), &n, sizeof(int32_t));
         } break;
         case TypeCode::Int64: {
             const int64_t n = static_cast<int64_t>(v);
@@ -154,9 +138,13 @@ ElemType elemTypeOf(TypeCode dtype) {
         // the runtime kernel.
         return ElemType::Double;
     }
-    switch (tensor::normalizeTensorDType(dtype)) {
+    switch (dtype) {
     case TypeCode::Float32:
         return ElemType::Float;
+    case TypeCode::Float64:
+        return ElemType::Double;
+    case TypeCode::Int32:
+        return ElemType::Int32;
     case TypeCode::Int64:
         return ElemType::Int64;
     case TypeCode::Bool:
@@ -172,7 +160,7 @@ Value Value::symbolicScalar(std::string name, type::Type *camelType) {
     v.form      = Form::Scalar;
     v.name      = std::move(name);
     v.camelType = camelType;
-    v.dtype     = tensor::normalizeTensorDType(camelType->code());
+    v.dtype     = camelType->code();
     v.shape     = tensor::StaticShape{};
     return v;
 }
@@ -188,7 +176,7 @@ TensorFacts factsOf(const Value &value) {
         return {t->dtype(), tensor::StaticShape(t->shapeSpan().begin(), t->shapeSpan().end())};
     }
     if (value.ty && isScalarCode(value.ty->code())) {
-        return {tensor::normalizeTensorDType(value.ty->code()), tensor::StaticShape{}};
+        return {value.ty->code(), tensor::StaticShape{}};
     }
     return {};
 }
@@ -421,6 +409,11 @@ std::string Emitter::operand(const Value &value, std::optional<TypeCode> dtype) 
         return value.name;
     }
     const TypeCode target = operandTarget(*dtype);
+    if (value.isConstant()) {
+        // A constant is written in the operand type directly (an initializer of that type), not
+        // cast at run time: the graph stays the shape the operator list describes.
+        return constantOperand(value, dtype);
+    }
     // A cast is valid in the scope that emitted it and in scopes nested inside it.
     for (auto it = scopes_.rbegin(); it != scopes_.rend(); ++it) {
         if (auto found = it->casts.find({value.name, target}); found != it->casts.end()) {

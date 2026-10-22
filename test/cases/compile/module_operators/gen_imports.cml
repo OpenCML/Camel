@@ -11,6 +11,6 @@ export func keep(b: Box): Box {
     return b
 }
 
-export func twice(x: typeas T): T {
+export func twice::<T>(x: T): T {
     return x + x
 }

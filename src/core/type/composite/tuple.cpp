@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/error/diagnostics.h"
@@ -179,7 +163,7 @@ namespace {
 /// One object per payload type and form, as for cells.
 TupleType *internTagged(
     std::vector<TupleType *> &known, Type *payloadType, const std::function<TupleType *()> &make) {
-    // Occurrences of one type variable are equal whether or not they bind (`typeas T` and
+    // Occurrences of one type variable are equal whether or not they bind (`T` in a signature and
     // `T`), so a type written with variables is never shared: sharing would drop the mark.
     if (containsTypeVar(payloadType)) {
         return make();

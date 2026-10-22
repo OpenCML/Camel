@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Modules and imports: the conflicts an import introduces and the declarations a module
@@ -41,12 +25,15 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/core/operator_traits.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/type/collection.h"
 #include "camel/core/type/other.h"
 #include "camel/execute/executor.h"
 
 #include <atomic>
 #include <cctype>
+#include <format>
+#include <set>
 #include <unordered_set>
 #define DEBUG_LEVEL -1
 
@@ -354,6 +341,59 @@ std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct
     return uri.text;
 }
 
+namespace {
+/// The accesses a clause writes, as the identity of the resource: the operand an access is
+/// bound to (`#i`), or the name of an ambient resource. The clause says which resources a call
+/// touches, not how (its modes are the upper bound a call uses), so the modes and the class of
+/// a parameter are not compared: a handle a declaration names and the `Foreign` resource the
+/// operator's module wraps are the same operand.
+std::set<std::string> resourceIdentities(const camel::core::sem::ResourceSignature &signature) {
+    std::set<std::string> identities;
+    for (const auto &use : signature.params) {
+        identities.insert(std::format("#{}", use.index));
+    }
+    for (const auto &use : signature.ambient) {
+        identities.insert(use.name);
+    }
+    return identities;
+}
+
+/// The text of a signature for a diagnostic: its parameter names where the type has them,
+/// `#index` otherwise.
+std::string describeResources(
+    const camel::core::sem::ResourceSignature &signature, const FunctionType *type) {
+    if (signature.mode == camel::core::sem::ResourceSignature::Mode::Generic) {
+        return "nothing about its resources";
+    }
+    if (signature.pure()) {
+        return "pure";
+    }
+    std::string out     = "uses ";
+    bool first          = true;
+    const auto add      = [&](const std::string &name) {
+        out += (first ? "" : ", ") + name;
+        first = false;
+    };
+    for (const auto &use : signature.params) {
+        if (type != nullptr && use.index < type->argNamesCount()) {
+            add(std::string(type->argNameAt(use.index)));
+        } else {
+            add(std::format("#{}", use.index));
+        }
+    }
+    for (const auto &use : signature.ambient) {
+        add(use.name);
+    }
+    for (camel::core::sem::ResourceClass cls : signature.anyOf) {
+        add(std::format("any {}", camel::core::sem::resourceClassName(cls)));
+    }
+    if (signature.external) {
+        add("external");
+    }
+    return out;
+}
+} // namespace
+
 void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     const std::string name = gct->name();
     FunctionType *funcType = tt::as_ptr<FunctionType>(gct->at(0)->dataType());
@@ -392,12 +432,44 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     // effects plan 2.2): until a body is inferred, the C++ declaration is the only source of a
     // Concrete signature. The parameter classes and modes stay those of the declaration, so a
     // call derived from the type touches what the operator itself would.
-    if (const auto id = camel::core::OperatorTable::instance().lookup(uri); id.has_value()) {
-        if (const auto *declaredFacts = camel::core::OperatorTable::instance().semantics(*id);
-            declaredFacts != nullptr && declaredFacts->resources) {
-            funcType = funcType->withResources(camel::core::sem::signatureOf(
-                *declaredFacts->resources, funcType->withTypesCount()));
+    const camel::core::sem::ResourceSignature written = funcType->resources();
+    const auto *declaredFacts = [&]() -> const camel::core::sem::OperatorSemantics * {
+        if (const auto id = camel::core::OperatorTable::instance().lookup(uri); id.has_value()) {
+            return camel::core::OperatorTable::instance().semantics(*id);
         }
+        return nullptr;
+    }();
+    if (written.mode == camel::core::sem::ResourceSignature::Mode::Concrete) {
+        // A clause on a body-less declaration is not a promise to be checked later: it is the
+        // signature the module publishes, and it must be the one the operator declares (design
+        // effects plan 3.2). The clause says which resources a call touches; the result, the
+        // allocation and the external effect stay the operator's, so only the accesses are
+        // compared.
+        std::optional<camel::core::sem::ResourceSignature> declared;
+        if (declaredFacts != nullptr && declaredFacts->resources) {
+            declared = camel::core::sem::signatureOf(
+                *declaredFacts->resources, funcType->withTypesCount());
+        }
+        const bool same = declared.has_value() &&
+                          resourceIdentities(written) == resourceIdentities(*declared) &&
+                          (written.pure() ==
+                           (declared->params.empty() && declared->ambient.empty() &&
+                            declared->anyOf.empty()));
+        if (!same) {
+            diags_->of(SemanticDiag::NativeResourceMismatch)
+                .atOrigin(gct->origin())
+                .commit(
+                    name,
+                    describeResources(written, funcType),
+                    uri,
+                    declared ? describeResources(*declared, funcType)
+                             : std::string("nothing about its resources"));
+            throw BuildAbortException();
+        }
+    }
+    if (declaredFacts != nullptr && declaredFacts->resources) {
+        funcType = funcType->withResources(camel::core::sem::signatureOf(
+            *declaredFacts->resources, funcType->withTypesCount()));
     }
     auto resolver = camel::core::type::DeclaredFuncTypeResolver::create(funcType);
     // A declaration stands for an operator of this module (design principles 10.1; handover

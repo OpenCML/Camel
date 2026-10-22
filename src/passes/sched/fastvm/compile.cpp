@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 21, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "compile.h"
 #include "camel/runtime/exec_plan.h"
@@ -708,6 +692,14 @@ LinkedBytecodeResult compileAndLinkGraphs(
     for (auto *runtimeGraph : uniqueGraphs) {
         ASSERT(runtimeGraph != nullptr, "Reachable runtime graph set contains null.");
         if (known(runtimeGraph)) {
+            continue;
+        }
+        // A generic declaration leaves a placeholder graph behind while its instances are the
+        // graphs that are built. When a call site folds the call to a constant, nothing else
+        // builds the placeholder, and it reaches this pass with no node at all: it has no
+        // bytecode and no call it can serve, so it is skipped rather than reported as an
+        // internal error.
+        if (runtimeGraph->nodeCount() == 0) {
             continue;
         }
         camel::runtime::validateRuntimeGraphPayload(program, runtimeGraph);

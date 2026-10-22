@@ -55,7 +55,7 @@ result may be any of them, and it has an external effect when its traits say so.
 | `:op/assn`, `:op/assn_<t>`, `:op/assn_owned` | write the cell; the result is the value stored |
 | `:op/assn_<op>_<t>` | read-modify-write of the cell |
 | `:struct/append_arr_in_place`, `:op/set_index_in_place` | read-modify-write of operand 0; the result is that object |
-| `algo:*_in_place` | read-modify-write of an object (operand 0); the result is that object |
+| `array:*_in_place` | read-modify-write of an object (operand 0); the result is that object |
 | `:io/print`, `:io/println`, `tensor:show` | write `stdout`, external |
 | `:io/eprintln` | write `stderr`, external |
 | `:io/input`, `io:get_char(s)`, `io:clear_input_buffer` | read-modify-write `stdin`, external |

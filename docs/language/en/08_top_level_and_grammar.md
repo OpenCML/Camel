@@ -77,14 +77,14 @@ typeExpr  : arrayType ('?' | '!')*
 arrayType : specType ('[' ']')*
 specType  : primaryType ('<' (type | const data), ... '>')?
 primaryType : name | '(' type ')' | '(' type, ... ')' | '{' name: type, ... '}'
-            | modifier* '(' parameters ')' '=>' type | typeas name
+            | modifier* '(' parameters ')' '=>' type
 enumBody  : 'enum' '{' variant, ... '}'
 variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 ```
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
-- `typeas T`: [7.5](07_statements.md#75-generic-functions).
-- `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key.
+- `::<T>`: a function, `rule` or `fact` declares its type parameters after its name ([7.5](07_statements.md#75-generic-functions)).
+- `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key. A dimension name in a shape no longer writes `constas`: the name binds where it first appears in a parameter type and is written as plain `n` afterwards (see the array row of [3.1](03_data_model.md)).
 - `enum`: [3.5](03_data_model.md#35-enums).
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
@@ -97,7 +97,7 @@ Every production of the language, one for one with the parser: each production i
 ```
 program            : SEP? (decl SEP?)* EOF
 decl               : moduleDecl | importDecl | exportDecl | namespaceDecl | usingNamespaceDecl
-                     | tagDecl | dataDecl | funcDecl | typeDecl | ruleDecl
+                     | tagDecl | resourceDecl | dataDecl | funcDecl | typeDecl | ruleDecl
 stmt               : dataDecl | funcDecl | typeDecl | dataExpr | usingNamespaceDecl | retStmt
                      | blockStmt | staticForExpr
 blockStmt          : 'wait'? stmtBlock | funcAnno+ stmtBlock
@@ -113,11 +113,12 @@ exportDecl         : 'export' (dataDecl | typeDecl | bracedIdents)
 usingNamespaceDecl : 'using' 'namespace' identRef
 namespaceDecl      : 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 namespaceItem      : namespaceDecl | importDecl | exportDecl | usingNamespaceDecl | funcDecl
-                     | typeDecl | dataDecl
+                     | typeDecl | dataDecl | resourceDecl
 funcAnno           : '@' identRef (angledValues | parentIdents)?
 frontMatter        : (funcAnno | tagUse)*
 funcDecl           : frontMatter ('with' angledParams)? 'export'? modifiers?
-                     'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock?
+                     'func' (identRef | operatorName) typeParams? parentParams (':' typeExpr)?
+                     resourceClause? whenClause? stmtBlock?
 tagDecl            : 'export'? 'tag' identDef angledParams? 'on' tagPositions ('read_by' tagReaders)?
                      | 'export'? 'tag' identDef '=' bracketIdents
 tagPositions       : tagPositionName (',' tagPositionName)* ','?
@@ -125,6 +126,8 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef angledValues?
+whenClause         : IDENTIFIER logicalOrExpr
+typeParams         : '::' '<' identDef (',' identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
@@ -132,6 +135,7 @@ carrier            : identList | parentIdents | bracedIdents | bracketIdents
 typeDecl           : frontMatter? 'type' identRef
                      ('=' | '<' identDef (',' identDef)* ','? ('>' '=' | '>='))
                      (typeExpr | STRING)
+resourceDecl       : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 retStmt            : ('return' | 'throw') dataList
 modifiers          : 'sync'+
 identDef           : IDENTIFIER
@@ -172,6 +176,7 @@ compExpr           : annoExpr (('..' | '?..') annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | structData | angledValues | typeArguments | '!'
 memberAccess       : '.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']')
 accessExpr         : primaryData ('.' (IDENTIFIER | INTEGER | REAL | '[' dataExpr ']'))*
+shapeComp          : typeExpr '{' staticForExpr '}'
 primaryData        : identRef | constasData | literal | arrayData | structData | tupleData
                      | funcData
 constasData        : 'constas' identDef
@@ -180,6 +185,7 @@ literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_S
 indexValue         : ('...' | '..')? dataExpr
 keyValuePair       : identDef ':' dataExpr | '...' dataExpr
 pairedValues       : keyValuePair (',' keyValuePair)*
+argumentValues     : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
 dataList           : dataExpr (',' dataExpr)*
 argumentList       : indexValues (',' pairedValues)? | pairedValues
 indexValues        : indexValue (',' indexValue)*
@@ -197,10 +203,10 @@ funcData           : modifiers? angledParams? parentParams (':' typeExpr)? '=>' 
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
 typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
-staticForHeader    : 'for' '(' identDef (',' identDef)? ')' 'in' ('fields' typeExpr
-                     | 'indices' dataExpr)
+staticForHeader    : 'for' '(' (identDef | '_') (',' (identDef | '_'))? ')' 'in'
+                     ('fields' typeExpr | 'indices' dataExpr)
 staticLoopExpr     : 'static' 'loop' loopState (',' loopState)* staticForHeader 'do' blockExpr
-typeCasePattern    : 'struct' | 'tuple' | '#' 'leaf' | '_'
+typeCasePattern    : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 matchCase          : 'case' pattern ('|' pattern)* '=>' blockExpr
 pattern            : identRef (identDef | enumTuplePattern | enumStructPattern)? | literal
                      | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
@@ -217,21 +223,24 @@ diffType           : keyUnionDiffType ('\\' keyUnionDiffType)*
 keyUnionDiffType   : keyInterType (('+' | '-') keyInterType)*
 keyInterType       : typeUnit ('^' typeUnit)*
 typeUnit           : (identDef 'of')? arrayType
-arrayType          : specType ('[' ']')*
+arrayType          : specType arrayDim+
+arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
+arrayDimItem       : '?' | '..' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
-typeOrData         : typeExpr | 'const' dataExpr
+typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
-                     | 'typeof' dataExpr | 'typeas' identDef
+                     | 'typeof' dataExpr
 tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
-funcType           : modifiers? angledParams? parentParams '=>' typeExpr
+funcType           : modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
+resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 enumField          : identDef ':' typeExpr
-ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
-                     '}' (IDENTIFIER dataExpr)?
+ruleDecl           : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
+                     '{' ruleBody '}' (IDENTIFIER dataExpr)?
 ruleContext        : '<' identDef (',' identDef)* ','? '>'
 ruleBody           : dataExpr ('=>' | '<=>') dataExpr
 analysisDecl       : frontMatter? 'export'? IDENTIFIER identDef parentParams? ':' typeExpr
@@ -284,12 +293,10 @@ The following constructs are accepted by the grammar (or their keywords are rese
 | `try { } catch e: T { } finally { }` | `SemanticDiag::TryCatchNotInLanguage` (not part of the language) | `T!` with `!!`, `?->`, `case error e` |
 | Tuple patterns, struct patterns; identifier patterns on ordinary types | `ConstructNotSupported` | `if` chain; take the members first |
 | Struct destructuring `let { x, y } = p`, array destructuring `let [a, b] = xs` | `SemanticDiag::FeatureNotSupported` | `p.x`, `xs[0]` (tuple destructuring is available) |
-| Keyword arguments `f(a: 1)` | `FeatureNotSupported` | Pass by position |
-| Parameter default values `b: int = 5` | `FeatureNotSupported` | Overloading; `with` parameters |
 | A slice subscript that slices a dimension other than the first, `xs[:, 0]`, `xs[a:b, c]` | `SemanticDiag::ConstructNotSupported` (the diagnostic names H17) | Take the rows with `take`, or slice one dimension at a time |
 | A slice subscript whose step is not 1, `xs[a:b:s]` | Array: the run-time `RuntimeDiag::InvalidArgument`; tensor: the compile-time `ArgumentsRejected` (both name H17) | `xs->slice<0, a, b, s>` |
 | Type operations `A & B`, `A \ B`, `A + B`, `A - B`, `A ^ B` | `FeatureNotSupported` | None |
-| `typeof e`, `name of T` | `FeatureNotSupported` | None |
+| `name of T` | `FeatureNotSupported` | None |
 | `keyof` | Syntax error | None |
 
 In addition there is one thing that "can be written but cannot be used at present": a declaration with a function type `let f: (x: int) => int = g`.

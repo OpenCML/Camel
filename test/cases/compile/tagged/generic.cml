@@ -1,22 +1,22 @@
 /**
- * The tagged forms and `typeas`: `(typeas T)?` binds `T` from the payload of the argument,
- * and each set of types is one subgraph of concrete types.
+ * The tagged forms with head type parameters: `T?` binds `T` from the payload of the
+ * argument, and each set of types is one subgraph of concrete types.
  */
 module generic
 
-func or_else(x: (typeas T)?, d: T): T {
+func or_else::<T>(x: T?, d: T): T {
     return x ?? d
 }
 
-func some(x: typeas T): T? {
+func some::<T>(x: T): T? {
     return x
 }
 
-func recover(r: (typeas T)!, d: T): T {
+func recover::<T>(r: T!, d: T): T {
     return r !! d
 }
 
-func ok(x: typeas T): T! {
+func ok::<T>(x: T): T! {
     return x
 }
 

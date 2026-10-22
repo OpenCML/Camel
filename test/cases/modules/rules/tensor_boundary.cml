@@ -10,7 +10,7 @@ import { Tensor, reshape } from tensor
 import { Program } from graph
 import { rewrite } from rewrite
 
-type Vec = Tensor<f32, const [3]>
+type Vec = Tensor<f32, [3]>
 
 /// The f32 sum of the coefficients overflows: at x = 0 the products are 0, but a coefficient of
 /// f32 infinity makes the rewrite 0 * inf = NaN.
@@ -40,10 +40,10 @@ rule mixed_unguarded(x: Vec, const c1: float, const c2: float) {
 }
 
 func main(): int sync {
-    let y = reshape([1.0e30, 1.0, 2.0], [3])
-    println(overflow(reshape([0.0, 0.0, 0.0], [3])), 0.0)
+    let y = reshape([1.0e30, 1.0, 2.0] as f32[], [3])
+    println(overflow(reshape([0.0, 0.0, 0.0] as f32[], [3])), 0.0)
     println(underflow(y), 1.0e-30)
-    println(mixed_zero(reshape([-1.0, 1.0, -0.0], [3])), 0.0)
+    println(mixed_zero(reshape([-1.0, 1.0, -0.0] as f32[], [3])), 0.0)
     return 0
 }
 

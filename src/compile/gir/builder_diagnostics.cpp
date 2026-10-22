@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 20, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The diagnostics and the effect analysis of a built program: effects that are dropped,
@@ -1194,11 +1178,6 @@ std::string Builder::sourceLocationOf(uint64_t origin) const {
         slash == std::string::npos ? file->path : file->path.substr(slash + 1),
         line,
         span->startOffset - lineStart + 1);
-}
-
-void Builder::registerTreeOrigin(
-    node_handle_t node, const GCT::node_ptr_t &origin, const char *kind) {
-    registerNodeOrigin(context_, node, origin, kind);
 }
 
 void Builder::reportConversionGaps(

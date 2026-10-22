@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Sep. 11, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -86,6 +70,12 @@ enum class RuntimeDiag : uint32_t {
     // implementation: the scope promises the device runs it, so the compiler refuses the program
     // instead of leaving the operator on the host (GPU design 6.1).
     GpuScopeUnsupported = 0x000071,
+    // A `#gpu` scope whose program the device back end cannot build, even though the operator is
+    // one it may run: the shape or the calling convention of this use has no device program, or
+    // the graph the scope calls brings an operator that has none. The scope promises the device
+    // runs everything it contains, and GPU design 6.1 makes that a compile-time error rather than
+    // a host execution; unlike GpuScopeUnsupported this is about the use, not the operator.
+    GpuScopeNoDeviceProgram = 0x0001A7,
     // Warnings (severity bits = Warn).
     PassesNeverRun           = 0x10000F,
     ConstantExpressionFaults = 0x100015,

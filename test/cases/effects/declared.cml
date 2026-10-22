@@ -1,0 +1,37 @@
+// What a call touches, written on the declaration (design effects plan 3.1): a resource of the
+// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
+// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+module declared
+
+resource db
+resource console = [db, stdout]
+
+#resource type Stream = { id: int }
+
+/// The body touches nothing; the clause says a call reads and writes the handle it is given.
+func consume(s: Stream): int uses s {
+    return 0
+}
+
+/// The body is empty; every call touches what the group names.
+func tick(): void uses console {
+}
+
+/// The body touches nothing; the clause says a call writes the cell it is given.
+func bump(var t: int): int uses t sync {
+    return 0
+}
+
+func main(): int sync {
+    let s: Stream = { id: 7 }
+    consume(s)
+    consume(s)
+    tick()
+    tick()
+    var cell = 0
+    bump(cell)
+    bump(cell)
+    println(s.id)
+    println(cell)
+    return 0
+}

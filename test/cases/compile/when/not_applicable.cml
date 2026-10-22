@@ -1,0 +1,21 @@
+/**
+ * A `when` condition that is false: the declaration is inapplicable, and a call that only it
+ * could take is reported with the unmet condition at the call site (design principles 5.13).
+ */
+module when_not_applicable
+
+func is_float::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
+
+/// The condition asks about int, so this overload never applies here.
+func needs_float(x: float): float when is_float::<int>() {
+    return x
+}
+
+func main(): int sync {
+    return int(needs_float(1.0))
+}

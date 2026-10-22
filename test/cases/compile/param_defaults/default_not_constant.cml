@@ -1,0 +1,13 @@
+/**
+ * A default is evaluated where the declaration is, not at a call, so it cannot read a
+ * parameter of the same declaration (design principles 4.4, handover H276).
+ */
+module param_default_not_constant
+
+func f(a: int, b: int = a): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1)
+}

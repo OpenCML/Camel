@@ -1,0 +1,23 @@
+/**
+ * The zero rule is for discrete values only.
+ *
+ * A continuous value put into a Map has no derivative rule either: the Map has no tangent, so
+ * the parameter's contribution would be dropped without a word. The pass still refuses where
+ * the map is built, names the collection, and says gradients do not flow through it (design
+ * principles 9.9). This is the contrast that keeps the new zero rules honest: they cover a
+ * discrete value's definitional zero, not every value the pass cannot differentiate.
+ */
+module discrete_zero_refuse
+
+import { grad } from autodiff
+
+with <x: float>
+func through_map(): float {
+    let table = [(1, x)] as Map<int, float>
+    return table->get_or<1, 0.0> * x
+}
+
+func main(): int sync {
+    println(grad(through_map)<3.0>())
+    return 0
+}

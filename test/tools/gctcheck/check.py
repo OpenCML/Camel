@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Compare the graph construction trees (GCT) two builds of the compiler make of the corpus.
 
     python3 test/tools/gctcheck/check.py dump OUT_DIR [--camel-home HOME] [--jobs N]

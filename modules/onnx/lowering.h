@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The ONNX backend's operator capability registry.
@@ -83,6 +67,13 @@ class LowerContext {
     const tensor::ops::TensorFacts &result() const { return result_; }
     /// Camel static type of the call's result (e.g. int for :op/add_l).
     type::Type *resultType() const { return resultType_; }
+
+    /// The element type a tensor operator's arithmetic runs in: the result's when it is known,
+    /// else the first operand's, else f32 — the float element type the operators declare they
+    /// compute in, and the element type a bare `Tensor` model input is exported as. A scalar
+    /// operand takes this type (the runtime kernel's rule: a scalar meeting a tensor is computed
+    /// in the tensor's element type), so a graph never mixes a double scalar into float32 data.
+    std::optional<type::TypeCode> elementDtype() const;
 
     /// Operand name of argument `index`, converted to `dtype` when given.
     std::string input(size_t index, std::optional<type::TypeCode> dtype = std::nullopt) const;

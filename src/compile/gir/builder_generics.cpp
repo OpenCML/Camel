@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 20, 2026
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The types and the generic instantiation of the GIR builder: the generic templates a
@@ -159,7 +143,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         }
         const std::string name = child->name();
         Type *type             = child->at(0)->dataType();
-        if (!name.empty() && !isGenericHere(type)) {
+        if (!name.empty() && !isGenericHere(type, child)) {
             plainNames.insert(name);
         }
     }
@@ -176,7 +160,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
             continue;
         }
         Type *type = child->at(0)->dataType();
-        if (name.empty() || !isGenericHere(type)) {
+        if (name.empty() || !isGenericHere(type, child)) {
             continue;
         }
         // One name is either a generic function or a set of ordinary ones: which of two
@@ -199,6 +183,9 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         tmpl->name           = isOperator ? displayNameOf(name) : name;
         tmpl->func           = child;
         tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
+        if (const auto *head = GCT::Tree::of(child)->headTypeParamsOf(child)) {
+            tmpl->headParams = *head;
+        }
         tmpl->outerBindings  = typeBindings_;
         tmpl->ownerGraph     = currGraph_;
         tmpl->module         = module_;
@@ -214,12 +201,28 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         if (const auto *usings = GCT::Tree::of(child)->usingsOf(child)) {
             tmpl->usingFrames.push_back(usings);
         }
+        // The defaults of the declaration's parameters are evaluated where the
+        // declaration is written, once, and every instance takes the same values: a default is
+        // a compile-time constant (design principles 4.4, handover H235/H276).
+        evaluateDefaults(child, tmpl->funcType, tmpl.get(), false);
         if (isOperator) {
             operatorTemplates_[name].push_back({templateScope_, tmpl});
         } else {
             templateScope_->insert(name, tmpl);
         }
     }
+}
+
+std::vector<std::string> Builder::typeParameterNames(const template_ptr_t &tmpl) const {
+    std::vector<std::string> names = tmpl->headParams;
+    std::vector<std::string> fromSignature;
+    collectTypeVars(tmpl->funcType, fromSignature);
+    for (const std::string &name : fromSignature) {
+        if (std::find(names.begin(), names.end(), name) == names.end()) {
+            names.push_back(name);
+        }
+    }
+    return names;
 }
 
 node_handle_t Builder::anonymousTemplateOf(const GCT::node_ptr_t &func) {
@@ -332,6 +335,26 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
             return nullptr;
         }
     }
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        // A function value has no `with` arguments of its own, so a condition that reads one
+        // cannot be answered here; a false one makes this candidate inapplicable.
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, {}, tmpl);
+        if (verdict.fails()) {
+            why = std::format("its 'when' condition is false: when {}", when->text);
+            return nullptr;
+        }
+        if (verdict.outcome == WhenOutcome::NeedsWithValue) {
+            why = std::format(
+                "its 'when' condition reads the 'with' parameter '{}', and a function value "
+                "gives no 'with' arguments",
+                verdict.subject);
+            return nullptr;
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
+    }
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, bindings, {}, {}, origin);
     if (!graph->funcType()->hasExitType()) {
         diags_->of(SemanticDiag::CallingIncompleteFunction)
@@ -372,8 +395,7 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
         throw BuildAbortException();
     }
     if (expected == nullptr) {
-        std::vector<std::string> names;
-        collectTypeVars(tmpl->funcType, names);
+        std::vector<std::string> names = typeParameterNames(tmpl);
         rejectGenericValue(
             tmpl,
             origin,
@@ -442,6 +464,17 @@ void Builder::takeConstasValues(
         if (data == nullptr && valueType != nullptr && argument.node != nullptr) {
             if (const StaticArg constant = staticArgOf(argument.node); constant.value) {
                 data = dataOfStaticValue(valueType, *constant.value);
+            }
+        }
+        if (data == nullptr && expr != nullptr && expr->type() == GCT::NodeKind::LINK) {
+            // A call of a pure function with constant arguments is a constant, and this place
+            // needs one: a call that does not reduce to one is refused by its own name
+            // (design principles 5.1, 6.5), not as a value without a constant.
+            const FoldedCall folded = foldConstantCall(expr);
+            if (folded.data != nullptr) {
+                data = folded.data;
+            } else if (folded.refusal != FoldRefusal::NotAProgramCall) {
+                reportFoldRefusal(folded, expr);
             }
         }
         if (data == nullptr || valueType == nullptr) {
@@ -603,9 +636,9 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             paramName,
             patternAt(i)->toString());
     };
-    // 1. Each variable takes the type found at its `typeas` position. An argument that is
+    // 1. Each variable takes the type found at its first binding position. An argument that is
     // not of the form of a `T?` / `T!` parameter enters it (design principles 3.8), so it
-    // binds the variables of the payload: `or_zero(5, 0)` with `x: (typeas T)?` gives
+    // binds the variables of the payload: `or_zero(5, 0)` with `x: T?` gives
     // `T = int`. `null` binds nothing.
     type_bindings_t bindings;
     const std::function<bool(Type *, Type *)> bindEntering = [&](Type *pattern, Type *actual) {
@@ -628,7 +661,7 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             reject(describe(i) + " needs a type of that form to bind its type variables");
         }
     }
-    // 2. A variable that its `typeas` position left open (the argument there is `null`, or a
+    // 2. A variable that its first binding position left open (the argument there is `null`, or a
     // generic function that is still waiting) takes the type found at any other occurrence:
     // the constraints of all arguments are collected before any is held to its parameter.
     for (size_t i = 0; i < withCount + normCount; ++i) {
@@ -758,6 +791,34 @@ compile_graph_ptr_t Builder::resolveGenericCall(
             }
         }
         value.type = wanted;
+    }
+    // The declaration's `when`, now that every type variable has a type: a false condition
+    // makes this candidate inapplicable (design principles 5.13), so the call is reported with
+    // the condition it could not meet rather than with a mismatch of types.
+    if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+        std::unordered_map<std::string, data_ptr_t> withValues;
+        for (size_t i = 0; i < withCount && i < withInputs.size(); ++i) {
+            data_ptr_t value = constantOfNode(withInputs[i].node);
+            if (value != nullptr) {
+                withValues.emplace(std::string(signature->argNameAt(i)), value);
+            }
+        }
+        const WhenResult verdict =
+            evaluateWhenCondition(when->condition, signature, bindings, withValues, tmpl);
+        if (verdict.fails()) {
+            std::vector<Type *> all(withTypes);
+            all.insert(all.end(), normTypes.begin(), normTypes.end());
+            diags_->of(SemanticDiag::WhenConditionUnmet)
+                .atOrigin(call->origin())
+                .commit(
+                    tmpl->name,
+                    strutil::join(all, ", ", [](Type *t) { return t->toString(); }),
+                    tmpl->name + " — when " + when->text);
+            throw BuildAbortException();
+        }
+        if (!verdict.holds()) {
+            reportWhenProblem(verdict, tmpl->name, when->condition);
+        }
     }
     return instantiateGeneric(tmpl, bindings, extents, constas, call);
 }
@@ -1288,6 +1349,11 @@ compile_graph_ptr_t Builder::instantiateGeneric(
                 declaring != units_.end() ? declaring->second.get() : unit_;
         }
         tmpl->instances.push_back({bindings, constas, extents, graph, false});
+        // The instance takes the declaration's parameter defaults as they are: they are
+        // constants, the same for every instance, and a call of the instance fills them.
+        if (const auto found = defaults_.find(tmpl.get()); found != defaults_.end()) {
+            defaults_[graph.get()] = found->second;
+        }
         // Scopes are kept by name under the scope they were entered from, here the scope the
         // function was declared in: two functions written in place, which have no name to
         // tell them apart, need two scopes; so do two generic overloads of one operator,
@@ -1330,9 +1396,44 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     return graph;
 }
 
+Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    if (type->code() == TypeCode::TypeOf) {
+        // `typeof e`: build e where the type is used and take the type of the value it makes.
+        // A build-time tuple is taken without a FILL, as `indices` and `...` take one.
+        const auto *placeholder = tt::as_ptr<TypeOfType>(type);
+        const auto *held       = static_cast<const GCT::Node *>(placeholder->expression());
+        ASSERT(held != nullptr, "typeof holds the expression it was made with.");
+        GCT::Node *expression = const_cast<GCT::Node *>(held);
+        Type *valueType       = nullptr;
+        const std::any result = visit(expression);
+        if (result.type() == typeid(StaticTuple)) {
+            valueType = any_cast<const StaticTuple &>(result).type;
+        } else if (node_handle_t value = valueNodeOf(result)) {
+            valueType = valueTypeOf(nodeTypeOf(value));
+        }
+        if (valueType == nullptr || valueType->code() == TypeCode::Void) {
+            diags_->of(SemanticDiag::TypeOfNotAValue)
+                .atOrigin(expression->origin())
+                .commit(sourceTextOf(expression), valueType == nullptr ? "no value" : "void");
+            throw BuildAbortException();
+        }
+        return boundType(valueType);
+    }
+    if (containsTypeOf(type)) {
+        diags_->of(SemanticDiag::TypeOfNotWholeType)
+            .atOrigin(at != nullptr ? at->origin() : 0)
+            .commit(type->toString());
+        throw BuildAbortException();
+    }
+    return boundType(type);
+}
+
 Type *Builder::visitTypeNode(const GCT::node_ptr_t &gct) {
     ENTER("TYPE");
-    Type *type = boundType(gct->dataType());
+    Type *type = resolveTypeNode(gct->dataType(), gct);
     LEAVE("TYPE");
     return type;
 }

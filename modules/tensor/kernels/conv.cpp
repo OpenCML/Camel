@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Oct. 03, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Convolution, pooling, and batch-norm kernels (see conv.h).
@@ -91,8 +75,16 @@ ConvGeometry geometry(
     return g;
 }
 
-const Array *asFloat(const Array *t, mm::IAllocator &allocator) {
-    return t->dtype() == TypeCode::Float32 ? t : cast(t, TypeCode::Float32, allocator);
+/// The convolution, pooling and batch-norm kernels compute in f32 only. Every tensor they read
+/// is checked here: an f64 or integer tensor is refused with the operator, the argument type and
+/// the supported set, never narrowed to f32 (design principles 5.1; 13.1). This is each
+/// kernel's declaration of what it computes; it is a fault at the call site, not a conversion.
+void requireF32(const char *op, std::initializer_list<const Array *> tensors) {
+    for (const Array *t : tensors) {
+        if (t != nullptr && t->dtype() != TypeCode::Float32) {
+            refuseTensorElementType(op, t, {TypeCode::Float32});
+        }
+    }
 }
 
 /// Unfolds one image [C, H, W] into cols [C*KH*KW, OH*OW] (zero padding).
@@ -170,12 +162,10 @@ Array *conv2d(
             "conv2d bias must have shape [" + std::to_string(g.O) + "], got " +
             dims(bias->shapeSpan()));
     }
-    const Array *x    = asFloat(input, allocator);
-    const Array *w    = asFloat(kernel, allocator);
-    const Array *b    = bias ? asFloat(bias, allocator) : nullptr;
+    requireF32("conv2d", {input, kernel, bias});
     const int64_t outShape[] = {g.N, g.O, g.OH, g.OW};
     Array *out        = createTensor(TypeCode::Float32, outShape, allocator);
-    const float *px = x->dataAs<float>(), *pw = w->dataAs<float>();
+    const float *px = input->dataAs<float>(), *pw = kernel->dataAs<float>();
     float *py = out->dataAs<float>();
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
         std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
@@ -183,9 +173,10 @@ Array *conv2d(
             im2col(g, px + n * g.C * g.H * g.W, cols.data());
             float *y   = py + n * g.O * g.spatial();
             float beta = 0.0f;
-            if (b) {
+            if (bias) {
                 for (int64_t o = 0; o < g.O; ++o) {
-                    std::fill_n(y + o * g.spatial(), g.spatial(), b->dataAs<float>()[o]);
+                    std::fill_n(
+                        y + o * g.spatial(), g.spatial(), bias->dataAs<float>()[o]);
                 }
                 beta = 1.0f;
             }
@@ -213,8 +204,7 @@ Array *conv2dInputGrad(
     int64_t padding, mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     requireDy(g, dy);
-    const Array *w = asFloat(kernel, allocator);
-    const Array *d = asFloat(dy, allocator);
+    requireF32("conv2d_input_grad", {kernel, dy});
     Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator, true);
     parallelFor(g.N, 1, [&](int64_t begin, int64_t end) {
         std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
@@ -227,9 +217,9 @@ Array *conv2dInputGrad(
                 g.spatial(),
                 g.O,
                 1.0f,
-                w->dataAs<float>(),
+                kernel->dataAs<float>(),
                 g.ckk(),
-                d->dataAs<float>() + n * g.O * g.spatial(),
+                dy->dataAs<float>() + n * g.O * g.spatial(),
                 g.spatial(),
                 0.0f,
                 cols.data(),
@@ -245,13 +235,12 @@ Array *conv2dKernelGrad(
     int64_t padding, mm::IAllocator &allocator) {
     const ConvGeometry g = geometry(input->shapeSpan(), kernel->shapeSpan(), stride, padding);
     requireDy(g, dy);
-    const Array *x = asFloat(input, allocator);
-    const Array *d = asFloat(dy, allocator);
+    requireF32("conv2d_kernel_grad", {input, dy});
     Array *dw =
         createTensor(TypeCode::Float32, kernel->shapeSpan(), allocator, true);
     std::vector<float> cols(static_cast<size_t>(g.ckk() * g.spatial()));
     for (int64_t n = 0; n < g.N; ++n) {
-        im2col(g, x->dataAs<float>() + n * g.C * g.H * g.W, cols.data());
+        im2col(g, input->dataAs<float>() + n * g.C * g.H * g.W, cols.data());
         // dW [O x CKK] += dy[n] [O x OHOW] @ cols^T [OHOW x CKK]
         sgemm(
             false,
@@ -260,7 +249,7 @@ Array *conv2dKernelGrad(
             g.ckk(),
             g.spatial(),
             1.0f,
-            d->dataAs<float>() + n * g.O * g.spatial(),
+            dy->dataAs<float>() + n * g.O * g.spatial(),
             g.spatial(),
             cols.data(),
             g.spatial(),
@@ -275,14 +264,14 @@ Array *conv2dBiasGrad(const Array *dy, mm::IAllocator &allocator) {
     if (dy->rank() != 4) {
         throw ShapeError("conv2d bias gradient expects a rank-4 dy, got " + dims(dy->shapeSpan()));
     }
-    const Array *d = asFloat(dy, allocator);
+    requireF32("conv2d_bias_grad", {dy});
     const int64_t N = dy->dim(0), O = dy->dim(1), S = dy->dim(2) * dy->dim(3);
     const int64_t shape[] = {O};
     Array *db      = createTensor(TypeCode::Float32, shape, allocator);
     for (int64_t o = 0; o < O; ++o) {
         double acc = 0.0;
         for (int64_t n = 0; n < N; ++n) {
-            const float *plane = d->dataAs<float>() + (n * O + o) * S;
+            const float *plane = dy->dataAs<float>() + (n * O + o) * S;
             for (int64_t s = 0; s < S; ++s) {
                 acc += plane[s];
             }
@@ -311,13 +300,13 @@ Shape pool2dShape(std::span<const int64_t> input, const Window2d &window) {
 Array *pool2d(
     PoolKind kind, const Array *input, const Window2d &window, mm::IAllocator &allocator) {
     const Shape outShape  = pool2dShape(input->shapeSpan(), window);
-    const Array *x = asFloat(input, allocator);
+    requireF32("pool2d", {input});
     Array *out     = createTensor(TypeCode::Float32, outShape, allocator);
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
     parallelFor(planes, 4, [&](int64_t begin, int64_t end) {
         for (int64_t p = begin; p < end; ++p) {
-            const float *src = x->dataAs<float>() + p * H * W;
+            const float *src = input->dataAs<float>() + p * H * W;
             float *dst       = out->dataAs<float>() + p * OH * OW;
             for (int64_t oh = 0; oh < OH; ++oh) {
                 for (int64_t ow = 0; ow < OW; ++ow) {
@@ -358,16 +347,15 @@ Array *pool2dGrad(
             "pool2d gradient expects dy of shape " + dims(outShape) + ", got " +
             dims(dy->shapeSpan()));
     }
-    const Array *x = asFloat(input, allocator);
-    const Array *d = asFloat(dy, allocator);
+    requireF32("pool2d_grad", {input, dy});
     Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator, true);
     const int64_t H = input->dim(2), W = input->dim(3), OH = outShape[2], OW = outShape[3];
     const int64_t planes = outShape[0] * outShape[1];
     const float scale    = 1.0f / static_cast<float>(window.kernelH * window.kernelW);
     parallelFor(planes, 4, [&](int64_t begin, int64_t end) {
         for (int64_t p = begin; p < end; ++p) {
-            const float *src = x->dataAs<float>() + p * H * W;
-            const float *g   = d->dataAs<float>() + p * OH * OW;
+            const float *src = input->dataAs<float>() + p * H * W;
+            const float *g   = dy->dataAs<float>() + p * OH * OW;
             float *dst       = dx->dataAs<float>() + p * H * W;
             for (int64_t oh = 0; oh < OH; ++oh) {
                 for (int64_t ow = 0; ow < OW; ++ow) {
@@ -415,9 +403,7 @@ Array *batchNorm(
                 dims(p->shapeSpan()));
         }
     }
-    const Array *x = asFloat(input, allocator);
-    const Array *m = asFloat(mean, allocator), *v = asFloat(var, allocator);
-    const Array *gm = asFloat(gamma, allocator), *bt = asFloat(beta, allocator);
+    requireF32("batch_norm", {input, mean, var, gamma, beta});
     Array *out = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
     int64_t inner     = 1;
     for (size_t d = 2; d < input->rank(); ++d) {
@@ -430,10 +416,10 @@ Array *batchNorm(
         [&](int64_t begin, int64_t end) {
             for (int64_t plane = begin; plane < end; ++plane) {
                 const int64_t c   = plane % C;
-                const float scale = gm->dataAs<float>()[c] /
-                                    std::sqrt(v->dataAs<float>()[c] + static_cast<float>(eps));
-                const float shift = bt->dataAs<float>()[c] - m->dataAs<float>()[c] * scale;
-                const float *src  = x->dataAs<float>() + plane * inner;
+                const float scale = gamma->dataAs<float>()[c] /
+                                    std::sqrt(var->dataAs<float>()[c] + static_cast<float>(eps));
+                const float shift = beta->dataAs<float>()[c] - mean->dataAs<float>()[c] * scale;
+                const float *src  = input->dataAs<float>() + plane * inner;
                 float *dst        = out->dataAs<float>() + plane * inner;
                 for (int64_t i = 0; i < inner; ++i) {
                     dst[i] = src[i] * scale + shift;
@@ -527,15 +513,13 @@ void batchNormTrain(
     mm::IAllocator &allocator) {
     const BnTrainGeometry g =
         bnTrainGeometry(input, {gamma, beta, runningMean, runningVar}, "batch_norm_train");
-    const Array *x  = asFloat(input, allocator);
-    const Array *gm = asFloat(gamma, allocator), *bt = asFloat(beta, allocator);
-    const Array *rm = asFloat(runningMean, allocator), *rv = asFloat(runningVar, allocator);
+    requireF32("batch_norm_train", {input, gamma, beta, runningMean, runningVar});
     const Shape statShape{g.C};
     Array *y   = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
     Array *nrm = createTensor(TypeCode::Float32, statShape, allocator);
     Array *nrv = createTensor(TypeCode::Float32, statShape, allocator);
 
-    const BnTrainStats stats = bnTrainStats(x->dataAs<float>(), g, eps);
+    const BnTrainStats stats = bnTrainStats(input->dataAs<float>(), g, eps);
 
     const float keep = static_cast<float>(1.0 - momentum), mix = static_cast<float>(momentum);
     const double unbiased =
@@ -543,8 +527,10 @@ void batchNormTrain(
     float *prm = nrm->dataAs<float>(), *prv = nrv->dataAs<float>();
     for (int64_t c = 0; c < g.C; ++c) {
         const size_t u = static_cast<size_t>(c);
-        prm[c]         = keep * rm->dataAs<float>()[c] + mix * static_cast<float>(stats.mean[u]);
-        prv[c] = keep * rv->dataAs<float>()[c] + mix * static_cast<float>(stats.var[u] * unbiased);
+        prm[c]         = keep * runningMean->dataAs<float>()[c] +
+                 mix * static_cast<float>(stats.mean[u]);
+        prv[c] = keep * runningVar->dataAs<float>()[c] +
+                 mix * static_cast<float>(stats.var[u] * unbiased);
     }
     parallelFor(
         g.N * g.C,
@@ -553,10 +539,11 @@ void batchNormTrain(
             for (int64_t plane = begin; plane < end; ++plane) {
                 const int64_t c   = plane % g.C;
                 const size_t u    = static_cast<size_t>(c);
-                const float scale = gm->dataAs<float>()[c] * static_cast<float>(stats.invStd[u]);
+                const float scale =
+                    gamma->dataAs<float>()[c] * static_cast<float>(stats.invStd[u]);
                 const float shift =
-                    bt->dataAs<float>()[c] - static_cast<float>(stats.mean[u]) * scale;
-                const float *src = x->dataAs<float>() + plane * g.inner;
+                    beta->dataAs<float>()[c] - static_cast<float>(stats.mean[u]) * scale;
+                const float *src = input->dataAs<float>() + plane * g.inner;
                 float *dst       = y->dataAs<float>() + plane * g.inner;
                 for (int64_t i = 0; i < g.inner; ++i) {
                     dst[i] = src[i] * scale + shift;
@@ -578,15 +565,13 @@ void batchNormTrainGrad(
             "batch_norm_train_grad expects dy shaped like the input, got " + dims(dy->shapeSpan()) +
             " vs " + dims(input->shapeSpan()));
     }
-    const Array *x  = asFloat(input, allocator);
-    const Array *gm = asFloat(gamma, allocator);
-    const Array *d  = asFloat(dy, allocator);
+    requireF32("batch_norm_train_grad", {input, gamma, dy});
     const Shape statShape{g.C};
     Array *dx = createTensor(TypeCode::Float32, input->shapeSpan(), allocator);
     Array *dg = createTensor(TypeCode::Float32, statShape, allocator);
     Array *db = createTensor(TypeCode::Float32, statShape, allocator);
 
-    const BnTrainStats stats = bnTrainStats(x->dataAs<float>(), g, eps);
+    const BnTrainStats stats = bnTrainStats(input->dataAs<float>(), g, eps);
     const double M           = static_cast<double>(g.perChannel());
     float *pdg = dg->dataAs<float>(), *pdb = db->dataAs<float>();
     // Per-channel sums of dy and dy*xhat (double accumulators).
@@ -596,8 +581,8 @@ void batchNormTrainGrad(
             const double mu = stats.mean[u], inv = stats.invStd[u];
             double sumDy = 0.0, sumDyXhat = 0.0;
             for (int64_t n = 0; n < g.N; ++n) {
-                const float *xplane = x->dataAs<float>() + (n * g.C + c) * g.inner;
-                const float *dplane = d->dataAs<float>() + (n * g.C + c) * g.inner;
+                const float *xplane = input->dataAs<float>() + (n * g.C + c) * g.inner;
+                const float *dplane = dy->dataAs<float>() + (n * g.C + c) * g.inner;
                 for (int64_t i = 0; i < g.inner; ++i) {
                     const double xhat = (xplane[i] - mu) * inv;
                     sumDy += dplane[i];
@@ -617,11 +602,11 @@ void batchNormTrainGrad(
                 const int64_t c = plane % g.C;
                 const size_t u  = static_cast<size_t>(c);
                 const double mu = stats.mean[u], inv = stats.invStd[u];
-                const float ginv    = gm->dataAs<float>()[c] * static_cast<float>(inv);
+                const float ginv    = gamma->dataAs<float>()[c] * static_cast<float>(inv);
                 const float meanDy  = pdb[c] / static_cast<float>(M);
                 const float meanDxh = pdg[c] / static_cast<float>(M);
-                const float *xplane = x->dataAs<float>() + plane * g.inner;
-                const float *dplane = d->dataAs<float>() + plane * g.inner;
+                const float *xplane = input->dataAs<float>() + plane * g.inner;
+                const float *dplane = dy->dataAs<float>() + plane * g.inner;
                 float *dst          = dx->dataAs<float>() + plane * g.inner;
                 for (int64_t i = 0; i < g.inner; ++i) {
                     const float xhat =

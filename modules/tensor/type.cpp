@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * TensorType implementation: interning, printing, and the refinement lattice.
@@ -98,8 +82,8 @@ TensorType *TensorType::get(std::optional<TypeCode> dtype, std::optional<StaticS
 TensorType *TensorType::get(
     std::optional<TypeCode> dtype, std::optional<StaticShape> shape,
     std::vector<ExtentForm> forms) {
-    if (dtype) {
-        dtype = normalizeTensorDType(*dtype);
+    if (dtype && !isSupportedTensorScalar(*dtype)) {
+        throw std::invalid_argument("Unsupported Tensor element type");
     }
     if (shape) {
         for (int64_t &extent : *shape) {
@@ -165,26 +149,7 @@ std::string TensorType::spelling() const {
     }
     std::string arguments;
     if (dtype_) {
-        switch (*dtype_) {
-        case TypeCode::Float32:
-            arguments = "f32";
-            break;
-        case TypeCode::Float64:
-            arguments = "f64";
-            break;
-        case TypeCode::Int32:
-            arguments = "i32";
-            break;
-        case TypeCode::Int64:
-            arguments = "i64";
-            break;
-        case TypeCode::Bool:
-            arguments = "bool";
-            break;
-        default:
-            arguments = std::string(dtypeName(*dtype_));
-            break;
-        }
+        arguments = elementTypeSpelling(*dtype_);
     }
     if (shape_) {
         arguments += arguments.empty() ? "const [" : ", const [";
@@ -277,7 +242,7 @@ slot_t TensorType::castSlotFrom(slot_t value, Type *sourceType) const {
     if (tensor == nullptr) {
         refuse("the value is null");
     }
-    if (dtype_ && normalizeTensorDType(tensor->dtype()) != *dtype_) {
+    if (dtype_ && tensor->dtype() != *dtype_) {
         refuse("the tensor has element type " + std::string(dtypeName(tensor->dtype())));
     }
     if (shape_) {
@@ -340,9 +305,18 @@ OtherType *TensorType::cloneWithArguments(
                         "Tensor<dtype, const [d0, d1, ...]>";
                 return nullptr;
             }
-            // As cloneWithParams: the type's code names the element type.
+            // The element type is a storage dtype of this module (dtype.h): exactly the type written,
+            // f32, f64, i32, i64 or bool. Anything else would reach the kernels, which dispatch
+            // on these five element types.
             const TypeCode code = argument.type->code();
-            dtype               = code;
+            if (!isSupportedTensorScalar(code)) {
+                error = "the element type is f32, f64, i32, i64 or bool, not '" +
+                        type::typeCodeToString(code) + "'";
+                return nullptr;
+            }
+            // As cloneWithParams: the type's code names the element type, and the tensor stores
+            // exactly that type (no normalization: dtype.h).
+            dtype = code;
             continue;
         }
         if (shape) {

@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The standard library reference, read from the signature files and the library sources.
 //
 //   node scripts/stdlib-reference.mjs --write       regenerate docs/stdlib-reference.md
@@ -94,9 +97,9 @@ const MODULES = [
         name: 'tree',
         title: '`tree`: parameter trees written in Camel',
         kind: 'camel',
-        // Its one public function has no written result type: the result is the argument's
-        // shape with a string at every leaf, which a type the reference can spell does not
-        // name yet. It is rendered as `?` (an inferred result), not as `void`.
+        // The walks are written with `match type`, `static for` and rest parameters, so a
+        // function whose result shape follows its argument has no result type a declaration can
+        // spell yet: it is rendered as `?` (an inferred result), not as `void`.
     },
     {
         name: 'tensor',
@@ -108,7 +111,22 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/tensor.cml',
     },
-    { name: 'array', title: '`array`: arrays and higher-order functions', kind: 'camel' },
+    {
+        name: 'types',
+        title: '`types`: the properties of types',
+        kind: 'camel',
+        // The predicates are head-only generic functions whose `match type` cases name the
+        // types the language spells, so a `when` condition can ask a property of a type.
+    },
+    {
+        name: 'array',
+        title: '`array`: arrays, sorting and higher-order functions',
+        kind: 'camel',
+        // Most of the module is Camel; a body-less declaration is one of its native operators
+        // (the sorts, argsort, flatten, unique), and the page says so. Those declarations are
+        // checked against the registered operators like a C++ module's.
+        native: true,
+    },
     {
         name: 'math',
         title: '`math`: numbers and bits',
@@ -124,15 +142,6 @@ const MODULES = [
         kind: 'cpp',
         // The declarations, not a signature file: they are what the module compiles (H19).
         source: 'statistics.cml',
-        declaration: true,
-    },
-    {
-        name: 'algo',
-        title: '`algo`: sorting and array primitives',
-        kind: 'cpp',
-        // The declarations only: the seven names whose result type C++ computed from their array
-        // argument are generic declarations (handover H202).
-        source: 'algo.cml',
         declaration: true,
     },
     {
@@ -480,7 +489,7 @@ function signatureBodyProblems() {
         const lines = fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n').split('\n')
         for (let i = 0; i < lines.length; i++) {
             const trimmed = lines[i].trim()
-            const decl = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_][\w:]*)\s*\(/)
+            const decl = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_][\w:]*)\s*(?:::<[^>]*>)?\s*\(/)
             if (!decl) continue
             const close = closingBracket(trimmed, decl[0].length - 1)
             if (close < 0) continue
@@ -661,7 +670,7 @@ function readDeclarations(file, module) {
     }
     if (trimmed.startsWith(keyword + ' ')) {
             const rest = trimmed.slice(keyword.length + 1)
-            const name = rest.slice(0, rest.indexOf('('))
+            const name = rest.slice(0, rest.indexOf('(')).replace(/::<.*>$/, '')
             const args = bracketed(rest, rest.indexOf('('))
             const after = rest.slice(args.end + 1)
             const result = after.replace(/^\s*:\s*/, '').replace(/\s*(sync\s*)?\{\s*$/, '').trim()
@@ -675,6 +684,10 @@ function readDeclarations(file, module) {
                 norm: splitParams(args.inner),
                 result,
                 inferred: result === '' && module.kind === 'camel',
+                // A body-less `export func` in a library module written in Camel declares one of
+                // the module's native operators (`array`'s sorts and primitives): there is no
+                // subgraph, and the kernel is the operator's.
+                native: module.kind === 'camel' && !declarationBody(after, lines, i),
                 doc: [],
                 purity: null,
                 effect: '',
@@ -693,7 +706,8 @@ function readDeclarations(file, module) {
                 else if (text.startsWith('@example')) entry.examples.push(text.slice('@example'.length).trim())
                 else entry.doc.push(text)
             }
-            if (module.kind === 'cpp') {
+            // A native entry names its operator like a C++ module's declaration does.
+            if (module.kind === 'cpp' || entry.native) {
                 // `module:function`, or what the `#op` tag above says.
                 entry.uri = pendingUri || `${module.name}:${name}`
             }
@@ -743,10 +757,12 @@ function parseDeclarations(module) {
     return entries
 }
 
-// The comment at the top of the file, without the note that it is not compiled.
+// The comment at the top of the file, without the two-line header, the blank line after it and the
+// note that the file is not compiled.
 function parseHeader(module) {
     const text = fs.readFileSync(sourceOf(module), 'utf8').replace(/\r\n/g, '\n')
-    const match = text.match(/^\/\*\*\n([\s\S]*?)\n \*\//)
+    const body = text.replace(/^(?:\/\/[^\n]*\n){2}\n/, '')
+    const match = body.match(/^\/\*\*\n([\s\S]*?)\n \*\//)
     if (!match) return []
     const lines = match[1].split('\n').map((l) => l.replace(/^ \* ?/, ''))
     const stop = lines.findIndex((l) => l.startsWith('For reference only'))
@@ -891,6 +907,8 @@ out.push('Not in this reference: the profiler (`perf`).')
                 out.push('')
                 if (entry.value) {
                     out.push('- A value: written without parentheses, a constant where it is used.')
+                } else if (module.kind === 'camel' && entry.native) {
+                    out.push('- A native operator of this module: an opaque node, pure.')
                 } else if (module.kind === 'camel') {
                     out.push('- Written in Camel: a subgraph, pure when the functions passed to it are.')
                 } else if (entry.purity === 'pure') {
@@ -1019,7 +1037,7 @@ function bindArguments(entry, code) {
         // A parameter typed by a type variable cannot be written in the wrapper: its type is not a
         // type of the program (`T[]`, `Map<K, V>`, `(...args: A) => T`). The example has to
         // supply a concrete value instead; the compile below reports the name as unresolved.
-        if (/\btypeas\b/.test(param.type) || /\b[A-Z]\b/.test(param.type)) return
+        if (/\b[A-Z]\b/.test(param.type)) return
         if (!bindings.some((binding) => binding.name === name)) bindings.push({ name, type: param.type })
     }
     if (call.receiver) bind(call.receiver, params[0])
@@ -1094,14 +1112,23 @@ async function probeImport(name, moduleName) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-doc-type-'))
     try {
         const file = path.join(dir, 'main.cml')
-        fs.writeFileSync(
-            file,
-            `import { ${name} } from ${moduleName}\nfunc __doc_type(v: ${name}): void {\n    let _ = v\n}\n` +
-                'func main(): int sync { return 0 }\n',
-        )
-        const result = await runCamelCompile(file, dir)
-        probeImportCache.set(key, result.ok)
-        return result.ok
+        // A type with parameters (`Run<F>`) cannot be written by its bare name, so the probe tries
+        // it as a type constructor too: `Run<int>` is a type for any payload, and a name that is
+        // not generic simply fails the second spelling after passing the first.
+        for (const spelling of [name, `${name}<int>`]) {
+            fs.writeFileSync(
+                file,
+                `import { ${name} } from ${moduleName}\nfunc __doc_type(v: ${spelling}): void {\n    let _ = v\n}\n` +
+                    'func main(): int sync { return 0 }\n',
+            )
+            const result = await runCamelCompile(file, dir)
+            if (result.ok) {
+                probeImportCache.set(key, true)
+                return true
+            }
+        }
+        probeImportCache.set(key, false)
+        return false
     } finally {
         fs.rmSync(dir, { recursive: true, force: true })
     }
@@ -1328,7 +1355,7 @@ function verifyOps() {
     const registered = registeredOperators()
     const problems = []
     let checked = 0
-    for (const module of MODULES.filter((m) => m.kind === 'cpp')) {
+    for (const module of MODULES.filter((m) => m.kind === 'cpp' || m.native)) {
         const registeredName = module.registered || module.name
         const file = path.relative(REPO_ROOT, sourceOf(module)).replace(/\\/g, '/')
         // Every operator the module registers and a declaration may name. A type-qualified alias
@@ -1342,8 +1369,12 @@ function verifyOps() {
             problems.push(`${file}: the module '${registeredName}' registers no operator (is it imported by ${path.relative(REPO_ROOT, PROBE)}?)`)
             continue
         }
-        // Values are not operators: inspect --ops does not list them.
-        const entries = parseDeclarations(module).filter((e) => !e.value)
+        // Values are not operators: inspect --ops does not list them. A module written in Camel
+        // is verified only for its native declarations: its Camel functions are bodies, not
+        // operators.
+        const entries = parseDeclarations(module).filter(
+            (e) => !e.value && (module.kind === 'cpp' || e.native),
+        )
         const declaredNames = new Set(entries.filter((e) => e.file === file).map((e) => e.name))
         // A module may publish an operator under a type namespace too (`Tensor.shape`). That
         // name is C++'s, because a declaration cannot write it, and the compiler points it at

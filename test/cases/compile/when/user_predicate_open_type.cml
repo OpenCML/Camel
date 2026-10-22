@@ -1,0 +1,20 @@
+/**
+ * A user predicate on a type the declaration cannot answer: T is declared at the head but
+ * written nowhere in the signature, so the condition still has a type variable. The evaluator
+ * reports WhenTypeQueryNotConcrete for the predicate's own name, not for a compiler table.
+ */
+module when_user_predicate_open_type
+
+func probe::<T>(): bool {
+    return match type T {
+        case _ => true
+    }
+}
+
+func bad::<T>(x: int): int when probe::<T>() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}

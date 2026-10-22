@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The release gate: one command that runs the layers a release decision needs, and says out
 // loud what it does not run.
 //

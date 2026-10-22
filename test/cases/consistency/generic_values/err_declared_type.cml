@@ -1,4 +1,4 @@
-func first(xs: (typeas T)[]): T { return xs[0] }
+func first::<T>(xs: T[]): T { return xs[0] }
 func main(): int sync {
     let f: (x: int) => int = first
     println(f(1))

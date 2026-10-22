@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 18, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // Translate the supported pure tensor subgraphs without running user operators on the host.
+
 #include "camel/core/rtdata/array.h"
 #include "camel/core/tags.h"
 #include "camel/core/rtdata/foreign.h"
@@ -57,7 +51,7 @@ struct Value {
     size_t tensor = SIZE_MAX;
     std::vector<Value> fields;
     // Borrowed function graph and captured values, used only while reading the graph.
-    rt::GCGraph *function = nullptr;
+    rt::GCGraph *function              = nullptr;
     const rt::Program *functionProgram = nullptr; // the program `function` is a graph of
     bool loopElement = false; // Exact i64 body port, materialized only by an explicit conversion.
 };
@@ -164,7 +158,10 @@ class Compiler {
         if (tensor::asTensorType(type)) {
             const auto *t = td::fromSlot<tensor::Array *>(slot);
             if (!t || t->dtype() != ty::TypeCode::Float32)
-                throw UnsupportedComputation("tiles currently requires f32 tensors");
+                throw UnsupportedComputation(
+                    "tiles currently requires f32 tensors",
+                    {},
+                    UnsupportedComputation::Reason::Shape);
             Node node{.op = "input", .shape = t->shapeVector()};
             const size_t n = elements(node.shape);
             if (n)
@@ -614,7 +611,9 @@ class Compiler {
             return out;
         } catch (const UnsupportedComputation &e) {
             throw UnsupportedComputation(
-                g->name() + " node " + std::to_string(id) + ": " + e.what());
+                g->name() + " node " + std::to_string(id) + ": " + e.what(),
+                e.oper(),
+                e.reason());
         } catch (const std::exception &e) {
             throw std::runtime_error(g->name() + " node " + std::to_string(id) + ": " + e.what());
         }
@@ -729,13 +728,17 @@ class Compiler {
         }
         const auto *def = tensor::ops::OpRegistry::instance().find(id);
         if (!def || !def->traits.pure)
-            throw UnsupportedComputation("unsupported or effectful operator '" + uri() + "'");
+            throw UnsupportedComputation(
+                "unsupported or effectful operator '" + uri() + "'",
+                uri());
         if (def->name == "permute_inverse" && args.size() == 2) {
             const auto input = tensorValue(args[0]);
             const auto rank  = program.nodes[input].shape.size();
             if (!args[1].constant ||
                 !std::holds_alternative<std::vector<int64_t>>(*args[1].constant))
-                throw UnsupportedComputation("permute_inverse requires a static permutation");
+                throw UnsupportedComputation(
+                    "permute_inverse requires a static permutation",
+                    uri());
             const auto &permutation = std::get<std::vector<int64_t>>(*args[1].constant);
             if (permutation.size() != rank)
                 throw std::runtime_error("permute_inverse: permutation rank mismatch");
@@ -779,7 +782,9 @@ class Compiler {
         const auto *result = inferred ? tensor::asTensorType(*inferred) : nullptr;
         if (!result || result->dtype() != ty::TypeCode::Float32 || !result->isStaticShape())
             throw UnsupportedComputation(
-                "operator '" + uri() + "' needs a statically known f32 tensor result");
+                "operator '" + uri() + "' needs a statically known f32 tensor result",
+                uri(),
+                UnsupportedComputation::Reason::Shape);
         Node n{.op = std::string(def->name), .shape = *result->shape()};
         if (n.op == "sum_to") {
             n.inputs = {tensorValue(args.at(0))};
@@ -798,7 +803,10 @@ class Compiler {
             // (notes/core-semantics-map.md, "cast_like"). A scalar source is not the same
             // value as the 0-d tensor this result has: keep that on the CPU as well.
             if (!tensor::asTensorType(args.at(0).type))
-                throw UnsupportedComputation("'" + n.op + "' needs a tensor operand here");
+                throw UnsupportedComputation(
+                    "'" + n.op + "' needs a tensor operand here",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
             n.inputs           = {tensorValue(args.at(0))};
             const Node &source = program.nodes[n.inputs[0]];
             if (source.shape != n.shape)
@@ -806,14 +814,19 @@ class Compiler {
             if (source.dtype == n.dtype)
                 return {.type = *inferred, .tensor = n.inputs[0]};
             throw UnsupportedComputation(
-                "element type conversion in '" + n.op + "' is not supported");
+                "element type conversion in '" + n.op + "' is not supported",
+                uri(),
+                UnsupportedComputation::Reason::Shape);
         }
         if (n.op == "broadcast_like" || n.op == "expand_axis") {
             n.inputs   = {tensorValue(args.at(0))};
             n.op       = "reindex";
             n.indexing = indexed;
             if (!n.indexing)
-                throw UnsupportedComputation("view operator lacks a concrete core index instance");
+                throw UnsupportedComputation(
+                    "view operator lacks a concrete core index instance",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
             (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
             return {.type = *inferred, .tensor = append(std::move(n))};
         }
@@ -831,7 +844,10 @@ class Compiler {
             const auto a = program.nodes[tensorValue(args.at(1))].shape;
             const auto b = program.nodes[tensorValue(args.at(2))].shape;
             if (a.size() < 2 || b.size() < 2)
-                throw UnsupportedComputation("tiles matmul gradient requires rank >= 2");
+                throw UnsupportedComputation(
+                    "tiles matmul gradient requires rank >= 2",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
             // Compose existing tensor primitives, retaining their core instances
             // and contracts rather than inventing a separate batched index law.
             auto apply = [&](const char *uri, std::vector<Value> values) {
@@ -872,7 +888,10 @@ class Compiler {
             n.inputs = {tensorValue(args.at(0)), tensorValue(args.at(1))};
             if (n.op == "matmul" && (program.nodes[n.inputs[0]].shape.size() < 2 ||
                                      program.nodes[n.inputs[1]].shape.size() < 2))
-                throw UnsupportedComputation("tiles matmul requires tensors with rank >= 2");
+                throw UnsupportedComputation(
+                    "tiles matmul requires tensors with rank >= 2",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
         } else if (n.op == "sum_axis" || n.op == "max_axis" || n.op == "mean_axis") {
             n.inputs          = {tensorValue(args.at(0))};
             int64_t axis      = integer(args.at(1));
@@ -890,14 +909,16 @@ class Compiler {
             n.op       = "reindex";
             if (!n.indexing)
                 throw UnsupportedComputation(
-                    "layout operator lacks a concrete core index instance");
+                    "layout operator lacks a concrete core index instance",
+                    uri(),
+                    UnsupportedComputation::Reason::Shape);
             (void)kernel::coreViewAddress(program, n, kernel::IndexExpr(0));
         } else if (n.op == "reshape") {
             n.inputs = {tensorValue(args.at(0))};
             if (elements(program.nodes[n.inputs[0]].shape) != elements(n.shape))
                 throw std::runtime_error("reshape changes the number of elements");
         } else {
-            throw UnsupportedComputation("no CUDA lowering for '" + uri() + "'");
+            throw UnsupportedComputation("no CUDA lowering for '" + uri() + "'", uri());
         }
         return {.type = *inferred, .tensor = append(std::move(n))};
     }
@@ -958,7 +979,9 @@ static Program compileInputs(
                 const auto *tensor = tensor::asTensorType(type);
                 if (!tensor || tensor->dtype() != ty::TypeCode::Float32 || !tensor->isStaticShape())
                     throw UnsupportedComputation(
-                        "type-only compilation requires static f32 tensor shapes");
+                        "type-only compilation requires static f32 tensor shapes",
+                        {},
+                        UnsupportedComputation::Reason::Shape);
                 input.shape = *tensor->shape();
             }
             const auto node = c.append(std::move(input));
@@ -1034,4 +1057,3 @@ void bindRegionArguments(
     planStorage(program);
 }
 } // namespace camel::tiles
-

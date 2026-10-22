@@ -7,7 +7,7 @@ module tensor_target
 
 import { Tensor, reshape } from tensor
 
-type Vec = Tensor<f32, const [3]>
+type Vec = Tensor<f32, [3]>
 
 func combine(x: Vec): Vec { return x * 3.0 + x * 5.0 }
 func combine_mixed(x: Vec): Vec { return x * 3.0 + x * -5.0 }
@@ -43,7 +43,7 @@ func i64_distribute(a: Tensor<i64>, b: Tensor<i64>, c: Tensor<i64>): Tensor<i64>
 }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(combine(x))
     println(combine_mixed(x))
     println(combine_mixed_granted(x))

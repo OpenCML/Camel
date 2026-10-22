@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -93,6 +77,9 @@ enum class TypeCode : uint32_t {
     // The argument of a pending enum instance that its value does not determine (`Option<_>`).
     // Compile time only: no value has this type.
     EnumHole = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x010),
+    // `typeof e` before e is built (design principles 5.6): the type of the value the expression
+    // will have. Compile time only; the graph builder replaces it by the expression's type.
+    TypeOf = makeTypeCode(TypeFlag::Primitive | TypeFlag::Auxiliary, 0x013),
     // Complex numbers (design principles 5.1): two IEEE parts, `c64` (two f32) and `c128` (two
     // f64). They are numbers, but not primitive in the encoding's sense: a value does not fit
     // in one slot (c128 is 16 bytes, c64 needs a box so that a number is one kind of value),

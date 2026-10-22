@@ -1,27 +1,12 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Aug. 18, 2024
- * Updated: May. 05, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <format>
 #include <mutex>
+#include <thread>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -91,8 +76,17 @@ int deriveProcessExitCode(camel::runtime::GCGraph *graph, slot_t result, bool de
 
 } // namespace
 
+size_t hardwareThreadCount() {
+    const unsigned hardware = std::thread::hardware_concurrency();
+    return hardware == 0 ? 1 : static_cast<size_t>(hardware);
+}
+
 Context::Context(const EntryConfig &entryConf, const DiagsConfig &diagConf)
     : entryConfig_(entryConf), diagConfig_(diagConf) {}
+
+size_t Context::threadLimit() const {
+    return entryConfig_.maxThreads != 0 ? entryConfig_.maxThreads : hardwareThreadCount();
+}
 
 Context::~Context() {
     // Runtime function objects stored inside modules may consult GCGraph-backed

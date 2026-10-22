@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Oct. 03, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The ONNX lowering table for the tensor and nn operators (see lowering.h).
@@ -61,6 +45,18 @@ size_t LowerContext::rank(size_t index) const {
 
 std::string LowerContext::input(size_t index, std::optional<TypeCode> dtype) const {
     return emitter_.operand(args_[index], dtype);
+}
+
+std::optional<TypeCode> LowerContext::elementDtype() const {
+    if (result_.dtype) {
+        return result_.dtype;
+    }
+    for (size_t i = 0; i < args_.size(); ++i) {
+        if (auto dtype = factsOf(args_[i]).dtype) {
+            return dtype;
+        }
+    }
+    return TypeCode::Float32;
 }
 
 std::optional<ConstArg> LowerContext::constArg(size_t index) const {
@@ -170,20 +166,68 @@ std::string reduceAxes(
     Emitter &e, const std::string &op, const std::string &x, std::vector<int64_t> axes,
     bool keepDims);
 
-/// Every argument converted to the result dtype, then one node.
+/// The element type an elementwise operator computes in, mirroring the kernels' `operandType`:
+/// one scalar takes the tensor's element type (a float scalar meeting an integer tensor computes
+/// in f32), and two tensors promote by widening. A bare `Tensor` operand has no facts and takes
+/// the graph's element type. The whole node is emitted in this one type, so ONNX never sees a
+/// double constant beside a float tensor.
+std::optional<TypeCode> operandDtype(const LowerContext &ctx);
+
+/// Every argument converted to the dtype the operator computes in, then one node.
 LowerFn sameTypeOp(std::string opType, size_t operands) {
     return [opType = std::move(opType), operands](const LowerContext &ctx) {
+        std::optional<TypeCode> dtype = operands == 1 ? ctx.facts(0).dtype : operandDtype(ctx);
+        if (!dtype) {
+            dtype = ctx.elementDtype();
+        }
         std::vector<std::string> inputs;
         for (size_t i = 0; i < operands; ++i) {
-            inputs.push_back(ctx.input(i, ctx.result().dtype));
+            inputs.push_back(ctx.input(i, dtype));
         }
         return ctx.emit(opType, std::move(inputs));
     };
 }
 
+/// Whether an argument is a scalar Camel number rather than tensor data: a constant scalar has a
+/// numeric Camel type, a symbolic one says Form::Scalar.
+bool isScalarOperand(const Value &value) {
+    if (value.form == Value::Form::Scalar) {
+        return true;
+    }
+    if (value.ty == nullptr) {
+        return false;
+    }
+    const TypeCode code = value.ty->code();
+    return code == TypeCode::Int32 || code == TypeCode::Int64 || code == TypeCode::Float32 ||
+           code == TypeCode::Float64 || code == TypeCode::Bool;
+}
+
+std::optional<TypeCode> operandDtype(const LowerContext &ctx) {
+    const auto left  = ctx.facts(0);
+    const auto right = ctx.facts(1);
+    const bool leftData  = !isScalarOperand(ctx.arg(0));
+    const bool rightData = !isScalarOperand(ctx.arg(1));
+    if (leftData != rightData) {
+        const tensor::ops::TensorFacts &data = leftData ? left : right;
+        const std::optional<TypeCode> scalar = leftData ? right.dtype : left.dtype;
+        if (data.dtype) {
+            if (tensor::isFloatingTensorType(*data.dtype)) {
+                return data.dtype;
+            }
+            return scalar && tensor::isFloatingTensorType(*scalar) ? std::optional(TypeCode::Float32)
+                                                           : data.dtype;
+        }
+        return TypeCode::Float32;
+    }
+    if (auto promoted = tensor::ops::promote(left.dtype, right.dtype)) {
+        return promoted;
+    }
+    return ctx.elementDtype();
+}
+
 LowerFn compareOp(std::string opType, bool negate) {
     return [opType = std::move(opType), negate](const LowerContext &ctx) {
-        const auto dtype = tensor::ops::promote(ctx.facts(0).dtype, ctx.facts(1).dtype);
+        auto dtype = operandDtype(ctx);
         std::vector<std::string> inputs{ctx.input(0, dtype), ctx.input(1, dtype)};
         if (!negate) {
             return ctx.emit(opType, std::move(inputs));
@@ -194,13 +238,13 @@ LowerFn compareOp(std::string opType, bool negate) {
 }
 
 Value lowerRsqrt(const LowerContext &ctx) {
-    const std::string sqrt = ctx.emitter().node("Sqrt", {ctx.input(0, ctx.result().dtype)});
+    const std::string sqrt = ctx.emitter().node("Sqrt", {ctx.input(0, ctx.elementDtype())});
     return ctx.emit("Reciprocal", {sqrt});
 }
 
 /// GELU with the tanh approximation (the Camel kernel's definition).
 Value lowerGelu(const LowerContext &ctx) {
-    const std::string x = ctx.input(0, ctx.result().dtype);
+    const std::string x = ctx.input(0, ctx.elementDtype());
     if (ctx.opset() >= 20) {
         return ctx.emit("Gelu", {x}, {Attribute::makeString("approximate", "tanh")});
     }
@@ -221,8 +265,8 @@ Value lowerWhere(const LowerContext &ctx) {
     return ctx.emit(
         "Where",
         {ctx.input(0, TypeCode::Bool),
-         ctx.input(1, ctx.result().dtype),
-         ctx.input(2, ctx.result().dtype)});
+         ctx.input(1, ctx.elementDtype()),
+         ctx.input(2, ctx.elementDtype())});
 }
 
 Value lowerCast(const LowerContext &ctx) {
@@ -236,7 +280,7 @@ Value lowerCast(const LowerContext &ctx) {
 }
 
 Value lowerLinear(const LowerContext &ctx) {
-    const auto dtype   = ctx.result().dtype;
+    const auto dtype   = ctx.elementDtype();
     const bool hasBias = ctx.has(2);
     std::string x      = ctx.input(0, dtype);
     std::string w      = ctx.input(1, dtype);
@@ -348,7 +392,7 @@ Value lowerUnsqueeze(const LowerContext &ctx) {
 }
 
 Value lowerConcat(const LowerContext &ctx) {
-    const auto dtype = ctx.result().dtype;
+    const auto dtype = ctx.elementDtype();
     return ctx.emit(
         "Concat",
         {ctx.input(0, dtype), ctx.input(1, dtype)},
@@ -579,7 +623,7 @@ LowerFn reduceAxisOp(std::string opType) {
         const int64_t axis     = ctx.constInt(1);
         const int64_t keepDims = ctx.constBool(2, false) ? 1 : 0;
         const bool axesInput   = opType == "ReduceSum" ? ctx.opset() >= 13 : ctx.opset() >= 18;
-        const std::string x    = ctx.input(0, ctx.result().dtype);
+        const std::string x    = ctx.input(0, ctx.elementDtype());
         if (axesInput) {
             const int64_t axes[] = {axis};
             return ctx.emit(
@@ -777,8 +821,13 @@ Value lowerArrayIndex(const LowerContext &ctx) {
 /// sum(t) / mean(t) over all elements: a Camel float.
 LowerFn reduceAllOp(std::string opType) {
     return [opType = std::move(opType)](const LowerContext &ctx) {
+        // sum/mean return a Camel float and the kernel accumulates in double (kernels/reduce.cpp,
+        // sumAll), so the ONNX reduction is the same computation: the input is widened to double
+        // and reduced there. A float32 reduction would round in the graph where the program does
+        // not, and declaring a float32 node as a float64 value exports a graph ONNX rejects
+        // (the value_info and the node would disagree).
         return Value::symbolicScalar(
-            ctx.emitter().node(opType, {ctx.input(0, TypeCode::Float32)}, {intAttr("keepdims", 0)}),
+            ctx.emitter().node(opType, {ctx.input(0, TypeCode::Float64)}, {intAttr("keepdims", 0)}),
             type::Type::Float64());
     };
 }
@@ -786,7 +835,7 @@ LowerFn reduceAllOp(std::string opType) {
 /// t[i] / t[i, j]: element reads producing a Camel float.
 Value lowerTensorIndex(const LowerContext &ctx) {
     Emitter &e    = ctx.emitter();
-    std::string v = ctx.input(0, TypeCode::Float32);
+    std::string v = ctx.input(0, TypeCode::Float64);
     for (size_t i = 1; i < ctx.size(); ++i) {
         v = e.node("Gather", {v, ctx.input(i, TypeCode::Int64)}, {intAttr("axis", 0)});
     }
@@ -798,7 +847,7 @@ Value lowerTensorIndex(const LowerContext &ctx) {
 /// Camel int / float / bool arithmetic on scalars: operands converted to the result's dtype.
 LowerFn scalarOp(std::string opType, size_t operands) {
     return [opType = std::move(opType), operands](const LowerContext &ctx) {
-        const TypeCode dtype = tensor::normalizeTensorDType(ctx.resultType()->code());
+        const TypeCode dtype = ctx.resultType()->code();
         std::vector<std::string> inputs;
         for (size_t i = 0; i < operands; ++i) {
             inputs.push_back(ctx.input(i, dtype));
@@ -810,7 +859,7 @@ LowerFn scalarOp(std::string opType, size_t operands) {
 /// Scalar comparisons: operands converted to their promoted dtype, bool result.
 LowerFn scalarCompare(std::string opType, bool negate) {
     return [opType = std::move(opType), negate](const LowerContext &ctx) {
-        const auto dtype = tensor::ops::promote(ctx.facts(0).dtype, ctx.facts(1).dtype);
+        auto dtype = tensor::ops::promote(ctx.facts(0).dtype, ctx.facts(1).dtype);
         std::vector<std::string> inputs{ctx.input(0, dtype), ctx.input(1, dtype)};
         if (!negate) {
             return ctx.emitScalar(opType, std::move(inputs));
@@ -821,7 +870,7 @@ LowerFn scalarCompare(std::string opType, bool negate) {
 
 /// Conversions between Camel scalar types (itol, ltod, dtol, ...).
 Value lowerScalarCast(const LowerContext &ctx) {
-    const TypeCode target = tensor::normalizeTensorDType(ctx.resultType()->code());
+    const TypeCode target = ctx.resultType()->code();
     return ctx.emitScalar(
         "Cast",
         {ctx.input(0)},

@@ -54,7 +54,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | Module | Contents |
 |---|---|
 | `str` | Strings: by byte, splitting, trimming, case conversion, replacing, searching, taking substrings; by code point, counting, reading, encoding and decoding |
-| `array` | Arrays: `reverse`, `take`, `drop`, `unique`, `find`, `sum`, `min`, `max`, `sort_by`, `flat_map` and others (generic functions written in Camel) |
+| `array` | Arrays: `sort`, `merge_sort`, `quick_sort`, `insert_sort`, `merge_sorted_arrays`, `argsort`, `reverse`, `take`, `drop`, `unique`, `find`, `sum`, `min`, `max`, `sort_by`, `flat_map` and others (mostly generic functions written in Camel; the sorting kernels are native operators) |
 | `math` | The constants `pi`, `e`, `inf`, `nan` (values); elementary functions, rounding, `min`/`max`/`clamp`, `gcd`/`lcm`, base conversion, bit operations such as `bit_and` |
 | `random` | The type `Key`; `seed`, `rand`, `randint`, `randn`, `choice`, `sample`, `shuffle`, and the pure keyed `key`, `split`, `permutation` |
 | `time` | `now`, `strftime`, `strptime` |
@@ -64,7 +64,6 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `re` | `test` |
 | `hash` | `sha256`, `sha256_rounds` |
 | `this` | `zen` |
-| `algo` | `sort`, `merge_sort`, `merge_sorted_arrays` and other sorting functions (each returns a new array, under one name) |
 | `statistics` | `mean`, `stdev`, `variance`, `median`, `quantile` |
 | `para` | `unordered_foreach`, `unordered_reduce` |
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export; the row gather `take`, `one_hot`, and `softmax_cross_entropy` overloaded on the target's type (one-hot rows or integer class labels) |

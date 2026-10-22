@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * InferContext queries and signature rendering for OpDef.
@@ -45,13 +29,13 @@ TensorFacts InferContext::facts(size_t index) const {
         }
         TensorFacts facts;
         if (isSupportedTensorScalar(elem->code())) {
-            facts.dtype = normalizeTensorDType(elem->code());
+            facts.dtype = elem->code();
         }
         facts.shape = StaticShape(rank, kUnknownDim);
         return facts;
     }
     if (isSupportedTensorScalar(argType->code())) {
-        return {normalizeTensorDType(argType->code()), StaticShape{}};
+        return {argType->code(), StaticShape{}};
     }
     return {};
 }

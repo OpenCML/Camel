@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 # Camel 模块 (.cmo) 的通用 CMake 封装
 # 用法：include 后调用 add_camel_module(...)
 #

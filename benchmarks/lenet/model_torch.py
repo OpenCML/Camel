@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch implementation of the ``lenet`` benchmark model (see README.md).
 
 x[64,1,28,28] -> Conv(1->6,k5,p2) -> ReLU -> MaxPool2 -> Conv(6->16,k5) -> ReLU

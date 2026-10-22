@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """T13 account 1 (static side): dump the program graph after `std::macro` and after
 `std::macro std::opt`, per model.
 

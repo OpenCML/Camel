@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
@@ -652,6 +636,24 @@ const std::vector<Reference> &Module::defaultImportedRefs() const { return defau
 type_ns_ptr_t Module::exportedTypeNS() const { return exportedTypeNS_; }
 
 entity_ns_ptr_t Module::nativeEntityNS() const { return nativeEntityNS_; }
+
+// ---- Resources (design effects plan 3.2) --------------------------------------------------
+
+void Module::declareResource(const Reference &name, ResourceDecl decl) {
+    resources_[name.toString()] = std::move(decl);
+}
+
+void Module::setResourceExported(const Reference &name, bool exported) {
+    const auto it = resources_.find(name.toString());
+    if (it != resources_.end()) {
+        it->second.exported = exported;
+    }
+}
+
+const Module::ResourceDecl *Module::resource(const Reference &name) const {
+    const auto it = resources_.find(name.toString());
+    return it == resources_.end() ? nullptr : &it->second;
+}
 
 // ---- Tags (design principles 6.2; camel/core/tags.h) -------------------------------------
 

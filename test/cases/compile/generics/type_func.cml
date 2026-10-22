@@ -1,6 +1,7 @@
 /**
  * Type functions: a type declaration with parameters. `Pair<int>` is the right-hand side with
- * the parameter replaced; it can be combined with `typeas`.
+ * the parameter replaced; a function can use one in its signature and declare the type
+ * parameter it passes at its head.
  */
 module type_func
 
@@ -10,7 +11,7 @@ type Mapper<A, B> = (x: A) => B
 type Grid<T> = T[][]
 type PairList<T> = Pair<T>[]
 
-func swap(p: Pair<typeas T>): Pair<T> {
+func swap::<T>(p: Pair<T>): Pair<T> {
     return (p.1, p.0)
 }
 
@@ -18,23 +19,23 @@ func sum_pair(p: Pair<int>): int {
     return p.0 + p.1
 }
 
-func key_of(e: Entry<typeas K, typeas V>): K {
+func key_of::<K, V>(e: Entry<K, V>): K {
     return e.key
 }
 
-func value_of(e: Entry<typeas K, typeas V>): V {
+func value_of::<K, V>(e: Entry<K, V>): V {
     return e.value
 }
 
-func apply(f: Mapper<typeas A, typeas B>, x: A): B {
+func apply::<A, B>(f: Mapper<A, B>, x: A): B {
     return f(x)
 }
 
-func corner(g: Grid<typeas T>): T {
+func corner::<T>(g: Grid<T>): T {
     return g[0][0]
 }
 
-func firsts(ps: PairList<typeas T>): T {
+func firsts::<T>(ps: PairList<T>): T {
     return ps[0].0
 }
 

@@ -1,0 +1,114 @@
+/**
+ * Rule values and the scheduling combinators of `stdlib/rules.cml` (rewrite design 2 (second
+ * version) 8.5), applied to `schedule_target.cml`. Every pass prints what the application cost,
+ * so a count that differs from the design (a rule applied twice where a schedule applies it once,
+ * a stage reordered) is visible, not only the final program.
+ *
+ * A combinator answers a `Run`: `rewrites`, `rounds`, `visited` are read as fields, and the
+ * program is `.result`. The pass hands the run to `reported`, which prints the three counts and
+ * answers the program; `?->` carries an error on unchanged.
+ */
+module schedulers
+
+import { Program } from graph
+import { Rule, Run, rule_name, rewrite } from rewrite
+import {
+    int_add_zero, int_mul_zero, seq, first, repeat, until, alternate,
+} from rules
+
+rule bump_one(x: int) { x + 0 => x + 1 }
+rule bump_ten(x: int) { x + 1 => x + 11 }
+rule step(x: int, const c: int) { x + c => x + (c + 1) }
+rule step_ten(x: int, const c: int) { x + c => x + (c + 10) }
+
+func helper(x: int): int {
+    return x
+}
+rule bad(x: int) { helper(x) => x }
+
+func always(q: Program): bool {
+    return true
+}
+
+func never(q: Program): bool {
+    return false
+}
+
+/// A rule chosen at run time: this is the value form, so `pick` returns a `Rule`, not a function.
+func pick(which: int): Rule {
+    return if which == 0 then int_add_zero else bump_one
+}
+
+/// A rule set built at run time from the chosen rule.
+func choose(which: int): Rule[] {
+    let chosen: Rule = pick(which)
+    return if which == 0 then [chosen] else [chosen, int_add_zero]
+}
+
+/// Prints what the schedule cost, and answers the program it produced.
+func reported(label: string, r: Run<Program>): Program sync {
+    println(label, r.rewrites, r.rounds, r.visited)
+    return r.result
+}
+
+export func values(p: Program): Program! sync {
+    let firstSet: Rule[] = choose(0)
+    let secondSet: Rule[] = choose(1)
+    let all: Rule[] = [secondSet[0], secondSet[1], firstSet[0]]
+    println('values', rule_name(all[0]), rule_name(all[1]), rule_name(all[2]), len(all))
+    return rewrite(p, all)
+}
+
+export func seq_order(p: Program): Program! sync {
+    return p->seq<[[bump_one], [bump_ten]], false>
+        ?-> sync (r: Run<Program>) => reported('seq_order', r)
+}
+
+export func seq_reverse(p: Program): Program! sync {
+    return p->seq<[[bump_ten], [bump_one]], false>
+        ?-> sync (r: Run<Program>) => reported('seq_reverse', r)
+}
+
+export func first_zero(p: Program): Program! sync {
+    return p->first<[[int_add_zero], [bump_one]], false>
+        ?-> sync (r: Run<Program>) => reported('first_zero', r)
+}
+
+export func first_bump(p: Program): Program! sync {
+    return p->first<[[bump_one], [int_add_zero]], false>
+        ?-> sync (r: Run<Program>) => reported('first_bump', r)
+}
+
+export func repeat_five(p: Program): Program! sync {
+    return p->repeat<[step], 5, false>
+        ?-> sync (r: Run<Program>) => reported('repeat_five', r)
+}
+
+export func repeat_two(p: Program): Program! sync {
+    return p->repeat<[step], 2, false>
+        ?-> sync (r: Run<Program>) => reported('repeat_two', r)
+}
+
+export func alternate_three(p: Program): Program! sync {
+    return p->alternate<[step], [step_ten], 3, false>
+        ?-> sync (r: Run<Program>) => reported('alternate_three', r)
+}
+
+export func until_now(p: Program): Program! sync {
+    return p->until<[step], always, 10, false>
+        ?-> sync (r: Run<Program>) => reported('until_now', r)
+}
+
+export func until_budget(p: Program): Program! sync {
+    return p->until<[step], never, 2, false>
+        ?-> sync (r: Run<Program>) => reported('until_budget', r)
+}
+
+export func nothing(p: Program): Program! sync {
+    return p->seq<[[int_mul_zero]], false>
+        ?-> sync (r: Run<Program>) => reported('nothing', r)
+}
+
+export func refuse(p: Program): Program! {
+    return rewrite(p, [bad])
+}

@@ -17,7 +17,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Complex | `c64`, `c128` | Single and double precision complex: a real and an imaginary floating-point part |
 | Boolean | `bool` | `true`, `false` |
 | String | `string` | Sequence of bytes, immutable |
-| Array | `T[]` | Elements of the same type; length determined at run time |
+| Array | `T[]`, `T[4]`, `T[n]`, `T[..]` | Elements of the same type; the brackets hold dimensions: a constant, the unknown `?`, or a trailing pack `..s`; `T[][]` is a nested array, rank 2 is written `T[m, n]` |
 | Tuple | `(T1, T2, ...)` | By position, accessed with `.0`, `.1` |
 | Struct | `{ x: T1, y: T2 }`, or the name a `type` declares | By name, accessed with `.x`; `type Name = { ... }` declares a named type, see 3.3.3 |
 | Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
@@ -26,8 +26,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Map, set | `Map<K, V>`, `Set<T>` | See 3.6 |
 | Enum | `Shape`, `Option<int>` | See 3.5 |
 | No value | `void` | Return type of a function that returns no value; its only value prints as `null` |
-| Module types | e.g. `Tensor`, `Tensor<f32, const [2, 3]>` | Introduced by modules; the arguments in angle brackets are interpreted by the type itself |
-
+| Module types | e.g. `Tensor`, `Tensor<f32, [2, 3]>` | Introduced by modules; the arguments in angle brackets are interpreted by the type itself |
 There is no type `any`: after compilation every value has a definite type (design principles 5.10). Writing `any` in any type position is, like any other unknown type name, the compile-time error `SemanticDiag::UnresolvedTypeReference`; a parameter that takes several types uses a type parameter (see [7.5](07_statements.md#75-generic-functions)), and values of different types side by side go in a tuple or a struct.
 
 Reading JSON: for a known shape use `json::decode_as(text, shape)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
@@ -256,7 +255,7 @@ Rules:
 - **Never the other way.** A `T?` or `T!` used as a `T` must be opened; an `int?` does not become a `float?` either, and numbers are still not converted implicitly. The arguments of built-in operators (`append`, `println`, ...) are not such a position: their parameter types are computed from the arguments by C++ type rules, so there is no target type to enter; write `as` there.
 - **The empty array literal `[]` takes its element type from where it stands**: a declared type (`let xs: int[] = []`), a parameter (`count([])`), the other arm of a branch, the left side of `??`/`!!` (`attempt(f) !! []`), a declared return type, `as` (`[] as Map<string, int>`). Binding `[]` to a name without a type (`let xs = []`) is the compile-time error `SemanticDiag::EmptyArrayWithoutType`, which says to write the type.
 - The two tags can be combined: `T?!`, `T!?`. The marks are written from the innermost outwards: `T?!` is fallible(nullable(T)) and `T!?` is nullable(fallible(T)); a `match` opens the outer form only. The same one cannot be repeated. Positions such as array elements need parentheses: `(int?)[]`.
-- With generics: `(typeas T)?` binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
+- With generics: after `T` is declared at the head, a `T?` parameter binds `T` from a nullable argument ([7.5](07_statements.md#75-generic-functions)).
 - In `let x: int! = v` there must be a space between `!` and `=`.
 - Built-in fallible functions: `parse_int(s)`, `parse_float(s)`, `try_read_text(path)`, `remove(path)` and `remove_dir(path)` of the `fs` module, `decode` and `decode_as` of the `json` module. `error(kind, message)` constructs an error value and records the location of the call.
 
@@ -419,7 +418,7 @@ func main(): int sync {
 
 Camel favours immutability: `var` and assignment are only an opening left for convenience and should be used as little as possible.
 
-**The operators of the standard library return new values and do not change their arguments** (design principles 11.3): `append`, `extend`, `apply`, the `sort` of the `algo` module and the others; after `let ys = xs->append<5>`, `xs` is unchanged. To "append to a variable" write `acc = acc->append<5>`, as with `x = x + 1`; there is no separate explicit in-place operator.
+**The operators of the standard library return new values and do not change their arguments** (design principles 11.3): `append`, `extend`, `apply`, the `sort` of the `array` module and the others; after `let ys = xs->append<5>`, `xs` is unchanged. To "append to a variable" write `acc = acc->append<5>`, as with `x = x + 1`; there is no separate explicit in-place operator.
 
 - **An unused result of a pure operation is a compile-time error** (`SemanticDiag::UnusedPureResult`): `xs->append<5>` written as a statement does nothing, and the diagnostic suggests `xs = xs->append<5>` (when `xs` is not a variable, it suggests using the result, or `let _ = ...` to drop it on purpose). "Pure operation" means an operator declared pure in the operator table (the built-in operators and those of C++ modules; `camel inspect --ops` lists the purity) written as a statement whose value nothing takes; calls of the program's own functions are not covered. The last statement of a block is the value of the block: it is not reported when that value is used (returned, bound, passed on); where the block's value is dropped (a body declared `: void`, an element function written in place for `foreach`, the arm of an `if` without `else`, a block written as a statement), its last statement is reported as well.
 - **Appending in place is an implementation detail, not part of the meaning.** When `acc = acc->append<v>` is a statement, `acc` is a variable and `append` is the built-in one, the compiler writes it with another implementation of the same rebinding: the array is grown where it is when the variable is the only reference to it (nothing has read `acc` since the previous in-place append), and copied (with room to grow) otherwise. So appending in a loop stays linear. A read of `acc` in between whose value may be kept (`let snap = acc`, passing it to a function, an element that is itself an array) makes the next append copy, and `snap` keeps its value; a read whose value only goes to operations that cannot keep the array (`len(acc)`, a numeric element `acc[i]`, a comparison, `format`), in a sync block and before the next write, leaves the in-place append as it is.

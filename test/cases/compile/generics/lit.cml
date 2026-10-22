@@ -1,16 +1,16 @@
 module lit
 
-func zero_of(x: typeas T): T {
+func zero_of::<T>(x: T): T {
     let z: T = 0
     return z
 }
 
-func none_of(x: typeas T): T[] {
+func none_of::<T>(x: T): T[] {
     let e: T[] = []
     return e
 }
 
-func as_lit(x: typeas T): T {
+func as_lit::<T>(x: T): T {
     return 1 as T
 }
 

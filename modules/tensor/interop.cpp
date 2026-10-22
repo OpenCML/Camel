@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Mar. 10, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Tensor interop conversions (see interop.h).
@@ -48,9 +32,11 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
         type::Type *elemType = arrayType->elemType();
         type::TypeCode inferredDType;
         if (elemType->code() == type::TypeCode::Array) {
+            // An empty nested array has no element to take a type from; like `zeros` and `ones`,
+            // a constructor that names no element type builds f32.
             inferredDType = type::TypeCode::Float32;
         } else {
-            inferredDType = normalizeTensorDType(arrayType->elemTypeCode());
+            inferredDType = arrayType->elemTypeCode();
         }
 
         ArrayInference inferred{inferredDType, {size}};
@@ -69,7 +55,7 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
                 }
             }
         } else {
-            inferred.dtype = normalizeTensorDType(elemType->code());
+            inferred.dtype = elemType->code();
         }
         return inferred;
     }
@@ -77,7 +63,7 @@ ArrayInference inferArrayType(slot_t slot, type::Type *valueType) {
     if (!isSupportedTensorScalar(valueType->code())) {
         throw std::invalid_argument("Only numeric arrays can be converted to Tensor");
     }
-    return ArrayInference{normalizeTensorDType(valueType->code()), {}};
+    return ArrayInference{valueType->code(), {}};
 }
 
 void flattenArray(
@@ -94,8 +80,10 @@ void flattenArray(
 
         switch (tensor->dtype()) {
         case type::TypeCode::Float32:
+        case type::TypeCode::Float64:
             tensor->setFromDouble(offset++, scalarToDouble(elemType->code(), value));
             break;
+        case type::TypeCode::Int32:
         case type::TypeCode::Int64:
             tensor->setFromInt64(offset++, scalarToInt64(elemType->code(), value));
             break;

@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch implementation of the ``transformer`` benchmark model (see README.md).
 
 Single pre-LN encoder block, d_model=128, 4 heads, FFN 512, GELU (tanh approx.):

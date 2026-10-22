@@ -160,6 +160,7 @@ def prepare_data(args, data: Path, epochs: int) -> dict:
 def camel_arg_command(camel: Path, data: Path, args, passes: list[str]) -> list[str]:
     command = [
         str(camel),
+        "-t", str(args.threads),
         str(TRAIN_CML),
         "--arg", f"data={data}",
         "--arg", f"steps={args.steps}",
@@ -171,12 +172,11 @@ def camel_arg_command(camel: Path, data: Path, args, passes: list[str]) -> list[
     return command + passes
 
 
-def camel_env(threads: int) -> dict[str, str]:
+def camel_env() -> dict[str, str]:
     env = os.environ.copy()
     home = REPO / "out" / "latest"
     env["CAMEL_HOME"] = str(home)
     env["PATH"] = str(home / "bin") + os.pathsep + env.get("PATH", "")
-    env["CAMEL_NUM_THREADS"] = str(threads)
     return env
 
 
@@ -606,7 +606,7 @@ def main() -> int:
         for _ in range(3):
             compile_run = run_command(
                 camel_arg_command(camel, data, args, ["std::macro", "std::stats", "std::null"]),
-                camel_env(args.threads),
+                camel_env(),
             )
             if compile_run["exit"] != 0:
                 sys.stderr.write(compile_run["stdout"] + compile_run["stderr"])
@@ -623,7 +623,7 @@ def main() -> int:
         )
 
     camel_run = run_command(
-        camel_arg_command(camel, data, args, ["std::macro", "std::nvm"]), camel_env(args.threads)
+        camel_arg_command(camel, data, args, ["std::macro", "std::nvm"]), camel_env()
     )
     if camel_run["exit"] != 0:
         sys.stderr.write(camel_run["stdout"] + camel_run["stderr"])
@@ -647,7 +647,7 @@ def main() -> int:
     sys.stdout.write(torch_run["stdout"])
 
     # The Camel version is printed in the report; get it from the same binary that ran.
-    version_run = run_command([str(camel), "--version"], camel_env(args.threads))
+    version_run = run_command([str(camel), "--version"], camel_env())
     version_line = version_run["stdout"].strip().splitlines()
     args.camel_version = version_line[0] if version_line else "unknown"
 

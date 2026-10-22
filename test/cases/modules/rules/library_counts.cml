@@ -1,0 +1,39 @@
+/**
+ * The cost line of the rule libraries: for every graph of the program except `main`, the number
+ * of operator nodes and the count of each operator the two libraries move. Printed before and
+ * after a pass, it is the cost of the rewrite, not a count of source sites.
+ */
+module library_counts
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func countOf(ops: string[], which: string): int {
+    return len(ops->filter<(s: string): bool => s == which>)
+}
+
+func reportGraph(g: Graph) {
+    let ops = nodes(g)->map<(n: Node): string => opText(n)>->filter<(s: string): bool => s != ''>
+    println(
+        'cost', name(g), len(ops),
+        countOf(ops, 'tensor:exp'), countOf(ops, 'tensor:sum_axis'),
+        countOf(ops, 'tensor:divide'), countOf(ops, 'tensor:log'),
+        countOf(ops, 'tensor:softmax'), countOf(ops, 'tensor:log_softmax'),
+        countOf(ops, 'tensor:sigmoid'), countOf(ops, 'tensor:matmul'),
+        countOf(ops, 'tensor:neg'), countOf(ops, 'tensor:add'))
+}
+
+export func report(p: Program): Program! sync {
+    let gs = graphs(p)->filter<(g: Graph): bool => name(g) != 'main' && name(g) != '__root__'>
+    let _ = loop n = 0 for g in gs do sync {
+        reportGraph(g)
+        return n + 1
+    }
+    return p
+}

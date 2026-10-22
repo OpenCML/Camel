@@ -10,15 +10,15 @@ module as_constant_fails
 import { Tensor, reshape } from tensor
 import { export_model } from onnx
 
-func weights(): Tensor { return reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]) }
+func weights(): Tensor { return reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3]) }
 
 func f(x: Tensor): Tensor {
-    let w = weights() as Tensor<f32, const [3, 2]>
+    let w = weights() as Tensor<f32, [3, 2]>
     return x @ w
 }
 
 func main(): int sync {
-    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0], [2, 3])
+    let ex = reshape([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[], [2, 3])
     export_model(f, ex, 'tmp/test/onnx/refusal_as_constant_fails.onnx')
     return 0
 }

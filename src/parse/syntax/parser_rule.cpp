@@ -1,22 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 21, 2026
- * Updated: Oct. 21, 2026
- * Supported by: National Key Research and Development Program of China
- */
-
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The productions of rule declarations (rewrite design 2): a rule is a pattern, what it becomes
@@ -30,14 +13,15 @@
 namespace camel::parse::syntax {
 
 /// Whether the current token starts a rule declaration: the name `rule` followed by the name of
-/// the rule, then its parameters or its context (`rule mul_one(`, `rule fuse<f, g>(`). `n` is
-/// the offset of the `rule` token (1 after `export`).
+/// the rule, then its type parameters, its parameters or its context (`rule mul_one(`,
+/// `rule sub_self::<T>(`, `rule fuse<f, g>(`). `n` is the offset of the `rule` token (1 after
+/// `export`).
 bool ParserImpl::atRuleDecl(uint32_t n) const {
     if (peek(n) != TK::Identifier || peek(n + 1) != TK::Identifier) {
         return false;
     }
     const TK after = peek(n + 2);
-    if (after != TK::LParen && after != TK::Lt && after != TK::LAngle) {
+    if (after != TK::LParen && after != TK::ColonColon && after != TK::Lt && after != TK::LAngle) {
         return false;
     }
     // The text of the token at offset `n`.
@@ -51,8 +35,8 @@ bool ParserImpl::atRuleDecl(uint32_t n) const {
     return tree_.tokens_.text(i) == "rule";
 }
 
-/// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody
-///            '}' (IDENTIFIER dataExpr)?
+/// ruleDecl : frontMatter? 'export'? IDENTIFIER identDef typeParams? ruleContext? parentParams
+///            '{' ruleBody '}' (IDENTIFIER dataExpr)?
 /// The first IDENTIFIER is the name `rule`, the second the name `when`: the condition, checked
 /// after the pattern matched. The parameters are the pattern variables; `const x: T` only
 /// matches a constant. The tags before it are the rule's requirements (`#requires<reassociate>`,
@@ -67,6 +51,9 @@ void ParserImpl::parseRuleDeclRest(size_t m) {
     eat(TK::KwExport);
     bump(); // `rule`
     parseIdentDef();
+    if (cur_ == TK::ColonColon && (peek(1) == TK::Lt || peek(1) == TK::LAngle)) {
+        parseTypeParams();
+    }
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         parseRuleContext();
     }

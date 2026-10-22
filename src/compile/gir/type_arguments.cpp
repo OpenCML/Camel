@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 19, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // Explicit types are consumed while building concrete graphs, never passed as values.
+
 #include "builder.h"
 #include "builder_support.h"
 #include "camel/core/data/primary.h"
@@ -66,12 +60,11 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 std::static_pointer_cast<core::data::StringData>(gct->at(i)->data())->data());
             ++i;
         }
-        types.push_back(boundType(gct->at(i)->dataType()));
+        types.push_back(resolveTypeNode(gct->at(i)->dataType(), gct->at(i)));
     }
     if (const auto found = genericDrefs_.find(target); found != genericDrefs_.end()) {
         const auto tmpl = found->second;
-        std::vector<std::string> names;
-        collectTypeVars(tmpl->funcType, names);
+        std::vector<std::string> names = typeParameterNames(tmpl);
         if (!given.empty()) {
             // By name: each type variable of the signature once, in any order.
             std::vector<Type *> byPosition(names.size(), nullptr);
@@ -131,9 +124,31 @@ node_handle_t Builder::visitTypeApplication(const GCT::node_ptr_t &gct) {
                 .commit(tmpl->name);
             throw BuildAbortException();
         }
+        if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
+            const WhenResult verdict =
+                evaluateWhenCondition(when->condition, tmpl->funcType, bindings, {}, tmpl);
+            if (verdict.fails()) {
+                diags_->of(SemanticDiag::WhenConditionUnmet)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        tmpl->name,
+                        "explicit type arguments",
+                        tmpl->name + " — when " + when->text);
+                throw BuildAbortException();
+            }
+            if (!verdict.holds()) {
+                reportWhenProblem(verdict, tmpl->name, when->condition);
+            }
+        }
         auto graph = instantiateGeneric(tmpl, bindings, {}, {}, gct);
         currGraph_->addDependencyGraph(graph);
-        return createFuncDataNode(graph, true, false);
+        node_handle_t value = createFuncDataNode(graph, true, false);
+        // The instance is made here, so a call of `f::<int>(...)` reaches the value, not the
+        // declaration: the declaration's parameter defaults travel with the value.
+        if (const auto found = defaults_.find(graph.get()); found != defaults_.end()) {
+            defaultsOfValue_[value] = found->second;
+        }
+        return value;
     }
     if (nodeIsKind(target, runtime::GCNodeKind::Dref) &&
         std::holds_alternative<oper_group_ptr_t>(nodeGraphOf(target)->drefTarget(target))) {

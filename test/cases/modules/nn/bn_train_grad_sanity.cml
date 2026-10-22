@@ -19,13 +19,13 @@ type Inputs = { t: Tensor, g: Tensor, b: Tensor, rm: Tensor, rv: Tensor }
 func w(): Tensor {
     return reshape([
         0.5, -1.0, 0.25, 2.0, -0.75, 1.5, 0.125, -0.5, 1.0, 0.0, -2.0, 0.75, 0.5, 0.5, -0.25, 1.25
-    ], [2, 2, 2, 2])
+    ] as f32[], [2, 2, 2, 2])
 }
 
 func x(): Tensor {
     return reshape([
         1.0, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
-    ], [2, 2, 2, 2])
+    ] as f32[], [2, 2, 2, 2])
 }
 
 // Per-channel mean over (batch, spatial) of a rank-4 NCHW tensor: [N,C,H,W] -> [C].
@@ -57,10 +57,10 @@ func loss(): float {
 }
 
 func main(): int sync {
-    let g = reshape([1.2, 0.8], [2])
-    let b = reshape([0.3, -0.2], [2])
-    let rm = reshape([0.1, -0.4], [2])
-    let rv = reshape([1.5, 0.9], [2])
+    let g = reshape([1.2, 0.8] as f32[], [2])
+    let b = reshape([0.3, -0.2] as f32[], [2])
+    let rm = reshape([0.1, -0.4] as f32[], [2])
+    let rv = reshape([1.5, 0.9] as f32[], [2])
 
     let got = batch_norm_train(x(), g, b, rm, rv, 0.1, 0.00001)
     let ref = reference(x(), g, b, rm, rv, 0.1, 0.00001)
@@ -79,21 +79,21 @@ func main(): int sync {
     let dRvGrad = sum(abs(grads.rv))
 
     // Finite differences: gamma[0], beta[0], x[0,0,0,0] (h = 0.001).
-    let fdG0 = (loss_at(x(), reshape([1.201, 0.8], [2]), b, rm, rv) - loss_at(x(), reshape([1.199, 0.8], [2]), b, rm, rv)) / 0.002
-    let fdB0 = (loss_at(x(), g, reshape([0.301, -0.2], [2]), rm, rv) - loss_at(x(), g, reshape([0.299, -0.2], [2]), rm, rv)) / 0.002
+    let fdG0 = (loss_at(x(), reshape([1.201, 0.8] as f32[], [2]), b, rm, rv) - loss_at(x(), reshape([1.199, 0.8] as f32[], [2]), b, rm, rv)) / 0.002
+    let fdB0 = (loss_at(x(), g, reshape([0.301, -0.2] as f32[], [2]), rm, rv) - loss_at(x(), g, reshape([0.299, -0.2] as f32[], [2]), rm, rv)) / 0.002
     let xp = reshape([
         1.001, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
-    ], [2, 2, 2, 2])
+    ] as f32[], [2, 2, 2, 2])
     let xm = reshape([
         0.999, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
-    ], [2, 2, 2, 2])
+    ] as f32[], [2, 2, 2, 2])
     let fdX0 = (loss_at(xp, g, b, rm, rv) - loss_at(xm, g, b, rm, rv)) / 0.002
 
-    let g0 = sum(grads.g * reshape([1.0, 0.0], [2]))
-    let b0 = sum(grads.b * reshape([1.0, 0.0], [2]))
+    let g0 = sum(grads.g * reshape([1.0, 0.0] as f32[], [2]))
+    let b0 = sum(grads.b * reshape([1.0, 0.0] as f32[], [2]))
     let x0 = sum(grads.t * reshape([
         1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
-    ], [2, 2, 2, 2]))
+    ] as f32[], [2, 2, 2, 2]))
 
     'bn_train_sanity fwd={} rm={} rv={}'->format<dY, dRm, dRv>->println
     'bn_train_sanity dx={} dg={} db={} rm_grad={} rv_grad={}'->format<dX, dG, dB, dRmGrad, dRvGrad>->println

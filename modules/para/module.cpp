@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Jul. 29, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "module.h"
 #include "camel/compile/gir.h"
@@ -36,7 +20,7 @@ using namespace camel::core::type;
 /*
  * Unordered iteration. Every signature is a declaration of `stdlib/para.cml`: the fixed one of
  * `rendezvous` and the two that take the element type of their array argument
- * (`unordered_foreach`, `unordered_reduce`), which a `(typeas T)` declaration states exactly
+ * (`unordered_foreach`, `unordered_reduce`), which a head declaration `::<T>` states exactly
  * (design principles 6.4; handover H19, step 10, H202). What is left here is what only C++ knows:
  * the kernels in operators.cpp, the executor that runs them, and the operator traits and
  * resources declared at load.

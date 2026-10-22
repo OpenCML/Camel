@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 12, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The parser's state and its helpers, shared by the three files that hold the productions:
@@ -207,6 +191,9 @@ class ParserImpl {
     void parseFuncAnno();
     void parseFuncDecl();
     void parseFuncDeclRest(size_t m);
+    /// The type parameters a generic declaration declares at its head, `::<T, U>` after its name
+    /// (design principles 5.5): `func first::<T>(xs: T[]): T`, `rule sub_self::<T>(x: T) { ... }`.
+    void parseTypeParams();
     void parseAnnotatedStmt();
     /// The `@` decorators and `#` tag uses before a declaration or a block, in either order.
     void parseFrontMatter();
@@ -246,6 +233,16 @@ class ParserImpl {
     void parseTypeDecl();
     /// typeDecl after the tags and decorators that may precede it; `m` marks where it began.
     void parseTypeDeclRest(size_t m);
+    /// At `resource` naming a resource declaration (offset `n`).
+    bool atResourceDecl(uint32_t n) const;
+    void parseResourceDecl();
+    /// resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+    /// The clause after a function's result type (design effects plan 3.1): the resources a call
+    /// touches. `uses` and `pure` are contextual keywords.
+    void parseResourceClause();
+    /// whenClause : 'when' logicalOrExpr
+    /// A declaration's applicability condition, after its signature (design principles 5.13).
+    void parseWhenClause();
     void parseRetStmt();
 
     void parseModifiers();
@@ -333,12 +330,14 @@ class ParserImpl {
     void parseArrayData();
     void parseStructData();
     void parseTupleData();
+    void parseShapeComp();
     void parseFuncData();
     void parseIf();
     void parseMatch();
     void parseMatchType();
     void parseStaticFor();
     void parseStaticForHeader();
+    void parseStaticForName();
     void parseStaticLoop();
     void parseMatchCase();
     void parseTypeCase();
@@ -355,6 +354,9 @@ class ParserImpl {
     void parseIndexValue();
     void parseKeyValuePair();
     void parsePairedValues(TK closer);
+    /// `pairedValues`, and in a call's parentheses also a positional written after a named one,
+    /// kept apart so that the call can refuse it (design principles 4.4, handover H276).
+    void parseArgumentValues(TK closer);
     void parseDataList(TK closer);
     void parseArguments(TK closer);
     void parseIndices();
@@ -375,6 +377,8 @@ class ParserImpl {
         return peek(n) == TK::Identifier && peek(n + 1) == TK::Colon;
     }
     bool lambdaAhead() const;
+    /// A shape comprehension is ahead: a name path, `{`, and the `static for` that fills it.
+    bool shapeCompAhead() const;
 
     // ---- Types (parser_type.cpp) ----
     bool typeStartsAt(uint32_t n) const;
@@ -385,6 +389,7 @@ class ParserImpl {
     void parseKeyInterType();
     void parseTypeUnit();
     void parseArrayType();
+    void parseArrayDim();
     void parseSpecType();
     void parsePrimaryType();
     void parseStructType();

@@ -91,7 +91,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 
 `modules/tensor/type.h/.cpp` 的 `TensorType : OtherType` 带可选 dtype 与可选形状，自己的驻留表、`kUnknownDim = -1`、`equals/unify/widened`、形状检查、`cloneWithParams/cloneWithArguments`（解析 `Tensor<f32, const [n, m]>`）。模块以此作为：
 
-- 导出的类型 `Tensor`（`modules/tensor/module.cpp` 第 60 行 `exportType(Reference("Tensor"), TensorType::Default())`）；
+- 导出的类型 `Tensor`（`modules/tensor/module.cpp#exportType` `exportType(Reference("Tensor"), TensorType::Default())`）；
 - 所有算子推断的返回类型（`modules/tensor/ops/*`、`support.cpp` 的 `tensorOf`）；
 - 值类型细化器（常量数组 → dtype+形状）与 `.npy` 入口加载器的类型键；
 - `modules/nn`、`modules/onnx`、`modules/tiles`、`modules/ckpt`、`modules/autodiff` 识别"这是不是张量"的依据（`asTensorType`，25 个文件、51 处）。
@@ -101,8 +101,8 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 ### 1.4 第一维与原地写（第 3 项的起点）
 
 - `Array::size()` 已经是第一维、`numel()` 是元素总数、`strides_` 已按行主序填好；运行时已经能创建 rank-n 数组。
-- 但类型说不了形状：`Tensor<f32>` 是模块类型，`f32[3]` 的语法不存在；`map`/`filter` 等的算子规则（`src/builtin/modules/globals.cpp` 1890–2050）按 `arrType->elemType()` 得出元素类型，对 rank-n 数组按第一维的语义还没有实现。
-- 原地写：`OperatorTable::setInPlaceForm` + `Builder::inPlaceRebindingOf` 把 `xs = xs->sort()` 改写成调用原地形式；今天注册的有 `modules/algo` 的排序家族、`:op/set_index` 与 `append`（`:struct/append_arr_in_place`）。`src/core/rtdata/array.cpp` 的 `reusableBlock`/`adoptBlock`/`canWriteInPlace` 是现成的积木。
+- 但类型说不了形状：`Tensor<f32>` 是模块类型，`f32[3]` 的语法不存在；`map`/`filter` 等的算子规则（`src/builtin/modules/globals.cpp`）按 `arrType->elemType()` 得出元素类型，对 rank-n 数组按第一维的语义还没有实现。
+- 原地写：`OperatorTable::setInPlaceForm` + `Builder::inPlaceRebindingOf` 把 `xs = xs->sort()` 改写成调用原地形式；今天注册的有 `array` 的排序家族（`src/builtin/operators/array.cpp`）、`:op/set_index` 与 `append`（`:struct/append_arr_in_place`）。`src/core/rtdata/array.cpp` 的 `reusableBlock`/`adoptBlock`/`canWriteInPlace` 是现成的积木。
 
 ### 1.5 缺口清单
 
@@ -211,7 +211,7 @@ virtual const Type *applyArguments(std::span<const TypeArgument> args,
 
 `ExtentPacks = std::map<std::string, std::vector<ExtentForm>>` 加在 `extent.h`。`OtherType` 的 `extentForms/withExtentValues` 变成空实现（`modules/tensor` 先继续用自己的 override，P4 删除）。`TypeArgument` 已经在 `include/camel/core/type/other.h`，不动。
 
-调用点只有两处 GIR 与一处 GCT：`src/compile/gir/builder_operators.cpp` 1397–1497（调用点绑定）、2226–2246（返回类型细化）、`src/compile/gct/builder.cpp` 4056–4084（`isOtherType` 分支）。全部改成走 `Type` 虚函数，不再 `dynamic_cast<const OtherType*>`。
+调用点只有两处 GIR 与一处 GCT：`src/compile/gir/builder_operators.cpp`（调用点绑定、返回类型细化）、`src/compile/gct/builder.cpp`（`isOtherType` 分支）。全部改成走 `Type` 虚函数，不再 `dynamic_cast<const OtherType*>`。
 
 ### 3.5 调用点的绑定与替换
 
@@ -268,20 +268,20 @@ Tensor<f32>               // f32[..]
 - 一个数组类型里 `..` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[.., 3]` 是错误。
 - 裸 `..` 匿名（打印 `T[3, ..]`）；`..s` 命名，名字只活在类型里。
 - `?` 是未知维度，`T[?]` 就是 `T[]`；`2 * n - 1` 这类线性形式保留名字。
-- 元素类型可以是类型变量：`(typeas T)[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
+- 元素类型可以是类型变量：函数头声明 `T` 后写 `T[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
 - 形状参数里写 `const`（`Tensor<f32, const [3]>`）报 `InvalidTypeArgument`，消息给出"去掉 `const`"的写法；不新增诊断码（批复 Q2 的同类处理）。
 
 ### 4.2 AST、CST 与格式化
 
 - `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '..' ident? ']'`。
 - `src/parse/syntax/parser_type.cpp` 的 `parseArrayType`（158–206）改为循环解析 `ArrayDim`；`parseSpecType`（208+）的 `typeOrData` 增加"以 `[` 开头的形状参数"分支（解析成 `ArrayData`，里面的项是 extent 表达式），`const` 分支保留但只对普通类型参数有效。
-- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp:99`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `..name`。
-- CST→AST：`src/parse/ast/builder.cpp` 3330–3342 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp` 3639–3652）对每组建一个 `ArrayType`：`[]` → `[?]`，`[..s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
-- 格式化器：`tools/format/fmt.cpp:1250` 的 `visitArrayType` 逐组打印 `[?]/[..s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
+- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp#ArrayTypeLoad`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `..name`。
+- CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[..s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
+- 格式化器：`tools/format/fmt.cpp#Formatter` 的 `visitArrayType` 逐组打印 `[?]/[..s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
 
 ### 4.3 绑定规则
 
-在一个函数签名的**参数类型**里（`dimBindAllowed_` 只在 `visitFuncType` 访问形参时置位，`src/compile/gct/builder.cpp:3804`）：
+在一个函数签名的**参数类型**里（`dimBindAllowed_` 只在 `visitFuncType` 访问形参时置位，`src/compile/gct/builder.cpp#dimBindAllowed_`）：
 
 1. 一个普通名字 `n` 第一次出现 ⇒ 绑定为维度，产生 `ExtentForm::linear({{n, 1}})`；
 2. 同一签名里再出现 `n` ⇒ 引用已绑定的维度（`T[m, m]` 表示方阵）；
@@ -312,7 +312,7 @@ Tensor<f32>               // f32[..]
 ### 4.5 标准库与文档
 
 - `stdlib/signatures/globals.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[..]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[..]`。
-- `stdlib/signatures/algo.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（H21 再泛化）。
+- `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（H21 再泛化）。
 - `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`..s`、`Tensor` 别名。
 - `docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 重新生成。
 
@@ -339,7 +339,7 @@ Tensor<f32>               // f32[..]
 
 `Tensor` 不再是一个 `OtherType`，而是**一个由张量模块导出的 `ArrayType` 构造器对象**：
 
-- 导出：`modules/tensor/module.cpp:60` 从 `exportType(Reference("Tensor"), TensorType::Default())` 改为 `exportType(Reference("Tensor"), ArrayType::numericUnknown({}))` —— 元素是"数值、类型未定"，任意秩。`elemType()` 是 `Void`，`numericUnknown_` 为真。
+- 导出：`modules/tensor/module.cpp#Reference` 从 `exportType(Reference("Tensor"), TensorType::Default())` 改为 `exportType(Reference("Tensor"), ArrayType::numericUnknown({}))` —— 元素是"数值、类型未定"，任意秩。`elemType()` 是 `Void`，`numericUnknown_` 为真。
 - 应用：`ArrayType::applyArguments`（P2 加的 `Type` 虚函数）在 `numericUnknown_` 为真时解释参数：
   - 无参数 ⇒ 自身（`Tensor`，任意秩）；
   - 一个类型参数 `E` ⇒ 要求 `E` 是数值标量（`i32/i64/f32/f64/bool/byte/c64/c128`），否则 `InvalidTypeArgument`（`Tensor<string>` 是错误）；带形状参数 ⇒ `E[extents]`，否则 `E[..]`（任意秩）；
@@ -354,7 +354,7 @@ Tensor<f32>               // f32[..]
 
 ### 5.2 元素类型精确
 
-- 删除 `normalizeTensorDType`（`modules/tensor/dtype.cpp:43`）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
+- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp#TensorType::get` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
 - 审计模块内核的 dtype 支持：elementwise 已支持 f32/f64/i32/i64（`modules/tensor/kernels/elementwise.cpp`）；conv/bn 的若干内核只接受 `const float*`（`kernels/conv.cpp` 283+、404+、572+）。这些算子的推断处要声明只支持 f32（今天没有声明，遇到 f64 会读错），遇到 f64 输入报运行时故障（而不是静默读错）。测试里没有 `Tensor<float>` 的用例（已核对），只有 `Tensor<int>` 出现在 `modules/nn` 的 checkpoint 用例里，`int` 就是 i64，与今天相同。
 - 删除 `TensorType::castSafetyFrom/castSlotFrom` 里的 dtype 归一化；`as` 的检查变成 `ArrayType::castSlotFrom` 的形状检查（P2）。
 
@@ -392,7 +392,7 @@ Tensor<f32>               // f32[..]
 
 ### 5.5 入口参数与 `.npy`
 
-`EntryArgumentLoader` 今天按 `TypeCode` 精确查表（`src/execute/entry_args.cpp:100/366`），且先试聚合类型。数组与张量共用 `TypeCode::Array` 之后：
+`EntryArgumentLoader` 今天按 `TypeCode` 精确查表（`src/execute/entry_args.cpp#EntryArgumentLoader/350`），且先试聚合类型。数组与张量共用 `TypeCode::Array` 之后：
 
 - 张量模块在 `TypeCode::Array` 上注册 `.npy` 加载器，回调先判"这是不是数值数组、秩是否已知"；不是就返回"不接"（批复 Q4 明确要求加载器能拒接）——`Type[string]` 的入口参数仍按原来的"不能从命令行给出"报错。
 - 返回值的静态类型是**声明的数组类型**（例如 `f32[2, 3]`），不是裸 `Tensor`；`.npy` 的真实 dtype/形状必须与声明相符，否则报入口参数错误。`from_bytes` 的声明保持 `Tensor`（任意数值数组）。
@@ -471,18 +471,18 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 - `filter`/`foreach`/`reduce`：循环 `size()`，传 `rowView(i)`/`rowCopy(i)`；结果按行追加（`appendRow`，见下）。
 - `Array::appendRow(const Array *row)`：紧凑数组按 `row->byteSize()` 拷贝并推进第一维（容量不足用 `reusableBlock` 增长）；槽数组逐槽 `setSlot` + 写屏障。
 - `filter` 的原地形式（P6）在最后收缩容量/维度（`setExtents({kept, d1...})`）。
-- `sort`/`argsort`：`modules/algo` 的 `__doSortSlots__` 已按元素宽度分派；rank ≥ 2 时按 `rowBytes` 交换行，比较用元素字典序。只接受数值元素（`canWriteInPlace` 与 dtype 检查）。`argsort` 的 `int[]` 结果与今天相同（rank 1 时）。
+- `sort`/`argsort`：`src/builtin/operators/array.cpp` 的 `__doSortSlots__` 已按元素宽度分派；rank ≥ 2 时按 `rowBytes` 交换行，比较用元素字典序。只接受数值元素（`canWriteInPlace` 与 dtype 检查）。`argsort` 的 `int[]` 结果与今天相同（rank 1 时）。
 - 四个后端必须一致：`feat/modules/tensor` 的用例在 nvm/fvm/jit 各跑一遍（计划里的 `backends` 字段）。
 
 ### 6.5 标准库
 
-`stdlib/signatures/globals.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[..]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/signatures/algo.cml` 的 `sort`/`argsort` 已改 `T[..]`。
+`stdlib/signatures/globals.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[..]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/array.cml` 的 `sort`/`argsort` 已改 `T[..]`。
 
 测试：`test/cases/compile/hof_multidim/*`（map 按行：rank 1 不变、rank 2 得 `U[d0]`、filter 行、foreach 行、reduce 行、sort 字典序、argsort、len、`int[m,n]` 与 `string[m,n]`、空维、1 行、1 列）、`test/plans/feat/compile/hof_multidim.plan.toml`；`feat/mm/hof_block_alloc` 加 rank 2 的分配计数。
 
 ### 6.6 P5 的文件与门禁
 
-改：`include/camel/core/rtdata/array.h`、`src/core/rtdata/array.cpp`（`rowView/rowCopy/appendRow/setExtents`）、`src/builtin/modules/globals.cpp`、`src/builtin/operators/higher_order.cpp`、三个调度器、`modules/algo/{operators,module}.cpp`、标准库签名、用例。
+改：`include/camel/core/rtdata/array.h`、`src/core/rtdata/array.cpp`（`rowView/rowCopy/appendRow/setExtents`）、`src/builtin/modules/globals.cpp`、`src/builtin/operators/higher_order.cpp`、三个调度器、`src/builtin/operators/array.cpp`、标准库签名、用例。
 
 门禁：`feat/compile/hof_multidim`、`feat/mm`、`feat/modules/tensor`、`feat/para`、`smoke`。P5 可与 P6 交换顺序；它们都不依赖对方。
 
@@ -514,7 +514,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 | `merge_sorted_arrays` | **是** | 从尾部合并进操作数 0 | — |
 | `filter` | **是** | 原地压缩，末尾收缩 | — |
 | `unique` | **是** | 原地压缩 | — |
-| `sort`/`insert_sort`/`quick_sort`/`merge_sort` | **是**（已落地） | `modules/algo` 的原地形式 | — |
+| `sort`/`insert_sort`/`quick_sort`/`merge_sort` | **是**（已落地） | `array` 的原地形式（`src/builtin/operators/array.cpp`） | — |
 | `set_index`（`xs[i] = v`） | **是**（已落地） | `:op/set_index_in_place` | — |
 | `tail` | 不分配（视图） | 返回 `rowView`/偏移视图 | 不是"原地写"，而是不分配 |
 | `head` | 不分配 | 返回元素 | — |
@@ -561,7 +561,7 @@ println(after - before);             // 期望 0
 
 ### 7.7 P6 的文件与门禁
 
-改：`src/builtin/operators/struct.cpp`、`src/builtin/executors/builtin.cpp`、`src/core/operator_table.cpp`（只读清单）、`modules/algo/{operators,module}.cpp`、`modules/tensor` 的注册与内核入口、用例与计划。
+改：`src/builtin/operators/struct.cpp`、`src/builtin/executors/builtin.cpp`、`src/core/operator_table.cpp`（只读清单）、`src/builtin/operators/array.cpp`、`modules/tensor` 的注册与内核入口、用例与计划。
 
 门禁：`feat/mm/dyn_in_place`、`feat/mm`、`feat/loops`、`feat/modules/tensor`、`feat/para`、`smoke`。P6 在 P5 之后做，避免行语义与原地压缩同时改。
 
@@ -790,14 +790,14 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 | `src/builtin/modules/globals.cpp` | HOF/`len` 的第一维类型规则 |
 | `src/builtin/operators/{higher_order,struct}.cpp` | 第一维实现；原地分支 |
 | `src/passes/sched/{nodevm,fastvm,taskflow}.cpp` | 同一套循环 |
-| `modules/algo/{operators,module}.cpp` | 行排序/argsort；原地注册 |
+| `src/builtin/operators/array.cpp` | 行排序/argsort；原地注册 |
 | `modules/tensor/type.{h,cpp}` | **删除** |
 | `modules/tensor/{module,tensor,interop,npy,binary,dtype}.{h,cpp}`、`ops/*`、`passes/index_eval.cpp` | 别名、精确 dtype、加载器 |
 | `modules/{nn,onnx,tiles,tree,autodiff}/**` | `asTensorType` → `asArrayType`/谓词 |
 | `src/execute/entry_args.{h,cpp}` | 加载器的"能否接"谓词 |
 | `src/builtin/executors/builtin.cpp`、`src/core/operator_table.cpp` | 原地注册与例外清单 |
-| `stdlib/signatures/{globals,algo}.cml`、`stdlib/array.cml`（注释） | 签名与第一维 |
-| `docs/language/03_data_model.md`、`08_top_level_and_grammar.md`（+`en/`）、`docs/diagnostics.md`、`docs/stdlib-reference.md`、`docs/performance/graph-store-baseline.md` | 文档 |
+| `stdlib/signatures/globals.cml`、`stdlib/array.cml`（注释） | 签名与第一维 |
+| `docs/language/03_data_model.md`、`docs/language/08_top_level_and_grammar.md`（+`en/`）、`docs/diagnostics.md`、`docs/stdlib-reference.md`、`docs/performance/graph-store-baseline.md` | 文档 |
 | `test/tools/perfbaseline/baseline.py` | 张量程序 |
 | `test/plan-selection.json` | 新计划规则 |
 | `docs/handover/README.cn.md`（H17 一节的计划路径）、`handover note ⟨0f5f935⟩ (H17)` | 指向本计划 |

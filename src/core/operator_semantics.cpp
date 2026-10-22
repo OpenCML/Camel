@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 15, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The value types of the operator semantics record (see operator_semantics.h): the text forms
@@ -36,8 +20,8 @@ namespace camel::core::sem {
 
 namespace {
 
-/// The source names of the nine permission bits, in bit order.
-constexpr std::array<std::pair<Permission, std::string_view>, 9> kPermissionNames = {{
+/// The source names of the ten permission bits, in bit order.
+constexpr std::array<std::pair<Permission, std::string_view>, 10> kPermissionNames = {{
     {kReassociate, "reassociate"},
     {kContract, "contract"},
     {kApproxMath, "approx_math"},
@@ -47,6 +31,7 @@ constexpr std::array<std::pair<Permission, std::string_view>, 9> kPermissionName
     {kNoSignedZeros, "no_signed_zeros"},
     {kFlushSubnormals, "flush_subnormals"},
     {kNonDeterministic, "nondeterministic"},
+    {kRefineAccuracy, "refine_accuracy"},
 }};
 
 /// Parses a decimal uint16_t that is the whole of `text`.
@@ -157,6 +142,10 @@ double stepUlps(const NumericSemantics &numeric) {
 }
 
 RewriteErrorBound rewriteErrorBound(PermissionMask needs, size_t steps, double declaredUlps) {
+    // `refine_accuracy` is not a rounding bound: the check of such a rule compares the two
+    // sides' errors against a higher-precision reference, sample by sample (rewrite 8.10,
+    // modules/rewrite/module.cpp). Its `declaredUlps` is still reported below, so a caller that
+    // only asks for a syntactic bound sees the operators' declarations.
     if (needs == kNoPermissions) {
         // Bit for bit: the check compares the bits (a NaN is a NaN).
         return {};

@@ -32,3 +32,19 @@ with <f: (a: T, b: U) => V> export func zip_with(xs: T[], ys: U[]): V[] { return
 5. `sort_by` 用 `xs[idx]` 取位置；`argsort`、`flatten`、`unique` 随 H19 第 5 步成为 `array` 自己的私有原生声明，删去 `algo::` 前缀。
 6. `zip_with` 的 lambda 若不支持元组形参解构 `((a, b)) => …`，补进语言（与 `let (a, b) = p` 同一规则）。
 7. 上面示意里用到、而语言还没有的（负步长、元组形参解构、可选值上的 `map`），各自记为语言缺口补上，或换成已有写法；不在库里绕。
+
+## 第二轮（决策者 2026-10-22）
+
+重写后的 `array` 明显好了：函数头声明类型参数、负步长切片、`loop … while` 提前结束、`xs[argsort(…)]`、元组形参解构都用上了，`min`/`max` 走 `math::min`/`max`。剩下几处：
+
+1. **`sum` 与 `zip_with` 里的两个中间 `let`**：
+   ```camel
+   let zero: T = 0
+   let add: (a: T, b: T) => T = (a, b) => a + b
+   return xs->reduce<add, zero>
+   ```
+   这是在绕两个推断缺口：`with` 实参位置的字面量没有取 `reduce` 形参的类型，`with` 实参位置的 lambda 没有从形参的函数类型推出参数类型。**修推断**（设计原则 5.9 与字面量取型），使 `xs->reduce<(a, b) => a + b, 0>` 与 `zip(xs, ys)->map<((a, b)) => f(a, b)>` 一行写成；然后删去中间的 `let`。
+2. **`flatten`、`unique` 是对私有原生声明的一层转手**：直接导出无体声明——`export func flatten::<T>(xss: T[][]): T[]`，算子名就是默认的 `array:flatten`，`#op` 也不用写。`native_*` 三个名字随之消失（`argsort` 同理，`sort_by` 直接用它）。
+3. **`import algo` 已不再使用**：删去（`algo` 并入 `array` 后，`algo` 模块本身也应删除）。
+4. **`xs[:: -1]` 中间多一个空格**：这是格式化器的输出问题，修格式化器，打印为 `xs[::-1]`。
+5. **适用条件**：H234 落地后，`sum` 加 `when is_numeric::<T>()`，`min`/`max` 加 `when is_ordered::<T>()`。

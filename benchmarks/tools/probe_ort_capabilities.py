@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Probe which ONNX operators ONNX Runtime can run, per opset and element type.
 
 For every operator the Camel ONNX backend can emit, every element type a Camel

@@ -1,0 +1,11 @@
+/**
+ * A lambda cannot declare type parameters, and a name inside its parameter type is resolved
+ * like any other type name: one that denotes nothing is an unknown type (design principles
+ * 5.5).
+ */
+module err_type_in_lambda
+
+func main(): int sync {
+    let f = (x: T) => x
+    return 0
+}

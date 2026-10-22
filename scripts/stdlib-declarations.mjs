@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // A module that has moved to a declaration module stays migrated (handover H137), and the
 // computed signatures a declaration cannot express have one recorded place (handover H180).
 //
@@ -14,7 +17,7 @@
 //
 // A module is a *declaration module* when `stdlib/<module>.cml` exists, its header says
 // `module <module>`, and a C++ module of that name registers itself with `BuiltinModule`. The
-// set is read from the tree, not from a list in this script: the next batch (`time`, `algo`,
+// set is read from the tree, not from a list in this script: the next batch (`time`,
 // `statistics`, `tree`/`ckpt`) is covered the day its `.cml` lands.
 //
 // The checks, for every declaration module:
@@ -521,7 +524,7 @@ function readDeclarations(file, moduleName) {
             pendingUri = null
             continue
         }
-        const declaration = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_]\w*)\s*\(/)
+        const declaration = trimmed.match(/^(?:export\s+)?func\s+([A-Za-z_]\w*)\s*(?:::<[^>]*>)?\s*\(/)
         if (declaration) {
             declarations.push({
                 name: declaration[1],

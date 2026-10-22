@@ -1,0 +1,20 @@
+/**
+ * The fusion rule as a value, applied on its own with the cost of the application printed. The
+ * cost line before it and after it is what shows four kernels becoming one; the values on either
+ * side are the same bits.
+ */
+module fusion_schedule
+
+import { Program } from graph
+import { Run, run } from rewrite
+import { tensor_sigmoid_chain } from rules
+
+func reported(label: string, r: Run<Program>): Program sync {
+    println(label, 'rewrites', r.rewrites, 'rounds', r.rounds)
+    return r.result
+}
+
+export func only_sigmoid(p: Program): Program! sync {
+    return run(p, [tensor_sigmoid_chain], 16, false)
+        ?-> sync (r: Run<Program>) => reported('only_sigmoid', r)
+}

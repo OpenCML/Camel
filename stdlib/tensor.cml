@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * The `tensor` module: multi-dimensional numeric arrays, their element type and extents, their
  * binary form, a NumPy file, and the module's worker threads and random generator.
@@ -49,7 +52,7 @@ export func to_bytes(t: Tensor): Bytes
 /// the program runs (check them with `as`, or read them with `shape`).
 /// @effect reads a file
 /// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, or holds a storage type the module does not read
-/// @example load_npy('x.npy') as Tensor<f32, const [2, 2]>
+/// @example load_npy('x.npy') as Tensor<f32, [2, 2]>
 export func load_npy(path: string): Tensor
 
 /// Writes a tensor to a NumPy `.npy` file, replacing it.
@@ -64,7 +67,7 @@ export func save_npy(t: Tensor, path: string): void
 /// @effect writes the console
 /// @example show(new([[1.0, 2.0]]))
 export func show(t: Tensor): void
-export func show(t: (typeas A)[]): void
+export func show::<A>(t: A[]): void
 
 // ---- module state ----
 

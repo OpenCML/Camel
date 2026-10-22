@@ -1,0 +1,121 @@
+id = "compile.effects_syntax"
+order = 342
+tier = "fast"
+tags = ["feat", "compile", "effects", "resources", "syntax"]
+desc = "The surface of the resource model (design effects plan 3.1): `resource` and `unordered`, `#resource` on a nominal type, and `uses`/`pure` on a function declaration or a function type; the signature a declaration publishes is the one a call touches, and a body-less declaration must carry the signature its operator declares"
+
+# Design effects plan step 3: the syntax the resource model reads. A clause is lowered to the
+# function type's ResourceSignature, so a call's footprint comes from the declaration and not from
+# the body it happens to have; `#resource` marks the type whose values are handles; a body-less
+# declaration is checked against the C++ operator's own declaration.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 12000
+
+# ---- A source program: the clause is what a call touches ----
+
+[[tests]]
+name = "source.declared_resources"
+desc = "Two calls of `consume` touch the same handle (the value they are given) and are ordered by control, two calls of `tick` touch the group's `db` and `stdout`, two calls of `bump` touch the same cell: the bodies touch nothing, so the footprint can only come from the clauses. The program's own output is unchanged."
+kind = "behavior"
+case = "../../../cases/effects/declared.cml"
+args = ["${case}", "test::resources"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+const nodes = (re) => lines.map((l) => l.match(re)).filter(Boolean)
+const allNodes = lines.filter((l) => l.startsWith('RESOURCES node')).join(' ; ')
+const orders = nodes(/^RESOURCES order \S+ (\d+) (\d+) resource ordered by control$/)
+const ordered = (a, b) => orders.some((m) => (m[1] === a && m[2] === b) || (m[1] === b && m[2] === a))
+const pair = (label, found) => {
+  assert(found.length === 2, `${label}: expected two calls, got ${found.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)
+  assert(ordered(found[0][1], found[1][1]), `${label}: the two calls are not ordered by control: ${found.map((m) => m[0]).join(' | ')}; orders: ${orders.map((m) => m[0]).join(' | ')}`)
+}
+
+const handles = nodes(/^RESOURCES node \S+ (\d+) FUNC consume: rmw handle \S+::Stream \(node (\d+)\)$/)
+pair('consume', handles)
+assert(handles[0][2] === handles[1][2], `consume: the two calls name different values: ${handles[0][0]} | ${handles[1][0]}`)
+
+const cells = nodes(/^RESOURCES node \S+ (\d+) FUNC bump: rmw variable \(node (\d+)\)$/)
+pair('bump', cells)
+assert(cells[0][2] === cells[1][2], `bump: the two calls name different cells: ${cells[0][0]} | ${cells[1][0]}`)
+
+const ambient = nodes(/^RESOURCES node \S+ (\d+) FUNC tick: rmw ambient db; rmw ambient stdout$/)
+assert(ambient.length === 2, `tick: expected two calls of the group, got ${ambient.map((m) => m[0]).join(' | ')}; all nodes: ${allNodes}`)
+pair('tick', ambient)
+
+assert(lines.includes('7'), `the handle value was not printed: ${lines.filter((l) => !l.startsWith('RESOURCES')).join(' | ')}`)
+assert(lines.includes('0'), `the untouched cell was not printed: ${lines.filter((l) => !l.startsWith('RESOURCES')).join(' | ')}`)
+}
+"""
+
+# ---- A body-less native declaration carries the operator's signature ----
+
+[[tests]]
+name = "native.same_signature"
+desc = "`fs:exists` declares `uses fs`; a body-less declaration in a module named `fs` that writes the same clause is accepted, and the call reaches the operator."
+kind = "behavior"
+case = "../../../cases/effects/native_clause.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "false\n"
+
+[[tests]]
+name = "native.wrong_signature"
+desc = "The same declaration written `pure`: the operator reads the file system, so the declaration promises what the operator does not keep. One diagnostic at the declaration, naming both sides."
+kind = "negative"
+case = "../../../cases/effects/native_clause_wrong.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NativeResourceMismatch"
+expect_diagnostic_code = "0x030001A4"
+expect_output_contains = ["native_clause_wrong.cml:", "exists", "fs:exists", "pure", "uses fs"]
+
+# ---- Refusals ----
+
+[[tests]]
+name = "err.unknown_resource"
+desc = "`uses nowhere`: the name is not a parameter, not a resource of the module, not a standard resource and not imported."
+kind = "negative"
+case = "../../../cases/effects/err_unknown_resource.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnknownResource"
+expect_diagnostic_code = "0x030001A0"
+expect_output_contains = ["err_unknown_resource.cml:", "'nowhere'"]
+
+[[tests]]
+name = "err.pure_and_uses"
+desc = "`pure` and `uses` on one signature: `pure` says the call touches nothing, `uses` names what it touches."
+kind = "negative"
+case = "../../../cases/effects/err_pure_and_uses.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::PureAndUses"
+expect_diagnostic_code = "0x030001A1"
+expect_output_contains = ["err_pure_and_uses.cml:", "'pure'", "'uses'"]
+
+[[tests]]
+name = "err.group_cycle"
+desc = "`a = [b]` and `b = [a]`: a group cannot be one of its own members, and the message shows the path."
+kind = "negative"
+case = "../../../cases/effects/err_group_cycle.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ResourceGroupCycle"
+expect_diagnostic_code = "0x030001A2"
+expect_output_contains = ["err_group_cycle.cml:", "contains itself", "a", "b"]
+
+[[tests]]
+name = "err.handle_not_nominal"
+desc = "`#resource` before an alias: an alias has no identity of its own to name, so `#resource` says nothing about it."
+kind = "negative"
+case = "../../../cases/effects/err_handle_not_nominal.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::HandleTypeNotNominal"
+expect_diagnostic_code = "0x030001A3"
+expect_output_contains = ["err_handle_not_nominal.cml:", "'Id'"]

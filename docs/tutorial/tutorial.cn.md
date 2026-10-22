@@ -555,15 +555,15 @@ module generics
 
 type Pair<T> = (T, T)
 
-func first(xs: (typeas T)[]): T {
+func first::<T>(xs: T[]): T {
     return xs[0]
 }
 
-func swap(p: Pair<typeas T>): Pair<T> {
+func swap::<T>(p: Pair<T>): Pair<T> {
     return (p.1, p.0)
 }
 
-func my_map(xs: (typeas T)[], f: (x: T) => typeas U): U[] {
+func my_map::<T, U>(xs: T[], f: (x: T) => U): U[] {
     return xs->map<f>
 }
 
@@ -583,10 +583,32 @@ a
 [1!, 2!, 3!]
 ```
 
-- 没有单独的类型参数表。在签名里类型变量**第一次出现的位置**写 `typeas T`，把那个位置上的类型绑定为 `T`，之后直接用 `T`。
+- 类型参数没有单独的表，写在函数名后的 `::<…>` 里；函数名后有它就是泛型，没有就不是。签名里（形参、返回类型、函数体）直接写 `T`。函数头声明的名字在函数里优先于同名的类型。
 - `type Pair<T> = (T, T)` 是带参数的类型声明：`Pair<int>` 就是 `(int, int)`。
 - 在图上，泛型函数是一张**子图模板**。每用一组具体类型调用，就实例化出一张类型全部具体的子图：上面的程序里有 `first<int>` 与 `first<string>` 两张子图（`camel docs/tutorial/examples/08_generics.cml std::rgir` 可以看到）。图上只有具体类型，运行时不需要类型信息。
 - 泛型函数也可以出现在任何期望一个函数的位置（`apply(id, 3)`、`xss->map<reverse>`、`let f: (x: int) => int = id`）：编译器在所在位置确定了类型之后才实例化它。什么都确定不了时（`let g = id`）是编译期错误，提示写出类型。
+
+声明还可以说明**自己在哪里适用**：签名后的 `when` 是对声明类型参数的编译期条件。下面的 `double_it` 只适用于数值；一次调用若所有候选的条件都不成立，调用处会报错，并列出每个候选写下的条件。`is_numeric` 不是编译器内建的名字，而是用 `match type` 写出来的普通函数（标准库的七个类型谓词在 `types` 里）；条件调用的是这个模块看得到的函数，所以片段把它写在同一个模块。
+
+```cml
+module applicability
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 => true
+        case _ => false
+    }
+}
+
+func double_it::<T>(x: T): T when is_numeric::<T>() {
+    return x + x
+}
+
+func main(): int sync {
+    println(double_it(21), double_it(1.5))
+    return 0
+}
+```
 
 ## 9. 错误处理
 
@@ -779,7 +801,7 @@ func main(): int sync {
 
 ### 标准库
 
-随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`algo`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十五个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
+随 Camel 提供的模块有 `str`（字符串）、`array`（数组）、`math`、`statistics`、`random`、`time`、`fs`、`json`、`process`、`env`、`re`、`hash`、`para`、`this`，张量一系的 `tensor`、`nn`、`autodiff`、`onnx`，以及嵌入 Python 的 `python`（[语言参考 5.2.1](../language/05_modules.md#521-随-camel-提供的模块)）。[标准库参考](../stdlib-reference.md)逐个列出前十四个模块的函数：签名、是否纯、失败时的行为、例子。[`examples/12_stdlib.cml`](examples/12_stdlib.cml)：
 
 ```cml
 module stdlib_demo
@@ -1010,7 +1032,7 @@ module model
 
 import { Tensor, ones, relu, sum } from tensor
 
-func main(x: Tensor<f32, const [2, 3]>): Tensor {
+func main(x: Tensor<f32, [2, 3]>): Tensor {
     let w = ones([3, 1])
     return relu(x @ w)
 }

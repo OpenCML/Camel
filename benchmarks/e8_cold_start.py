@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E8 cold-start comparison (MLSys 2027 eval): wall time from "source + fresh
 process" to the FIRST completed training step, per (model, config):
 

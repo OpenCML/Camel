@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 29, 2026
- * Updated: Sep. 29, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Reverse-mode rules of the builtin float arithmetic (float64 `_d` and
@@ -206,6 +190,61 @@ void idxArrayVjp(VjpBuilder &b, const VjpCall &call) {
         b.addOper(tangentType, ":tangent/scatter_add_arr", scatterInputs));
 }
 
+// `staticInt(b, n)`: an int constant of the gradient graph, for a fixed argument a rule emits.
+vjp_node_t staticInt(VjpBuilder &b, int64_t value) {
+    return b.addStatic(toSlot<int64_t>(value), Type::Int64());
+}
+
+// A slice of an array — `xs->slice<start, end>` (`:struct/slice_arr`) and `xs[a:b:s]`
+// (`:op/slice_sub`) — takes a range of positions, so its adjoint is an array of the parent's
+// length with the upstream gradient at those positions and the zero tangent everywhere else.
+// That is `:tangent/scatter_slice_arr`, the array counterpart of `tensor:slice_grad`. The
+// bounds, the step and the mask are passed through unchanged, so the reverse normalizes them
+// with the same code as the forward, a negative step included: it walks the positions backwards
+// and its gradient is placed in that same order. The tangent of an array is the array of its
+// elements' tangents (design principles 9.9), so the gradient of the result is already an array
+// of that element type and its elements are placed, not converted.
+void scatterSliceArray(
+    VjpBuilder &b,
+    const VjpCall &call,
+    vjp_node_t start,
+    vjp_node_t end,
+    vjp_node_t step,
+    vjp_node_t written) {
+    Type *const arrayType   = b.nodeType(call.inputs[0]);
+    Type *const tangentType = camel::core::tangentTypeOf(arrayType);
+    if (tangentType == nullptr) {
+        return; // an array whose elements have no tangent: the slice has none either
+    }
+    const auto dy = b.gradientOf(call.output);
+    if (!dy) {
+        return;
+    }
+    const std::array<vjp_node_t, 6> inputs{*dy, call.inputs[0], start, end, step, written};
+    b.accumulateGradient(
+        call.inputs[0], b.addOper(tangentType, ":tangent/scatter_slice_arr", inputs));
+}
+
+// `xs->slice<start, end>`: the bounds are the call's two `with` inputs, and both are written.
+void sliceArrayVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 1);
+    if (call.withInputs.size() != 2) {
+        throw std::runtime_error(std::format(
+            "Derivative of '{}' expects 2 with inputs (start, end), got {}.",
+            call.uri,
+            call.withInputs.size()));
+    }
+    // The mask of a slice whose bounds are both written: bit 0 the end, bit 1 the start.
+    scatterSliceArray(
+        b, call, call.withInputs[0], call.withInputs[1], staticInt(b, 1), staticInt(b, 3));
+}
+
+// `xs[a:b:s]`: start, end, step and the mask are the call's last four norm inputs.
+void sliceSubArrayVjp(VjpBuilder &b, const VjpCall &call) {
+    requireInputs(call, 5);
+    scatterSliceArray(b, call, call.inputs[1], call.inputs[2], call.inputs[3], call.inputs[4]);
+}
+
 // A conversion between float widths: the gradient converts back.
 template <typename To> void convertVjp(VjpBuilder &b, const VjpCall &call, std::string_view back) {
     requireInputs(call, 1);
@@ -245,6 +284,10 @@ void registerBuiltinDerivatives() {
     registry.setRule(":op/dtof", dtofVjp);
     registry.setRule(":op/ftod", ftodVjp);
     registry.setRule(":op/idx_arr", idxArrayVjp);
+    // A slice of an array is a range of positions, so its adjoint is the range scatter of the
+    // tangent array: the gradient of the elements the slice took goes back to their places.
+    registry.setRule(":struct/slice_arr", sliceArrayVjp);
+    registry.setRule(":op/slice_sub", sliceSubArrayVjp);
     registry.setRule(":struct/append_arr", appendArrayVjp);
     // The form the loop-state rewrite uses (Builder::markLoopStateInPlace): the same call, so
     // the same rule - it reads the output's gradient and never the array's own value.

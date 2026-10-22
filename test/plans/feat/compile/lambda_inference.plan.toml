@@ -12,8 +12,9 @@ tags = ["feat", "compile", "lambda", "function_types", "inference"]
 # Two things this plan pins down beyond the positions: a lambda that writes its types still picks
 # the overload it picked before (the overload_typed case prints the same on 950b690f5, the base of
 # this branch), and a lambda that writes none, given to a name with two overloads, is an error
-# rather than a pick. The generic higher-order case (`map`, `tree_reduce`) is the undecided one
-# of the H92 report: it is recorded as it behaves today (no expected type, so the error).
+# rather than a pick. The generic higher-order case (`map`, `reduce`) is settled: the ordinary
+# arguments are typed first, so the operator's type variable is known when the with-arguments are
+# lowered, and a lambda or a literal there takes the parameter's type (design principles 5.9).
 
 [[tests]]
 name = "lambda_inference.positions"
@@ -135,17 +136,25 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 
 [[tests]]
-name = "lambda_inference.generic_undecided"
-desc = "The undecided case of the H92 report: a generic higher-order operator (`map`) gives the lambda no expected type, because the instance that would fix it does not exist yet when the lambda is lowered. Today that is the same error; the test records it so a ruling has something to change."
-kind = "negative"
+name = "lambda_inference.generic"
+desc = "The former undecided case of the H92 report, now settled: a generic higher-order operator (`map`) binds its type variable from the ordinary argument before the lambda is lowered, so the lambda's parameter type follows without being written."
+kind = "behavior"
 case = "../../../cases/compile/lambda_inference/generic.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
-expect_diagnostic_code = "0x0300017E"
-expect_diagnostic_line = 11
-expect_diagnostic_column = 22
-expect_output_contains = ["The type of the parameter 'x' of this lambda is not written and cannot be inferred: nothing here expects a function type."]
-expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "[1, 4, 9]\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_inference.with_arguments"
+desc = "With-arguments take the types of the signature once the ordinary arguments are typed (design principles 5.9): `reduce<(a, b) => a + b, 0>` on an int array, with a float accumulator `0.0`, and a tuple parameter that follows the element type of the array `map` maps over."
+kind = "behavior"
+case = "../../../cases/compile/lambda_inference/with_arguments.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "6\n4.0\n[11, 22]\n"
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

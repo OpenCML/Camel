@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 14, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The program-wide side of the GIR builder (design principles 10.1 "模块"; the graph model,
@@ -288,7 +272,7 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
             }
             if (child->type() == GCT::NodeKind::FUNC) {
                 FunctionType *declared = tt::as_ptr<FunctionType>(child->at(0)->dataType());
-                if (isGenericHere(declared)) {
+                if (isGenericHere(declared, child)) {
                     continue; // a template: its instances are built where they are called
                 }
                 // The graph its DECL made: found by the declared type object, like overloads.

@@ -1,27 +1,13 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Shared helpers for operator VJP rules (see vjp.h).
  */
 
 #include "vjp.h"
+
+#include "camel/core/error/runtime.h"
 
 #include "../type.h"
 #include "op_def.h"
@@ -108,6 +94,17 @@ void setVjp(std::vector<OpDef> &defs, std::string_view name, VjpFn rule) {
         }
     }
     throw std::logic_error("setVjp: no operator definition named " + std::string(name));
+}
+
+void refuseVjp(const VjpCall &call, std::string_view reason) {
+    throw camel::core::error::RuntimeFault(
+        camel::core::error::RuntimeDiag::RuntimeError,
+        {"autodiff: cannot differentiate operator '" + std::string(call.uri) + "': " +
+         std::string(reason)},
+        "",
+        nullptr,
+        camel::core::error::ExecutionSiteHint{
+            .cachedOrigin = static_cast<camel::source::origin_id_t>(call.origin)});
 }
 
 } // namespace camel::tensor::ops

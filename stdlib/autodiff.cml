@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Automatic differentiation: `grad` turns a function into its gradient function, `with_grad`
  * returns the value together with that gradient, and `stop_gradient` marks a value as a
@@ -25,4 +28,4 @@ module autodiff
 /// argument's own type.
 /// @pure
 /// @example stop_gradient(3.0)    // 3.0
-export func stop_gradient(x: typeas T): T
+export func stop_gradient::<T>(x: T): T

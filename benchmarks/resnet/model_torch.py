@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """PyTorch implementation of the ``resnet`` benchmark model (E6, see common.models).
 
 ResNet-18-depth residual CNN without batch_norm: conv3x3(3->64) stem, eight

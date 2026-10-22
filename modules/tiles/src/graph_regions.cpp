@@ -1,14 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license: https://opensource.org/license/mit
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND.
- * Author: Camel Contributors
- * Created: Oct. 16, 2026
- * Updated: Oct. 18, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // Classify static core-indexed operations, then partition the complete dependency DAG.
+
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/composite/tuple.h"
@@ -180,6 +174,39 @@ bool deviceCapable(core::OperId oper) {
     const auto &table = core::OperatorTable::instance();
     return operations().find(oper) != operations().end() && table.isPure(oper) &&
            !table.hasExternalEffect(oper);
+}
+const char *
+gpuRefusal(const rt::GCGraph &graph, const RegionAnalysis &analysis, rt::gc_node_ref_t id) {
+    if (id >= analysis.exclusions.size())
+        return "";
+    const std::string &reason = analysis.exclusions[id];
+    if (reason.empty() || !graph.node(id) || graph.node(id)->kind != rt::GCNodeKind::Oper)
+        return "";
+    const auto oper   = graph.nodeBodyAs<rt::GCOperBody>(id)->oper;
+    const auto &table = core::OperatorTable::instance();
+    // A host effect is the boundary of a device scope, not an operator the device must run
+    // (review of the GPU plan, Q3): the pass leaves it to the host and this refusal ignores it.
+    if (!table.isPure(oper) || table.hasExternalEffect(oper))
+        return "";
+    if (reason == "unsupported_operator") {
+        // Not in the device capability list: no module offers a device program for it.
+        return "the module provides none";
+    }
+    if (reason == "semantic_declaration" || reason == "context_arguments") {
+        // The operator or the call convention has no lowering, at any shape.
+        return "no device program for this operator";
+    }
+    if (reason == "matrix_rank" || reason == "scalar_tensor_operand" || reason == "axis_count" ||
+        reason == "operand_arity" || reason == "reduction_arity" ||
+        reason == "unsupported_index_contract") {
+        // A lowering exists, but not for this shape or element type; a run with actual
+        // arguments cannot change a static one.
+        return "no device program for this shape";
+    }
+    // Unresolved types and index instances are not refusals (h251 retries with the actual
+    // shapes); structural host code (`node_kind`, `control_edge`, `inside_loop`) is not an
+    // operator's business.
+    return "";
 }
 RegionAnalysis
 analyzeRegions(const rt::Program &graphs, const rt::GCGraph &graph, rt::fact::FactStore &facts) {

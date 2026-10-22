@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 21, 2026
- * Updated: Oct. 21, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The tag registry and the storage of declaration tags (camel/core/tags.h).
@@ -120,6 +104,10 @@ void declareStandardTags() {
         add("no_signed_zeros", sem::kNoSignedZeros, on);
         add("flush_subnormals", sem::kFlushSubnormals, on);
         add("nondeterministic", sem::kNonDeterministic, on);
+        // `refine_accuracy` (rewrite 8.10): a rewrite may replace a form with one whose error is
+        // not larger, even though the bits change. Not granted by default; `#strict` revokes it
+        // with every other permission.
+        add("refine_accuracy", sem::kRefineAccuracy, on);
         // `finite_math` is the group of the four assumptions (design principles 7.2), not a
         // permission of its own.
         Decl finite;
@@ -180,6 +168,26 @@ void declareStandardTags() {
         independent.ident = "independent";
         independent.on    = Func;
         declare(std::move(independent));
+
+        // `#resource` on a type declaration (design effects plan 3.1): a value of the type is a
+        // handle, one resource per value, named by the declaration. It is a standard tag, so a
+        // program writes it without an import, and it is declaration-only: it says nothing about
+        // the nodes of a body, so the placement facts of `#gpu`/`#cpu` are untouched. The fact
+        // is a mark; the declaration's own flag (StructDecl::handle) is what the type predicate
+        // reads, so the two labels cannot be combined into a second meaning.
+        const attr::AttrKey resourceKey = attr::registerKey(
+            "resource",
+            attr::KeySpec{
+                attr::ValueKind::Unit,
+                attr::rules::inner(),
+                attr::rules::equalOnly(),
+            });
+        Decl resource;
+        resource.name  = "resource";
+        resource.ident = "resource";
+        resource.on    = Type;
+        resource.key   = resourceKey;
+        declare(std::move(resource));
 
         // The one placement fact (design principles 13.4, docs/design/gpu/plan.cn.md 2.1): a
         // Symbol, `gpu` or `cpu`. Two labels write it, so a consumer reads one key whichever

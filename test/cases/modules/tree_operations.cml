@@ -1,7 +1,8 @@
 module tree_operations
-import { tree_map, tree_unzip, tree_reduce, tree_leaves } from ckpt
+import { tree_map, tree_unzip, tree_reduce } from tree
+import { tree_leaves } from ckpt
 import { tree_paths } from tree
-func twice(x: typeas T): T { return x + x }
+func twice::<T>(x: T): T { return x + x }
 func bump(x: int): int { return x + 1 }
 func bump(x: float): float { return x + 0.5 }
 func main(): int sync {
@@ -18,5 +19,10 @@ func main(): int sync {
     println(tree_paths(p))
     println(tree_map<(a: int[]): int => len(a)>({ samples: [1, 2, 3] }))
     println(tree_reduce<(a: float, b: float): float => a + b>((10000000000000000.0, -10000000000000000.0, 1.0), 0.0))
+    // A tree may itself be a tuple: the same-shape comprehension covers the tuple kind, and
+    // `tree_unzip` reads the leaf-tuple arity from `typeof`, not from a sample value.
+    println(tree_paths((1, (2.0, 3.0))))
+    println(tree_map<bump>((1, (2, 3))))
+    println(tree_unzip(tree_map<(a: int) => (a, a + 1)>({ x: 1, y: (2, 3) }), { x: 0, y: (0, 0) }))
     return 0
 }

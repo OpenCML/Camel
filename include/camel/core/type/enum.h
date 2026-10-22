@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Oct. 19, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Sum types: `type Shape = enum { Circle(float), Rect { w: float, h: float }, Empty }`
@@ -114,6 +98,11 @@ class EnumDecl {
     const std::vector<std::string> &params() const { return params_; }
     bool generic() const { return !params_.empty(); }
 
+    /// The declaration is written `#resource` (design effects plan 3.1): a value of the type is
+    /// a handle, one resource per value, named by this declaration.
+    bool handle() const { return handle_; }
+    void setHandle(bool handle = true) { handle_ = handle; }
+
     /// Sets the variants as written. Called once, when the declaration has been read.
     void define(std::vector<EnumVariant> variants);
     bool defined() const { return defined_.load(std::memory_order_acquire); }
@@ -134,6 +123,7 @@ class EnumDecl {
     std::vector<std::string> params_;
     std::vector<EnumVariant> variants_;
     std::atomic<bool> defined_{false};
+    bool handle_ = false;
 };
 
 class EnumType final : public OtherType {

@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
- * Updated: Oct. 14, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -153,6 +137,12 @@ class StructDecl {
     const std::vector<std::string> &params() const { return params_; }
     bool generic() const { return !params_.empty(); }
 
+    /// The declaration is written `#resource` (design effects plan 3.1): a value of the type is
+    /// a handle, one resource per value, named by this declaration. The tag is the only way to
+    /// say it; the flag caches what the tag decided, so the type predicates need no module.
+    bool handle() const { return handle_; }
+    void setHandle(bool handle = true) { handle_ = handle; }
+
     /// The field types as written, in the order of the declaration, with the parameters still
     /// in them. Called once, when the declaration is read.
     void define(std::vector<std::pair<std::string, Type *>> fields);
@@ -172,6 +162,7 @@ class StructDecl {
     std::vector<std::pair<std::string, Type *>> fields_;
     uint32_t id_;
     bool defined_ = false;
+    bool handle_  = false;
 };
 
 // Immutable StructType: type information is embedded directly in the object.

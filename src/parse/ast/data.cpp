@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details
- *
- * Author: Zhenjie Wei
- * Created: Jul. 03, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include <stdexcept>
 
@@ -62,6 +46,8 @@ std::string to_string(DataType type) {
         return "StructComp";
     case DataType::TupleComp:
         return "TupleComp";
+    case DataType::ShapeComp:
+        return "ShapeComp";
     case DataType::Func:
         return "Func";
     case DataType::Ref:
@@ -88,6 +74,10 @@ std::string to_string(TypeCaseKind kind) {
         return "#leaf";
     case TypeCaseKind::Wildcard:
         return "_";
+    case TypeCaseKind::Func:
+        return "func";
+    case TypeCaseKind::Identity:
+        return "type";
     default:
         ASSERT(false, "Unknown TypeCaseKind");
         return "unknown";
@@ -222,7 +212,10 @@ const std::string TypeCaseLoad::geneCode() const {
         if (i > 0) {
             result += " | ";
         }
-        result += to_string(patterns_[i]);
+        const TypeCasePattern &pattern = patterns_[i];
+        result += pattern.kind == TypeCaseKind::Identity && pattern.type != nullptr
+                      ? pattern.type->load()->geneCode()
+                      : to_string(pattern.kind);
     }
     return result + " =>";
 }
@@ -244,6 +237,8 @@ const std::string TupleDataLoad::geneCode() const { return "()"; }
 const std::string StructCompLoad::geneCode() const { return "{ static for }"; }
 
 const std::string TupleCompLoad::geneCode() const { return "( static for )"; }
+
+const std::string ShapeCompLoad::geneCode() const { return "T { static for }"; }
 
 const std::string FuncDataLoad::geneCode() const {
     if (ref_.empty()) {

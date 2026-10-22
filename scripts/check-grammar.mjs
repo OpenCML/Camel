@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The grammar of Camel is written once, as the production above each function of the parser
 // (src/parse/syntax/parser*.cpp, the `/// name : ...` comments). This script keeps the copies
 // in step with it:
@@ -35,8 +38,10 @@ const TOKEN_CLASSES = new Set(['IDENTIFIER', 'INTEGER', 'REAL', 'STRING', 'MULTI
 // Contextual keywords: written as a word, but not reserved words, so they are not tokens of
 // token_kinds.def. A production may quote one where the parser decides on the text (`tag` in
 // `tag x on nodes`, `on` and `read_by` in the same production, design principles 6.2);
-// `struct`, `tuple` and `leaf` in a `match type` case (they stay ordinary names elsewhere).
-const CONTEXTUAL = new Set(['tag', 'on', 'read_by', 'struct', 'tuple', 'leaf', 'fields', 'indices'])
+// `struct`, `tuple` and `leaf` in a `match type` case (they stay ordinary names elsewhere);
+// `resource`, `unordered`, `uses` and `pure` in a resource declaration and a function's
+// resource clause (design effects plan 3.1).
+const CONTEXTUAL = new Set(['tag', 'on', 'read_by', 'struct', 'tuple', 'leaf', 'fields', 'indices', 'resource', 'unordered', 'uses', 'pure'])
 // Productions parsed inside the function of another one.
 const FOLDED = {
     decl: 'parseDecl',
@@ -47,6 +52,7 @@ const FOLDED = {
     bracedIdents: 'parseBracketedIdents',
     bracketIdents: 'parseBracketedIdents',
     dataExpr: 'parseExpr',
+    arrayDimItem: 'parseArrayDim',
     waitExpr: 'parseExpr',
     ctrlExpr: 'parseExpr',
     matchTypeExpr: 'parseMatchType',
@@ -176,6 +182,7 @@ for (const m of readText(NODES).matchAll(/^CAMEL_NODE\((\w+), \w+\)\s*\/\/\s*(.*
         spreadValue: 'indexValue', restValue: 'indexValue', ifExpr: 'ctrlExpr', matchExpr: 'ctrlExpr', tryExpr: 'ctrlExpr',
         castExpr: 'unaryExpr', refData: 'primaryData', constData: 'typeOrData', refType: 'primaryType',
         parenType: 'primaryType', typeOfType: 'primaryType', typeAsType: 'primaryType',
+        tupleParam: 'keyParamPair', strayPositional: 'indexValue',
     }
     const owner = NODE_OF[production] || production
     if (!names.has(owner)) {

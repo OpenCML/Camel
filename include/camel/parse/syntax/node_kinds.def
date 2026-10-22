@@ -26,6 +26,7 @@ CAMEL_NODE(ImportDecl, Other)          // 'import' (moduleName | (identDef | bra
 CAMEL_NODE(BracedImports, Other)       // '{' (importItem (',' importItem)*)? ','? '}'
 CAMEL_NODE(ImportItem, Other)          // identDef ('as' identDef)?
 CAMEL_NODE(ExportDecl, Other)          // 'export' (dataDecl | typeDecl | bracedIdents)
+CAMEL_NODE(ResourceDecl, Other)        // 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 CAMEL_NODE(UsingNamespaceDecl, Other)  // 'using' 'namespace' identRef
 CAMEL_NODE(NamespaceDecl, Other)       // 'namespace' identRef '{' SEP? (namespaceItem SEP?)* '}'
 CAMEL_NODE(BlockStmt, Other)           // 'wait' stmtBlock | frontMatter? ('#' tagUse)* ('sync'? stmtBlock | funcDecl | typeDecl)
@@ -36,7 +37,9 @@ CAMEL_NODE(TagPositions, Other)        // identDef (',' identDef)* ','?
 CAMEL_NODE(TagReaders, Other)          // identRef (',' identRef)* ','?
 CAMEL_NODE(TagUse, Other)              // '#' (tagRef | '[' tagRef (',' tagRef)* ','? ']')
 CAMEL_NODE(TagRef, Other)              // identRef angledValues?
-CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'export'? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? stmtBlock? (no block: the declaration of a C++ operator, design principles 6.4)
+CAMEL_NODE(FuncDecl, Other)            // frontMatter? ('with' angledParams)? 'export'? modifiers? 'func' (identRef | operatorName) parentParams (':' typeExpr)? resourceClause? whenClause? stmtBlock? (no block: the declaration of a C++ operator, design principles 6.4)
+CAMEL_NODE(ResourceClause, Other)      // 'uses' identRef (',' identRef)* | 'pure'
+CAMEL_NODE(WhenClause, Other)          // 'when' logicalOrExpr: a declaration's applicability condition (design principles 5.13)
 CAMEL_NODE(OperatorName, Other)        // IDENTIFIER (OPERATOR | '[' ']'): the name `operator`, read so only after 'func' (provisional notation)
 CAMEL_NODE(RuleDecl, Other)            // 'export'? IDENTIFIER identDef ruleContext? parentParams '{' ruleBody '}' (IDENTIFIER dataExpr)?
 CAMEL_NODE(RuleContext, Other)         // '<' identDef (',' identDef)* ','? '>'
@@ -56,7 +59,8 @@ CAMEL_NODE(KeyParamPair, Other)        // 'var'? identDef ':' typeExpr ('=' data
 CAMEL_NODE(DataList, Other)            // dataExpr (',' dataExpr)*
 CAMEL_NODE(IdentList, Other)           // identDef (',' identDef)*
 CAMEL_NODE(IndexValues, Other)         // indexValue (',' indexValue)*
-CAMEL_NODE(PairedValues, Other)        // keyValuePair (',' keyValuePair)*
+CAMEL_NODE(PairedValues, Other)        // keyValuePair (',' keyValuePair)*, and in a call's argument list a strayPositional after them
+CAMEL_NODE(StrayPositional, Other)     // indexValue (a positional written after a named argument; the call refuses it)
 CAMEL_NODE(PairedParams, Other)        // keyParamPair (',' keyParamPair)*
 CAMEL_NODE(ArgumentList, Other)        // indexValues (',' pairedValues)? | pairedValues
 CAMEL_NODE(Indices, Other)             // '[' (sliceIndices | dataExpr) (',' (sliceIndices | dataExpr))* ']'
@@ -66,6 +70,7 @@ CAMEL_NODE(ParentArgues, Other)        // '(' argumentList? ','? ')'
 CAMEL_NODE(AngledParams, Other)        // '<' pairedParams? ','? '>'
 CAMEL_NODE(AngledValues, Other)        // '<' argumentList? ','? '>'
 CAMEL_NODE(TypeArguments, Other)       // '::' '<' (typeList | namedTypeArgument (',' namedTypeArgument)*) ','? '>'
+CAMEL_NODE(TypeParams, Other)          // '::' '<' identDef (',' identDef)* ','? '>', after a declaration's name
 CAMEL_NODE(NamedTypeArgument, Other)   // IDENTIFIER '=' typeExpr
 CAMEL_NODE(Pattern, Other)             // identRef (identDef | enumTuplePattern | enumStructPattern)? | literal | '(' (dataList | identList)? ','? ')' | '{' (pairedValues | identList)? ','? '}' | '_'
 CAMEL_NODE(EnumTuplePattern, Other)    // '(' (pattern (',' pattern)*)? ','? ')', after a variant path
@@ -115,6 +120,7 @@ CAMEL_NODE(Literal, Expr)              // ('+' | '-')? (INTEGER | REAL) | STRING
 CAMEL_NODE(ArrayData, Expr)            // '[' ((indexValues ','?) | dataExpr 'for' identRef 'in' dataExpr ('if' dataExpr)?)? ']'
 CAMEL_NODE(StructData, Expr)           // '{' (pairedValues ','?)? '}'
 CAMEL_NODE(TupleData, Expr)            // '(' dataList? ','? ')'; with one element and no comma, the parenthesized expression
+CAMEL_NODE(ShapeComp, Expr)            // typeExpr '{' staticForExpr '}'
 CAMEL_NODE(FuncData, Expr)             // modifiers? angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 
 CAMEL_NODE(TypeExpr, Type)             // interType ('?' | '!')*
@@ -123,16 +129,18 @@ CAMEL_NODE(DiffType, Type)             // keyUnionDiffType ('\\' keyUnionDiffTyp
 CAMEL_NODE(KeyUnionDiffType, Type)     // keyInterType (('+' | '-') keyInterType)*
 CAMEL_NODE(KeyInterType, Type)         // typeUnit ('^' typeUnit)*
 CAMEL_NODE(TypeUnit, Type)             // identDef 'of' arrayType
-CAMEL_NODE(ArrayType, Type)            // specType ('[' ']')+
+CAMEL_NODE(ArrayType, Type)            // specType arrayDim+
+CAMEL_NODE(ArrayDim, Type)             // '[' (']' | arrayDimItem (',' arrayDimItem)*) ']'
+                                       //   arrayDimItem: '?' | '..' identDef? | dataExpr
 CAMEL_NODE(SpecType, Type)             // primaryType '<' typeOrData (',' typeOrData)* '>'
 CAMEL_NODE(ConstData, Type)            // 'const' dataExpr (a typeOrData that is data)
 CAMEL_NODE(StructType, Type)           // '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 CAMEL_NODE(RefType, Type)              // identRef, as a type
 CAMEL_NODE(ParenType, Type)            // '(' typeExpr ')'
 CAMEL_NODE(TupleType, Type)            // '(' typeList? ','? ')'
-CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr
+CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
 CAMEL_NODE(TypeOfType, Type)           // 'typeof' dataExpr
-CAMEL_NODE(TypeAsType, Type)           // 'typeas' identDef
 CAMEL_NODE(EnumType, Type)             // 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 CAMEL_NODE(EnumVariant, Other)         // identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
 CAMEL_NODE(EnumField, Other)           // identDef ':' typeExpr
+CAMEL_NODE(TupleParam, Other)          // '(a, b)': a lambda parameter destructured as a tuple

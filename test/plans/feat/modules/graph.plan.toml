@@ -16,12 +16,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "node_kinds_match_the_graph"
-desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order; the graph inventory and the kinds match the std::jgir dump of the same program."
+desc = "Every graph of a program with a branch, closures and a fold lists the kinds the graph has, in NodeId order; the graph inventory and the kinds match the std::jgir dump of the same program. A literal written in a `with` position is built at the call, after the ordinary arguments (design principles 5.9), so it takes the last data node of its graph."
 kind = "behavior"
 case = "../../../cases/modules/graph_kinds.cml"
 args = ["${case}", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "10\n[__root__, pick, total, kinds, main, __g_6__, __g_7__, __g_8__, __g_9__]\n[[NodeKind::Data, NodeKind::Call], [NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Data, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
+expect_stdout_exact = "10\n[__root__, pick, total, kinds, main, __g_6__, __g_7__, __g_8__, __g_9__]\n[[NodeKind::Data, NodeKind::Call], [NodeKind::Port, NodeKind::Port, NodeKind::Oper, NodeKind::Join, NodeKind::Brch, NodeKind::Oper, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Data, NodeKind::Data, NodeKind::Oper], [NodeKind::Port, NodeKind::Data, NodeKind::Oper, NodeKind::Oper], [NodeKind::Data, NodeKind::Func, NodeKind::Oper, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Oper, NodeKind::Oper, NodeKind::Data, NodeKind::Gate], [NodeKind::Port, NodeKind::Data, NodeKind::Func], [NodeKind::Port, NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper], [NodeKind::Port, NodeKind::Oper]]\n"
 timeout_ms = 10000
 
 [[tests]]

@@ -1,0 +1,30 @@
+/**
+ * The arithmetic does not depend on the thread count. The program first checks that the pool
+ * reports `expected` (the number `-t` gave) and exits 1 when it does not; it then prints only
+ * the digests of the payloads the kernels produced. `to_bytes` copies storage bits, so equal
+ * digests mean equal bits, not equal rounded text: two runs at different thread counts can be
+ * compared byte for byte.
+ *
+ * The reduction goes over the lanes of a column sum and the product is a GEMM; both split their
+ * output between workers and keep every accumulator's order inside one output element, so the
+ * expected relation is exact equality, with no tolerance.
+ */
+module thread_values
+
+import { num_threads, randn, seed, sum, to_bytes } from tensor
+import { sha256 } from hash
+
+func main(expected: int): int sync {
+    if num_threads() != expected then {
+        return 1
+    }
+
+    seed(20261023)
+    let x = randn([2048, 128], 0.0, 1.0)
+    let y = randn([128, 128], 0.0, 1.0)
+    let columns = sum(x, 0)
+    let product = x @ y
+    'reduction={}'->format<sha256(to_bytes(columns))>->println
+    'product={}'->format<sha256(to_bytes(product))>->println
+    return 0
+}

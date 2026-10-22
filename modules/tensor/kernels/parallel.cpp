@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Sep. 28, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Worker pool behind `parallelFor`.
@@ -36,7 +20,6 @@
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
-#include <cstdlib>
 #include <exception>
 #include <mutex>
 #include <thread>
@@ -71,12 +54,6 @@ struct RegionScope {
 };
 
 int defaultThreadCount() {
-    if (const char *env = std::getenv("CAMEL_NUM_THREADS")) {
-        const int requested = std::atoi(env);
-        if (requested > 0) {
-            return requested;
-        }
-    }
     const unsigned hw = std::thread::hardware_concurrency();
     return hw == 0 ? 1 : static_cast<int>(hw);
 }

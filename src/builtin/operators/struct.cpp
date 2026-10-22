@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Sep. 25, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "struct.h"
 #include "camel/core/context/context.h"
@@ -25,6 +9,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/execute/executor.h"
 #include "camel/utils/type.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
@@ -203,36 +188,68 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
+namespace {
+
+// The positions a slice of an array of `size` elements takes. The bounds follow the rules of the
+// slice function (design principles 3.9): a position from 0 to the length, the end one past the
+// last element taken, a negative bound a fault rather than a count from the end, and an end
+// before the start the empty range. A negative step runs backwards: the start defaults to the
+// last element and the end, left out, stands for the position before the first. The step and
+// which of the start and the end were written come with the call as a two-bit mask (bit 0 end,
+// bit 1 start). The forward slice and the range scatter of its gradient both read the range
+// here, so the adjoint puts each element's gradient back where the forward took the element.
+struct SliceRange {
+    Int64 start = 0; // the first position taken
+    Int64 count = 0; // how many elements the slice has
+    Int64 step  = 1; // the distance between two positions taken
+};
+
+SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written) {
+    const bool wroteEnd   = (written & 1) != 0;
+    const bool wroteStart = (written & 2) != 0;
+    if (step == 0) {
+        throwRuntimeFault(RuntimeDiag::InvalidArgument, "[]", "a slice step must not be 0");
+    }
+    SliceRange range;
+    range.step = step;
+    if (step > 0) {
+        range.start = wroteStart ? startRaw : 0;
+        const Int64 end = wroteEnd ? endRaw : size;
+        if (range.start < 0 || range.start > size || end < 0 || end > size) {
+            throwRuntimeFault(
+                RuntimeDiag::SliceOutOfRange, range.start, end, "an array", size);
+        }
+        range.count = range.start < end ? (end - range.start + step - 1) / step : 0;
+        return range;
+    }
+    range.start = wroteStart ? startRaw : size - 1;
+    const Int64 end = wroteEnd ? endRaw : -1;
+    if ((wroteStart && (range.start < 0 || range.start >= size)) ||
+        (wroteEnd && (end < 0 || end > size))) {
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, "an array", size);
+    }
+    range.count = range.start > end ? (range.start - end + (-step) - 1) / (-step) : 0;
+    return range;
+}
+
+} // namespace
+
 // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a subscript
-// writes (design principles 5.4). The bounds follow the rules of the slice function (3.9): a
-// position from 0 to the length, the end one past the last element taken, a negative bound a
-// fault rather than a count from the end, and an end before the start the empty range. The step
-// and whether the end was written come with the call: a step is a distance forward, so 0 and
-// negative steps are faults, and an unwritten end runs to the end of the array.
+// writes (design principles 5.4). The bounds are read by `sliceRange` above.
+//
+// A step other than 1 is a view with strides, which needs the multidimensional array
+// representation of H17. Until it lands, a stepped slice is a copy: the elements are the same
+// and the program does not have to know, but the result does not share the array's block. H17
+// records the deviation; step 1 still shares the block.
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr    = norm.get<Array *>(0);
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    const Int64 start   = norm.get<Int64>(1);
-    const Int64 endRaw  = norm.get<Int64>(2);
-    const Int64 step    = norm.get<Int64>(3);
-    const bool wroteEnd = norm.get<Int64>(4) != 0;
-
-    const Int64 size = static_cast<Int64>(arr->size());
-    const Int64 end  = wroteEnd ? endRaw : size;
-    if (start < 0 || start > size || end < 0 || end > size) {
-        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
-    }
-    if (step != 1) {
-        // A slice with a step takes every `step`-th element, which is a view with strides: the
-        // multidimensional array representation H17 brings (design principles 5.4). A copy
-        // would have the same elements but would not share the block a slice shares, so the
-        // form is refused rather than quietly copied.
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument,
-            "[]",
-            "a slice step must be 1 for now; a step other than 1 is a view with strides, which "
-            "needs the multidimensional array representation of H17");
-    }
+    const SliceRange range = sliceRange(
+        static_cast<Int64>(arr->size()),
+        norm.get<Int64>(1),
+        norm.get<Int64>(2),
+        norm.get<Int64>(3),
+        norm.get<Int64>(4));
     if (arr->rank() != 1) {
         // A slice of a dimension other than the first is a view with strides (H17); the type
         // system states rank 1, so this is a defect rather than something a program writes.
@@ -242,20 +259,21 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
             "a slice of an array of rank 1; a slice of another dimension is a view with "
             "strides, which needs the multidimensional array representation of H17");
     }
-
-    // Both bounds inside the array and the end before the start is the empty range, not a
-    // fault (design principles 3.9).
-    const Int64 count = end > start ? end - start : 0;
-    if (arr->isCompact()) {
+    if (range.step == 1 && arr->isCompact()) {
         // A slice is a view sharing the data block (design principles 5.4).
-        return rtdata::toSlot(
-            Array::view(arr, std::span<const int64_t>(&count, 1), static_cast<uint64_t>(start)));
+        return rtdata::toSlot(Array::view(
+            arr,
+            std::span<const int64_t>(&range.count, 1),
+            static_cast<uint64_t>(range.start)));
     }
-    // A slot array has no block to share and is copied (H17 records that for slot arrays).
-    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(count));
-    for (Int64 i = 0; i < count; ++i) {
-        res->set<slot_t>(
-            static_cast<size_t>(i), arr->get<slot_t>(static_cast<size_t>(start + i)), arrType);
+    // A slot array has no block to share and is copied (H17 records that for slot arrays); so
+    // is a stepped slice.
+    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(range.count));
+    for (Int64 i = 0; i < range.count; ++i) {
+        res->setSlot(
+            static_cast<uint64_t>(i),
+            arr->getSlot(static_cast<uint64_t>(range.start + i * range.step)),
+            arrType);
     }
     return rtdata::toSlot(res);
 }
@@ -412,9 +430,10 @@ slot_t __contains_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // 9.9): `T[]` has the tangent `tangent(T)[]`, and an array of a type without a tangent has
 // none at all. These three operators are how a gradient graph adds two such arrays, makes a
 // zero one shaped like a primal array, and adds one element's gradient at an index (the
-// reverse of `xs[i]`, a scatter-add). They are structural: they recurse on the tangent type,
-// so an array of structs, tuples or arrays works as well as an array of floats. A tangent
-// type owned by a module (a tensor) has no structural definition here yet; that is H17.
+// reverse of `xs[i]`, a scatter-add). They recurse on the tangent type, so an array of
+// structs, tuples or arrays works as well as an array of floats. A tangent type owned by a
+// module (a tensor) is not defined here: the registry says how to make its zero and how to
+// add two, and those are operators the module published, reached by URI.
 
 namespace {
 
@@ -428,10 +447,46 @@ using type::TupleType;
         std::format("autodiff: {} is not defined for tangent type '{}'", what, type->toString()));
 }
 
+/// Arguments of a call to another operator, made of slots and their types. A tangent type owned
+/// by a module is handled by that module's own operator (`zeros_like`, `add`), so the builtin
+/// module never has to know which module owns a type.
+class SlotArgs final : public ArgsView {
+  public:
+    SlotArgs(std::vector<slot_t> slots, std::vector<Type *> types)
+        : slots_(std::move(slots)), types_(std::move(types)) {}
+    size_t size() const override { return slots_.size(); }
+    slot_t slot(size_t index) const override { return slots_[index]; }
+    void setSlot(size_t index, slot_t value) override { slots_[index] = value; }
+    TypeCode code(size_t index) const override { return types_[index]->code(); }
+    Type *type(size_t index) const override { return types_[index]; }
+
+  private:
+    std::vector<slot_t> slots_;
+    std::vector<Type *> types_;
+};
+
+/// Calls the operator `uri` on `slots`: the tangent-space operator of a module-owned type.
+slot_t callTangentOperator(
+    Context &ctx, std::string_view uri, Type *resultType, std::vector<slot_t> slots,
+    std::vector<Type *> types) {
+    const auto op = ctx.execMgr().find(std::string(uri));
+    if (!op) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "autodiff: the operator '{}' a tangent space names has no implementation", uri));
+    }
+    SlotArgs norm(std::move(slots), std::move(types));
+    SlotArgs with({}, {});
+    norm.setResultType(resultType);
+    with.setResultType(resultType);
+    return (*op)(with, norm, ctx);
+}
+
 // The zero tangent of a value of primal type `primalType`, whose tangent type is
 // `tangentType`. `primal` is the primal value: an array's zero has the array's length, and a
 // struct or tuple's fields line up with the primal's, so the shape is taken from it.
-slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
+slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t primal) {
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(0.0);
@@ -450,7 +505,7 @@ slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
             }
             zero->set<slot_t>(
                 position,
-                zeroTangent(primalStruct->typeAt(i), fieldTangent, value->get<slot_t>(i)),
+                zeroTangent(ctx, primalStruct->typeAt(i), fieldTangent, value->get<slot_t>(i)),
                 tangentStruct);
             ++position;
         }
@@ -469,7 +524,7 @@ slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
             }
             zero->set<slot_t>(
                 position,
-                zeroTangent(primalTuple->typeAt(i), elementTangent, value->get<slot_t>(i)),
+                zeroTangent(ctx, primalTuple->typeAt(i), elementTangent, value->get<slot_t>(i)),
                 tangentTuple);
             ++position;
         }
@@ -484,19 +539,33 @@ slot_t zeroTangent(Type *primalType, Type *tangentType, slot_t primal) {
             zero->set<slot_t>(
                 i,
                 zeroTangent(
-                    primalArray->elemType(), tangentArray->elemType(),
+                    ctx, primalArray->elemType(), tangentArray->elemType(),
                     value->get<slot_t>(i)),
                 tangentArray);
         }
         return rtdata::toSlot(zero);
     }
     default:
+        break;
+    }
+    // A leaf whose tangent type a module owns (a tensor): the module says how to make the zero
+    // of a value of its type, and the registry passes that operator's URI on.
+    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(primalType);
+    if (space == nullptr) {
         noStructuralTangent("a zero tangent", tangentType);
     }
+    if (space->zero) {
+        return *space->zero;
+    }
+    if (space->zerosLikeUri.empty()) {
+        noStructuralTangent("a zero tangent", tangentType);
+    }
+    return callTangentOperator(
+        ctx, space->zerosLikeUri, tangentType, {primal}, {primalType});
 }
 
 // The sum of two tangents of `tangentType`. Both have the same shape.
-slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
+slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
     switch (tangentType->code()) {
     case TypeCode::Float64:
         return toSlot<Float64>(fromSlot<Float64>(lhsSlot) + fromSlot<Float64>(rhsSlot));
@@ -513,7 +582,7 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
         for (size_t i = 0; i < structType->size(); ++i) {
             sum->set<slot_t>(
                 i,
-                addTangent(structType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+                addTangent(ctx, structType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
                 structType);
         }
         return rtdata::toSlot(sum);
@@ -529,7 +598,7 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
         for (size_t i = 0; i < tupleType->size(); ++i) {
             sum->set<slot_t>(
                 i,
-                addTangent(tupleType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+                addTangent(ctx, tupleType->typeAt(i), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
                 tupleType);
         }
         return rtdata::toSlot(sum);
@@ -543,14 +612,22 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
         for (size_t i = 0; i < lhs->size(); ++i) {
             sum->set<slot_t>(
                 i,
-                addTangent(arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+                addTangent(ctx, arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
                 arrayType);
         }
         return rtdata::toSlot(sum);
     }
     default:
+        break;
+    }
+    // A leaf whose tangent type a module owns (a tensor): the module published the operator that
+    // adds two of them, and the registry passes its URI on.
+    const auto *space = camel::core::DerivativeRegistry::instance().findTangentSpace(tangentType);
+    if (space == nullptr || space->addUri.empty()) {
         noStructuralTangent("a sum of tangents", tangentType);
     }
+    return callTangentOperator(
+        ctx, space->addUri, tangentType, {lhsSlot, rhsSlot}, {tangentType, tangentType});
 }
 
 } // namespace
@@ -558,7 +635,6 @@ slot_t addTangent(Type *tangentType, slot_t lhsSlot, slot_t rhsSlot) {
 // `tangent/add_arr(lhs, rhs)`: the elementwise sum of two tangent arrays.
 slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    (void)ctx;
     auto *arrayType = tt::as_ptr<ArrayType>(norm.type(0));
     auto *lhs       = norm.get<Array *>(0);
     auto *rhs       = norm.get<Array *>(1);
@@ -571,7 +647,7 @@ slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < lhs->size(); ++i) {
         sum->set<slot_t>(
             i,
-            addTangent(arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
+            addTangent(ctx, arrayType->elemType(), lhs->get<slot_t>(i), rhs->get<slot_t>(i)),
             arrayType);
     }
     return rtdata::toSlot(sum);
@@ -581,7 +657,6 @@ slot_t __tangent_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // the zero tangents of the elements of `xs`.
 slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    (void)ctx;
     Type *primalType  = norm.type(0);
     Type *tangentType = norm.resultType();
     if (tangentType == nullptr) {
@@ -599,7 +674,8 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (size_t i = 0; i < value->size(); ++i) {
         zero->set<slot_t>(
             i,
-            zeroTangent(primalArray->elemType(), tangentArray->elemType(), value->get<slot_t>(i)),
+            zeroTangent(
+                ctx, primalArray->elemType(), tangentArray->elemType(), value->get<slot_t>(i)),
             tangentArray);
     }
     return rtdata::toSlot(zero);
@@ -609,7 +685,6 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // `xs[i]`: the gradient of one element goes back to its place in the array's gradient.
 slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    (void)ctx;
     auto *arrayType   = tt::as_ptr<ArrayType>(norm.type(0));
     auto *base        = norm.get<Array *>(0);
     const Int64 index = norm.get<Int64>(1);
@@ -623,7 +698,65 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     }
     const size_t at = static_cast<size_t>(index);
     result->set<slot_t>(
-        at, addTangent(arrayType->elemType(), base->get<slot_t>(at), delta), arrayType);
+        at, addTangent(ctx, arrayType->elemType(), base->get<slot_t>(at), delta), arrayType);
+    return rtdata::toSlot(result);
+}
+
+// `tangent/scatter_slice_arr(dx, like, start, end, step, written)`: the tangent of `like`'s
+// length whose positions the slice of those bounds takes hold dx's elements, and whose other
+// positions are the zero tangent of `like`'s elements. The reverse of a slice: the gradient of
+// the elements a slice took goes back to their places in the parent's gradient, the array
+// counterpart of `tensor:slice_grad`. A slice takes each position at most once, so a place is
+// written rather than added. `like` is the primal array the slice was taken from: its length and
+// its elements give the zeros, and the result type is the tangent of its type.
+slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    Type *const primalType  = norm.type(1);
+    Type *const tangentType = norm.resultType() != nullptr
+                                  ? norm.resultType()
+                                  : camel::core::tangentTypeOf(primalType);
+    if (tangentType == nullptr || primalType->code() != TypeCode::Array ||
+        tangentType->code() != TypeCode::Array) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "autodiff: a sliced gradient needs an array with a tangent");
+    }
+    auto *const primalArray  = tt::as_ptr<ArrayType>(primalType);
+    auto *const tangentArray = tt::as_ptr<ArrayType>(tangentType);
+    auto *const like         = norm.get<Array *>(1);
+    auto *const dx           = norm.get<Array *>(0);
+    const SliceRange range   = sliceRange(
+        static_cast<Int64>(like->size()),
+        norm.get<Int64>(2),
+        norm.get<Int64>(3),
+        norm.get<Int64>(4),
+        norm.get<Int64>(5));
+    if (static_cast<Int64>(dx->size()) != range.count) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "autodiff: the gradient of a slice has {} elements, the slice takes {}",
+                dx->size(),
+                range.count));
+    }
+    Array *result = Array::create(mm::autoSpace(), like->size());
+    for (size_t i = 0; i < like->size(); ++i) {
+        result->set<slot_t>(
+            i,
+            zeroTangent(
+                ctx,
+                primalArray->elemType(),
+                tangentArray->elemType(),
+                like->get<slot_t>(i)),
+            tangentArray);
+    }
+    for (Int64 i = 0; i < range.count; ++i) {
+        result->set<slot_t>(
+            static_cast<size_t>(range.start + i * range.step),
+            dx->get<slot_t>(static_cast<size_t>(i)),
+            tangentArray);
+    }
     return rtdata::toSlot(result);
 }
 

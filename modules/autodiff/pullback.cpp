@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 29, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Pullback transform (see pullback.h).
@@ -562,8 +546,8 @@ std::string uniqueSuffix() {
 /// Which ports a plan makes room for: a gradient of an aggregate or array of such values, or of a
 /// type the derivative registry describes. An array's tangent is the array of its elements'
 /// tangents (design principles 9.9), so a loop carries an array's gradient in a tangent array; an
-/// array whose elements have no tangent has none, and a loop over or capturing one is refused
-/// instead (see LoopArray below).
+/// array whose elements have no tangent has none, and a loop that iterates or captures one while
+/// it depends on a differentiated value is refused instead (see Backward::run).
 bool carriesGradient(Type *type) {
     if (type == nullptr || tangentTypeOf(type) == nullptr) {
         return false;
@@ -634,23 +618,6 @@ PullbackPlan makePlanTypes(
     return plan;
 }
 
-/// An array a differentiated loop reads: the array it iterates over, or one it captures. A
-/// captured array now carries a gradient (its tangent is the array of its elements' tangents),
-/// so only an iterated array is refused: the reverse pass does not scatter each round's element
-/// gradient back into it (design principles 9.9). The iterator is recorded so the refusal can
-/// name it where it is written.
-struct LoopArray {
-    gc_node_ref_t array = kInvalidNodeRef;
-    bool iterated       = false;
-};
-
-/// A LOOP node the forward rewrite gave collection slots to (the tape, design principles 9.9):
-/// the node, for the located refusal, and the arrays the loop reads.
-struct LoopSite {
-    gc_node_ref_t node = kInvalidNodeRef;
-    std::vector<LoopArray> arrays;
-};
-
 /// A differentiable call in a forward graph: its value, the pullback it returned, and the
 /// inputs the pullback's tangents belong to.
 struct CallSite {
@@ -659,9 +626,6 @@ struct CallSite {
     PullbackPlan plan;
     /// A call of a function carrying a custom rule (see rules.h): the rule replaces the pullback.
     ::Function *rule = nullptr;
-    /// Set when the call is a differentiated loop: the node reported if the loop reads an array
-    /// that depends on a differentiated parameter.
-    const LoopSite *loop = nullptr;
 };
 
 /// The edges a rewrite made without a graph edge: the values a call's pullback returns
@@ -713,6 +677,11 @@ struct LoopBodyPlan {
     std::vector<Type *> stateTypes;    // k, the types of the state
     std::vector<Type *> residualTypes; // r, the values the loop collects each round
     std::vector<Type *> portTypes;     // captures, then states: the ports of the call site
+    /// The element type of an iterated array whose gradient the loop sends back (a `for` over
+    /// an array that takes part in the gradient). It is one more port of body.pb, after the
+    /// captures and the states; null when the loop does not iterate, or when the array cannot
+    /// carry a gradient (then the array itself is a site port, see the loop's reverse pass).
+    Type *elementType = nullptr; // e
     /// The body's result: the state alone for k = 1, the k-tuple otherwise.
     Type *stateValueType = nullptr;
     /// The tangent of stateValueType: the gradient body.pb is seeded with.
@@ -784,6 +753,13 @@ class ForwardRewrite {
     /// Gives a LOOP node collection slots for what its body's pullback reads, and records it as a
     /// call site whose pullback is the synthesized reverse loop (design principles 3.10, 9.9).
     void rewriteLoop(gc_node_ref_t loop);
+    /// Whether a value depends, through the graph's data and control edges, on a port that
+    /// carries a tangent. A loop over an array that does not can never need the array's
+    /// gradient: nothing differentiated flows into it, so its reverse pass does not carry one
+    /// (a loop over a literal array is not made more expensive by arrays having tangents). This
+    /// is a structural over-approximation of the backward pass's activity analysis, not that
+    /// analysis; over-approximating is always safe.
+    bool dependsOnTangentPort(gc_node_ref_t node);
     /// The bookkeeping split needs: the users of `node`'s value read `value` instead, and the
     /// graph's own result is `value` where it was `node`. Shared with rewriteLoop, which makes
     /// the loop's value the state alone (the tapes are not part of what its users see).
@@ -796,8 +772,9 @@ class ForwardRewrite {
     uint32_t part_;
     std::unordered_map<gc_node_ref_t, CallSite> sites_;
     std::unordered_set<gc_node_ref_t> untaped_;
+    std::unordered_set<gc_node_ref_t> reach_; // see dependsOnTangentPort
+    bool reachComputed_ = false;
     std::deque<mm::RootHandle> roots_;
-    std::deque<LoopSite> loopSites_;
 };
 
 // ---------------------------------------------------------------- backward emission
@@ -896,6 +873,7 @@ class Backward final : public VjpBuilder {
     }
     std::optional<vjp_node_t> gradientOf(vjp_node_t node) const override;
     void accumulateGradient(vjp_node_t node, vjp_node_t gradient) override;
+    bool isActive(vjp_node_t node) const override;
 
   private:
     std::optional<gc_node_ref_t> primalOf(gc_node_ref_t target) const;
@@ -1031,9 +1009,12 @@ class Engine {
     const PullbackPlan &planForClosure(GCGraph *graph);
     /// The tape plan of a loop `body` region (memoized by the draft and the loop node). Built at
     /// once, not left pending: the loop's caller needs the shape of the tape to rewrite its node.
-    /// `stateCount` and `iterates` are what the LOOP node says the body's ports are.
+    /// `stateCount` and `iterates` are what the LOOP node says the body's ports are;
+    /// `arrayGradient` says whether the reverse pass also carries the iterated array's gradient
+    /// (so the body pullback takes the element as one more port).
     const LoopBodyPlan &loopBodyPlanFor(
-        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates);
+        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates,
+        bool arrayGradient);
     /// The group of graphs this transformation adds to the program.
     rt::GraphDraftGroup &group() { return group_; }
     /// The refusals collected so far: a region differentiated in place reports its own.
@@ -1057,8 +1038,9 @@ class Engine {
     /// A plan whose only graph is the pullback (a region's forward is the region itself).
     PullbackPlan reservePullback(const std::string &name, const PullbackPlan &types);
     void build(Pending &pending);
-    LoopBodyPlan
-    buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates);
+    LoopBodyPlan buildLoopBody(
+        GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates,
+        bool arrayGradient);
 
     camel::core::context::context_ptr_t context_;
     rt::GraphDraftGroup group_;
@@ -1374,6 +1356,15 @@ struct ReverseLoop {
     std::vector<size_t> captureSlot;
     /// The component of the state tuple's tangent a state's gradient is.
     std::vector<size_t> statePart;
+    /// The array a `for` iterates, when its gradient is carried: the primal type (so the zero
+    /// tangent of the array can be taken from it), the component of the reverse state the array's
+    /// gradient travels in, its position in the site's tangents, and the position of one round's
+    /// element gradient in the body pullback's result.
+    Type *iterableType       = nullptr;
+    size_t arraySlot         = kNoSlot;
+    std::optional<size_t> arrayTangent;
+    std::optional<size_t> elementTangent;
+    TupleType *bodyTangentsType = nullptr; // the result type of body.pb
 };
 
 gc_node_ref_t addLoopInt(GraphDraft &draft, int64_t value) {
@@ -1394,8 +1385,8 @@ void stampLoopOrigin(GraphDraft &draft, uint64_t origin) {
 }
 
 /// The state of a reverse loop: the round index, then the gradients it carries, states first,
-/// then captures, as the body pullback's result names them. A value without a tangent has no
-/// component: its gradient is never needed.
+/// then captures, then the iterated array, as the body pullback's result names them. A value
+/// without a tangent has no component: its gradient is never needed.
 std::vector<Type *> reverseStateTypes(const ReverseLoop &loop) {
     std::vector<Type *> types{Type::Int64()};
     for (size_t j = 0; j < loop.stateTypes.size(); ++j) {
@@ -1407,6 +1398,9 @@ std::vector<Type *> reverseStateTypes(const ReverseLoop &loop) {
         if (loop.captureTangent[c]) {
             types.push_back(loop.tangentsType->typeAt(*loop.captureTangent[c]));
         }
+    }
+    if (loop.arrayTangent) {
+        types.push_back(loop.tangentsType->typeAt(*loop.arrayTangent));
     }
     return types;
 }
@@ -1521,7 +1515,8 @@ void buildReverseBody(
         const std::array<gc_node_ref_t, 2> at{tapePorts[c], ports.front()};
         args.push_back(addOper(draft, loop.residualTypes[c], ":op/idx_arr", at));
     }
-    const gc_node_ref_t pullback = draft.addFuncNode(loop.bodyPullback, loop.tangentsType);
+    const gc_node_ref_t pullback =
+        draft.addFuncNode(loop.bodyPullback, loop.bodyTangentsType);
     draft.setNormInputs(pullback, args);
     const std::array<gc_node_ref_t, 2> step{ports.front(), addLoopInt(draft, 1)};
     std::vector<gc_node_ref_t> next{addOper(draft, Type::Int64(), ":op/sub_l", step)};
@@ -1529,8 +1524,11 @@ void buildReverseBody(
         if (loop.stateSlot[j] == kNoSlot) {
             continue;
         }
-        next.push_back(
-            addAccs(draft, loop.tangentsType->typeAt(*loop.stateTangent[j]), pullback, *loop.stateTangent[j]));
+        next.push_back(addAccs(
+            draft,
+            loop.bodyTangentsType->typeAt(*loop.stateTangent[j]),
+            pullback,
+            *loop.stateTangent[j]));
     }
     for (size_t c = 0; c < loop.captureTypes.size(); ++c) {
         if (loop.captureSlot[c] == kNoSlot) {
@@ -1540,7 +1538,28 @@ void buildReverseBody(
             draft,
             loop.captureTypes[c],
             ports[loop.captureSlot[c]],
-            addAccs(draft, loop.tangentsType->typeAt(*loop.captureTangent[c]), pullback, *loop.captureTangent[c])));
+            addAccs(
+                draft,
+                loop.bodyTangentsType->typeAt(*loop.captureTangent[c]),
+                pullback,
+                *loop.captureTangent[c])));
+    }
+    if (loop.arrayTangent) {
+        // The reverse of `for x in xs`: this round read element `ports.front()`, so the element
+        // gradient body.pb sends back goes into the array's gradient at that index
+        // (design principles 9.9: the reverse of a read by index is a scatter-add).
+        const gc_node_ref_t element = addAccs(
+            draft,
+            loop.bodyTangentsType->typeAt(*loop.elementTangent),
+            pullback,
+            *loop.elementTangent);
+        const std::array<gc_node_ref_t, 3> scatter{
+            ports[loop.arraySlot], ports.front(), element};
+        next.push_back(addOper(
+            draft,
+            loop.tangentsType->typeAt(*loop.arrayTangent),
+            ":tangent/scatter_add_arr",
+            scatter));
     }
     draft.setRegionResult(region, packState(draft, stateTypes, next));
     draft.setInsertRegion(0);
@@ -1579,6 +1598,13 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
         capturePorts[c] = addPort(*draft, loop.captureTypes[c]);
         draft->appendClosureNode(capturePorts[c]);
     }
+    // The iterated array itself, when its gradient is carried: the zero tangent starts at the
+    // primal's length and shape (a `float[]` taken from the array the forward loop walked).
+    gc_node_ref_t iterablePort = kInvalidNodeRef;
+    if (loop.arrayTangent) {
+        iterablePort = addPort(*draft, loop.iterableType);
+        draft->appendClosureNode(iterablePort);
+    }
     // The cond and the body are regions of this graph; the loop node names them by owning them,
     // and its With inputs are their results and the round port.
     const uint32_t condRegion = draft->addRegion(rt::GCRegionKind::LoopCond, 0);
@@ -1604,6 +1630,9 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
             continue;
         }
         initial.push_back(addZeroTangent(*draft, loop.captureTypes[c], capturePorts[c]));
+    }
+    if (loop.arrayTangent) {
+        initial.push_back(addZeroTangent(*draft, loop.iterableType, iterablePort));
     }
     const Type *valueType =
         stateTypes.size() == 1 ? stateTypes.front() : TupleType::create(stateTypes);
@@ -1641,19 +1670,65 @@ std::unique_ptr<GraphDraft> buildReverseClosure(
             tangents.push_back(stateValues[loop.stateSlot[j]]);
         }
     }
+    if (loop.arrayTangent) {
+        tangents.push_back(stateValues[loop.arraySlot]);
+    }
     setResult(*draft, addAggregate(*draft, loop.tangentsType, tangents));
     stampLoopOrigin(*draft, loop.origin);
     return draft;
 }
 
+bool ForwardRewrite::dependsOnTangentPort(gc_node_ref_t node) {
+    if (!reachComputed_) {
+        std::vector<gc_node_ref_t> work;
+        for (gc_node_ref_t id = 0; id < draft_.nodeSlotCount(); ++id) {
+            if (draft_.alive(id) && kindOf(draft_, id) == GCNodeKind::Port &&
+                hasTangentType(typeOf(draft_, id))) {
+                reach_.insert(id);
+                work.push_back(id);
+            }
+        }
+        while (!work.empty()) {
+            const gc_node_ref_t value = work.back();
+            work.pop_back();
+            for (const std::span<const gc_node_ref_t> users :
+                 {draft_.normUsersOf(value), draft_.withUsersOf(value),
+                  draft_.ctrlUsersOf(value)}) {
+                for (gc_node_ref_t user : users) {
+                    if (reach_.insert(user).second) {
+                        work.push_back(user);
+                    }
+                }
+            }
+        }
+        reachComputed_ = true;
+    }
+    return reach_.contains(node);
+}
+
 void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     const LoopDraftView view(*draft_.program(), draft_, loop);
+    // A `for` over an array: when the array depends on a differentiated value, the loop's reverse
+    // pass sends each round's element gradient back into an array gradient carried alongside the
+    // state gradients (the reverse of a read by index is a scatter-add, design principles 9.9).
+    // The array is then one more site port, after the states, and the body pullback takes one
+    // port more, after the captures and the states. An array that no port reaches (a literal) is
+    // left out: nothing that can carry a gradient flows into it.
+    const auto iterable      = view.iterable();
+    Type *const iterableType = iterable ? typeOf(draft_, *iterable) : nullptr;
+    // Only an array's iteration has a reverse here: the element of a tensor iterated by its first
+    // axis is a slice, and iterating any other value goes through that kind's own operator. Such a
+    // value reaches the loop as the array that operator produced, or is refused where the operator
+    // has no derivative rule.
+    const bool carryArray =
+        iterableType != nullptr && iterableType->code() == TypeCode::Array &&
+        carriesGradient(iterableType) && dependsOnTangentPort(*iterable);
     // The builder may already have given the loop collection slots (an empty-array state whose
     // only use is `append`, Builder::collectLoopAppends). They are part of the loop's value,
     // before the tape, and are preserved here.
     const size_t existingCollections = view.collectionCount();
-    const LoopBodyPlan &bodyPlan =
-        engine_.loopBodyPlanFor(draft_, loop, view.stateCount(), view.iterable().has_value());
+    const LoopBodyPlan &bodyPlan = engine_.loopBodyPlanFor(
+        draft_, loop, view.stateCount(), view.iterable().has_value(), carryArray);
     const size_t k               = bodyPlan.stateTypes.size();
     const size_t m               = bodyPlan.captureTypes.size();
     // A state with no tangent whose next value depends on an active value loses that value's
@@ -1684,8 +1759,14 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         untaped_.insert(loop);
         return;
     }
+    // The site's ports: the values the body reads from around it, then the initial states, then
+    // the iterated array when its gradient is carried.
+    std::vector<Type *> sitePorts = bodyPlan.portTypes;
+    if (carryArray) {
+        sitePorts.push_back(iterableType);
+    }
     bool anyPort = false;
-    for (Type *type : bodyPlan.portTypes) {
+    for (Type *type : sitePorts) {
         anyPort |= carriesGradient(type);
     }
     if (!anyPort) {
@@ -1699,13 +1780,17 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     ASSERT(
         bodyPlan.tapeCollectionTypes.size() == (r == 0 ? 1u : r),
         "autodiff: a loop body's tape slots do not match the values its round collects.");
-    const PullbackPlan site = makePlanTypes(bodyPlan.portTypes, bodyPlan.stateValueType, carriesGradient);
+    const PullbackPlan site = makePlanTypes(sitePorts, bodyPlan.stateValueType, carriesGradient);
     // The site's inputs: the values the body reads from around it (the node's captures), then the
-    // first values of the state (its Norm inputs), the order visitCallSite reads them in.
+    // first values of the state (its Norm inputs), then the iterated array, the order
+    // visitCallSite reads them in.
     const std::vector<gc_node_ref_t> captured = view.externalInputs(false);
     std::vector<gc_node_ref_t> inputs(captured.begin(), captured.end());
     for (size_t j = 0; j < k; ++j) {
         inputs.push_back(view.initialState(j));
+    }
+    if (carryArray) {
+        inputs.push_back(*iterable);
     }
     // The loop's value becomes (the states…, one array per collection slot): the tape is part of
     // it, collected in place by the executor.
@@ -1791,6 +1876,15 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     reverse.stateSlot.resize(k, kNoSlot);
     reverse.captureSlot.resize(m, kNoSlot);
     reverse.statePart.resize(k, 0);
+    reverse.bodyTangentsType = bodyPlan.graphs.tangentsType;
+    if (carryArray) {
+        reverse.iterableType  = iterableType;
+        reverse.arrayTangent  = site.tangentIndex(m + k);
+        reverse.elementTangent = bodyPlan.graphs.tangentIndex(m + k);
+        ASSERT(
+            reverse.arrayTangent && reverse.elementTangent,
+            "autodiff: an iterated array with a tangent is a site port and an element port.");
+    }
     size_t slot = 1;
     size_t part = 0;
     for (size_t j = 0; j < k; ++j) {
@@ -1805,6 +1899,9 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
             reverse.captureTangent[c] = position;
             reverse.captureSlot[c]    = slot++;
         }
+    }
+    if (carryArray) {
+        reverse.arraySlot = slot++;
     }
     // The reverse pass's graph: its condition and body are regions of it, as a program's loops are.
     // It is reserved (not encoded) now; the group re-points the graph references its payload holds
@@ -1824,6 +1921,12 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
             closureTypes.push_back(bodyPlan.captureTypes[c]);
         }
     }
+    // The iterated array itself: its zero tangent has the array's length, taken at run time from
+    // the value the forward loop walked.
+    if (carryArray) {
+        captures.push_back(*iterable);
+        closureTypes.push_back(iterableType);
+    }
     TupleType *const closureType = TupleType::create(closureTypes);
     engine_.group().define(
         closureKey, buildReverseClosure(reverse, closureType, captures));
@@ -1834,17 +1937,6 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     recorded.pullback = pullback;
     recorded.inputs   = std::move(inputs);
     recorded.plan     = site;
-    loopSites_.push_back(LoopSite{.node = loop, .arrays = {}});
-    if (const auto iterable = view.iterable()) {
-        loopSites_.back().arrays.push_back(LoopArray{.array = *iterable, .iterated = true});
-    }
-    const auto withInputs = captured;
-    for (gc_node_ref_t value : withInputs) {
-        if (typeOf(draft_, value)->code() == TypeCode::Array) {
-            loopSites_.back().arrays.push_back(LoopArray{.array = value, .iterated = false});
-        }
-    }
-    recorded.loop = &loopSites_.back();
     sites_.emplace(state, std::move(recorded));
 }
 
@@ -2390,6 +2482,11 @@ void Backward::accumulateGradient(vjp_node_t node, vjp_node_t gradient) {
     }
 }
 
+bool Backward::isActive(vjp_node_t node) const {
+    const auto primal = primalOf(node);
+    return primal && active_.contains(*primal);
+}
+
 void Backward::accumulate(gc_node_ref_t primal, gc_node_ref_t gradient) {
     if (!active_.contains(primal)) {
         return; // a constant, or a value no parameter flows into
@@ -2620,9 +2717,11 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
     };
     // A discrete value: an integer or a boolean. Its derivative is zero by definition (design
     // principles 9.9), so it is never tainted and never refused, whatever it was computed from.
+    // The registry knows the module types too (an integer tensor is discrete by its element
+    // type), so an argmax result or a comparison mask converted back to float is zero, not a
+    // refusal.
     const auto discreteType = [](const Type *type) {
-        return type->code() == TypeCode::Int32 || type->code() == TypeCode::Int64 ||
-               type->code() == TypeCode::Bool;
+        return camel::core::DerivativeRegistry::instance().isDiscrete(type);
     };
     // A branch's arms and a loop's condition and body are regions, not values the control node is
     // passed: what the node depends on is what its regions read from around them. Without this,
@@ -2662,6 +2761,38 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         return false;
     };
     for (gc_node_ref_t node : order) {
+        // A `for` over an array sends each round's element gradient back into the array's
+        // gradient by a scatter-add (design principles 9.9). When the array has no tangent, the
+        // element can have none either, so a differentiated value the array is computed from
+        // would be dropped without a sign: refuse the loop here, naming the array and its
+        // element type. An array of discrete elements is not tainted, so it is not refused (its
+        // derivative is zero by definition). Every other iterable is materialized by the
+        // iteration operator of its kind (`tensor:iter` and the like), which is refused by the
+        // rule lookup when the value takes part in the gradient.
+        if (kindOf(forward_, node) == GCNodeKind::Loop) {
+            const auto iterable =
+                rt::LoopDraftView(*forward_.program(), forward_, node).iterable();
+            if (iterable.has_value() &&
+                (active_.contains(*iterable) || tainted_.contains(*iterable))) {
+                Type *const iterableType = typeOf(forward_, *iterable);
+                if (iterableType->code() == TypeCode::Array &&
+                    tangentTypeOf(iterableType) == nullptr) {
+                    Type *const elementType = tt::as_ptr<type::ArrayType>(iterableType)->elemType();
+                    failAt(
+                        forward_.nodeOrigin(node),
+                        std::format(
+                            "a 'loop' iterates over an array of type '{}'{} that depends on a "
+                            "differentiated parameter, but the array has no tangent: its element "
+                            "type '{}' has none, so each round's element gradient could not be "
+                            "scattered back into it. Use an array whose elements carry a gradient "
+                            "(a float, or a struct or tuple of them), or stop depending on the "
+                            "differentiated value",
+                            iterableType->toString(),
+                            whereIs(forward_.nodeOrigin(*iterable)),
+                            elementType->toString()));
+                }
+            }
+        }
         Type *const type   = typeOf(forward_, node);
         const bool carrier = holdsFunction(type);
         bool inputActive    = false;
@@ -3130,30 +3261,6 @@ void Backward::visit(gc_node_ref_t node) {
 }
 
 void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
-    if (site.loop != nullptr) {
-        // Captured arrays now carry a gradient: an array's tangent is the array of its
-        // elements' tangents, so the reverse pass can accumulate into one (design principles
-        // 9.9). Iterating an array is still refused: the body receives one element per round,
-        // and the reverse pass has no per-round scatter of that element's gradient back into the
-        // iterated array. Doing so silently would lose the gradient, so it is located here.
-        for (const LoopArray &read : site.loop->arrays) {
-            if (!read.iterated || !active_.contains(read.array)) {
-                continue;
-            }
-            const std::string arrayWhere = whereIs(forward_.nodeOrigin(read.array));
-            failAt(
-                forward_.nodeOrigin(site.loop->node),
-                std::format(
-                    "a 'loop' iterates over an array that depends on a differentiated "
-                    "parameter: {} of type {}{}. The gradient of each round's element would "
-                    "have to be scattered back into the array at that round's index, which the "
-                    "loop's reverse pass does not do. Capture the array and read its elements "
-                    "by index inside the loop instead",
-                    arrayWhere.empty() ? "an array" : "the array",
-                    typeOf(forward_, read.array)->toString(),
-                    arrayWhere));
-        }
-    }
     if (site.rule != nullptr) {
         visitRuleSite(node, site);
         return;
@@ -3233,7 +3340,8 @@ void Backward::visitOper(gc_node_ref_t node) {
             .uri        = uri,
             .inputs     = inputs,
             .withInputs = withInputs,
-            .output     = ref(node)});
+            .output     = ref(node),
+            .origin     = forward_.nodeOrigin(node)});
 }
 
 void Backward::visitAccs(gc_node_ref_t node) {
@@ -3554,12 +3662,15 @@ void Engine::build(Pending &pending) {
 }
 
 const LoopBodyPlan &Engine::loopBodyPlanFor(
-    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates) {
+    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates, bool arrayGradient) {
     const auto key = std::make_pair(&draft, loop);
     if (auto it = loopBodyPlans_.find(key); it != loopBodyPlans_.end()) {
         ASSERT(
             it->second.stateTypes.size() == stateCount,
             "autodiff: one loop body used by two loops of different shapes.");
+        ASSERT(
+            (it->second.elementType != nullptr) == arrayGradient,
+            "autodiff: one loop body used with and without its iterated array's gradient.");
         return it->second;
     }
     if (!loopBodiesBeingBuilt_.insert(key).second) {
@@ -3567,7 +3678,7 @@ const LoopBodyPlan &Engine::loopBodyPlanFor(
             "a 'loop' whose body needs its own tape (a loop nested in the body of the same loop) "
             "cannot be differentiated");
     }
-    LoopBodyPlan plan = buildLoopBody(draft, loop, stateCount, iterates);
+    LoopBodyPlan plan = buildLoopBody(draft, loop, stateCount, iterates, arrayGradient);
     loopBodiesBeingBuilt_.erase(key);
     return loopBodyPlans_.emplace(key, std::move(plan)).first->second;
 }
@@ -3577,8 +3688,8 @@ const LoopBodyPlan &Engine::loopBodyPlanFor(
 // primal values of the body: the operands the round's rules read again (and, for a call in the
 // body, the pullback closure the round's call returned, which is a value like any other). They
 // are what the forward loop collects, so the tape is arrays of those types.
-LoopBodyPlan
-Engine::buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates) {
+LoopBodyPlan Engine::buildLoopBody(
+    GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, bool iterates, bool arrayGradient) {
     LoopBodyPlan plan;
     const LoopDraftView view(*draft.program(), draft, loop);
     const uint32_t bodyRegion = view.bodyRegion();
@@ -3591,8 +3702,6 @@ Engine::buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, 
     for (gc_node_ref_t value : external) {
         plan.captureTypes.push_back(typeOf(draft, value));
     }
-    const size_t firstState = iterates ? 1 : 0;
-    (void)firstState;
     for (size_t j = 0; j < stateCount; ++j) {
         plan.stateTypes.push_back(view.stateType(j));
     }
@@ -3603,9 +3712,25 @@ Engine::buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, 
     }
     plan.portTypes = plan.captureTypes;
     plan.portTypes.insert(plan.portTypes.end(), plan.stateTypes.begin(), plan.stateTypes.end());
+    // The element of an iterated array whose gradient the loop sends back: one more port of the
+    // body pullback, after the captures and the states, so its gradient can be scattered into
+    // the array's at each round's index.
+    if (arrayGradient) {
+        ASSERT(iterates, "autodiff: a loop that does not iterate has no element gradient.");
+        const auto element = view.bodyElementParam();
+        ASSERT(element.has_value(), "autodiff: a 'for' loop body has no element parameter.");
+        plan.elementType = typeOf(draft, *element);
+        ASSERT(
+            carriesGradient(plan.elementType),
+            "autodiff: an iterated array with a tangent has an element without one.");
+    }
+    std::vector<Type *> pullbackPorts = plan.portTypes;
+    if (plan.elementType != nullptr) {
+        pullbackPorts.push_back(plan.elementType);
+    }
     plan.name   = std::format("loop{}.tape", static_cast<size_t>(loop));
     plan.graphs = reservePullback(
-        plan.name, makePlanTypes(plan.portTypes, plan.stateValueType, carriesGradient));
+        plan.name, makePlanTypes(pullbackPorts, plan.stateValueType, carriesGradient));
 
     // A loop that appends to its array state in place (Builder::markLoopStateInPlace) has one
     // array that every round writes into, so the tape this body is about to collect would hold
@@ -3671,6 +3796,9 @@ Engine::buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, 
     for (size_t j = 0; j < stateCount; ++j) {
         boundary.push_back(view.bodyStateParam(j));
     }
+    if (plan.elementType != nullptr) {
+        boundary.push_back(*view.bodyElementParam());
+    }
     std::vector<gc_node_ref_t> primalPorts = boundary;
     std::vector<gc_node_ref_t> differentiated;
     for (size_t i = 0; i < primalPorts.size(); ++i) {
@@ -3699,7 +3827,7 @@ Engine::buildLoopBody(GraphDraft &draft, gc_node_ref_t loop, size_t stateCount, 
     // them may add residuals (a zero tangent of an aggregate reads the primal), so the residual
     // list is read afterwards: the loop collects what this pullback ended up reading.
     std::vector<gc_node_ref_t> tangents;
-    for (size_t i = 0; i < plan.portTypes.size(); ++i) {
+    for (size_t i = 0; i < plan.graphs.portTypes.size(); ++i) {
         if (plan.graphs.tangentIndex(i)) {
             tangents.push_back(backward.gradient(primalPorts[i]));
         }

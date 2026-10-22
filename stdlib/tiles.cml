@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Programs on a CUDA device: a function value is compiled to device code, its inputs are uploaded,
  * the device computes, and the results come back to the host. `tiles::compile` outlines the regions

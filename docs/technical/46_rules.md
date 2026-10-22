@@ -4,7 +4,7 @@ Step 8 of the graph store (design: [rewrite](../design/rewrite/README.cn.md),
 [graph store](../design/graph-store/README.cn.md) 5.2). This note records what the code does;
 [44](44_values_with_several_writings.md) describes the engines underneath.
 
-## 1. A rule is a function
+## 1. A rule is a value
 
 ```camel
 export rule mul_one(x: int) { x * 1 => x }
@@ -16,16 +16,17 @@ rule swap(a: int, b: int) { a + b <=> b + a }
 declaration starts, so a program may still have a variable called `rule`. `<=>` is a token of its
 own. A parameter marked `const` only matches a constant.
 
-The AST builder (`Builder::visitRuleDecl`) turns a declaration into three functions, which is what
-the design calls the shorthand of a pair of functions with the same parameters:
+The AST builder (`Builder::visitRuleDecl`) turns a declaration into two functions and a
+module-level value, which is what the design calls the shorthand of a pair of functions with the
+same parameters:
 
 ```camel
 func mul_one__lhs(x: int) => x * 1          // the pattern
 func mul_one__rhs(x: int) => x              // what it becomes
-func mul_one() => __rule('mul_one', false, 0, 0, mul_one__lhs, mul_one__rhs)
+let mul_one = __rule('mul_one', false, 0, 0, mul_one__lhs, mul_one__rhs)
 ```
 
-A condition adds a fourth function and a different maker:
+A condition adds a third function and a different maker:
 
 ```camel
 rule add_zero(x: int, y: int) { x + y => x } when isZero(y)
@@ -33,16 +34,22 @@ rule add_zero(x: int, y: int) { x + y => x } when isZero(y)
 func add_zero__lhs(x: int, y: int) => x + y
 func add_zero__rhs(x: int, y: int) => x
 func add_zero__when(x: Node, y: Node) => isZero(y)   // the parameters as nodes of the draft
-func add_zero() => __rule_when('add_zero', false, 0, 0, add_zero__lhs, add_zero__rhs, add_zero__when)
+let add_zero = __rule_when('add_zero', false, 0, 0, add_zero__lhs, add_zero__rhs, add_zero__when)
 ```
 
 `__rule` and `__rule_when` are operators of the module `rewrite` (`modules/rewrite`), which the
 declaration imports itself (with `graph.Node` for the condition). They make a `RuleObject` (type
 `Rule`): the name, the direction, the permissions the rule needs, a bit per `const` parameter and
-the function values. A rule is the function that makes it, not a `let`: a library function (what a
-Camel pass is) has no module-level values, and a rule function is exported, imported and listed
-like any function. A list of rules is an array of such functions (`[mul_one, combine]`, type
-`(() => Rule)[]`).
+the function values. The rule is a value, so it can be held in a variable, passed to and returned
+from a function, and stored in a `Rule[]`; a rule set is an ordinary array (`[mul_one, combine]`,
+type `Rule[]`), made of values rather than of the functions that make them. A module-level value
+is computed before the pass of its module runs, so a rule is ready when the engine is called.
+
+`Rule` is not a primitive: the compiler names the type the C++ module registers, and everything
+else about a rule set is the language's own arrays, functions and control flow. The declaration
+always produces the `Rule` value; a program that only wants the two sides can still call
+`name__lhs` and `name__rhs` in the same module, but they are an implementation detail of the
+declaration, not the rule's public surface.
 
 The context of a rule (`rule fuse<f, g>(...)`) is read by the grammar and refused by the compiler
 (`ConstructNotSupported`) until generics land (H38 item 5).
@@ -90,6 +97,8 @@ calls a user function. A `<=>` rule gives two `Rule`s.
 | `saturate(p, rules, rounds)` | both ways on the writings of every value; the result has values with several writings |
 | `extract(p, cost)` | one writing per value by the named cost model |
 | `check(rules, samples, seed)` | the check of section 4 |
+| `run(p, rules, rounds, strict)` | `rewrite` with the round budget explicit, as a `Run` with its cost (section 3.1) |
+| `run(p, rules, rounds, strict, explain)` | the same, with the attribution record open; `explain(r)` reads it (section 3.2) |
 
 `rewrite` and `saturate` leave the functions that are the sides of rules (`__lhs`, `__rhs`, and
 `__when`) alone. The result is `Program!`; the errors are `RuleInvalid`, `RuleTwoWay`,
@@ -100,9 +109,84 @@ a function `(p: Program) => Program!` (`camel prog.cml mod::pass std::nvm`):
 export func apply(p: Program): Program! { return rewrite(p, [add_zero, mul_one, combine]) }
 ```
 
-The engines call the rule functions through `NodeVMSchedPass::callGraph`. A call can move the
-objects, so a kernel reads the array of rules from its argument each time and copies what it needs
-from a rule object at once (the poison sweep finds a raw pointer kept across a call).
+The engines read `Rule` values from the array; no function is called to make a rule. Compiling a
+rule makes constants and can collect, so a kernel reads the array again each time and copies what
+it needs from a rule object before the next allocation; a condition still runs through
+`NodeVMSchedPass::callGraph`, and the rule object is rooted for it.
+
+### 3.1 Scheduling, and what an application costs
+
+The scheduling combinators are ordinary Camel functions in `stdlib/rules.cml`, over stages (a
+stage is a `Rule[]` applied by `run` to a fixpoint). The rule sets and the choices are `with`
+parameters, so they are written in the angle brackets of the call:
+
+| combinator | semantics |
+|---|---|
+| `seq<stages, strict>(p)` | the stages once each, in the written order; a failing stage fails the sequence |
+| `first<stages, strict>(p)` | the stages in the written order, the first one that rewrites something is the result; a stage that matches nothing does not stop the choice |
+| `repeat<rules, rounds, strict>(p)` | one round at a time until a round applies nothing or `rounds` rounds; the round that proves the fixpoint is made and counted |
+| `until<rules, done, rounds, strict>(p)` | one round at a time while `done(p)` is false, until a fixpoint or `rounds` rounds |
+| `alternate<left, right, rounds, strict>(p)` | one round of `left`, then one of `right`, until a full pair applies nothing or `rounds` pairs |
+
+Each answers a `Run<Program>`: `result` is the program, and `rewrites`, `rounds`, `visited`,
+`erased`, `fixpoint` and `seconds` are what the schedule cost, summed over the stages (`fixpoint`
+is the last application's; `proof` is described in section 3.2). The functions are written with
+`loop ... for ... while` and `?->`; no
+helper carries an index or an accumulator. A combinator never reorders a stage's rules and never
+drops a match: a stage that applies nothing leaves the count at zero.
+
+`run(p, rules, rounds, strict)` is the same engine with the round budget explicit and the cost
+kept in a `Run` value. `Run` is a plain Camel struct declared in `stdlib/rewrite.cml`; the native
+kernel fills its eight fields in that order, so a field is read as `r.rewrites` and the program is
+`r.result`. `seconds` is the wall time of one application: compiling the rules, matching,
+rewriting the graphs and the commit; it is measured in the kernel with
+`std::chrono::steady_clock`. `visited` is the number of alive nodes that take part in a rewrite,
+summed over rounds and graphs (`DraftWritings::rewrite` increments it for every node it
+considers); `rewrites` is the number of replacements actually made. The numbers are ordinary
+values, so a benchmark prints them from Camel and the plan can pin them.
+
+### 3.2 Attribution, and `explain`
+
+A rewrite is only useful to a reader if it can be attributed to the rule that made it (rewrite
+design 8.7). The record is kept where the application happens: `DraftWritings::rewrite` sees the
+rule, the round, the match and the nodes it erases, and it is the only place that sees an erased
+node before the draft forgets it. `rewrite` takes a `RewriteLog *` (null means no record); for
+each rewrite it appends one `RewriteStep` with:
+
+- the rule's source name and compiled id, and the round of the graph's rewrite;
+- the graph, filled in by `applyRewrite` from the graph the step was made in;
+- the node the left side matched and the nodes its variables bound, with the text each node had
+  at that moment (`%id kind [operator] : type`, plus the value of a scalar constant);
+- the node the right side was built as, with its text;
+- the nodes the rewrite left unread and erased, with their text.
+
+The text is taken at recording time because a node that is erased or renumbered has no later text
+to read. With a null log the engine allocates nothing and takes no branch in the per-node match:
+`rewrite` and `saturate` keep their H226 cost, which `bench::compare` measures side by side with
+the recording on.
+
+`run`'s fifth parameter decides whether the application passes a log. With it, the kernel builds
+one `Proof` from the log and stores it in the `proof` field of the `Run` (a finalizer releases the
+steps); without it the field is null, nothing was recorded, and `explain` refuses the run with the
+error value `NoAttribution`, rather than answering with an empty chain. `explain(r)` gives the
+`Proof` back, and its printing is the derivation:
+
+```
+2 rewrites in 2 rounds, 9 nodes visited
+  g round 1: %3 :op/add_l : int
+  = %0 port : int  by add_zero
+    matched %3 :op/add_l : int; %0 port : int;
+    erased %3 :op/add_l : int; %2 data 0 : int;
+  g round 1: %5 :op/add_l : int
+  = %1 port : int  by add_zero
+    matched %5 :op/add_l : int; %1 port : int;
+    erased %5 :op/add_l : int; %4 data 0 : int;
+```
+
+A run that applied nothing prints one sentence (`no rewrite matched in 1 round: the program is
+unchanged`), not an empty table. The order of the lines is the order of the applications: graph by
+graph, round by round, nodes in id order, rules in the order of the array, which is what makes a
+`seq` schedule's proof follow the schedule.
 
 ## 4. The check
 
@@ -140,9 +224,9 @@ The rule declaration, the engines and the check are the first step; `when` is im
 item 1), the rest is planned in the H38 report (`handover note ⟨50954d0⟩ (H38)`, section 1). In
 short:
 
-**`when` (implemented).** `rule … { lhs => rhs } when expr` compiles to a fourth function
-`name__when(params as Node) => expr`, and to a maker `__rule_when(name, twoWay, needs, consts,
-lhs, rhs, when)`; the 6-argument `__rule` stays for rules without a condition. A parameter of the
+**`when` (implemented).** `rule … { lhs => rhs } when expr` compiles to a third function
+`name__when(params as Node) => expr`, and to the value `let name = __rule_when(name, twoWay, needs,
+consts, lhs, rhs, when)`; the 6-argument `__rule` stays for rules without a condition. A parameter of the
 condition is a `graph::Node` naming the node the engine bound to that parameter in the draft
 being rewritten (scheme (a)), so a condition sees the live graph: its operator, type, tags,
 inputs, users, constants, anchor flags. The graph module's `Handle` carries a draft, and the node

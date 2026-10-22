@@ -50,7 +50,7 @@ func control(dir: string, xs: int[]): int! {
     }
 }
 
-func generic(x: typeas T, y: tag of T, z: Tensor<f32, const [constas n, 4]>): T {
+func generic::<T>(x: T, y: tag of T, z: Tensor<f32, [n, 4]>): T {
     return x
 }
 

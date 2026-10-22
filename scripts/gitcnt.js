@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 import { exec } from 'child_process'
 
 const ignoredFilesPatterns = [/\.md$/, /^docs\//, /\.json$/, /^\.updcache$/]

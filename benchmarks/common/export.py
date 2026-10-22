@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """Export one model to ONNX with one framework exporter, in a fresh process.
 
 ``python common/export.py --model M --exporter torch|tf|camel`` writes

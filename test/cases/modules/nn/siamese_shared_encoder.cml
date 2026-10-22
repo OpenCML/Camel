@@ -43,7 +43,7 @@ func siamese_loss(xa: Tensor, xb: Tensor): float {
 func init(): Siamese {
     return {
         encoder: {
-            weight: full([2, 2], 0.1),
+            weight: full([2, 2], f32(0.1)),
             bias: zeros([2])
         }
     }
@@ -55,8 +55,8 @@ func train(model: Siamese, xa: Tensor, xb: Tensor, steps: int): Siamese {
 
 func main(): int sync {
     let model = init()
-    let xa = full([1, 2], 1.0)
-    let xb = full([1, 2], 0.5)
+    let xa = full([1, 2], f32(1.0))
+    let xb = full([1, 2], f32(0.5))
 
     let before = siamese_loss<model>(xa, xb)
     let vg = with_grad(siamese_loss)<model>(xa, xb)

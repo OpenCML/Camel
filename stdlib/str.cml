@@ -1,3 +1,6 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * A string is always valid UTF-8, and its length and indices count Unicode code points:
  * `len('中文')` is 2 and `'中文'[0]` is `'中'`. Binary data is `Bytes`; `bytes::encode` and

@@ -20,7 +20,7 @@ func main(): int sync {
     println(sum(abs(download(run_preferred_resident<add>((x, bias))) - add(x, bias))))
     let changed = x + 2.0
     println(sum(abs(download(run_preferred_resident<add>((changed, bias))) - add(changed, bias))))
-    let small = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])
+    let small = reshape([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[], [2, 3])
     println(sum(abs(download(run_preferred_resident<flatten>(small)) - flatten(small))))
     return 0
 }

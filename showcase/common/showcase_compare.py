@@ -78,11 +78,10 @@ def run_command(command: list[str], env: dict[str, str], cwd: Path | None = None
     }
 
 
-def camel_env(repo: Path, threads: int) -> dict[str, str]:
+def camel_env(repo: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["CAMEL_HOME"] = str(repo / "out" / "latest")
     env["PATH"] = str(repo / "out" / "latest" / "bin") + os.pathsep + env.get("PATH", "")
-    env["CAMEL_NUM_THREADS"] = str(threads)
     return env
 
 

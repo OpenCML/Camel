@@ -1,0 +1,103 @@
+{
+  "camel_version": "0.2.24",
+  "dataset_manifest_sha256": "",
+  "schema": 1,
+  "tree": {
+    "kind": "struct",
+    "members": [
+      {
+        "name": "w",
+        "type": {
+          "bytes": 136,
+          "dtype": "float32",
+          "file": "w.npy",
+          "kind": "tensor",
+          "path": "w",
+          "sha256": "871e5662a75c479e365d04d276e29a67b9ca3c43ef3dfc57996800abc8806db8",
+          "shape": [
+            2
+          ]
+        }
+      },
+      {
+        "name": "odd",
+        "type": {
+          "bytes": 144,
+          "dtype": "int64",
+          "file": "odd.npy",
+          "kind": "tensor",
+          "path": "odd",
+          "sha256": "a4360c6ccd8c97d961abdfea77906cfcd5647e0df2c0f2d14b7f30181b4a27e9",
+          "shape": [
+            2
+          ]
+        }
+      },
+      {
+        "name": "empty",
+        "type": {
+          "bytes": 128,
+          "dtype": "float32",
+          "file": "empty.npy",
+          "kind": "tensor",
+          "path": "empty",
+          "sha256": "b73a884cf37a78b41ba540b9284a1abb61d8c8ec507dc926d9a20468b002ce02",
+          "shape": [
+            2,
+            0
+          ]
+        }
+      },
+      {
+        "name": "note",
+        "type": {
+          "bytes": 17,
+          "file": "note.txt",
+          "kind": "string",
+          "path": "note",
+          "sha256": "a5282e5859a975ecd17817a940ea870c9c8e3eadd5adc48c225f56b3ebb7dd15"
+        }
+      },
+      {
+        "name": "cursor",
+        "type": {
+          "kind": "tuple",
+          "members": [
+            {
+              "name": "0",
+              "type": {
+                "bytes": 1,
+                "file": "cursor.0.txt",
+                "kind": "int",
+                "path": "cursor.0",
+                "sha256": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce"
+              }
+            },
+            {
+              "name": "1",
+              "type": {
+                "bytes": 16,
+                "file": "cursor.1.txt",
+                "kind": "f64",
+                "path": "cursor.1",
+                "sha256": "516b8f4ca845a49d9761fc5508faf69e3e552a55f10e528604ac1d3cd4aecd97"
+              }
+            }
+          ],
+          "path": "cursor"
+        }
+      },
+      {
+        "name": "enabled",
+        "type": {
+          "bytes": 4,
+          "file": "enabled.txt",
+          "kind": "bool",
+          "path": "enabled",
+          "sha256": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b"
+        }
+      }
+    ],
+    "path": ""
+  }
+}

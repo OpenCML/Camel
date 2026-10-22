@@ -51,12 +51,16 @@ func add(x: Tensor<f32>, y: Tensor<f32>): Tensor<f32> { return x + y }
 ```
 
 `#gpu` marks a function or a block with a compile-time fact; it names no card. The card (or the
-host) is chosen at run time with `--devices`. `tiles::compile` reads the label as a promise: every
-operator written in the scope must have a device implementation, and one that does not is the
-compile error `GpuScopeUnsupported`, located at the operator and naming the scope. Without
-`tiles::compile` in the pipeline nothing reads the label, and the compiler warns that the tag has
-no reader (design principles 9.4). Outside a `#gpu` scope, a node the device cannot take is left on
-the host, as before.
+host) is chosen at run time with `--devices`. `tiles::compile` reads the label as a promise:
+every operator written in the scope — including the ones written in the functions it calls —
+must have a device program, and a scope the device cannot serve is a compile error, never a host
+run. The capability miss is `GpuScopeUnsupported`; an operator the device back end has a program
+for but not for this shape, or one whose module provides none, is `GpuScopeNoDeviceProgram`. Both
+are located at the operator, name the scope and say why. A `#cpu` block inside the scope is the
+explicit host escape and stays the host's. Without `tiles::compile` in the pipeline nothing reads
+the label, and the compiler warns that the tag has no reader (design principles 9.4). Outside a
+`#gpu` scope, a node the device cannot take is left on the host, as before; that host side of the
+preference path is scheduled for deletion.
 
 For statically shaped eligible tensor regions, `tiles::compile` uses region extraction and resident
 transfers. Unsupported nodes stay on CPU while supported regions prefer GPU; captures and CPU
@@ -95,8 +99,10 @@ ordinary scheduler; this is graph execution, not a fused CPU JIT kernel.
 Configuration errors, malformed graphs, compilation failures and device execution
 faults are reported; an executed GPU region is never replayed on CPU.
 `run_preferred_resident` chooses the host the same way when no device program can
-be made for its function. Functions with mutable parameters, unbound context
-parameters or no ordinary inputs are still refused by the compiled-region path.
+be made for its function, unless the function's body is `#gpu`: a device unit is
+reported as `GpuScopeNoDeviceProgram` instead of being replayed on the host. Functions with
+mutable parameters, unbound context parameters or no ordinary inputs are still refused by the
+compiled-region path.
 
 CPU fallback may change the last bits of transcendental results such as `exp`
 and `log`: each backend must satisfy the operator's declared ulp bound, rather
@@ -179,7 +185,10 @@ This is not a persistent semantic fingerprint or a cache of graph compilation.
 
 - `run_preferred_resident<fn>(inputs)` specializes a function graph for actual input
   shapes, compiles CUDA with NVRTC and executes on the device when a program can be
-  made for it; the host prepares a resident program otherwise. It returns
+  made for it; the host prepares a resident program otherwise. A reusable graph-bound
+  template is used when the signature fixes the shapes; a shape-generic signature is
+  specialized from the call's arguments on the same device, not moved to the host
+  merely because the template cannot be made. It returns
   `Device<Tensor<...>>` or `Device<float>` leaves in the result's original tuple/struct
   structure. Outputs retain their allocations instead of downloading; feed them
   directly into subsequent graph calls and use `download` only when host values are

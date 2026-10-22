@@ -1,7 +1,7 @@
 module shape_inference_recursion_leaf
 import { Tensor, slice, reshape, sum } from tensor
 // That the vector has one element where the recursion ends is known when the program runs.
-func tree(x: Tensor<f32, const [-1]>, n: int): Tensor<f32, const [1]> {
+func tree(x: Tensor<f32, [?]>, n: int): Tensor<f32, [1]> {
     return if n <= 1 then x else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
 }
 func main(): int sync {

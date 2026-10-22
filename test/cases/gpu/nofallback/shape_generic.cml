@@ -1,0 +1,18 @@
+/// (d) A shape-generic `#gpu` function called through `run_preferred_resident`: the type-only
+/// template cannot be built (the parameter has no static shape), and the run retries with the
+/// actual argument shapes before it decides. The retry must still produce the device program —
+/// a `#gpu` scope may not be refused for a shape it never had at compile time (h251).
+module gpu_nofallback_shape_generic
+
+import { Tensor, reshape, sum } from tensor
+import { run_preferred_resident, download } from tiles
+
+#gpu
+func square(x: Tensor<f32>): Tensor<f32> {
+    return x * x
+}
+
+func main() {
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
+    println(sum(download(run_preferred_resident<square>(x))))
+}

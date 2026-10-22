@@ -1,0 +1,54 @@
+/**
+ * The two scalar accuracy rules of the design (rewrite design 2 (second version) 8.10):
+ * `log(1 + x) => log1p(x)` and `exp(x) - 1 => expm1(x)`, in f64 and in f32. The values next to
+ * each naive form are the accurate operator's: at `1e-300` the naive log of `1 + x` is 0 (the
+ * addition lost the whole value) and the naive `exp(x) - 1` is 0 as well; `log1p` and `expm1`
+ * return the value. After `rules::accuracy` each line prints the same number twice.
+ *
+ * `guarded_log` and `guarded_exp` are the forms the rules must not match: the constant is not 1.
+ */
+module accuracy_scalar_target
+
+import { exp, expm1, log1p, log } from math
+
+#[refine_accuracy]
+func naive_log1p(x: float): float {
+    return log(1.0 + x)
+}
+
+#[refine_accuracy]
+func naive_expm1(x: float): float {
+    return exp(x) - 1.0
+}
+
+#[refine_accuracy]
+func naive_log1p32(x: f32): f32 {
+    return log(1.0 + x)
+}
+
+#[refine_accuracy]
+func naive_expm1_32(x: f32): f32 {
+    return exp(x) - 1.0
+}
+
+func guarded_log(x: float): float {
+    return log(2.0 + x)
+}
+
+func guarded_exp(x: float): float {
+    return exp(x) - 2.0
+}
+
+func main(): int sync {
+    let tiny = 1e-300
+    let near = -1.0 + 1e-15
+    let tiny32: f32 = 1e-8
+    println('log1p tiny ', naive_log1p(tiny), log1p(tiny))
+    println('log1p near ', naive_log1p(near), log1p(near))
+    println('log1p tiny32', naive_log1p32(tiny32), log1p(tiny32))
+    println('expm1 tiny ', naive_expm1(tiny), expm1(tiny))
+    println('expm1 one  ', naive_expm1(1.0), expm1(1.0))
+    println('expm1 tiny32', naive_expm1_32(tiny32), expm1(tiny32))
+    println('guarded log', guarded_log(0.5), 'guarded exp', guarded_exp(0.5))
+    return 0
+}

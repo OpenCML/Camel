@@ -14,7 +14,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-218 diagnostics: 201 errors, 17 warnings.
+262 diagnostics: 243 errors, 19 warnings.
 
 | Code | Name | Severity |
 |------|------|----------|
@@ -77,7 +77,6 @@ prints one entry.
 | `0x03000022` | [SemanticDiag::ReturnNeedsConversion](#returnneedsconversion) | Error |
 | `0x03000027` | [SemanticDiag::ImportNameConflict](#importnameconflict) | Error |
 | `0x03000040` | [SemanticDiag::FeatureNotSupported](#featurenotsupported) | Error |
-| `0x03000050` | [SemanticDiag::TypeVariableNotAllowed](#typevariablenotallowed) | Error |
 | `0x03000051` | [SemanticDiag::TypeVariableRedeclared](#typevariableredeclared) | Error |
 | `0x03000052` | [SemanticDiag::TypeVariableNotBindable](#typevariablenotbindable) | Error |
 | `0x03000053` | [SemanticDiag::GenericArgumentsMismatch](#genericargumentsmismatch) | Error |
@@ -182,6 +181,48 @@ prints one entry.
 | `0x0300019B` | [SemanticDiag::ConstasArgumentMissing](#constasargumentmissing) | Error |
 | `0x0300019C` | [SemanticDiag::StaticTupleEscapes](#statictupleescapes) | Error |
 | `0x0300019D` | [SemanticDiag::TagValueConflict](#tagvalueconflict) | Error |
+| `0x0300019E` | [SemanticDiag::DimensionAfterAnyRank](#dimensionafteranyrank) | Error |
+| `0x030001A0` | [SemanticDiag::UnknownResource](#unknownresource) | Error |
+| `0x030001A1` | [SemanticDiag::PureAndUses](#pureanduses) | Error |
+| `0x030001A2` | [SemanticDiag::ResourceGroupCycle](#resourcegroupcycle) | Error |
+| `0x030001A3` | [SemanticDiag::HandleTypeNotNominal](#handletypenotnominal) | Error |
+| `0x030001A4` | [SemanticDiag::NativeResourceMismatch](#nativeresourcemismatch) | Error |
+| `0x030001A5` | [SemanticDiag::CmlUnsupportedConstruct](#cmlunsupportedconstruct) | Error |
+| `0x030001A6` | [SemanticDiag::CmlBigConstant](#cmlbigconstant) | Error |
+| `0x030001A8` | [SemanticDiag::WhenConditionNotBool](#whenconditionnotbool) | Error |
+| `0x030001A9` | [SemanticDiag::WhenConditionNotConstant](#whenconditionnotconstant) | Error |
+| `0x030001AA` | [SemanticDiag::WhenUnknownName](#whenunknownname) | Error |
+| `0x030001AB` | [SemanticDiag::WhenTypeQueryNotConcrete](#whentypequerynotconcrete) | Error |
+| `0x030001AC` | [SemanticDiag::WhenConditionUnmet](#whenconditionunmet) | Error |
+| `0x030001B3` | [SemanticDiag::TypeOfNotAValue](#typeofnotavalue) | Error |
+| `0x030001B4` | [SemanticDiag::TypeOfNotWholeType](#typeofnotwholetype) | Error |
+| `0x030001B5` | [SemanticDiag::SameShapeComprehensionNotComposite](#sameshapecomprehensionnotcomposite) | Error |
+| `0x030001B6` | [SemanticDiag::SameShapeComprehensionMismatch](#sameshapecomprehensionmismatch) | Error |
+| `0x030001B7` | [SemanticDiag::WithArgumentUnknown](#withargumentunknown) | Error |
+| `0x030001B8` | [SemanticDiag::WithArgumentDuplicate](#withargumentduplicate) | Error |
+| `0x030001B9` | [SemanticDiag::WithArgumentMissing](#withargumentmissing) | Error |
+| `0x030001BA` | [SemanticDiag::WithDefaultNotConstant](#withdefaultnotconstant) | Error |
+| `0x030001BB` | [SemanticDiag::WithDefaultWrongType](#withdefaultwrongtype) | Error |
+| `0x030001BC` | [SemanticDiag::WithParameterAfterDefault](#withparameterafterdefault) | Error |
+| `0x030001BD` | [SemanticDiag::WithArgumentCallee](#withargumentcallee) | Error |
+| `0x030001BE` | [SemanticDiag::WithArgumentInValue](#withargumentinvalue) | Error |
+| `0x030001BF` | [SemanticDiag::WhenPredicateNotImported](#whenpredicatenotimported) | Error |
+| `0x030001C0` | [SemanticDiag::WhenPredicateNotCompileTime](#whenpredicatenotcompiletime) | Error |
+| `0x030001C1` | [SemanticDiag::WhenPredicateAmbiguous](#whenpredicateambiguous) | Error |
+| `0x030001C2` | [SemanticDiag::StaticMatchPatternCannotMatch](#staticmatchpatterncannotmatch) | Error |
+| `0x030001C5` | [SemanticDiag::FoldCallArgumentNotConstant](#foldcallargumentnotconstant) | Error |
+| `0x030001C6` | [SemanticDiag::FoldCallHasEffects](#foldcallhaseffects) | Error |
+| `0x030001C7` | [SemanticDiag::FoldCallTooDeep](#foldcalltoodeep) | Error |
+| `0x030001C8` | [SemanticDiag::FoldCallResultNotConstant](#foldcallresultnotconstant) | Error |
+| `0x030001C9` | [SemanticDiag::FoldCallNotEvaluable](#foldcallnotevaluable) | Error |
+| `0x030001CD` | [SemanticDiag::ParamArgumentUnknown](#paramargumentunknown) | Error |
+| `0x030001CE` | [SemanticDiag::ParamArgumentDuplicate](#paramargumentduplicate) | Error |
+| `0x030001CF` | [SemanticDiag::ParamArgumentMissing](#paramargumentmissing) | Error |
+| `0x030001D0` | [SemanticDiag::ParamArgumentCallee](#paramargumentcallee) | Error |
+| `0x030001D1` | [SemanticDiag::ParamArgumentPositionalAfterNamed](#paramargumentpositionalafternamed) | Error |
+| `0x030001D2` | [SemanticDiag::ParamDefaultNotConstant](#paramdefaultnotconstant) | Error |
+| `0x030001D3` | [SemanticDiag::ParamDefaultWrongType](#paramdefaultwrongtype) | Error |
+| `0x030001D4` | [SemanticDiag::ParamAfterDefault](#paramafterdefault) | Error |
 | `0x03100001` | [SemanticDiag::VarParamInAsyncFunction](#varparaminasyncfunction) | Warn |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn |
 | `0x03100003` | [SemanticDiag::CapturedWriteInAsyncFunction](#capturedwriteinasyncfunction) | Warn |
@@ -194,6 +235,8 @@ prints one entry.
 | `0x03100131` | [SemanticDiag::MatchCaseAfterWildcard](#matchcaseafterwildcard) | Warn |
 | `0x03100132` | [SemanticDiag::MatchWildcardRedundant](#matchwildcardredundant) | Warn |
 | `0x03100160` | [SemanticDiag::TagHasNoReader](#taghasnoreader) | Warn |
+| `0x03100161` | [SemanticDiag::DimensionNameUsedOnce](#dimensionnameusedonce) | Warn |
+| `0x031001A5` | [SemanticDiag::TypeVariableUnused](#typevariableunused) | Warn |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error |
@@ -233,6 +276,7 @@ prints one entry.
 | `0x04000071` | [RuntimeDiag::GpuScopeUnsupported](#gpuscopeunsupported) | Error |
 | `0x04000186` | [RuntimeDiag::PassNotProvidedByModule](#passnotprovidedbymodule) | Error |
 | `0x04000187` | [RuntimeDiag::PassNotExportedByModule](#passnotexportedbymodule) | Error |
+| `0x040001A7` | [RuntimeDiag::GpuScopeNoDeviceProgram](#gpuscopenodeviceprogram) | Error |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn |
@@ -793,7 +837,7 @@ Each identifier must be declared only once in its scope.
 ```camel
 module err_redecl
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
@@ -880,7 +924,22 @@ Tuple unpacking requires the same number of references and data nodes, or exactl
 Ensure the number of variables matches the number of unpacked data elements, or use a single tuple value.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/err_lambda_tuple_arity.cml`, run as `camel test/cases/compile/err_lambda_tuple_arity.cml`)
+
+```camel
+module lambda_tuple_arity
+
+// More names than the tuple has elements is refused, not read past the end.
+with <f: (p: (int, int)) => int>
+func apply_all(ps: (int, int)[]): int[] {
+    return ps->map<f>
+}
+
+func main(): int sync {
+    println(apply_all<((a, b, c)) => a + b + c>([(1, 2)]))
+    return 0
+}
+```
 
 ### InvalidLiteral
 
@@ -1016,17 +1075,17 @@ Unresolved type reference: '{0}'.
 Ensure the type is defined and visible in the current scope.
 ```
 
-**Example** (`test/cases/compile/generics/err_unbound_use.cml`, run as `camel test/cases/compile/generics/err_unbound_use.cml`)
+**Example** (`test/cases/compile/generic_head/err_unknown_type_in_signature.cml`, run as `camel test/cases/compile/generic_head/err_unknown_type_in_signature.cml`)
 
 ```camel
-module err_unbound_use
+module err_unknown_type_in_signature
 
-func id(a: T, b: typeas T): T {
-    return a
+func identity(x: T): T {
+    return x
 }
 
 func main(): int sync {
-    println(id(1, 2))
+    println(identity(1))
     return 0
 }
 ```
@@ -1360,7 +1419,7 @@ A literal the type cannot hold is not wrapped around or cut off, and a value is 
 ```camel
 module err_literal
 
-func zero_of(x: typeas T): T {
+func zero_of::<T>(x: T): T {
     let z: T = 0.5
     return z
 }
@@ -1647,19 +1706,19 @@ The arguments of the type '{0}<...>' are not accepted: {1}.
 What a type takes between '<' and '>' is defined by the type itself (a type argument, or a constant written 'const <data>'). An argument a type does not accept is an error; it is never ignored.
 ```
 
-**Example** (`test/cases/compile/collections/err_bare_name.cml`, run as `camel test/cases/compile/collections/err_bare_name.cml`)
+**Example** (`test/cases/compile/array_shape/err_const_shape.cml`, run as `camel test/cases/compile/array_shape/err_const_shape.cml`)
 
 ```camel
-module main
+// A shape argument is written without `const`; the old spelling is refused and the message
+// gives the new one.
+module array_shape_err_const
+import { Tensor } from tensor
 
-// `Map` is always written with its key and value types.
-
-func size(m: Map): int {
+func bad(x: Tensor<f32, const [3]>): int {
     return 0
 }
 
 func main(): int sync {
-    println("never printed")
     return 0
 }
 ```
@@ -1686,10 +1745,10 @@ A type that leaves open what a parameter fixes is never accepted implicitly, and
 module shape_inference_computed_extent_stays_open
 import { Tensor, reshape, sum } from tensor
 // The computed extent itself is not known: [?, 3] does not enter a [2, 3] parameter.
-func exact(a: Tensor<f32, const [2, 3]>): float {
+func exact(a: Tensor<f32, [2, 3]>): float {
     return sum(a)
 }
-func f(x: Tensor<f32, const [-1, 3]>, n: int): float {
+func f(x: Tensor<f32, [?, 3]>, n: int): float {
     return exact(reshape(x, [n, 3]))
 }
 func main(): int sync {
@@ -1720,7 +1779,7 @@ A type that leaves open what the declared return type fixes is never accepted im
 module shape_inference_recursion_leaf
 import { Tensor, slice, reshape, sum } from tensor
 // That the vector has one element where the recursion ends is known when the program runs.
-func tree(x: Tensor<f32, const [-1]>, n: int): Tensor<f32, const [1]> {
+func tree(x: Tensor<f32, [?]>, n: int): Tensor<f32, [1]> {
     return if n <= 1 then x else tree(slice(x, 0, 0, n / 2), n / 2) + tree(slice(x, 0, n / 2, n), n - n / 2)
 }
 func main(): int sync {
@@ -1790,33 +1849,6 @@ func main(): int sync {
 }
 ```
 
-### TypeVariableNotAllowed
-
-`0x03000050` · Error · `SemanticDiag::TypeVariableNotAllowed`
-
-**Message**
-
-```text
-'typeas {0}' cannot bind a type variable here: {1}.
-```
-
-**Help**
-
-```text
-A type variable is declared where it first appears in the parameters or result of a function declaration, e.g. 'func first(xs: (typeas T)[]): T', and is written as plain '{0}' everywhere after that.
-```
-
-**Example** (`test/cases/compile/generics/err_typeas_let.cml`, run as `camel test/cases/compile/generics/err_typeas_let.cml`)
-
-```camel
-module err_typeas_let
-
-func main(): int sync {
-    let f = (x: typeas T) => x
-    return 0
-}
-```
-
 ### TypeVariableRedeclared
 
 `0x03000051` · Error · `SemanticDiag::TypeVariableRedeclared`
@@ -1824,21 +1856,21 @@ func main(): int sync {
 **Message**
 
 ```text
-'typeas {0}' cannot bind '{0}': the name already denotes a type here.
+The type parameter '{0}' is declared twice at the head of this declaration.
 ```
 
 **Help**
 
 ```text
-Write 'typeas' only at the first occurrence of a type variable and plain '{0}' afterwards, or choose a name that is not a type in scope.
+A declaration declares each type parameter once, after its name: 'func first::<T>(xs: T[]): T'. A call names them by position or by name ('f::<T = int>').
 ```
 
-**Example** (`test/cases/compile/generics/err_typeas_twice.cml`, run as `camel test/cases/compile/generics/err_typeas_twice.cml`)
+**Example** (`test/cases/compile/generic_head/err_duplicate_head_param.cml`, run as `camel test/cases/compile/generic_head/err_duplicate_head_param.cml`)
 
 ```camel
-module err_typeas_twice
+module err_duplicate_head_param
 
-func same(a: typeas T, b: typeas T): T {
+func same::<T, T>(a: T, b: T): T {
     return a
 }
 
@@ -1871,7 +1903,7 @@ module err_tf_unused
 
 type Tag<T> = int
 
-func f(p: Tag<typeas T>): int {
+func f::<T>(p: Tag<T>): int {
     return 1
 }
 
@@ -1893,7 +1925,7 @@ The generic function '{0}' cannot be called with argument types {1}: {2}.
 **Help**
 
 ```text
-A type variable takes the type of the argument found at its 'typeas' position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
+A type variable takes the type of the argument found at its first binding position, or, when that argument says nothing (a 'null', a generic function that is itself waiting for its types), at another occurrence; every parameter is then checked against its type with the variables replaced. Result-only variables take their types from the expected result or explicit f::<T> arguments. A value enters a 'T?' or 'T!' parameter by itself; nothing else is converted. Signature: {3}
 ```
 
 **Example** (`test/cases/compile/constas/constas_argument_shape.cml`, run as `camel test/cases/compile/constas/constas_argument_shape.cml`)
@@ -1902,7 +1934,7 @@ A type variable takes the type of the argument found at its 'typeas' position, o
 module constas_argument_shape
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -1934,7 +1966,7 @@ A generic function may stand wherever a function is expected, also as an argumen
 ```camel
 module err_as_value
 
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
@@ -1966,7 +1998,7 @@ Each call of a generic function with a new set of types builds a new subgraph. A
 ```camel
 module err_deep
 
-func grow(x: typeas T, n: int): int {
+func grow::<T>(x: T, n: int): int {
     return if n <= 0 then 0 else grow([x], n - 1)
 }
 
@@ -2034,7 +2066,7 @@ func deco(f: (x: int) => int): (x: int) => int {
 }
 
 @deco
-func id(x: typeas T): T {
+func id::<T>(x: T): T {
     return x
 }
 
@@ -2168,7 +2200,7 @@ The type '{0}' marks '{1}' twice.
 
 ```camel
 module generic_explicit_nullable_error
-func optional(x: typeas T): T? { return null }
+func optional::<T>(x: T): T? { return null }
 func main(): int sync {
     println(optional::<int?>(null))
     return 0
@@ -3422,23 +3454,10 @@ The dimension name '{0}' is bound here, but only a parameter type can bind one.
 **Help**
 
 ```text
-Write 'constas n' where the dimension first appears in a parameter type, 'x: Tensor<f32, const [constas n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
+A dimension name binds where it first appears in a parameter type, 'x: Tensor<f32, [n, 3]>'. Every later occurrence, including one in the return type, writes 'n'.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_constas_return.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_return.cml`)
-
-```camel
-module named_dims_err_constas_return
-import { Tensor, ones } from tensor
-// A return type uses the names its parameters bound; it binds none.
-func bad(x: Tensor<f32>): Tensor<f32, const [constas n]> {
-    return x as Tensor<f32, const [-1]>
-}
-func main(): int sync {
-    println(bad(ones([3])))
-    return 0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### DimensionNameNotBound
 
@@ -3453,20 +3472,21 @@ The dimension name '{0}' is not bound by any parameter of this signature.
 **Help**
 
 ```text
-A name in a type's extents is bound by 'constas name' where it first appears in a parameter type. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
+A name in a type's extents is bound by its first plain occurrence in a parameter type, 'x: f32[n]', and later occurrences write it. A name that appears only in the return type is an error: the caller has no argument that could say what it is.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_unbound_name.cml`, run as `camel test/cases/modules/tensor/named_dims/err_unbound_name.cml`)
+**Example** (`test/cases/compile/array_shape/err_unbound.cml`, run as `camel test/cases/compile/array_shape/err_unbound.cml`)
 
 ```camel
-module named_dims_err_unbound_name
-import { Tensor, ones } from tensor
-// A name that only the return type writes is an error: no parameter binds it.
-func only_return(x: Tensor<f32>): Tensor<f32, const [n]> {
-    return x as Tensor<f32, const [-1]>
+// The return type writes `n`, but no parameter binds it: the caller has no argument that
+// could say what it is.
+module array_shape_err_unbound
+
+func bad(x: f32[]): f32[n] {
+    return x
 }
+
 func main(): int sync {
-    println(only_return(ones([3])))
     return 0
 }
 ```
@@ -3478,25 +3498,16 @@ func main(): int sync {
 **Message**
 
 ```text
-The dimension name '{0}' is already bound; write '{0}' here instead of 'constas {0}'.
+The dimension name '{0}' is already bound; write '{0}' here.
 ```
 
 **Help**
 
 ```text
-Only the first occurrence of a dimension name in the parameter types binds it ('constas n'). Writing 'constas' again would ask for a second binding of the same name.
+Only the first occurrence of a dimension name in the parameter types binds it; later occurrences write it. Dimension names and pack names are separate namespaces, so one name cannot be both.
 ```
 
-**Example** (`test/cases/modules/tensor/named_dims/err_constas_twice.cml`, run as `camel test/cases/modules/tensor/named_dims/err_constas_twice.cml`)
-
-```camel
-module named_dims_err_constas_twice
-import { Tensor } from tensor
-// Only the first occurrence binds; a second `constas` of the same name would bind it again.
-func bad(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [constas n]>): float {
-    return 0.0
-}
-```
+*No example: no test small enough to show raises it.*
 
 ### DimensionMismatch
 
@@ -3519,7 +3530,7 @@ The dimensions a signature names are one value for the whole call: every argumen
 ```camel
 module named_dims_err_mismatch
 import { Tensor, ones, sum } from tensor
-func pair(a: Tensor<f32, const [constas n]>, b: Tensor<f32, const [n]>): float {
+func pair(a: Tensor<f32, [n]>, b: Tensor<f32, [n]>): float {
     return sum(a) + sum(b)
 }
 func main(): int sync {
@@ -3535,16 +3546,29 @@ func main(): int sync {
 **Message**
 
 ```text
-This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('const [n, 3]').
+This is not a shape: the extents of a type written with dimension names are integers, bound names, or linear expressions over them ('f32[n, 3]').
 ```
 
 **Help**
 
 ```text
-Each extent is an integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown.
+Each extent is a non-negative integer, a dimension name bound by the signature, or a linear expression over such names: 'n', 'n + 1', '2 * n', 'n - k'. A dimension that is not linear is unknown, and an unknown extent is written '?'.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/compile/array_shape/err_negative.cml`, run as `camel test/cases/compile/array_shape/err_negative.cml`)
+
+```camel
+// A negative extent is not a dimension: `?` is the unknown extent.
+module array_shape_err_negative
+
+func bad(x: f32[-1]): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}
+```
 
 ### NotDifferentiable
 
@@ -3948,7 +3972,7 @@ No case of this 'match type' selects the type '{0}'.
 **Help**
 
 ```text
-The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), and '_' for every type. Add the case for this shape, or end with '#leaf' or '_'.
+The cases name shapes: 'struct', 'tuple', 'func', '#leaf' (every type that is not a structure or an ordinary tuple, including 'T?' and 'T!'), '_' for every type, and a type's identity ('int', 'MyStruct', T). Add the case for this type, or end with '#leaf' or '_'.
 ```
 
 **Example** (`test/cases/compile/static_expansion/match_type_exhaustive.cml`, run as `camel test/cases/compile/static_expansion/match_type_exhaustive.cml`)
@@ -3956,7 +3980,7 @@ The cases name shapes: 'struct', 'tuple', '#leaf' (every type that is not a stru
 ```camel
 module match_type_exhaustive
 
-func only_composite(t: typeas T): int {
+func only_composite::<T>(t: T): int {
     return match type T {
         case struct => 1
         case tuple => 2
@@ -3982,7 +4006,7 @@ The case '{0}' selects every type the cases after it could select.
 **Help**
 
 ```text
-'#leaf' and '_' select every type, so they must be the last case of a 'match type'.
+'#leaf' and '_' select every type, so they must be the last case of a 'match type'. An identity pattern that repeats a type an earlier case already selects is the same kind of dead case.
 ```
 
 **Example** (`test/cases/compile/static_expansion/match_type_unreachable.cml`, run as `camel test/cases/compile/static_expansion/match_type_unreachable.cml`)
@@ -3990,7 +4014,7 @@ The case '{0}' selects every type the cases after it could select.
 ```camel
 module match_type_unreachable
 
-func after_leaf(t: typeas T): int {
+func after_leaf::<T>(t: T): int {
     return match type T {
         case #leaf => 1
         case struct => 2
@@ -4060,7 +4084,7 @@ A recursive generic call can be built only after the return type is known. Write
 ```camel
 module err_recursive_untyped
 
-func count(xs: (typeas T)[], i: int) {
+func count::<T>(xs: T[], i: int) {
     return if i >= len(xs) then 0 else 1 + count(xs, i + 1)
 }
 
@@ -4119,7 +4143,16 @@ A field cannot be taken from '{0}' by a compile-time key.
 't.[key]' names a field of a struct or an element of an ordinary tuple. A 'T?' or 'T!' has to be opened first ('??', '!!', 'match'), and a scalar or an array has no fields.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/tree_shape_error.cml`, run as `camel test/cases/modules/tree_shape_error.cml std::nvm`)
+
+```camel
+module tree_shape_error
+import { tree_map } from tree
+func main(): int sync {
+    println(tree_map<(a: int, b: int): int => a + b>({ block: (1, 2) }, { block: 3 }))
+    return 0
+}
+```
 
 ### StaticAccessUnknownField
 
@@ -4194,7 +4227,7 @@ The key '{0}' of a 't.[...]' access is not known when the function is compiled.
 **Help**
 
 ```text
-The key is a string or integer literal, or the 'n' of an enclosing 'static for'. A runtime value cannot choose a field, because only the selected field is built into the graph.
+The key is a string or integer literal, the 'n' of an enclosing 'static for', or an expression whose value is known at compile time, such as a 'let' bound once to such a value. A run-time value (a 'var', a parameter) cannot choose a field, because only the selected field is built into the graph.
 ```
 
 **Example** (`test/cases/compile/static_expansion/static_access_not_constant.cml`, run as `camel test/cases/compile/static_expansion/static_access_not_constant.cml`)
@@ -4354,12 +4387,12 @@ An operator has one meaning for one call: which rule applies must be decided by 
 module native_overlap
 
 #op<':op/idx_arr'>
-export func pick(xs: (typeas T)[], i: int): T
+export func pick::<T>(xs: T[], i: int): T
 
 // The same call: an array of some element type and an index. `T` and `U` are no help — every
 // call of one is a call of the other.
 #op<':op/idx_arr'>
-export func pick(xs: (typeas U)[], i: int): U
+export func pick::<U>(xs: U[], i: int): U
 
 func main(): int sync {
     println(pick([10, 20, 30], 1))
@@ -4661,7 +4694,7 @@ The value selects the instance of the declaration, so it must be known before th
 module constas_value_not_constant
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4697,7 +4730,7 @@ The value must be known where the call is written. Call the declaration directly
 module constas_as_value
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4736,7 +4769,7 @@ import { Tensor } from tensor
 
 // A body-less declaration names a C++ operator whose signature does not carry a compile-time
 // value parameter, even when the value writes the result's extent.
-func zeros(constas n: int): Tensor<f32, const [n]>
+func zeros(constas n: int): Tensor<f32, [n]>
 
 func main(): int sync {
     println(zeros(3))
@@ -4766,7 +4799,7 @@ A 'constas' value is bound at the call, like any other argument, but it is not a
 module constas_missing_argument
 import { Tensor, ones, sum } from tensor
 
-func total(constas n: int, x: Tensor<f32, const [n]>): float {
+func total(constas n: int, x: Tensor<f32, [n]>): float {
     return sum(x)
 }
 
@@ -4836,6 +4869,1302 @@ func both(x: int): int {
 
 func main(): int {
     return both(1)
+}
+```
+
+### DimensionAfterAnyRank
+
+`0x0300019E` · Error · `SemanticDiag::DimensionAfterAnyRank`
+
+**Message**
+
+```text
+A dimension pack ('..') must be the last item of its '[...]', and only one may be written.
+```
+
+**Help**
+
+```text
+A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.
+```
+
+**Example** (`test/cases/compile/array_shape/err_pack_not_last.cml`, run as `camel test/cases/compile/array_shape/err_pack_not_last.cml`)
+
+```camel
+// A pack stands for the trailing dimensions, so nothing may follow it.
+module array_shape_err_pack_not_last
+
+func bad(x: f32[..rest, 3]): int {
+    return 0
+}
+
+func main(): int sync {
+    return 0
+}
+```
+
+### UnknownResource
+
+`0x030001A0` · Error · `SemanticDiag::UnknownResource`
+
+**Message**
+
+```text
+The name '{0}' in the resource clause of '{1}' is neither a parameter nor a resource.
+```
+
+**Help**
+
+```text
+A clause names a parameter of the function (the value a call touches), a resource the module declares (`resource {0}`), one of the resources every program has (stdout, stderr, stdin, clock, env, fs), or a resource imported from another module. Check the spelling, or declare the resource.
+```
+
+**Example** (`test/cases/effects/err_unknown_resource.cml`, run as `camel test/cases/effects/err_unknown_resource.cml`)
+
+```camel
+// A clause names a parameter, a resource the module declares, one of the standard resources, or
+// one imported from another module. `nowhere` is none of those (UnknownResource).
+func f(x: int): int uses nowhere {
+    return x
+}
+
+func main(): int {
+    return f(1)
+}
+```
+
+### PureAndUses
+
+`0x030001A1` · Error · `SemanticDiag::PureAndUses`
+
+**Message**
+
+```text
+The signature of '{0}' says both 'pure' and 'uses'.
+```
+
+**Help**
+
+```text
+'pure' says the call touches no resource at all; 'uses' names the resources it touches. Write one of the two.
+```
+
+**Example** (`test/cases/effects/err_pure_and_uses.cml`, run as `camel test/cases/effects/err_pure_and_uses.cml`)
+
+```camel
+// `pure` says a call touches no resource at all; `uses` names the resources it touches. A
+// signature cannot say both (PureAndUses).
+func f(): int pure uses fs {
+    return 0
+}
+
+func main(): int {
+    return f()
+}
+```
+
+### ResourceGroupCycle
+
+`0x030001A2` · Error · `SemanticDiag::ResourceGroupCycle`
+
+**Message**
+
+```text
+The resource group '{0}' contains itself: {1}.
+```
+
+**Help**
+
+```text
+A group names resources, or other groups that name resources. Expand them in an order: a group cannot be one of its own members.
+```
+
+**Example** (`test/cases/effects/err_group_cycle.cml`, run as `camel test/cases/effects/err_group_cycle.cml`)
+
+```camel
+// A group names resources, or other groups that name resources, in an order: `a` contains itself
+// through `b` (ResourceGroupCycle).
+resource a = [b]
+resource b = [a]
+
+func main(): int {
+    return 0
+}
+```
+
+### HandleTypeNotNominal
+
+`0x030001A3` · Error · `SemanticDiag::HandleTypeNotNominal`
+
+**Message**
+
+```text
+'{0}' is not a nominal type declaration, so '#resource' says nothing about it.
+```
+
+**Help**
+
+```text
+A handle is a type with an identity of its own, one resource per value. Write the tag before a struct or an enum declaration (a `type` that names its fields or variants), not before an alias or a type function.
+```
+
+**Example** (`test/cases/effects/err_handle_not_nominal.cml`, run as `camel test/cases/effects/err_handle_not_nominal.cml`)
+
+```camel
+// `#resource` says a type is a handle: one resource per value, named by the declaration. An alias
+// has no identity of its own to name (HandleTypeNotNominal).
+#resource type Id = int
+
+func main(): int {
+    return 0
+}
+```
+
+### NativeResourceMismatch
+
+`0x030001A4` · Error · `SemanticDiag::NativeResourceMismatch`
+
+**Message**
+
+```text
+The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.
+```
+
+**Help**
+
+```text
+A body-less declaration is the whole signature of a C++ operator, its resources included: write the clause the operator declares, or remove the clause and let the operator's declaration be the one the module publishes.
+```
+
+**Example** (`test/cases/effects/native_clause_wrong.cml`, run as `camel test/cases/effects/native_clause_wrong.cml`)
+
+```camel
+module fs
+
+import { read_text } from fs
+
+export func exists(path: string): bool pure
+
+func main(): int sync {
+    println(exists("no/such/file"))
+    return 0
+}
+```
+
+### CmlUnsupportedConstruct
+
+`0x030001A5` · Error · `SemanticDiag::CmlUnsupportedConstruct`
+
+**Message**
+
+```text
+std::cml cannot print {0}: {1}.
+```
+
+**Help**
+
+```text
+This version prints expressions, `let` and `var`, branches, loops, closures, `with` and `var` parameters, and `sync` blocks (handover H240). Tags, named types, generic instances and the other region kinds are refused.
+```
+
+*No example: no test small enough to show raises it.*
+
+### CmlBigConstant
+
+`0x030001A6` · Error · `SemanticDiag::CmlBigConstant`
+
+**Message**
+
+```text
+std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}).
+```
+
+**Help**
+
+```text
+Raise the limit with `std::cml(max_literal_bytes=...)`, or keep the value in a module the printed program imports.
+```
+
+*No example: no test small enough to show raises it.*
+
+### WhenConditionNotBool
+
+`0x030001A8` · Error · `SemanticDiag::WhenConditionNotBool`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' is not a bool (it is '{1}').
+```
+
+**Help**
+
+```text
+A 'when' is a compile-time predicate over the declaration's type parameters and 'with' parameters: call a generic function this module declares that reduces to a constant over its type arguments ('is_numeric::<T>()' is one, written in the standard module 'types'), possibly combined with '!', '&&' and '||'. It is not a runtime value.
+```
+
+**Example** (`test/cases/compile/when/non_bool.cml`, run as `camel test/cases/compile/when/non_bool.cml`)
+
+```camel
+module when_non_bool
+
+func bad(x: int): int when 1 {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenConditionNotConstant
+
+`0x030001A9` · Error · `SemanticDiag::WhenConditionNotConstant`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' cannot be evaluated when the declaration is instantiated: {1}.
+```
+
+**Help**
+
+```text
+The condition is checked at instantiation, before the body is built, so it can only read what is known there: the types bound to the declaration's type parameters, and the 'with' arguments the call writes as compile-time constants. Move a runtime test into the body, or make the value a constant.
+```
+
+**Example** (`test/cases/compile/when/not_constant.cml`, run as `camel test/cases/compile/when/not_constant.cml`)
+
+```camel
+module when_not_constant
+
+func is_positive(x: int): bool {
+    return x > 0
+}
+
+func bad(x: int): int when is_positive(1) {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenUnknownName
+
+`0x030001AA` · Error · `SemanticDiag::WhenUnknownName`
+
+**Message**
+
+```text
+'{0}' is not visible to the 'when' condition of '{1}'.
+```
+
+**Help**
+
+```text
+A condition sees the declaration's type parameters and its 'with' parameters. Ordinary parameters and the names of the body do not exist yet when the condition is evaluated: test those in the body, or move the value to a 'with' parameter.
+```
+
+**Example** (`test/cases/compile/when/unknown_name.cml`, run as `camel test/cases/compile/when/unknown_name.cml`)
+
+```camel
+module when_unknown_name
+
+func bad(x: int): int when x {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenTypeQueryNotConcrete
+
+`0x030001AB` · Error · `SemanticDiag::WhenTypeQueryNotConcrete`
+
+**Message**
+
+```text
+The type query '{0}' cannot be answered for '{1}' in the 'when' condition of '{2}': the type still has a type variable.
+```
+
+**Help**
+
+```text
+A predicate is evaluated when the declaration is instantiated, where every type parameter has a type. Give the predicate a type parameter the call binds, or guard the declaration so that it is only instantiated for a concrete type.
+```
+
+**Example** (`test/cases/compile/when/open_type.cml`, run as `camel test/cases/compile/when/open_type.cml`)
+
+```camel
+module when_open_type
+
+func is_numeric::<T>(): bool {
+    return match type T {
+        case int | i32 | float | f32 | c64 | c128 => true
+        case _ => false
+    }
+}
+
+func bad::<T>(x: int): int when is_numeric::<T>() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenConditionUnmet
+
+`0x030001AC` · Error · `SemanticDiag::WhenConditionUnmet`
+
+**Message**
+
+```text
+No candidate of '{0}' applies to ({1}): every candidate's 'when' condition is false. Candidates: {2}
+```
+
+**Help**
+
+```text
+A 'when' that is false makes its declaration inapplicable, not erroneous, and the call goes on to the other candidates. Pass an argument or a type that satisfies a condition, or write another overload for this call.
+```
+
+**Example** (`test/cases/compile/when/not_applicable.cml`, run as `camel test/cases/compile/when/not_applicable.cml`)
+
+```camel
+module when_not_applicable
+
+func is_float::<T>(): bool {
+    return match type T {
+        case float | f32 => true
+        case _ => false
+    }
+}
+
+/// The condition asks about int, so this overload never applies here.
+func needs_float(x: float): float when is_float::<int>() {
+    return x
+}
+
+func main(): int sync {
+    return int(needs_float(1.0))
+}
+```
+
+### TypeOfNotAValue
+
+`0x030001B3` · Error · `SemanticDiag::TypeOfNotAValue`
+
+**Message**
+
+```text
+typeof {0} has no value type: {1}.
+```
+
+**Help**
+
+```text
+`typeof` takes the type of a value. Write an expression that produces one, or name the type directly.
+```
+
+**Example** (`test/cases/compile/static_expansion/typeof_void.cml`, run as `camel test/cases/compile/static_expansion/typeof_void.cml`)
+
+```camel
+module typeof_void
+
+func nothing(): void {
+}
+
+func main(): int sync {
+    static for (j, C) in fields typeof(nothing()) => println(j)
+    return 0
+}
+```
+
+### TypeOfNotWholeType
+
+`0x030001B4` · Error · `SemanticDiag::TypeOfNotWholeType`
+
+**Message**
+
+```text
+typeof is written inside the larger type {0}.
+```
+
+**Help**
+
+```text
+`typeof` stands for a whole type. Bind the value in a `let` and name its type, or write the enclosing type out.
+```
+
+**Example** (`test/cases/compile/static_expansion/typeof_inside_type.cml`, run as `camel test/cases/compile/static_expansion/typeof_inside_type.cml`)
+
+```camel
+module typeof_inside_type
+
+func main(): int sync {
+    static for (j, C) in fields typeof(1)[] => println(j)
+    return 0
+}
+```
+
+### SameShapeComprehensionNotComposite
+
+`0x030001B5` · Error · `SemanticDiag::SameShapeComprehensionNotComposite`
+
+**Message**
+
+```text
+{0} is not a struct or a tuple, so it has no shape to fill.
+```
+
+**Help**
+
+```text
+A same-shape comprehension names a struct or a tuple type; a leaf has no fields.
+```
+
+**Example** (`test/cases/compile/static_expansion/shape_not_composite.cml`, run as `camel test/cases/compile/static_expansion/shape_not_composite.cml`)
+
+```camel
+module shape_not_composite
+
+type N = int
+
+func build(t: int) {
+    return N { static for (n, F) in fields N => t }
+}
+
+func main(): int sync {
+    println(build(1))
+    return 0
+}
+```
+
+### SameShapeComprehensionMismatch
+
+`0x030001B6` · Error · `SemanticDiag::SameShapeComprehensionMismatch`
+
+**Message**
+
+```text
+The shape {0} is filled from the fields of {1}.
+```
+
+**Help**
+
+```text
+Write `T { static for (n, F) in fields T => ... }`: the generator must walk the shape the comprehension constructs.
+```
+
+**Example** (`test/cases/compile/static_expansion/shape_mismatch.cml`, run as `camel test/cases/compile/static_expansion/shape_mismatch.cml`)
+
+```camel
+module shape_mismatch
+
+type A = {a: int}
+type B = {b: int, c: int}
+
+func build(u: B) {
+    return A { static for (n, F) in fields B => u.[n] }
+}
+
+func main(): int sync {
+    println(build({b: 1, c: 2}))
+    return 0
+}
+```
+
+### WithArgumentUnknown
+
+`0x030001B7` · Error · `SemanticDiag::WithArgumentUnknown`
+
+**Message**
+
+```text
+'{0}' is not a 'with' parameter of '{1}'.
+```
+
+**Help**
+
+```text
+A name in a 'with' argument is written as in a struct literal, 'name: value', and must be one of the callee's 'with' parameters.
+```
+
+**Example** (`test/cases/compile/with_defaults/unknown_name.cml`, run as `camel test/cases/compile/with_defaults/unknown_name.cml`)
+
+```camel
+module with_argument_unknown
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    return f<round: 2>(1)
+}
+```
+
+### WithArgumentDuplicate
+
+`0x030001B8` · Error · `SemanticDiag::WithArgumentDuplicate`
+
+**Message**
+
+```text
+The 'with' parameter '{0}' of '{1}' is given twice.
+```
+
+**Help**
+
+```text
+Give each 'with' parameter once: positionally, or by name after the positional arguments.
+```
+
+**Example** (`test/cases/compile/with_defaults/duplicate.cml`, run as `camel test/cases/compile/with_defaults/duplicate.cml`)
+
+```camel
+module with_argument_duplicate
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    return f<2, rounds: 3>(1)
+}
+```
+
+### WithArgumentMissing
+
+`0x030001B9` · Error · `SemanticDiag::WithArgumentMissing`
+
+**Message**
+
+```text
+The call gives no value for the 'with' parameter '{0}' of '{1}', and it has no default.
+```
+
+**Help**
+
+```text
+Give the parameter, or write a default where the parameter is declared ('with <name: type = value>').
+```
+
+**Example** (`test/cases/compile/with_defaults/missing.cml`, run as `camel test/cases/compile/with_defaults/missing.cml`)
+
+```camel
+module with_argument_missing
+
+with <rounds: int, strict: bool = false>
+func f(x: int): int {
+    return if strict then x * rounds else x + rounds
+}
+
+func main(): int sync {
+    return f<strict: true>(1)
+}
+```
+
+### WithDefaultNotConstant
+
+`0x030001BA` · Error · `SemanticDiag::WithDefaultNotConstant`
+
+**Message**
+
+```text
+The default of the 'with' parameter '{0}' is not a compile-time constant: {1}.
+```
+
+**Help**
+
+```text
+A default is evaluated where the declaration is, not at each call, so it can only be a constant expression: a literal, or operands of an operator that is computed at compile time.
+```
+
+**Example** (`test/cases/compile/with_defaults/default_not_constant.cml`, run as `camel test/cases/compile/with_defaults/default_not_constant.cml`)
+
+```camel
+module with_default_not_constant
+
+with <a: int = 1, b: int = a + 1>
+func f(x: int): int {
+    return x + b
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### WithDefaultWrongType
+
+`0x030001BB` · Error · `SemanticDiag::WithDefaultWrongType`
+
+**Message**
+
+```text
+The default of the 'with' parameter '{0}' has type '{1}', not '{2}'.
+```
+
+**Help**
+
+```text
+The default is a value of the parameter's type, as an argument at the call would be.
+```
+
+**Example** (`test/cases/compile/with_defaults/default_wrong_type.cml`, run as `camel test/cases/compile/with_defaults/default_wrong_type.cml`)
+
+```camel
+module with_default_wrong_type
+
+with <rounds: int = "many">
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### WithParameterAfterDefault
+
+`0x030001BC` · Error · `SemanticDiag::WithParameterAfterDefault`
+
+**Message**
+
+```text
+The 'with' parameter '{0}' has no default and follows '{1}', which has one.
+```
+
+**Help**
+
+```text
+A parameter after one with a default must have a default too, so that a call that leaves the first out can be read as giving the others by name.
+```
+
+**Example** (`test/cases/compile/with_defaults/after_default.cml`, run as `camel test/cases/compile/with_defaults/after_default.cml`)
+
+```camel
+module with_parameter_after_default
+
+with <a: int = 1, b: int>
+func f(x: int): int {
+    return x + b
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### WithArgumentCallee
+
+`0x030001BD` · Error · `SemanticDiag::WithArgumentCallee`
+
+**Message**
+
+```text
+The 'with' argument '{0}' is given by name, and the signature of '{1}' is not known where the binding is written.
+```
+
+**Help**
+
+```text
+Name the one function the binding is for, or give the 'with' arguments positionally.
+```
+
+**Example** (`test/cases/compile/with_defaults/callee_unknown.cml`, run as `camel test/cases/compile/with_defaults/callee_unknown.cml`)
+
+```camel
+module with_argument_callee
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+with <rounds: int = 8>
+func f(x: string): string {
+    return x
+}
+
+func main(): int sync {
+    return f<rounds: 2>(1)
+}
+```
+
+### WithArgumentInValue
+
+`0x030001BE` · Error · `SemanticDiag::WithArgumentInValue`
+
+**Message**
+
+```text
+The 'with' argument '{0}' is given by name, and this binding is used as a function value.
+```
+
+**Help**
+
+```text
+A function value binds the 'with' arguments it is given in order; name a parameter only in a call, 'f<name: value>(x)'.
+```
+
+**Example** (`test/cases/compile/with_defaults/in_value.cml`, run as `camel test/cases/compile/with_defaults/in_value.cml`)
+
+```camel
+module with_argument_in_value
+
+with <rounds: int = 8>
+func f(x: int): int {
+    return x + rounds
+}
+
+func main(): int sync {
+    let g = f<rounds: 2>
+    return g(1)
+}
+```
+
+### WhenPredicateNotImported
+
+`0x030001BF` · Error · `SemanticDiag::WhenPredicateNotImported`
+
+**Message**
+
+```text
+'{1}' is declared in module '{2}', but that name is not imported where the 'when' condition of '{0}' is written.
+```
+
+**Help**
+
+```text
+A condition resolves names where its declaration is written, as a call in its body does: the module's own names, then what it imports by name, selectively or as a module prefix, then the prelude. Import the module that declares the predicate, or move the predicate into the module that uses it.
+```
+
+**Example** (`test/cases/compile/when_import/not_imported.cml`, run as `camel test/cases/compile/when_import/not_imported.cml`)
+
+```camel
+module when_import_not_imported
+
+import predicates
+import unimported_user
+
+func main(): int sync {
+    println(unimported_user::describe((1, 2)))
+    return 0
+}
+```
+
+### WhenPredicateNotCompileTime
+
+`0x030001C0` · Error · `SemanticDiag::WhenPredicateNotCompileTime`
+
+**Message**
+
+```text
+'{1}' is not a compile-time predicate that the 'when' condition of '{0}' can call: {2}.
+```
+
+**Help**
+
+```text
+A condition calls a generic function whose body reduces to a constant over the types it is given: a 'match type', a 'static for' or a 'static loop' over 'fields T', and the comparison operators. An ordinary function runs at run time, and a value is read there too.
+```
+
+**Example** (`test/cases/compile/when_import/not_predicate.cml`, run as `camel test/cases/compile/when_import/not_predicate.cml`)
+
+```camel
+module when_import_not_predicate
+
+import { ready } from predicates
+
+func bad(x: int): int when ready() {
+    return x
+}
+
+func main(): int sync {
+    return bad(1)
+}
+```
+
+### WhenPredicateAmbiguous
+
+`0x030001C1` · Error · `SemanticDiag::WhenPredicateAmbiguous`
+
+**Message**
+
+```text
+The 'when' condition of '{0}' calls '{1}', and that name is ambiguous: it is imported from {2}.
+```
+
+**Help**
+
+```text
+Two imports that bring one name do not choose between them. Import the predicate by another name ('import { p as q } from m') or qualify it with the module it comes from ('m::p').
+```
+
+**Example** (`test/cases/compile/when_import/ambiguous.cml`, run as `camel test/cases/compile/when_import/ambiguous.cml`)
+
+```camel
+module when_import_ambiguous
+
+import { is_compound } from predicates
+import { is_compound } from predicates_other
+
+func describe::<T>(x: T): string when is_compound::<T>() {
+    return 'compound'
+}
+
+func main(): int sync {
+    println(describe((1, 2)))
+    return 0
+}
+```
+
+### StaticMatchPatternCannotMatch
+
+`0x030001C2` · Error · `SemanticDiag::StaticMatchPatternCannotMatch`
+
+**Message**
+
+```text
+The identity pattern '{0}' cannot select a type here: {1}.
+```
+
+**Help**
+
+```text
+An identity pattern is exact: it selects only the type it names, after the declaration's type variables are bound. Name a concrete type, do not write the same type twice in one case, and put a pattern an earlier case already selects before that case or remove it.
+```
+
+**Example** (`test/cases/compile/static_expansion/type_identity_duplicate.cml`, run as `camel test/cases/compile/static_expansion/type_identity_duplicate.cml`)
+
+```camel
+module type_identity_duplicate
+
+func twice::<T>(t: T): int {
+    return match type T {
+        case int | int => 1
+        case _ => 0
+    }
+}
+
+func main(): int sync {
+    println(twice(1))
+    return 0
+}
+```
+
+### FoldCallArgumentNotConstant
+
+`0x030001C5` · Error · `SemanticDiag::FoldCallArgumentNotConstant`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+A call in a place that needs a compile-time constant is evaluated only when every argument is a constant itself: a literal, the 'n' of a 'static for', a 'constas' value, or an expression the compiler can evaluate. Make the argument a constant, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/argument.cml`, run as `camel test/cases/compile/fold_calls/argument.cml`)
+
+```camel
+module fold_call_argument
+
+func half(n: int): int {
+    return n / 2
+}
+
+func at(t: (int, int, int), n: int): int {
+    return t.[half(n)]
+}
+
+func main(): int {
+    return at((10, 20, 30), 4)
+}
+```
+
+### FoldCallHasEffects
+
+`0x030001C6` · Error · `SemanticDiag::FoldCallHasEffects`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+Only a pure call is evaluated: a function with no effects and no reads of mutable state. Remove the effect from the declaration, or call it where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/effect.cml`, run as `camel test/cases/compile/fold_calls/effect.cml`)
+
+```camel
+module fold_call_effect
+
+func reveal(s: string): string uses stdout {
+    println(s)
+    return s
+}
+
+func main(): int {
+    let t = { x: 1 }
+    return t.[reveal('x')]
+}
+```
+
+### FoldCallTooDeep
+
+`0x030001C7` · Error · `SemanticDiag::FoldCallTooDeep`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+A call that recurses without reaching a value for the constants it is given is not a compile-time constant. Give the recursion a base case that the constants reach, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/depth_limit.cml`, run as `camel test/cases/compile/fold_calls/depth_limit.cml`)
+
+```camel
+module fold_call_depth_limit
+
+func spin(n: int): int {
+    return spin(n + 1)
+}
+
+func main(): int {
+    let xs = (1, 2)
+    return xs.[spin(0)]
+}
+```
+
+### FoldCallResultNotConstant
+
+`0x030001C8` · Error · `SemanticDiag::FoldCallResultNotConstant`
+
+**Message**
+
+```text
+The call of '{0}' cannot be used as a compile-time constant: {1}.
+```
+
+**Help**
+
+```text
+A compile-time value is a number, a bool, a string or a character. Return one of those from the function, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/result_kind.cml`, run as `camel test/cases/compile/fold_calls/result_kind.cml`)
+
+```camel
+module fold_call_result
+
+func pair(): (int, int) {
+    return (1, 2)
+}
+
+func main(): int {
+    let t = { x: 1 }
+    return t.[pair()]
+}
+```
+
+### FoldCallNotEvaluable
+
+`0x030001C9` · Error · `SemanticDiag::FoldCallNotEvaluable`
+
+**Message**
+
+```text
+The call of '{0}' cannot be evaluated at build time: {1}.
+```
+
+**Help**
+
+```text
+The body of a folded call is read from the same constructs a 'when' condition reads: data, names, blocks, 'match type', 'static for'/'static loop', branches, fields, arithmetic and comparisons, and calls of other pure functions. Rewrite the body with those, or move the call to a place where a runtime value is accepted.
+```
+
+**Example** (`test/cases/compile/fold_calls/not_evaluable.cml`, run as `camel test/cases/compile/fold_calls/not_evaluable.cml`)
+
+```camel
+module fold_call_not_evaluable
+
+func first_of_list(): int {
+    let xs = [1, 2, 3]
+    return xs.[0]
+}
+
+func main(): int {
+    let t = (10, 20, 30)
+    return t.[first_of_list()]
+}
+```
+
+### ParamArgumentUnknown
+
+`0x030001CD` · Error · `SemanticDiag::ParamArgumentUnknown`
+
+**Message**
+
+```text
+'{0}' is not a parameter of '{1}'.
+```
+
+**Help**
+
+```text
+A named argument is written as in a struct literal, 'name: value', and must be one of the callee's ordinary parameters.
+```
+
+**Example** (`test/cases/compile/param_defaults/unknown_name.cml`, run as `camel test/cases/compile/param_defaults/unknown_name.cml`)
+
+```camel
+module param_argument_unknown
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1, z: 2)
+}
+```
+
+### ParamArgumentDuplicate
+
+`0x030001CE` · Error · `SemanticDiag::ParamArgumentDuplicate`
+
+**Message**
+
+```text
+The parameter '{0}' of '{1}' is given twice.
+```
+
+**Help**
+
+```text
+Give each parameter once: positionally, or by name after the positional arguments.
+```
+
+**Example** (`test/cases/compile/param_defaults/duplicate.cml`, run as `camel test/cases/compile/param_defaults/duplicate.cml`)
+
+```camel
+module param_argument_duplicate
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1, a: 2)
+}
+```
+
+### ParamArgumentMissing
+
+`0x030001CF` · Error · `SemanticDiag::ParamArgumentMissing`
+
+**Message**
+
+```text
+The call gives no value for the parameter '{0}' of '{1}', and it has no default.
+```
+
+**Help**
+
+```text
+Give the parameter, or write a default where the parameter is declared ('name: type = value').
+```
+
+**Example** (`test/cases/compile/param_defaults/missing.cml`, run as `camel test/cases/compile/param_defaults/missing.cml`)
+
+```camel
+module param_argument_missing
+
+func f(a: int, b: int, c: int = 3): int {
+    return a + b + c
+}
+
+func main(): int sync {
+    return f(1, c: 5)
+}
+```
+
+### ParamArgumentCallee
+
+`0x030001D0` · Error · `SemanticDiag::ParamArgumentCallee`
+
+**Message**
+
+```text
+The argument '{0}' is given by name, and the signature of '{1}' is not known where the call is written.
+```
+
+**Help**
+
+```text
+Name one function, or give the arguments positionally.
+```
+
+**Example** (`test/cases/compile/param_defaults/callee_unknown.cml`, run as `camel test/cases/compile/param_defaults/callee_unknown.cml`)
+
+```camel
+module param_argument_callee
+
+func f(x: int): int {
+    return x
+}
+
+func f(x: int, y: int): int {
+    return x + y
+}
+
+func main(): int sync {
+    return f(1, y: 2)
+}
+```
+
+### ParamArgumentPositionalAfterNamed
+
+`0x030001D1` · Error · `SemanticDiag::ParamArgumentPositionalAfterNamed`
+
+**Message**
+
+```text
+A positional argument follows a named one in the call of '{0}'.
+```
+
+**Help**
+
+```text
+Write the positional arguments first, then the named ones ('f(1, by: 2)').
+```
+
+**Example** (`test/cases/compile/param_defaults/positional_after_name.cml`, run as `camel test/cases/compile/param_defaults/positional_after_name.cml`)
+
+```camel
+module param_argument_after_name
+
+func f(a: int, b: int = 0): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(a: 1, 2)
+}
+```
+
+### ParamDefaultNotConstant
+
+`0x030001D2` · Error · `SemanticDiag::ParamDefaultNotConstant`
+
+**Message**
+
+```text
+The default of the parameter '{0}' is not a compile-time constant: {1}.
+```
+
+**Help**
+
+```text
+A default is evaluated where the declaration is, not at each call, so it can only be a constant expression.
+```
+
+**Example** (`test/cases/compile/param_defaults/default_not_constant.cml`, run as `camel test/cases/compile/param_defaults/default_not_constant.cml`)
+
+```camel
+module param_default_not_constant
+
+func f(a: int, b: int = a): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(1)
+}
+```
+
+### ParamDefaultWrongType
+
+`0x030001D3` · Error · `SemanticDiag::ParamDefaultWrongType`
+
+**Message**
+
+```text
+The default of the parameter '{0}' has type '{1}', not '{2}'.
+```
+
+**Help**
+
+```text
+The default is a value of the parameter's type, as an argument at the call would be.
+```
+
+**Example** (`test/cases/compile/param_defaults/default_wrong_type.cml`, run as `camel test/cases/compile/param_defaults/default_wrong_type.cml`)
+
+```camel
+module param_default_wrong_type
+
+func f(a: int = "x"): int {
+    return a
+}
+
+func main(): int sync {
+    return f()
+}
+```
+
+### ParamAfterDefault
+
+`0x030001D4` · Error · `SemanticDiag::ParamAfterDefault`
+
+**Message**
+
+```text
+The parameter '{0}' has no default and follows '{1}', which has one.
+```
+
+**Help**
+
+```text
+Write a default here too, so that a call that leaves '{1}' out can still give '{0}' by name.
+```
+
+**Example** (`test/cases/compile/param_defaults/after_default.cml`, run as `camel test/cases/compile/param_defaults/after_default.cml`)
+
+```camel
+module param_after_default
+
+func f(a: int = 1, b: int): int {
+    return a + b
+}
+
+func main(): int sync {
+    return f(2, 3)
 }
 ```
 
@@ -5246,6 +6575,69 @@ func f(x: int): int {
 
 func main(): int {
     println(f(1))
+    return 0
+}
+```
+
+### DimensionNameUsedOnce
+
+`0x03100161` · Warn · `SemanticDiag::DimensionNameUsedOnce`
+
+**Message**
+
+```text
+The dimension name '{0}' is written once in this signature, so it relates nothing.
+```
+
+**Help**
+
+```text
+A name relates the extents that write it. If the size is not a relation, write '?' instead; if it is, write the name in another parameter or in the return type.
+```
+
+**Example** (`test/cases/compile/array_shape/warn_once.cml`, run as `camel test/cases/compile/array_shape/warn_once.cml std::nvm`)
+
+```camel
+// A name written once in the signature relates nothing, so the compiler suggests `?`.
+module array_shape_warn_once
+
+func first(x: f32[n]): f32 {
+    return x[0]
+}
+
+func main(): int sync {
+    println(first([1.0, 2.0]))
+    return 0
+}
+```
+
+### TypeVariableUnused
+
+`0x031001A5` · Warn · `SemanticDiag::TypeVariableUnused`
+
+**Message**
+
+```text
+The type parameter '{0}' is declared at the head but never written in the signature.
+```
+
+**Help**
+
+```text
+A type parameter is one the declaration uses in a parameter or result type; a declaration that writes it nowhere can never take a type for it. Write it in a type, or remove it from '::<...>'.
+```
+
+**Example** (`test/cases/compile/generic_head/err_unused_head_param.cml`, run as `camel test/cases/compile/generic_head/err_unused_head_param.cml`)
+
+```camel
+module err_unused_head_param
+
+func show::<T>(x: int): string {
+    return 'x'
+}
+
+func main(): int sync {
+    println(show(1))
     return 0
 }
 ```
@@ -5832,7 +7224,27 @@ A replacement field is a pair of braces, optionally holding a format specificati
 Convert the value to a supported type before the call.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/tensor/dtype/f32_only.cml`, run as `camel test/cases/modules/tensor/dtype/f32_only.cml`)
+
+```camel
+// `conv2d` computes in f32 only, and says so: an f64 tensor is refused at the call with a
+// diagnostic naming the operator, the argument's element type and the set the kernel takes.
+// It is never narrowed to f32 (design principles 5.1, 13.1).
+module tensor_dtype_f32_only
+
+import { new, reshape, ones, sum } from tensor
+import { conv2d } from nn
+
+func main(): int sync {
+    let values: f64[] = [1.0, 2.0, 3.0, 4.0]
+    let x = reshape(new(values), [1, 1, 2, 2])
+    let kernel = ones([1, 1, 1, 1])
+    let bias = ones([1])
+    let y = conv2d(x, kernel, bias, 1, 0)
+    println(sum(y))
+    return 0
+}
+```
 
 ### FieldNotFound
 
@@ -6249,7 +7661,7 @@ import { Tensor, reshape, tanh, sum } from tensor
 func activate(x: Tensor<f32>): Tensor<f32> { return tanh(x) }
 
 func main(): int sync {
-    let x = reshape([1.0, 2.0, 3.0], [3])
+    let x = reshape([1.0, 2.0, 3.0] as f32[], [3])
     println(sum(activate(x)))
     return 0
 }
@@ -6307,6 +7719,48 @@ module main
 func main(): int sync {
     println(42)
     return 0
+}
+```
+
+### GpuScopeNoDeviceProgram
+
+`0x040001A7` · Error · `RuntimeDiag::GpuScopeNoDeviceProgram`
+
+**Message**
+
+```text
+`#gpu` scope '{0}': operator '{1}' has no device program ({2}).
+```
+
+**Help**
+
+```text
+The `#gpu` tag promises that the device runs everything written in the scope, including the functions it calls; an operator the device back end cannot build a program for is a compile-time error there, never a host execution. Change the operator, its shape or the function it is written in, put it under `#cpu` where the scope allows that, or remove the tag; `--devices cpu` runs the whole program on the host.
+```
+
+**Example** (`test/cases/gpu/nofallback/refused_operator.cml`, run as `CUDA_VISIBLE_DEVICES=-1 camel test/cases/gpu/nofallback/refused_operator.cml tiles::compile std::nvm`)
+
+```camel
+/// (b) An operator without a device program, written in a function a `#gpu` scope calls. The
+/// scope covers the functions it calls (GPU design 2.3), so `tanh` here is inside it; `tanh` has
+/// no device implementation, and the compiler refuses the program instead of running it on the
+/// host. `test/cases/gpu/nofallback/host.cml` is the same program without the tag.
+module gpu_nofallback_refused_operator
+
+import { Tensor, tanh, reshape } from tensor
+
+func activate(x: Tensor<f32>): Tensor<f32> {
+    return tanh(x)
+}
+
+#gpu
+func step(x: Tensor<f32>): Tensor<f32> {
+    return activate(x)
+}
+
+func main() {
+    let x = reshape([1.0, 2.0] as f32[], [2])
+    println(step(x))
 }
 ```
 

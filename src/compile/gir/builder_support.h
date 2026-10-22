@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 14, 2026
- * Updated: Oct. 14, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * Small accessors over the draft nodes the GIR builder works on, shared by the source files
@@ -25,6 +9,7 @@
 
 #pragma once
 
+#include "camel/compile/gct.h"
 #include "camel/compile/gir/draft_graph_builder.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/type/composite/func.h"
@@ -32,11 +17,32 @@
 #include "camel/utils/assert.h"
 
 #include <span>
+#include <string>
 #include <string_view>
 
 namespace camel::compile::gir {
 
 using compile_graph_ptr_t = std::shared_ptr<DraftGraphBuilder>;
+
+/// The name a call writes for its callee: the `DREF` under a generic application (`TAPP`) or a
+/// `with` application (`WITH`). Empty when the callee is an expression (a function value).
+inline std::string writtenCalleeName(const GCT::node_ptr_t &callee) {
+    GCT::node_ptr_t node = callee;
+    while (node != nullptr) {
+        if (node->type() == GCT::NodeKind::WITH || node->type() == GCT::NodeKind::TAPP) {
+            node = node->at(0);
+            continue;
+        }
+        return node->type() == GCT::NodeKind::DREF ? node->name() : std::string{};
+    }
+    return {};
+}
+
+/// The name a `LINK` writes for its callee; empty for an expression.
+inline std::string writtenCallName(const GCT::node_ptr_t &call) {
+    return call != nullptr && call->type() == GCT::NodeKind::LINK ? writtenCalleeName(call->at(0))
+                                                                  : std::string{};
+}
 
 inline runtime::DraftEdgeKind toDraftEdgeKind(LinkType type) {
     switch (type) {

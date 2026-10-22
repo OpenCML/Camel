@@ -1,23 +1,8 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 22, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 // One placement query and its report. See tiles/internal/placement.h for the rule.
+
 #include "tiles/internal/placement.h"
 
 #include "camel/core/node_attrs.h"
@@ -183,6 +168,24 @@ PlacementDecision placementOf(const runtime::GCGraph &graph, runtime::gc_node_re
         return decide(bodyValue, PlacementScope::Body, 0);
     }
     // 4. Nothing says otherwise: the host.
+    return decision;
+}
+
+PlacementDecision bodyPlacementOf(const runtime::GCGraph &graph) {
+    PlacementDecision decision;
+    const attr::AttrKey key = attr::key("tiles.placement");
+    if (key == attr::kNoKey) {
+        return decision;
+    }
+    const attr::AttrValueId value = attr::valueOf(bodyAttrs(graph), key);
+    if (value == attr::kNoValue) {
+        return decision;
+    }
+    // A body fact is the graph's own scope, so a "gpu" here is GpuRequired, not Gpu.
+    decision.placement = classify(value, /*bodyGpu=*/true);
+    decision.scope     = PlacementScope::Body;
+    decision.fact      = factText(value);
+    decision.region    = 0;
     return decision;
 }
 

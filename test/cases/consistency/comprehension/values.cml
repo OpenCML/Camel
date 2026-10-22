@@ -6,7 +6,7 @@
 module values
 
 func squares_of_even(xs: int[]): int[] { return [x * x for x in xs if x % 2 == 0] }
-func lengths(ws: (typeas T)[][]): int[] { return [len(w) for w in ws] }
+func lengths::<T>(ws: T[][]): int[] { return [len(w) for w in ws] }
 func shout(x: int): string sync {
     println('element ' + string(x))
     return string(x) + '!'

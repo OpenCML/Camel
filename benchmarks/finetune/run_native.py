@@ -1,3 +1,6 @@
+# Copyright (c) the OpenCML Organization
+# SPDX-License-Identifier: MIT
+
 """E1 helper: run Camel-native multi-step training and collect its losses.
 
 Invokes ``.cache/out-stable/bin/camel.exe`` on ``native_train_<model>.cml``

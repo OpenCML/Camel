@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 20, 2026
- * Updated: Oct. 22, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The expression nodes of the GIR builder: data, names and dereferences (visitDataNode,
@@ -347,6 +331,17 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::Redeclaration).atOrigin(gct->origin()).commit(ident);
         throw BuildAbortException();
     }
+    // The source name of the value, for the readers of the graph (`std::cml` prints it, the
+    // debugger and diagnostics show it). A name the compiler made (a literal's element, a
+    // capture) is not source, and a node that already has a name keeps it (`let y = x` binds
+    // two names to one value; the first name wins).
+    if (!ident.empty() && !std::isdigit(static_cast<unsigned char>(ident.front())) &&
+        ident.front() != '$') {
+        runtime::GraphDraft &draft = currGraph_->draft();
+        if (draft.nodeName(bound.id) == camel::core::kEmptySym) {
+            draft.setNodeName(bound.id, camel::core::internSymbol(ident));
+        }
+    }
     if (currGraph_ == rootGraph_ && !ident.empty() &&
         !std::isdigit(static_cast<unsigned char>(ident.front())) && ident.front() != '$') {
         // A value of the top level of the module: what the functions that use it capture.
@@ -538,6 +533,25 @@ std::any Builder::visitDRefNode(const GCT::node_ptr_t &gct) {
             // capture could hold (it was captured as a port of type void, and the call of
             // it then failed with "Function of type 'void' cannot be called").
             rejectNameWithoutValue(node, name, gct);
+            // A value can only be captured from a graph that encloses this one (the root
+            // graph for a value of a module's top level). A rest function expanded at a call
+            // in another module is built in that caller's graph, so a name that is a value of
+            // the function's own module has no path to it: say so instead of asserting.
+            bool enclosed = false;
+            for (auto outer = currGraph_; outer != nullptr && !enclosed;
+                 outer      = outer->outerGraph()) {
+                enclosed = outer.get() == nodeGraphOf(node);
+            }
+            if (!enclosed) {
+                diags_->of(SemanticDiag::RestFunctionNeedsExpansion)
+                    .atOrigin(gct->origin())
+                    .commit(
+                        captureNameOf(node, name),
+                        "its body names a value of its own module, which a call in another "
+                        "module cannot reach; a rest function expanded at a foreign call may "
+                        "only name functions and its own arguments");
+                throw BuildAbortException();
+            }
             node = captureInto(currGraph_, node, name);
         }
         if (recorder_ && !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
@@ -981,12 +995,13 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
             return entered;
         }
     }
-    // Safe conversions always; an Unsafe one only into a module type, which then checks the
-    // value when the conversion runs (Type::castSlotFrom of that type). Primitive conversions
-    // that may lose information stay refused.
+    // Safe conversions always; an Unsafe one only into a module type or an array, which then
+    // check the value when the conversion runs (Type::castSlotFrom: an array checks its shape).
+    // Primitive conversions that may lose information stay refused.
     const CastSafety safety = targetType->castSafetyFrom(sourceType);
     if (safety != CastSafety::Safe &&
-        !(safety == CastSafety::Unsafe && targetType->isOtherType())) {
+        !(safety == CastSafety::Unsafe &&
+          (targetType->isOtherType() || targetType->code() == TypeCode::Array))) {
         // An explicit `as` between struct types whose fields are the same by name but in
         // another order (or between two named types) is a copy, field by field (design
         // principles 5.2). A shape that does not match at all stays refused.
@@ -1127,16 +1142,105 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     genericCalleeAllowed_ = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
+    // Whether the value bound here is the callee of the call being built (`withArgsOfCall_`).
+    const bool inCall = std::exchange(withArgsOfCall_, false);
+    // A callee with a signature of its own: the only kind whose with-parameter types the call
+    // itself completes. `reduce<(a, b) => a + b, 0>`: the element type comes from the array,
+    // and the type of the result of the reduction from the position the call stands at, so the
+    // lambda and the literal take their types there. A name is not deferred: a generic function
+    // or a set of overloads bound as a with-argument stays a name until the callee resolves it.
     vector<Argument> inputs;
     FunctionType *argumentSignature = signatureForArgumentContext(targetNode);
+    const bool parameterTypesFollowCall = inCall && argumentSignature != nullptr;
+    // A call of a rest function is expanded at the call (inlineRestCall), so a with-argument
+    // that names a generic function or a set of overloads stays a compile-time callable: every
+    // call of it in the body picks the instance for that call's arguments (`tree_map<twice>`,
+    // `tree_map<bump>`). Making it a function value here would need the one type it does not
+    // have yet, and a set of overloads has no single value at all.
+    const auto restInfo = genericDrefs_.find(targetNode);
+    const bool restCall = restInfo != genericDrefs_.end() &&
+                          restInfo->second->funcType->hasRest();
+    const auto isCallableName = [&](node_handle_t node) {
+        if (genericDrefs_.contains(node)) {
+            return true;
+        }
+        if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Dref)) {
+            return false;
+        }
+        const auto &target = nodeGraphOf(node)->drefTarget(node);
+        if (std::holds_alternative<oper_group_ptr_t>(target)) {
+            return true;
+        }
+        if (std::holds_alternative<graph_vec_ptr_t>(target)) {
+            auto graphs = asCompileGraphVec(target);
+            return graphs && graphs->size() > 1;
+        }
+        return false;
+    };
+    const auto *withNames = GCT::Tree::of(gct)->argumentNamesOf(gct);
+    // A `with` argument may be written by name (`f<rounds: 8>`, design principles 4.4): the
+    // name chooses the parameter the literal takes its type from, and is kept on the argument
+    // for the call to bind (bindArguments). A binding used as a value has no names to
+    // resolve them with, and is refused there.
+    const auto slotOf = [&](size_t written) -> size_t {
+        if (withNames == nullptr || written >= withNames->size() || !(*withNames)[written]) {
+            return written;
+        }
+        if (argumentSignature != nullptr) {
+            const std::string &name = *(*withNames)[written];
+            for (size_t i = 0; i < argumentSignature->withTypesCount(); ++i) {
+                if (name == argumentSignature->argNameAt(i)) {
+                    return i;
+                }
+            }
+        }
+        return written;
+    };
     for (size_t i = 1; i < gct->size(); i++) {
-        Type *wanted = argumentSignature && i <= argumentSignature->withTypesCount()
-                           ? argumentSignature->withTypeAt(i - 1)
-                           : nullptr;
+        const size_t slot = slotOf(i - 1);
+        Type *wanted      = argumentSignature && slot < argumentSignature->withTypesCount()
+                                ? argumentSignature->withTypeAt(slot)
+                                : nullptr;
         ExpectedValueScope argumentScope(
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
-        inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i)});
+        const std::optional<std::string> name =
+            withNames != nullptr && i - 1 < withNames->size() ? (*withNames)[i - 1]
+                                                              : std::nullopt;
+        if (!restCall) {
+            const GCT::NodeKind kind = gct->at(i)->type();
+            // A literal whose type the signature still leaves open takes its type from the
+            // position (`reduce<(a, b) => a + b, 0>`), and a lambda that writes no parameter
+            // type needs the completed signature for it; both are built at the call, after the
+            // ordinary arguments are typed. A lambda that writes every type is built here, as
+            // before: nothing about it waits for the call.
+            bool deferred = kind == GCT::NodeKind::DATA;
+            if (!deferred && kind == GCT::NodeKind::FUNC) {
+                const auto &lambda = gct->at(i);
+                const auto *unwritten =
+                    GCT::Tree::of(lambda)->unwrittenParamsOf(lambda);
+                deferred = unwritten == nullptr || !unwritten->empty();
+            }
+            if (parameterTypesFollowCall && deferred && wanted != nullptr &&
+                containsTypeVar(wanted)) {
+                // Built at the call, where the ordinary arguments are typed and the signature's
+                // variables have their types (visitLinkNode). A lambda's parameters come from
+                // the parameter it is passed to (design principles 5.9). The name goes with it:
+                // the binding puts it at its parameter's place before the literal is built.
+                inputs.push_back({nullptr, gct->at(i), name});
+                continue;
+            }
+            inputs.push_back({visitOperand(gct->at(i), gct), gct->at(i), name});
+            continue;
+        }
+        any res              = visit(gct->at(i));
+        node_handle_t argNode = res.type() == typeid(graph_ptr_t)
+                                    ? createFuncDataNode(any_cast<graph_ptr_t>(res), true, false)
+                                    : valueNodeOf(res);
+        if (!isCallableName(argNode)) {
+            argNode = functionValueOf(argNode, gct->at(i));
+        }
+        inputs.push_back({argNode, gct->at(i), name});
     }
     auto &bound = boundWithArgs_[targetNode];
     bound.insert(bound.end(), inputs.begin(), inputs.end());

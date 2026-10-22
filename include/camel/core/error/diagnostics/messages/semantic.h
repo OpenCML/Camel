@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Sep. 11, 2025
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #pragma once
 
@@ -78,7 +62,6 @@ enum class SemanticDiag : uint32_t {
     // dropped while the rest of the program went on.
     FeatureNotSupported = 0x000040,
     // Generic functions and type functions (design principles 5.6).
-    TypeVariableNotAllowed      = 0x000050,
     TypeVariableRedeclared      = 0x000051,
     TypeVariableNotBindable     = 0x000052,
     GenericArgumentsMismatch    = 0x000053,
@@ -225,6 +208,70 @@ enum class SemanticDiag : uint32_t {
     ConstasArgumentMissing = 0x00019B,
     /// A tag gives a fact one value where the node already has another.
     TagValueConflict = 0x00019D,
+    /// A dimension pack (`..rest`) is not the last item of its `[...]`, or is written twice.
+    DimensionAfterAnyRank = 0x00019E,
+
+    // The resource surface of a program (docs/design/effects/plan.cn.md step 3): the `resource`
+    // declaration, `uses`/`pure` and the `#resource` tag. 0x1A0 and up.
+    /// A name in a `uses` clause is neither a parameter nor a declared resource.
+    UnknownResource = 0x0001A0,
+    /// A signature says both `pure` and `uses`.
+    PureAndUses = 0x0001A1,
+    /// A resource group names itself, directly or through other groups.
+    ResourceGroupCycle = 0x0001A2,
+    /// `#resource` is written before a type declaration that is not nominal.
+    HandleTypeNotNominal = 0x0001A3,
+    /// A body-less declaration's clause differs from the operator's declared resources.
+    NativeResourceMismatch = 0x0001A4,
+
+    // `std::cml`, the source printer (handover H240, step S1). 0x1A5 and up.
+    /// A graph holds a construct the printer does not turn into source (yet).
+    CmlUnsupportedConstruct = 0x0001A5,
+    /// A constant is larger than the printer's max_literal_bytes.
+    CmlBigConstant = 0x0001A6,
+
+    // Tensor element types (design/arrays-memory, P4 "element type exact"). 0x1A7 is retired: a
+    // tensor keeps the element type it is written with, so nothing rewrites it and there is no
+    // such diagnostic. The code is not reused.
+
+    // Applicability conditions (`when`, design principles 5.13; handover H234). 0x1A8 and up.
+    /// The condition's value is not a bool.
+    WhenConditionNotBool = 0x0001A8,
+    /// The condition is not a compile-time predicate the compiler can evaluate.
+    WhenConditionNotConstant = 0x0001A9,
+    /// The condition names something outside the declaration.
+    WhenUnknownName = 0x0001AA,
+    /// A type query is asked about a type that is still open (a type variable).
+    WhenTypeQueryNotConcrete = 0x0001AB,
+    /// No candidate of a call applies: every condition that could take it is false.
+    WhenConditionUnmet = 0x0001AC,
+
+    // Defaults of `with` parameters and `with` arguments given by name (design principles 4.4,
+    // handover H235). 0x1B7 to 0x1BE; 0x1BF and up belong to `when` predicate lookup.
+    /// A named `with` argument does not name a `with` parameter of the callee.
+    WithArgumentUnknown = 0x0001B7,
+    /// A `with` parameter is given twice, once by position and once by name.
+    WithArgumentDuplicate = 0x0001B8,
+    /// A call gives no value for a `with` parameter that has no default.
+    WithArgumentMissing = 0x0001B9,
+    /// The default of a `with` parameter is not a compile-time constant.
+    WithDefaultNotConstant = 0x0001BA,
+    /// The default of a `with` parameter has a type that does not fit the parameter.
+    WithDefaultWrongType = 0x0001BB,
+    /// A `with` parameter without a default follows one that has a default.
+    WithParameterAfterDefault = 0x0001BC,
+    /// A `with` argument is given by name where the callee's signature is not known.
+    WithArgumentCallee = 0x0001BD,
+    /// A `with` argument is given by name in a binding used as a function value.
+    WithArgumentInValue = 0x0001BE,
+
+    // Predicate lookup in a `when` condition (design principles 5.13, 10.2). 0x1BF and up.
+    /// A predicate another module declares, but this module does not import it.
+    WhenPredicateNotImported = 0x0001BF,
+    /// A name an import brings exists, but it is not a generic function answered at compile time.
+    WhenPredicateNotCompileTime = 0x0001C0,
+    /// Two imports bring a predicate of the same name, and neither is chosen.
+    WhenPredicateAmbiguous = 0x0001C1,
 
     // Body-less declarations, the declarations of a C++ module's operators (design principles
     // 6.4; handover H19, step 1). 0x17B and up.
@@ -240,6 +287,54 @@ enum class SemanticDiag : uint32_t {
     // A lambda's parameter that writes no type and that the function type of its position does
     // not determine (design principles 5.9). 0x17E and up.
     LambdaParameterWithoutType = 0x00017E,
+
+    // `typeof` and the same-shape comprehension (design principles 5.6, generic-structure
+    // README R3). 0x1B3 and up.
+    /// The expression after `typeof` has no value, so the type it stands for cannot be taken.
+    TypeOfNotAValue = 0x0001B3,
+    /// `typeof` is written inside a larger type (`typeof e[]`, `(typeof e, int)`).
+    TypeOfNotWholeType = 0x0001B4,
+    /// `T { static for ... }` names a type that is not a struct or a tuple.
+    SameShapeComprehensionNotComposite = 0x0001B5,
+    /// `T { static for (n, F) in fields U }` walks a type other than the shape `T`.
+    SameShapeComprehensionMismatch = 0x0001B6,
+
+    // Type identity in `match type` (`case int`, `case T`; design principles 5.5). 0x1C2.
+    /// An identity pattern names a type that cannot select the subject: `void`, a `typeof`
+    /// expression, an open type variable, a type written twice in one case, or a type that an
+    /// earlier case already selects.
+    StaticMatchPatternCannotMatch = 0x0001C2,
+    // Folding a call of a pure function with constant arguments (handover H271). 0x1C5 and up.
+    /// An argument of a call in a place that needs a constant is not one.
+    FoldCallArgumentNotConstant = 0x0001C5,
+    /// The call has effects: it is `sync`, writes a `var`, or uses a resource.
+    FoldCallHasEffects = 0x0001C6,
+    /// The call nests deeper than the evaluator follows: it recurses without a base case here.
+    FoldCallTooDeep = 0x0001C7,
+    /// The call's result is not a kind a constant can have.
+    FoldCallResultNotConstant = 0x0001C8,
+    /// The call's body uses a construct this build-time evaluation does not read.
+    FoldCallNotEvaluable = 0x0001C9,
+
+    // Defaults of ordinary parameters and ordinary arguments given by name (design principles
+    // 4.4, handover H276). 0x1CD and up, after the constant-folding codes of h271. The `with`
+    // parameter's forms are 0x1B7-0x1BE.
+    /// A name in a call's argument list names no ordinary parameter of the callee.
+    ParamArgumentUnknown = 0x0001CD,
+    /// An ordinary parameter is given twice, once by position and once by name.
+    ParamArgumentDuplicate = 0x0001CE,
+    /// A call gives no value for an ordinary parameter that has no default.
+    ParamArgumentMissing = 0x0001CF,
+    /// An ordinary argument is given by name where the callee's signature is not known.
+    ParamArgumentCallee = 0x0001D0,
+    /// A positional argument is written after a named one.
+    ParamArgumentPositionalAfterNamed = 0x0001D1,
+    /// The default of an ordinary parameter is not a compile-time constant.
+    ParamDefaultNotConstant = 0x0001D2,
+    /// The default of an ordinary parameter has a type that does not fit the parameter.
+    ParamDefaultWrongType = 0x0001D3,
+    /// An ordinary parameter without a default follows one that has a default.
+    ParamAfterDefault = 0x0001D4,
 
     // Warnings
     VarParamInAsyncFunction      = 0x100001,
@@ -261,6 +356,14 @@ enum class SemanticDiag : uint32_t {
     // Tags (design principles 6.2): the tag is declared for no pass in the pipeline, so nothing
     // reads what was written.
     TagHasNoReader = 0x100160,
+    // A dimension name is written once in a signature, so it relates nothing (design principles
+    // 5.4): write `?` if the size is not meant as a relation.
+    DimensionNameUsedOnce = 0x100161,
+    // Type variables (design principles 5.5). A head name written nowhere is a warning: the
+    // declaration is still well formed, it just declares a parameter nothing can fill.
+    /// A type parameter is declared at the head of a declaration and written nowhere in its
+    /// signature, so no argument could ever give it a type.
+    TypeVariableUnused = 0x1001A5,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

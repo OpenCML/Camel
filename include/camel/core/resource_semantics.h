@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Oct. 15, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The resources of an operator (docs/design/op-semantics, section 8): what an operator reads
@@ -58,9 +42,14 @@
 
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
+
+namespace camel::core::type {
+class Type;
+}
 
 namespace camel::core::sem {
 
@@ -239,6 +228,20 @@ struct ResourceSignature {
 /// The signature a declared spec publishes, in the parameter numbering of a function with
 /// `withCount` with parameters (with parameters first, ordinary ones after them).
 ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount);
+
+/// The ambient resources the language gives every program (design principles 3.3): `stdout`,
+/// `stderr`, `stdin`, `clock`, `env` and `fs`. They need no declaration and every module sees
+/// them; a module may still write `resource fs` to say it uses it, and a group may name them.
+std::span<const std::string_view> standardResourceNames();
+bool isStandardResource(std::string_view name);
+
+/// Whether values of `type` are handles (design effects plan 3.1): the type is a nominal type
+/// declaration written `#resource`. A handle is one resource per value; two values of the type
+/// are two resources.
+bool isHandleType(const type::Type *type);
+/// The resource name a handle of `type` carries: the declaration's qualified name
+/// (`module::Type`), empty when `type` is not a handle type.
+std::string handleResourceName(const type::Type *type);
 
 /// The text form of a signature: "" for Generic, "pure", "uses s, fs".
 std::string toString(const ResourceSignature &signature);

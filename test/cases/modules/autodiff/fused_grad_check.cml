@@ -22,10 +22,10 @@ func check(name: string, f: <x: Tensor> () => float, df: <x: Tensor> () => Tenso
     return 0
 }
 
-func x23(): Tensor { return new([[0.3, -1.2, 0.5], [1.1, 0.4, -0.7]]) }
-func w34(): Tensor { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]]) }
-func b4(): Tensor { return new([0.7, -0.3, 1.5, 0.2]) }
-func out24(): Tensor { return new([[1.0, -2.0, 0.5, 0.3], [0.4, 1.2, -0.6, 0.9]]) }
+func x23(): Tensor { return new([[0.3, -1.2, 0.5], [1.1, 0.4, -0.7]] as f32[][]) }
+func w34(): Tensor { return new([[0.3, -1.2, 0.5, 2.0], [1.1, 0.4, -0.7, 0.2], [-0.5, 0.9, 1.3, -0.1]] as f32[][]) }
+func b4(): Tensor { return new([0.7, -0.3, 1.5, 0.2] as f32[]) }
+func out24(): Tensor { return new([[1.0, -2.0, 0.5, 0.3], [0.4, 1.2, -0.6, 0.9]] as f32[][]) }
 
 // matmul + bias (one fused group), in each operand
 with <x: Tensor>
@@ -43,9 +43,9 @@ with <b: Tensor>
 func mlp_b(): float { return sum(relu(x23() @ w34() + b) * out24()) }
 
 func main(): int sync {
-    let vx = new([[0.2, -0.4, 0.9], [-0.3, 0.8, 0.1]])
-    let vw = new([[0.5, 0.1, -0.2, 0.3], [-0.6, 0.4, 0.2, -0.1], [0.3, -0.5, 0.7, 0.2]])
-    let vb = new([0.3, -0.7, 0.2, 0.5])
+    let vx = new([[0.2, -0.4, 0.9], [-0.3, 0.8, 0.1]] as f32[][])
+    let vw = new([[0.5, 0.1, -0.2, 0.3], [-0.6, 0.4, 0.2, -0.1], [0.3, -0.5, 0.7, 0.2]] as f32[][])
+    let vb = new([0.3, -0.7, 0.2, 0.5] as f32[])
     check('linear.x', lin_x, grad(lin_x), x23(), vx)
     check('linear.w', lin_w, grad(lin_w), w34(), vw)
     check('linear.b', lin_b, grad(lin_b), b4(), vb)

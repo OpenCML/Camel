@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You may use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Camel Contributors
- * Created: Sep. 28, 2026
- * Updated: Oct. 19, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 /*
  * The partial evaluator behind onnx.export_model (see exporter.h).
@@ -812,7 +796,7 @@ Value Evaluator::evalCast(Activation &act, gc_node_ref_t ref, Value src) {
                 have));
     }
     if (src.form == Value::Form::Scalar && tensor::isSupportedTensorScalar(target->code())) {
-        const TypeCode code = tensor::normalizeTensorDType(target->code());
+        const TypeCode code = target->code();
         return Value::symbolicScalar(
             emitter_.node(
                 "Cast",
@@ -3551,7 +3535,7 @@ Value Evaluator::symbolicFloatArray(
     auto *templ = rtdata::fromSlot<::Array *>(source.slot);
     type::Type *elemType =
         static_cast<type::ArrayType *>(act.graph->node(ref)->dataType())->elemType();
-    const TypeCode dtype = tensor::normalizeTensorDType(elemType->code());
+    const TypeCode dtype = elemType->code();
     const auto fillSlots = act.graph->nodeBodyAs<camel::runtime::GCFillBody>(ref)->slots();
     std::vector<std::optional<Value>> elems(templ->size());
     for (size_t k = 0; k < fillSlots.size(); ++k) {

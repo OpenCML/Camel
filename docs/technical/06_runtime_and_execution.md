@@ -71,7 +71,7 @@ with no path between them that are each worth a task: a higher-order operator (`
 an item. Every other scope runs inline on the calling thread, in the linear order.
 
 A graph is heavy when its body, or the body of a graph it calls directly or indirectly,
-contains a higher-order operator, an operator of a module (`tensor:matmul`, `algo:sort`: any
+contains a higher-order operator, an operator of a module (`tensor:matmul`, `array:sort`: any
 operator that is not one of the built-in `:...` operators), or a call of a function value (whose
 callee is not known when the plan is built). A graph that only does built-in arithmetic and
 comparisons and calls such graphs, like the body of `fib`, is light: a task per call costs more
@@ -202,9 +202,12 @@ independent calls of heavy graphs. For a program that is sequential by its depen
   one thread). The scheduler could measure scopes as it now measures elements, but a scope has
   no counter to claim from; the alternative is a coarsening pass before `std::prl` that decides
   per call site. Not done: either changes which parts of a program run concurrently.
-- `DESIGN-QUESTION(prl-thread-budget)`: the tensor kernels and the scheduler each start as many
-  threads as there are hardware threads (`tensor_train` under `std::prl` has 36). `-t` limits
-  the scheduler only. Whether one budget should cover both is undecided.
+- The thread budget is one number: the tensor kernels and the scheduler both take their worker
+  count from the run's `-t` (`EntryConfig::maxThreads`), and without it from the hardware
+  concurrency. The tensor module installs that number into its kernel pool when it loads, so a
+  run pinned to one thread runs both with one; `Tensor.num_threads()` reports the pool's size,
+  and a program that needs another size can still set it at run time with
+  `Tensor.set_num_threads`. There is no environment variable for the budget.
 - The calling thread of an operator that got helpers waits for them without working when it is
   not a worker itself (the main thread): with `-t N` there are never more than N threads
   computing.

@@ -1,0 +1,64 @@
+/**
+ * Measures one whole application of a rule set on `bench_target.cml` (H226): the rewrites, the
+ * rounds, the nodes visited, the nodes erased, whether it reached a fixpoint and the wall time,
+ * for the application that rewrites and for a second one that finds the fixpoint at once.
+ *
+ * The pass is `sync` and so are the callbacks it hands to `?->`: printing is part of the pass's
+ * execution, not a value left unapplied (`SemanticDiag::EffectNotExecuted`).
+ */
+module bench
+
+import { Program } from graph
+import { Rule, Run, run } from rewrite
+import { int_add_zero, int_mul_one } from rules
+
+func report(label: string, r: Run<Program>): void sync {
+    println(label, 'rewrites', r.rewrites, 'rounds', r.rounds, 'visited', r.visited, 'erased',
+        r.erased, 'fixpoint', r.fixpoint, 'seconds', r.seconds)
+}
+
+export func measure(p: Program): Program! sync {
+    let rules: Rule[] = [int_add_zero, int_mul_one]
+    return run(p, rules, 16, false) ?-> sync (first: Run<Program>) => sync {
+        report('run_first', first)
+        return run(first.result, rules, 16, false) ?-> sync (second: Run<Program>) => sync {
+            report('run_again', second)
+            return second.result
+        }
+    }
+}
+
+/// Runs the same application twice on the same program, once without the attribution record and
+/// once with it (`run`'s fifth parameter), and prints both costs (rewrite design 8.7). The two
+/// applications see the same program, so the record is the only difference between them.
+func one_pair(p: Program): Program! sync {
+    return match run(p, [int_add_zero, int_mul_one], 16, false) {
+        case error e => { throw e }
+        case off => sync {
+            match run(p, [int_add_zero, int_mul_one], 16, false, true) {
+                case error e => { throw e }
+                case on => sync {
+                    println(
+                        'bench',
+                        'off_seconds', off.seconds,
+                        'on_seconds', on.seconds,
+                        'off_rewrites', off.rewrites,
+                        'on_rewrites', on.rewrites,
+                        'off_rounds', off.rounds,
+                        'on_rounds', on.rounds,
+                        'off_visited', off.visited,
+                        'on_visited', on.visited)
+                    return p
+                }
+            }
+        }
+    }
+}
+
+/// Measures the two modes on the same program and leaves the program as it was.
+export func compare(p: Program): Program! sync {
+    return match one_pair(p) {
+        case error e => { throw e }
+        case done => done
+    }
+}

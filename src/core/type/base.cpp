@@ -1,21 +1,5 @@
-/**
- * Copyright (c) 2024 the OpenCML Organization
- * Camel is licensed under the MIT license.
- * You can use this software according to the terms and conditions of the
- * MIT license. You may obtain a copy of the MIT license at:
- * [https://opensource.org/license/mit]
- *
- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY
- * KIND, EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO
- * NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
- *
- * See the the MIT license for more details.
- *
- * Author: Zhenjie Wei
- * Created: Oct. 06, 2024
- * Updated: Oct. 20, 2026
- * Supported by: National Key Research and Development Program of China
- */
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
 
 #include "camel/core/type/base.h"
 #include "camel/core/mm.h"
@@ -123,6 +107,8 @@ string typeCodeToString(TypeCode code) {
         return "typefunc";
     case TypeCode::EnumHole:
         return "_";
+    case TypeCode::TypeOf:
+        return "typeof";
     default:
         return isOtherType(code) ? OtherTypeRegistry::getTypeName(code) : "unknown";
     }
@@ -209,6 +195,8 @@ Type::applyArguments(std::span<const TypeArgument> arguments, std::string &error
     error = "this type takes no arguments";
     return nullptr;
 }
+
+
 
 ExtentBinding bindExtents(
     const Type *parameter, const Type *actual, ExtentValues &values, ExtentPacks &packs,

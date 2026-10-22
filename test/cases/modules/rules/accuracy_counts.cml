@@ -1,0 +1,35 @@
+/**
+ * Counts the log operators the functions of `accuracy_licence_target` call, so the test can see
+ * whether the accuracy rewrite fired: `math:log_d` is the naive form, `math:log1p_d` the
+ * accurate one.
+ */
+module accuracy_counts
+
+import { Program, Node, Graph, graphs, nodes, op, op_name, name } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func nodesOf(p: Program, function: string): Node[] {
+    let found = graphs(p)->filter<(g: Graph): bool => name(g) == function>
+    return nodes(found[0])
+}
+
+func countOf(p: Program, function: string, operator: string): int {
+    return len(nodesOf(p, function)->filter<(n: Node): bool => opText(n) == operator>)
+}
+
+func line(p: Program, function: string) {
+    println(function, countOf(p, function, 'math:log_d'), countOf(p, function, 'math:log1p_d'))
+}
+
+export func report(p: Program): Program! sync {
+    line(p, 'plain')
+    line(p, 'licensed')
+    line(p, 'guarded')
+    return p
+}
