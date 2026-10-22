@@ -70,6 +70,8 @@ std::string to_string(DataType type) {
         return "ConstAs";
     case DataType::Slice:
         return "Slice";
+    case DataType::SpreadArg:
+        return "SpreadArg";
     default:
         ASSERT(false, "Unknown DataType");
         return "UnknownDataType";

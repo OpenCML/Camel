@@ -162,7 +162,7 @@ enum Modifier {
 
 NamedData(Ref ref) : Data data ;
 NamedType(Ref ref, bool isVar) : Type type ;
-NamedPair(Ref ref, bool isVar) : Type type, Data? data ;
+NamedPair(Ref ref, bool isVar, bool isRest) : Type type, Data? data ;
 
 Type(TypeType type) := 
     NullableType | TypeExpr | ArrayType | StructType | TupleType

@@ -141,6 +141,7 @@ parentIdents       : '(' identList? ','? ')'
 bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
 keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
+                     | '..' identDef (':' typeExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
 angledParams       : '<' pairedParams? ','? '>'
@@ -175,7 +176,7 @@ primaryData        : identRef | constasData | literal | arrayData | structData |
 constasData        : 'constas' identDef
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
                      | 'true' | 'false' | 'null'
-indexValue         : '...'? dataExpr
+indexValue         : ('...' | '..')? dataExpr
 keyValuePair       : identDef ':' dataExpr | '...' dataExpr
 pairedValues       : keyValuePair (',' keyValuePair)*
 dataList           : dataExpr (',' dataExpr)*

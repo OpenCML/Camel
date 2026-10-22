@@ -818,6 +818,9 @@ string Generator::generateDataLoad(const AST::node_ptr_t &node) {
     case AST::DataType::ConstAs:
         result = dataLoad->geneCode();
         break;
+    case AST::DataType::SpreadArg:
+        result = ".." + generateChildren(node);
+        break;
     default:
         result = generateChildren(node);
         break;
