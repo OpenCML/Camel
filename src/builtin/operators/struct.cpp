@@ -188,13 +188,54 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     return rtdata::toSlot(res);
 }
 
+namespace {
+
+// The positions a slice of an array of `size` elements takes. The bounds follow the rules of the
+// slice function (design principles 3.9): a position from 0 to the length, the end one past the
+// last element taken, a negative bound a fault rather than a count from the end, and an end
+// before the start the empty range. A negative step runs backwards: the start defaults to the
+// last element and the end, left out, stands for the position before the first. The step and
+// which of the start and the end were written come with the call as a two-bit mask (bit 0 end,
+// bit 1 start). The forward slice and the range scatter of its gradient both read the range
+// here, so the adjoint puts each element's gradient back where the forward took the element.
+struct SliceRange {
+    Int64 start = 0; // the first position taken
+    Int64 count = 0; // how many elements the slice has
+    Int64 step  = 1; // the distance between two positions taken
+};
+
+SliceRange sliceRange(Int64 size, Int64 startRaw, Int64 endRaw, Int64 step, Int64 written) {
+    const bool wroteEnd   = (written & 1) != 0;
+    const bool wroteStart = (written & 2) != 0;
+    if (step == 0) {
+        throwRuntimeFault(RuntimeDiag::InvalidArgument, "[]", "a slice step must not be 0");
+    }
+    SliceRange range;
+    range.step = step;
+    if (step > 0) {
+        range.start = wroteStart ? startRaw : 0;
+        const Int64 end = wroteEnd ? endRaw : size;
+        if (range.start < 0 || range.start > size || end < 0 || end > size) {
+            throwRuntimeFault(
+                RuntimeDiag::SliceOutOfRange, range.start, end, "an array", size);
+        }
+        range.count = range.start < end ? (end - range.start + step - 1) / step : 0;
+        return range;
+    }
+    range.start = wroteStart ? startRaw : size - 1;
+    const Int64 end = wroteEnd ? endRaw : -1;
+    if ((wroteStart && (range.start < 0 || range.start >= size)) ||
+        (wroteEnd && (end < 0 || end > size))) {
+        throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, "an array", size);
+    }
+    range.count = range.start > end ? (range.start - end + (-step) - 1) / (-step) : 0;
+    return range;
+}
+
+} // namespace
+
 // `t[a:b]`, `t[a:b:s]`, `t[:b]`, `t[a:]`, `t[:]`: the slice of the first dimension a subscript
-// writes (design principles 5.4). The bounds follow the rules of the slice function (3.9): a
-// position from 0 to the length, the end one past the last element taken, a negative bound a
-// fault rather than a count from the end, and an end before the start the empty range. A
-// negative step runs backwards: the start defaults to the last element and the end, left out,
-// stands for the position before the first. The step and which of the start and the end were
-// written come with the call as a two-bit mask (bit 0 end, bit 1 start).
+// writes (design principles 5.4). The bounds are read by `sliceRange` above.
 //
 // A step other than 1 is a view with strides, which needs the multidimensional array
 // representation of H17. Until it lands, a stepped slice is a copy: the elements are the same
@@ -203,41 +244,12 @@ slot_t __slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Array *arr    = norm.get<Array *>(0);
     auto *arrType = tt::as_ptr<ArrayType>(norm.type(0));
-    const Int64 startRaw = norm.get<Int64>(1);
-    const Int64 endRaw   = norm.get<Int64>(2);
-    const Int64 step     = norm.get<Int64>(3);
-    const Int64 written  = norm.get<Int64>(4);
-    const bool wroteEnd   = (written & 1) != 0;
-    const bool wroteStart = (written & 2) != 0;
-
-    const Int64 size = static_cast<Int64>(arr->size());
-    if (step == 0) {
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument, "[]", "a slice step must not be 0");
-    }
-    Int64 start = 0;
-    Int64 end   = 0;
-    Int64 count = 0;
-    if (step > 0) {
-        start = wroteStart ? startRaw : 0;
-        end   = wroteEnd ? endRaw : size;
-        if (start < 0 || start > size || end < 0 || end > size) {
-            throwRuntimeFault(
-                RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
-        }
-        count = start < end ? (end - start + step - 1) / step : 0;
-    } else {
-        // A negative step starts at an element and stops after `end`; an omitted start is the
-        // last element, an omitted end the position before the first (-1).
-        start = wroteStart ? startRaw : size - 1;
-        end   = wroteEnd ? endRaw : -1;
-        if ((wroteStart && (start < 0 || start >= size)) ||
-            (wroteEnd && (end < 0 || end > size))) {
-            throwRuntimeFault(
-                RuntimeDiag::SliceOutOfRange, start, end, "an array", arr->size());
-        }
-        count = start > end ? (start - end + (-step) - 1) / (-step) : 0;
-    }
+    const SliceRange range = sliceRange(
+        static_cast<Int64>(arr->size()),
+        norm.get<Int64>(1),
+        norm.get<Int64>(2),
+        norm.get<Int64>(3),
+        norm.get<Int64>(4));
     if (arr->rank() != 1) {
         // A slice of a dimension other than the first is a view with strides (H17); the type
         // system states rank 1, so this is a defect rather than something a program writes.
@@ -247,18 +259,20 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
             "a slice of an array of rank 1; a slice of another dimension is a view with "
             "strides, which needs the multidimensional array representation of H17");
     }
-    if (step == 1 && arr->isCompact()) {
+    if (range.step == 1 && arr->isCompact()) {
         // A slice is a view sharing the data block (design principles 5.4).
-        return rtdata::toSlot(
-            Array::view(arr, std::span<const int64_t>(&count, 1), static_cast<uint64_t>(start)));
+        return rtdata::toSlot(Array::view(
+            arr,
+            std::span<const int64_t>(&range.count, 1),
+            static_cast<uint64_t>(range.start)));
     }
     // A slot array has no block to share and is copied (H17 records that for slot arrays); so
     // is a stepped slice.
-    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(count));
-    for (Int64 i = 0; i < count; ++i) {
+    Array *res = Array::create(mm::autoSpace(), arrType, static_cast<size_t>(range.count));
+    for (Int64 i = 0; i < range.count; ++i) {
         res->setSlot(
             static_cast<uint64_t>(i),
-            arr->getSlot(static_cast<uint64_t>(start + i * step)),
+            arr->getSlot(static_cast<uint64_t>(range.start + i * range.step)),
             arrType);
     }
     return rtdata::toSlot(res);
@@ -685,6 +699,60 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
     const size_t at = static_cast<size_t>(index);
     result->set<slot_t>(
         at, addTangent(ctx, arrayType->elemType(), base->get<slot_t>(at), delta), arrayType);
+    return rtdata::toSlot(result);
+}
+
+// `tangent/scatter_slice_arr(dx, like, start, end, step, written)`: the tangent of `like`'s
+// length whose positions the slice of those bounds takes hold dx's elements, and whose other
+// positions are the zero tangent of `like`'s elements. The reverse of a slice: the gradient of
+// the elements a slice took goes back to their places in the parent's gradient, the array
+// counterpart of `tensor:slice_grad`. A slice takes each position at most once, so a place is
+// written rather than added. `like` is the primal array the slice was taken from: its length and
+// its elements give the zeros, and the result type is the tangent of its type.
+slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    (void)with;
+    (void)ctx;
+    Type *const primalType  = norm.type(1);
+    Type *const tangentType = norm.resultType() != nullptr
+                                  ? norm.resultType()
+                                  : camel::core::tangentTypeOf(primalType);
+    if (tangentType == nullptr || primalType->code() != TypeCode::Array ||
+        tangentType->code() != TypeCode::Array) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            "autodiff: a sliced gradient needs an array with a tangent");
+    }
+    auto *const primalArray  = tt::as_ptr<ArrayType>(primalType);
+    auto *const tangentArray = tt::as_ptr<ArrayType>(tangentType);
+    auto *const like         = norm.get<Array *>(1);
+    auto *const dx           = norm.get<Array *>(0);
+    const SliceRange range   = sliceRange(
+        static_cast<Int64>(like->size()),
+        norm.get<Int64>(2),
+        norm.get<Int64>(3),
+        norm.get<Int64>(4),
+        norm.get<Int64>(5));
+    if (static_cast<Int64>(dx->size()) != range.count) {
+        throwRuntimeFault(
+            RuntimeDiag::RuntimeError,
+            std::format(
+                "autodiff: the gradient of a slice has {} elements, the slice takes {}",
+                dx->size(),
+                range.count));
+    }
+    Array *result = Array::create(mm::autoSpace(), like->size());
+    for (size_t i = 0; i < like->size(); ++i) {
+        result->set<slot_t>(
+            i,
+            zeroTangent(primalArray->elemType(), tangentArray->elemType(), like->get<slot_t>(i)),
+            tangentArray);
+    }
+    for (Int64 i = 0; i < range.count; ++i) {
+        result->set<slot_t>(
+            static_cast<size_t>(range.start + i * range.step),
+            dx->get<slot_t>(static_cast<size_t>(i)),
+            tangentArray);
+    }
     return rtdata::toSlot(result);
 }
 

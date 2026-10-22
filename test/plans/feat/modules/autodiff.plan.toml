@@ -2549,3 +2549,25 @@ expect_diagnostic_line = 23
 expect_output_contains = ["cannot differentiate operator 'tensor:concat'", "carries a tensor's gradient back into an array"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "array_slice_grad.runtime.nvm"
+desc = "A slice of an array takes a range of positions, so its adjoint is the upstream gradient placed back in that range of the parent's zeros: the range scatter tangent/scatter_slice_arr, the array counterpart of the tensor's slice_grad. Checked against adjoints written out by hand for a subscript slice ([0,2,3,0,0]), the same slice through the function form, a slice of a slice (the direct adjoint again), a sliced-backwards `xs[4:1:-1]` ([0,0,5,3,2]) and a stepped `xs[0:5:2]` ([2,0,3,0,5]); the printed raw gradients are pinned too. `nonzero` is the summed squared distance to the zero array — 115.0 from the tree — so a rule that returned zeros prints 0.0 and fails. (grad built at run time)"
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_slice_grad.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "[0.0, 2.0, 3.0, 0.0, 0.0]\n[0.0, 0.0, 5.0, 3.0, 2.0]\narray_slice_grad subscript_d=0.0 call_d=0.0 nested_d=0.0 roundtrip_d=0.0 reversed_d=0.0 stepped_d=0.0 nonzero=115.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "array_slice_grad.macro.fvm"
+desc = "The same array-slice adjoints when std::macro builds the gradient ahead of time and the FastVM runs it: the range scatter is placed in the compiled gradient graph, not only in a graph built at run time."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/array_slice_grad.cml"
+args = ["${case}", "std::macro", "${run_fvm}"]
+expect_exit = 0
+expect_stdout_exact = "[0.0, 2.0, 3.0, 0.0, 0.0]\n[0.0, 0.0, 5.0, 3.0, 2.0]\narray_slice_grad subscript_d=0.0 call_d=0.0 nested_d=0.0 roundtrip_d=0.0 reversed_d=0.0 stepped_d=0.0 nonzero=115.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
