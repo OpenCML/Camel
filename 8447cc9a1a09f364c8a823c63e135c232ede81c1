@@ -1,0 +1,175 @@
+# H16b 报告
+
+工作树 `D:\Projects\Camel-wt\h16-small`，分支 `handover/H16-small`（基于 `develop`，HEAD `efe312bc`），2026-10-21。
+改动留在工作树中，未提交、未建分支；由协调者复核、提交与合并。
+
+构建：`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h16-small`（Release，`out/latest`）。
+本 worktree 构建需要把 `D:\Projects\Camel\.venv\Scripts` 放在 `PATH` 上（否则 `pyplot` 的 `find_package(Python3)` 失败），并从主检出复制被 `.gitignore` 忽略的 `modules\python\sdks\python312`（不用 junction）。
+
+判据：`docs/handover/README.cn.md` 第 473、474 行；`docs/design-principles.cn.md` 11.3（键类型，618–631 行，其中第 630 行是"所有字段的类型都可比较"）、5.1（表达式的位置是各操作数的并集）、3.9（`error(...)` 记录的位置）、4.4（`x->f(a)` 即 `f(x, a)`）；`docs/handover/reviews/H9-H11.md` 对 H9 1.6 的答复（部分应用取 `inc<1>` 这个表达式；`error(...)` 取整个调用表达式）。
+
+---
+
+## 1. 第 3 项：`enum` 作映射的键与集合的元素（11.3）
+
+### 1.1 允许的条件与诊断
+
+规则（11.3 第 630 行）：一个枚举能作键，当且仅当**每个变体的每个字段**本身能作键。实现沿用既有的唯一判定点 `collectionKeyProblem`（`src/core/type/collection.cpp`）：它同时服务写出来的类型（GCT 的 `visitSpecType`）和替换类型变量后的类型（GIR 的 `rejectInvalidCollectionKey`），所以两处不会各说一套。
+
+- 新增枚举分支：逐变体、逐字段递归；`TypeCode::EnumHole`（此处类型尚未确定）给出自己的理由。字段失败时消息点名该字段：
+
+  ```
+  The type 'Boxed' cannot be a key of 'Map': its field 0 of variant 'Weight' of type 'float'
+  cannot be a key: a floating-point number has no usable equality as a key (NaN is not equal
+  to itself, and 0.0 equals -0.0).
+  ```
+
+  结构变体用字段名（`field 'w' of variant 'Rect'`），元组变体用序号（`field 0`，它们没有名字）。
+- 位置：`collectionKeyProblem` 增加两个可选出参（`fieldOrigin`、`fieldLabel`），把出错字段**在声明处**的 origin 带出来；`EnumVariant` 因此多一个与 `fieldTypes` 平行的 `fieldOrigins`（`include/camel/core/type/enum.h`，由 `buildEnumVariants` 填充）。它只用于诊断，不参与类型相等、不进入类型打印。两个调用点在有 origin 时各加一个从属位置：
+
+  ```
+  error[SemanticDiag::CollectionKeyNotAllowed]: The type 'Boxed' cannot be a key of 'Map': ...
+    --> err_key_enum_field.cml:10:36
+     |
+  10 |     let m = [(Boxed::Empty, 1)] as Map<Boxed, int>
+     |                                    ^^^^^^^^^^^^^^^
+  note: field 0 of variant 'Weight' is declared here
+    --> err_key_enum_field.cml:7:35
+     |
+   7 | type Boxed = enum { Empty, Weight(float) }
+     |                                   -----
+  ```
+
+  测试用的单行格式（`CAMEL_ERROR_FORMAT=short`）把它写成 `[field 0 of variant 'Weight' is declared here at 7:35]`。拒绝是带位置的诊断，不是默默接受：没有这条诊断时程序会编译通过，然后在运行期拿一个无法排序的键去比较。
+- 帮助文字补上枚举（`semantic.cpp`，`docs/diagnostics.md` 由 `node scripts/diagnostics-catalog.mjs --write` 重新生成）：
+
+  ```
+  ... 'int', 'i32', 'bool', 'string', tuples of those, and an enum every field of which is one of those. ...
+  ```
+
+### 1.2 顺序与相等（"哈希/相等路径"与"排序路径"）
+
+本实现**没有哈希路径**：`Map` / `Set` 是 `rtdata::Table`，一棵按 `compareKeys` 排序的持久 B+ 树（`docs/technical/31_map_and_set.md` 第 5 节）。所以"相等"就是比较结果为 0，"排序"就是同一个函数，两者不可能不一致；`valuesEqual` 对枚举走既有的 `Variant::equals`（tag 加各字段），改前已如此。
+
+`compareKeys`（`src/core/rtdata/collection.cpp`）新增枚举分支，放在 switch 之前（`TypeCode::Enum` 是运行时注册的 `OtherType` code，不是 switch 常量）：
+
+1. 先比 `tag()`（即变体的声明序号）；
+2. tag 相同再按该变体的 `fieldTypes` 逐字段递归 `compareKeys`；
+3. 全部相等返回 0。
+
+这直接落实 11.3 的顺序："先按变体声明顺序，再逐字段"。
+
+### 1.3 测试
+
+新用例（`test/plans/feat/compile/collections.plan.toml`）：
+
+| 测试 | 用例 | 覆盖 |
+|---|---|---|
+| `enum_keys` | `test/cases/compile/collections/enum_keys.cml` | 无载荷枚举作 `Map` 键与 `Set` 元素；有可比较载荷的枚举作键；顺序（`keys` / `items` / 打印）、查找、`put` / `remove` / `has` / `union`、相等、重复元素被相等性去掉；四个后端输出逐字节相同（快照 `golden/collections/enum_keys.txt`） |
+| `err_key_enum_field` | `err_key_enum_field.cml` | `Map<Boxed, int>`，`Boxed` 的一个变体带 `float`：拒绝，消息点名字段，从属位置在 `float` 的声明处（10:36 与 7:35） |
+| `err_key_enum_element` | `err_key_enum_element.cml` | 集合元素路径：`Set<Rec>`，`Rec` 的变体带结构体字段：拒绝，点名字段与声明处（11:27 与 8:30） |
+| `err_key_enum_by_substitution` | `err_key_enum_by_substitution.cml` | 泛型替换路径：`to_set(Boxed::Empty)` 在调用处报同一个诊断，仍点名字段与声明处（14:19 与 7:35） |
+
+`err_key_enum_element` 也确认了 `collectionKeyProblem` 的递归停在**枚举的字段**上：结构体字段的理由仍是既有的"a struct is not a key type; use a tuple of its fields"，只是外面多了一层"哪个变体的哪个字段"。
+
+`enum_keys.cml` 的实际输出（四个后端逐字节相同，快照即此文本）：
+
+```
+{Color::Red: 1, Color::Green: 2, Color::Blue: 3}
+3
+[Color::Red, Color::Green, Color::Blue]
+[1, 2, 3]
+[(Color::Red, 1), (Color::Green, 2), (Color::Blue, 3)]
+2 1
+true true
+{Color::Red: 10, Color::Blue: 3}
+true
+{Color::Red, Color::Green, Color::Blue} 3
+true true
+true {Color::Green, Color::Blue}
+{Color::Red, Color::Green, Color::Blue}
+{Value::Unit: u, Value::Pair(1, 9): a, Value::Pair(2, 2): c, Value::Pair(2, 3): b, Value::Named { x: 1, y: 2 }: n}
+[Value::Unit, Value::Pair(1, 9), Value::Pair(2, 2), Value::Pair(2, 3), Value::Named { x: 1, y: 2 }]
+b ?
+n
+{Value::Unit, Value::Pair(1, 2)} 2
+```
+
+第 14、15 行是顺序的判据：`Unit`（声明在前）→ `Pair(1, 9)` < `Pair(2, 2)` < `Pair(2, 3)` → `Named`；插入顺序是打乱的。第 13 行是集合：`Green` 只出现一次，打印按 `Red, Green, Blue`。
+
+### 1.4 文档
+
+- `docs/technical/31_map_and_set.md` 3.1：键类型表加"每个字段都是键类型的 `enum`"一行；顺序一节加"枚举按变体声明顺序、再逐字段"；诊断一段写明字段名与声明处这个从属位置。
+- `docs/technical/42_enums.md`：把"枚举作为 `Map` 键与 `Set` 元素"从"留给语言作者的问题"里移走，并指向实现与 31 号文档。
+- `docs/diagnostics.md`：重新生成，只有 `CollectionKeyNotAllowed` 的帮助文字一行变化。
+
+## 2. 第 4 项：源码范围
+
+### 2.1 部分应用 `inc<1>`：取表达式本身
+
+改前观察（`let g = inc<1>`，整个 `let` 在第 6 行）：
+
+| 观察点 | 改前 | 改后 |
+|---|---|---|
+| 作为值被拒时的 `PartialApplicationRefused`（`inc<'a'>`） | 4:16，`^` 只覆盖 `<'a'>` | 4:13，`^` 覆盖整个 `inc<'a'>` |
+| 值调用的 FUNC 节点 | `6:4-6:18`（整条 `let`） | `9:12-9:18`（`inc<1>`） |
+| 同一值的 FILL 节点 | 没有 span | `9:12-9:18` |
+
+做法：`boundWithOrigin_` 仍保存 GCT 的 WITH 节点（即 `f<w>` 这个绑定），**在真正用到值时才**由 `callExpressionSpan` 取"节点自身的 span（`<w>`）与各操作数（callee、实参）的并集"，再 `deriveGirOrigin` 出一个表达式 origin；`partialApplicationOf` 用它给内部所有节点定 origin、并用同一个 span 注册部分应用那张图的 origin（值的 FILL 因此有 `inc<1>` 的 span）；`rejectUnappliedBinding` 与 `rejectAmbiguousCallAt` 在同一个 origin 上报诊断。
+
+这条路径特意**不改 AST 节点自身的范围**：`Call` 节点在 AST 里覆盖的是实参表 `(x)`，整个 `f(x)` 是 GIR 由并集得出的（5.1）。若把 Bind 节点的范围改成 `f<w>`，全仓库每个用到 `<>` 的文件的 AST 快照都会变（实测 712 个条目），而且同类节点的约定就不一致了。取并集既符合 5.1，又不动 2169 条 AST 记录中的任何既有哈希；只新增了 6 个新用例的条目（见 5.2）。
+
+新增测试：`test/cases/compile/function_values/partial_application_span.cml` + `function_value_positions.plan.toml` 的 `partial_application_span`，用 `std::gir` 输出断言 FUNC 节点与 FILL 节点都是 `span="9:12-9:18"`。
+
+### 2.2 `error(...)`：取整个调用表达式
+
+改前观察：`throw 'Zero'->error('zero')` 的 `UnhandledError` 报在 4:19（callee `error`），`^` 只有一个字符。改后报在 4:11，即整个调用表达式的开头：
+
+```
+error[RuntimeDiag::UnhandledError]: An error value reached the exit of 'main' without being handled: Zero: zero.
+  --> error_position_pipeline.cml:8:11
+   |
+ 8 |     throw 'Zero'->error('zero')
+   |           ^
+```
+
+`Error.location` 只记 `文件:行:列`（起点），与 `stdlib/signatures/globals.cml` 的说明一致，所以对外可观察的就是起点从 callee 移到整条管道。`x->error(m)` 按 4.4 就是 `error(x, m)`，两者记录同一个位置。
+
+做法：`builder_operators.cpp` 的调用点位置由 `gct->at(0)->origin()`（callee）改为 `expressionPositionOf(gct)`（5.1 的并集，GIR 已有的辅助函数，失败时退回 `gct->origin()`）。
+
+新增测试：`test/cases/compile/tagged/error_position_pipeline.cml` + `tagged.plan.toml` 的 `error_position_pipeline`（8:11，`RuntimeDiag::UnhandledError`）。普通写法 `error('K', 'm')` 的位置不变（`tagged` 计划的 `fallible` 用例仍断言 `fallible.cml:10:15`），所以没有改它的期望。
+
+## 3. 验证
+
+| 命令 | 结果 |
+|---|---|
+| `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-build.ps1 -Path D:\Projects\Camel-wt\h16-small` | 通过（Release，`out/latest`） |
+| `camel-test.ps1 ... -Plan test/plans/feat/compile/collections.plan.toml,...`（8 个目标，`-Jobs 8`） | 292/292 通过：collections 143、enum 32、function_value_positions 7、tagged 52、surface 18、partial_application 26、parse.frontend 4、smoke 10 |
+| `python test/tools/parsecheck/check.py snapshot` | 2130 个文件"read as recorded"，另有 39 个既有文件尚未入快照（与本项无关的既有差异，未动）；本次只新增 6 条 |
+| `node scripts/diagnostics-catalog.mjs --check` | 168 个 code，无重号 |
+| `node scripts/diagnostics-catalog.mjs --verify-doc` | 文档最新 |
+| `node scripts/check-doc-links.mjs --all` | 248 篇文档，无断链 |
+| `node scripts/check-std-includes.mjs` | 1006 个文件通过 |
+
+按 `agents/test.md` 没有跑全套、poison/GC 压力、progen、PyTorch 对比与 perf。
+
+## 4. 期望变更
+
+1. `test/plans/feat/consistency/partial_application.plan.toml` 三处列号：
+   `err_var_parameter.cml:5:5:` → `5:13:`（`add<t>` 的起点）、`err_ambiguous.cml:12:18:` → `12:13:`、`err_entering_ambiguous.cml:10:18:` → `10:13:`（`scale<2>` 的起点），另 `err_overload_choice_name.cml:18:18:` → `18:13:`。
+   依据：从第 4 项起，部分应用的位置是 `f<w>` 这个表达式而不是 `<'w'>` 这一段；H9 1.6 的原话是"取 `inc<1>` 这个表达式"。四处都是把尖括号段的起点换成 callee 的起点，行号不变，范围变宽。
+2. `test/plans/feat/parse/golden/ast_hashes.txt`：**只新增** 6 行（四个新用例、`partial_application_span.cml`、`error_position_pipeline.cml`），没有任何既有哈希改变。依据见 2.1：范围由 GIR 取并集，AST 节点自身的范围保持既有约定。
+3. `test/plans/feat/compile/golden/collections/enum_keys.txt` 是**新**快照，不是对既有期望的修改。
+4. `docs/diagnostics.md` 是重新生成的产物（帮助文字一行），不作为手改期望。
+
+没有其它既有 golden 或断言改动。
+
+## 5. 待决问题
+
+1. **嵌套枚举的从属位置**：`enum A { X(B) }`、`enum B { Y(float) }` 时消息会一路点出两层（"its field 0 of variant 'X' …: its field 0 of variant 'Y' of type 'float' …"），但从属位置只指向**外层**字段 `B` 的声明处，内层字段的位置没有第二个从属标签（`Diagnostic` 目前只有一个 related 列表，可以加，但本项按"小项"没有扩展）。要的话是 `collectionKeyProblem` 再多带一个 origin。
+2. **重复的常量枚举键**：`[(Color::Red, 1), (Color::Red, 2)] as Map<Color, int>` 不是编译期错误。既有的 `DuplicateCollectionKey` 只认字面量常量键；枚举值由变体构造产生，不在其列。是否要也识别常量枚举值，需要另定。
+3. **`T?` / `T!` 字段**：`==` 对它们没有定义（29 号文档 Q5），所以带这种字段的枚举仍被拒绝；若以后给 `T?` 定义相等，这条规则自动跟着放宽（判定点是同一个 `collectionKeyProblem`）。
+4. **"可比较"与"可作键"**：11.3 的原文是"所有字段的类型都可比较"，实现用的是"可作键"（浮点可比较但不能作键）。对枚举字段来说两者恰好一致（结构体、数组等既不可作键也没有 `==`），所以没有分歧；帮助文字与文档用的是"作键"的说法。
+## 6. 没做完的
+
+无：第 3、4 两项都已实现、测试、写入文档。上面第 5 节的四条是留给语言作者的问题，不阻塞本项。
