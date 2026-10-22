@@ -218,6 +218,16 @@ const MODULES = [
         declaration: true,
         computed: 'signatures/tiles.cml',
     },
+    {
+        name: 'pyplot',
+        title: '`pyplot`: draw an array',
+        kind: 'cpp',
+        // The one operator is declared in stdlib/pyplot.cml; the four element types and the two
+        // arities are written out because a declaration cannot say "an array of one of four
+        // numeric types" and cannot write an optional parameter (handover H166).
+        source: 'pyplot.cml',
+        declaration: true,
+    },
 ]
 
 function sourceOf(module) {
@@ -663,8 +673,8 @@ function renderDoc() {
     out.push('- Write one call that has with-arguments per statement when several appear in one argument')
     out.push('  list: `f<a>(x), g<b>(y)` is read as comparisons.')
     out.push('')
-    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`), the Python')
-    out.push('bridge (`python`, `pyplot`) and the profiler (`perf`).')
+    out.push('Not in this reference: the tensor stack\'s own layers (`nn`, `autodiff`, `onnx`, `sim`), the')
+    out.push('Python bridge\'s `python` module and the profiler (`perf`).')
     out.push('')
     out.push('| Module | Import | Written in | Functions |')
     out.push('|---|---|---|---|')

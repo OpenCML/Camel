@@ -323,6 +323,7 @@ dd4c782619481c22 ok stdlib/fs.cml
 f234da727937674c ok stdlib/math.cml
 ebb8e94036f7abd2 ok stdlib/para.cml
 173076cd43673a6b ok stdlib/perf.cml
+e16b29b55ac8a7b2 ok stdlib/pyplot.cml
 e02c37ac47d43974 ok stdlib/random.cml
 a8be31ddfa495bf4 ok stdlib/re.cml
 dc425a313698f684 ok stdlib/rules.cml
@@ -835,6 +836,9 @@ d00f123e17d236e0 ok test/cases/compile/native/para_declaration_import.cml
 9609b6bef7b8b772 ok test/cases/compile/native/private.cml
 a82e21d2c35eadf1 ok test/cases/compile/native/private_import.cml
 62b93c05ad87f26e ok test/cases/compile/native/private_module.cml
+b9f5c8bd35cbc410 ok test/cases/compile/native/pyplot_arity.cml
+ec6811955c1d233a ok test/cases/compile/native/pyplot_declaration_import.cml
+98b0a8cd56bd70ec ok test/cases/compile/native/pyplot_type.cml
 6af60677dfbb389d ok test/cases/compile/native/random_arity.cml
 8dc1d757bf1f2b9d ok test/cases/compile/native/random_declaration_import.cml
 ee2521e209cfbc45 ok test/cases/compile/native/random_type.cml
@@ -1842,7 +1846,7 @@ f88e35ce8297c7ff ok test/cases/modules/stdlib/fault_zip_with.cml
 4137dad18f1c4711 ok test/cases/modules/stdlib/math_bits.cml
 9f305a00d4e93445 ok test/cases/modules/stdlib/math_functions.cml
 040bb7f614cb1861 ok test/cases/modules/stdlib/math_numbers.cml
-2398c6db7706548f ok test/cases/modules/stdlib/registry_all.cml
+76dbaadf8882ce4e ok test/cases/modules/stdlib/registry_all.cml
 1c894b3c842c4cf8 ok test/cases/modules/stdlib/registry_tensor.cml
 bc838590fe8282ac ok test/cases/modules/stdlib/stats_quantiles.cml
 f38819c872dbb5e4 ok test/cases/modules/stdlib/str_chars.cml

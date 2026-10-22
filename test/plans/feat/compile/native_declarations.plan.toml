@@ -697,3 +697,36 @@ case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_type.cml:11:21", "argument types: <> (string)", "<tensor:to_bytes>: (t: Tensor) => Bytes"]
+# ---- The declarations of `pyplot` (handover H166) ----
+#
+# `pyplot:plot` has a fixed signature: four element types and two arities. The C++ module never
+# declared its purity, so a body-less declaration was refused by the loader; the module now
+# declares `plot` effectful and the declarations in stdlib/pyplot.cml are its one signature.
+# The calls are compile-only: `plot` writes an image file.
+
+[[tests]]
+name = "native.pyplot_declaration_import"
+desc = "`pyplot:plot` is declared for `i32`, `int`, `f32` and `float` arrays, with and without the output file name; the importer reads all eight declarations from `stdlib/pyplot.cml`, and the calls type-check without running."
+kind = "behavior"
+case = "../../../cases/compile/native/pyplot_declaration_import.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "native.pyplot_wrong_arity"
+desc = "`pyplot:plot` is declared with one or two ordinary arguments: a third is refused at the call, and the overloads the message lists are the declarations' two arities from `stdlib/pyplot.cml`."
+kind = "negative"
+case = "../../../cases/compile/native/pyplot_arity.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_arity.cml:12:5", "argument types: <> (float[], string, int)", "<pyplot:plot>: (data: float[], filename: string) => void"]
+
+[[tests]]
+name = "native.pyplot_wrong_type"
+desc = "The first parameter of `pyplot:plot` is an array of numbers: a `string` is refused at the call, and the message lists the declarations' array forms from `stdlib/pyplot.cml`."
+kind = "negative"
+case = "../../../cases/compile/native/pyplot_type.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "pyplot_type.cml:11:5", "argument types: <> (string)", "<pyplot:plot>: (data: float[]) => void"]

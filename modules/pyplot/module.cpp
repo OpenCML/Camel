@@ -267,36 +267,6 @@ static void set_python_home_from_venv() {
 #endif
 }
 
-const std::vector<oper_group_ptr_t> &getOperatorGroups() {
-    static const std::vector<oper_group_ptr_t> groups = {
-        OperatorGroup::create(
-            "plot",
-            {
-                {
-                    "pyplot:plot",
-                    DynamicFuncTypeResolver::create(
-                        {{0, {}}, {-1, {}}},
-                        "(data: (typeas T)[], filename?: string) => void",
-                        [](const type_vec_t &with, const type_vec_t &norm, const ModifierSet &)
-                            -> std::optional<Type *> {
-                            if (norm.size() < 1 || norm.size() > 2)
-                                return std::nullopt;
-                            if (norm[0]->code() != TypeCode::Array)
-                                return std::nullopt;
-                            TypeCode elemCode = tt::as_ptr<ArrayType>(norm[0])->elemType()->code();
-                            if (elemCode != TypeCode::Int32 && elemCode != TypeCode::Int64 &&
-                                elemCode != TypeCode::Float32 && elemCode != TypeCode::Float64)
-                                return std::nullopt;
-                            if (norm.size() == 2 && norm[1]->code() != TypeCode::String)
-                                return std::nullopt;
-                            return Type::Void();
-                        }),
-                },
-            }),
-    };
-    return groups;
-}
-
 } // namespace
 
 namespace {
@@ -315,10 +285,10 @@ struct ReleaseGilAfterLoad {
 };
 } // namespace
 
-PyplotModule::PyplotModule(context_ptr_t ctx) : BuiltinModule("pyplot", ctx) {
-    for (const auto &group : getOperatorGroups())
-        exportEntity(group->name(), group);
-}
+// The module exports no operator group of its own: `plot` is declared in `stdlib/pyplot.cml`,
+// which is the one source of its signature (design principles 6.4; handover H19, step 10; H166).
+// The C++ side keeps the kernel, the executor and the operator traits.
+PyplotModule::PyplotModule(context_ptr_t ctx) : BuiltinModule("pyplot", ctx) {}
 
 module_ptr_t PyplotModule::create(context_ptr_t ctx) { return std::make_shared<PyplotModule>(ctx); }
 

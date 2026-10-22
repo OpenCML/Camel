@@ -31,8 +31,8 @@ How to read an entry:
 - Write one call that has with-arguments per statement when several appear in one argument
   list: `f<a>(x), g<b>(y)` is read as comparisons.
 
-Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`), the Python
-bridge (`python`, `pyplot`) and the profiler (`perf`).
+Not in this reference: the tensor stack's own layers (`nn`, `autodiff`, `onnx`, `sim`), the
+Python bridge's `python` module and the profiler (`perf`).
 
 | Module | Import | Written in | Functions |
 |---|---|---|---|
@@ -58,6 +58,7 @@ bridge (`python`, `pyplot`) and the profiler (`perf`).
 | [this](#this) | `import { ... } from this` | C++ | 1 |
 | [graph](#graph) | `import { ... } from graph` | C++ | 41 |
 | [tiles](#tiles) | `import { ... } from tiles` | C++ | 12 |
+| [pyplot](#pyplot) | `import { ... } from pyplot` | C++ | 1 |
 
 <a id="built-in-functions"></a>
 
@@ -4450,3 +4451,41 @@ memory. Asking is a requirement, not a preference: with no device the call is a 
 - With effects: probes the driver.
 - Failure: fault `RuntimeError` when this build or this machine has no CUDA device; fault `DeviceUnavailable` when `--devices` names a device that is not there.
 - Example: `println(device())`
+
+<a id="pyplot"></a>
+
+## `pyplot`: draw an array
+
+Plots: draw an array of numbers with matplotlib, and fall back to an SVG file when matplotlib
+is not installed. The operator writes an image file and is never folded or dropped by a pass.
+
+The declarations of the operator of the C++ module `modules/pyplot` (design principles 6.4;
+handover H19, step 10; H166). This file is the one source of its fixed signature; the C++ side
+keeps the kernel, the executor, the operator traits and the purity.
+
+`plot` is one operator with one URI, over four element types and two arities: an array of
+`i32`, `int`, `f32` or `float`, with or without the name of the output file. A declaration
+cannot write "an array of one of these four" as one rule, and a `(typeas T)[]` declaration
+would accept a `string[]` that the kernel refuses, so the four types are written out for each
+arity: eight declarations of the one operator. A declaration cannot write the optional
+parameter `filename?: string` either, which is why the two arities are separate.
+
+#### `plot`
+
+```camel
+plot: (data: i32[]) => void
+plot: (data: int[]) => void
+plot: (data: f32[]) => void
+plot: (data: float[]) => void
+plot: (data: i32[], filename: string) => void
+plot: (data: int[], filename: string) => void
+plot: (data: f32[], filename: string) => void
+plot: (data: float[], filename: string) => void
+```
+
+Draws the values of `data` and writes the image to `filename` (`plot.png` when it is omitted).
+`data` may be an `i32`, `int`, `f32` or `float` array; an empty array is drawn as an empty
+plot. matplotlib is used when it is importable, and an SVG file is written otherwise.
+
+- With effects: writes an image file.
+- Example: `plot([1.0, 2.0, 3.0], "myplot.png")`

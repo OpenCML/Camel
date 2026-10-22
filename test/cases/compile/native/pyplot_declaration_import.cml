@@ -1,0 +1,27 @@
+/**
+ * The declarations of `pyplot:plot`, read from `stdlib/pyplot.cml`: four element types
+ * (`i32[]`, `int[]`, `f32[]`, `float[]`) and two arities (with and without the output file
+ * name), eight declarations of the one operator (handover H166). The calls are type-checked and
+ * never run: `plot` writes an image file, so this case stays compile-only.
+ */
+module pyplot_declaration_import
+
+import { plot } from pyplot
+
+func plot_arrays(data_i32: i32[], data_f32: f32[], name: string): void sync {
+    plot(data_i32)
+    plot(data_i32, name)
+    plot(data_f32)
+    plot(data_f32, name)
+}
+
+func plot_literals(name: string): void sync {
+    plot([1, 2, 3])
+    plot([1, 2, 3], name)
+    plot([1.0, 2.0, 3.0])
+    plot([1.0, 2.0, 3.0], name)
+}
+
+func main(): int {
+    return 0
+}
